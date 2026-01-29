@@ -1,0 +1,17 @@
+[package]
+name = "hv2-cpu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+hv2-core = { path = "../hv2-core" }
+
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[[example]]
+name = "instruction_test"
+path = "examples/instruction_test.rs"

@@ -1,0 +1,46 @@
+[package]
+name = "hv2-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+hv2-core = { path = "../hv2-core" }
+
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+
+# Scripting engines
+rhai = { workspace = true }
+wasmtime = { workspace = true }
+wasmtime-wasi = { workspace = true }
+
+# Security (Linux only - commented out for Windows compatibility)
+# seccompiler = "0.4"
+
+[dev-dependencies]
+proptest = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[[example]]
+name = "agent_script"
+path = "examples/agent_script.rs"
+
+[[example]]
+name = "advanced"
+path = "examples/advanced.rs"
+
+[[example]]
+name = "integrated"
+path = "examples/integrated.rs"

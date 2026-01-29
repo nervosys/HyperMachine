@@ -1,0 +1,19 @@
+[package]
+name = "hv2-gpu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+hv2-core = { path = "../hv2-core" }
+
+tokio = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+# GPU support
+wgpu = { workspace = true }
+ash = { workspace = true }

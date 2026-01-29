@@ -1,0 +1,34 @@
+[package]
+name = "hv2-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+hv2-core = { path = "../hv2-core" }
+hv2-agent = { path = "../hv2-agent" }
+
+tokio = { workspace = true }
+tokio-stream = "0.1"
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+
+# gRPC
+tonic = { workspace = true }
+tonic-build = { workspace = true }
+prost = { workspace = true }
+
+# REST API
+axum = { workspace = true }
+tower = { workspace = true }
+hyper = { workspace = true }
+uuid = { workspace = true }
+
+[build-dependencies]
+tonic-build = { workspace = true }

@@ -1,0 +1,35 @@
+[package]
+name = "hv2-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+crossbeam = { workspace = true }
+memmap2 = { workspace = true }
+bincode = { workspace = true }
+toml = { workspace = true }
+chrono = { workspace = true }
+bitflags = "2.4"
+
+[dev-dependencies]
+proptest = { workspace = true }
+criterion = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "serial_console"
+path = "examples/serial_console.rs"
+
+[[example]]
+name = "timer_demo"
+path = "examples/timer_demo.rs"

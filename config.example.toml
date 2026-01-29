@@ -1,0 +1,26 @@
+# HV2 Configuration Example
+
+[vm]
+name = "production-vm"
+vcpus = 8
+memory_mb = 16384
+
+[network]
+enabled = true
+interface = "tap0"
+ip_address = "192.168.100.10"
+
+[gpu]
+enabled = true
+device = "default"
+passthrough = false
+
+[agent]
+enabled = true
+script_timeout_seconds = 300
+max_memory_mb = 512
+
+[observability]
+tracing = true
+metrics = true
+otlp_endpoint = "http://localhost:4317"
