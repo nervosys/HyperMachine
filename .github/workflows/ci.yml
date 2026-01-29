@@ -1,154 +1,154 @@
 name: CI
 
 on:
-  push:
-    branches: [master, main]
-  pull_request:
-    branches: [master, main]
+    push:
+        branches: [master, main]
+    pull_request:
+        branches: [master, main]
 
 env:
-  CARGO_TERM_COLOR: always
-  RUSTFLAGS: -D warnings
+    CARGO_TERM_COLOR: always
+    RUSTFLAGS: -D warnings
 
 jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    check:
+        name: Check
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-action@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run cargo check
-        run: cargo check --all-targets --all-features
+            - name: Run cargo check
+              run: cargo check --all-targets --all-features
 
-  test:
-    name: Test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    steps:
-      - uses: actions/checkout@v4
+    test:
+        name: Test
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [ubuntu-latest, windows-latest, macos-latest]
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-action@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run tests
-        run: cargo test --workspace --exclude hv2-core
+            - name: Run tests
+              run: cargo test --workspace --exclude hv2-core
 
-  test-core:
-    name: Test Core (Linux only)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    test-core:
+        name: Test Core (Linux only)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-action@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run core tests
-        run: cargo test -p hv2-core
+            - name: Run core tests
+              run: cargo test -p hv2-core
 
-  fmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    fmt:
+        name: Rustfmt
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
-        with:
-          components: rustfmt
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-action@stable
+              with:
+                  components: rustfmt
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+            - name: Check formatting
+              run: cargo fmt --all -- --check
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+    clippy:
+        name: Clippy
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
-        with:
-          components: clippy
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-action@stable
+              with:
+                  components: clippy
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-clippy-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+            - name: Run clippy
+              run: cargo clippy --all-targets --all-features -- -D warnings
 
-  build-cli:
-    name: Build CLI
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: hm
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: hm.exe
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: hm
-    steps:
-      - uses: actions/checkout@v4
+    build-cli:
+        name: Build CLI
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      artifact: hm
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      artifact: hm.exe
+                    - os: macos-latest
+                      target: x86_64-apple-darwin
+                      artifact: hm
+        steps:
+            - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-action@stable
 
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build CLI
-        run: cargo build --release --package hm-cli
+            - name: Build CLI
+              run: cargo build --release --package hm-cli
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hm-${{ matrix.target }}
-          path: target/release/${{ matrix.artifact }}
+            - name: Upload artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: hm-${{ matrix.target }}
+                  path: target/release/${{ matrix.artifact }}

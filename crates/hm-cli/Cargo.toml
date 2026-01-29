@@ -30,5 +30,8 @@ dirs = "5.0"
 axum = "0.7"
 tower-http = { version = "0.5", features = ["cors"] }
 
+# Shell completions
+clap_complete = "4.5"
+
 [dev-dependencies]
 tempfile = "3.10"
