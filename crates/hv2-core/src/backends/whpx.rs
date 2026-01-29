@@ -1799,7 +1799,7 @@ impl WhpxVcpu {
     ///
     /// # Example
     /// ```no_run
-    /// # use hv2_core::backends::WhpxVcpu;
+    /// # use hv2_core::backends::whpx::WhpxVcpu;
     /// # fn example(vcpu: &WhpxVcpu) -> hv2_core::Result<()> {
     /// let stats = vcpu.get_interrupt_stats();
     /// println!("Interrupts injected: {}", stats.interrupts_injected);
@@ -1829,7 +1829,7 @@ impl WhpxVcpu {
     ///
     /// # Example
     /// ```no_run
-    /// # use hv2_core::backends::WhpxVcpu;
+    /// # use hv2_core::backends::whpx::WhpxVcpu;
     /// # fn example(vcpu: &WhpxVcpu) -> hv2_core::Result<()> {
     /// let rflags = vcpu.get_rflags()?;
     /// println!("Current RFLAGS: 0x{:016X}", rflags);
@@ -1877,7 +1877,7 @@ impl WhpxVcpu {
     ///
     /// # Example
     /// ```no_run
-    /// # use hv2_core::backends::WhpxVcpu;
+    /// # use hv2_core::backends::whpx::WhpxVcpu;
     /// # fn example(vcpu: &WhpxVcpu) -> hv2_core::Result<()> {
     /// if vcpu.is_interrupt_enabled()? {
     ///     println!("Guest is ready to receive interrupts");
