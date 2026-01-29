@@ -1,10 +1,12 @@
-# HV2 Project Summary
+# HyperMachine Project Summary
 
-## What is HV2?
+## What is HyperMachine?
 
-HV2 is a **fast, remotely scriptable, network- and GPU-enabled Type 2 hypervisor and emulator framework written in Rust with first-class support for agentic AI**. It's designed from the ground up to be controlled by AI agents while maintaining security, performance, and observability.
+HyperMachine is a **fast, remotely scriptable, network- and GPU-enabled hypervisor and emulator framework written in Rust with first-class support for agentic AI**. It's designed from the ground up to be controlled by AI agents while maintaining security, performance, and observability.
 
-> **Type 2 Hypervisor**: HV2 is a hosted hypervisor that runs on top of an existing operating system (Windows, Linux, macOS). A future Type 1 (bare-metal) variant called HV1 is planned for deployment directly on hardware.
+> **Dual-Mode Architecture**: HyperMachine supports both Type 2 (hosted) and Type 1 (bare-metal) hypervisor modes:
+> - **HV2 Mode**: Runs on top of an existing OS (Windows, Linux, macOS) - *Currently Implemented*
+> - **HV1 Mode**: Runs directly on hardware for maximum performance - *Planned*
 
 ## Key Features
 
@@ -42,7 +44,7 @@ HV2 is a **fast, remotely scriptable, network- and GPU-enabled Type 2 hypervisor
 ## Project Structure
 
 ```
-HV2/
+HyperMachine/
 ├── crates/
 │   ├── hv2-core/           # Core VM engine and abstractions
 │   ├── hv2-cpu/            # CPU emulation (x86-64, AArch64)
@@ -213,25 +215,28 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-AetherVM is dual-licensed under MIT and Apache-2.0. You can choose either license.
+HyperMachine is dual-licensed under MIT and Apache-2.0. You can choose either license.
 
 ## Future Vision
 
-HV2 aims to become the **de facto standard for AI-controlled virtualization**:
+HyperMachine aims to become the **de facto standard for AI-controlled virtualization**:
 
-### Type 2 (Current - HV2)
+### Type 2 Mode (HV2) - *Current Focus*
 - Runs on existing OS (Windows, Linux, macOS)
 - Easy development and debugging
 - Good for development, testing, and edge deployments
+- Leverages KVM (Linux), WHPX (Windows), HVF (macOS)
 
-### Type 1 (Planned - HV1)
+### Type 1 Mode (HV1) - *Planned*
 - Runs directly on hardware (bare-metal)
 - Maximum performance and isolation
 - Ideal for production cloud infrastructure
-- Direct hardware access and control
+- Direct VMX/SVM hardware access
+- Minimal trusted computing base (TCB)
 
 ### Unified Vision
 
+- Seamless switching between HV1 and HV2 modes
 - Natural language VM management
 - Self-optimizing resource allocation
 - Predictive failure prevention
@@ -243,8 +248,8 @@ HV2 aims to become the **de facto standard for AI-controlled virtualization**:
 
 ```bash
 # Clone the repository
-git clone https://github.com/nervosys/hv2
-cd hv2
+git clone https://github.com/nervosys/HyperMachine
+cd HyperMachine
 
 # Build the project
 cargo build --release
@@ -263,12 +268,12 @@ For detailed instructions, see [GETTING_STARTED.md](GETTING_STARTED.md).
 
 ## Contact & Community
 
-- **GitHub**: https://github.com/nervosys/hv2
+- **GitHub**: https://github.com/nervosys/HyperMachine
 - **Issues**: Report bugs and request features
 - **Discussions**: Ask questions and share ideas
 
 ---
 
-**HV2** - Type 2 Hypervisor empowering AI agents to manage virtualization infrastructure safely, efficiently, and intelligently. 🚀🤖
+**HyperMachine** - Empowering AI agents to manage virtualization infrastructure safely, efficiently, and intelligently. 🚀🤖
 
-*Coming Soon: **HV1** - Type 1 bare-metal hypervisor for maximum performance*
+*HV2 Mode (hosted) - Available Now | HV1 Mode (bare-metal) - Coming Soon*

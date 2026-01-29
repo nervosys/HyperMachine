@@ -1,8 +1,8 @@
-# AetherVM Development Roadmap
+# HyperMachine Development Roadmap
 
 ## Overview
 
-AetherVM is a lightweight hypervisor implementation targeting x86-64 architecture with comprehensive device emulation and interrupt handling.
+HyperMachine is a high-performance hypervisor framework written in Rust supporting both Type 2 (hosted) and Type 1 (bare-metal) modes. Currently targeting x86-64 architecture with comprehensive device emulation and interrupt handling.
 
 ---
 
@@ -155,7 +155,7 @@ AetherVM is a lightweight hypervisor implementation targeting x86-64 architectur
 | 0x04         | Cache parameters (L1D, L1I, L2)                           |
 | 0x07         | Extended features                                         |
 | 0x0D         | XSAVE features                                            |
-| 0x40000000-1 | Hypervisor identification ("AetherVMHV")                  |
+| 0x40000000-1 | Hypervisor identification ("HyperMachne")                 |
 | 0x80000000-8 | Extended info, brand string, address sizes                |
 
 ---
@@ -1778,3 +1778,151 @@ Implemented hierarchical task planning and goal management for AI agents:
 | `crates/hv2-agent/src/memory.rs`                    | Episodic & semantic memory      |
 | `crates/hv2-agent/src/tools.rs`                     | Tool-use framework              |
 | `crates/hv2-agent/src/perception.rs`                | Environment perception system   |
+
+---
+
+## HV1/HV2 Dual-Mode Architecture
+
+### Overview
+
+HyperMachine is designed to support two operational modes:
+
+| Mode | Type | Host OS Required | Target Use Case |
+|------|------|------------------|-----------------|
+| **HV2** | Type 2 (Hosted) | Yes (Linux/Windows/macOS) | Development, Testing, Edge |
+| **HV1** | Type 1 (Bare-metal) | No | Production, Cloud, Data Center |
+
+### HV2 Mode (Type 2) - *Currently Implemented*
+
+HV2 runs as a user-space application on an existing host operating system, leveraging platform-specific hypervisor APIs:
+
+| Platform | Backend | Hardware Extension |
+|----------|---------|-------------------|
+| Linux | KVM | Intel VT-x / AMD-V |
+| Windows | WHPX | Intel VT-x / AMD-V |
+| macOS | HVF (Hypervisor.framework) | Apple Hypervisor |
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Guest VMs                             │
+├─────────────────────────────────────────────────────────┤
+│                 HyperMachine (HV2)                       │
+│            (User-space hypervisor layer)                 │
+├─────────────────────────────────────────────────────────┤
+│              KVM / WHPX / HVF API                        │
+├─────────────────────────────────────────────────────────┤
+│                  Host OS Kernel                          │
+├─────────────────────────────────────────────────────────┤
+│                    Hardware                              │
+└─────────────────────────────────────────────────────────┘
+```
+
+### HV1 Mode (Type 1) - *Planned*
+
+HV1 will run directly on bare metal without a host OS, implementing its own VMX/SVM virtualization:
+
+| Architecture | Extension | Implementation |
+|--------------|-----------|----------------|
+| x86-64 (Intel) | VMX | Direct VMXON/VMCS manipulation |
+| x86-64 (AMD) | SVM | Direct VMRUN/VMCB manipulation |
+| ARM64 | EL2 | Direct EL2 hypervisor mode |
+
+**Architecture:**
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Guest VMs                             │
+├─────────────────────────────────────────────────────────┤
+│                 HyperMachine (HV1)                       │
+│           (Bare-metal hypervisor layer)                  │
+├─────────────────────────────────────────────────────────┤
+│              VMX / SVM / EL2 Hardware                    │
+├─────────────────────────────────────────────────────────┤
+│                    Hardware                              │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Planned HV1 Implementation Phases
+
+#### Phase HV1-1: Core VMX/SVM Support
+- Direct hardware virtualization without host OS
+- VMCS/VMCB setup and management
+- VM entry/exit handling
+- Minimal trusted computing base (TCB)
+
+#### Phase HV1-2: Memory Virtualization
+- Extended Page Tables (EPT) for Intel
+- Nested Page Tables (NPT) for AMD
+- Direct memory management without host OS assistance
+- DMA remapping via VT-d/AMD-Vi
+
+#### Phase HV1-3: Interrupt Virtualization
+- Posted interrupts (Intel) / AVIC (AMD)
+- Direct APIC virtualization
+- Minimal interrupt latency
+- MSI/MSI-X routing
+
+#### Phase HV1-4: Device Passthrough
+- VFIO-style PCI passthrough (without Linux VFIO)
+- GPU passthrough for ML/AI workloads
+- NVMe direct access
+- IOMMU management
+
+#### Phase HV1-5: Boot and Runtime
+- UEFI boot loader
+- Firmware integration
+- Runtime services
+- Management interface (serial, network)
+
+### Code Sharing Strategy
+
+The codebase is structured to maximize code sharing between HV1 and HV2:
+
+| Component | Shared | HV2-Specific | HV1-Specific |
+|-----------|--------|--------------|--------------|
+| Device Emulation | ✅ | - | - |
+| Guest State Management | ✅ | - | - |
+| Memory Abstractions | ✅ | - | - |
+| Platform Backend | - | KVM/WHPX/HVF | VMX/SVM direct |
+| Memory Mapping | - | mmap/VirtualAlloc | EPT/NPT direct |
+| Interrupt Delivery | - | Platform API | Posted/AVIC |
+
+### Planned Crate Structure
+
+```
+crates/
+├── hm-common/          # Shared abstractions (devices, memory, guest state)
+├── hv2-core/           # Type 2 implementation (current)
+├── hv2-cpu/            # Type 2 CPU backends
+├── hv1-core/           # Type 1 implementation (planned)
+├── hv1-vmx/            # Intel VMX backend (planned)
+├── hv1-svm/            # AMD SVM backend (planned)
+├── hv1-arm/            # ARM EL2 backend (planned)
+├── hv2-gpu/            # GPU virtualization
+├── hv2-net/            # Network virtualization
+├── hv2-agent/          # AI agent interface
+├── hv2-api/            # Remote APIs
+└── hv2-cli/            # CLI tool
+```
+
+### Benefits of Dual-Mode Architecture
+
+| Benefit | HV2 Advantage | HV1 Advantage |
+|---------|---------------|---------------|
+| **Development** | Easy debugging, standard tools | - |
+| **Performance** | Good for most workloads | Maximum, no host overhead |
+| **Isolation** | Good, OS-provided | Maximum, minimal TCB |
+| **Deployment** | Simple, runs anywhere | Complex, bare metal only |
+| **Hardware Access** | Via host OS drivers | Direct hardware control |
+| **Multi-tenant** | Shared resources | Dedicated hardware |
+
+### Timeline
+
+| Phase | Target | Status |
+|-------|--------|--------|
+| HV2 Core | Q1-Q2 2024 | ✅ Complete |
+| HV2 Full Features | Q3-Q4 2024 | 🚧 In Progress |
+| HV1 Research | Q1 2025 | 📋 Planned |
+| HV1 Alpha | Q2-Q3 2025 | 📋 Planned |
+| HV1 Beta | Q4 2025 | 📋 Planned |
+| HV1 Production | 2026 | 📋 Planned |

@@ -1,22 +1,22 @@
-# Getting Started with AetherVM
+# Getting Started with HyperMachine
 
-Welcome to AetherVM! This guide will help you get started with the high-performance VM framework designed for AI agents.
+Welcome to HyperMachine! This guide will help you get started with the high-performance hypervisor framework designed for AI agents.
 
 ## Installation
 
 ### From Source
 
 ```bash
-git clone https://github.com/nervosys/aethervm
-cd aethervm
+git clone https://github.com/nervosys/HyperMachine
+cd HyperMachine
 cargo build --release
-cargo install --path crates/aethervm-cli
+cargo install --path crates/hv2-cli
 ```
 
 ### Using Cargo
 
 ```bash
-cargo install aethervm-cli
+cargo install hv2-cli
 ```
 
 ## Quick Start
@@ -24,7 +24,7 @@ cargo install aethervm-cli
 ### 1. Create Your First VM
 
 ```bash
-aethervm create \
+hv2 create \
   --name my-first-vm \
   --cpu 2 \
   --memory 4 \
@@ -35,19 +35,19 @@ aethervm create \
 ### 2. Start the VM
 
 ```bash
-aethervm start my-first-vm
+hv2 start my-first-vm
 ```
 
 ### 3. Check Status
 
 ```bash
-aethervm status my-first-vm
+hv2 status my-first-vm
 ```
 
 ### 4. Stop the VM
 
 ```bash
-aethervm stop my-first-vm
+hv2 stop my-first-vm
 ```
 
 ## Using the API
@@ -55,7 +55,7 @@ aethervm stop my-first-vm
 ### Start API Servers
 
 ```bash
-aethervm serve --grpc-port 50051 --rest-port 8080
+hv2 serve --grpc-port 50051 --rest-port 8080
 ```
 
 ### REST API Examples
@@ -86,20 +86,20 @@ curl -X POST http://localhost:8080/api/v1/vms/{vm_id}/start
 ### Basic Script Execution
 
 ```bash
-aethervm script my-vm --script "vm_state"
+hv2 script my-vm --script "vm_state"
 ```
 
 ### From File
 
 ```bash
 echo 'print("VM: " + vm_name); vm_state' > script.rhai
-aethervm script my-vm --script script.rhai
+hv2 script my-vm --script script.rhai
 ```
 
 ### Programmatic Usage
 
 ```rust
-use aethervm_agent::AgentVM;
+use hv2_agent::AgentVM;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -165,7 +165,7 @@ metrics = true
 Load configuration:
 
 ```rust
-use aethervm_core::Config;
+use hv2_core::Config;
 
 let config = Config::from_file("config.toml")?;
 ```
@@ -175,7 +175,7 @@ let config = Config::from_file("config.toml")?;
 ### GPU Passthrough
 
 ```bash
-aethervm create \
+hv2 create \
   --name gpu-vm \
   --gpu-passthrough \
   --gpu-device 0000:01:00.0
@@ -184,7 +184,7 @@ aethervm create \
 ### Network Configuration
 
 ```bash
-aethervm create \
+hv2 create \
   --name net-vm \
   --network \
   --ip 192.168.100.10 \
@@ -194,7 +194,7 @@ aethervm create \
 ### Custom Script Timeout
 
 ```bash
-aethervm script my-vm \
+hv2 script my-vm \
   --script "long_running_task()" \
   --timeout 600
 ```
@@ -224,13 +224,13 @@ otlp_endpoint = "http://localhost:4317"
 ### View Logs
 
 ```bash
-export RUST_LOG=aethervm=debug
-aethervm start my-vm
+export RUST_LOG=hv2=debug
+hv2 start my-vm
 ```
 
 ## Examples
 
-AetherVM includes several examples:
+HyperMachine includes several examples:
 
 ```bash
 # Basic VM management
@@ -247,7 +247,7 @@ cargo run --example agent_script
 - Check virtualization is enabled in BIOS
 - Verify KVM/WHPX is available
 - Check memory availability
-- Review logs: `RUST_LOG=debug aethervm start my-vm`
+- Review logs: `RUST_LOG=debug hv2 start my-vm`
 
 ### Script Timeout
 
@@ -276,8 +276,8 @@ cargo run --example agent_script
 
 ## Resources
 
-- [GitHub Repository](https://github.com/nervosys/aethervm)
-- [API Documentation](https://docs.rs/aethervm)
+- [GitHub Repository](https://github.com/nervosys/HyperMachine)
+- [API Documentation](https://docs.rs/hv2-core)
 - [Examples](examples/)
 - [Contributing Guide](CONTRIBUTING.md)
 
