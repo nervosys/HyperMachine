@@ -7,15 +7,20 @@
 use crate::vm_manager::{VmManager, VmMetrics, VmState};
 use anyhow::Result;
 use axum::{
+    body::Body,
     extract::{Path, State},
-    http::StatusCode,
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::Response,
     routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -25,6 +30,10 @@ pub struct McpServerState {
     pub vm_manager: Arc<VmManager>,
     /// Active sessions
     pub sessions: RwLock<HashMap<String, McpSession>>,
+    /// API key for authentication (optional)
+    pub api_key: Option<String>,
+    /// Rate limiter state
+    pub rate_limiter: RateLimiter,
 }
 
 /// An agent session
@@ -34,6 +43,64 @@ pub struct McpSession {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub last_activity: chrono::DateTime<chrono::Utc>,
     pub call_count: u64,
+}
+
+/// Simple rate limiter (token bucket per IP)
+pub struct RateLimiter {
+    /// Request counts per IP
+    buckets: RwLock<HashMap<String, RateBucket>>,
+    /// Max requests per window
+    pub max_requests: u64,
+    /// Window duration
+    pub window: Duration,
+}
+
+struct RateBucket {
+    count: AtomicU64,
+    window_start: Instant,
+}
+
+impl RateLimiter {
+    pub fn new(max_requests: u64, window: Duration) -> Self {
+        Self {
+            buckets: RwLock::new(HashMap::new()),
+            max_requests,
+            window,
+        }
+    }
+
+    /// Check if request is allowed, returns remaining quota
+    pub async fn check(&self, key: &str) -> Result<u64, ()> {
+        let now = Instant::now();
+        let mut buckets = self.buckets.write().await;
+
+        let bucket = buckets
+            .entry(key.to_string())
+            .or_insert_with(|| RateBucket {
+                count: AtomicU64::new(0),
+                window_start: now,
+            });
+
+        // Reset if window expired
+        if now.duration_since(bucket.window_start) > self.window {
+            bucket.count.store(0, Ordering::SeqCst);
+            bucket.window_start = now;
+        }
+
+        let current = bucket.count.fetch_add(1, Ordering::SeqCst);
+        if current >= self.max_requests {
+            Err(())
+        } else {
+            Ok(self.max_requests - current - 1)
+        }
+    }
+}
+
+impl Default for RateLimiter {
+    fn default() -> Self {
+        // Default: 100 requests per minute
+        Self::new(100, Duration::from_secs(60))
+    }
 }
 
 /// Tool definition (OpenAI/Anthropic compatible)
@@ -107,13 +174,73 @@ fn default_timeout() -> u64 {
     300
 }
 
+/// Authentication middleware
+async fn auth_middleware(
+    State(state): State<Arc<McpServerState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    // If no API key configured, allow all requests
+    let Some(ref required_key) = state.api_key else {
+        return Ok(next.run(request).await);
+    };
+
+    // Check Authorization header
+    let auth_header = request
+        .headers()
+        .get("Authorization")
+        .and_then(|h| h.to_str().ok());
+
+    match auth_header {
+        Some(header) if header.starts_with("Bearer ") => {
+            let token = &header[7..];
+            if token == required_key {
+                Ok(next.run(request).await)
+            } else {
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+        _ => Err(StatusCode::UNAUTHORIZED),
+    }
+}
+
+/// Rate limiting middleware
+async fn rate_limit_middleware(
+    State(state): State<Arc<McpServerState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    // Use X-Forwarded-For or connection IP as key
+    let ip = request
+        .headers()
+        .get("X-Forwarded-For")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or("unknown").trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    match state.rate_limiter.check(&ip).await {
+        Ok(_remaining) => Ok(next.run(request).await),
+        Err(_) => Err(StatusCode::TOO_MANY_REQUESTS),
+    }
+}
+
 /// Start the MCP HTTP server
 pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
     let vm_manager = Arc::new(VmManager::new()?);
 
+    // Load API key from environment
+    let api_key = std::env::var("HM_API_KEY").ok();
+    if api_key.is_some() {
+        tracing::info!("API key authentication enabled");
+    } else {
+        tracing::warn!("No API key configured (set HM_API_KEY for authentication)");
+    }
+
     let state = Arc::new(McpServerState {
         vm_manager,
         sessions: RwLock::new(HashMap::new()),
+        api_key,
+        rate_limiter: RateLimiter::default(),
     });
 
     let cors = CorsLayer::new()
@@ -121,21 +248,34 @@ pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = Router::new()
-        // Discovery endpoints
-        .route("/mcp/tools", get(list_tools))
+    // Protected routes (require auth if configured)
+    let protected_routes = Router::new()
         .route("/mcp/call", post(call_tool))
-        // VM management endpoints
-        .route("/vms", get(list_vms))
         .route("/vms", post(create_vm))
-        .route("/vms/:name", get(get_vm))
         .route("/vms/:name", delete(delete_vm))
         .route("/vms/:name/start", post(start_vm))
         .route("/vms/:name/stop", post(stop_vm))
-        .route("/vms/:name/metrics", get(get_vm_metrics))
         .route("/vms/:name/script", post(execute_script))
-        // Health check
-        .route("/health", get(health_check))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
+
+    // Public routes (no auth required)
+    let public_routes = Router::new()
+        .route("/mcp/tools", get(list_tools))
+        .route("/vms", get(list_vms))
+        .route("/vms/:name", get(get_vm))
+        .route("/vms/:name/metrics", get(get_vm_metrics))
+        .route("/health", get(health_check));
+
+    let app = Router::new()
+        .merge(protected_routes)
+        .merge(public_routes)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
         .layer(cors)
         .with_state(state);
 
