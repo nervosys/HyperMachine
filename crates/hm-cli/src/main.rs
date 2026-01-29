@@ -14,11 +14,13 @@
 //! hm t1 create --name prod-vm --cpu 16 --memory 64
 //! ```
 
+mod vm_manager;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
-use hv2_agent::AgentVM;
 use std::time::Duration;
+use vm_manager::{VmManager, VmState};
 
 /// HyperMachine - High-performance hypervisor with AI agent support
 #[derive(Parser)]
@@ -175,6 +177,16 @@ enum T2Commands {
     /// List all Type 2 VMs
     List,
 
+    /// Delete a Type 2 VM
+    Delete {
+        /// VM name
+        name: String,
+
+        /// Force delete without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
     /// Execute an AI agent script on Type 2 VM
     Script {
         /// VM name
@@ -308,6 +320,8 @@ async fn handle_t1(command: T1Commands) -> Result<()> {
 async fn handle_t2(command: T2Commands) -> Result<()> {
     println!("{}", "[T2 Hosted Mode]".cyan().bold());
 
+    let manager = VmManager::new()?;
+
     match command {
         T2Commands::Create {
             name,
@@ -317,24 +331,28 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
             network,
         } => {
             println!("{}", "Creating VM...".green().bold());
-            println!("  Name:    {}", name.cyan());
-            println!("  CPUs:    {}", cpu);
-            println!("  Memory:  {} GB", memory);
-            println!("  GPU:     {}", if gpu { "enabled" } else { "disabled" });
+
+            let record = manager.create_vm(&name, cpu, memory, gpu, network).await?;
+
+            println!("  Name:    {}", record.name.cyan());
+            println!("  CPUs:    {}", record.cpu_cores);
+            println!("  Memory:  {} GB", record.memory_gb);
+            println!(
+                "  GPU:     {}",
+                if record.gpu_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
             println!(
                 "  Network: {}",
-                if network { "enabled" } else { "disabled" }
+                if record.network_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
             );
-
-            let _vm = AgentVM::builder()
-                .name(name.clone())
-                .cpu_cores(cpu)
-                .memory_gb(memory)
-                .enable_gpu(gpu)
-                .enable_networking(network)
-                .with_tracing()
-                .build()
-                .await?;
 
             println!(
                 "{}",
@@ -345,33 +363,99 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
         T2Commands::Start { name } => {
             println!("{}", format!("Starting VM '{}'...", name).green().bold());
 
-            let vm = AgentVM::builder().name(name.clone()).build().await?;
-            vm.start().await?;
+            manager.start_vm(&name).await?;
 
             println!("{}", format!("✓ VM '{}' started", name).green());
         }
 
         T2Commands::Stop { name } => {
             println!("{}", format!("Stopping VM '{}'...", name).yellow().bold());
+
+            manager.stop_vm(&name).await?;
+
             println!("{}", format!("✓ VM '{}' stopped", name).green());
         }
 
         T2Commands::Status { name } => {
             if let Some(n) = name {
+                let metrics = manager.get_metrics(&n).await?;
+
                 println!("{}", format!("VM Status: {}", n).cyan().bold());
-                println!("  State:       {}", "Running".green());
-                println!("  Uptime:      2h 15m");
-                println!("  CPU Usage:   45%");
-                println!("  Memory:      2.1/4.0 GB");
+                println!(
+                    "  State:       {}",
+                    match metrics.state {
+                        VmState::Running => "Running".green(),
+                        VmState::Stopped => "Stopped".red(),
+                        VmState::Created => "Created".yellow(),
+                        VmState::Paused => "Paused".yellow(),
+                        VmState::Error => "Error".red().bold(),
+                    }
+                );
+                println!("  CPUs:        {}", metrics.cpu_cores);
+                println!("  Memory:      {} GB", metrics.memory_gb);
+
+                if let Some(uptime) = metrics.uptime_seconds {
+                    let hours = uptime / 3600;
+                    let mins = (uptime % 3600) / 60;
+                    println!("  Uptime:      {}h {}m", hours, mins);
+                }
             } else {
-                println!("{}", "All VMs:".cyan().bold());
-                println!("  (no VMs currently running)");
+                // Show all VMs
+                let vms = manager.list_vms().await;
+                if vms.is_empty() {
+                    println!("{}", "No VMs configured".dimmed());
+                } else {
+                    println!("{}", "All VMs:".cyan().bold());
+                    for vm in vms {
+                        let state_str = match vm.state {
+                            VmState::Running => "running".green(),
+                            VmState::Stopped => "stopped".red(),
+                            VmState::Created => "created".yellow(),
+                            VmState::Paused => "paused".yellow(),
+                            VmState::Error => "error".red().bold(),
+                        };
+                        println!(
+                            "  {} - {} ({} CPU, {} GB RAM)",
+                            vm.name.cyan(),
+                            state_str,
+                            vm.cpu_cores,
+                            vm.memory_gb
+                        );
+                    }
+                }
             }
         }
 
         T2Commands::List => {
+            let vms = manager.list_vms().await;
+
             println!("{}", "Type 2 VMs:".cyan().bold());
-            println!("  (no VMs currently defined)");
+            if vms.is_empty() {
+                println!("  {}", "(no VMs configured)".dimmed());
+            } else {
+                println!(
+                    "  {:<20} {:<12} {:<6} {:<8} {:<8}",
+                    "NAME", "STATE", "CPUS", "MEMORY", "GPU"
+                );
+                println!("  {}", "-".repeat(58));
+                for vm in vms {
+                    let state_str = match vm.state {
+                        VmState::Running => "running".green().to_string(),
+                        VmState::Stopped => "stopped".red().to_string(),
+                        VmState::Created => "created".yellow().to_string(),
+                        VmState::Paused => "paused".yellow().to_string(),
+                        VmState::Error => "error".red().bold().to_string(),
+                    };
+                    println!(
+                        "  {:<20} {:<12} {:<6} {:<8} {:<8}",
+                        vm.name,
+                        state_str,
+                        vm.cpu_cores,
+                        format!("{} GB", vm.memory_gb),
+                        if vm.gpu_enabled { "yes" } else { "no" }
+                    );
+                }
+            }
         }
 
         T2Commands::Script {
@@ -386,11 +470,11 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
                     .bold()
             );
 
-            let vm = AgentVM::builder()
-                .name(name.clone())
-                .script_timeout(Duration::from_secs(timeout))
-                .build()
-                .await?;
+            // Check VM exists and is running
+            let record = manager.get_vm(&name).await?;
+            if record.state != VmState::Running {
+                anyhow::bail!("VM '{}' is not running (state: {})", name, record.state);
+            }
 
             // Read script from file if it's a path
             let script_content = if std::path::Path::new(&script).exists() {
@@ -399,10 +483,45 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
                 script
             };
 
-            let result = vm.execute_agent_script(&script_content).await?;
+            // Set timeout for the script
+            let _ = Duration::from_secs(timeout);
+
+            let result = manager.execute_script(&name, &script_content).await?;
 
             println!("{}", "Script Result:".green().bold());
             println!("{}", serde_json::to_string_pretty(&result)?);
+        }
+
+        T2Commands::Delete { name, force } => {
+            // Check if VM exists
+            let record = manager.get_vm(&name).await?;
+
+            // Confirm deletion unless --force is specified
+            if !force {
+                if record.state == VmState::Running {
+                    println!(
+                        "{}",
+                        format!("WARNING: VM '{}' is currently running!", name)
+                            .yellow()
+                            .bold()
+                    );
+                }
+                print!("{}", format!("Delete VM '{}'? [y/N] ", name).yellow());
+                use std::io::Write;
+                std::io::stdout().flush()?;
+
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+
+                if !input.trim().eq_ignore_ascii_case("y") {
+                    println!("{}", "Deletion cancelled".dimmed());
+                    return Ok(());
+                }
+            }
+
+            println!("{}", format!("Deleting VM '{}'...", name).red().bold());
+            manager.delete_vm(&name).await?;
+            println!("{}", format!("✓ VM '{}' deleted", name).green());
         }
     }
 
