@@ -1,8 +1,39 @@
-//! AI Agent interface for HV2
+//! AI Agent interface for HyperMachine
 //!
 //! This crate provides a safe, scriptable interface for AI agents to control
 //! virtual machines. It includes sandboxed execution, resource limits, and
 //! comprehensive observability.
+//!
+//! # Agent Interface Design
+//!
+//! HyperMachine is designed for agentic AI systems, providing:
+//!
+//! - **MCP-Compatible Tools**: Function calling interface compatible with OpenAI
+//!   and Anthropic tool-use patterns via the [`mcp`] module
+//! - **Multi-Agent Orchestration**: Coordination primitives for multiple agents
+//!   to collaborate on VM management via the [`orchestration`] module
+//! - **Capability-Based Security**: Fine-grained permissions for agent actions
+//! - **Audit Logging**: Complete traceability of all agent operations
+//!
+//! # Example
+//!
+//! ```rust,ignore
+//! use hv2_agent::{McpServer, AgentCapabilities, AgentOrchestrator};
+//!
+//! // Create MCP server for tool-use interface
+//! let mcp = McpServer::new();
+//!
+//! // Register an AI agent with operator capabilities
+//! let session = mcp.create_session("ai-assistant", AgentCapabilities::operator())?;
+//!
+//! // Agent can discover available tools
+//! let tools = session.list_tools(&mcp);
+//!
+//! // For multi-agent scenarios, use the orchestrator
+//! let orchestrator = AgentOrchestrator::new();
+//! orchestrator.register_agent("agent-1", "Operator", AgentRole::Operator)?;
+//! orchestrator.register_agent("agent-2", "Monitor", AgentRole::Monitor)?;
+//! ```
 
 pub mod actions;
 pub mod agent_vm;
@@ -11,7 +42,9 @@ pub mod communication;
 pub mod events;
 pub mod learning;
 pub mod limits;
+pub mod mcp;
 pub mod memory;
+pub mod orchestration;
 pub mod perception;
 pub mod planning;
 pub mod policies;
@@ -93,6 +126,20 @@ pub use tools::{
     ArgSource, ParameterType, RegisteredTool, SharedToolRegistry, ToolCall, ToolCallResult,
     ToolCategory, ToolChain, ToolChainStep, ToolDefinition, ToolError, ToolHandler, ToolParameter,
     ToolRegistry, ToolResult,
+};
+
+// MCP interface for AI agent tool-use
+pub use mcp::{
+    AgentCapabilities, AgentCapability, AgentSession, AuditEntry, McpConfig, McpServer, McpTool,
+    ToolCallRequest, ToolCallResponse, ToolCategory as McpToolCategory,
+};
+
+// Multi-agent orchestration
+pub use orchestration::{
+    AgentInfo as OrchAgentInfo, AgentOrchestrator, AgentRole, AgentState, Channel as OrchChannel,
+    Conflict, ConflictResolution, ConflictType, EventType, MessagePriority as OrchMessagePriority,
+    MessageType as OrchMessageType, OrchestrationError, OrchestratorConfig, TaskState, VmClaim,
+    Workflow as OrchWorkflow, WorkflowState, WorkflowTask, AgentMessage,
 };
 
 use thiserror::Error;
