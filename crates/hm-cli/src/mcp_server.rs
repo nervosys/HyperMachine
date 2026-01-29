@@ -703,3 +703,109 @@ async fn health_check() -> Json<serde_json::Value> {
         "version": env!("CARGO_PKG_VERSION")
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn test_rate_limiter_allows_requests_within_limit() {
+        let limiter = RateLimiter::new(5, Duration::from_secs(60));
+
+        // First 5 requests should succeed
+        for i in 0..5 {
+            let result = limiter.check("test-ip").await;
+            assert!(result.is_ok(), "Request {} should be allowed", i);
+        }
+
+        // 6th request should fail
+        let result = limiter.check("test-ip").await;
+        assert!(result.is_err(), "Request 6 should be rate limited");
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_separate_keys() {
+        let limiter = RateLimiter::new(2, Duration::from_secs(60));
+
+        // Each key has its own limit
+        assert!(limiter.check("ip-1").await.is_ok());
+        assert!(limiter.check("ip-1").await.is_ok());
+        assert!(limiter.check("ip-1").await.is_err()); // ip-1 exhausted
+
+        // ip-2 should still have quota
+        assert!(limiter.check("ip-2").await.is_ok());
+        assert!(limiter.check("ip-2").await.is_ok());
+        assert!(limiter.check("ip-2").await.is_err()); // ip-2 exhausted
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_returns_remaining() {
+        let limiter = RateLimiter::new(5, Duration::from_secs(60));
+
+        assert_eq!(limiter.check("test").await, Ok(4)); // 5-1=4 remaining
+        assert_eq!(limiter.check("test").await, Ok(3)); // 5-2=3 remaining
+        assert_eq!(limiter.check("test").await, Ok(2));
+        assert_eq!(limiter.check("test").await, Ok(1));
+        assert_eq!(limiter.check("test").await, Ok(0)); // Last allowed request
+        assert!(limiter.check("test").await.is_err()); // Rate limited
+    }
+
+    #[test]
+    fn test_tool_definitions_are_valid() {
+        // Verify list_tools returns properly structured tools
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let tools = rt.block_on(async { list_tools().await.0 });
+
+        assert!(!tools.is_empty(), "Should have at least one tool");
+
+        for tool in &tools {
+            assert!(!tool.name.is_empty(), "Tool name should not be empty");
+            assert!(
+                !tool.description.is_empty(),
+                "Tool description should not be empty"
+            );
+            assert!(
+                tool.parameters.is_object(),
+                "Tool parameters should be an object"
+            );
+        }
+
+        // Check for expected tools
+        let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        assert!(tool_names.contains(&"vm.create"));
+        assert!(tool_names.contains(&"vm.list"));
+        assert!(tool_names.contains(&"vm.start"));
+        assert!(tool_names.contains(&"vm.stop"));
+        assert!(tool_names.contains(&"vm.delete"));
+        assert!(tool_names.contains(&"vm.get"));
+        assert!(tool_names.contains(&"vm.metrics"));
+        assert!(tool_names.contains(&"vm.execute_script"));
+    }
+
+    #[test]
+    fn test_vm_create_tool_schema() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let tools = rt.block_on(async { list_tools().await.0 });
+
+        let create_tool = tools.iter().find(|t| t.name == "vm.create").unwrap();
+
+        // Verify required fields
+        let params = &create_tool.parameters;
+        let props = params.get("properties").unwrap();
+
+        assert!(props.get("name").is_some(), "Should have name property");
+        assert!(
+            props.get("cpu_cores").is_some(),
+            "Should have cpu_cores property"
+        );
+        assert!(
+            props.get("memory_gb").is_some(),
+            "Should have memory_gb property"
+        );
+
+        // Verify 'name' is required
+        let required = params.get("required").unwrap().as_array().unwrap();
+        assert!(required.iter().any(|v| v == "name"));
+    }
+}
