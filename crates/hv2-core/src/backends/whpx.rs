@@ -6477,15 +6477,33 @@ mod tests {
             if let Ok(vm) = WhpxVm::new(1, 1024 * 1024) {
                 if let Ok(vcpu) = vm.create_vcpu(0) {
                     let stats = vcpu.get_interrupt_stats();
-                    
-                    assert_eq!(stats.interrupts_injected, 0, "Initial injection count should be 0");
-                    assert_eq!(stats.interrupts_deferred, 0, "Initial deferral count should be 0");
-                    assert_eq!(stats.window_requests, 0, "Initial window request count should be 0");
-                    assert_eq!(stats.window_exits, 0, "Initial window exit count should be 0");
+
+                    assert_eq!(
+                        stats.interrupts_injected, 0,
+                        "Initial injection count should be 0"
+                    );
+                    assert_eq!(
+                        stats.interrupts_deferred, 0,
+                        "Initial deferral count should be 0"
+                    );
+                    assert_eq!(
+                        stats.window_requests, 0,
+                        "Initial window request count should be 0"
+                    );
+                    assert_eq!(
+                        stats.window_exits, 0,
+                        "Initial window exit count should be 0"
+                    );
                     assert_eq!(stats.nmis_injected, 0, "Initial NMI count should be 0");
-                    assert_eq!(stats.if_enabled_count, 0, "Initial IF enabled count should be 0");
-                    assert_eq!(stats.if_disabled_count, 0, "Initial IF disabled count should be 0");
-                    
+                    assert_eq!(
+                        stats.if_enabled_count, 0,
+                        "Initial IF enabled count should be 0"
+                    );
+                    assert_eq!(
+                        stats.if_disabled_count, 0,
+                        "Initial IF disabled count should be 0"
+                    );
+
                     println!("✓ Interrupt statistics initialized correctly");
                 }
             }
@@ -6502,13 +6520,15 @@ mod tests {
                     for _ in 0..5 {
                         let _ = vcpu.is_interrupt_enabled();
                     }
-                    
+
                     let stats = vcpu.get_interrupt_stats();
                     let total_checks = stats.if_enabled_count + stats.if_disabled_count;
-                    
+
                     assert_eq!(total_checks, 5, "Should have 5 total IF checks");
-                    println!("✓ Interrupt flag statistics tracking: {} enabled, {} disabled",
-                             stats.if_enabled_count, stats.if_disabled_count);
+                    println!(
+                        "✓ Interrupt flag statistics tracking: {} enabled, {} disabled",
+                        stats.if_enabled_count, stats.if_disabled_count
+                    );
                 }
             }
         }
@@ -6524,14 +6544,16 @@ mod tests {
                     for _ in 0..10 {
                         let _ = vcpu.is_interrupt_enabled();
                     }
-                    
+
                     let stats_before = vcpu.get_interrupt_stats();
-                    assert!(stats_before.if_enabled_count + stats_before.if_disabled_count > 0,
-                            "Should have some statistics before reset");
-                    
+                    assert!(
+                        stats_before.if_enabled_count + stats_before.if_disabled_count > 0,
+                        "Should have some statistics before reset"
+                    );
+
                     // Reset statistics
                     vcpu.reset_interrupt_stats();
-                    
+
                     let stats_after = vcpu.get_interrupt_stats();
                     assert_eq!(stats_after.interrupts_injected, 0);
                     assert_eq!(stats_after.interrupts_deferred, 0);
@@ -6540,7 +6562,7 @@ mod tests {
                     assert_eq!(stats_after.nmis_injected, 0);
                     assert_eq!(stats_after.if_enabled_count, 0);
                     assert_eq!(stats_after.if_disabled_count, 0);
-                    
+
                     println!("✓ Interrupt statistics reset successfully");
                 }
             }
@@ -6557,24 +6579,29 @@ mod tests {
                     for _ in 0..20 {
                         let _ = vcpu.is_interrupt_enabled();
                     }
-                    
+
                     let stats = vcpu.get_interrupt_stats();
-                    
+
                     // Test total_attempts()
                     let total = stats.total_attempts();
                     assert!(total > 0, "Total attempts should be > 0");
                     println!("✓ total_attempts() = {}", total);
-                    
+
                     // Test success_rate() - returns 0.0 if no injections yet
                     let success_rate = stats.success_rate();
-                    assert!(success_rate >= 0.0 && success_rate <= 100.0,
-                            "Success rate should be between 0 and 100");
+                    assert!(
+                        success_rate >= 0.0 && success_rate <= 100.0,
+                        "Success rate should be between 0 and 100"
+                    );
                     println!("✓ success_rate() = {:.2}%", success_rate);
-                    
+
                     // Test avg_window_requests_per_injection() - returns 0.0 if no injections
                     let avg_requests = stats.avg_window_requests_per_injection();
                     assert!(avg_requests >= 0.0, "Average should be non-negative");
-                    println!("✓ avg_window_requests_per_injection() = {:.2}", avg_requests);
+                    println!(
+                        "✓ avg_window_requests_per_injection() = {:.2}",
+                        avg_requests
+                    );
                 }
             }
         }
@@ -6588,17 +6615,23 @@ mod tests {
                 if let Ok(vcpu) = vm.create_vcpu(0) {
                     let stats_before = vcpu.get_interrupt_stats();
                     let initial_requests = stats_before.window_requests;
-                    
+
                     // Request an interrupt window
                     match vcpu.request_interrupt_window() {
                         Ok(()) => {
                             let stats_after = vcpu.get_interrupt_stats();
-                            assert_eq!(stats_after.window_requests, initial_requests + 1,
-                                      "Window request count should increment");
+                            assert_eq!(
+                                stats_after.window_requests,
+                                initial_requests + 1,
+                                "Window request count should increment"
+                            );
                             println!("✓ Interrupt window request tracked in statistics");
                         }
                         Err(e) => {
-                            println!("⚠ Interrupt window request failed (may not be supported): {}", e);
+                            println!(
+                                "⚠ Interrupt window request failed (may not be supported): {}",
+                                e
+                            );
                         }
                     }
                 }
@@ -6617,17 +6650,20 @@ mod tests {
                     let ivt_entry: Vec<u8> = vec![
                         0x00, 0x10, 0x00, 0x00, // IP:CS for interrupt vector 0x20
                     ];
-                    
+
                     if vm.write_guest_memory(0x80, &ivt_entry).is_ok() {
                         let stats_before = vcpu.get_interrupt_stats();
                         let initial_injected = stats_before.interrupts_injected;
-                        
+
                         // Try to inject an interrupt (vector 0x20 - timer)
                         match vcpu.inject_interrupt(0x20) {
                             Ok(()) => {
                                 let stats_after = vcpu.get_interrupt_stats();
-                                assert_eq!(stats_after.interrupts_injected, initial_injected + 1,
-                                          "Interrupt injection count should increment");
+                                assert_eq!(
+                                    stats_after.interrupts_injected,
+                                    initial_injected + 1,
+                                    "Interrupt injection count should increment"
+                                );
                                 println!("✓ Interrupt injection tracked in statistics");
                             }
                             Err(e) => {
@@ -6648,13 +6684,16 @@ mod tests {
                 if let Ok(vcpu) = vm.create_vcpu(0) {
                     let stats_before = vcpu.get_interrupt_stats();
                     let initial_nmis = stats_before.nmis_injected;
-                    
+
                     // Inject an NMI
                     match vcpu.inject_nmi() {
                         Ok(()) => {
                             let stats_after = vcpu.get_interrupt_stats();
-                            assert_eq!(stats_after.nmis_injected, initial_nmis + 1,
-                                      "NMI injection count should increment");
+                            assert_eq!(
+                                stats_after.nmis_injected,
+                                initial_nmis + 1,
+                                "NMI injection count should increment"
+                            );
                             println!("✓ NMI injection tracked in statistics");
                         }
                         Err(e) => {
@@ -6677,27 +6716,30 @@ mod tests {
                         0xFA, // CLI (clear interrupt flag)
                         0xF4, // HLT
                     ];
-                    
+
                     if vm.write_guest_memory(0x1000, &code).is_ok() {
                         // Set entry point
                         let mut regs = vcpu.get_register_set().unwrap_or_default();
                         regs.rip = 0x1000;
                         let _ = vcpu.set_register_set(&regs);
-                        
+
                         // Execute CLI to disable interrupts
                         let _ = vcpu.run();
-                        
+
                         // Verify interrupts are disabled
                         if let Ok(false) = vcpu.is_interrupt_enabled() {
                             println!("✓ Interrupts disabled via CLI");
-                            
+
                             // NMI should still be injectable
                             match vcpu.inject_nmi() {
                                 Ok(()) => {
                                     println!("✓ NMI successfully injected despite RFLAGS.IF=0");
-                                    
+
                                     let stats = vcpu.get_interrupt_stats();
-                                    assert_eq!(stats.nmis_injected, 1, "Should have 1 NMI injected");
+                                    assert_eq!(
+                                        stats.nmis_injected, 1,
+                                        "Should have 1 NMI injected"
+                                    );
                                 }
                                 Err(e) => {
                                     println!("⚠ NMI injection failed: {}", e);
@@ -6719,25 +6761,25 @@ mod tests {
             if let Ok(vm) = WhpxVm::new(1, 4 * 1024 * 1024) {
                 if let Ok(vcpu) = vm.create_vcpu(0) {
                     println!("\n=== Comprehensive Interrupt Statistics Test ===");
-                    
+
                     // 1. Check IF multiple times
                     for _ in 0..5 {
                         let _ = vcpu.is_interrupt_enabled();
                     }
-                    
+
                     // 2. Request interrupt windows
                     for _ in 0..3 {
                         let _ = vcpu.request_interrupt_window();
                     }
-                    
+
                     // 3. Inject NMIs
                     for _ in 0..2 {
                         let _ = vcpu.inject_nmi();
                     }
-                    
+
                     // Get final statistics
                     let stats = vcpu.get_interrupt_stats();
-                    
+
                     println!("Interrupt Statistics:");
                     println!("  Interrupts injected:      {}", stats.interrupts_injected);
                     println!("  Interrupts deferred:      {}", stats.interrupts_deferred);
@@ -6748,14 +6790,26 @@ mod tests {
                     println!("  IF disabled checks:       {}", stats.if_disabled_count);
                     println!("  Total attempts:           {}", stats.total_attempts());
                     println!("  Success rate:             {:.2}%", stats.success_rate());
-                    println!("  Avg window reqs/inject:   {:.2}", stats.avg_window_requests_per_injection());
-                    
+                    println!(
+                        "  Avg window reqs/inject:   {:.2}",
+                        stats.avg_window_requests_per_injection()
+                    );
+
                     // Verify expected counts
-                    assert_eq!(stats.if_enabled_count + stats.if_disabled_count, 5,
-                              "Should have 5 IF checks");
-                    assert!(stats.window_requests >= 3, "Should have at least 3 window requests");
-                    assert!(stats.nmis_injected >= 2, "Should have at least 2 NMI injections");
-                    
+                    assert_eq!(
+                        stats.if_enabled_count + stats.if_disabled_count,
+                        5,
+                        "Should have 5 IF checks"
+                    );
+                    assert!(
+                        stats.window_requests >= 3,
+                        "Should have at least 3 window requests"
+                    );
+                    assert!(
+                        stats.nmis_injected >= 2,
+                        "Should have at least 2 NMI injections"
+                    );
+
                     println!("✓ Comprehensive statistics test passed");
                 }
             }
@@ -6767,13 +6821,13 @@ mod tests {
         // Verify thread-safe access to interrupt statistics
         use std::sync::Arc;
         use tokio::task;
-        
+
         if let Ok(_backend) = WhpxBackend::new() {
             if let Ok(vm) = WhpxVm::new(1, 1024 * 1024) {
                 if let Ok(vcpu) = vm.create_vcpu(0) {
                     let vcpu_arc = Arc::new(vcpu);
                     let mut handles = vec![];
-                    
+
                     // Spawn 10 tasks that concurrently check interrupt flag
                     for _ in 0..10 {
                         let vcpu_clone = Arc::clone(&vcpu_arc);
@@ -6784,18 +6838,24 @@ mod tests {
                         });
                         handles.push(handle);
                     }
-                    
+
                     // Wait for all tasks to complete
                     for handle in handles {
                         let _ = handle.await;
                     }
-                    
+
                     // Verify statistics
                     let stats = vcpu_arc.get_interrupt_stats();
                     let total_checks = stats.if_enabled_count + stats.if_disabled_count;
-                    
-                    assert_eq!(total_checks, 100, "Should have 100 total IF checks from concurrent tasks");
-                    println!("✓ Concurrent statistics access test passed: {} total checks", total_checks);
+
+                    assert_eq!(
+                        total_checks, 100,
+                        "Should have 100 total IF checks from concurrent tasks"
+                    );
+                    println!(
+                        "✓ Concurrent statistics access test passed: {} total checks",
+                        total_checks
+                    );
                 }
             }
         }

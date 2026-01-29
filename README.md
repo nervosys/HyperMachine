@@ -1,6 +1,6 @@
-# HV2 - Type 2 Hypervisor
+# HyperMachine
 
-A high-performance, remotely scriptable Type 2 hypervisor and emulator framework written in Rust with first-class support for agentic AI.
+A high-performance, remotely scriptable hypervisor and emulator framework written in Rust with first-class support for agentic AI. Supports Type-1 (hv1) and Type-2 (hv2) operational modes.
 
 > **Note**: HV2 is a Type 2 (hosted) hypervisor. A Type 1 (bare-metal) hypervisor variant (HV1) is planned for future development.
 
@@ -39,6 +39,10 @@ A high-performance, remotely scriptable Type 2 hypervisor and emulator framework
 
 ## Architecture
 
+HyperMachine supports two operational modes:
+
+### Type 2 Mode (HV2) - Hosted Hypervisor
+Runs on top of an existing operating system (Windows, Linux, macOS).
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    AI Agent Interface                    │
@@ -51,7 +55,26 @@ A high-performance, remotely scriptable Type 2 hypervisor and emulator framework
 │  Emulation   │ (Vulkan/GPU) │  (TAP/TUN)   │ Management │
 ├──────────────┴──────────────┴──────────────┴────────────┤
 │                      HV2 Core Engine                     │
-│                  (Type 2 Hypervisor)                     │
+│            (Type 2 Hypervisor - KVM/WHPX/HVF)            │
+├─────────────────────────────────────────────────────────┤
+│                    Host OS (Linux/Windows/macOS)         │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Type 1 Mode (HV1) - Bare-Metal Hypervisor *(Planned)*
+Runs directly on hardware without a host OS for maximum performance.
+```
+┌─────────────────────────────────────────────────────────┐
+│                    AI Agent Interface                    │
+├─────────────────────────────────────────────────────────┤
+│                     Remote API Layer                     │
+├──────────────┬──────────────┬──────────────┬────────────┤
+│   CPU Core   │  GPU Module  │   Network    │   Memory   │
+├──────────────┴──────────────┴──────────────┴────────────┤
+│                      HV1 Core Engine                     │
+│              (Type 1 Hypervisor - VMX/SVM)               │
+├─────────────────────────────────────────────────────────┤
+│                    Hardware (x86-64/ARM64)               │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -60,8 +83,8 @@ A high-performance, remotely scriptable Type 2 hypervisor and emulator framework
 ### Installation
 
 ```bash
-git clone https://github.com/nervosys/hv2
-cd hv2
+git clone https://github.com/nervosys/HyperMachine
+cd HyperMachine
 cargo build --release --package hv2-cli
 cp target/release/hv2 target/release/hv2-cli ~/.cargo/bin/
 ## Or add target/release to your PATH
@@ -137,8 +160,8 @@ async fn main() -> anyhow::Result<()> {
 ## Building from Source
 
 ```bash
-git clone https://github.com/nervosys/hv2
-cd hv2
+git clone https://github.com/nervosys/HyperMachine
+cd HyperMachine
 cargo build --release
 ```
 

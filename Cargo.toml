@@ -13,9 +13,9 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["HV2 Contributors"]
+authors = ["HyperMachine Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/nervosys/hv2"
+repository = "https://github.com/nervosys/HyperMachine"
 rust-version = "1.75"
 
 [workspace.dependencies]

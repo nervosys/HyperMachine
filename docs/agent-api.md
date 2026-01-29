@@ -2,12 +2,12 @@
 
 ## Overview
 
-The AetherVM Agent API provides a safe, scriptable interface for AI agents to control virtual machines. All operations are subject to capability checks and resource limits.
+The HyperMachine Agent API provides a safe, scriptable interface for AI agents to control virtual machines. All operations are subject to capability checks and resource limits.
 
 ## Quick Start
 
 ```rust
-use aethervm_agent::AgentVM;
+use hv2_agent::AgentVM;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -37,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
 
 ## Scripting Language
 
-AetherVM uses [Rhai](https://rhai.rs/) as its scripting language - a simple, safe, embedded scripting language for Rust.
+HyperMachine uses [Rhai](https://rhai.rs/) as its scripting language - a simple, safe, embedded scripting language for Rust.
 
 ### Basic Syntax
 
@@ -185,7 +185,7 @@ Scripts are subject to capability checks. Agents must have the required capabili
 ### Setting Capabilities
 
 ```rust
-use aethervm_agent::{AgentVM, CapabilitySet, Capability};
+use hv2_agent::{AgentVM, CapabilitySet, Capability};
 
 let mut caps = CapabilitySet::new();
 caps.add(Capability::VmRead);
@@ -277,7 +277,7 @@ print("Network RX: " + metrics.network_rx_bytes);
 
 ```python
 from langchain import LLMChain
-from aethervm import AgentVM
+from hv2_agent import AgentVM
 
 vm = AgentVM.create(name="langchain-vm")
 
@@ -293,7 +293,7 @@ result = vm.execute_script(script)
 
 ```python
 from autogpt import Agent
-from aethervm import AgentVM
+from hv2_agent import AgentVM
 
 class VMManager(Agent):
     def __init__(self):
@@ -306,4 +306,4 @@ class VMManager(Agent):
 
 ## API Reference
 
-For complete API documentation, see the [rustdoc](https://docs.rs/aethervm-agent).
+For complete API documentation, see the [rustdoc](https://docs.rs/hv2-agent).

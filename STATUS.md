@@ -1,7 +1,11 @@
-# HV2 (AetherVM) - Complete Status Report
+# HyperMachine - Complete Status Report
 
 ## Project Overview
-**HV2** (formerly AetherVM) is a high-performance Type 2 hypervisor designed for AI agent scriptability and remote control. Built in Rust with async/await, it provides a modern foundation for VM management with integrated AI capabilities.
+**HyperMachine** is a high-performance hypervisor framework designed for AI agent scriptability and remote control. Built in Rust with async/await, it supports both Type 2 (hosted) and Type 1 (bare-metal) modes with integrated AI capabilities.
+
+> **Dual-Mode Architecture:**
+> - **HV2 Mode (Type 2)**: Hosted hypervisor running on Linux/Windows/macOS - *Currently Implemented*
+> - **HV1 Mode (Type 1)**: Bare-metal hypervisor - *Planned*
 
 ---
 
@@ -31,7 +35,7 @@
 
 ### Workspace Structure
 ```
-hv2/
+HyperMachine/
 ├── hv2-core/        - Core hypervisor engine ✅ COMPLETE
 ├── hv2-cpu/         - CPU emulation (x86_64) ✅ BASIC
 ├── hv2-agent/       - AI agent integration ✅ COMPLETE
@@ -387,5 +391,6 @@ The system successfully demonstrates:
 ---
 
 *Last Updated: October 29, 2025*
-*Project: HV2 (formerly AetherVM)*
+*Project: HyperMachine*
 *Status: Functional Prototype*
+*Mode: HV2 (Type 2 Hosted Hypervisor)*
