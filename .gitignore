@@ -1,0 +1,30 @@
+# reference VMs
+reference/
+
+.DS_Store
+target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+.vscode/
+.idea/
+
+# VM images and state
+*.img
+*.qcow2
+*.vmdk
+*.vdi
+vm-state/
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+
+# Development session files
+SESSION*_SUMMARY.md
+SESSION*_VISUAL.txt
+PROGRESS_SESSION*.md

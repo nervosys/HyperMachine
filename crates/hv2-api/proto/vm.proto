@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package hv2.v1;
+
+// VM control service
+service VMService {
+    // Create a new VM
+    rpc CreateVM(CreateVMRequest) returns (CreateVMResponse);
+    
+    // Start a VM
+    rpc StartVM(StartVMRequest) returns (StartVMResponse);
+    
+    // Stop a VM
+    rpc StopVM(StopVMRequest) returns (StopVMResponse);
+    
+    // Pause a VM
+    rpc PauseVM(PauseVMRequest) returns (PauseVMResponse);
+    
+    // Resume a VM
+    rpc ResumeVM(ResumeVMRequest) returns (ResumeVMResponse);
+    
+    // Get VM status
+    rpc GetVMStatus(GetVMStatusRequest) returns (GetVMStatusResponse);
+    
+    // List all VMs
+    rpc ListVMs(ListVMsRequest) returns (ListVMsResponse);
+    
+    // Execute agent script
+    rpc ExecuteScript(ExecuteScriptRequest) returns (ExecuteScriptResponse);
+    
+    // Stream VM events
+    rpc StreamEvents(StreamEventsRequest) returns (stream VMEvent);
+}
+
+// VM configuration
+message VMConfig {
+    string name = 1;
+    uint32 vcpu_count = 2;
+    uint64 memory_size = 3;
+    bool enable_gpu = 4;
+    bool enable_networking = 5;
+    bool enable_tracing = 6;
+}
+
+// VM state
+enum VMState {
+    VM_STATE_UNSPECIFIED = 0;
+    VM_STATE_CREATED = 1;
+    VM_STATE_RUNNING = 2;
+    VM_STATE_PAUSED = 3;
+    VM_STATE_STOPPED = 4;
+    VM_STATE_ERROR = 5;
+}
+
+// Create VM request
+message CreateVMRequest {
+    VMConfig config = 1;
+}
+
+message CreateVMResponse {
+    string vm_id = 1;
+}
+
+// Start VM request
+message StartVMRequest {
+    string vm_id = 1;
+}
+
+message StartVMResponse {
+    bool success = 1;
+}
+
+// Stop VM request
+message StopVMRequest {
+    string vm_id = 1;
+}
+
+message StopVMResponse {
+    bool success = 1;
+}
+
+// Pause VM request
+message PauseVMRequest {
+    string vm_id = 1;
+}
+
+message PauseVMResponse {
+    bool success = 1;
+}
+
+// Resume VM request
+message ResumeVMRequest {
+    string vm_id = 1;
+}
+
+message ResumeVMResponse {
+    bool success = 1;
+}
+
+// Get VM status request
+message GetVMStatusRequest {
+    string vm_id = 1;
+}
+
+message GetVMStatusResponse {
+    string vm_id = 1;
+    VMState state = 2;
+    uint32 vcpu_count = 3;
+    uint64 memory_size = 4;
+}
+
+// List VMs request
+message ListVMsRequest {}
+
+message ListVMsResponse {
+    repeated VMInfo vms = 1;
+}
+
+message VMInfo {
+    string vm_id = 1;
+    string name = 2;
+    VMState state = 3;
+}
+
+// Execute script request
+message ExecuteScriptRequest {
+    string vm_id = 1;
+    string script = 2;
+    uint64 timeout_seconds = 3;
+}
+
+message ExecuteScriptResponse {
+    string result = 1;
+    repeated string logs = 2;
+}
+
+// Stream events request
+message StreamEventsRequest {
+    string vm_id = 1;
+}
+
+message VMEvent {
+    string vm_id = 1;
+    string event_type = 2;
+    string timestamp = 3;
+    string data = 4;
+}

@@ -1,0 +1,353 @@
+//! Hypervisor backend abstraction
+
+use crate::{Error, Result, VCpu, VmExit};
+use async_trait::async_trait;
+
+/// Hypervisor platform
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HypervisorPlatform {
+    /// KVM (Linux)
+    Kvm,
+    /// Windows Hypervisor Platform (Windows)
+    Whpx,
+    /// Hypervisor Framework (macOS)
+    Hvf,
+    /// Software emulation (fallback)
+    Tcg,
+}
+
+impl std::fmt::Display for HypervisorPlatform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Kvm => write!(f, "Kvm"),
+            Self::Whpx => write!(f, "Whpx"),
+            Self::Hvf => write!(f, "Hvf"),
+            Self::Tcg => write!(f, "Tcg"),
+        }
+    }
+}
+
+impl HypervisorPlatform {
+    /// Detect the best available hypervisor platform
+    pub fn detect() -> Self {
+        #[cfg(target_os = "linux")]
+        {
+            if Self::is_kvm_available() {
+                return Self::Kvm;
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if Self::is_whpx_available() {
+                return Self::Whpx;
+            }
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            if Self::is_hvf_available() {
+                return Self::Hvf;
+            }
+        }
+
+        // Fallback to TCG
+        Self::Tcg
+    }
+
+    #[cfg(target_os = "linux")]
+    fn is_kvm_available() -> bool {
+        std::path::Path::new("/dev/kvm").exists()
+    }
+
+    #[cfg(target_os = "windows")]
+    fn is_whpx_available() -> bool {
+        // Check if WHPX is available
+        // TODO: Implement actual WHPX detection
+        false
+    }
+
+    #[cfg(target_os = "macos")]
+    fn is_hvf_available() -> bool {
+        // Check if HVF is available
+        // TODO: Implement actual HVF detection
+        false
+    }
+}
+
+/// Hypervisor capabilities
+#[derive(Debug, Clone, Default)]
+pub struct HypervisorCapabilities {
+    pub max_vcpus: u32,
+    pub max_memory: u64,
+    pub supports_nested_virt: bool,
+    pub supports_apic: bool,
+    pub supports_x2apic: bool,
+    pub supports_iommu: bool,
+    pub supports_gpu_passthrough: bool,
+}
+
+/// Hypervisor backend trait
+#[async_trait]
+pub trait HypervisorBackend: Send + Sync {
+    /// Get the platform type
+    fn platform(&self) -> HypervisorPlatform;
+
+    /// Get hypervisor capabilities
+    fn capabilities(&self) -> HypervisorCapabilities;
+
+    /// Initialize the hypervisor
+    async fn init(&mut self) -> Result<()>;
+
+    /// Create a VM instance
+    async fn create_vm(&self, vcpu_count: u32, memory_size: u64) -> Result<HypervisorVm>;
+
+    /// Run a vCPU until it exits
+    ///
+    /// This is the core execution method. It runs the vCPU until a VM exit occurs,
+    /// then returns the exit reason for the hypervisor to handle.
+    async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit>;
+
+    /// Inject an interrupt into a vCPU
+    ///
+    /// This queues an interrupt to be delivered to the guest when interrupts are enabled.
+    async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()>;
+
+    /// Shutdown the hypervisor
+    async fn shutdown(&mut self) -> Result<()>;
+
+    /// Allow downcasting to concrete types
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+/// Hypervisor VM instance
+pub struct HypervisorVm {
+    pub(crate) platform: HypervisorPlatform,
+    pub(crate) vcpu_count: u32,
+    pub(crate) memory_size: u64,
+}
+
+impl HypervisorVm {
+    /// Create a new hypervisor VM
+    pub fn new(platform: HypervisorPlatform, vcpu_count: u32, memory_size: u64) -> Self {
+        Self {
+            platform,
+            vcpu_count,
+            memory_size,
+        }
+    }
+
+    /// Get the platform
+    pub fn platform(&self) -> HypervisorPlatform {
+        self.platform
+    }
+
+    /// Map guest memory
+    pub async fn map_memory(&self, _guest_addr: u64, _size: u64, _host_ptr: *mut u8) -> Result<()> {
+        // TODO: Implement platform-specific memory mapping
+        Ok(())
+    }
+}
+
+/// TCG (software emulation) backend
+pub struct TcgBackend {
+    capabilities: HypervisorCapabilities,
+}
+
+impl TcgBackend {
+    pub fn new() -> Self {
+        Self {
+            capabilities: HypervisorCapabilities {
+                max_vcpus: 256,
+                max_memory: 1024 * 1024 * 1024 * 1024, // 1TB
+                supports_nested_virt: false,
+                supports_apic: true,
+                supports_x2apic: false,
+                supports_iommu: false,
+                supports_gpu_passthrough: false,
+            },
+        }
+    }
+}
+
+impl Default for TcgBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl HypervisorBackend for TcgBackend {
+    fn platform(&self) -> HypervisorPlatform {
+        HypervisorPlatform::Tcg
+    }
+
+    fn capabilities(&self) -> HypervisorCapabilities {
+        self.capabilities.clone()
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        tracing::info!("Initializing TCG backend (software emulation)");
+        Ok(())
+    }
+
+    async fn create_vm(&self, vcpu_count: u32, memory_size: u64) -> Result<HypervisorVm> {
+        if vcpu_count > self.capabilities.max_vcpus {
+            return Err(Error::Config(format!(
+                "vCPU count {} exceeds maximum {}",
+                vcpu_count, self.capabilities.max_vcpus
+            )));
+        }
+
+        if memory_size > self.capabilities.max_memory {
+            return Err(Error::Config(format!(
+                "Memory size {} exceeds maximum {}",
+                memory_size, self.capabilities.max_memory
+            )));
+        }
+
+        Ok(HypervisorVm::new(
+            HypervisorPlatform::Tcg,
+            vcpu_count,
+            memory_size,
+        ))
+    }
+
+    async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
+        // TCG (software emulation) execution
+        // In a full implementation, this would:
+        // 1. Fetch instruction from memory at RIP
+        // 2. Decode and execute instruction
+        // 3. Update CPU state
+        // 4. Return exit reason when appropriate
+
+        // For now, return a simple HLT exit to avoid infinite loops
+        // This will be properly implemented when we integrate with hv2-cpu
+        tracing::debug!("TCG: vCPU {} executing", vcpu.id());
+        Ok(VmExit::Hlt)
+    }
+
+    async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
+        tracing::debug!(
+            "TCG: Injecting interrupt {} into vCPU {}",
+            vector,
+            vcpu.id()
+        );
+        // In a full implementation, this would set the interrupt pending flag
+        // and deliver it when the guest enables interrupts
+        Ok(())
+    }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        tracing::info!("Shutting down TCG backend");
+        Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub mod whpx {
+    use super::*;
+
+    /// WHPX (Windows Hypervisor Platform) backend
+    pub struct WhpxBackend {
+        capabilities: HypervisorCapabilities,
+    }
+
+    impl WhpxBackend {
+        pub fn new() -> Result<Self> {
+            // TODO: Implement actual WHPX initialization
+            Ok(Self {
+                capabilities: HypervisorCapabilities {
+                    max_vcpus: 64,
+                    max_memory: 512 * 1024 * 1024 * 1024, // 512GB
+                    supports_nested_virt: true,
+                    supports_apic: true,
+                    supports_x2apic: true,
+                    supports_iommu: true,
+                    supports_gpu_passthrough: false,
+                },
+            })
+        }
+    }
+
+    #[async_trait]
+    impl HypervisorBackend for WhpxBackend {
+        fn platform(&self) -> HypervisorPlatform {
+            HypervisorPlatform::Whpx
+        }
+
+        fn capabilities(&self) -> HypervisorCapabilities {
+            self.capabilities.clone()
+        }
+
+        async fn init(&mut self) -> Result<()> {
+            tracing::info!("Initializing WHPX backend");
+            // TODO: Implement actual WHPX initialization
+            Ok(())
+        }
+
+        async fn create_vm(&self, vcpu_count: u32, memory_size: u64) -> Result<HypervisorVm> {
+            if vcpu_count > self.capabilities.max_vcpus {
+                return Err(Error::Config(format!(
+                    "vCPU count {} exceeds maximum {}",
+                    vcpu_count, self.capabilities.max_vcpus
+                )));
+            }
+
+            Ok(HypervisorVm::new(
+                HypervisorPlatform::Whpx,
+                vcpu_count,
+                memory_size,
+            ))
+        }
+
+        async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
+            tracing::debug!("WHPX: vCPU {} executing", vcpu.id());
+            // TODO: Implement actual WHPX vCPU execution
+            Ok(VmExit::Hlt)
+        }
+
+        async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
+            tracing::debug!(
+                "WHPX: Injecting interrupt {} into vCPU {}",
+                vector,
+                vcpu.id()
+            );
+            // TODO: Implement actual WHPX interrupt injection
+            Ok(())
+        }
+
+        async fn shutdown(&mut self) -> Result<()> {
+            tracing::info!("Shutting down WHPX backend");
+            Ok(())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+}
+
+// KVM backend is now in backends::kvm module
+
+/// Create the best available hypervisor backend
+pub fn create_backend() -> Result<Box<dyn HypervisorBackend>> {
+    let platform = HypervisorPlatform::detect();
+
+    tracing::info!("Detected hypervisor platform: {:?}", platform);
+
+    match platform {
+        #[cfg(target_os = "linux")]
+        HypervisorPlatform::Kvm => {
+            use crate::backends::kvm::KvmBackend;
+            Ok(Box::new(KvmBackend::new()?))
+        }
+        #[cfg(target_os = "windows")]
+        HypervisorPlatform::Whpx => Ok(Box::new(whpx::WhpxBackend::new()?)),
+        HypervisorPlatform::Tcg | _ => Ok(Box::new(TcgBackend::new())),
+    }
+}

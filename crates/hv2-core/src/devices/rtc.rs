@@ -1,0 +1,427 @@
+//! Real-Time Clock (RTC) Device
+//!
+//! This module implements the MC146818 Real-Time Clock, which provides:
+//! - Date and time tracking
+//! - 128 bytes of CMOS RAM
+//! - Periodic interrupts (IRQ 8)
+//! - Alarm functionality
+//!
+//! I/O Ports:
+//! - 0x70: Index register (write only)
+//! - 0x71: Data register (read/write)
+
+use crate::{Device, DeviceType, Error, Result};
+use async_trait::async_trait;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+/// RTC register indices
+const RTC_SECONDS: u8 = 0x00;
+const RTC_SECONDS_ALARM: u8 = 0x01;
+const RTC_MINUTES: u8 = 0x02;
+const RTC_MINUTES_ALARM: u8 = 0x03;
+const RTC_HOURS: u8 = 0x04;
+const RTC_HOURS_ALARM: u8 = 0x05;
+const RTC_DAY_OF_WEEK: u8 = 0x06;
+const RTC_DAY_OF_MONTH: u8 = 0x07;
+const RTC_MONTH: u8 = 0x08;
+const RTC_YEAR: u8 = 0x09;
+const RTC_STATUS_A: u8 = 0x0A;
+const RTC_STATUS_B: u8 = 0x0B;
+const RTC_STATUS_C: u8 = 0x0C;
+const RTC_STATUS_D: u8 = 0x0D;
+
+/// Status Register A flags
+const STATUS_A_UIP: u8 = 0x80; // Update in progress
+
+/// Status Register B flags
+const STATUS_B_DSE: u8 = 0x01; // Daylight Savings Enable
+const STATUS_B_24H: u8 = 0x02; // 24-hour mode
+const STATUS_B_BCD: u8 = 0x04; // BCD mode (0=binary, 1=BCD)
+const STATUS_B_SQWE: u8 = 0x08; // Square Wave Enable
+const STATUS_B_UIE: u8 = 0x10; // Update-ended Interrupt Enable
+const STATUS_B_AIE: u8 = 0x20; // Alarm Interrupt Enable
+const STATUS_B_PIE: u8 = 0x40; // Periodic Interrupt Enable
+const STATUS_B_SET: u8 = 0x80; // SET bit (1=disable updates)
+
+/// Status Register C flags (read-only, cleared on read)
+const STATUS_C_UF: u8 = 0x10; // Update-ended Flag
+const STATUS_C_AF: u8 = 0x20; // Alarm Flag
+const STATUS_C_PF: u8 = 0x40; // Periodic Interrupt Flag
+const STATUS_C_IRQF: u8 = 0x80; // Interrupt Request Flag
+
+/// Status Register D flags
+const STATUS_D_VRT: u8 = 0x80; // Valid RAM and Time (battery good)
+
+/// Internal state of the RTC
+#[derive(Debug)]
+struct RtcState {
+    /// Currently selected register index
+    index: u8,
+    /// CMOS RAM (128 bytes, includes time/date registers)
+    cmos_ram: [u8; 128],
+    /// Status registers
+    status_a: u8,
+    status_b: u8,
+    status_c: u8,
+    status_d: u8,
+    /// NMI disable bit (bit 7 of port 0x70)
+    nmi_disabled: bool,
+}
+
+impl RtcState {
+    fn new() -> Self {
+        Self {
+            index: 0,
+            cmos_ram: [0; 128],
+            status_a: 0x26,         // Default: 32kHz rate, no UIP
+            status_b: STATUS_B_24H, // 24-hour binary mode
+            status_c: 0,
+            status_d: STATUS_D_VRT, // Battery good
+            nmi_disabled: false,
+        }
+    }
+
+    /// Update time registers from system time
+    fn update_time(&mut self) {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+
+        // Calculate time components
+        let total_seconds = now.as_secs();
+        let seconds = (total_seconds % 60) as u8;
+        let minutes = ((total_seconds / 60) % 60) as u8;
+        let hours = ((total_seconds / 3600) % 24) as u8;
+
+        // Calculate date components
+        // Simplified: Unix epoch is Jan 1, 1970 (Thursday)
+        let days_since_epoch = total_seconds / 86400;
+        let day_of_week = ((days_since_epoch + 4) % 7 + 1) as u8; // 1=Sunday
+
+        // Simplified date calculation (doesn't account for leap years properly)
+        let year = 1970 + (days_since_epoch / 365) as u16;
+        let year_offset = year - 2000; // RTC stores 2-digit year
+        let day_of_year = days_since_epoch % 365;
+        let month = ((day_of_year / 30) + 1).min(12) as u8;
+        let day = ((day_of_year % 30) + 1).min(31) as u8;
+
+        // Store in BCD or binary depending on mode
+        if self.status_b & STATUS_B_BCD != 0 {
+            // BCD mode
+            self.cmos_ram[RTC_SECONDS as usize] = to_bcd(seconds);
+            self.cmos_ram[RTC_MINUTES as usize] = to_bcd(minutes);
+            self.cmos_ram[RTC_HOURS as usize] = to_bcd(hours);
+            self.cmos_ram[RTC_DAY_OF_WEEK as usize] = day_of_week;
+            self.cmos_ram[RTC_DAY_OF_MONTH as usize] = to_bcd(day);
+            self.cmos_ram[RTC_MONTH as usize] = to_bcd(month);
+            self.cmos_ram[RTC_YEAR as usize] = to_bcd((year_offset % 100) as u8);
+        } else {
+            // Binary mode
+            self.cmos_ram[RTC_SECONDS as usize] = seconds;
+            self.cmos_ram[RTC_MINUTES as usize] = minutes;
+            self.cmos_ram[RTC_HOURS as usize] = hours;
+            self.cmos_ram[RTC_DAY_OF_WEEK as usize] = day_of_week;
+            self.cmos_ram[RTC_DAY_OF_MONTH as usize] = day;
+            self.cmos_ram[RTC_MONTH as usize] = month;
+            self.cmos_ram[RTC_YEAR as usize] = (year_offset % 100) as u8;
+        }
+    }
+
+    /// Read from the currently indexed register
+    fn read_data(&mut self) -> u8 {
+        match self.index {
+            RTC_STATUS_A => self.status_a,
+            RTC_STATUS_B => self.status_b,
+            RTC_STATUS_C => {
+                // Reading status C clears it
+                let value = self.status_c;
+                self.status_c = 0;
+                value
+            }
+            RTC_STATUS_D => self.status_d,
+            i if (i as usize) < self.cmos_ram.len() => {
+                // Update time before reading time registers
+                if i <= RTC_YEAR {
+                    self.update_time();
+                }
+                self.cmos_ram[i as usize]
+            }
+            _ => 0,
+        }
+    }
+
+    /// Write to the currently indexed register
+    fn write_data(&mut self, value: u8) {
+        match self.index {
+            RTC_STATUS_A => {
+                // Only allow certain bits to be changed
+                self.status_a = (self.status_a & STATUS_A_UIP) | (value & !STATUS_A_UIP);
+            }
+            RTC_STATUS_B => {
+                self.status_b = value;
+            }
+            RTC_STATUS_C | RTC_STATUS_D => {
+                // Read-only, ignore writes
+            }
+            i if (i as usize) < self.cmos_ram.len() => {
+                self.cmos_ram[i as usize] = value;
+            }
+            _ => {}
+        }
+    }
+
+    /// Trigger periodic interrupt
+    fn trigger_periodic_interrupt(&mut self) -> bool {
+        if self.status_b & STATUS_B_PIE != 0 {
+            self.status_c |= STATUS_C_PF | STATUS_C_IRQF;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Check if there's a pending interrupt
+    fn has_pending_interrupt(&self) -> bool {
+        (self.status_c & STATUS_C_IRQF) != 0
+    }
+}
+
+/// Convert binary to BCD
+fn to_bcd(value: u8) -> u8 {
+    ((value / 10) << 4) | (value % 10)
+}
+
+/// MC146818 Real-Time Clock
+///
+/// This device emulates the classic PC RTC/CMOS chip.
+/// It provides date/time tracking and 128 bytes of CMOS RAM.
+#[derive(Debug)]
+pub struct RtcDevice {
+    state: Arc<Mutex<RtcState>>,
+}
+
+impl RtcDevice {
+    /// Create a new RTC device
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(Mutex::new(RtcState::new())),
+        }
+    }
+
+    /// Read from index port (0x70) - returns NMI status
+    pub fn read_index(&self) -> u8 {
+        let state = self.state.lock().unwrap();
+        if state.nmi_disabled {
+            0x80
+        } else {
+            0x00
+        }
+    }
+
+    /// Write to index port (0x70)
+    pub fn write_index(&self, value: u8) {
+        let mut state = self.state.lock().unwrap();
+        state.nmi_disabled = (value & 0x80) != 0;
+        state.index = value & 0x7F;
+    }
+
+    /// Read from data port (0x71)
+    pub fn read_data(&self) -> u8 {
+        let mut state = self.state.lock().unwrap();
+        state.read_data()
+    }
+
+    /// Write to data port (0x71)
+    pub fn write_data(&self, value: u8) {
+        let mut state = self.state.lock().unwrap();
+        state.write_data(value);
+    }
+
+    /// Check if the RTC has a pending interrupt (IRQ 8)
+    pub fn has_pending_interrupt(&self) -> bool {
+        self.state.lock().unwrap().has_pending_interrupt()
+    }
+
+    /// Trigger a periodic interrupt (called by timer subsystem)
+    pub fn trigger_periodic(&self) -> bool {
+        self.state.lock().unwrap().trigger_periodic_interrupt()
+    }
+}
+
+impl Default for RtcDevice {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl Device for RtcDevice {
+    fn name(&self) -> &str {
+        "MC146818 RTC"
+    }
+
+    fn device_type(&self) -> DeviceType {
+        DeviceType::Timer
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        // Initialize time on first boot
+        self.state.lock().unwrap().update_time();
+        Ok(())
+    }
+
+    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        if data.len() != 1 {
+            return Err(Error::Device("RTC only supports single-byte reads".into()));
+        }
+
+        let value = match offset {
+            0x70 => self.read_index(),
+            0x71 => self.read_data(),
+            _ => return Err(Error::Device(format!("Invalid RTC port: {:#x}", offset))),
+        };
+
+        data[0] = value;
+        Ok(())
+    }
+
+    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+        if data.len() != 1 {
+            return Err(Error::Device("RTC only supports single-byte writes".into()));
+        }
+
+        match offset {
+            0x70 => self.write_index(data[0]),
+            0x71 => self.write_data(data[0]),
+            _ => return Err(Error::Device(format!("Invalid RTC port: {:#x}", offset))),
+        }
+
+        Ok(())
+    }
+
+    async fn reset(&mut self) -> Result<()> {
+        let mut state = self.state.lock().unwrap();
+        *state = RtcState::new();
+        state.update_time();
+        Ok(())
+    }
+
+    async fn shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_rtc_creation() {
+        let rtc = RtcDevice::new();
+        assert_eq!(rtc.name(), "MC146818 RTC");
+        assert_eq!(rtc.device_type(), DeviceType::Timer);
+    }
+
+    #[tokio::test]
+    async fn test_rtc_time_read() {
+        let mut rtc = RtcDevice::new();
+        rtc.init().await.unwrap();
+
+        // Select seconds register
+        rtc.write_index(RTC_SECONDS);
+        let seconds = rtc.read_data();
+
+        // Should be in range 0-59
+        assert!(seconds < 60);
+    }
+
+    #[tokio::test]
+    async fn test_rtc_status_registers() {
+        let rtc = RtcDevice::new();
+
+        // Read status B (should default to 24-hour binary mode)
+        rtc.write_index(RTC_STATUS_B);
+        let status_b = rtc.read_data();
+        assert_eq!(status_b & STATUS_B_24H, STATUS_B_24H);
+
+        // Read status D (should indicate battery good)
+        rtc.write_index(RTC_STATUS_D);
+        let status_d = rtc.read_data();
+        assert_eq!(status_d & STATUS_D_VRT, STATUS_D_VRT);
+    }
+
+    #[tokio::test]
+    async fn test_rtc_cmos_ram() {
+        let rtc = RtcDevice::new();
+
+        // Write to CMOS RAM (using high addresses that aren't time registers)
+        rtc.write_index(0x10);
+        rtc.write_data(0x42);
+
+        // Read back
+        rtc.write_index(0x10);
+        assert_eq!(rtc.read_data(), 0x42);
+    }
+
+    #[tokio::test]
+    async fn test_rtc_nmi_disable() {
+        let rtc = RtcDevice::new();
+
+        // Set NMI disable bit
+        rtc.write_index(0x80 | RTC_SECONDS);
+        let index_read = rtc.read_index();
+        assert_eq!(index_read & 0x80, 0x80);
+
+        // Clear NMI disable bit
+        rtc.write_index(RTC_SECONDS);
+        let index_read = rtc.read_index();
+        assert_eq!(index_read & 0x80, 0);
+    }
+
+    #[tokio::test]
+    async fn test_rtc_periodic_interrupt() {
+        let rtc = RtcDevice::new();
+
+        // Enable periodic interrupts
+        rtc.write_index(RTC_STATUS_B);
+        rtc.write_data(STATUS_B_PIE | STATUS_B_24H);
+
+        // Trigger periodic interrupt
+        let triggered = rtc.trigger_periodic();
+        assert!(triggered);
+        assert!(rtc.has_pending_interrupt());
+
+        // Read status C (should clear interrupt)
+        rtc.write_index(RTC_STATUS_C);
+        let status_c = rtc.read_data();
+        assert_eq!(status_c & STATUS_C_PF, STATUS_C_PF);
+        assert!(!rtc.has_pending_interrupt());
+    }
+
+    #[tokio::test]
+    async fn test_rtc_device_trait() {
+        let mut rtc = RtcDevice::new();
+
+        // Test Device trait methods
+        rtc.init().await.unwrap();
+
+        let mut buf = [0u8; 1];
+        rtc.read(0x70, &mut buf).await.unwrap();
+
+        rtc.write(0x70, &[RTC_SECONDS]).await.unwrap();
+        rtc.read(0x71, &mut buf).await.unwrap();
+
+        rtc.reset().await.unwrap();
+        rtc.shutdown().await.unwrap();
+    }
+
+    #[test]
+    fn test_bcd_conversion() {
+        assert_eq!(to_bcd(0), 0x00);
+        assert_eq!(to_bcd(9), 0x09);
+        assert_eq!(to_bcd(10), 0x10);
+        assert_eq!(to_bcd(59), 0x59);
+        assert_eq!(to_bcd(99), 0x99);
+    }
+}
