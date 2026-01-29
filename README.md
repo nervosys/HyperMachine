@@ -1,6 +1,6 @@
-# HyperMachine
+# HyperMachine: Agentic hypervisors for the 21st century
 
-A high-performance, remotely scriptable hypervisor and emulator framework written in Rust with first-class support for agentic AI. Supports Type-1 (hv1) and Type-2 (hv2) operational modes.
+A high-performance, remotely scriptable hypervisor and emulator framework written in Rust with first-class support for agentic AI. Supports Type-1 (t1) and Type-2 (t2) operational modes.
 
 > **Note**: HV2 is a Type 2 (hosted) hypervisor. A Type 1 (bare-metal) hypervisor variant (HV1) is planned for future development.
 

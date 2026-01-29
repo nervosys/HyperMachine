@@ -900,7 +900,9 @@ impl McpServer {
             "agent.claim".to_string(),
             McpTool {
                 name: "agent.claim".to_string(),
-                description: "Claim exclusive access to a VM (prevents other agents from modifying)".to_string(),
+                description:
+                    "Claim exclusive access to a VM (prevents other agents from modifying)"
+                        .to_string(),
                 parameters: json!({
                     "type": "object",
                     "properties": {
@@ -917,7 +919,10 @@ impl McpServer {
                     "required": ["vm_name"]
                 }),
                 category: ToolCategory::Coordination,
-                required_capabilities: vec![AgentCapability::VmWrite, AgentCapability::Coordination],
+                required_capabilities: vec![
+                    AgentCapability::VmWrite,
+                    AgentCapability::Coordination,
+                ],
                 enabled: true,
             },
         );
@@ -982,7 +987,11 @@ impl McpServer {
     }
 
     /// Create a new agent session
-    pub fn create_session(&self, agent_id: &str, capabilities: AgentCapabilities) -> Result<Arc<AgentSession>, String> {
+    pub fn create_session(
+        &self,
+        agent_id: &str,
+        capabilities: AgentCapabilities,
+    ) -> Result<Arc<AgentSession>, String> {
         let sessions = self.sessions.read().unwrap();
         if sessions.len() >= self.config.max_sessions {
             return Err("Maximum sessions reached".to_string());
@@ -1075,7 +1084,9 @@ impl McpServer {
         }
 
         // Execute tool (placeholder - actual implementation would dispatch to real handlers)
-        let result = self.execute_tool_impl(&tool.name, &request.parameters, session).await;
+        let result = self
+            .execute_tool_impl(&tool.name, &request.parameters, session)
+            .await;
 
         let response = match result {
             Ok(value) => ToolCallResponse {
@@ -1262,9 +1273,7 @@ mod tests {
             .create_session("test-agent", AgentCapabilities::full())
             .unwrap();
 
-        let response = session
-            .call_tool(&server, "system.info", json!({}))
-            .await;
+        let response = session.call_tool(&server, "system.info", json!({})).await;
 
         assert!(response.success);
         assert!(response.result.is_some());

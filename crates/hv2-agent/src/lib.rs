@@ -136,10 +136,10 @@ pub use mcp::{
 
 // Multi-agent orchestration
 pub use orchestration::{
-    AgentInfo as OrchAgentInfo, AgentOrchestrator, AgentRole, AgentState, Channel as OrchChannel,
-    Conflict, ConflictResolution, ConflictType, EventType, MessagePriority as OrchMessagePriority,
-    MessageType as OrchMessageType, OrchestrationError, OrchestratorConfig, TaskState, VmClaim,
-    Workflow as OrchWorkflow, WorkflowState, WorkflowTask, AgentMessage,
+    AgentInfo as OrchAgentInfo, AgentMessage, AgentOrchestrator, AgentRole, AgentState,
+    Channel as OrchChannel, Conflict, ConflictResolution, ConflictType, EventType,
+    MessagePriority as OrchMessagePriority, MessageType as OrchMessageType, OrchestrationError,
+    OrchestratorConfig, TaskState, VmClaim, Workflow as OrchWorkflow, WorkflowState, WorkflowTask,
 };
 
 use thiserror::Error;
