@@ -109,14 +109,37 @@ hm t1 create --name prod-vm --cpu 16 --memory 64
 # Start the MCP HTTP server
 hm serve --rest-port 8080
 
+# With authentication (recommended for production)
+export HM_API_KEY="your-secret-key"
+hm serve --rest-port 8080
+
 # AI agents can discover available tools
 curl http://localhost:8080/mcp/tools
 
-# Execute tool calls
+# Execute tool calls (with auth)
 curl -X POST http://localhost:8080/mcp/call \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret-key" \
   -d '{"tool": "vm.create", "arguments": {"name": "ai-vm", "cpu_cores": 4}}'
 ```
+
+### Python SDK
+
+```python
+from hypermachine_client import HyperMachineClient
+
+# Connect to MCP server
+client = HyperMachineClient("http://localhost:8080", api_key="your-key")
+
+# Create and start a VM
+vm = client.create_vm("my-vm", cpu_cores=4, memory_gb=8)
+client.start_vm("my-vm")
+
+# Get OpenAI-compatible tools for function calling
+tools = client.list_tools_openai_format()
+```
+
+See [examples/python](examples/python) for full SDK documentation.
 
 ### AI Agent Integration
 
@@ -156,13 +179,15 @@ async fn main() -> anyhow::Result<()> {
 
 ## Project Structure
 
-- `crates/hm-cli` - **Unified CLI** (`hm t1/t2` commands)
+- `crates/hm-cli` - **Unified CLI** (`hm t1/t2` commands) + MCP HTTP server
 - `crates/hv2-core` - Core VM engine and architecture
 - `crates/hv2-cpu` - CPU emulation and execution
 - `crates/hv2-gpu` - GPU virtualization layer
 - `crates/hv2-net` - Network stack and devices
 - `crates/hv2-agent` - AI agent interface and scripting
 - `crates/hv2-api` - Remote control APIs
+- `examples/python` - Python SDK for AI agent integration
+- `docs/` - Architecture and API documentation
 
 ## Use Cases
 
@@ -183,6 +208,7 @@ cargo build --release
 ## Documentation
 
 - [Architecture Guide](docs/architecture.md)
+- [Agentic AI Interface](docs/AGENTIC_INTERFACE.md) - MCP server & multi-agent orchestration
 - [AI Agent API](docs/agent-api.md)
 - [GPU Virtualization](docs/gpu.md)
 - [Network Configuration](docs/networking.md)
