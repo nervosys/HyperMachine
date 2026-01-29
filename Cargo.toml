@@ -7,6 +7,7 @@ members = [
     "crates/hv2-agent",
     "crates/hv2-api",
     "crates/hv2-cli",
+    "crates/hm-cli",
 ]
 resolver = "2"
 

@@ -85,22 +85,22 @@ Runs directly on hardware without a host OS for maximum performance.
 ```bash
 git clone https://github.com/nervosys/HyperMachine
 cd HyperMachine
-cargo build --release --package hv2-cli
-cp target/release/hv2 target/release/hv2-cli ~/.cargo/bin/
-## Or add target/release to your PATH
+cargo build --release --package hm-cli
+cargo install --path crates/hm-cli
+# Or: cp target/release/hm ~/.cargo/bin/
 ```
 
 ### Create and Run a VM
 
 ```bash
-# Create a new VM configuration
-hv2 create --name myvm --cpu 4 --memory 8G --gpu auto
+# Type 2 (hosted) hypervisor - runs on your OS
+hm t2 create --name myvm --cpu 4 --memory 8 --gpu --network
+hm t2 start myvm
+hm t2 status myvm
+hm t2 script myvm --script "vm_state"
 
-# Start the VM
-hv2 start myvm
-
-# Connect via remote API
-hv2 connect myvm --api-port 8080
+# Type 1 (bare-metal) hypervisor - planned
+hm t1 create --name prod-vm --cpu 16 --memory 64
 ```
 
 ### AI Agent Integration
@@ -141,13 +141,13 @@ async fn main() -> anyhow::Result<()> {
 
 ## Project Structure
 
+- `crates/hm-cli` - **Unified CLI** (`hm t1/t2` commands)
 - `crates/hv2-core` - Core VM engine and architecture
 - `crates/hv2-cpu` - CPU emulation and execution
 - `crates/hv2-gpu` - GPU virtualization layer
 - `crates/hv2-net` - Network stack and devices
 - `crates/hv2-agent` - AI agent interface and scripting
 - `crates/hv2-api` - Remote control APIs
-- `crates/hv2-cli` - Command-line interface
 
 ## Use Cases
 

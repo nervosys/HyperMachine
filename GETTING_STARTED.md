@@ -10,21 +10,23 @@ Welcome to HyperMachine! This guide will help you get started with the high-perf
 git clone https://github.com/nervosys/HyperMachine
 cd HyperMachine
 cargo build --release
-cargo install --path crates/hv2-cli
+cargo install --path crates/hm-cli
 ```
 
 ### Using Cargo
 
 ```bash
-cargo install hv2-cli
+cargo install hm-cli
 ```
 
 ## Quick Start
 
-### 1. Create Your First VM
+HyperMachine uses the `hm` command with `t1` (Type 1 bare-metal) or `t2` (Type 2 hosted) subcommands.
+
+### 1. Create Your First VM (Type 2)
 
 ```bash
-hv2 create \
+hm t2 create \
   --name my-first-vm \
   --cpu 2 \
   --memory 4 \
@@ -35,19 +37,25 @@ hv2 create \
 ### 2. Start the VM
 
 ```bash
-hv2 start my-first-vm
+hm t2 start my-first-vm
 ```
 
 ### 3. Check Status
 
 ```bash
-hv2 status my-first-vm
+hm t2 status my-first-vm
 ```
 
 ### 4. Stop the VM
 
 ```bash
-hv2 stop my-first-vm
+hm t2 stop my-first-vm
+```
+
+### 5. List All VMs
+
+```bash
+hm t2 list
 ```
 
 ## Using the API
@@ -55,7 +63,7 @@ hv2 stop my-first-vm
 ### Start API Servers
 
 ```bash
-hv2 serve --grpc-port 50051 --rest-port 8080
+hm serve --grpc-port 50051 --rest-port 8080
 ```
 
 ### REST API Examples
@@ -86,14 +94,14 @@ curl -X POST http://localhost:8080/api/v1/vms/{vm_id}/start
 ### Basic Script Execution
 
 ```bash
-hv2 script my-vm --script "vm_state"
+hm t2 script my-vm --script "vm_state"
 ```
 
 ### From File
 
 ```bash
 echo 'print("VM: " + vm_name); vm_state' > script.rhai
-hv2 script my-vm --script script.rhai
+hm t2 script my-vm --script script.rhai
 ```
 
 ### Programmatic Usage
@@ -172,29 +180,34 @@ let config = Config::from_file("config.toml")?;
 
 ## Advanced Features
 
-### GPU Passthrough
+### GPU Passthrough (Type 2)
 
 ```bash
-hv2 create \
+hm t2 create \
   --name gpu-vm \
-  --gpu-passthrough \
-  --gpu-device 0000:01:00.0
+  --gpu
+```
+
+### GPU Passthrough (Type 1 - Planned)
+
+```bash
+hm t1 create \
+  --name gpu-vm \
+  --gpu  # Will use direct VFIO passthrough
 ```
 
 ### Network Configuration
 
 ```bash
-hv2 create \
+hm t2 create \
   --name net-vm \
-  --network \
-  --ip 192.168.100.10 \
-  --interface tap0
+  --network
 ```
 
 ### Custom Script Timeout
 
 ```bash
-hv2 script my-vm \
+hm t2 script my-vm \
   --script "long_running_task()" \
   --timeout 600
 ```
@@ -224,8 +237,8 @@ otlp_endpoint = "http://localhost:4317"
 ### View Logs
 
 ```bash
-export RUST_LOG=hv2=debug
-hv2 start my-vm
+export RUST_LOG=hm=debug
+hm t2 start my-vm
 ```
 
 ## Examples
@@ -247,7 +260,7 @@ cargo run --example agent_script
 - Check virtualization is enabled in BIOS
 - Verify KVM/WHPX is available
 - Check memory availability
-- Review logs: `RUST_LOG=debug hv2 start my-vm`
+- Review logs: `RUST_LOG=debug hm t2 start my-vm`
 
 ### Script Timeout
 
