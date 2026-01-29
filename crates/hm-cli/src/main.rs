@@ -12,14 +12,22 @@
 //!
 //! # Type 1 (bare-metal hypervisor) - planned
 //! hm t1 create --name prod-vm --cpu 16 --memory 64
+//!
+//! # Generate shell completions
+//! hm completions bash > ~/.local/share/bash-completion/completions/hm
+//! hm completions zsh > ~/.zfunc/_hm
+//! hm completions fish > ~/.config/fish/completions/hm.fish
+//! hm completions powershell > $PROFILE.CurrentUserAllHosts
 //! ```
 
 mod mcp_server;
 mod vm_manager;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use colored::*;
+use std::io;
 use std::time::Duration;
 use vm_manager::{VmManager, VmState};
 
@@ -63,6 +71,13 @@ enum Commands {
         /// REST API port
         #[arg(long, default_value = "8080")]
         rest_port: u16,
+    },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
 
     /// Show version and system information
@@ -224,6 +239,9 @@ async fn main() -> Result<()> {
             grpc_port,
             rest_port,
         } => handle_serve(grpc_port, rest_port).await?,
+        Commands::Completions { shell } => {
+            generate(shell, &mut Cli::command(), "hm", &mut io::stdout());
+        }
         Commands::Info => handle_info(),
     }
 
