@@ -1,0 +1,7 @@
+# HyperMachine Python Client Requirements
+
+# Core dependency for HTTP requests
+requests>=2.28.0
+
+# Optional: For OpenAI function calling integration
+openai>=1.0.0
