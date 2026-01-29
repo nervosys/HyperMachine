@@ -375,6 +375,29 @@ hm serve --rest-port 8080
 curl http://localhost:8080/mcp/tools
 ```
 
+Returns OpenAI/Anthropic-compatible tool definitions:
+
+```json
+[
+  {
+    "name": "vm.create",
+    "description": "Create a new virtual machine",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "VM name" },
+        "cpu_cores": { "type": "integer", "default": 2 },
+        "memory_gb": { "type": "integer", "default": 4 },
+        "gpu_enabled": { "type": "boolean", "default": false },
+        "network_enabled": { "type": "boolean", "default": false }
+      },
+      "required": ["name"]
+    }
+  },
+  // ... more tools
+]
+```
+
 ### Unified Tool Execution
 
 ```bash
