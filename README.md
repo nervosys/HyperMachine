@@ -103,6 +103,21 @@ hm t2 script myvm --script "vm_state"
 hm t1 create --name prod-vm --cpu 16 --memory 64
 ```
 
+### MCP Server for AI Agents
+
+```bash
+# Start the MCP HTTP server
+hm serve --rest-port 8080
+
+# AI agents can discover available tools
+curl http://localhost:8080/mcp/tools
+
+# Execute tool calls
+curl -X POST http://localhost:8080/mcp/call \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "vm.create", "arguments": {"name": "ai-vm", "cpu_cores": 4}}'
+```
+
 ### AI Agent Integration
 
 ```rust
