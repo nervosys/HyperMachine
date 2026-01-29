@@ -14,6 +14,7 @@
 //! hm t1 create --name prod-vm --cpu 16 --memory 64
 //! ```
 
+mod mcp_server;
 mod vm_manager;
 
 use anyhow::Result;
@@ -531,28 +532,29 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
 /// Handle API server startup
 async fn handle_serve(grpc_port: u16, rest_port: u16) -> Result<()> {
     println!("{}", "Starting HyperMachine API servers...".cyan().bold());
-    println!("  gRPC: {}", format!("0.0.0.0:{}", grpc_port).green());
+
+    // Note: gRPC requires protoc - using MCP HTTP server instead
+    let _ = grpc_port; // gRPC disabled until protoc available
+
     println!(
-        "  REST: {}",
+        "  MCP HTTP API: {}",
         format!("http://0.0.0.0:{}", rest_port).green()
     );
-
-    // TODO: Enable when hv2-api is built with protoc
-    // let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port).parse()?;
-    // let rest_addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
-    let _ = (grpc_port, rest_port); // Suppress unused warnings
-
-    println!(
-        "{}",
-        "⚠ API server requires protoc to be installed".yellow()
-    );
-    println!("  Install protobuf-compiler and rebuild with hv2-api enabled");
     println!();
-    println!("  On Windows: winget install Google.Protobuf");
-    println!("  On Ubuntu:  apt install protobuf-compiler");
-    println!("  On macOS:   brew install protobuf");
+    println!("{}", "Endpoints:".bold());
+    println!("  GET  /mcp/tools      - List available tools (OpenAI/Anthropic format)");
+    println!("  POST /mcp/call       - Execute a tool call");
+    println!("  GET  /vms            - List all VMs");
+    println!("  POST /vms            - Create a new VM");
+    println!("  GET  /vms/:name      - Get VM details");
+    println!("  DELETE /vms/:name    - Delete a VM");
+    println!("  POST /vms/:name/start - Start a VM");
+    println!("  POST /vms/:name/stop  - Stop a VM");
+    println!("  GET  /health         - Health check");
+    println!();
 
-    Ok(())
+    let addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
+    mcp_server::start_mcp_server(addr).await
 }
 
 /// Display system and version information
