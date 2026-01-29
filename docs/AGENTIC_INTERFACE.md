@@ -110,28 +110,28 @@ Agents can discover available tools with their JSON Schema definitions:
 
 ### Tool Categories
 
-| Category | Description | Example Tools |
-|----------|-------------|---------------|
-| VmLifecycle | VM create/start/stop/delete | `vm.create`, `vm.start`, `vm.stop`, `vm.delete` |
-| Resources | CPU/memory management | `vm.resize`, `vm.metrics` |
-| Snapshots | State management | `snapshot.create`, `snapshot.restore` |
-| Network | Network configuration | `network.attach`, `network.detach` |
-| System | Guest execution | `guest.exec`, `guest.file.read`, `guest.file.write` |
-| Coordination | Multi-agent ops | `agent.broadcast`, `agent.claim`, `agent.release` |
-| Monitoring | Observability | `system.health`, `system.info` |
+| Category     | Description                 | Example Tools                                       |
+| ------------ | --------------------------- | --------------------------------------------------- |
+| VmLifecycle  | VM create/start/stop/delete | `vm.create`, `vm.start`, `vm.stop`, `vm.delete`     |
+| Resources    | CPU/memory management       | `vm.resize`, `vm.metrics`                           |
+| Snapshots    | State management            | `snapshot.create`, `snapshot.restore`               |
+| Network      | Network configuration       | `network.attach`, `network.detach`                  |
+| System       | Guest execution             | `guest.exec`, `guest.file.read`, `guest.file.write` |
+| Coordination | Multi-agent ops             | `agent.broadcast`, `agent.claim`, `agent.release`   |
+| Monitoring   | Observability               | `system.health`, `system.info`                      |
 
 ## Multi-Agent Orchestration
 
 ### Agent Roles
 
-| Role | Description | Capabilities |
-|------|-------------|--------------|
-| Operator | Full VM management | Create, delete, modify, execute |
-| Monitor | Read-only observation | View status, metrics, logs |
-| Security | Audit and enforcement | View all, alert on violations |
-| Backup | Snapshot management | Create/restore snapshots |
-| Network | Network configuration | Manage networking only |
-| Scaler | Resource management | Resize, migrate VMs |
+| Role     | Description           | Capabilities                    |
+| -------- | --------------------- | ------------------------------- |
+| Operator | Full VM management    | Create, delete, modify, execute |
+| Monitor  | Read-only observation | View status, metrics, logs      |
+| Security | Audit and enforcement | View all, alert on violations   |
+| Backup   | Snapshot management   | Create/restore snapshots        |
+| Network  | Network configuration | Manage networking only          |
+| Scaler   | Resource management   | Resize, migrate VMs             |
 
 ### Resource Claiming
 
