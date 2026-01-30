@@ -97,8 +97,18 @@ impl VmManager {
     }
 
     /// Create VM manager with in-memory storage (for testing)
+    ///
+    /// Each call creates a unique isolated directory to ensure test isolation
+    /// even when tests run in parallel within the same process.
     pub fn new_in_memory() -> Result<Self> {
-        let tmp = std::env::temp_dir().join(format!("hypermachine-test-{}", std::process::id()));
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let unique_id = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let tmp = std::env::temp_dir().join(format!(
+            "hypermachine-test-{}-{}",
+            std::process::id(),
+            unique_id
+        ));
         std::fs::create_dir_all(&tmp)?;
         Self::with_state_dir(tmp)
     }
