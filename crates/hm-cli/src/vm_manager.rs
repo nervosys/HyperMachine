@@ -96,6 +96,13 @@ impl VmManager {
         Self::with_state_dir(state_dir)
     }
 
+    /// Create VM manager with in-memory storage (for testing)
+    pub fn new_in_memory() -> Result<Self> {
+        let tmp = std::env::temp_dir().join(format!("hypermachine-test-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp)?;
+        Self::with_state_dir(tmp)
+    }
+
     /// Create VM manager with custom state directory
     pub fn with_state_dir(state_dir: PathBuf) -> Result<Self> {
         // Ensure state directory exists
