@@ -1,9 +1,9 @@
 //! LLM Provider Adapters
 //!
-//! Provides first-class support for major LLM providers:
-//! - OpenAI (GPT-4, GPT-4o, o1, o3)
-//! - Anthropic (Claude 3.5, Claude 4)
-//! - Google (Gemini 2.0, Gemini Ultra)
+//! Provides first-class support for major LLM providers (as of January 2026):
+//! - OpenAI (GPT-5, GPT-5-turbo, GPT-4o, o1, o3, o3-mini)
+//! - Anthropic (Claude 4.5 Opus/Sonnet, Claude 4, Claude 3.5)
+//! - Google (Gemini 2.5, Gemini 2.0 Ultra/Pro, Gemini Flash)
 //! - Other providers following OpenAI-compatible formats
 
 use super::ontology::{HyperMachineOntology, Operation, Parameter, Range};

@@ -138,13 +138,13 @@ curl http://localhost:8080/agentic/capabilities
 
 **Provider-Specific Formats** - Native tool formats for each LLM:
 ```bash
-# OpenAI function calling format (GPT-4, GPT-4o, o1, o3)
+# OpenAI function calling format (GPT-5, GPT-4o, o1, o3)
 curl http://localhost:8080/agentic/tools/openai
 
-# Anthropic tool use format (Claude 3/4, Sonnet, Opus, Haiku)
+# Anthropic tool use format (Claude 4.5, Claude 4, Sonnet, Opus)
 curl http://localhost:8080/agentic/tools/anthropic
 
-# Google Gemini format
+# Google Gemini format (Gemini 2.5, 2.0, Flash)
 curl http://localhost:8080/agentic/tools/gemini
 
 # Get complete config with system prompt and hints
