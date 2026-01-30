@@ -96,12 +96,94 @@ class HyperMachineClient:
             raise HyperMachineError(f"Request failed: {e}")
     
     # =========================================================================
-    # Tool Discovery (for OpenAI/Anthropic integration)
+    # Agentic AI Interface (for LLM integration)
+    # =========================================================================
+    
+    def get_ontology(self) -> dict:
+        """
+        Get the complete HyperMachine ontology for AI agent discovery.
+        
+        Returns:
+            Full ontology with concepts, types, operations, and relationships
+        """
+        return self._request("GET", "/agentic/ontology")
+    
+    def get_capabilities(self) -> dict:
+        """
+        Get a quick summary of available operations.
+        
+        Returns:
+            Capabilities summary with operation list
+        """
+        return self._request("GET", "/agentic/capabilities")
+    
+    def get_schema(self, compact: bool = False) -> dict:
+        """
+        Get the JSON Schema for validation.
+        
+        Args:
+            compact: If True, return minimal schema for bandwidth-constrained scenarios
+            
+        Returns:
+            JSON Schema document
+        """
+        path = "/agentic/schema/compact" if compact else "/agentic/schema"
+        return self._request("GET", path)
+    
+    def get_provider_config(self, provider: str) -> dict:
+        """
+        Get provider-specific configuration for an LLM.
+        
+        Args:
+            provider: Provider name (openai, gpt-5, claude, claude-4.5, gemini, gemini-2.5, etc.)
+            
+        Returns:
+            Configuration with tools, system_prompt, and hints
+        """
+        return self._request("GET", f"/agentic/providers/{provider}")
+    
+    def get_openai_tools(self) -> list[dict]:
+        """
+        Get tools in OpenAI function calling format.
+        
+        Supports: GPT-5, GPT-5-turbo, GPT-4o, o1, o3, etc.
+        
+        Returns:
+            List of tools in OpenAI format
+        """
+        return self._request("GET", "/agentic/tools/openai")
+    
+    def get_anthropic_tools(self) -> list[dict]:
+        """
+        Get tools in Anthropic tool use format.
+        
+        Supports: Claude 4.5, Claude 4, Claude 3.5, Sonnet, Opus, Haiku
+        
+        Returns:
+            List of tools in Anthropic format
+        """
+        return self._request("GET", "/agentic/tools/anthropic")
+    
+    def get_gemini_tools(self) -> dict:
+        """
+        Get tools in Google Gemini format.
+        
+        Supports: Gemini 2.5, Gemini 2.0, Gemini Flash
+        
+        Returns:
+            Tools in Gemini function declaration format
+        """
+        return self._request("GET", "/agentic/tools/gemini")
+    
+    # =========================================================================
+    # Tool Discovery (legacy MCP endpoint)
     # =========================================================================
     
     def list_tools(self) -> list[dict]:
         """
-        Get available tools in OpenAI/Anthropic function calling format.
+        Get available tools in basic format.
+        
+        Note: Prefer get_openai_tools() or get_anthropic_tools() for LLM integration.
         
         Returns:
             List of tool definitions with name, description, and parameters
@@ -111,6 +193,8 @@ class HyperMachineClient:
     def list_tools_openai_format(self) -> list[dict]:
         """
         Get tools formatted for OpenAI's function calling API.
+        
+        Note: Prefer get_openai_tools() for optimized LLM integration.
         
         Returns:
             List of tools in OpenAI's expected format

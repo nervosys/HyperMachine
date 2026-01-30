@@ -126,11 +126,90 @@ export class HyperMachineClient {
     }
 
     // ===========================================================================
-    // Tool Discovery (for OpenAI/Anthropic integration)
+    // Agentic AI Interface (for LLM integration)
+    // ===========================================================================
+
+    /**
+     * Get the complete HyperMachine ontology for AI agent discovery.
+     */
+    async getOntology(): Promise<Record<string, unknown>> {
+        return this.request<Record<string, unknown>>("GET", "/agentic/ontology");
+    }
+
+    /**
+     * Get a quick summary of available operations.
+     */
+    async getCapabilities(): Promise<Record<string, unknown>> {
+        return this.request<Record<string, unknown>>("GET", "/agentic/capabilities");
+    }
+
+    /**
+     * Get the JSON Schema for validation.
+     * @param compact - If true, return minimal schema for bandwidth-constrained scenarios
+     */
+    async getSchema(compact: boolean = false): Promise<Record<string, unknown>> {
+        const path = compact ? "/agentic/schema/compact" : "/agentic/schema";
+        return this.request<Record<string, unknown>>("GET", path);
+    }
+
+    /**
+     * Get provider-specific configuration for an LLM.
+     * @param provider - Provider name (openai, gpt-5, claude, claude-4.5, gemini, gemini-2.5, etc.)
+     */
+    async getProviderConfig(provider: string): Promise<{
+        provider: string;
+        tools: unknown;
+        system_prompt: string;
+        hints: {
+            temperature: number;
+            parallel_tool_calls: boolean;
+            max_tokens?: number;
+        };
+    }> {
+        return this.request("GET", `/agentic/providers/${encodeURIComponent(provider)}`);
+    }
+
+    /**
+     * Get tools in OpenAI function calling format.
+     * Supports: GPT-5, GPT-5-turbo, GPT-4o, o1, o3, etc.
+     */
+    async getOpenAITools(): Promise<OpenAITool[]> {
+        return this.request<OpenAITool[]>("GET", "/agentic/tools/openai");
+    }
+
+    /**
+     * Get tools in Anthropic tool use format.
+     * Supports: Claude 4.5, Claude 4, Claude 3.5, Sonnet, Opus, Haiku
+     */
+    async getAnthropicTools(): Promise<Array<{
+        name: string;
+        description: string;
+        input_schema: Record<string, unknown>;
+    }>> {
+        return this.request("GET", "/agentic/tools/anthropic");
+    }
+
+    /**
+     * Get tools in Google Gemini format.
+     * Supports: Gemini 2.5, Gemini 2.0, Gemini Flash
+     */
+    async getGeminiTools(): Promise<{
+        function_declarations: Array<{
+            name: string;
+            description: string;
+            parameters: Record<string, unknown>;
+        }>;
+    }> {
+        return this.request("GET", "/agentic/tools/gemini");
+    }
+
+    // ===========================================================================
+    // Tool Discovery (legacy MCP endpoint)
     // ===========================================================================
 
     /**
      * Get available tools in MCP format.
+     * Note: Prefer getOpenAITools() or getAnthropicTools() for LLM integration.
      */
     async listTools(): Promise<ToolDefinition[]> {
         return this.request<ToolDefinition[]>("GET", "/mcp/tools");
@@ -138,6 +217,7 @@ export class HyperMachineClient {
 
     /**
      * Get tools formatted for OpenAI's function calling API.
+     * Note: Prefer getOpenAITools() for optimized LLM integration.
      */
     async listToolsOpenAIFormat(): Promise<OpenAITool[]> {
         const tools = await this.listTools();
