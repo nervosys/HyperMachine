@@ -1,5 +1,15 @@
 # HV2 Configuration Example
 
+[server]
+# REST/MCP API port
+port = 8080
+# gRPC port (requires protoc)
+# grpc_port = 50051
+# API key for authentication (optional)
+# api_key = "your-secret-key"
+# Rate limit: requests per minute per IP
+rate_limit = 100
+
 [vm]
 name = "production-vm"
 vcpus = 8

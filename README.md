@@ -141,6 +141,22 @@ tools = client.list_tools_openai_format()
 
 See [examples/python](examples/python) for full SDK documentation.
 
+### Shell Completions
+
+```bash
+# Bash
+hm completions bash > ~/.local/share/bash-completion/completions/hm
+
+# Zsh
+hm completions zsh > ~/.zfunc/_hm
+
+# Fish
+hm completions fish > ~/.config/fish/completions/hm.fish
+
+# PowerShell
+hm completions powershell >> $PROFILE
+```
+
 ### AI Agent Integration
 
 ```rust
@@ -187,6 +203,7 @@ async fn main() -> anyhow::Result<()> {
 - `crates/hv2-agent` - AI agent interface and scripting
 - `crates/hv2-api` - Remote control APIs
 - `examples/python` - Python SDK for AI agent integration
+- `examples/typescript` - TypeScript SDK for AI agent integration
 - `docs/` - Architecture and API documentation
 
 ## Use Cases
