@@ -267,7 +267,16 @@ pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
         .route("/vms", get(list_vms))
         .route("/vms/:name", get(get_vm))
         .route("/vms/:name/metrics", get(get_vm_metrics))
-        .route("/health", get(health_check));
+        .route("/health", get(health_check))
+        // Agentic AI endpoints for LLM discovery and introspection
+        .route("/agentic/ontology", get(agentic_ontology))
+        .route("/agentic/schema", get(agentic_schema))
+        .route("/agentic/schema/compact", get(agentic_schema_compact))
+        .route("/agentic/capabilities", get(agentic_capabilities))
+        .route("/agentic/providers/:provider", get(agentic_provider_config))
+        .route("/agentic/tools/openai", get(agentic_openai_tools))
+        .route("/agentic/tools/anthropic", get(agentic_anthropic_tools))
+        .route("/agentic/tools/gemini", get(agentic_gemini_tools));
 
     let app = Router::new()
         .merge(protected_routes)
@@ -702,6 +711,75 @@ async fn health_check() -> Json<serde_json::Value> {
         "service": "hypermachine-mcp",
         "version": env!("CARGO_PKG_VERSION")
     }))
+}
+
+// ============================================================================
+// Agentic AI Endpoints
+// ============================================================================
+
+use crate::agentic::adapters::LlmProvider;
+use crate::agentic::schema::SchemaEndpoints;
+
+/// Get the complete HyperMachine ontology
+///
+/// Returns a fully discoverable programming language ontology that AI agents
+/// can use to understand all available operations, types, and relationships.
+async fn agentic_ontology() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::ontology())
+}
+
+/// Get the full JSON Schema for AI agents
+///
+/// Returns a complete JSON Schema document with all type definitions,
+/// operations, and examples.
+async fn agentic_schema() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::full_schema())
+}
+
+/// Get a compact schema for bandwidth-constrained scenarios
+async fn agentic_schema_compact() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::compact_schema())
+}
+
+/// Get capabilities summary
+///
+/// Quick reference for available operations and their descriptions.
+async fn agentic_capabilities() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::capabilities())
+}
+
+/// Get provider-specific configuration
+///
+/// Returns tools, system prompt, and hints optimized for the specified LLM provider.
+async fn agentic_provider_config(
+    Path(provider): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let provider = match provider.to_lowercase().as_str() {
+        "openai" | "gpt" | "gpt-4" | "gpt-4o" | "o1" | "o3" => LlmProvider::OpenAI,
+        "anthropic" | "claude" | "claude-3" | "claude-4" | "sonnet" | "opus" | "haiku" => {
+            LlmProvider::Anthropic
+        }
+        "google" | "gemini" | "gemini-pro" | "gemini-ultra" | "bard" => LlmProvider::Google,
+        "generic" | "other" | "custom" => LlmProvider::Generic,
+        _ => return Err(StatusCode::BAD_REQUEST),
+    };
+
+    Ok(Json(SchemaEndpoints::provider_config(provider)))
+}
+
+/// Get tools in OpenAI function calling format
+async fn agentic_openai_tools() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::openai_tools())
+}
+
+/// Get tools in Anthropic tool use format
+async fn agentic_anthropic_tools() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::anthropic_tools())
+}
+
+/// Get tools in Google Gemini format
+async fn agentic_gemini_tools() -> Json<serde_json::Value> {
+    Json(SchemaEndpoints::gemini_tools())
 }
 
 #[cfg(test)]
