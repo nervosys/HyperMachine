@@ -123,6 +123,45 @@ curl -X POST http://localhost:8080/mcp/call \
   -d '{"tool": "vm.create", "arguments": {"name": "ai-vm", "cpu_cores": 4}}'
 ```
 
+### Agentic AI Interface
+
+HyperMachine provides first-class support for ChatGPT, Claude, Gemini, and other SOTA LLMs with:
+
+**Discoverable Ontology** - AI agents can understand all available operations:
+```bash
+# Get the complete ontology with concepts, types, operations, and relationships
+curl http://localhost:8080/agentic/ontology
+
+# Get a quick capabilities summary
+curl http://localhost:8080/agentic/capabilities
+```
+
+**Provider-Specific Formats** - Native tool formats for each LLM:
+```bash
+# OpenAI function calling format (GPT-4, GPT-4o, o1, o3)
+curl http://localhost:8080/agentic/tools/openai
+
+# Anthropic tool use format (Claude 3/4, Sonnet, Opus, Haiku)
+curl http://localhost:8080/agentic/tools/anthropic
+
+# Google Gemini format
+curl http://localhost:8080/agentic/tools/gemini
+
+# Get complete config with system prompt and hints
+curl http://localhost:8080/agentic/providers/openai
+curl http://localhost:8080/agentic/providers/claude
+curl http://localhost:8080/agentic/providers/gemini
+```
+
+**JSON Schema for Validation**:
+```bash
+# Full JSON Schema (2020-12)
+curl http://localhost:8080/agentic/schema
+
+# Compact schema for bandwidth-constrained scenarios
+curl http://localhost:8080/agentic/schema/compact
+```
+
 ### Python SDK
 
 ```python

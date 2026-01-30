@@ -398,6 +398,63 @@ Returns OpenAI/Anthropic-compatible tool definitions:
 ]
 ```
 
+## Agentic Discovery API
+
+HyperMachine provides a fully discoverable ontology that AI agents can use to understand
+all available operations, types, and constraints without hardcoded knowledge.
+
+### Ontology Endpoint
+
+```bash
+# Get the complete programming language ontology
+curl http://localhost:8080/agentic/ontology
+```
+
+Returns concepts (VM, Metrics, Script), types (VmName, VmState), operations with parameters,
+relationships, and usage examples.
+
+### Provider-Specific Tool Formats
+
+AI agents can request tools in their native format:
+
+```bash
+# OpenAI function calling (GPT-4, GPT-4o, o1, o3)
+curl http://localhost:8080/agentic/tools/openai
+
+# Anthropic tool use (Claude 3/4, Sonnet, Opus, Haiku)
+curl http://localhost:8080/agentic/tools/anthropic
+
+# Google Gemini
+curl http://localhost:8080/agentic/tools/gemini
+```
+
+### Complete Provider Configuration
+
+Get tools, system prompt, and LLM hints in one call:
+
+```bash
+# Returns tools, system_prompt, and hints (temperature, max_tokens, etc.)
+curl http://localhost:8080/agentic/providers/openai
+curl http://localhost:8080/agentic/providers/claude
+curl http://localhost:8080/agentic/providers/gemini
+```
+
+### Quick Capabilities Summary
+
+```bash
+curl http://localhost:8080/agentic/capabilities
+```
+
+### JSON Schema for Validation
+
+```bash
+# Full JSON Schema (2020-12)
+curl http://localhost:8080/agentic/schema
+
+# Compact schema for bandwidth-constrained scenarios
+curl http://localhost:8080/agentic/schema/compact
+```
+
 ### Unified Tool Execution
 
 ```bash
