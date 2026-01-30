@@ -20,8 +20,8 @@
 //! hm completions powershell > $PROFILE.CurrentUserAllHosts
 //! ```
 
-mod mcp_server;
-mod vm_manager;
+use hm_cli::mcp_server;
+use hm_cli::vm_manager::{VmManager, VmState};
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
@@ -29,7 +29,6 @@ use clap_complete::{generate, Shell};
 use colored::*;
 use std::io;
 use std::time::Duration;
-use vm_manager::{VmManager, VmState};
 
 /// HyperMachine - High-performance hypervisor with AI agent support
 #[derive(Parser)]

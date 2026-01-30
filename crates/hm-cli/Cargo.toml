@@ -6,6 +6,10 @@ authors.workspace = true
 license.workspace = true
 description = "HyperMachine CLI - Unified hypervisor management for Type 1 and Type 2 modes"
 
+[lib]
+name = "hm_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "hm"
 path = "src/main.rs"
