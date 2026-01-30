@@ -755,11 +755,22 @@ async fn agentic_provider_config(
     Path(provider): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let provider = match provider.to_lowercase().as_str() {
-        "openai" | "gpt" | "gpt-4" | "gpt-4o" | "o1" | "o3" => LlmProvider::OpenAI,
-        "anthropic" | "claude" | "claude-3" | "claude-4" | "sonnet" | "opus" | "haiku" => {
+        // OpenAI models (GPT-5, GPT-4, o-series)
+        "openai" | "gpt" | "chatgpt" 
+        | "gpt-5" | "gpt-5-turbo" | "gpt-4" | "gpt-4o" | "gpt-4o-mini"
+        | "o1" | "o1-mini" | "o1-preview" | "o3" | "o3-mini" => LlmProvider::OpenAI,
+        // Anthropic models (Claude 4.5, Claude 4, Claude 3.5)
+        "anthropic" | "claude"
+        | "claude-4.5" | "claude-4.5-opus" | "claude-4.5-sonnet"
+        | "claude-4" | "claude-4-opus" | "claude-4-sonnet"
+        | "claude-3.5" | "claude-3" | "sonnet" | "opus" | "haiku" => {
             LlmProvider::Anthropic
         }
-        "google" | "gemini" | "gemini-pro" | "gemini-ultra" | "bard" => LlmProvider::Google,
+        // Google models (Gemini 2.5, Gemini 2.0, Flash)
+        "google" | "gemini"
+        | "gemini-2.5" | "gemini-2.5-pro" | "gemini-2.5-ultra"
+        | "gemini-2.0" | "gemini-2.0-pro" | "gemini-2.0-ultra"
+        | "gemini-pro" | "gemini-ultra" | "gemini-flash" => LlmProvider::Google,
         "generic" | "other" | "custom" => LlmProvider::Generic,
         _ => return Err(StatusCode::BAD_REQUEST),
     };

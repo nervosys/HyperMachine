@@ -24,7 +24,7 @@ The design follows these principles:
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           AI Agent Systems                                  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐         │
-│  │  GPT-4      │  │  Claude     │  │  Gemini     │  │  Local LLM  │         │
+│  │  GPT-5      │  │  Claude 4.5 │  │  Gemini 2.5 │  │  Local LLM  │         │
 │  │  Agent      │  │  Agent      │  │  Agent      │  │  Agent      │         │
 │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘         │
 │         │                │                │                │                │
@@ -306,7 +306,7 @@ openai_tools = [
 
 # Use with OpenAI
 response = openai.chat.completions.create(
-    model="gpt-4",
+    model="gpt-5",  # Also supports gpt-5-turbo, gpt-4o, o1, o3
     messages=[{"role": "user", "content": "Create a VM with 4 cores and 8GB RAM"}],
     tools=openai_tools,
 )
@@ -418,13 +418,13 @@ relationships, and usage examples.
 AI agents can request tools in their native format:
 
 ```bash
-# OpenAI function calling (GPT-4, GPT-4o, o1, o3)
+# OpenAI function calling (GPT-5, GPT-4o, o1, o3)
 curl http://localhost:8080/agentic/tools/openai
 
-# Anthropic tool use (Claude 3/4, Sonnet, Opus, Haiku)
+# Anthropic tool use (Claude 4.5, Claude 4, Sonnet, Opus)
 curl http://localhost:8080/agentic/tools/anthropic
 
-# Google Gemini
+# Google Gemini (Gemini 2.5, 2.0, Flash)
 curl http://localhost:8080/agentic/tools/gemini
 ```
 
