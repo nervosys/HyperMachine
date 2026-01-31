@@ -24,6 +24,9 @@ pub enum Error {
     #[error("Network error: {0}")]
     Network(String),
 
+    #[error("Hypervisor error: {0}")]
+    Hypervisor(String),
+
     #[error("Configuration error: {0}")]
     Config(String),
 

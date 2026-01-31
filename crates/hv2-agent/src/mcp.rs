@@ -236,6 +236,8 @@ pub struct AgentSession {
     pub last_activity: RwLock<Instant>,
     /// Call count for rate limiting
     pub call_count: RwLock<u32>,
+    /// Rate limit window start time
+    pub rate_limit_window_start: RwLock<Instant>,
     /// Session-specific state
     pub state: RwLock<HashMap<String, JsonValue>>,
     /// Owned VMs (VMs created by this session)
@@ -1006,6 +1008,7 @@ impl McpServer {
             created_at: Instant::now(),
             last_activity: RwLock::new(Instant::now()),
             call_count: RwLock::new(0),
+            rate_limit_window_start: RwLock::new(Instant::now()),
             state: RwLock::new(HashMap::new()),
             owned_vms: RwLock::new(Vec::new()),
         });
@@ -1051,9 +1054,31 @@ impl McpServer {
 
         // Check rate limit
         {
-            let mut count = session.call_count.write().unwrap();
+            let mut count = session.call_count.write().unwrap();            let mut window_start = session.rate_limit_window_start.write().unwrap();
+            let now = Instant::now();
+            let window_duration = Duration::from_secs(60);
+
+            // Reset window if expired
+            if now.duration_since(*window_start) >= window_duration {
+                *window_start = now;
+                *count = 0;
+            }
+
+            // Check if rate limit exceeded
+            if *count >= self.config.rate_limit {
+                return ToolCallResponse {
+                    id: request.id,
+                    success: false,
+                    result: None,
+                    error: Some(format!(
+                        "Rate limit exceeded: {} calls per minute",
+                        self.config.rate_limit
+                    )),
+                    execution_time_ms: start.elapsed().as_millis() as u64,
+                };
+            }
+
             *count += 1;
-            // TODO: Implement proper rate limiting with time window
         }
 
         // Get tool definition

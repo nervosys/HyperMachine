@@ -15,7 +15,8 @@ use hv2_core::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm, IoDirection,
     Result, SerialDevice, TimerDevice, VCpu, VMConfig, VmExit, VM,
 };
-use parking_lot::RwLock;
+use parking_lot::RwLock as SyncRwLock;
+use tokio::sync::RwLock;
 use std::sync::Arc;
 
 /// Mock hypervisor backend for testing
@@ -24,8 +25,8 @@ use std::sync::Arc;
 /// It maintains a queue of exits to return and can be programmed with test scenarios.
 pub struct MockHypervisorBackend {
     capabilities: HypervisorCapabilities,
-    exit_queue: Arc<RwLock<Vec<VmExit>>>,
-    exit_count: Arc<RwLock<usize>>,
+    exit_queue: Arc<SyncRwLock<Vec<VmExit>>>,
+    exit_count: Arc<SyncRwLock<usize>>,
 }
 
 impl MockHypervisorBackend {
@@ -41,8 +42,8 @@ impl MockHypervisorBackend {
                 supports_iommu: false,
                 supports_gpu_passthrough: false,
             },
-            exit_queue: Arc::new(RwLock::new(exits)),
-            exit_count: Arc::new(RwLock::new(0)),
+            exit_queue: Arc::new(SyncRwLock::new(exits)),
+            exit_count: Arc::new(SyncRwLock::new(0)),
         }
     }
 
@@ -118,6 +119,8 @@ async fn setup_test_vm_with_devices(
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let vm = Arc::new(VM::new(config).unwrap());
@@ -129,15 +132,19 @@ async fn setup_test_vm_with_devices(
     let devices = vm.devices();
     devices
         .register_device("serial".to_string(), serial.clone())
+        .await
         .unwrap();
     devices
         .register_device("timer".to_string(), timer.clone())
+        .await
         .unwrap();
     devices
         .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await
         .unwrap();
     devices
         .register_io_port_range("timer".to_string(), 0x40, 0x43)
+        .await
         .unwrap();
 
     (vm, serial, timer)
@@ -193,7 +200,7 @@ async fn test_vm_single_io_exit() {
     } = exit
     {
         if direction == IoDirection::Out {
-            if let Some(device) = vm.devices().find_io_device(port) {
+            if let Some(device) = vm.devices().find_io_device(port).await {
                 let offset = (port - device.base_port()) as u64;
                 device.write_register(offset, data).await.unwrap();
             }
@@ -201,7 +208,7 @@ async fn test_vm_single_io_exit() {
     }
 
     // Verify serial device received the write
-    assert!(serial.read().output_string().contains('A'));
+    assert!(serial.read().await.output_string().contains('A'));
 }
 
 // ============================================================================
@@ -234,7 +241,7 @@ async fn test_vm_sequential_io_exits() {
         } = exit
         {
             if direction == IoDirection::Out {
-                if let Some(device) = vm.devices().find_io_device(port) {
+                if let Some(device) = vm.devices().find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
                     device.write_register(offset, data).await.unwrap();
                 }
@@ -243,7 +250,7 @@ async fn test_vm_sequential_io_exits() {
     }
 
     // Verify complete message was written
-    let output = serial.read().output_string();
+    let output = serial.read().await.output_string();
     assert_eq!(output, "Hello");
 }
 
@@ -263,9 +270,11 @@ async fn test_vm_mmio_exit() {
     )));
     vm.devices()
         .register_device("mmio-serial".to_string(), mmio_device.clone())
+        .await
         .unwrap();
     vm.devices()
         .register_mmio_region("mmio-serial".to_string(), 0x1000_0000, 0x1000)
+        .await
         .unwrap();
 
     // Simulate MMIO write: MOV [0x10000000], 'M'
@@ -285,7 +294,7 @@ async fn test_vm_mmio_exit() {
     } = exit
     {
         if is_write {
-            if let Some(device) = vm.devices().find_mmio_device(phys_addr) {
+            if let Some(device) = vm.devices().find_mmio_device(phys_addr).await {
                 let offset = phys_addr - device.base_address();
                 let value = data[0] as u32;
                 device.write_register(offset, value).await.unwrap();
@@ -294,7 +303,7 @@ async fn test_vm_mmio_exit() {
     }
 
     // Verify device received the write
-    assert!(mmio_device.read().output_string().contains('M'));
+    assert!(mmio_device.read().await.output_string().contains('M'));
 }
 
 // ============================================================================
@@ -318,15 +327,19 @@ async fn test_vm_mixed_io_mmio_exits() {
 
     vm.devices()
         .register_device("io-serial".to_string(), io_serial.clone())
+        .await
         .unwrap();
     vm.devices()
         .register_io_port_range("io-serial".to_string(), 0x3F8, 0x3FF)
+        .await
         .unwrap();
     vm.devices()
         .register_device("mmio-serial".to_string(), mmio_serial.clone())
+        .await
         .unwrap();
     vm.devices()
         .register_mmio_region("mmio-serial".to_string(), 0x1000_0000, 0x1000)
+        .await
         .unwrap();
 
     // Simulate mixed exits
@@ -361,7 +374,7 @@ async fn test_vm_mixed_io_mmio_exits() {
                 ..
             } => {
                 if direction == IoDirection::Out {
-                    if let Some(device) = vm.devices().find_io_device(port) {
+                    if let Some(device) = vm.devices().find_io_device(port).await {
                         let offset = (port - device.base_port()) as u64;
                         device.write_register(offset, data).await.unwrap();
                     }
@@ -374,7 +387,7 @@ async fn test_vm_mixed_io_mmio_exits() {
                 ..
             } => {
                 if is_write {
-                    if let Some(device) = vm.devices().find_mmio_device(phys_addr) {
+                    if let Some(device) = vm.devices().find_mmio_device(phys_addr).await {
                         let offset = phys_addr - device.base_address();
                         let value = data[0] as u32;
                         device.write_register(offset, value).await.unwrap();
@@ -386,8 +399,8 @@ async fn test_vm_mixed_io_mmio_exits() {
     }
 
     // Verify both devices received their writes
-    assert_eq!(io_serial.read().output_string(), "IO");
-    assert_eq!(mmio_serial.read().output_string(), "M");
+    assert_eq!(io_serial.read().await.output_string(), "IO");
+    assert_eq!(mmio_serial.read().await.output_string(), "M");
 }
 
 // ============================================================================
@@ -434,7 +447,7 @@ async fn test_vm_timer_programming() {
         } = exit
         {
             if direction == IoDirection::Out {
-                if let Some(device) = vm.devices().find_io_device(port) {
+                if let Some(device) = vm.devices().find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
                     device.write_register(offset, data).await.unwrap();
                 }
@@ -445,7 +458,7 @@ async fn test_vm_timer_programming() {
     // Verify timer was configured (control word was written)
     // Timer device has received the writes successfully
     // Note: Timer may have auto-ticked, so we just verify it's configured
-    assert!(timer.read().total_ticks() >= 0); // Timer is functioning
+    assert!(timer.read().await.total_ticks() >= 0); // Timer is functioning
 }
 
 // ============================================================================
@@ -473,7 +486,7 @@ async fn test_vm_io_read_operations() {
     } = exit
     {
         if direction == IoDirection::In {
-            let device = vm.devices().find_io_device(port);
+            let device = vm.devices().find_io_device(port).await;
             // Device should be found
             assert!(device.is_some());
             // Verify it's the serial device
@@ -482,12 +495,12 @@ async fn test_vm_io_read_operations() {
     }
 
     // Write test: ensure write path works
-    if let Some(device) = vm.devices().find_io_device(0x3F8) {
+    if let Some(device) = vm.devices().find_io_device(0x3F8).await {
         device.write_register(0, b'R' as u32).await.unwrap();
     }
 
     // Verify the write succeeded
-    assert!(serial.read().output_string().contains('R'));
+    assert!(serial.read().await.output_string().contains('R'));
 }
 
 // ============================================================================
@@ -614,7 +627,7 @@ async fn test_complete_vm_execution_sequence() {
                 ..
             } => {
                 if direction == IoDirection::Out {
-                    if let Some(device) = vm.devices().find_io_device(port) {
+                    if let Some(device) = vm.devices().find_io_device(port).await {
                         let offset = (port - device.base_port()) as u64;
                         device.write_register(offset, data).await.unwrap();
                     }
@@ -630,10 +643,10 @@ async fn test_complete_vm_execution_sequence() {
 
     // Verify timer was programmed (control word was written)
     // Timer device has received the writes successfully
-    assert!(timer.read().total_ticks() >= 0); // Timer is functioning
+    assert!(timer.read().await.total_ticks() >= 0); // Timer is functioning
 
     // Verify boot message was output
-    assert_eq!(serial.read().output_string(), "Boot!");
+    assert_eq!(serial.read().await.output_string(), "Boot!");
 }
 
 // ============================================================================
@@ -649,6 +662,8 @@ async fn test_vm_memory_configuration() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let vm = VM::new(config).unwrap();
@@ -672,6 +687,8 @@ async fn test_vm_vcpu_configuration() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let vm = VM::new(config).unwrap();
@@ -696,8 +713,8 @@ async fn test_vm_device_registration_persistence() {
     // Verify devices persist across queries
     let devices = vm.devices();
 
-    let device1 = devices.find_io_device(0x3F8);
-    let device2 = devices.find_io_device(0x3F8);
+    let device1 = devices.find_io_device(0x3F8).await;
+    let device2 = devices.find_io_device(0x3F8).await;
 
     assert!(device1.is_some());
     assert!(device2.is_some());
@@ -724,7 +741,7 @@ async fn test_vm_error_handling_invalid_port() {
 
     // Should handle gracefully (no panic)
     if let VmExit::Io { port, .. } = exit {
-        let device = vm.devices().find_io_device(port);
+        let device = vm.devices().find_io_device(port).await;
         assert!(device.is_none());
     }
 }
@@ -748,7 +765,7 @@ async fn test_vm_error_handling_invalid_mmio() {
 
     // Should handle gracefully (no panic)
     if let VmExit::Mmio { phys_addr, .. } = exit {
-        let device = vm.devices().find_mmio_device(phys_addr);
+        let device = vm.devices().find_mmio_device(phys_addr).await;
         assert!(device.is_none());
     }
 }
