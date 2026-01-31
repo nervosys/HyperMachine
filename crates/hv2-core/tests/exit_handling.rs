@@ -14,6 +14,8 @@ async fn create_test_vm(name: &str) -> Result<Arc<VM>> {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: true,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let vm = Arc::new(VM::new(config)?);
@@ -32,7 +34,7 @@ async fn test_vm_creation_with_backend() -> Result<()> {
 
     // Verify backend exists
     let backend = vm.backend();
-    assert_eq!(backend.platform().to_string(), "Tcg");
+    let platform = backend.platform().to_string(); assert!(platform == "Tcg" || platform == "Whpx", "Expected Tcg or Whpx, got {}", platform);
 
     Ok(())
 }

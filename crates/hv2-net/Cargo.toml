@@ -13,3 +13,13 @@ async-trait = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = [
+    "fileapi",
+    "handleapi",
+    "winbase",
+    "winnt",
+    "minwindef",
+    "ioapiset",
+] }

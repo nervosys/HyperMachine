@@ -3,7 +3,8 @@
 use crate::{AgentError, CapabilitySet, Result, Sandbox, SandboxConfig, ScriptEngine};
 use hv2_core::{VMConfig, VMState, VM};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
 use tokio::time::timeout;
 
 /// VM builder with AI agent capabilities
@@ -69,6 +70,7 @@ impl AgentVMBuilder {
             script_engine: Arc::new(script_engine),
             sandbox: Arc::new(sandbox),
             script_timeout: self.script_timeout,
+            started_at: RwLock::new(None),
         })
     }
 }
@@ -85,6 +87,7 @@ pub struct AgentVM {
     script_engine: Arc<ScriptEngine>,
     sandbox: Arc<Sandbox>,
     script_timeout: Duration,
+    started_at: RwLock<Option<Instant>>,
 }
 
 impl AgentVM {
@@ -120,12 +123,14 @@ impl AgentVM {
     /// Start the VM
     pub async fn start(&self) -> Result<()> {
         self.vm.start().await?;
+        *self.started_at.write().await = Some(Instant::now());
         Ok(())
     }
 
     /// Stop the VM
     pub async fn stop(&self) -> Result<()> {
         self.vm.stop().await?;
+        *self.started_at.write().await = None;
         Ok(())
     }
 
@@ -147,7 +152,7 @@ impl AgentVM {
             state: self.vm.state(),
             vcpu_count: self.vm.vcpus().len() as u32,
             memory_size: self.vm.memory().total_size(),
-            uptime_seconds: 0, // TODO: implement uptime tracking
+            uptime_seconds: self.started_at.read().await.map(|s| s.elapsed().as_secs()).unwrap_or(0),
         })
     }
 

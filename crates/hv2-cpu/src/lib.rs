@@ -18,6 +18,12 @@ pub enum CpuError {
 
     #[error("Invalid memory access")]
     InvalidMemoryAccess,
+
+    #[error("Invalid interrupt vector: {0}")]
+    InvalidInterrupt(u8),
+
+    #[error("Protection fault: {0}")]
+    ProtectionFault(String),
 }
 
 pub type Result<T> = std::result::Result<T, CpuError>;

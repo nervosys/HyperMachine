@@ -2,9 +2,9 @@
 
 use crate::{Error, Result};
 use async_trait::async_trait;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Device type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -84,8 +84,8 @@ impl DeviceManager {
     }
 
     /// Register a device
-    pub fn register_device(&self, name: String, device: Arc<RwLock<dyn Device>>) -> Result<()> {
-        let mut devices = self.devices.write();
+    pub async fn register_device(&self, name: String, device: Arc<RwLock<dyn Device>>) -> Result<()> {
+        let mut devices = self.devices.write().await;
 
         if devices.contains_key(&name) {
             return Err(Error::Device(format!(
@@ -99,8 +99,8 @@ impl DeviceManager {
     }
 
     /// Unregister a device
-    pub fn unregister_device(&self, name: &str) -> Result<()> {
-        let mut devices = self.devices.write();
+    pub async fn unregister_device(&self, name: &str) -> Result<()> {
+        let mut devices = self.devices.write().await;
 
         if devices.remove(name).is_none() {
             return Err(Error::Device(format!("Device '{}' not found", name)));
@@ -110,26 +110,28 @@ impl DeviceManager {
     }
 
     /// Get a device by name
-    pub fn get_device(&self, name: &str) -> Option<Arc<RwLock<dyn Device>>> {
-        self.devices.read().get(name).cloned()
+    pub async fn get_device(&self, name: &str) -> Option<Arc<RwLock<dyn Device>>> {
+        self.devices.read().await.get(name).cloned()
     }
 
     /// Get all devices of a specific type
-    pub fn get_devices_by_type(&self, device_type: DeviceType) -> Vec<Arc<RwLock<dyn Device>>> {
-        self.devices
-            .read()
-            .values()
-            .filter(|d| d.read().device_type() == device_type)
-            .cloned()
-            .collect()
+    pub async fn get_devices_by_type(&self, device_type: DeviceType) -> Vec<Arc<RwLock<dyn Device>>> {
+        let devices = self.devices.read().await;
+        let mut result = Vec::new();
+        for d in devices.values() {
+            if d.read().await.device_type() == device_type {
+                result.push(d.clone());
+            }
+        }
+        result
     }
 
     /// Initialize all devices
     pub async fn init_all(&self) -> Result<()> {
-        let devices: Vec<_> = self.devices.read().values().cloned().collect();
+        let devices: Vec<_> = self.devices.read().await.values().cloned().collect();
 
         for device in devices {
-            device.write().init().await?;
+            device.write().await.init().await?;
         }
 
         Ok(())
@@ -137,30 +139,30 @@ impl DeviceManager {
 
     /// Shutdown all devices
     pub async fn shutdown_all(&self) -> Result<()> {
-        let devices: Vec<_> = self.devices.read().values().cloned().collect();
+        let devices: Vec<_> = self.devices.read().await.values().cloned().collect();
 
         for device in devices {
-            device.write().shutdown().await?;
+            device.write().await.shutdown().await?;
         }
 
         Ok(())
     }
 
     /// Register an MMIO region for a device
-    pub fn register_mmio_region(
+    pub async fn register_mmio_region(
         &self,
         device_name: String,
         base_addr: u64,
         size: u64,
     ) -> Result<()> {
-        let devices = self.devices.read();
+        let devices = self.devices.read().await;
         let device = devices
             .get(&device_name)
             .ok_or_else(|| Error::Device(format!("Device '{}' not found", device_name)))?
             .clone();
         drop(devices);
 
-        let mut mmio_regions = self.mmio_regions.write();
+        let mut mmio_regions = self.mmio_regions.write().await;
 
         // Check for overlapping regions
         let end_addr = base_addr + size;
@@ -192,20 +194,20 @@ impl DeviceManager {
     }
 
     /// Register an I/O port range for a device
-    pub fn register_io_port_range(
+    pub async fn register_io_port_range(
         &self,
         device_name: String,
         start_port: u16,
         end_port: u16,
     ) -> Result<()> {
-        let devices = self.devices.read();
+        let devices = self.devices.read().await;
         let device = devices
             .get(&device_name)
             .ok_or_else(|| Error::Device(format!("Device '{}' not found", device_name)))?
             .clone();
         drop(devices);
 
-        let mut io_ports = self.io_ports.write();
+        let mut io_ports = self.io_ports.write().await;
 
         // Check for overlapping ranges
         for mapping in io_ports.iter() {
@@ -235,8 +237,8 @@ impl DeviceManager {
     }
 
     /// Find a device that handles the given MMIO address
-    pub fn find_mmio_device(&self, phys_addr: u64) -> Option<MmioDeviceHandle> {
-        let mmio_regions = self.mmio_regions.read();
+    pub async fn find_mmio_device(&self, phys_addr: u64) -> Option<MmioDeviceHandle> {
+        let mmio_regions = self.mmio_regions.read().await;
 
         for region in mmio_regions.iter() {
             let end_addr = region.base_addr + region.size;
@@ -253,8 +255,8 @@ impl DeviceManager {
     }
 
     /// Find a device that handles the given I/O port
-    pub fn find_io_device(&self, port: u16) -> Option<IoDeviceHandle> {
-        let io_ports = self.io_ports.read();
+    pub async fn find_io_device(&self, port: u16) -> Option<IoDeviceHandle> {
+        let io_ports = self.io_ports.read().await;
 
         for mapping in io_ports.iter() {
             if port >= mapping.start_port && port <= mapping.end_port {
@@ -290,7 +292,7 @@ impl MmioDeviceHandle {
 
     /// Read a register at the given offset
     pub async fn read_register(&self, offset: u64) -> Result<u32> {
-        let device = self.device.read();
+        let device = self.device.read().await;
         let mut data = [0u8; 4];
         device.read(offset, &mut data).await?;
         Ok(u32::from_le_bytes(data))
@@ -298,7 +300,7 @@ impl MmioDeviceHandle {
 
     /// Write a register at the given offset
     pub async fn write_register(&self, offset: u64, value: u32) -> Result<()> {
-        let mut device = self.device.write();
+        let mut device = self.device.write().await;
         let data = value.to_le_bytes();
         device.write(offset, &data).await
     }
@@ -324,7 +326,7 @@ impl IoDeviceHandle {
 
     /// Read a register at the given offset
     pub async fn read_register(&self, offset: u64) -> Result<u32> {
-        let device = self.device.read();
+        let device = self.device.read().await;
         let mut data = [0u8; 4];
         device.read(offset, &mut data).await?;
         Ok(u32::from_le_bytes(data))
@@ -332,7 +334,7 @@ impl IoDeviceHandle {
 
     /// Write a register at the given offset
     pub async fn write_register(&self, offset: u64, value: u32) -> Result<()> {
-        let mut device = self.device.write();
+        let mut device = self.device.write().await;
         let data = value.to_le_bytes();
         device.write(offset, &data).await
     }
@@ -390,7 +392,7 @@ mod tests {
             name: "test".to_string(),
         }));
 
-        manager.register_device("test".to_string(), device).unwrap();
-        assert!(manager.get_device("test").is_some());
+        manager.register_device("test".to_string(), device).await.unwrap();
+        assert!(manager.get_device("test").await.is_some());
     }
 }

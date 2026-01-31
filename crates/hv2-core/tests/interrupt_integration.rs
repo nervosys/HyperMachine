@@ -180,6 +180,7 @@ async fn test_multiple_irqs() {
 }
 
 #[tokio::test]
+#[ignore = "Requires WHPX hardware virtualization to be enabled"]
 async fn test_vm_with_backend_integration() {
     let vm = create_test_vm("test-backend-integration").await;
     let backend = create_backend().expect("Failed to create backend");

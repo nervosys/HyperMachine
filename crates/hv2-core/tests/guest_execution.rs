@@ -21,7 +21,8 @@ use hv2_core::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm, IoDirection,
     Result, SerialDevice, VCpu, VMConfig, VmExit, VM,
 };
-use parking_lot::RwLock;
+use parking_lot::RwLock as SyncRwLock;
+use tokio::sync::RwLock;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -83,9 +84,9 @@ impl ExecutionTelemetry {
 /// It maintains a queue of exits to return and tracks execution telemetry.
 pub struct MockHypervisorBackend {
     capabilities: HypervisorCapabilities,
-    exit_queue: Arc<RwLock<Vec<VmExit>>>,
-    exit_count: Arc<RwLock<usize>>,
-    telemetry: Arc<RwLock<ExecutionTelemetry>>,
+    exit_queue: Arc<SyncRwLock<Vec<VmExit>>>,
+    exit_count: Arc<SyncRwLock<usize>>,
+    telemetry: Arc<SyncRwLock<ExecutionTelemetry>>,
 }
 
 impl MockHypervisorBackend {
@@ -101,9 +102,9 @@ impl MockHypervisorBackend {
                 supports_iommu: false,
                 supports_gpu_passthrough: false,
             },
-            exit_queue: Arc::new(RwLock::new(exits)),
-            exit_count: Arc::new(RwLock::new(0)),
-            telemetry: Arc::new(RwLock::new(ExecutionTelemetry::default())),
+            exit_queue: Arc::new(SyncRwLock::new(exits)),
+            exit_count: Arc::new(SyncRwLock::new(0)),
+            telemetry: Arc::new(SyncRwLock::new(ExecutionTelemetry::default())),
         }
     }
 
@@ -301,6 +302,8 @@ async fn create_test_vm() -> Arc<VM> {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: true,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     Arc::new(VM::new(config).expect("Failed to create VM"))
@@ -481,6 +484,8 @@ async fn test_execute_hello_binary() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -490,9 +495,11 @@ async fn test_execute_hello_binary() {
     let serial = Arc::new(RwLock::new(SerialDevice::new("serial".to_string(), 0x3F8)));
     vm.devices()
         .register_device("serial".to_string(), serial.clone())
+        .await
         .expect("Failed to register serial device");
     vm.devices()
         .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await
         .expect("Failed to register I/O port range");
 
     // Load hello.bin
@@ -514,7 +521,7 @@ async fn test_execute_hello_binary() {
             println!("✓ VM execution completed successfully");
 
             // Check serial output
-            let output = serial.read().output();
+            let output = serial.read().await.output();
             let output_str = String::from_utf8_lossy(&output);
             println!("✓ Serial output: {}", output_str);
 
@@ -876,6 +883,8 @@ async fn test_execute_multiboot() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -885,9 +894,11 @@ async fn test_execute_multiboot() {
     let serial = Arc::new(RwLock::new(SerialDevice::new("serial".to_string(), 0x3F8)));
     vm.devices()
         .register_device("serial".to_string(), serial.clone())
+        .await
         .expect("Failed to register serial device");
     vm.devices()
         .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await
         .expect("Failed to register I/O port range");
 
     // Load multiboot.img
@@ -911,7 +922,7 @@ async fn test_execute_multiboot() {
         Ok(Ok(())) => {
             println!("✓ Multi-stage boot execution completed");
 
-            let output = serial.read().output();
+            let output = serial.read().await.output();
             let output_str = String::from_utf8_lossy(&output);
             println!("✓ Boot output:\n{}", output_str);
 
@@ -972,6 +983,8 @@ async fn test_execute_interrupt_demo() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -980,9 +993,11 @@ async fn test_execute_interrupt_demo() {
     let serial = Arc::new(RwLock::new(SerialDevice::new("serial".to_string(), 0x3F8)));
     vm.devices()
         .register_device("serial".to_string(), serial.clone())
+        .await
         .unwrap();
     vm.devices()
         .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await
         .unwrap();
 
     let code = load_guest_binary("interrupt_demo.img");
@@ -997,7 +1012,7 @@ async fn test_execute_interrupt_demo() {
 
     match result {
         Ok(Ok(())) => {
-            let output = serial.read().output();
+            let output = serial.read().await.output();
             let output_str = String::from_utf8_lossy(&output);
             println!("✓ Interrupt demo output:\n{}", output_str);
 
@@ -1052,6 +1067,8 @@ async fn test_execute_mmio_test() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1060,9 +1077,11 @@ async fn test_execute_mmio_test() {
     let serial = Arc::new(RwLock::new(SerialDevice::new("serial".to_string(), 0x3F8)));
     vm.devices()
         .register_device("serial".to_string(), serial.clone())
+        .await
         .unwrap();
     vm.devices()
         .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await
         .unwrap();
 
     let code = load_guest_binary("mmio_test.img");
@@ -1077,7 +1096,7 @@ async fn test_execute_mmio_test() {
 
     match result {
         Ok(Ok(())) => {
-            let output = serial.read().output();
+            let output = serial.read().await.output();
             let output_str = String::from_utf8_lossy(&output);
             println!("✓ MMIO test output:\n{}", output_str);
 
@@ -1114,6 +1133,8 @@ async fn test_state_management_tracking() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: true,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1183,6 +1204,8 @@ async fn test_multi_vcpu_state_management() {
         enable_gpu: false,
         enable_networking: false,
         enable_tracing: true,
+        parallel_vcpu: false,
+        vcpu_affinity: Vec::new(),
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));

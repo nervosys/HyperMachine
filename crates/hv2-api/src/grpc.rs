@@ -2,9 +2,9 @@
 
 use crate::{ApiError, Result};
 use hv2_agent::AgentVM;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 
 // Include generated proto code
@@ -63,7 +63,7 @@ impl VmService for VMServiceImpl {
             .map_err(|e| Status::internal(e.to_string()))?;
 
         let vm_id = uuid::Uuid::new_v4().to_string();
-        self.vms.write().insert(vm_id.clone(), Arc::new(vm));
+        self.vms.write().await.insert(vm_id.clone(), Arc::new(vm));
 
         Ok(Response::new(CreateVmResponse { vm_id }))
     }
@@ -74,12 +74,7 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<StartVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = {
-            let vms = self.vms.read();
-            vms.get(&req.vm_id)
-                .ok_or_else(|| Status::not_found("VM not found"))?
-                .clone()
-        };
+        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
 
         vm.start()
             .await
@@ -94,12 +89,7 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<StopVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = {
-            let vms = self.vms.read();
-            vms.get(&req.vm_id)
-                .ok_or_else(|| Status::not_found("VM not found"))?
-                .clone()
-        };
+        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
 
         vm.stop()
             .await
@@ -114,12 +104,7 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<PauseVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = {
-            let vms = self.vms.read();
-            vms.get(&req.vm_id)
-                .ok_or_else(|| Status::not_found("VM not found"))?
-                .clone()
-        };
+        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
 
         vm.pause()
             .await
@@ -134,12 +119,7 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<ResumeVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = {
-            let vms = self.vms.read();
-            vms.get(&req.vm_id)
-                .ok_or_else(|| Status::not_found("VM not found"))?
-                .clone()
-        };
+        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
 
         vm.resume()
             .await
@@ -154,12 +134,7 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<GetVmStatusResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = {
-            let vms = self.vms.read();
-            vms.get(&req.vm_id)
-                .ok_or_else(|| Status::not_found("VM not found"))?
-                .clone()
-        };
+        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
 
         let metrics = vm
             .get_metrics()
@@ -186,7 +161,7 @@ impl VmService for VMServiceImpl {
         &self,
         _request: Request<ListVMsRequest>,
     ) -> std::result::Result<Response<ListVMsResponse>, Status> {
-        let vms = self.vms.read();
+        let vms = self.vms.read().await;
 
         let vm_list: Vec<VmInfo> = vms
             .iter()
@@ -216,12 +191,7 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<ExecuteScriptResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = {
-            let vms = self.vms.read();
-            vms.get(&req.vm_id)
-                .ok_or_else(|| Status::not_found("VM not found"))?
-                .clone()
-        };
+        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
 
         let result = vm
             .execute_agent_script(&req.script)
