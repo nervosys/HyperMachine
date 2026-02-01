@@ -271,6 +271,44 @@ print("Network TX: " + metrics.network_tx_bytes);
 print("Network RX: " + metrics.network_rx_bytes);
 ```
 
+### VMMetrics Structure
+
+The `VMMetrics` struct provides comprehensive VM state information:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | `VMState` | Current VM state (Created, Running, Paused, Stopped) |
+| `vcpu_count` | `u32` | Number of virtual CPUs |
+| `memory_size` | `u64` | Total memory size in bytes |
+| `uptime_seconds` | `u64` | VM uptime since last start |
+| `cpu_usage_percent` | `Option<f64>` | CPU utilization (0-100) across all vCPUs |
+| `memory_used_bytes` | `Option<u64>` | Memory used (requires virtio-balloon) |
+
+```rust
+let metrics = vm.get_metrics().await?;
+println!("State: {:?}", metrics.state);
+println!("vCPUs: {}", metrics.vcpu_count);
+println!("Memory: {} GB", metrics.memory_size / (1024 * 1024 * 1024));
+println!("Uptime: {} seconds", metrics.uptime_seconds);
+if let Some(cpu) = metrics.cpu_usage_percent {
+    println!("CPU Usage: {:.1}%", cpu);
+}
+```
+
+### CPU Usage Tracking
+
+CPU usage is calculated from vCPU run time statistics:
+- Aggregates run time across all vCPUs
+- Reports percentage relative to total available CPU time
+- Returns `None` if VM is not running or just started
+
+### Memory Usage Tracking
+
+Memory usage tracking requires guest OS cooperation:
+- Currently returns `None` (infrastructure in place)
+- Full implementation requires virtio-balloon driver
+- Guest OS reports actual memory pressure to hypervisor
+
 ## Integration Examples
 
 ### With LangChain

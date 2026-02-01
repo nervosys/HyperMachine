@@ -107,11 +107,13 @@ hm t1 create --name prod-vm --cpu 16 --memory 64
 
 ```bash
 # Start the MCP HTTP server
-hm serve --rest-port 8080
+hm mcp serve
+
+# With rate limiting (100 req/min default, customize as needed)
+hm mcp serve --rate-limit 1000
 
 # With authentication (recommended for production)
-export HM_API_KEY="your-secret-key"
-hm serve --rest-port 8080
+hm mcp serve --api-key "your-secret-key"
 
 # AI agents can discover available tools
 curl http://localhost:8080/mcp/tools
