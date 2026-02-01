@@ -84,7 +84,11 @@ impl DeviceManager {
     }
 
     /// Register a device
-    pub async fn register_device(&self, name: String, device: Arc<RwLock<dyn Device>>) -> Result<()> {
+    pub async fn register_device(
+        &self,
+        name: String,
+        device: Arc<RwLock<dyn Device>>,
+    ) -> Result<()> {
         let mut devices = self.devices.write().await;
 
         if devices.contains_key(&name) {
@@ -115,7 +119,10 @@ impl DeviceManager {
     }
 
     /// Get all devices of a specific type
-    pub async fn get_devices_by_type(&self, device_type: DeviceType) -> Vec<Arc<RwLock<dyn Device>>> {
+    pub async fn get_devices_by_type(
+        &self,
+        device_type: DeviceType,
+    ) -> Vec<Arc<RwLock<dyn Device>>> {
         let devices = self.devices.read().await;
         let mut result = Vec::new();
         for d in devices.values() {
@@ -392,7 +399,10 @@ mod tests {
             name: "test".to_string(),
         }));
 
-        manager.register_device("test".to_string(), device).await.unwrap();
+        manager
+            .register_device("test".to_string(), device)
+            .await
+            .unwrap();
         assert!(manager.get_device("test").await.is_some());
     }
 }

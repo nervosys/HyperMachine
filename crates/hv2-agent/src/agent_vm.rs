@@ -152,7 +152,12 @@ impl AgentVM {
             state: self.vm.state(),
             vcpu_count: self.vm.vcpus().len() as u32,
             memory_size: self.vm.memory().total_size(),
-            uptime_seconds: self.started_at.read().await.map(|s| s.elapsed().as_secs()).unwrap_or(0),
+            uptime_seconds: self
+                .started_at
+                .read()
+                .await
+                .map(|s| s.elapsed().as_secs())
+                .unwrap_or(0),
             cpu_usage_percent: None,
             memory_used_bytes: None,
         })

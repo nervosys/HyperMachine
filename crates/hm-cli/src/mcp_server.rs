@@ -756,21 +756,16 @@ async fn agentic_provider_config(
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let provider = match provider.to_lowercase().as_str() {
         // OpenAI models (GPT-5, GPT-4, o-series)
-        "openai" | "gpt" | "chatgpt" 
-        | "gpt-5" | "gpt-5-turbo" | "gpt-4" | "gpt-4o" | "gpt-4o-mini"
-        | "o1" | "o1-mini" | "o1-preview" | "o3" | "o3-mini" => LlmProvider::OpenAI,
+        "openai" | "gpt" | "chatgpt" | "gpt-5" | "gpt-5-turbo" | "gpt-4" | "gpt-4o"
+        | "gpt-4o-mini" | "o1" | "o1-mini" | "o1-preview" | "o3" | "o3-mini" => LlmProvider::OpenAI,
         // Anthropic models (Claude 4.5, Claude 4, Claude 3.5)
-        "anthropic" | "claude"
-        | "claude-4.5" | "claude-4.5-opus" | "claude-4.5-sonnet"
-        | "claude-4" | "claude-4-opus" | "claude-4-sonnet"
-        | "claude-3.5" | "claude-3" | "sonnet" | "opus" | "haiku" => {
-            LlmProvider::Anthropic
-        }
+        "anthropic" | "claude" | "claude-4.5" | "claude-4.5-opus" | "claude-4.5-sonnet"
+        | "claude-4" | "claude-4-opus" | "claude-4-sonnet" | "claude-3.5" | "claude-3"
+        | "sonnet" | "opus" | "haiku" => LlmProvider::Anthropic,
         // Google models (Gemini 2.5, Gemini 2.0, Flash)
-        "google" | "gemini"
-        | "gemini-2.5" | "gemini-2.5-pro" | "gemini-2.5-ultra"
-        | "gemini-2.0" | "gemini-2.0-pro" | "gemini-2.0-ultra"
-        | "gemini-pro" | "gemini-ultra" | "gemini-flash" => LlmProvider::Google,
+        "google" | "gemini" | "gemini-2.5" | "gemini-2.5-pro" | "gemini-2.5-ultra"
+        | "gemini-2.0" | "gemini-2.0-pro" | "gemini-2.0-ultra" | "gemini-pro" | "gemini-ultra"
+        | "gemini-flash" => LlmProvider::Google,
         "generic" | "other" | "custom" => LlmProvider::Generic,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
@@ -875,7 +870,10 @@ mod tests {
     fn test_schema_endpoints_provider_config() {
         let openai = SchemaEndpoints::provider_config(LlmProvider::OpenAI);
         assert!(openai["provider"].as_str().is_some());
-        assert!(openai["system_prompt"].as_str().unwrap().contains("HyperMachine"));
+        assert!(openai["system_prompt"]
+            .as_str()
+            .unwrap()
+            .contains("HyperMachine"));
 
         let anthropic = SchemaEndpoints::provider_config(LlmProvider::Anthropic);
         assert!(anthropic["provider"].as_str().is_some());

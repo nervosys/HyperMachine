@@ -22,9 +22,9 @@ use hv2_core::{
     Result, SerialDevice, VCpu, VMConfig, VmExit, VM,
 };
 use parking_lot::RwLock as SyncRwLock;
-use tokio::sync::RwLock;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 // ============================================================================
 // Mock Hypervisor Backend for Testing

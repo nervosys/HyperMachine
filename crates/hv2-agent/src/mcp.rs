@@ -1054,7 +1054,8 @@ impl McpServer {
 
         // Check rate limit
         {
-            let mut count = session.call_count.write().unwrap();            let mut window_start = session.rate_limit_window_start.write().unwrap();
+            let mut count = session.call_count.write().unwrap();
+            let mut window_start = session.rate_limit_window_start.write().unwrap();
             let now = Instant::now();
             let window_duration = Duration::from_secs(60);
 

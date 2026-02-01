@@ -236,7 +236,9 @@ mod platform {
     use winapi::um::fileapi::{CreateFileW, ReadFile, WriteFile, OPEN_EXISTING};
     use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
     use winapi::um::winbase::FILE_FLAG_OVERLAPPED;
-    use winapi::um::winnt::{FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE};
+    use winapi::um::winnt::{
+        FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
+    };
 
     const TAP_WINDOWS_COMPONENT_ID: &str = "tap0901";
 

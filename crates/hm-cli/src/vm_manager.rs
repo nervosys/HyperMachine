@@ -363,7 +363,9 @@ impl VmManager {
                 state: record.state,
                 cpu_cores: record.cpu_cores,
                 memory_gb: record.memory_gb,
-                memory_used_gb: vm_metrics.memory_used_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0)),
+                memory_used_gb: vm_metrics
+                    .memory_used_bytes
+                    .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0)),
                 cpu_usage_percent: vm_metrics.cpu_usage_percent,
                 uptime_seconds: Some(vm_metrics.uptime_seconds),
             }
@@ -536,7 +538,7 @@ mod tests {
     #[test]
     fn test_vm_state_from_vmstate() {
         use hv2_core::VMState;
-        
+
         assert_eq!(VmState::from(VMState::Created), VmState::Created);
         assert_eq!(VmState::from(VMState::Running), VmState::Running);
         assert_eq!(VmState::from(VMState::Paused), VmState::Paused);
@@ -625,4 +627,3 @@ mod tests {
         assert_eq!(deserialized.state, VmState::Running);
     }
 }
-

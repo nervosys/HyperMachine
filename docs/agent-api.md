@@ -275,14 +275,14 @@ print("Network RX: " + metrics.network_rx_bytes);
 
 The `VMMetrics` struct provides comprehensive VM state information:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `state` | `VMState` | Current VM state (Created, Running, Paused, Stopped) |
-| `vcpu_count` | `u32` | Number of virtual CPUs |
-| `memory_size` | `u64` | Total memory size in bytes |
-| `uptime_seconds` | `u64` | VM uptime since last start |
-| `cpu_usage_percent` | `Option<f64>` | CPU utilization (0-100) across all vCPUs |
-| `memory_used_bytes` | `Option<u64>` | Memory used (requires virtio-balloon) |
+| Field               | Type          | Description                                          |
+| ------------------- | ------------- | ---------------------------------------------------- |
+| `state`             | `VMState`     | Current VM state (Created, Running, Paused, Stopped) |
+| `vcpu_count`        | `u32`         | Number of virtual CPUs                               |
+| `memory_size`       | `u64`         | Total memory size in bytes                           |
+| `uptime_seconds`    | `u64`         | VM uptime since last start                           |
+| `cpu_usage_percent` | `Option<f64>` | CPU utilization (0-100) across all vCPUs             |
+| `memory_used_bytes` | `Option<u64>` | Memory used (requires virtio-balloon)                |
 
 ```rust
 let metrics = vm.get_metrics().await?;

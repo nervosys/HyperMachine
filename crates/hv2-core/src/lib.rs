@@ -206,6 +206,55 @@ pub use snapshot::{
     SnapshotResult, SnapshotState, SnapshotStats, SnapshotType, Snapshottable, TestDevice,
     VmSnapshot,
 };
+pub use telemetry::{
+    CarbonExporter,
+    // Collector types
+    CollectorError,
+    CollectorResult,
+    Counter,
+    DiskMetrics,
+    Ewma,
+    // Exporter types
+    ExporterError,
+    ExporterResult,
+    Gauge,
+    Histogram,
+    HistogramData,
+    HypervisorMetrics,
+    JsonExporter,
+    JsonMetric,
+    MemoryMetrics,
+    MetricCollector,
+    MetricDescriptor,
+    MetricExporter,
+    MetricFamily,
+    MetricLabel,
+    MetricLabels,
+    MetricRegistry,
+    MetricSample,
+    // Core types
+    MetricType,
+    MetricValue,
+    MovingAverage,
+    NetworkMetrics,
+    OpenTelemetryExporter,
+    PrometheusExporter,
+    RateCalculator,
+    StatsDExporter,
+    StatsDFormat,
+    SummaryData,
+    Timer,
+    TimerObservation,
+    Timestamp,
+    // VM metrics
+    VcpuMetrics,
+    VmMetrics,
+    // Constants
+    DEFAULT_HISTOGRAM_BUCKETS,
+    DEFAULT_QUANTILES,
+    LATENCY_BUCKETS,
+    SIZE_BUCKETS,
+};
 pub use uefi::{
     AllocateType, BootServices, BootServicesStats, CapsuleCapabilities, GopBltOperation,
     GopBltPixel, GopMode, GopModeInfo, GopPixelBitmask, GopPixelFormat, GopStats,
@@ -224,23 +273,6 @@ pub use usb::{
 };
 pub use vcpu::{ControlRegisters, RegisterSet, VCpu, VCpuState};
 pub use vm::{VMConfig, VMState, VM};
-pub use telemetry::{
-    // Core types
-    MetricType, MetricValue, MetricLabel, MetricLabels, MetricSample, MetricFamily,
-    HistogramData, SummaryData, Timestamp, RateCalculator, MovingAverage, Ewma,
-    // Collector types
-    CollectorError, CollectorResult, Counter, Gauge, Histogram, Timer, TimerObservation,
-    MetricDescriptor, MetricRegistry, MetricCollector,
-    // Exporter types
-    ExporterError, ExporterResult, MetricExporter,
-    PrometheusExporter, JsonExporter, JsonMetric,
-    OpenTelemetryExporter, StatsDExporter, StatsDFormat, CarbonExporter,
-    // VM metrics
-    VcpuMetrics, MemoryMetrics, DiskMetrics, NetworkMetrics,
-    HypervisorMetrics, VmMetrics,
-    // Constants
-    DEFAULT_HISTOGRAM_BUCKETS, LATENCY_BUCKETS, SIZE_BUCKETS, DEFAULT_QUANTILES,
-};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
