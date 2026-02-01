@@ -103,6 +103,20 @@ impl GuestMemory {
         Ok(data)
     }
 
+    /// Read bytes from guest memory into an existing buffer (zero allocation)
+    ///
+    /// This is more efficient than `read_bytes` when you can reuse a buffer.
+    pub fn read_bytes_into(&self, guest_addr: GuestAddress, buf: &mut [u8]) -> Result<()> {
+        let host_addr = self.translate(guest_addr)?;
+
+        unsafe {
+            let ptr = host_addr as *const u8;
+            std::ptr::copy_nonoverlapping(ptr, buf.as_mut_ptr(), buf.len());
+        }
+
+        Ok(())
+    }
+
     /// Get total memory size
     pub fn total_size(&self) -> u64 {
         self.total_size
