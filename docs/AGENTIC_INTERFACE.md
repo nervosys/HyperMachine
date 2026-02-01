@@ -472,6 +472,83 @@ curl -X POST http://localhost:8080/mcp/call \
   }'
 ```
 
+## MCP HTTP Server
+
+HyperMachine CLI (`hm`) includes a built-in MCP HTTP server for AI agent access.
+
+### Starting the Server
+
+```bash
+# Start with default settings
+hm mcp serve
+
+# Custom port and rate limit
+hm mcp serve --port 9000 --rate-limit 1000
+
+# With API key authentication
+hm mcp serve --api-key "your-secret-key"
+```
+
+### Rate Limiting
+
+The server includes built-in rate limiting to prevent abuse:
+
+- Default: 100 requests per minute per IP
+- Configurable via `--rate-limit` flag
+- Returns `429 Too Many Requests` when limit exceeded
+- `X-RateLimit-Remaining` header shows remaining quota
+
+```bash
+# High-traffic deployment
+hm mcp serve --rate-limit 10000  # 10,000 req/min
+```
+
+### Authentication
+
+When API key is configured, all requests must include the `Authorization` header:
+
+```bash
+curl -X POST http://localhost:8080/mcp/call \
+  -H "Authorization: Bearer your-secret-key" \
+  -H "Content-Type: application/json" \
+  -d '{"tool": "vm.list", "arguments": {}}'
+```
+
+### VM Metrics API
+
+Get detailed VM metrics including CPU and memory usage:
+
+```bash
+curl http://localhost:8080/vms/my-vm/metrics
+```
+
+Response:
+```json
+{
+  "name": "my-vm",
+  "state": "running",
+  "cpu_cores": 4,
+  "memory_gb": 8,
+  "cpu_usage_percent": 45.2,
+  "memory_used_gb": 3.7,
+  "uptime_seconds": 3600
+}
+```
+
+### Session Management
+
+Create persistent agent sessions for tracking:
+
+```bash
+# Create session
+curl -X POST http://localhost:8080/mcp/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"agent_id": "my-agent"}'
+
+# List sessions
+curl http://localhost:8080/mcp/sessions
+```
+
 ## API Reference
 
 See the Rust documentation:
@@ -479,3 +556,4 @@ See the Rust documentation:
 - [`hv2_agent::orchestration`](./crates/hv2-agent/src/orchestration.rs) - Multi-agent orchestration
 - [`hv2_agent::tools`](./crates/hv2-agent/src/tools.rs) - Tool definitions
 - [`hv2_agent::communication`](./crates/hv2-agent/src/communication.rs) - Agent messaging
+- [`hm_cli::mcp_server`](./crates/hm-cli/src/mcp_server.rs) - MCP HTTP Server with rate limiting
