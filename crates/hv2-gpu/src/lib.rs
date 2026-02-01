@@ -1,5 +1,9 @@
 //! GPU virtualization for HV2
 
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 pub mod passthrough;
 pub mod vgpu;
 

@@ -2,8 +2,11 @@
 
 #![allow(dead_code)]
 #![allow(unused_imports)]
-#![allow(unused_variables)]
-#![allow(unused_mut)]
+
+
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 
 pub mod aarch64;
 pub mod x86_64;
@@ -32,3 +35,4 @@ pub enum CpuError {
 }
 
 pub type Result<T> = std::result::Result<T, CpuError>;
+
