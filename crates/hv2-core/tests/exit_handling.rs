@@ -34,7 +34,12 @@ async fn test_vm_creation_with_backend() -> Result<()> {
 
     // Verify backend exists
     let backend = vm.backend();
-    let platform = backend.platform().to_string(); assert!(platform == "Tcg" || platform == "Whpx", "Expected Tcg or Whpx, got {}", platform);
+    let platform = backend.platform().to_string();
+    assert!(
+        platform == "Tcg" || platform == "Whpx",
+        "Expected Tcg or Whpx, got {}",
+        platform
+    );
 
     Ok(())
 }

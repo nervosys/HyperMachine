@@ -35,7 +35,6 @@
 //! orchestrator.register_agent("agent-2", "Monitor", AgentRole::Monitor)?;
 //! ```
 
-
 #![allow(dead_code)]
 #![allow(unused_imports)]
 #![allow(unused_variables)]

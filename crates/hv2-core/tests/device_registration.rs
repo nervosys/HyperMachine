@@ -71,11 +71,16 @@ async fn test_mmio_region_registration() -> Result<()> {
     let manager = DeviceManager::new();
 
     // Create and register device - cast to dyn Device
-    let device: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("test-mmio".to_string(), 256)));
-    manager.register_device("test-mmio".to_string(), device).await?;
+    let device: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("test-mmio".to_string(), 256)));
+    manager
+        .register_device("test-mmio".to_string(), device)
+        .await?;
 
     // Register MMIO region
-    manager.register_mmio_region("test-mmio".to_string(), 0x1000, 256).await?;
+    manager
+        .register_mmio_region("test-mmio".to_string(), 0x1000, 256)
+        .await?;
 
     // Find device by MMIO address
     let handle = manager.find_mmio_device(0x1000).await;
@@ -105,11 +110,16 @@ async fn test_io_port_registration() -> Result<()> {
     let manager = DeviceManager::new();
 
     // Create and register device - cast to dyn Device
-    let device: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("test-io".to_string(), 8)));
-    manager.register_device("test-io".to_string(), device).await?;
+    let device: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("test-io".to_string(), 8)));
+    manager
+        .register_device("test-io".to_string(), device)
+        .await?;
 
     // Register I/O port range
-    manager.register_io_port_range("test-io".to_string(), 0x3F8, 0x3FF).await?;
+    manager
+        .register_io_port_range("test-io".to_string(), 0x3F8, 0x3FF)
+        .await?;
 
     // Find device by I/O port
     let handle = manager.find_io_device(0x3F8).await;
@@ -143,9 +153,14 @@ async fn test_mmio_read_write() -> Result<()> {
     let manager = DeviceManager::new();
 
     // Create and register device - cast to dyn Device
-    let device: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("test-rw".to_string(), 256)));
-    manager.register_device("test-rw".to_string(), device).await?;
-    manager.register_mmio_region("test-rw".to_string(), 0x2000, 256).await?;
+    let device: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("test-rw".to_string(), 256)));
+    manager
+        .register_device("test-rw".to_string(), device)
+        .await?;
+    manager
+        .register_mmio_region("test-rw".to_string(), 0x2000, 256)
+        .await?;
 
     // Find and write to device
     let handle = manager.find_mmio_device(0x2000).await.unwrap();
@@ -171,9 +186,14 @@ async fn test_io_port_read_write() -> Result<()> {
     let manager = DeviceManager::new();
 
     // Create and register device - cast to dyn Device
-    let device: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("test-io-rw".to_string(), 16)));
-    manager.register_device("test-io-rw".to_string(), device).await?;
-    manager.register_io_port_range("test-io-rw".to_string(), 0x500, 0x50F).await?;
+    let device: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("test-io-rw".to_string(), 16)));
+    manager
+        .register_device("test-io-rw".to_string(), device)
+        .await?;
+    manager
+        .register_io_port_range("test-io-rw".to_string(), 0x500, 0x50F)
+        .await?;
 
     // Find and write to device
     let handle = manager.find_io_device(0x500).await.unwrap();
@@ -190,7 +210,8 @@ async fn test_mmio_region_overlap_detection() {
     let manager = DeviceManager::new();
 
     // Register first device at 0x3000-0x3100 (256 bytes)
-    let device1: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device1".to_string(), 256)));
+    let device1: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device1".to_string(), 256)));
     manager
         .register_device("device1".to_string(), device1)
         .await
@@ -201,49 +222,64 @@ async fn test_mmio_region_overlap_detection() {
         .unwrap();
 
     // Test 1: Complete overlap
-    let device2: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device2".to_string(), 128)));
+    let device2: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device2".to_string(), 128)));
     manager
         .register_device("device2".to_string(), device2)
         .await
         .unwrap();
-    let result = manager.register_mmio_region("device2".to_string(), 0x3000, 128).await;
+    let result = manager
+        .register_mmio_region("device2".to_string(), 0x3000, 128)
+        .await;
     assert!(result.is_err());
 
     // Test 2: Partial overlap (start before, end inside)
     // device3: 0x2F00-0x3001 (257 bytes) should overlap device1 (0x3000-0x3100)
-    let device3: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device3".to_string(), 257)));
+    let device3: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device3".to_string(), 257)));
     manager
         .register_device("device3".to_string(), device3)
         .await
         .unwrap();
-    let result = manager.register_mmio_region("device3".to_string(), 0x2F00, 257).await;
+    let result = manager
+        .register_mmio_region("device3".to_string(), 0x2F00, 257)
+        .await;
     assert!(result.is_err());
 
     // Test 3: Partial overlap (start inside, end after)
-    let device4: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device4".to_string(), 256)));
+    let device4: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device4".to_string(), 256)));
     manager
         .register_device("device4".to_string(), device4)
         .await
         .unwrap();
-    let result = manager.register_mmio_region("device4".to_string(), 0x30F0, 256).await;
+    let result = manager
+        .register_mmio_region("device4".to_string(), 0x30F0, 256)
+        .await;
     assert!(result.is_err());
 
     // Test 4: No overlap (before) - region ends at 0x2F00, device1 starts at 0x3000
-    let device5: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device5".to_string(), 256)));
+    let device5: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device5".to_string(), 256)));
     manager
         .register_device("device5".to_string(), device5)
         .await
         .unwrap();
-    let result = manager.register_mmio_region("device5".to_string(), 0x2E00, 256).await;
+    let result = manager
+        .register_mmio_region("device5".to_string(), 0x2E00, 256)
+        .await;
     assert!(result.is_ok());
 
     // Test 5: No overlap (after) - region starts at 0x3100, device1 ends at 0x3100
-    let device6: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device6".to_string(), 128)));
+    let device6: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device6".to_string(), 128)));
     manager
         .register_device("device6".to_string(), device6)
         .await
         .unwrap();
-    let result = manager.register_mmio_region("device6".to_string(), 0x3100, 128).await;
+    let result = manager
+        .register_mmio_region("device6".to_string(), 0x3100, 128)
+        .await;
     assert!(result.is_ok());
 }
 
@@ -252,7 +288,8 @@ async fn test_io_port_overlap_detection() {
     let manager = DeviceManager::new();
 
     // Register first device
-    let device1: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device1".to_string(), 16)));
+    let device1: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device1".to_string(), 16)));
     manager
         .register_device("device1".to_string(), device1)
         .await
@@ -263,22 +300,29 @@ async fn test_io_port_overlap_detection() {
         .unwrap();
 
     // Try to register overlapping range
-    let device2: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("device2".to_string(), 8)));
+    let device2: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("device2".to_string(), 8)));
     manager
         .register_device("device2".to_string(), device2)
         .await
         .unwrap();
 
     // Complete overlap
-    let result = manager.register_io_port_range("device2".to_string(), 0x600, 0x607).await;
+    let result = manager
+        .register_io_port_range("device2".to_string(), 0x600, 0x607)
+        .await;
     assert!(result.is_err());
 
     // Partial overlap
-    let result = manager.register_io_port_range("device2".to_string(), 0x5F8, 0x605).await;
+    let result = manager
+        .register_io_port_range("device2".to_string(), 0x5F8, 0x605)
+        .await;
     assert!(result.is_err());
 
     // No overlap (adjacent is OK)
-    let result = manager.register_io_port_range("device2".to_string(), 0x610, 0x617).await;
+    let result = manager
+        .register_io_port_range("device2".to_string(), 0x610, 0x617)
+        .await;
     assert!(result.is_ok());
 }
 
@@ -287,19 +331,30 @@ async fn test_multiple_devices() -> Result<()> {
     let manager = DeviceManager::new();
 
     // Register serial device
-    let serial: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("serial".to_string(), 8)));
-    manager.register_device("serial".to_string(), serial).await?;
-    manager.register_io_port_range("serial".to_string(), 0x3F8, 0x3FF).await?;
+    let serial: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("serial".to_string(), 8)));
+    manager
+        .register_device("serial".to_string(), serial)
+        .await?;
+    manager
+        .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await?;
 
     // Register timer device
-    let timer: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("timer".to_string(), 4)));
+    let timer: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("timer".to_string(), 4)));
     manager.register_device("timer".to_string(), timer).await?;
-    manager.register_io_port_range("timer".to_string(), 0x40, 0x43).await?;
+    manager
+        .register_io_port_range("timer".to_string(), 0x40, 0x43)
+        .await?;
 
     // Register video device with MMIO
-    let video: Arc<RwLock<dyn Device>> = Arc::new(RwLock::new(TestDevice::new("video".to_string(), 1024)));
+    let video: Arc<RwLock<dyn Device>> =
+        Arc::new(RwLock::new(TestDevice::new("video".to_string(), 1024)));
     manager.register_device("video".to_string(), video).await?;
-    manager.register_mmio_region("video".to_string(), 0xA0000, 1024).await?;
+    manager
+        .register_mmio_region("video".to_string(), 0xA0000, 1024)
+        .await?;
 
     // Find each device
     let handle = manager.find_io_device(0x3F8).await;

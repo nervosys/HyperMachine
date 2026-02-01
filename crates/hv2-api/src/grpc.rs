@@ -74,7 +74,13 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<StartVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
+        let vm = self
+            .vms
+            .read()
+            .await
+            .get(&req.vm_id)
+            .ok_or_else(|| Status::not_found("VM not found"))?
+            .clone();
 
         vm.start()
             .await
@@ -89,7 +95,13 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<StopVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
+        let vm = self
+            .vms
+            .read()
+            .await
+            .get(&req.vm_id)
+            .ok_or_else(|| Status::not_found("VM not found"))?
+            .clone();
 
         vm.stop()
             .await
@@ -104,7 +116,13 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<PauseVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
+        let vm = self
+            .vms
+            .read()
+            .await
+            .get(&req.vm_id)
+            .ok_or_else(|| Status::not_found("VM not found"))?
+            .clone();
 
         vm.pause()
             .await
@@ -119,7 +137,13 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<ResumeVmResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
+        let vm = self
+            .vms
+            .read()
+            .await
+            .get(&req.vm_id)
+            .ok_or_else(|| Status::not_found("VM not found"))?
+            .clone();
 
         vm.resume()
             .await
@@ -134,7 +158,13 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<GetVmStatusResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
+        let vm = self
+            .vms
+            .read()
+            .await
+            .get(&req.vm_id)
+            .ok_or_else(|| Status::not_found("VM not found"))?
+            .clone();
 
         let metrics = vm
             .get_metrics()
@@ -191,7 +221,13 @@ impl VmService for VMServiceImpl {
     ) -> std::result::Result<Response<ExecuteScriptResponse>, Status> {
         let req = request.into_inner();
 
-        let vm = self.vms.read().await.get(&req.vm_id).ok_or_else(|| Status::not_found("VM not found"))?.clone();
+        let vm = self
+            .vms
+            .read()
+            .await
+            .get(&req.vm_id)
+            .ok_or_else(|| Status::not_found("VM not found"))?
+            .clone();
 
         let result = vm
             .execute_agent_script(&req.script)

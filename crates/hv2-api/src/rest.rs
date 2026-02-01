@@ -45,13 +45,17 @@ struct ErrorResponse {
 impl IntoResponse for crate::ApiError {
     fn into_response(self) -> Response {
         let (status, code, error) = match &self {
-            crate::ApiError::VmNotFound(msg) => (StatusCode::NOT_FOUND, "VM_NOT_FOUND", msg.clone()),
+            crate::ApiError::VmNotFound(msg) => {
+                (StatusCode::NOT_FOUND, "VM_NOT_FOUND", msg.clone())
+            }
             crate::ApiError::InvalidRequest(msg) => {
                 (StatusCode::BAD_REQUEST, "INVALID_REQUEST", msg.clone())
             }
-            crate::ApiError::Transport(msg) => {
-                (StatusCode::SERVICE_UNAVAILABLE, "TRANSPORT_ERROR", msg.clone())
-            }
+            crate::ApiError::Transport(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "TRANSPORT_ERROR",
+                msg.clone(),
+            ),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
@@ -127,7 +131,10 @@ async fn list_vms(State(state): State<Arc<AppState>>) -> impl IntoResponse {
         .collect();
 
     let total = summaries.len();
-    Json(VmListResponse { vms: summaries, total })
+    Json(VmListResponse {
+        vms: summaries,
+        total,
+    })
 }
 
 /// VM creation request

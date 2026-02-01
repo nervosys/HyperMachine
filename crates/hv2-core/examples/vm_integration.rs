@@ -26,16 +26,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create and register serial device (COM1)
     let serial = Arc::new(RwLock::new(SerialDevice::new("COM1".to_string(), 0x3F8)));
     let serial_device: Arc<RwLock<dyn Device>> = serial.clone();
-    device_manager.register_device("serial".to_string(), serial_device).await?;
-    device_manager.register_io_port_range("serial".to_string(), 0x3F8, 0x3FF).await?;
+    device_manager
+        .register_device("serial".to_string(), serial_device)
+        .await?;
+    device_manager
+        .register_io_port_range("serial".to_string(), 0x3F8, 0x3FF)
+        .await?;
     serial.write().await.init().await?;
     println!("  ✓ Serial device (COM1) registered at 0x3F8-0x3FF");
 
     // Create and register timer device (PIT)
     let timer = Arc::new(RwLock::new(TimerDevice::new("PIT".to_string(), 0x40)));
     let timer_device: Arc<RwLock<dyn Device>> = timer.clone();
-    device_manager.register_device("timer".to_string(), timer_device).await?;
-    device_manager.register_io_port_range("timer".to_string(), 0x40, 0x43).await?;
+    device_manager
+        .register_device("timer".to_string(), timer_device)
+        .await?;
+    device_manager
+        .register_io_port_range("timer".to_string(), 0x40, 0x43)
+        .await?;
     timer.write().await.init().await?;
     println!("  ✓ Timer device (PIT) registered at 0x40-0x43");
 
@@ -70,7 +78,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    ✓ Control word written: 0x34");
 
         let reload_value: u16 = 1193;
-        handle.write_register(0, (reload_value & 0xFF) as u32).await?;
+        handle
+            .write_register(0, (reload_value & 0xFF) as u32)
+            .await?;
         handle.write_register(0, (reload_value >> 8) as u32).await?;
         println!("    ✓ Reload value set: {} (1ms period)", reload_value);
     }
@@ -98,8 +108,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         0x1000_0000,
     )));
     let mmio_serial_device: Arc<RwLock<dyn Device>> = mmio_serial.clone();
-    device_manager.register_device("mmio_serial".to_string(), mmio_serial_device).await?;
-    device_manager.register_mmio_region("mmio_serial".to_string(), 0x1000_0000, 0x1000).await?;
+    device_manager
+        .register_device("mmio_serial".to_string(), mmio_serial_device)
+        .await?;
+    device_manager
+        .register_mmio_region("mmio_serial".to_string(), 0x1000_0000, 0x1000)
+        .await?;
     mmio_serial.write().await.init().await?;
     println!("  ✓ MMIO serial device registered at 0x1000_0000-0x1000_1000");
 
@@ -112,14 +126,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 7: Show device statistics
     println!("\n📊 Device Statistics:");
     println!("  Serial (COM1):");
-    println!("    - Base address: 0x{:X}", serial.read().await.base_address());
+    println!(
+        "    - Base address: 0x{:X}",
+        serial.read().await.base_address()
+    );
     println!(
         "    - Output buffer: {} bytes",
         serial.read().await.output_string().len()
     );
 
     println!("  Timer (PIT):");
-    println!("    - Base address: 0x{:X}", timer.read().await.base_address());
+    println!(
+        "    - Base address: 0x{:X}",
+        timer.read().await.base_address()
+    );
     println!("    - Total ticks: {}", timer.read().await.total_ticks());
     println!(
         "    - Interrupts: {}",
