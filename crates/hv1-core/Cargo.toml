@@ -1,0 +1,49 @@
+[package]
+name = "hv1-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nervosys <info@nervosys.com>"]
+license = "Apache-2.0"
+description = "HyperMachine Type-1 bare-metal hypervisor core"
+repository = "https://github.com/nervosys/HyperMachine"
+keywords = ["hypervisor", "virtualization", "vmx", "svm", "bare-metal"]
+categories = ["hardware-support", "no-std", "os"]
+
+[features]
+default = ["intel", "amd"]
+intel = []  # Intel VT-x (VMX) support
+amd = []    # AMD-V (SVM) support
+serial = [] # Serial console support
+acpi = []   # ACPI support
+
+[dependencies]
+# No-std compatible crates
+spin = "0.9"
+bitflags = "2.4"
+log = "0.4"
+static_assertions = "1.1"
+
+# x86_64 specific
+x86_64 = "0.15"
+x86 = "0.52"
+raw-cpuid = "11.0"
+
+# Memory management
+linked_list_allocator = "0.10"
+
+# Bootloader integration (for standalone builds)
+bootloader_api = { version = "0.11", optional = true }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+# Additional x86_64 dependencies
+
+[dev-dependencies]
+
+[lib]
+# Can be built as no_std for bare-metal
+# crate-type = ["staticlib", "rlib"]
+
+[[bin]]
+name = "hv1-kernel"
+path = "src/main.rs"
+required-features = ["bootloader_api"]

@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/hv1-core",
     "crates/hv2-core",
     "crates/hv2-cpu",
     "crates/hv2-gpu",
