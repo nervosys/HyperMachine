@@ -480,4 +480,149 @@ mod tests {
             assert!(vms[0].gpu_enabled);
         }
     }
+
+    #[tokio::test]
+    async fn test_get_vm() {
+        let tmp = TempDir::new().unwrap();
+        let manager = VmManager::with_state_dir(tmp.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("my-vm", 8, 32, true, false)
+            .await
+            .unwrap();
+
+        let vm = manager.get_vm("my-vm").await.unwrap();
+        assert_eq!(vm.name, "my-vm");
+        assert_eq!(vm.cpu_cores, 8);
+        assert_eq!(vm.memory_gb, 32);
+        assert!(vm.gpu_enabled);
+        assert!(!vm.network_enabled);
+    }
+
+    #[tokio::test]
+    async fn test_get_vm_not_found() {
+        let tmp = TempDir::new().unwrap();
+        let manager = VmManager::with_state_dir(tmp.path().to_path_buf()).unwrap();
+
+        let result = manager.get_vm("nonexistent").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_vm_state_transitions() {
+        let tmp = TempDir::new().unwrap();
+        let manager = VmManager::with_state_dir(tmp.path().to_path_buf()).unwrap();
+
+        let record = manager
+            .create_vm("state-vm", 2, 4, false, false)
+            .await
+            .unwrap();
+        assert_eq!(record.state, VmState::Created);
+
+        // Update state manually through internal method if exposed
+        let vm = manager.get_vm("state-vm").await.unwrap();
+        assert_eq!(vm.state, VmState::Created);
+    }
+
+    #[test]
+    fn test_vm_state_display() {
+        assert_eq!(format!("{}", VmState::Created), "Created");
+        assert_eq!(format!("{}", VmState::Running), "Running");
+        assert_eq!(format!("{}", VmState::Paused), "Paused");
+        assert_eq!(format!("{}", VmState::Stopped), "Stopped");
+        assert_eq!(format!("{}", VmState::Error), "Error");
+    }
+
+    #[test]
+    fn test_vm_state_from_vmstate() {
+        use hv2_core::VMState;
+        
+        assert_eq!(VmState::from(VMState::Created), VmState::Created);
+        assert_eq!(VmState::from(VMState::Running), VmState::Running);
+        assert_eq!(VmState::from(VMState::Paused), VmState::Paused);
+        assert_eq!(VmState::from(VMState::Stopped), VmState::Stopped);
+        assert_eq!(VmState::from(VMState::Error), VmState::Error);
+    }
+
+    #[tokio::test]
+    async fn test_get_metrics_not_running() {
+        let tmp = TempDir::new().unwrap();
+        let manager = VmManager::with_state_dir(tmp.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("metrics-vm", 4, 8, false, false)
+            .await
+            .unwrap();
+
+        let metrics = manager.get_metrics("metrics-vm").await.unwrap();
+        assert_eq!(metrics.name, "metrics-vm");
+        assert_eq!(metrics.cpu_cores, 4);
+        assert_eq!(metrics.memory_gb, 8);
+        assert!(metrics.uptime_seconds.is_none()); // Not running
+    }
+
+    #[test]
+    fn test_vm_metrics_serialization() {
+        let metrics = VmMetrics {
+            name: "test".to_string(),
+            state: VmState::Running,
+            cpu_cores: 4,
+            memory_gb: 8,
+            memory_used_gb: Some(4.5),
+            cpu_usage_percent: Some(25.0),
+            uptime_seconds: Some(3600),
+        };
+
+        let json = serde_json::to_string(&metrics).unwrap();
+        assert!(json.contains("\"uptime_seconds\":3600"));
+        assert!(json.contains("\"cpu_usage_percent\":25.0"));
+    }
+
+    #[tokio::test]
+    async fn test_new_in_memory_isolation() {
+        // Create two managers - they should have separate state
+        let manager1 = VmManager::new_in_memory().unwrap();
+        let manager2 = VmManager::new_in_memory().unwrap();
+
+        manager1.create_vm("vm1", 2, 4, false, false).await.unwrap();
+        manager2.create_vm("vm2", 4, 8, false, false).await.unwrap();
+
+        // Each manager should only see its own VM
+        let vms1 = manager1.list_vms().await;
+        let vms2 = manager2.list_vms().await;
+
+        assert_eq!(vms1.len(), 1);
+        assert_eq!(vms1[0].name, "vm1");
+
+        assert_eq!(vms2.len(), 1);
+        assert_eq!(vms2[0].name, "vm2");
+    }
+
+    #[test]
+    fn test_vm_record_serialization() {
+        let now = chrono::Utc::now();
+        let record = VmRecord {
+            name: "test-vm".to_string(),
+            cpu_cores: 4,
+            memory_gb: 16,
+            gpu_enabled: true,
+            network_enabled: true,
+            state: VmState::Running,
+            created_at: now,
+            updated_at: now,
+            pid: None,
+        };
+
+        // Serialize to JSON and back
+        let json = serde_json::to_string(&record).unwrap();
+        let deserialized: VmRecord = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, "test-vm");
+        assert_eq!(deserialized.cpu_cores, 4);
+        assert_eq!(deserialized.memory_gb, 16);
+        assert!(deserialized.gpu_enabled);
+        assert!(deserialized.network_enabled);
+        assert_eq!(deserialized.state, VmState::Running);
+    }
 }
+
