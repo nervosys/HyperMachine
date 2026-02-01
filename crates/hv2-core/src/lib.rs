@@ -3,6 +3,17 @@
 //! This crate provides the core abstractions and engine for HV2,
 //! a Type 2 hypervisor designed for AI agent scriptability and remote control.
 
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
+#![allow(non_snake_case)]
+#![allow(non_upper_case_globals)]
+#![allow(clashing_extern_declarations)]
+#![allow(private_interfaces)]
+#![allow(unused_parens)]
+#![allow(unused_must_use)]
+
 pub mod acpi;
 pub mod address_space;
 pub mod audio;

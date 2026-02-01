@@ -1,5 +1,9 @@
 //! HV2 Command-Line Interface
 
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
