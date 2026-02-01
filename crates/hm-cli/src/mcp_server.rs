@@ -798,6 +798,149 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    // Rate limiter tests
+    #[tokio::test]
+    async fn test_rate_limiter_window_reset() {
+        let limiter = RateLimiter::new(2, Duration::from_millis(50));
+
+        // Exhaust the limit
+        assert!(limiter.check("test").await.is_ok());
+        assert!(limiter.check("test").await.is_ok());
+        assert!(limiter.check("test").await.is_err());
+
+        // Wait for window to reset
+        tokio::time::sleep(Duration::from_millis(60)).await;
+
+        // Should be able to make requests again
+        assert!(limiter.check("test").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_default() {
+        let limiter = RateLimiter::default();
+        // Default allows 100 requests per minute
+        assert_eq!(limiter.max_requests, 100);
+        assert_eq!(limiter.window, Duration::from_secs(60));
+    }
+
+    // MCP Session tests
+    #[test]
+    fn test_mcp_session_creation() {
+        let now = chrono::Utc::now();
+        let session = McpSession {
+            agent_id: "test-agent".to_string(),
+            created_at: now,
+            last_activity: now,
+            call_count: 0,
+        };
+        assert_eq!(session.agent_id, "test-agent");
+        assert_eq!(session.call_count, 0);
+    }
+
+    // Tool call tests
+    #[tokio::test]
+    async fn test_tool_call_request_deserialization() {
+        let json = r#"{"tool": "vm.create", "arguments": {"name": "test-vm", "cpu_cores": 2}}"#;
+        let call: ToolCallRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(call.tool, "vm.create");
+        assert_eq!(call.arguments["name"], "test-vm");
+    }
+
+    #[test]
+    fn test_tool_call_response_serialization() {
+        let response = ToolCallResponse {
+            success: true,
+            result: Some(serde_json::json!({"id": "vm-1"})),
+            error: None,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"vm-1\""));
+    }
+
+    #[test]
+    fn test_tool_call_response_error() {
+        let response = ToolCallResponse {
+            success: false,
+            result: None,
+            error: Some("VM not found".to_string()),
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("VM not found"));
+    }
+
+    // Schema endpoint tests
+    #[test]
+    fn test_schema_endpoints_provider_config() {
+        let openai = SchemaEndpoints::provider_config(LlmProvider::OpenAI);
+        assert!(openai["provider"].as_str().is_some());
+        assert!(openai["system_prompt"].as_str().unwrap().contains("HyperMachine"));
+
+        let anthropic = SchemaEndpoints::provider_config(LlmProvider::Anthropic);
+        assert!(anthropic["provider"].as_str().is_some());
+
+        let google = SchemaEndpoints::provider_config(LlmProvider::Google);
+        assert!(google["provider"].as_str().is_some());
+
+        let generic = SchemaEndpoints::provider_config(LlmProvider::Generic);
+        assert!(generic["provider"].as_str().is_some());
+    }
+
+    #[test]
+    fn test_schema_endpoints_openai_tools() {
+        let tools = SchemaEndpoints::openai_tools();
+        assert!(tools.as_array().is_some());
+        let tools_array = tools.as_array().unwrap();
+        assert!(!tools_array.is_empty());
+
+        // All OpenAI tools should have type "function"
+        for tool in tools_array {
+            assert_eq!(tool["type"], "function");
+            assert!(tool["function"]["name"].as_str().is_some());
+            assert!(tool["function"]["description"].as_str().is_some());
+        }
+    }
+
+    #[test]
+    fn test_schema_endpoints_anthropic_tools() {
+        let tools = SchemaEndpoints::anthropic_tools();
+        assert!(tools.as_array().is_some());
+        let tools_array = tools.as_array().unwrap();
+        assert!(!tools_array.is_empty());
+
+        // Anthropic tools should have name, description, input_schema
+        for tool in tools_array {
+            assert!(tool["name"].as_str().is_some());
+            assert!(tool["description"].as_str().is_some());
+            assert!(tool["input_schema"].is_object());
+        }
+    }
+
+    #[test]
+    fn test_schema_endpoints_gemini_tools() {
+        let tools = SchemaEndpoints::gemini_tools();
+        assert!(tools.is_object());
+        assert!(tools["function_declarations"].as_array().is_some());
+        let declarations = tools["function_declarations"].as_array().unwrap();
+        assert!(!declarations.is_empty());
+        for decl in declarations {
+            assert!(decl["name"].as_str().is_some());
+            assert!(decl["description"].as_str().is_some());
+        }
+    }
+
+    // LLM Provider tests
+    #[test]
+    fn test_llm_provider_display() {
+        assert_eq!(format!("{:?}", LlmProvider::OpenAI), "OpenAI");
+        assert_eq!(format!("{:?}", LlmProvider::Anthropic), "Anthropic");
+        assert_eq!(format!("{:?}", LlmProvider::Google), "Google");
+        assert_eq!(format!("{:?}", LlmProvider::Generic), "Generic");
+    }
+
+    // Tool definition tests
+
     #[tokio::test]
     async fn test_rate_limiter_allows_requests_within_limit() {
         let limiter = RateLimiter::new(5, Duration::from_secs(60));
