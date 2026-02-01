@@ -153,6 +153,8 @@ impl AgentVM {
             vcpu_count: self.vm.vcpus().len() as u32,
             memory_size: self.vm.memory().total_size(),
             uptime_seconds: self.started_at.read().await.map(|s| s.elapsed().as_secs()).unwrap_or(0),
+            cpu_usage_percent: None,
+            memory_used_bytes: None,
         })
     }
 
@@ -169,6 +171,10 @@ pub struct VMMetrics {
     pub vcpu_count: u32,
     pub memory_size: u64,
     pub uptime_seconds: u64,
+    /// CPU usage as percentage (0-100) across all vCPUs
+    pub cpu_usage_percent: Option<f64>,
+    /// Memory used in bytes (requires guest OS support via virtio-balloon)
+    pub memory_used_bytes: Option<u64>,
 }
 
 #[cfg(test)]

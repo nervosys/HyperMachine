@@ -363,8 +363,8 @@ impl VmManager {
                 state: record.state,
                 cpu_cores: record.cpu_cores,
                 memory_gb: record.memory_gb,
-                memory_used_gb: None, // TODO: implement actual memory tracking
-                cpu_usage_percent: None, // TODO: implement CPU tracking
+                memory_used_gb: vm_metrics.memory_used_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0)),
+                cpu_usage_percent: vm_metrics.cpu_usage_percent,
                 uptime_seconds: Some(vm_metrics.uptime_seconds),
             }
         } else {
