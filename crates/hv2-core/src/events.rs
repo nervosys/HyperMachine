@@ -25,6 +25,16 @@ pub enum VmEventType {
     DeviceDetached { device_name: String },
     /// Error occurred
     Error { message: String },
+    /// Memory access event (zero allocation variant for hot path)
+    MemoryAccess {
+        address: u64,
+        size: u64,
+        is_write: bool,
+    },
+    /// I/O port operation (zero allocation variant for hot path)
+    IoOperation { port: u16, is_write: bool },
+    /// Device interrupt (zero allocation variant for hot path)
+    DeviceInterrupt { vector: u32 },
     /// Custom event
     Custom { event_type: String, data: String },
 }
