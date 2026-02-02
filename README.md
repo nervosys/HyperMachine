@@ -2,7 +2,6 @@
 
 A high-performance, remotely scriptable hypervisor and emulator framework written in Rust with first-class support for agentic AI. Supports Type-1 (t1) and Type-2 (t2) operational modes.
 
-
 ## Features
 
 🚀 **High Performance**
