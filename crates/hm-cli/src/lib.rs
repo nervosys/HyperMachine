@@ -10,4 +10,5 @@
 
 pub mod agentic;
 pub mod mcp_server;
+pub mod t1_manager;
 pub mod vm_manager;

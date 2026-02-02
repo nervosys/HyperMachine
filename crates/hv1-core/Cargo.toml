@@ -11,10 +11,10 @@ categories = ["hardware-support", "no-std", "os"]
 
 [features]
 default = ["intel", "amd"]
-intel = []  # Intel VT-x (VMX) support
-amd = []    # AMD-V (SVM) support
-serial = [] # Serial console support
-acpi = []   # ACPI support
+intel = []                 # Intel VT-x (VMX) support
+amd = []                   # AMD-V (SVM) support
+serial = []                # Serial console support
+acpi = []                  # ACPI support
 
 [dependencies]
 # No-std compatible crates
