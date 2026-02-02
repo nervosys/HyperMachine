@@ -1,0 +1,22 @@
+[package]
+name = "hv1-boot"
+version = "0.1.0"
+edition = "2024"
+description = "HyperMachine Type-1 Hypervisor Bootable Image"
+license = "Apache-2.0"
+authors = ["nervosys"]
+
+[[bin]]
+name = "hv1"
+path = "src/main.rs"
+
+[dependencies]
+hv1-core = { path = "../hv1-core", features = ["intel", "amd", "serial"] }
+bootloader_api = "0.11"
+log = "0.4"
+
+[build-dependencies]
+bootloader = "0.11"
+
+[features]
+default = []
