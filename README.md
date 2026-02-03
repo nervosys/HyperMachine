@@ -16,6 +16,7 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 | **Networking** | Full TCP/IP stack, TAP/TUN, gRPC/REST APIs, distributed orchestration |
 | **GPU** | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL |
 | **AI-First** | MCP server, scriptable API, WASM plugins, LLM tool formats |
+| **GUI** | Desktop app, AI-driven automation, semantic control API |
 | **Security** | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
 
 ## Architecture
@@ -123,6 +124,7 @@ cargo bench -p hv2-core --bench crypto_bench
 ```
 crates/
   hm-cli      # CLI + MCP server
+  hm-gui      # Desktop GUI with AI automation API
   hv1-boot    # Type-1 bare-metal bootloader
   hv2-core    # Core engine (CPU, memory, devices, crypto)
   hv2-api     # REST/gRPC APIs
