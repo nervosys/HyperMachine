@@ -161,7 +161,7 @@ pub fn create_vm_dialog(ui: &mut Ui, form: &mut crate::state::CreateVmForm) -> O
                     Err(e) => { form.error = Some(e); }
                 }
             }
-            if ui.button("Cancel").clicked() { form.reset(); }
+            if ui.button("Cancel").clicked() { form.cancelled = true; }
         }
     });
     result

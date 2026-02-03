@@ -107,8 +107,6 @@ fn welcome_screen(ui: &mut Ui, state: &AppState) {
     ui.vertical_centered(|ui| {
         ui.add_space(60.0);
         ui.label(RichText::new("HyperMachine").size(64.0));
-        ui.add_space(16.0);
-        ui.heading(RichText::new("Welcome to HyperMachine").size(28.0));
         ui.add_space(8.0);
         ui.label(RichText::new("A modern virtual machine manager").color(colors.text_secondary).size(16.0));
         ui.add_space(32.0);
