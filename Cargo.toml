@@ -82,8 +82,8 @@ criterion = "0.5"
 
 # Scripting for AI agents
 rhai = { version = "1.19", features = ["sync"] }
-wasmtime = "24.0"
-wasmtime-wasi = "24.0"
+wasmtime = "24.0.5"
+wasmtime-wasi = "24.0.5"
 
 # Metrics
 prometheus = "0.13"

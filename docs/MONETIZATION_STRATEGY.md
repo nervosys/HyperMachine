@@ -15,11 +15,11 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### Cloud Market Opportunity
 
-| Segment | TAM (2026) | Growth Rate | Key Players |
-|---------|------------|-------------|-------------|
-| Cloud Infrastructure | $150B | 18% CAGR | AWS, Azure, GCP |
-| AI/ML Infrastructure | $45B | 35% CAGR | NVIDIA, CoreWeave |
-| Edge Computing | $25B | 28% CAGR | Cloudflare, Fastly |
+| Segment              | TAM (2026) | Growth Rate | Key Players        |
+| -------------------- | ---------- | ----------- | ------------------ |
+| Cloud Infrastructure | $150B      | 18% CAGR    | AWS, Azure, GCP    |
+| AI/ML Infrastructure | $45B       | 35% CAGR    | NVIDIA, CoreWeave  |
+| Edge Computing       | $25B       | 28% CAGR    | Cloudflare, Fastly |
 
 **HyperMachine Advantages:**
 - Native GPU passthrough for AI workloads
@@ -28,11 +28,11 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### Government Market Opportunity
 
-| Segment | TAM (2026) | Growth Rate | Key Players |
-|---------|------------|-------------|-------------|
-| Federal IT Modernization | $120B | 8% CAGR | Palantir, Anduril |
-| Defense Virtualization | $8B | 12% CAGR | VMware (Broadcom), Citrix |
-| Classified Networks | $15B | 15% CAGR | Raytheon, Lockheed |
+| Segment                  | TAM (2026) | Growth Rate | Key Players               |
+| ------------------------ | ---------- | ----------- | ------------------------- |
+| Federal IT Modernization | $120B      | 8% CAGR     | Palantir, Anduril         |
+| Defense Virtualization   | $8B        | 12% CAGR    | VMware (Broadcom), Citrix |
+| Classified Networks      | $15B       | 15% CAGR    | Raytheon, Lockheed        |
 
 **HyperMachine Advantages:**
 - Type-1 mode = minimal attack surface (no host OS)
@@ -64,19 +64,19 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### Cloud Provider Pricing
 
-| Model | Pricing | Target Customer |
-|-------|---------|-----------------|
-| **Consumption** | $0.002/vCPU-hour | Small/Medium clouds |
-| **Capacity** | $800/node/month | Large deployments |
-| **OEM License** | Negotiated | Cloud providers embedding HM |
+| Model           | Pricing          | Target Customer              |
+| --------------- | ---------------- | ---------------------------- |
+| **Consumption** | $0.002/vCPU-hour | Small/Medium clouds          |
+| **Capacity**    | $800/node/month  | Large deployments            |
+| **OEM License** | Negotiated       | Cloud providers embedding HM |
 
 ### Government Pricing
 
-| Contract Type | Pricing | Requirements |
-|---------------|---------|--------------|
-| **Site License** | $250K-$2M/year | Unlimited nodes per facility |
-| **Program License** | $1M-$10M/year | Multi-site, multi-year |
-| **GovCloud OEM** | Revenue share | FedRAMP/IL5 certified |
+| Contract Type       | Pricing        | Requirements                 |
+| ------------------- | -------------- | ---------------------------- |
+| **Site License**    | $250K-$2M/year | Unlimited nodes per facility |
+| **Program License** | $1M-$10M/year  | Multi-site, multi-year       |
+| **GovCloud OEM**    | Revenue share  | FedRAMP/IL5 certified        |
 
 ---
 
@@ -153,33 +153,33 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 **Target:** 70% of revenue
 
-| Year | Nodes Licensed | ARPU | Revenue |
-|------|----------------|------|---------|
-| Y1 | 500 | $1,200 | $600K |
-| Y2 | 2,500 | $1,500 | $3.75M |
-| Y3 | 10,000 | $1,800 | $18M |
-| Y4 | 35,000 | $2,000 | $70M |
-| Y5 | 100,000 | $2,200 | $220M |
+| Year | Nodes Licensed | ARPU   | Revenue |
+| ---- | -------------- | ------ | ------- |
+| Y1   | 500            | $1,200 | $600K   |
+| Y2   | 2,500          | $1,500 | $3.75M  |
+| Y3   | 10,000         | $1,800 | $18M    |
+| Y4   | 35,000         | $2,000 | $70M    |
+| Y5   | 100,000        | $2,200 | $220M   |
 
 ### 2. Professional Services
 
 **Target:** 20% of revenue
 
-| Service | Rate | Description |
-|---------|------|-------------|
-| Implementation | $2,500/day | Deployment, configuration, migration |
-| Training | $5,000/session | On-site or virtual, 2-day program |
-| Integration | $15,000-$100K | Custom integrations, API development |
-| Security Audit | $50,000+ | Third-party penetration testing, code review |
+| Service        | Rate           | Description                                  |
+| -------------- | -------------- | -------------------------------------------- |
+| Implementation | $2,500/day     | Deployment, configuration, migration         |
+| Training       | $5,000/session | On-site or virtual, 2-day program            |
+| Integration    | $15,000-$100K  | Custom integrations, API development         |
+| Security Audit | $50,000+       | Third-party penetration testing, code review |
 
 ### 3. Support Contracts
 
 **Target:** 10% of revenue
 
-| Level | Price | Response SLA |
-|-------|-------|--------------|
-| Silver | 15% of license | 8-hour response |
-| Gold | 20% of license | 4-hour response |
+| Level    | Price          | Response SLA                        |
+| -------- | -------------- | ----------------------------------- |
+| Silver   | 15% of license | 8-hour response                     |
+| Gold     | 20% of license | 4-hour response                     |
 | Platinum | 25% of license | 1-hour response, dedicated engineer |
 
 ---
@@ -266,22 +266,22 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### Federal Certifications Roadmap
 
-| Certification | Timeline | Cost | Unlocks |
-|---------------|----------|------|---------|
-| SOC2 Type II | Q2 2026 | $50K | Commercial enterprise |
-| FedRAMP Moderate | Q4 2026 | $500K | Civilian agencies |
-| FedRAMP High | Q2 2027 | $1M | DoD unclassified |
-| IL4/IL5 | Q4 2027 | $2M | DoD classified |
-| FIPS 140-3 | Q2 2027 | $300K | Crypto compliance |
+| Certification    | Timeline | Cost  | Unlocks               |
+| ---------------- | -------- | ----- | --------------------- |
+| SOC2 Type II     | Q2 2026  | $50K  | Commercial enterprise |
+| FedRAMP Moderate | Q4 2026  | $500K | Civilian agencies     |
+| FedRAMP High     | Q2 2027  | $1M   | DoD unclassified      |
+| IL4/IL5          | Q4 2027  | $2M   | DoD classified        |
+| FIPS 140-3       | Q2 2027  | $300K | Crypto compliance     |
 
 ### Contract Vehicles
 
-| Vehicle | Agency | Value | Entry Strategy |
-|---------|--------|-------|----------------|
-| GSA MAS | All federal | Unlimited | Direct application |
-| SEWP V | NASA | $15B | Partner with existing holder |
-| CIO-SP4 | All federal | $50B | Small business subcontract |
-| ITES-SW2 | Army | $13B | Partner with prime |
+| Vehicle  | Agency      | Value     | Entry Strategy               |
+| -------- | ----------- | --------- | ---------------------------- |
+| GSA MAS  | All federal | Unlimited | Direct application           |
+| SEWP V   | NASA        | $15B      | Partner with existing holder |
+| CIO-SP4  | All federal | $50B      | Small business subcontract   |
+| ITES-SW2 | Army        | $13B      | Partner with prime           |
 
 ### Target Agencies
 
@@ -302,34 +302,34 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### vs. VMware (Broadcom)
 
-| Factor | VMware | HyperMachine |
-|--------|--------|--------------|
-| Price | $$$$ | $$ |
-| AI Integration | Retrofit | Native |
-| Code Audit | Closed | Open (Gov edition) |
-| Attack Surface | Large (C/C++) | Minimal (Rust) |
+| Factor         | VMware        | HyperMachine       |
+| -------------- | ------------- | ------------------ |
+| Price          | $$$$          | $$                 |
+| AI Integration | Retrofit      | Native             |
+| Code Audit     | Closed        | Open (Gov edition) |
+| Attack Surface | Large (C/C++) | Minimal (Rust)     |
 
 **Message:** "Modern, AI-native alternative at 1/4 the cost"
 
 ### vs. KVM/QEMU
 
-| Factor | KVM | HyperMachine |
-|--------|-----|--------------|
-| Memory Safety | No | Yes (Rust) |
-| Enterprise Support | Red Hat | Direct |
-| Type-1 Mode | No | Yes |
-| AI Agent API | No | Native |
+| Factor             | KVM     | HyperMachine |
+| ------------------ | ------- | ------------ |
+| Memory Safety      | No      | Yes (Rust)   |
+| Enterprise Support | Red Hat | Direct       |
+| Type-1 Mode        | No      | Yes          |
+| AI Agent API       | No      | Native       |
 
 **Message:** "Enterprise-grade with memory safety guarantees"
 
 ### vs. Xen
 
-| Factor | Xen | HyperMachine |
-|--------|-----|--------------|
-| Complexity | High | Moderate |
-| Maintenance | Declining | Active |
-| Language | C | Rust |
-| GPU Support | Limited | Native |
+| Factor      | Xen       | HyperMachine |
+| ----------- | --------- | ------------ |
+| Complexity  | High      | Moderate     |
+| Maintenance | Declining | Active       |
+| Language    | C         | Rust         |
+| GPU Support | Limited   | Native       |
 
 **Message:** "Next-generation bare-metal for modern workloads"
 
@@ -339,26 +339,26 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### 5-Year Revenue Model
 
-| Year | Cloud | Government | Services | Total | Headcount |
-|------|-------|------------|----------|-------|-----------|
-| Y1 | $400K | $100K | $100K | $600K | 8 |
-| Y2 | $2.5M | $750K | $500K | $3.75M | 20 |
-| Y3 | $12M | $4M | $2M | $18M | 45 |
-| Y4 | $45M | $18M | $7M | $70M | 100 |
-| Y5 | $140M | $60M | $20M | $220M | 200 |
+| Year | Cloud | Government | Services | Total  | Headcount |
+| ---- | ----- | ---------- | -------- | ------ | --------- |
+| Y1   | $400K | $100K      | $100K    | $600K  | 8         |
+| Y2   | $2.5M | $750K      | $500K    | $3.75M | 20        |
+| Y3   | $12M  | $4M        | $2M      | $18M   | 45        |
+| Y4   | $45M  | $18M       | $7M      | $70M   | 100       |
+| Y5   | $140M | $60M       | $20M     | $220M  | 200       |
 
 ### Unit Economics
 
-| Metric | Target |
-|--------|--------|
-| CAC (Cloud) | $5,000 |
-| CAC (Enterprise) | $50,000 |
-| CAC (Government) | $150,000 |
-| LTV (Cloud) | $15,000 |
-| LTV (Enterprise) | $500,000 |
-| LTV (Government) | $2,000,000 |
-| Gross Margin | 85% |
-| Net Revenue Retention | 120% |
+| Metric                | Target     |
+| --------------------- | ---------- |
+| CAC (Cloud)           | $5,000     |
+| CAC (Enterprise)      | $50,000    |
+| CAC (Government)      | $150,000   |
+| LTV (Cloud)           | $15,000    |
+| LTV (Enterprise)      | $500,000   |
+| LTV (Government)      | $2,000,000 |
+| Gross Margin          | 85%        |
+| Net Revenue Retention | 120%       |
 
 ---
 
@@ -366,26 +366,26 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### Technical Risks
 
-| Risk | Mitigation |
-|------|------------|
+| Risk                   | Mitigation                                      |
+| ---------------------- | ----------------------------------------------- |
 | Security vulnerability | Bug bounty program, regular audits, Rust safety |
-| Performance issues | Continuous benchmarking, dedicated QA |
-| Compatibility gaps | Broad hardware testing program |
+| Performance issues     | Continuous benchmarking, dedicated QA           |
+| Compatibility gaps     | Broad hardware testing program                  |
 
 ### Market Risks
 
-| Risk | Mitigation |
-|------|------------|
-| Hyperscaler competition | Focus on differentiated use cases (AI, secure) |
-| Open source commoditization | Strong support/services moat |
-| Economic downturn | Government contracts provide stability |
+| Risk                        | Mitigation                                     |
+| --------------------------- | ---------------------------------------------- |
+| Hyperscaler competition     | Focus on differentiated use cases (AI, secure) |
+| Open source commoditization | Strong support/services moat                   |
+| Economic downturn           | Government contracts provide stability         |
 
 ### Regulatory Risks
 
-| Risk | Mitigation |
-|------|------------|
-| Export controls | ITAR/EAR compliance program |
-| Data sovereignty | Regional deployment options |
+| Risk                 | Mitigation                               |
+| -------------------- | ---------------------------------------- |
+| Export controls      | ITAR/EAR compliance program              |
+| Data sovereignty     | Regional deployment options              |
 | Certification delays | Start early, use experienced consultants |
 
 ---
