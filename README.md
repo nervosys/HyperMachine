@@ -1,645 +1,142 @@
-# HyperMachine: Agentic hypervisors for the 21st century
+# HyperMachine
 
-A high-performance, remotely scriptable hypervisor and emulator framework written in Rust with first-class support for agentic AI. Supports Type-1 (t1) and Type-2 (t2) operational modes.
+**Agentic hypervisors for autonomous AI systems.**
+
+[![CI](https://github.com/nervosys/HyperMachine/actions/workflows/ci.yml/badge.svg)](https://github.com/nervosys/HyperMachine/actions)
+[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+
+A high-performance hypervisor framework in Rust with first-class AI agent support. Type-1 bare-metal and Type-2 hosted modes.
 
 ## Features
 
-🚀 **High Performance**
-- Zero-copy memory management
-- JIT compilation support
-- Hardware-accelerated GPU virtualization
-- Multi-threaded execution
-
-🌐 **Network-Enabled**
-- Full TCP/IP stack virtualization
-- TAP/TUN device support
-- Remote control via gRPC/REST APIs
-- Distributed VM orchestration
-
-🎮 **GPU Acceleration**
-- Vulkan/WebGPU support
-- GPU passthrough capabilities
-- Virtual GPU device emulation
-- CUDA/OpenCL workload support
-
-🤖 **AI-First Design**
-- Scriptable API for autonomous agents
-- Safe sandboxed execution
-- Built-in telemetry and observability
-- Natural language VM control interface
-- WASM plugin system for agent extensions
-
-🔒 **Security**
-- Seccomp-based syscall filtering
-- Capability-based access control
-- Memory isolation and protection
-- Audit logging for AI operations
+| Category | Capabilities |
+|----------|-------------|
+| **Performance** | Zero-copy memory, JIT compilation, hardware GPU virtualization |
+| **Networking** | Full TCP/IP stack, TAP/TUN, gRPC/REST APIs, distributed orchestration |
+| **GPU** | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL |
+| **AI-First** | MCP server, scriptable API, WASM plugins, LLM tool formats |
+| **Security** | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
 
 ## Architecture
 
-HyperMachine supports two operational modes:
-
-### Type 2 Mode (HV2) - Hosted Hypervisor
-Runs on top of an existing operating system (Windows, Linux, macOS).
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    AI Agent Interface                    │
-│              (Scriptable, Safe, Observable)              │
-├─────────────────────────────────────────────────────────┤
-│                     Remote API Layer                     │
-│                   (gRPC, REST, WebSocket)                │
-├──────────────┬──────────────┬──────────────┬────────────┤
-│   CPU Core   │  GPU Module  │   Network    │   Memory   │
-│  Emulation   │ (Vulkan/GPU) │  (TAP/TUN)   │ Management │
-├──────────────┴──────────────┴──────────────┴────────────┤
-│                      HV2 Core Engine                     │
-│            (Type 2 Hypervisor - KVM/WHPX/HVF)            │
-├─────────────────────────────────────────────────────────┤
-│                    Host OS (Linux/Windows/macOS)         │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Type 1 Mode (HV1) - Bare-Metal Hypervisor 
-Runs directly on hardware without a host OS for maximum performance.
-```
-┌─────────────────────────────────────────────────────────┐
-│                    AI Agent Interface                    │
-├─────────────────────────────────────────────────────────┤
-│                     Remote API Layer                     │
-├──────────────┬──────────────┬──────────────┬────────────┤
-│   CPU Core   │  GPU Module  │   Network    │   Memory   │
-├──────────────┴──────────────┴──────────────┴────────────┤
-│                      HV1 Core Engine                     │
-│              (Type 1 Hypervisor - VMX/SVM)               │
-├─────────────────────────────────────────────────────────┤
-│                    Hardware (x86-64/ARM64)               │
-└─────────────────────────────────────────────────────────┘
++---------------------------------------------------------+
+|                   AI Agent Interface                     |
+|            (MCP Server - OpenAI/Claude/Gemini)          |
++---------------------------------------------------------+
+|                    Remote API Layer                      |
+|                  (gRPC - REST - WebSocket)              |
++-------------+-------------+-------------+----------------+
+|     CPU     |     GPU     |   Network   |     Memory     |
+|  Emulation  |   Vulkan    |   TAP/TUN   |   Management   |
++-------------+-------------+-------------+----------------+
+|                     HyperMachine Core                    |
+|         HV2 (KVM/WHPX/HVF) - HV1 (VMX/SVM bare-metal)  |
++---------------------------------------------------------+
 ```
 
 ## Quick Start
 
-### Installation
-
 ```bash
-git clone https://github.com/nervosys/HyperMachine
-cd HyperMachine
-cargo build --release --package hm-cli
-cargo install --path crates/hm-cli
-# Or: cp target/release/hm ~/.cargo/bin/
-```
+# Build
+git clone https://github.com/nervosys/HyperMachine && cd HyperMachine
+cargo build --release
 
-### Create and Run a VM
-
-```bash
-# Type 2 (hosted) hypervisor - runs on your OS
-hm t2 create --name myvm --cpu 4 --memory 8 --gpu --network
+# Create and run a VM (Type-2 hosted mode)
+hm t2 create --name myvm --cpu 4 --memory 8G --gpu
 hm t2 start myvm
-hm t2 status myvm
-hm t2 script myvm --script "vm_state"
 
-# Type 1 (bare-metal) hypervisor - configure VMs for direct hardware
-hm t1 create --name prod-vm --cpu 16 --memory 64 --gpu --network
-hm t1 list
-hm t1 export prod-vm --output prod-vm.json
-hm t1 connect 192.168.1.100:8443  # Connect to running hypervisor
-hm t1 start prod-vm               # Start VM (requires hypervisor connection)
+# Start MCP server for AI agents
+hm mcp serve --api-key "your-key"
 ```
 
-### MCP Server for AI Agents
+## AI Agent Integration
+
+HyperMachine exposes a Model Context Protocol (MCP) server for AI agents:
 
 ```bash
-# Start the MCP HTTP server
-hm mcp serve
-
-# With rate limiting (100 req/min default, customize as needed)
-hm mcp serve --rate-limit 1000
-
-# With authentication (recommended for production)
-hm mcp serve --api-key "your-secret-key"
-
-# AI agents can discover available tools
+# Discover available tools
 curl http://localhost:8080/mcp/tools
 
-# Execute tool calls (with auth)
+# LLM-specific tool formats
+curl http://localhost:8080/agentic/tools/openai     # GPT-4o, o1, o3
+curl http://localhost:8080/agentic/tools/anthropic  # Claude 4, Sonnet
+curl http://localhost:8080/agentic/tools/gemini     # Gemini 2.5
+
+# Execute operations
 curl -X POST http://localhost:8080/mcp/call \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-secret-key" \
-  -d '{"tool": "vm.create", "arguments": {"name": "ai-vm", "cpu_cores": 4}}'
+  -H "Authorization: Bearer your-key" \
+  -d '{"tool": "vm.create", "arguments": {"name": "ai-sandbox", "cpu_cores": 4}}'
 ```
 
-### Agentic AI Interface
-
-HyperMachine provides first-class support for ChatGPT, Claude, Gemini, and other SOTA LLMs with:
-
-**Discoverable Ontology** - AI agents can understand all available operations:
-```bash
-# Get the complete ontology with concepts, types, operations, and relationships
-curl http://localhost:8080/agentic/ontology
-
-# Get a quick capabilities summary
-curl http://localhost:8080/agentic/capabilities
-```
-
-**Provider-Specific Formats** - Native tool formats for each LLM:
-```bash
-# OpenAI function calling format (GPT-5, GPT-4o, o1, o3)
-curl http://localhost:8080/agentic/tools/openai
-
-# Anthropic tool use format (Claude 4.5, Claude 4, Sonnet, Opus)
-curl http://localhost:8080/agentic/tools/anthropic
-
-# Google Gemini format (Gemini 2.5, 2.0, Flash)
-curl http://localhost:8080/agentic/tools/gemini
-
-# Get complete config with system prompt and hints
-curl http://localhost:8080/agentic/providers/openai
-curl http://localhost:8080/agentic/providers/claude
-curl http://localhost:8080/agentic/providers/gemini
-```
-
-**JSON Schema for Validation**:
-```bash
-# Full JSON Schema (2020-12)
-curl http://localhost:8080/agentic/schema
-
-# Compact schema for bandwidth-constrained scenarios
-curl http://localhost:8080/agentic/schema/compact
-```
-
-### Python SDK
+**Python SDK:**
 
 ```python
-from hypermachine_client import HyperMachineClient
+from hypermachine import HyperMachine
 
-# Connect to MCP server
-client = HyperMachineClient("http://localhost:8080", api_key="your-key")
-
-# Create and start a VM
-vm = client.create_vm("my-vm", cpu_cores=4, memory_gb=8)
-client.start_vm("my-vm")
-
-# Get OpenAI-compatible tools for function calling
-tools = client.list_tools_openai_format()
+hm = HyperMachine("http://localhost:8080", api_key="your-key")
+vm = hm.create_vm("sandbox", cpu=4, memory="8G", gpu=True)
+vm.start()
+vm.exec("echo 'Hello from AI agent'")
 ```
-
-See [examples/python](examples/python) for full SDK documentation.
-
-### Shell Completions
-
-```bash
-# Bash
-hm completions bash > ~/.local/share/bash-completion/completions/hm
-
-# Zsh
-hm completions zsh > ~/.zfunc/_hm
-
-# Fish
-hm completions fish > ~/.config/fish/completions/hm.fish
-
-# PowerShell
-hm completions powershell >> $PROFILE
-```
-
-### AI Agent Integration
-
-```rust
-use hv2_agent::AgentVM;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Create VM with AI agent capabilities
-    let vm = AgentVM::builder()
-        .cpu_cores(4)
-        .memory_gb(8)
-        .enable_gpu(true)
-        .enable_networking(true)
-        .with_tracing()
-        .build()
-        .await?;
-    
-    // AI agents can script VM operations
-    vm.execute_agent_script(r#"
-        // Boot the VM
-        vm.boot();
-        
-        // Monitor CPU usage
-        let cpu = vm.cpu_usage();
-        if cpu > 0.8 {
-            vm.scale_cpu(8);
-        }
-        
-        // Execute commands
-        vm.exec("apt-get update");
-    "#).await?;
-    
-    Ok(())
-}
-```
-
-## Project Structure
-
-- `crates/hm-cli` - **Unified CLI** (`hm t1/t2` commands) + MCP HTTP server
-- `crates/hv2-core` - Core VM engine and architecture
-- `crates/hv2-cpu` - CPU emulation and execution
-- `crates/hv2-gpu` - GPU virtualization layer
-- `crates/hv2-net` - Network stack and devices
-- `crates/hv2-agent` - AI agent interface and scripting
-- `crates/hv2-api` - Remote control APIs
-- `examples/python` - Python SDK for AI agent integration
-- `examples/typescript` - TypeScript SDK for AI agent integration
-- `docs/` - Architecture and API documentation
-
-## Use Cases
-
-- **AI Research**: Safe sandboxes for autonomous agent experimentation
-- **Cloud Gaming**: GPU-enabled game streaming infrastructure
-- **CI/CD**: Ephemeral build environments with full observability
-- **Security Research**: Malware analysis in isolated environments
-- **Edge Computing**: Lightweight VMs for distributed workloads
 
 ## Cryptography
 
-HyperMachine includes FIPS 140-3 compliant cryptographic modules:
+FIPS 140-3 compliant cryptographic modules:
 
-### Symmetric Cryptography
-- AES-128/256-GCM encryption
-- SHA-256/384/512 hashing  
-- HMAC-SHA256 authentication
-- HKDF key derivation
-
-### Asymmetric Cryptography
-- RSA-2048/3072/4096 (FIPS 186-5)
-- ECDSA P-256/P-384/P-521
-- RSA-OAEP encryption
-- RSA-PSS and PKCS#1 v1.5 signatures
-
-### Post-Quantum Cryptography
-- **ML-KEM** (FIPS 203): Key encapsulation (Kyber)
-- **ML-DSA** (FIPS 204): Digital signatures (Dilithium)
-- **SLH-DSA** (FIPS 205): Hash-based signatures (SPHINCS+)
-- Hybrid schemes for transitional security
+| Type | Algorithms |
+|------|------------|
+| **Symmetric** | AES-128/256-GCM, SHA-256/384/512, HMAC, HKDF |
+| **Asymmetric** | RSA-2048/3072/4096, ECDSA P-256/P-384/P-521 |
+| **Post-Quantum** | ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+) |
 
 ## Deployment
 
-### Kubernetes
-
 ```bash
-kubectl apply -f deploy/k8s/hypermachine.yaml
+# Kubernetes
+helm install hypermachine ./deploy/helm/hypermachine \
+  --set environment=production \
+  --set replicaCount=3
 
-# Or with Helm
-helm install hypermachine ./deploy/helm/hypermachine
-```
-
-### Terraform
-
-```hcl
-module "hypermachine" {
-  source         = "./deploy/terraform"
-  cloud_provider = "aws"
-  region         = "us-east-1"
-  environment    = "production"
-}
+# Terraform (AWS EKS)
+cd deploy/terraform && terraform apply -var="environment=production"
 ```
 
 ## Performance
 
-```bash
-cargo bench -p hv2-core  # Crypto benchmarks
-cargo bench -p hv2-api   # API benchmarks
-```
+Benchmarks on AMD Ryzen 9 7950X:
 
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-Licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
-# HyperMachine: Agentic hypervisors for the 21st century
-
-A high-performance, remotely scriptable hypervisor and emulator framework written in Rust with first-class support for agentic AI. Supports Type-1 (t1) and Type-2 (t2) operational modes.
-
-
-## Features
-
-🚀 **High Performance**
-- Zero-copy memory management
-- JIT compilation support
-- Hardware-accelerated GPU virtualization
-- Multi-threaded execution
-
-🌐 **Network-Enabled**
-- Full TCP/IP stack virtualization
-- TAP/TUN device support
-- Remote control via gRPC/REST APIs
-- Distributed VM orchestration
-
-🎮 **GPU Acceleration**
-- Vulkan/WebGPU support
-- GPU passthrough capabilities
-- Virtual GPU device emulation
-- CUDA/OpenCL workload support
-
-🤖 **AI-First Design**
-- Scriptable API for autonomous agents
-- Safe sandboxed execution
-- Built-in telemetry and observability
-- Natural language VM control interface
-- WASM plugin system for agent extensions
-
-🔒 **Security**
-- Seccomp-based syscall filtering
-- Capability-based access control
-- Memory isolation and protection
-- Audit logging for AI operations
-
-## Architecture
-
-HyperMachine supports two operational modes:
-
-### Type 2 Mode (HV2) - Hosted Hypervisor
-Runs on top of an existing operating system (Windows, Linux, macOS).
-```
-┌─────────────────────────────────────────────────────────┐
-│                    AI Agent Interface                    │
-│              (Scriptable, Safe, Observable)              │
-├─────────────────────────────────────────────────────────┤
-│                     Remote API Layer                     │
-│                   (gRPC, REST, WebSocket)                │
-├──────────────┬──────────────┬──────────────┬────────────┤
-│   CPU Core   │  GPU Module  │   Network    │   Memory   │
-│  Emulation   │ (Vulkan/GPU) │  (TAP/TUN)   │ Management │
-├──────────────┴──────────────┴──────────────┴────────────┤
-│                      HV2 Core Engine                     │
-│            (Type 2 Hypervisor - KVM/WHPX/HVF)            │
-├─────────────────────────────────────────────────────────┤
-│                    Host OS (Linux/Windows/macOS)         │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Type 1 Mode (HV1) - Bare-Metal Hypervisor 
-Runs directly on hardware without a host OS for maximum performance.
-```
-┌─────────────────────────────────────────────────────────┐
-│                    AI Agent Interface                    │
-├─────────────────────────────────────────────────────────┤
-│                     Remote API Layer                     │
-├──────────────┬──────────────┬──────────────┬────────────┤
-│   CPU Core   │  GPU Module  │   Network    │   Memory   │
-├──────────────┴──────────────┴──────────────┴────────────┤
-│                      HV1 Core Engine                     │
-│              (Type 1 Hypervisor - VMX/SVM)               │
-├─────────────────────────────────────────────────────────┤
-│                    Hardware (x86-64/ARM64)               │
-└─────────────────────────────────────────────────────────┘
-```
-
-## Quick Start
-
-### Installation
+| Operation | Throughput |
+|-----------|------------|
+| AES-256-GCM encrypt | ~600 MiB/s |
+| AES-256-GCM decrypt | ~700 MiB/s |
+| SHA-256 | ~3.7 GiB/s |
+| SHA-512 | ~3.5 GiB/s |
 
 ```bash
-git clone https://github.com/nervosys/HyperMachine
-cd HyperMachine
-cargo build --release --package hm-cli
-cargo install --path crates/hm-cli
-# Or: cp target/release/hm ~/.cargo/bin/
-```
-
-### Create and Run a VM
-
-```bash
-# Type 2 (hosted) hypervisor - runs on your OS
-hm t2 create --name myvm --cpu 4 --memory 8 --gpu --network
-hm t2 start myvm
-hm t2 status myvm
-hm t2 script myvm --script "vm_state"
-
-# Type 1 (bare-metal) hypervisor - configure VMs for direct hardware
-hm t1 create --name prod-vm --cpu 16 --memory 64 --gpu --network
-hm t1 list
-hm t1 export prod-vm --output prod-vm.json
-hm t1 connect 192.168.1.100:8443  # Connect to running hypervisor
-hm t1 start prod-vm               # Start VM (requires hypervisor connection)
-```
-
-### MCP Server for AI Agents
-
-```bash
-# Start the MCP HTTP server
-hm mcp serve
-
-# With rate limiting (100 req/min default, customize as needed)
-hm mcp serve --rate-limit 1000
-
-# With authentication (recommended for production)
-hm mcp serve --api-key "your-secret-key"
-
-# AI agents can discover available tools
-curl http://localhost:8080/mcp/tools
-
-# Execute tool calls (with auth)
-curl -X POST http://localhost:8080/mcp/call \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer your-secret-key" \
-  -d '{"tool": "vm.create", "arguments": {"name": "ai-vm", "cpu_cores": 4}}'
-```
-
-### Agentic AI Interface
-
-HyperMachine provides first-class support for ChatGPT, Claude, Gemini, and other SOTA LLMs with:
-
-**Discoverable Ontology** - AI agents can understand all available operations:
-```bash
-# Get the complete ontology with concepts, types, operations, and relationships
-curl http://localhost:8080/agentic/ontology
-
-# Get a quick capabilities summary
-curl http://localhost:8080/agentic/capabilities
-```
-
-**Provider-Specific Formats** - Native tool formats for each LLM:
-```bash
-# OpenAI function calling format (GPT-5, GPT-4o, o1, o3)
-curl http://localhost:8080/agentic/tools/openai
-
-# Anthropic tool use format (Claude 4.5, Claude 4, Sonnet, Opus)
-curl http://localhost:8080/agentic/tools/anthropic
-
-# Google Gemini format (Gemini 2.5, 2.0, Flash)
-curl http://localhost:8080/agentic/tools/gemini
-
-# Get complete config with system prompt and hints
-curl http://localhost:8080/agentic/providers/openai
-curl http://localhost:8080/agentic/providers/claude
-curl http://localhost:8080/agentic/providers/gemini
-```
-
-**JSON Schema for Validation**:
-```bash
-# Full JSON Schema (2020-12)
-curl http://localhost:8080/agentic/schema
-
-# Compact schema for bandwidth-constrained scenarios
-curl http://localhost:8080/agentic/schema/compact
-```
-
-### Python SDK
-
-```python
-from hypermachine_client import HyperMachineClient
-
-# Connect to MCP server
-client = HyperMachineClient("http://localhost:8080", api_key="your-key")
-
-# Create and start a VM
-vm = client.create_vm("my-vm", cpu_cores=4, memory_gb=8)
-client.start_vm("my-vm")
-
-# Get OpenAI-compatible tools for function calling
-tools = client.list_tools_openai_format()
-```
-
-See [examples/python](examples/python) for full SDK documentation.
-
-### Shell Completions
-
-```bash
-# Bash
-hm completions bash > ~/.local/share/bash-completion/completions/hm
-
-# Zsh
-hm completions zsh > ~/.zfunc/_hm
-
-# Fish
-hm completions fish > ~/.config/fish/completions/hm.fish
-
-# PowerShell
-hm completions powershell >> $PROFILE
-```
-
-### AI Agent Integration
-
-```rust
-use hv2_agent::AgentVM;
-
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    // Create VM with AI agent capabilities
-    let vm = AgentVM::builder()
-        .cpu_cores(4)
-        .memory_gb(8)
-        .enable_gpu(true)
-        .enable_networking(true)
-        .with_tracing()
-        .build()
-        .await?;
-    
-    // AI agents can script VM operations
-    vm.execute_agent_script(r#"
-        // Boot the VM
-        vm.boot();
-        
-        // Monitor CPU usage
-        let cpu = vm.cpu_usage();
-        if cpu > 0.8 {
-            vm.scale_cpu(8);
-        }
-        
-        // Execute commands
-        vm.exec("apt-get update");
-    "#).await?;
-    
-    Ok(())
-}
+cargo bench -p hv2-core --bench crypto_bench
 ```
 
 ## Project Structure
 
-- `crates/hm-cli` - **Unified CLI** (`hm t1/t2` commands) + MCP HTTP server
-- `crates/hv2-core` - Core VM engine and architecture
-- `crates/hv2-cpu` - CPU emulation and execution
-- `crates/hv2-gpu` - GPU virtualization layer
-- `crates/hv2-net` - Network stack and devices
-- `crates/hv2-agent` - AI agent interface and scripting
-- `crates/hv2-api` - Remote control APIs
-- `examples/python` - Python SDK for AI agent integration
-- `examples/typescript` - TypeScript SDK for AI agent integration
-- `docs/` - Architecture and API documentation
-
-## Use Cases
-
-- **AI Research**: Safe sandboxes for autonomous agent experimentation
-- **Cloud Gaming**: GPU-enabled game streaming infrastructure
-- **CI/CD**: Ephemeral build environments with full observability
-- **Security Research**: Malware analysis in isolated environments
-- **Edge Computing**: Lightweight VMs for distributed workloads
-
-## Cryptography
-
-HyperMachine includes FIPS 140-3 compliant cryptographic modules:
-
-### Symmetric Cryptography
-- AES-128/256-GCM encryption
-- SHA-256/384/512 hashing  
-- HMAC-SHA256 authentication
-- HKDF key derivation
-
-### Asymmetric Cryptography
-- RSA-2048/3072/4096 (FIPS 186-5)
-- ECDSA P-256/P-384/P-521
-- RSA-OAEP encryption
-- RSA-PSS and PKCS#1 v1.5 signatures
-
-### Post-Quantum Cryptography
-- **ML-KEM** (FIPS 203): Key encapsulation (Kyber)
-- **ML-DSA** (FIPS 204): Digital signatures (Dilithium)
-- **SLH-DSA** (FIPS 205): Hash-based signatures (SPHINCS+)
-- Hybrid schemes for transitional security
-
-## Deployment
-
-### Kubernetes
-
-```bash
-kubectl apply -f deploy/k8s/hypermachine.yaml
-
-# Or with Helm
-helm install hypermachine ./deploy/helm/hypermachine
 ```
-
-### Terraform
-
-```hcl
-module "hypermachine" {
-  source         = "./deploy/terraform"
-  cloud_provider = "aws"
-  region         = "us-east-1"
-  environment    = "production"
-}
-```
-
-## Performance
-
-```bash
-cargo bench -p hv2-core  # Crypto benchmarks
-cargo bench -p hv2-api   # API benchmarks
+crates/
+  hm-cli      # CLI + MCP server
+  hv1-boot    # Type-1 bare-metal bootloader
+  hv2-core    # Core engine (CPU, memory, devices, crypto)
+  hv2-api     # REST/gRPC APIs
+  hv2-agent   # AI agent interface
+deploy/
+  k8s/        # Kubernetes manifests
+  helm/       # Helm charts
+  terraform/  # Infrastructure as code
 ```
 
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-Licensed under either of:
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
+MIT OR Apache-2.0
