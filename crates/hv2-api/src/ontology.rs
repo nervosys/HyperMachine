@@ -1139,7 +1139,12 @@ impl HyperMachineOntology {
             if param.location == ParameterLocation::Path
                 || param.location == ParameterLocation::Query
             {
-                properties.insert(param.name.clone(), param.schema.clone());
+                // Merge schema with description for tool formats
+                let mut param_schema = param.schema.clone();
+                if let Some(obj) = param_schema.as_object_mut() {
+                    obj.insert("description".to_string(), serde_json::Value::String(param.description.clone()));
+                }
+                properties.insert(param.name.clone(), param_schema);
                 if param.required {
                     required.push(param.name.clone());
                 }

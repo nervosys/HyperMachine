@@ -22,6 +22,7 @@ pub mod boot;
 pub mod config;
 pub mod container;
 pub mod cpuid;
+pub mod crypto;
 pub mod debug;
 pub mod descriptors;
 pub mod device;
