@@ -16,12 +16,15 @@ pub use app::HyperMachineApp;
 pub use state::{AppState, VmState};
 
 fn main() -> eframe::Result<()> {
-    // Initialize logging
+    // Initialize logging - suppress wgpu/Vulkan validation noise
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("hm_gui=info".parse().unwrap())
-                .add_directive("wgpu=warn".parse().unwrap()),
+                .add_directive("hypermachine_gui=info".parse().unwrap())
+                .add_directive("wgpu=off".parse().unwrap())
+                .add_directive("wgpu_hal=off".parse().unwrap())
+                .add_directive("wgpu_core=off".parse().unwrap())
+                .add_directive("naga=off".parse().unwrap()),
         )
         .init();
 
