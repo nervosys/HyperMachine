@@ -1,0 +1,205 @@
+# Default values for HyperMachine Helm chart
+# This is a YAML-formatted file.
+
+# Global settings
+global:
+  imageRegistry: ghcr.io
+  imagePullSecrets: []
+
+# Number of API replicas
+replicaCount: 3
+
+# Image configuration
+image:
+  registry: ghcr.io
+  repository: nervosys/hypermachine
+  tag: ""  # Defaults to chart appVersion
+  pullPolicy: IfNotPresent
+
+# Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+# Container security context
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# Service configuration
+service:
+  type: ClusterIP
+  http:
+    port: 80
+    targetPort: 8080
+  grpc:
+    port: 50051
+    targetPort: 50051
+  metrics:
+    port: 9090
+    targetPort: 9090
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: api.hypermachine.io
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hypermachine-tls
+      hosts:
+        - api.hypermachine.io
+
+# Resource limits
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: hypermachine
+          topologyKey: kubernetes.io/hostname
+
+# Probes
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# API Configuration
+config:
+  # Server
+  apiHost: "0.0.0.0"
+  apiPort: 8080
+  grpcPort: 50051
+  
+  # Logging
+  logLevel: info
+  logFormat: json
+  
+  # Security
+  fipsMode: enabled
+  tlsEnabled: true
+  
+  # Rate limiting
+  rateLimitRequests: 1000
+  rateLimitWindowSecs: 60
+
+# Secrets (use external secrets in production)
+secrets:
+  apiKey: ""  # Generate with: openssl rand -base64 32
+  tlsCert: ""
+  tlsKey: ""
+  dbPassword: ""
+
+# Persistence
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 100Gi
+
+# Network policies
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+
+# Observability
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+
+# OpenTelemetry
+otel:
+  enabled: true
+  endpoint: "http://otel-collector:4317"
+  serviceName: hypermachine
+
+# Redis (for caching and rate limiting)
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: ""
+  architecture: standalone
+  master:
+    persistence:
+      size: 8Gi
+
+# PostgreSQL (for state persistence)
+postgresql:
+  enabled: false
+  auth:
+    username: hypermachine
+    password: ""
+    database: hypermachine
+  primary:
+    persistence:
+      size: 50Gi
