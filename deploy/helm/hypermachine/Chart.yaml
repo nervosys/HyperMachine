@@ -1,0 +1,37 @@
+# HyperMachine Helm Chart
+apiVersion: v2
+name: hypermachine
+description: A high-performance, agentic hypervisor framework
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0"
+
+keywords:
+  - hypervisor
+  - virtualization
+  - ai
+  - agentic
+  - vm
+
+home: https://github.com/nervosys/HyperMachine
+sources:
+  - https://github.com/nervosys/HyperMachine
+
+maintainers:
+  - name: nervosys
+    email: support@nervosys.com
+
+dependencies:
+  - name: redis
+    version: "18.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: postgresql
+    version: "13.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+
+annotations:
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: virtualization

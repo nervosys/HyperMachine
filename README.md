@@ -257,22 +257,56 @@ async fn main() -> anyhow::Result<()> {
 - **Security Research**: Malware analysis in isolated environments
 - **Edge Computing**: Lightweight VMs for distributed workloads
 
-## Building from Source
+## Cryptography
+
+HyperMachine includes FIPS 140-3 compliant cryptographic modules:
+
+### Symmetric Cryptography
+- AES-128/256-GCM encryption
+- SHA-256/384/512 hashing  
+- HMAC-SHA256 authentication
+- HKDF key derivation
+
+### Asymmetric Cryptography
+- RSA-2048/3072/4096 (FIPS 186-5)
+- ECDSA P-256/P-384/P-521
+- RSA-OAEP encryption
+- RSA-PSS and PKCS#1 v1.5 signatures
+
+### Post-Quantum Cryptography
+- **ML-KEM** (FIPS 203): Key encapsulation (Kyber)
+- **ML-DSA** (FIPS 204): Digital signatures (Dilithium)
+- **SLH-DSA** (FIPS 205): Hash-based signatures (SPHINCS+)
+- Hybrid schemes for transitional security
+
+## Deployment
+
+### Kubernetes
 
 ```bash
-git clone https://github.com/nervosys/HyperMachine
-cd HyperMachine
-cargo build --release
+kubectl apply -f deploy/k8s/hypermachine.yaml
+
+# Or with Helm
+helm install hypermachine ./deploy/helm/hypermachine
 ```
 
-## Documentation
+### Terraform
 
-- [Architecture Guide](docs/architecture.md)
-- [Agentic AI Interface](docs/AGENTIC_INTERFACE.md) - MCP server & multi-agent orchestration
-- [AI Agent API](docs/agent-api.md)
-- [GPU Virtualization](docs/gpu.md)
-- [Network Configuration](docs/networking.md)
-- [Security Model](docs/security.md)
+```hcl
+module "hypermachine" {
+  source         = "./deploy/terraform"
+  cloud_provider = "aws"
+  region         = "us-east-1"
+  environment    = "production"
+}
+```
+
+## Performance
+
+```bash
+cargo bench -p hv2-core  # Crypto benchmarks
+cargo bench -p hv2-api   # API benchmarks
+```
 
 ## Contributing
 
@@ -546,22 +580,56 @@ async fn main() -> anyhow::Result<()> {
 - **Security Research**: Malware analysis in isolated environments
 - **Edge Computing**: Lightweight VMs for distributed workloads
 
-## Building from Source
+## Cryptography
+
+HyperMachine includes FIPS 140-3 compliant cryptographic modules:
+
+### Symmetric Cryptography
+- AES-128/256-GCM encryption
+- SHA-256/384/512 hashing  
+- HMAC-SHA256 authentication
+- HKDF key derivation
+
+### Asymmetric Cryptography
+- RSA-2048/3072/4096 (FIPS 186-5)
+- ECDSA P-256/P-384/P-521
+- RSA-OAEP encryption
+- RSA-PSS and PKCS#1 v1.5 signatures
+
+### Post-Quantum Cryptography
+- **ML-KEM** (FIPS 203): Key encapsulation (Kyber)
+- **ML-DSA** (FIPS 204): Digital signatures (Dilithium)
+- **SLH-DSA** (FIPS 205): Hash-based signatures (SPHINCS+)
+- Hybrid schemes for transitional security
+
+## Deployment
+
+### Kubernetes
 
 ```bash
-git clone https://github.com/nervosys/HyperMachine
-cd HyperMachine
-cargo build --release
+kubectl apply -f deploy/k8s/hypermachine.yaml
+
+# Or with Helm
+helm install hypermachine ./deploy/helm/hypermachine
 ```
 
-## Documentation
+### Terraform
 
-- [Architecture Guide](docs/architecture.md)
-- [Agentic AI Interface](docs/AGENTIC_INTERFACE.md) - MCP server & multi-agent orchestration
-- [AI Agent API](docs/agent-api.md)
-- [GPU Virtualization](docs/gpu.md)
-- [Network Configuration](docs/networking.md)
-- [Security Model](docs/security.md)
+```hcl
+module "hypermachine" {
+  source         = "./deploy/terraform"
+  cloud_provider = "aws"
+  region         = "us-east-1"
+  environment    = "production"
+}
+```
+
+## Performance
+
+```bash
+cargo bench -p hv2-core  # Crypto benchmarks
+cargo bench -p hv2-api   # API benchmarks
+```
 
 ## Contributing
 
