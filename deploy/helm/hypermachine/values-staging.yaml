@@ -1,0 +1,65 @@
+# Staging environment values
+# Reduced resources for cost efficiency
+
+replicaCount: 1
+
+resources:
+  limits:
+    cpu: "1"
+    memory: 1Gi
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 70
+
+env:
+  ENVIRONMENT: staging
+  LOG_LEVEL: debug
+  METRICS_ENABLED: "true"
+  TRACING_ENABLED: "true"
+  FIPS_MODE: "true"
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+  hosts:
+    - host: staging.hypermachine.nervosys.ai
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: hypermachine-staging-tls
+      hosts:
+        - staging.hypermachine.nervosys.ai
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: standard
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+  alerts:
+    enabled: true
+    cpuThreshold: 70
+    memoryThreshold: 80
+
+# Reduced security for easier debugging
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: false
+
+# Allow debug endpoints
+extraArgs:
+  - --debug-endpoints
+  - --verbose-logging

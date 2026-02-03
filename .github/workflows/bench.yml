@@ -1,0 +1,167 @@
+# Benchmark CI Workflow
+# Runs performance benchmarks on push to main and generates reports
+
+name: Benchmarks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      full_benchmark:
+        description: 'Run full benchmark suite (slower)'
+        required: false
+        default: 'false'
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  benchmark:
+    name: Performance Benchmarks
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-bench-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bench-
+            ${{ runner.os }}-cargo-
+
+      - name: Run crypto benchmarks
+        run: |
+          cargo bench -p hv2-core --bench crypto_bench -- --noplot --output-format=bencher | tee crypto_bench.txt
+
+      - name: Run API benchmarks
+        run: |
+          cargo bench -p hv2-api --bench api_bench -- --noplot --output-format=bencher | tee api_bench.txt
+        continue-on-error: true
+
+      - name: Store benchmark results
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: HyperMachine Benchmarks
+          tool: 'cargo'
+          output-file-path: crypto_bench.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
+          alert-comment-cc-users: '@nervosys/hypermachine-team'
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            crypto_bench.txt
+            api_bench.txt
+            target/criterion/**/*.svg
+          retention-days: 30
+
+      - name: Comment PR with benchmark results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let cryptoBench = '';
+            let apiBench = '';
+
+            try {
+              cryptoBench = fs.readFileSync('crypto_bench.txt', 'utf8');
+            } catch (e) {
+              cryptoBench = 'Crypto benchmarks not available';
+            }
+
+            try {
+              apiBench = fs.readFileSync('api_bench.txt', 'utf8');
+            } catch (e) {
+              apiBench = 'API benchmarks not available';
+            }
+
+            const body = `## 📊 Benchmark Results
+
+            ### Crypto Operations
+            \`\`\`
+            ${cryptoBench.substring(0, 4000)}
+            \`\`\`
+
+            ### API Operations
+            \`\`\`
+            ${apiBench.substring(0, 4000)}
+            \`\`\`
+
+            *Benchmarks run on ${new Date().toISOString()}*
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  benchmark-comparison:
+    name: Compare with baseline
+    runs-on: windows-latest
+    needs: benchmark
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+          path: baseline
+
+      - uses: actions/checkout@v4
+        with:
+          path: pr
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Run baseline benchmarks
+        working-directory: baseline
+        run: |
+          cargo bench -p hv2-core --bench crypto_bench -- --noplot --save-baseline baseline
+        continue-on-error: true
+
+      - name: Run PR benchmarks and compare
+        working-directory: pr
+        run: |
+          cargo bench -p hv2-core --bench crypto_bench -- --noplot --baseline baseline | tee comparison.txt
+        continue-on-error: true
+
+      - name: Check for regressions
+        run: |
+          if (Select-String -Path pr/comparison.txt -Pattern "regressed" -Quiet) {
+            Write-Warning "Performance regressions detected!"
+            Get-Content pr/comparison.txt | Select-String "regressed"
+            exit 1
+          }
+        continue-on-error: true

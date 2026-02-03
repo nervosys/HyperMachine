@@ -1,0 +1,328 @@
+# Deployment CI/CD Workflow
+# Handles container builds, Kubernetes deployments, and infrastructure provisioning
+
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      skip_tests:
+        description: 'Skip tests before deployment'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/hypermachine
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if ($env:GITHUB_REF -match '^refs/tags/v(.+)$') {
+            $version = $Matches[1]
+          } else {
+            $version = "0.0.0-dev.${{ github.run_number }}"
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          echo "Version: $version"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-deploy-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run tests
+        if: inputs.skip_tests != 'true'
+        run: cargo test --workspace --release
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hypermachine-${{ steps.version.outputs.version }}-windows
+          path: |
+            target/release/*.exe
+            target/release/*.dll
+          retention-days: 30
+
+  container:
+    name: Build Container Image
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.build.outputs.version }}
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, container]
+    if: github.ref == 'refs/heads/main' || inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging.hypermachine.nervosys.ai
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'v3.13.0'
+
+      - name: Configure Kubernetes context
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install hypermachine ./deploy/helm/hypermachine \
+            --namespace hypermachine \
+            --create-namespace \
+            --set image.tag=${{ github.sha }} \
+            --set environment=staging \
+            --values ./deploy/helm/hypermachine/values.yaml \
+            --values ./deploy/helm/hypermachine/values-staging.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/hypermachine -n hypermachine --timeout=5m
+          kubectl get pods -n hypermachine -l app.kubernetes.io/name=hypermachine
+
+      - name: Run smoke tests
+        run: |
+          # Wait for service to be ready
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=hypermachine -n hypermachine --timeout=2m
+
+          # Get service endpoint
+          SERVICE_IP=$(kubectl get svc hypermachine -n hypermachine -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          # Health check
+          curl -f http://$SERVICE_IP:8080/health || exit 1
+          echo "Smoke tests passed!"
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, container, deploy-staging]
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://hypermachine.nervosys.ai
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+
+      - name: Configure Kubernetes context
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.PRODUCTION_KUBECONFIG }}
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install hypermachine ./deploy/helm/hypermachine \
+            --namespace hypermachine \
+            --set image.tag=${{ needs.build.outputs.version }} \
+            --set environment=production \
+            --set replicaCount=3 \
+            --values ./deploy/helm/hypermachine/values.yaml \
+            --values ./deploy/helm/hypermachine/values-production.yaml \
+            --wait \
+            --timeout 15m
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/hypermachine -n hypermachine --timeout=10m
+
+      - name: Run production tests
+        run: |
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=hypermachine -n hypermachine --timeout=5m
+
+          SERVICE_IP=$(kubectl get svc hypermachine -n hypermachine -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          # Extended health checks
+          curl -f http://$SERVICE_IP:8080/health
+          curl -f http://$SERVICE_IP:8080/ready
+          curl -f http://$SERVICE_IP:8080/metrics
+
+          echo "Production verification complete!"
+
+  terraform:
+    name: Infrastructure Provisioning
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment:
+      name: infrastructure
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.6.0'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-west-2
+
+      - name: Terraform Init
+        working-directory: deploy/terraform
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: deploy/terraform
+        run: terraform plan -out=tfplan
+        env:
+          TF_VAR_environment: ${{ inputs.environment }}
+
+      - name: Terraform Apply
+        working-directory: deploy/terraform
+        run: terraform apply -auto-approve tfplan
+        if: inputs.environment == 'staging'
+
+      - name: Output infrastructure info
+        working-directory: deploy/terraform
+        run: terraform output -json > infrastructure.json
+
+      - name: Upload infrastructure info
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-${{ inputs.environment }}
+          path: deploy/terraform/infrastructure.json
+
+  notify:
+    name: Notify Deployment Status
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "HyperMachine Deployment ${{ job.status }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*HyperMachine Deployment*\n*Status:* ${{ job.status }}\n*Version:* ${{ needs.build.outputs.version }}\n*Environment:* ${{ inputs.environment || 'staging' }}\n*Actor:* ${{ github.actor }}"
+                  }
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {"type": "plain_text", "text": "View Workflow"},
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

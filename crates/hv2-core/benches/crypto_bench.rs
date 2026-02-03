@@ -18,7 +18,7 @@ fn bench_aes_gcm_encrypt(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
             b.iter(|| {
                 crypto
-                    .aes_gcm_encrypt(black_box(key.data()), black_box(&plaintext), black_box(aad))
+                    .aes_gcm_encrypt(black_box(key.as_bytes()), black_box(&plaintext), black_box(aad))
                     .unwrap()
             })
         });
@@ -35,13 +35,13 @@ fn bench_aes_gcm_decrypt(c: &mut Criterion) {
 
     for size in [64, 256, 1024, 4096, 16384, 65536].iter() {
         let plaintext = vec![0u8; *size];
-        let ciphertext = crypto.aes_gcm_encrypt(key.data(), &plaintext, aad).unwrap();
+        let ciphertext = crypto.aes_gcm_encrypt(key.as_bytes(), &plaintext, aad).unwrap();
 
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
             b.iter(|| {
                 crypto
-                    .aes_gcm_decrypt(black_box(key.data()), black_box(&ciphertext), black_box(aad))
+                    .aes_gcm_decrypt(black_box(key.as_bytes()), black_box(&ciphertext), black_box(aad))
                     .unwrap()
             })
         });
@@ -110,7 +110,7 @@ fn bench_hkdf(c: &mut Criterion) {
             |b, &len| {
                 b.iter(|| {
                     crypto
-                        .hkdf(black_box(&salt), black_box(&ikm), black_box(info), len)
+                        .hkdf_sha256(black_box(&salt), black_box(&ikm), black_box(info), len)
                         .unwrap()
                 })
             },
@@ -149,7 +149,7 @@ fn bench_key_generation(c: &mut Criterion) {
 fn bench_self_tests(c: &mut Criterion) {
     c.bench_function("fips_self_tests", |b| {
         b.iter(|| {
-            let crypto = FipsCrypto::new(black_box(FipsMode::Enabled)).unwrap();
+            let mut crypto = FipsCrypto::new(black_box(FipsMode::Enabled)).unwrap();
             crypto.run_self_tests().unwrap()
         })
     });
