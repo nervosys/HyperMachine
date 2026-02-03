@@ -10,6 +10,7 @@ members = [
     "crates/hv2-api",
     "crates/hv2-cli",
     "crates/hm-cli",
+    "crates/hm-gui",
 ]
 resolver = "2"
 
@@ -104,3 +105,4 @@ debug = true
 
 [profile.bench]
 inherits = "release"
+
