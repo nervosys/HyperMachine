@@ -81,6 +81,44 @@ vm = hm.create_vm("sandbox", cpu=4, memory="8G", gpu=True)
 vm.start()
 vm.exec("echo 'Hello from AI agent'")
 ```
+## GUI Automation
+
+HyperMachine includes a desktop GUI with **semantic automation API** for AI agents:
+
+```rust
+use hm_gui::{AutomationHandle, GuiCommand, DialogType, FormType};
+
+// Create automation handle
+let (handle, receiver) = AutomationHandle::new();
+
+// AI agent controls the GUI
+handle.open_dialog(DialogType::CreateVm)?;
+handle.set_field(FormType::CreateVm, "name", "ai-sandbox")?;
+handle.set_field(FormType::CreateVm, "cpus", 4)?;
+handle.set_field(FormType::CreateVm, "memory_mb", 8192)?;
+handle.execute(GuiCommand::SubmitDialog(DialogType::CreateVm))?;
+```
+
+**Available GUI Tools (13 total):**
+
+| Tool | Description |
+|------|-------------|
+| `gui.navigate` | Navigate views (welcome, vm_details, console, settings) |
+| `gui.dialog.open/close/submit` | Manage dialogs (create_vm, settings, about) |
+| `gui.vm.select` | Select VM by id, name, or partial match |
+| `gui.vm.action` | VM operations (start, stop, pause, delete, console) |
+| `gui.form.set_field` | Set form values programmatically |
+| `gui.get_state` | Query current GUI state |
+
+**LLM JSON Commands:**
+
+```json
+{"type":"OpenDialog","params":"create_vm"}
+{"type":"SetFormField","params":{"form":"create_vm","field":"name","value":"my-vm"}}
+{"type":"SubmitDialog","params":"create_vm"}
+```
+
+This semantic approach is **superior to screen-based automation** (like Anthropic Computer Use) because it is deterministic, fast, and layout-independent.
 
 ## Cryptography
 
