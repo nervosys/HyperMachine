@@ -298,7 +298,12 @@ impl HyperMachineApp {
                     }
                 }
                 ApiResponse::Error(e) => {
-                    tracing::error!("API error: {}", e);
+                    // Connection errors are expected when backend is offline
+                    if e.contains("error sending request") || e.contains("connection refused") {
+                        tracing::debug!("Backend unavailable: {}", e);
+                    } else {
+                        tracing::warn!("API error: {}", e);
+                    }
                     self.state.last_error = Some(e);
                 }
             }
