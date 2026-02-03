@@ -433,11 +433,9 @@ impl eframe::App for HyperMachineApp {
                         self.state.create_form.creating = true;
                         self.create_vm(config);
                     }
-                    if self.state.create_form.error.is_none() && !self.state.create_form.creating {
-                        // Check if cancel was clicked (form was reset)
-                        if self.state.create_form.name.is_empty() {
-                            self.state.show_create_dialog = false;
-                        }
+                    if self.state.create_form.cancelled {
+                        self.state.show_create_dialog = false;
+                        self.state.create_form.reset();
                     }
                 });
         }

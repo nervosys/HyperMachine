@@ -257,6 +257,7 @@ pub struct CreateVmForm {
     pub network_enabled: bool,
     pub error: Option<String>,
     pub creating: bool,
+    pub cancelled: bool,
 }
 
 impl Default for CreateVmForm {
@@ -270,6 +271,7 @@ impl Default for CreateVmForm {
             network_enabled: true,
             error: None,
             creating: false,
+        cancelled: false,
         }
     }
 }
