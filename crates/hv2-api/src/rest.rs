@@ -85,6 +85,8 @@ pub fn create_router() -> Router {
         .route("/api/v1/vms/{id}/resume", post(resume_vm))
         .route("/api/v1/vms/{id}/metrics", get(get_metrics))
         .route("/api/v1/vms/{id}/script", post(execute_script))
+        // Agentic ontology routes for AI agent discovery
+        .merge(crate::ontology::create_ontology_router())
         .with_state(Arc::new(state))
 }
 

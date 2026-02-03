@@ -7,6 +7,7 @@
 #![allow(unused_variables)]
 
 pub mod grpc;
+pub mod ontology;
 pub mod rest;
 
 use thiserror::Error;
