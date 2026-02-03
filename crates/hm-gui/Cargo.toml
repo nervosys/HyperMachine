@@ -1,0 +1,55 @@
+[package]
+name = "hm-gui"
+version = "0.1.0"
+edition = "2021"
+description = "HyperMachine Desktop GUI - virt-manager style interface"
+license = "Apache-2.0"
+repository = "https://github.com/nervosys/AetherVM"
+keywords = ["hypervisor", "gui", "virtualization", "desktop"]
+categories = ["virtualization", "gui"]
+
+[dependencies]
+# GUI framework
+eframe = { version = "0.31", features = ["persistence", "wgpu"] }
+egui = "0.31"
+egui_extras = { version = "0.31", features = ["image"] }
+
+# Async runtime
+tokio = { version = "1.42", features = ["full"] }
+
+# HTTP client for API communication
+reqwest = { version = "0.12", features = ["json"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Base64 decoding for framebuffer data
+base64 = "0.22"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Image handling for screen display
+image = "0.25"
+
+# Cross-platform file dialogs
+rfd = "0.15"
+
+# Platform icons
+include_dir = "0.7"
+
+[features]
+default = []
+vnc = []  # Future: VNC protocol support
+spice = []  # Future: SPICE protocol support
+
+[[bin]]
+name = "hypermachine-gui"
+path = "src/main.rs"
+
