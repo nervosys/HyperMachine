@@ -32,6 +32,10 @@ proptest = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+[[bench]]
+name = "crypto_bench"
+harness = false
+
 [[example]]
 name = "serial_console"
 path = "examples/serial_console.rs"
