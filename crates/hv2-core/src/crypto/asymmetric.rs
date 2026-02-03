@@ -393,15 +393,15 @@ impl FipsCrypto {
         algorithm: SignatureAlgorithm,
     ) -> CryptoResult<Signature> {
         // Compute message digest
-        let digest = match algorithm {
+        let digest: Vec<u8> = match algorithm {
             SignatureAlgorithm::RsaPkcs1Sha256 | SignatureAlgorithm::RsaPssSha256 => {
-                self.sha256(data)?
+                self.sha256(data)?.to_vec()
             }
             SignatureAlgorithm::RsaPkcs1Sha384 | SignatureAlgorithm::RsaPssSha384 => {
-                self.sha384(data)?
+                self.sha384(data)?.to_vec()
             }
             SignatureAlgorithm::RsaPkcs1Sha512 | SignatureAlgorithm::RsaPssSha512 => {
-                self.sha512(data)?
+                self.sha512(data)?.to_vec()
             }
             _ => return Err(CryptoError::UnsupportedAlgorithm(format!("{:?}", algorithm))),
         };
@@ -421,7 +421,8 @@ impl FipsCrypto {
         sig_data[2 + padding_len] = 0x00;
         
         // DigestInfo (simplified)
-        sig_data[sig_data.len() - digest.len()..].copy_from_slice(&digest);
+        let digest_start = sig_data.len() - digest.len();
+        sig_data[digest_start..].copy_from_slice(&digest);
         
         // "Sign" with private key (XOR with d for demo)
         for (i, b) in private_key.d.iter().enumerate() {
@@ -448,15 +449,15 @@ impl FipsCrypto {
         }
 
         // Compute expected digest
-        let expected_digest = match signature.algorithm {
+        let expected_digest: Vec<u8> = match signature.algorithm {
             SignatureAlgorithm::RsaPkcs1Sha256 | SignatureAlgorithm::RsaPssSha256 => {
-                self.sha256(data)?
+                self.sha256(data)?.to_vec()
             }
             SignatureAlgorithm::RsaPkcs1Sha384 | SignatureAlgorithm::RsaPssSha384 => {
-                self.sha384(data)?
+                self.sha384(data)?.to_vec()
             }
             SignatureAlgorithm::RsaPkcs1Sha512 | SignatureAlgorithm::RsaPssSha512 => {
-                self.sha512(data)?
+                self.sha512(data)?.to_vec()
             }
             _ => return Err(CryptoError::UnsupportedAlgorithm(format!("{:?}", signature.algorithm))),
         };
@@ -482,10 +483,10 @@ impl FipsCrypto {
         };
 
         // Compute message digest
-        let digest = match algorithm {
-            SignatureAlgorithm::EcdsaP256Sha256 => self.sha256(data)?,
-            SignatureAlgorithm::EcdsaP384Sha384 => self.sha384(data)?,
-            SignatureAlgorithm::EcdsaP521Sha512 => self.sha512(data)?,
+        let digest: Vec<u8> = match algorithm {
+            SignatureAlgorithm::EcdsaP256Sha256 => self.sha256(data)?.to_vec(),
+            SignatureAlgorithm::EcdsaP384Sha384 => self.sha384(data)?.to_vec(),
+            SignatureAlgorithm::EcdsaP521Sha512 => self.sha512(data)?.to_vec(),
             _ => unreachable!(),
         };
 
@@ -539,10 +540,10 @@ impl FipsCrypto {
         }
 
         // Compute expected digest
-        let _digest = match signature.algorithm {
-            SignatureAlgorithm::EcdsaP256Sha256 => self.sha256(data)?,
-            SignatureAlgorithm::EcdsaP384Sha384 => self.sha384(data)?,
-            SignatureAlgorithm::EcdsaP521Sha512 => self.sha512(data)?,
+        let _digest: Vec<u8> = match signature.algorithm {
+            SignatureAlgorithm::EcdsaP256Sha256 => self.sha256(data)?.to_vec(),
+            SignatureAlgorithm::EcdsaP384Sha384 => self.sha384(data)?.to_vec(),
+            SignatureAlgorithm::EcdsaP521Sha512 => self.sha512(data)?.to_vec(),
             _ => return Err(CryptoError::UnsupportedAlgorithm(format!("{:?}", signature.algorithm))),
         };
 

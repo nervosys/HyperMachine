@@ -15,8 +15,8 @@
 
 pub mod fips;
 // TODO: Fix compile errors in these modules
-// pub mod asymmetric;
-// pub mod pqc;
+pub mod asymmetric;
+pub mod pqc;
 
 pub use fips::{
     AesGcmCiphertext, AesKeySize, CryptoError, CryptoResult, FipsCrypto, FipsMode, FipsStatus,
