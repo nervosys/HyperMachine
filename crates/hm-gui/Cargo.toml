@@ -43,6 +43,7 @@ rfd = "0.15"
 
 # Platform icons
 include_dir = "0.7"
+chrono.workspace = true
 
 [features]
 default = []
