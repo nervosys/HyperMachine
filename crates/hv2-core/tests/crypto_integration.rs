@@ -168,3 +168,69 @@ mod fips_integration {
         }
     }
 }
+
+
+
+mod asymmetric_integration {
+    use hv2_core::crypto::fips::{FipsCrypto, FipsMode};
+    use hv2_core::crypto::asymmetric::{EcCurve, RsaKeySize, SignatureAlgorithm};
+
+    #[test]
+    fn test_rsa_keygen_and_sign() {
+        let crypto = FipsCrypto::new(FipsMode::Enabled).expect("Failed to create crypto");
+        let key = crypto.generate_rsa_keypair(RsaKeySize::Rsa2048).expect("RSA keygen failed");
+        assert_eq!(key.public.size, RsaKeySize::Rsa2048);
+        let message = b"Test message for RSA signature";
+        let signature = crypto.rsa_sign(&key, message, SignatureAlgorithm::RsaPkcs1Sha256).expect("RSA signing failed");
+        assert_eq!(signature.algorithm, SignatureAlgorithm::RsaPkcs1Sha256);
+        let valid = crypto.rsa_verify(&key.public, message, &signature).expect("Verify failed");
+        assert!(valid);
+    }
+
+    #[test]
+    fn test_ecdsa_keygen_and_sign() {
+        let crypto = FipsCrypto::new(FipsMode::Enabled).expect("Failed to create crypto");
+        let key = crypto.generate_ecdsa_keypair(EcCurve::P256).expect("ECDSA keygen failed");
+        assert_eq!(key.public.curve, EcCurve::P256);
+        let message = b"Test message for ECDSA signature";
+        let signature = crypto.ecdsa_sign(&key, message).expect("ECDSA signing failed");
+        let valid = crypto.ecdsa_verify(&key.public, message, &signature).expect("Verify failed");
+        assert!(valid);
+    }
+}
+
+mod pqc_integration {
+    use hv2_core::crypto::fips::{FipsCrypto, FipsMode};
+    use hv2_core::crypto::pqc::{MlDsaParameterSet, MlKemParameterSet, SlhDsaParameterSet};
+
+    #[test]
+    fn test_ml_kem_workflow() {
+        let crypto = FipsCrypto::new(FipsMode::Enabled).expect("Failed to create crypto");
+        let secret_key = crypto.ml_kem_keygen(MlKemParameterSet::MlKem768).expect("ML-KEM keygen failed");
+        assert_eq!(secret_key.public.parameter_set, MlKemParameterSet::MlKem768);
+        let (ciphertext, shared_secret1) = crypto.ml_kem_encaps(&secret_key.public).expect("Encaps failed");
+        let shared_secret2 = crypto.ml_kem_decaps(&secret_key, &ciphertext).expect("Decaps failed");
+        assert_eq!(shared_secret1.len(), 32);
+        assert_eq!(shared_secret2.len(), 32);
+    }
+
+    #[test]
+    fn test_ml_dsa_sign_verify() {
+        let crypto = FipsCrypto::new(FipsMode::Enabled).expect("Failed to create crypto");
+        let secret_key = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).expect("ML-DSA keygen failed");
+        let message = b"Post-quantum secure message";
+        let signature = crypto.ml_dsa_sign(&secret_key, message).expect("ML-DSA signing failed");
+        let valid = crypto.ml_dsa_verify(&secret_key.public, message, &signature).expect("Verify failed");
+        assert!(valid);
+    }
+
+    #[test]
+    fn test_slh_dsa_sign_verify() {
+        let crypto = FipsCrypto::new(FipsMode::Enabled).expect("Failed to create crypto");
+        let secret_key = crypto.slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f).expect("SLH-DSA keygen failed");
+        let message = b"Hash-based signature test";
+        let signature = crypto.slh_dsa_sign(&secret_key, message).expect("SLH-DSA signing failed");
+        let valid = crypto.slh_dsa_verify(&secret_key.public, message, &signature).expect("Verify failed");
+        assert!(valid);
+    }
+}
