@@ -16,7 +16,7 @@ pub struct VmConfig {
     pub name: String,
     #[serde(default = "default_cpus")]
     pub cpus: u32,
-    #[serde(default = "default_memory")]
+    #[serde(default = "default_memory", alias = "memory")]
     pub memory_mb: u32,
     pub disk_path: Option<String>,
     #[serde(default = "default_true")]
@@ -33,10 +33,13 @@ fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
+    #[serde(default, alias = "name")]
     pub id: String,
     pub name: String,
     pub state: VmStateApi,
+    #[serde(default = "default_cpus")]
     pub cpus: u32,
+    #[serde(default = "default_memory", alias = "memory")]
     pub memory_mb: u32,
     #[serde(default)]
     pub disk_path: Option<String>,
@@ -77,6 +80,7 @@ impl std::fmt::Display for VmStateApi {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthResponse {
     pub status: String,
+    #[serde(default)]
     pub version: String,
     #[serde(default)]
     pub uptime: u64,
@@ -95,7 +99,7 @@ impl ApiClient {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
+                .timeout(std::time::Duration::from_secs(10))
                 .build()
                 .expect("Failed to create HTTP client"),
         }
@@ -112,70 +116,79 @@ impl ApiClient {
     }
 
     pub async fn list_vms(&self) -> Result<Vec<VmInfo>> {
-        let url = format!("{}/api/v1/vms", self.base_url);
+        let url = format!("{}/vms", self.base_url);
         let response = self.client.get(&url).send().await?;
         if response.status().is_success() {
-            #[derive(Deserialize)]
-            struct VmList { vms: Vec<VmInfo> }
-            let list: VmList = response.json().await?;
-            Ok(list.vms)
+            // Backend returns array directly or wrapped - handle both
+            let text = response.text().await?;
+            if let Ok(vms) = serde_json::from_str::<Vec<VmInfo>>(&text) {
+                Ok(vms)
+            } else if let Ok(wrapper) = serde_json::from_str::<serde_json::Value>(&text) {
+                if let Some(vms) = wrapper.get("vms") {
+                    Ok(serde_json::from_value(vms.clone())?)
+                } else {
+                    Ok(vec![])
+                }
+            } else {
+                Ok(vec![])
+            }
         } else {
             anyhow::bail!("Failed to list VMs: {}", response.status())
         }
     }
 
     pub async fn create_vm(&self, config: VmConfig) -> Result<VmInfo> {
-        let url = format!("{}/api/v1/vms", self.base_url);
+        let url = format!("{}/vms", self.base_url);
         let response = self.client.post(&url).json(&config).send().await?;
         if response.status().is_success() {
             response.json().await.context("Failed to parse")
         } else {
-            anyhow::bail!("Failed to create VM")
+            anyhow::bail!("Failed to create VM: {}", response.status())
         }
     }
 
-    pub async fn start_vm(&self, vm_id: &str) -> Result<VmInfo> {
-        let url = format!("{}/api/v1/vms/{}/start", self.base_url, vm_id);
+    pub async fn start_vm(&self, vm_name: &str) -> Result<VmInfo> {
+        let url = format!("{}/vms/{}/start", self.base_url, vm_name);
         let response = self.client.post(&url).send().await?;
         if response.status().is_success() {
             response.json().await.context("Failed to parse")
         } else {
-            anyhow::bail!("Failed to start VM")
+            anyhow::bail!("Failed to start VM: {}", response.status())
         }
     }
 
-    pub async fn stop_vm(&self, vm_id: &str) -> Result<VmInfo> {
-        let url = format!("{}/api/v1/vms/{}/stop", self.base_url, vm_id);
+    pub async fn stop_vm(&self, vm_name: &str) -> Result<VmInfo> {
+        let url = format!("{}/vms/{}/stop", self.base_url, vm_name);
         let response = self.client.post(&url).send().await?;
         if response.status().is_success() {
             response.json().await.context("Failed to parse")
         } else {
-            anyhow::bail!("Failed to stop VM")
+            anyhow::bail!("Failed to stop VM: {}", response.status())
         }
     }
 
-    pub async fn pause_vm(&self, vm_id: &str) -> Result<VmInfo> {
-        let url = format!("{}/api/v1/vms/{}/pause", self.base_url, vm_id);
+    pub async fn pause_vm(&self, vm_name: &str) -> Result<VmInfo> {
+        let url = format!("{}/vms/{}/pause", self.base_url, vm_name);
         let response = self.client.post(&url).send().await?;
         if response.status().is_success() {
             response.json().await.context("Failed to parse")
         } else {
-            anyhow::bail!("Failed to pause VM")
+            anyhow::bail!("Failed to pause VM: {}", response.status())
         }
     }
 
-    pub async fn delete_vm(&self, vm_id: &str) -> Result<()> {
-        let url = format!("{}/api/v1/vms/{}", self.base_url, vm_id);
+    pub async fn delete_vm(&self, vm_name: &str) -> Result<()> {
+        let url = format!("{}/vms/{}", self.base_url, vm_name);
         let response = self.client.delete(&url).send().await?;
         if response.status().is_success() {
             Ok(())
         } else {
-            anyhow::bail!("Failed to delete VM")
+            anyhow::bail!("Failed to delete VM: {}", response.status())
         }
     }
 
-    pub async fn get_framebuffer(&self, vm_id: &str) -> Result<FramebufferData> {
-        let url = format!("{}/api/v1/vms/{}/display/framebuffer", self.base_url, vm_id);
+    pub async fn get_framebuffer(&self, vm_name: &str) -> Result<FramebufferData> {
+        let url = format!("{}/vms/{}/display", self.base_url, vm_name);
         let response = self.client.get(&url).send().await?;
         if response.status().is_success() {
             #[derive(Deserialize)]
@@ -185,26 +198,26 @@ impl ApiClient {
             let data = base64::engine::general_purpose::STANDARD.decode(&fb.data).unwrap_or_default();
             Ok(FramebufferData { width: fb.width, height: fb.height, format: fb.format, data })
         } else {
-            anyhow::bail!("Failed to get framebuffer")
+            anyhow::bail!("Failed to get framebuffer: {}", response.status())
         }
     }
 
-    pub async fn send_key(&self, vm_id: &str, keycode: u32, pressed: bool) -> Result<()> {
-        let url = format!("{}/api/v1/vms/{}/input/keyboard", self.base_url, vm_id);
+    pub async fn send_key(&self, vm_name: &str, keycode: u32, pressed: bool) -> Result<()> {
+        let url = format!("{}/vms/{}/input/keyboard", self.base_url, vm_name);
         let response = self.client.post(&url)
             .json(&serde_json::json!({"keycode": keycode, "pressed": pressed}))
             .send().await?;
         if response.status().is_success() { Ok(()) }
-        else { anyhow::bail!("Failed to send key") }
+        else { anyhow::bail!("Failed to send key: {}", response.status()) }
     }
 
-    pub async fn send_mouse(&self, vm_id: &str, x: i32, y: i32, buttons: u8, scroll: i32) -> Result<()> {
-        let url = format!("{}/api/v1/vms/{}/input/mouse", self.base_url, vm_id);
+    pub async fn send_mouse(&self, vm_name: &str, x: i32, y: i32, buttons: u8, scroll: i32) -> Result<()> {
+        let url = format!("{}/vms/{}/input/mouse", self.base_url, vm_name);
         let response = self.client.post(&url)
             .json(&serde_json::json!({"x": x, "y": y, "buttons": buttons, "scroll": scroll}))
             .send().await?;
         if response.status().is_success() { Ok(()) }
-        else { anyhow::bail!("Failed to send mouse") }
+        else { anyhow::bail!("Failed to send mouse: {}", response.status()) }
     }
 }
 
