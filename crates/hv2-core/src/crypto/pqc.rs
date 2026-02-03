@@ -415,7 +415,7 @@ impl FipsCrypto {
         self.random_bytes(&mut seed)?;
 
         // Expand seed to keys (simplified)
-        let expanded = self.hkdf(&[], &seed, b"ML-DSA-KeyGen", params.secret_key_bytes())?;
+        let expanded = self.hkdf_sha256(&seed, &[], b"ML-DSA-KeyGen", params.secret_key_bytes())?;
         secret_data.copy_from_slice(&expanded);
 
         let pk_seed = self.sha256(&secret_data)?;
@@ -496,8 +496,8 @@ impl FipsCrypto {
 
         // Derive public key from secret (simplified)
         let pk = self.sha256(&secret_data)?;
-        public_data[..public_data.len().min(32)]
-            .copy_from_slice(&pk[..public_data.len().min(32)]);
+        let pk_len = public_data.len().min(32);
+        public_data[..pk_len].copy_from_slice(&pk[..pk_len]);
 
         Ok(SlhDsaSecretKey {
             public: SlhDsaPublicKey {

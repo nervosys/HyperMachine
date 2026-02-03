@@ -134,6 +134,10 @@ pub enum CryptoError {
     KeyDerivationFailed(String),
     /// Hash computation failed
     HashFailed(String),
+    /// Invalid input parameters
+    InvalidInput(String),
+    /// Unsupported algorithm
+    UnsupportedAlgorithm(String),
 }
 
 impl fmt::Display for CryptoError {
@@ -158,6 +162,8 @@ impl fmt::Display for CryptoError {
             Self::InvalidSignature => write!(f, "Invalid signature format"),
             Self::KeyDerivationFailed(msg) => write!(f, "Key derivation failed: {}", msg),
             Self::HashFailed(msg) => write!(f, "Hash computation failed: {}", msg),
+            Self::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+            Self::UnsupportedAlgorithm(alg) => write!(f, "Unsupported algorithm: {}", alg),
         }
     }
 }
