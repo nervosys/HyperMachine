@@ -1,0 +1,290 @@
+# Security CI/CD Pipeline
+# Automated security scanning for HyperMachine
+# Runs on every push and PR, plus weekly scheduled scans
+
+name: Security
+
+on:
+  push:
+    branches: [master, main, develop]
+  pull_request:
+    branches: [master, main]
+  schedule:
+    # Run weekly on Sunday at midnight UTC
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ============================================================================
+  # Dependency Vulnerability Scanning
+  # ============================================================================
+  cargo-audit:
+    name: Cargo Audit (CVE Scanning)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: |
+          cargo audit --json > audit-results.json || true
+          cargo audit 2>&1 | tee audit-output.txt
+          
+          # Check for actual vulnerabilities (not warnings)
+          if grep -q "Vulnerability" audit-output.txt; then
+            echo "::error::Security vulnerabilities found!"
+            exit 1
+          fi
+
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-results
+          path: |
+            audit-results.json
+            audit-output.txt
+        if: always()
+
+  # ============================================================================
+  # Dependency License Compliance
+  # ============================================================================
+  cargo-deny:
+    name: Cargo Deny (License & Advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny
+
+      - name: Check licenses and advisories
+        run: cargo deny check
+        continue-on-error: true
+
+  # ============================================================================
+  # Static Application Security Testing (SAST)
+  # ============================================================================
+  clippy-security:
+    name: Clippy Security Lints
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy
+
+      - name: Run Clippy with security lints
+        run: |
+          cargo clippy --workspace --all-targets -- \
+            -D clippy::unwrap_used \
+            -D clippy::expect_used \
+            -D clippy::panic \
+            -D clippy::todo \
+            -D clippy::unimplemented \
+            -W clippy::pedantic \
+            2>&1 | tee clippy-output.txt
+        continue-on-error: true
+
+      - name: Upload Clippy results
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-security-results
+          path: clippy-output.txt
+        if: always()
+
+  # ============================================================================
+  # Memory Safety Analysis
+  # ============================================================================
+  miri:
+    name: Miri (Undefined Behavior Detection)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly with Miri
+        uses: dtolnay/rust-action@nightly
+        with:
+          components: miri
+
+      - name: Setup Miri
+        run: cargo miri setup
+
+      - name: Run Miri on hv2-core
+        run: |
+          cargo miri test -p hv2-core --lib 2>&1 | head -500 || true
+        continue-on-error: true
+
+  # ============================================================================
+  # Fuzzing Setup Check
+  # ============================================================================
+  fuzz-check:
+    name: Fuzz Targets Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-action@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Check fuzz targets compile
+        run: |
+          if [ -d "fuzz" ]; then
+            cd fuzz && cargo check
+          else
+            echo "No fuzz directory found - consider adding fuzz targets"
+          fi
+        continue-on-error: true
+
+  # ============================================================================
+  # Supply Chain Security
+  # ============================================================================
+  supply-chain:
+    name: Supply Chain Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Generate SBOM
+        run: |
+          cargo install cargo-cyclonedx
+          cargo cyclonedx --format json > sbom.json
+        continue-on-error: true
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+        if: always()
+
+      - name: Analyze dependency tree
+        run: |
+          cargo tree --duplicates > duplicate-deps.txt || true
+          cargo tree --edges features > feature-deps.txt || true
+
+      - name: Upload dependency analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-analysis
+          path: |
+            duplicate-deps.txt
+            feature-deps.txt
+        if: always()
+
+  # ============================================================================
+  # Secret Detection
+  # ============================================================================
+  secrets-scan:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  # ============================================================================
+  # CodeQL Analysis
+  # ============================================================================
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: 'rust'
+          queries: security-and-quality
+
+      - name: Build for CodeQL
+        run: cargo build --workspace
+        continue-on-error: true
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        continue-on-error: true
+
+  # ============================================================================
+  # Security Report Aggregation
+  # ============================================================================
+  security-report:
+    name: Security Report
+    runs-on: ubuntu-latest
+    needs: [cargo-audit, cargo-deny, clippy-security, secrets-scan]
+    if: always()
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: security-results
+
+      - name: Generate security summary
+        run: |
+          echo "# Security Scan Summary" > security-summary.md
+          echo "" >> security-summary.md
+          echo "**Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> security-summary.md
+          echo "" >> security-summary.md
+          
+          echo "## Job Results" >> security-summary.md
+          echo "| Check | Status |" >> security-summary.md
+          echo "|-------|--------|" >> security-summary.md
+          echo "| Cargo Audit | ${{ needs.cargo-audit.result }} |" >> security-summary.md
+          echo "| Cargo Deny | ${{ needs.cargo-deny.result }} |" >> security-summary.md
+          echo "| Clippy Security | ${{ needs.clippy-security.result }} |" >> security-summary.md
+          echo "| Secret Detection | ${{ needs.secrets-scan.result }} |" >> security-summary.md
+          echo "" >> security-summary.md
+          
+          echo "## Artifacts" >> security-summary.md
+          ls -la security-results/ >> security-summary.md || echo "No artifacts found" >> security-summary.md
+          
+          cat security-summary.md
+
+      - name: Upload security summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-summary
+          path: security-summary.md
+
+      - name: Post summary to PR
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "Security scan completed. Check artifacts for detailed results."

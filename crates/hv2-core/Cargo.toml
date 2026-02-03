@@ -20,6 +20,12 @@ bincode = { workspace = true }
 toml = { workspace = true }
 chrono = { workspace = true }
 bitflags = "2.4"
+rand = "0.8"
+
+[features]
+default = []
+fips = []
+ring = ["fips"]
 
 [dev-dependencies]
 proptest = { workspace = true }

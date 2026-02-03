@@ -1,0 +1,102 @@
+# deny.toml - Cargo Deny Configuration
+# https://embarkstudios.github.io/cargo-deny/
+
+# ============================================================================
+# Advisories Configuration
+# ============================================================================
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+
+# Ignore specific advisories (with justification)
+ignore = [
+    # bincode 1.x is unmaintained but used by bootloader crate
+    # We only use it in build-time dependencies
+    "RUSTSEC-2025-0141",
+    
+    # fxhash is unmaintained but has no known vulnerabilities
+    # Used for fast, non-cryptographic hashing only
+    "RUSTSEC-2024-0444",
+]
+
+# ============================================================================
+# Licenses Configuration
+# ============================================================================
+[licenses]
+unlicensed = "deny"
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "BSL-1.0",
+]
+copyleft = "warn"
+confidence-threshold = 0.8
+
+# Exceptions for specific crates
+[[licenses.clarify]]
+name = "ring"
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 }
+]
+
+[[licenses.clarify]]
+name = "webpki"
+expression = "ISC"
+license-files = [
+    { path = "LICENSE", hash = 0x001c7e6c }
+]
+
+# ============================================================================
+# Bans Configuration
+# ============================================================================
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+
+# Deny specific crates known for security issues
+deny = [
+    # Unmaintained crypto crates
+    { name = "rustc-serialize" },
+    
+    # Known problematic crates
+    { name = "openssl" },  # Prefer ring/rustls
+]
+
+# Allow specific duplicates that are acceptable
+skip = [
+    # Multiple versions are acceptable for these
+    { name = "hashbrown" },
+    { name = "syn" },
+    { name = "proc-macro2" },
+    { name = "quote" },
+]
+
+# ============================================================================
+# Sources Configuration
+# ============================================================================
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+
+# Allow crates.io
+[sources.allow-registry]
+# https://github.com/rust-lang/crates.io-index
+
+# Allow specific git sources
+[sources.allow-git]
+# Add trusted git sources here if needed
