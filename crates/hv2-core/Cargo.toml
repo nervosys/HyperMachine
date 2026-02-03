@@ -36,6 +36,10 @@ tracing-subscriber = { workspace = true }
 name = "crypto_bench"
 harness = false
 
+[[bench]]
+name = "vm_bench"
+harness = false
+
 [[example]]
 name = "serial_console"
 path = "examples/serial_console.rs"
