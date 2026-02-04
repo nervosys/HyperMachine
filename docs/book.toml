@@ -1,0 +1,51 @@
+[book]
+title = "HyperMachine Documentation"
+authors = ["Nervosys"]
+description = "Agentic hypervisors for autonomous AI systems"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = true
+
+[preprocessor.links]
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/nervosys/HyperMachine"
+edit-url-template = "https://github.com/nervosys/HyperMachine/edit/master/docs/{path}"
+site-url = "/HyperMachine/"
+cname = ""
+additional-css = ["theme/custom.css"]
+additional-js = []
+no-section-label = false
+fold.enable = true
+fold.level = 1
+
+[output.html.print]
+enable = true
+
+[output.html.fold]
+enable = true
+level = 0
+
+[output.html.playground]
+editable = true
+copyable = true
+copy-js = true
+line-numbers = true
+runnable = false
+
+[output.html.search]
+enable = true
+limit-results = 30
+teaser-word-count = 30
+use-hierarchical-headers = true
+boost-title = 2
+boost-hierarchy = 1
+boost-paragraph = 1
+expand = true
+heading-split-level = 3
+copy-js = true
