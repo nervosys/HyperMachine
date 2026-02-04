@@ -1,0 +1,4554 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>HyperMachine Documentation</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Agentic hypervisors for autonomous AI systems">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/custom-f2b2b484.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "rust";
+            const default_dark_theme = "ayu";
+            window.path_to_searchindex_js = "searchindex-c3981e48.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc-f4335d11.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">HyperMachine Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/nervosys/HyperMachine" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="hypermachine"><a class="header" href="#hypermachine">HyperMachine</a></h1>
+<div class="hero">
+<h2>Agentic Hypervisors for Autonomous AI Systems</h2>
+
+</div>
+
+<p><a href="https://github.com/nervosys/HyperMachine/actions"><img src="https://github.com/nervosys/HyperMachine/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+<a href="https://github.com/nervosys/HyperMachine/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg" alt="License"></a>
+<a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Rust"></a></p>
+<p><strong>HyperMachine</strong> is a high-performance hypervisor framework written in Rust with first-class AI agent support. It provides both Type-1 (bare-metal) and Type-2 (hosted) virtualization modes.</p>
+<h2 id="key-features"><a class="header" href="#key-features">Key Features</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Category</th><th>Capabilities</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Performance</strong></td><td>Zero-copy memory, JIT compilation, hardware GPU virtualization</td></tr>
+<tr><td><strong>Networking</strong></td><td>Full TCP/IP stack, TAP/TUN, gRPC/REST APIs, distributed orchestration</td></tr>
+<tr><td><strong>GPU</strong></td><td>Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL</td></tr>
+<tr><td><strong>AI-First</strong></td><td>MCP server, scriptable API, WASM plugins, LLM tool formats</td></tr>
+<tr><td><strong>GUI</strong></td><td>Desktop app, AI-driven automation, semantic control API</td></tr>
+<tr><td><strong>Security</strong></td><td>FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="why-hypermachine"><a class="header" href="#why-hypermachine">Why HyperMachine?</a></h2>
+<h3 id="built-for-ai-agents"><a class="header" href="#built-for-ai-agents">Built for AI Agents</a></h3>
+<p>HyperMachine is designed from the ground up for AI agent orchestration:</p>
+<ul>
+<li><strong>Model Context Protocol (MCP)</strong> server exposes all VM operations as tools</li>
+<li><strong>Native LLM tool formats</strong> for OpenAI, Anthropic Claude, and Google Gemini</li>
+<li><strong>Semantic GUI automation</strong> allows AI to control the desktop app programmatically</li>
+<li><strong>Python SDK</strong> for easy integration with AI frameworks</li>
+</ul>
+<h3 id="high-performance"><a class="header" href="#high-performance">High Performance</a></h3>
+<ul>
+<li>Written in Rust for memory safety and zero-cost abstractions</li>
+<li>Hardware-accelerated virtualization (KVM, WHPX, HVF)</li>
+<li>Zero-copy memory operations</li>
+<li>GPU passthrough and virtual GPU support</li>
+</ul>
+<h3 id="production-ready"><a class="header" href="#production-ready">Production Ready</a></h3>
+<ul>
+<li>FIPS 140-3 compliant cryptography</li>
+<li>Comprehensive audit logging</li>
+<li>Kubernetes and Terraform deployment support</li>
+<li>REST and gRPC APIs</li>
+</ul>
+<h2 id="quick-example"><a class="header" href="#quick-example">Quick Example</a></h2>
+<pre><code class="language-bash"># Create and run a VM
+hm t2 create --name ai-sandbox --cpu 4 --memory 8G --gpu
+hm t2 start ai-sandbox
+
+# Start MCP server for AI agents
+hm mcp serve --api-key "your-key"
+</code></pre>
+<pre><code class="language-python">from hypermachine import HyperMachine
+
+hm = HyperMachine("http://localhost:8080", api_key="your-key")
+vm = hm.create_vm("sandbox", cpu=4, memory="8G", gpu=True)
+vm.start()
+vm.exec("echo 'Hello from AI agent'")
+</code></pre>
+<h2 id="get-started"><a class="header" href="#get-started">Get Started</a></h2>
+<ul>
+<li><strong><a href="#installation">Installation</a></strong> - Install HyperMachine on your system</li>
+<li><strong><a href="#quick-start">Quick Start</a></strong> - Create your first VM in minutes</li>
+<li><strong><a href="#ai-integration-overview">AI Integration</a></strong> - Connect AI agents to HyperMachine</li>
+</ul>
+<h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
+<pre><code>+---------------------------------------------------------+
+|                   AI Agent Interface                     |
+|            (MCP Server - OpenAI/Claude/Gemini)          |
++---------------------------------------------------------+
+|                    Remote API Layer                      |
+|                  (gRPC - REST - WebSocket)              |
++-------------+-------------+-------------+----------------+
+|     CPU     |     GPU     |   Network   |     Memory     |
+|  Emulation  |   Vulkan    |   TAP/TUN   |   Management   |
++-------------+-------------+-------------+----------------+
+|                     HyperMachine Core                    |
+|         HV2 (KVM/WHPX/HVF) - HV1 (VMX/SVM bare-metal)  |
++---------------------------------------------------------+
+</code></pre>
+<h2 id="license"><a class="header" href="#license">License</a></h2>
+<p>HyperMachine is dual-licensed under MIT OR Apache-2.0.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>This guide covers installing HyperMachine on various platforms.</p>
+<h2 id="requirements"><a class="header" href="#requirements">Requirements</a></h2>
+<h3 id="system-requirements"><a class="header" href="#system-requirements">System Requirements</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Component</th><th>Minimum</th><th>Recommended</th></tr>
+</thead>
+<tbody>
+<tr><td>CPU</td><td>x86_64 with VT-x/AMD-V</td><td>Modern CPU with VT-d/AMD-Vi</td></tr>
+<tr><td>RAM</td><td>8 GB</td><td>32 GB+</td></tr>
+<tr><td>Storage</td><td>20 GB</td><td>100 GB+ SSD</td></tr>
+<tr><td>OS</td><td>Linux 5.10+, Windows 10+, macOS 12+</td><td>Latest stable</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="platform-specific-requirements"><a class="header" href="#platform-specific-requirements">Platform-Specific Requirements</a></h3>
+<p><strong>Linux:</strong></p>
+<ul>
+<li>KVM kernel module (<code>kvm</code>, <code>kvm_intel</code> or <code>kvm_amd</code>)</li>
+<li><code>/dev/kvm</code> access (add user to <code>kvm</code> group)</li>
+</ul>
+<p><strong>Windows:</strong></p>
+<ul>
+<li>Windows Hypervisor Platform (WHPX) enabled</li>
+<li>Hyper-V capabilities</li>
+</ul>
+<p><strong>macOS:</strong></p>
+<ul>
+<li>Hypervisor.framework support (Apple Silicon or Intel)</li>
+</ul>
+<h2 id="installation-methods"><a class="header" href="#installation-methods">Installation Methods</a></h2>
+<h3 id="from-source-recommended"><a class="header" href="#from-source-recommended">From Source (Recommended)</a></h3>
+<pre><code class="language-bash"># Clone the repository
+git clone https://github.com/nervosys/HyperMachine
+cd HyperMachine
+
+# Build release binaries
+cargo build --release
+
+# Install to system path
+cargo install --path crates/hm-cli
+</code></pre>
+<h3 id="pre-built-binaries"><a class="header" href="#pre-built-binaries">Pre-built Binaries</a></h3>
+<p>Download from <a href="https://github.com/nervosys/HyperMachine/releases">GitHub Releases</a>:</p>
+<pre><code class="language-bash"># Linux
+curl -LO https://github.com/nervosys/HyperMachine/releases/latest/download/hm-linux-x86_64.tar.gz
+tar xzf hm-linux-x86_64.tar.gz
+sudo mv hm /usr/local/bin/
+
+# macOS
+curl -LO https://github.com/nervosys/HyperMachine/releases/latest/download/hm-darwin-arm64.tar.gz
+tar xzf hm-darwin-arm64.tar.gz
+sudo mv hm /usr/local/bin/
+
+# Windows (PowerShell)
+Invoke-WebRequest -Uri "https://github.com/nervosys/HyperMachine/releases/latest/download/hm-windows-x86_64.zip" -OutFile hm.zip
+Expand-Archive hm.zip -DestinationPath C:\Program Files\HyperMachine
+</code></pre>
+<h3 id="cargo-install"><a class="header" href="#cargo-install">Cargo Install</a></h3>
+<pre><code class="language-bash">cargo install hypermachine
+</code></pre>
+<h3 id="docker"><a class="header" href="#docker">Docker</a></h3>
+<pre><code class="language-bash">docker pull ghcr.io/nervosys/hypermachine:latest
+docker run -it --privileged ghcr.io/nervosys/hypermachine:latest
+</code></pre>
+<h2 id="verify-installation"><a class="header" href="#verify-installation">Verify Installation</a></h2>
+<pre><code class="language-bash"># Check version
+hm --version
+
+# Verify hypervisor support
+hm doctor
+
+# Expected output:
+# ✓ Hypervisor support: KVM
+# ✓ CPU virtualization: Intel VT-x
+# ✓ IOMMU support: Intel VT-d
+# ✓ GPU passthrough: Available
+</code></pre>
+<h2 id="post-installation-setup"><a class="header" href="#post-installation-setup">Post-Installation Setup</a></h2>
+<h3 id="linux-kvm-permissions"><a class="header" href="#linux-kvm-permissions">Linux: KVM Permissions</a></h3>
+<pre><code class="language-bash"># Add user to kvm group
+sudo usermod -aG kvm $USER
+
+# Verify access
+ls -la /dev/kvm
+</code></pre>
+<h3 id="windows-enable-whpx"><a class="header" href="#windows-enable-whpx">Windows: Enable WHPX</a></h3>
+<pre><code class="language-powershell"># Enable Windows Hypervisor Platform
+Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform
+
+# Restart required
+Restart-Computer
+</code></pre>
+<h3 id="macos-hypervisor-entitlements"><a class="header" href="#macos-hypervisor-entitlements">macOS: Hypervisor Entitlements</a></h3>
+<p>For development builds, you may need to sign with hypervisor entitlements:</p>
+<pre><code class="language-bash">codesign --entitlements entitlements.plist --force -s - ./target/release/hm
+</code></pre>
+<h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
+<ul>
+<li><a href="#quick-start">Quick Start</a> - Create your first VM</li>
+<li><a href="#configuration">Configuration</a> - Configure HyperMachine settings</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<p>Get up and running with HyperMachine in under 5 minutes.</p>
+<h2 id="create-your-first-vm"><a class="header" href="#create-your-first-vm">Create Your First VM</a></h2>
+<h3 id="using-the-cli"><a class="header" href="#using-the-cli">Using the CLI</a></h3>
+<pre><code class="language-bash"># Create a VM with 4 CPUs, 8GB RAM, and GPU support
+hm t2 create --name my-first-vm --cpu 4 --memory 8G --gpu
+
+# List VMs
+hm t2 list
+
+# Start the VM
+hm t2 start my-first-vm
+
+# Connect to console
+hm t2 console my-first-vm
+
+# Stop the VM
+hm t2 stop my-first-vm
+
+# Delete the VM
+hm t2 delete my-first-vm
+</code></pre>
+<h3 id="using-the-gui"><a class="header" href="#using-the-gui">Using the GUI</a></h3>
+<ol>
+<li>
+<p>Launch the HyperMachine GUI:</p>
+<pre><code class="language-bash">hm-gui
+</code></pre>
+</li>
+<li>
+<p>Click <strong>Create VM</strong> button</p>
+</li>
+<li>
+<p>Fill in the VM settings:</p>
+<ul>
+<li><strong>Name:</strong> <code>my-first-vm</code></li>
+<li><strong>CPUs:</strong> <code>4</code></li>
+<li><strong>Memory:</strong> <code>8192</code> MB</li>
+<li><strong>Enable GPU:</strong> ✓</li>
+</ul>
+</li>
+<li>
+<p>Click <strong>Create</strong></p>
+</li>
+<li>
+<p>Select the VM and click <strong>Start</strong></p>
+</li>
+</ol>
+<h2 id="start-the-mcp-server"><a class="header" href="#start-the-mcp-server">Start the MCP Server</a></h2>
+<p>The MCP (Model Context Protocol) server allows AI agents to control HyperMachine:</p>
+<pre><code class="language-bash"># Start the server with an API key
+hm mcp serve --api-key "your-secret-key" --port 8080
+
+# Or use environment variable
+export HM_API_KEY="your-secret-key"
+hm mcp serve
+</code></pre>
+<h3 id="discover-available-tools"><a class="header" href="#discover-available-tools">Discover Available Tools</a></h3>
+<pre><code class="language-bash"># List all available tools
+curl http://localhost:8080/mcp/tools | jq
+
+# Get tools in OpenAI format (for GPT-4, o1, o3)
+curl http://localhost:8080/agentic/tools/openai
+
+# Get tools in Anthropic format (for Claude)
+curl http://localhost:8080/agentic/tools/anthropic
+
+# Get tools in Google format (for Gemini)
+curl http://localhost:8080/agentic/tools/gemini
+</code></pre>
+<h3 id="execute-a-tool"><a class="header" href="#execute-a-tool">Execute a Tool</a></h3>
+<pre><code class="language-bash">curl -X POST http://localhost:8080/mcp/call \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-secret-key" \
+  -d '{
+    "tool": "vm.create",
+    "arguments": {
+      "name": "ai-sandbox",
+      "cpu_cores": 4,
+      "memory_mb": 8192,
+      "enable_gpu": true
+    }
+  }'
+</code></pre>
+<h2 id="python-sdk"><a class="header" href="#python-sdk">Python SDK</a></h2>
+<p>Install the Python SDK:</p>
+<pre><code class="language-bash">pip install hypermachine
+</code></pre>
+<p>Use it in your code:</p>
+<pre><code class="language-python">from hypermachine import HyperMachine
+
+# Connect to HyperMachine
+hm = HyperMachine("http://localhost:8080", api_key="your-secret-key")
+
+# Create a VM
+vm = hm.create_vm(
+    name="python-vm",
+    cpu=4,
+    memory="8G",
+    gpu=True
+)
+
+# Start the VM
+vm.start()
+
+# Execute a command
+result = vm.exec("uname -a")
+print(result.stdout)
+
+# Stop and delete
+vm.stop()
+vm.delete()
+</code></pre>
+<h2 id="ai-agent-integration"><a class="header" href="#ai-agent-integration">AI Agent Integration</a></h2>
+<h3 id="openai-gpt-4"><a class="header" href="#openai-gpt-4">OpenAI GPT-4</a></h3>
+<pre><code class="language-python">import openai
+import requests
+
+# Get HyperMachine tools in OpenAI format
+tools = requests.get("http://localhost:8080/agentic/tools/openai").json()
+
+# Use with OpenAI
+client = openai.OpenAI()
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[{"role": "user", "content": "Create a VM named ai-test with 4 CPUs"}],
+    tools=tools
+)
+
+# Execute the tool call
+if response.choices[0].message.tool_calls:
+    tool_call = response.choices[0].message.tool_calls[0]
+    result = requests.post(
+        "http://localhost:8080/mcp/call",
+        headers={"Authorization": "Bearer your-secret-key"},
+        json={
+            "tool": tool_call.function.name,
+            "arguments": json.loads(tool_call.function.arguments)
+        }
+    )
+</code></pre>
+<h3 id="anthropic-claude"><a class="header" href="#anthropic-claude">Anthropic Claude</a></h3>
+<pre><code class="language-python">import anthropic
+import requests
+
+# Get HyperMachine tools in Anthropic format
+tools = requests.get("http://localhost:8080/agentic/tools/anthropic").json()
+
+# Use with Claude
+client = anthropic.Anthropic()
+response = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Create a VM for running ML experiments"}],
+    tools=tools
+)
+</code></pre>
+<h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
+<ul>
+<li><a href="#configuration">Configuration</a> - Customize HyperMachine settings</li>
+<li><a href="#architecture-overview">Architecture Overview</a> - Understand how HyperMachine works</li>
+<li><a href="#ai-integration-overview">AI Integration Guide</a> - Deep dive into AI agent support</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="configuration"><a class="header" href="#configuration">Configuration</a></h1>
+<p>HyperMachine can be configured through configuration files, environment variables, or command-line arguments.</p>
+<h2 id="configuration-file"><a class="header" href="#configuration-file">Configuration File</a></h2>
+<p>The default configuration file location is:</p>
+<ul>
+<li><strong>Linux/macOS:</strong> <code>~/.config/hypermachine/config.toml</code></li>
+<li><strong>Windows:</strong> <code>%APPDATA%\hypermachine\config.toml</code></li>
+</ul>
+<h3 id="example-configuration"><a class="header" href="#example-configuration">Example Configuration</a></h3>
+<pre><code class="language-toml">[general]
+log_level = "info"  # trace, debug, info, warn, error
+data_dir = "/var/lib/hypermachine"
+
+[server]
+host = "127.0.0.1"
+port = 8080
+api_key = "your-secret-key"  # Or use HM_API_KEY env var
+tls_enabled = true
+tls_cert = "/etc/hypermachine/cert.pem"
+tls_key = "/etc/hypermachine/key.pem"
+
+[vm.defaults]
+cpu_cores = 2
+memory_mb = 4096
+enable_gpu = false
+network_mode = "nat"  # nat, bridge, host
+
+[hypervisor]
+backend = "auto"  # auto, kvm, whpx, hvf
+nested_virtualization = false
+
+[gpu]
+enabled = true
+passthrough = false
+virtual_gpu = true
+vulkan_enabled = true
+
+[network]
+default_bridge = "hm0"
+dns_servers = ["8.8.8.8", "8.8.4.4"]
+enable_ipv6 = true
+
+[security]
+seccomp_enabled = true
+capability_mode = "strict"  # strict, permissive
+audit_logging = true
+audit_log_path = "/var/log/hypermachine/audit.log"
+
+[crypto]
+fips_mode = false
+default_cipher = "aes-256-gcm"
+key_derivation = "hkdf-sha256"
+
+[mcp]
+enabled = true
+max_concurrent_operations = 100
+operation_timeout_secs = 300
+</code></pre>
+<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>Description</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><code>HM_API_KEY</code></td><td>API key for authentication</td><td>None</td></tr>
+<tr><td><code>HM_LOG_LEVEL</code></td><td>Logging verbosity</td><td><code>info</code></td></tr>
+<tr><td><code>HM_DATA_DIR</code></td><td>Data storage directory</td><td>Platform-specific</td></tr>
+<tr><td><code>HM_CONFIG_FILE</code></td><td>Custom config file path</td><td>Default location</td></tr>
+<tr><td><code>HM_HYPERVISOR</code></td><td>Force hypervisor backend</td><td><code>auto</code></td></tr>
+<tr><td><code>HM_TLS_CERT</code></td><td>TLS certificate path</td><td>None</td></tr>
+<tr><td><code>HM_TLS_KEY</code></td><td>TLS private key path</td><td>None</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="command-line-arguments"><a class="header" href="#command-line-arguments">Command-Line Arguments</a></h2>
+<p>All configuration options can be overridden via CLI:</p>
+<pre><code class="language-bash"># Override server port
+hm mcp serve --port 9090
+
+# Override log level
+hm --log-level debug t2 list
+
+# Use custom config file
+hm --config /path/to/config.toml t2 create --name test
+
+# Multiple overrides
+hm mcp serve \
+  --port 8443 \
+  --tls-cert /etc/ssl/cert.pem \
+  --tls-key /etc/ssl/key.pem \
+  --api-key "production-key"
+</code></pre>
+<h2 id="vm-specific-configuration"><a class="header" href="#vm-specific-configuration">VM-Specific Configuration</a></h2>
+<p>Each VM can have its own configuration in <code>&lt;data_dir&gt;/vms/&lt;vm-name&gt;/config.toml</code>:</p>
+<pre><code class="language-toml">[vm]
+name = "my-vm"
+uuid = "550e8400-e29b-41d4-a716-446655440000"
+
+[hardware]
+cpu_cores = 4
+memory_mb = 8192
+cpu_model = "host"  # host, qemu64, max
+
+[gpu]
+enabled = true
+passthrough_device = "0000:01:00.0"  # PCI address for passthrough
+
+[storage]
+[[storage.disks]]
+path = "disk0.qcow2"
+format = "qcow2"
+size_gb = 100
+
+[[storage.disks]]
+path = "/dev/nvme0n1"
+format = "raw"
+readonly = false
+
+[network]
+[[network.interfaces]]
+type = "virtio"
+mode = "nat"
+mac = "52:54:00:12:34:56"
+
+[[network.interfaces]]
+type = "virtio"
+mode = "bridge"
+bridge = "br0"
+
+[boot]
+firmware = "uefi"  # bios, uefi
+secure_boot = true
+boot_order = ["disk", "network"]
+</code></pre>
+<h2 id="security-profiles"><a class="header" href="#security-profiles">Security Profiles</a></h2>
+<p>Pre-defined security profiles for different use cases:</p>
+<pre><code class="language-bash"># High security (production)
+hm t2 create --name secure-vm --security-profile high
+
+# Development (more permissive)
+hm t2 create --name dev-vm --security-profile development
+
+# AI sandbox (isolated with network access)
+hm t2 create --name ai-vm --security-profile ai-sandbox
+</code></pre>
+<h3 id="profile-definitions"><a class="header" href="#profile-definitions">Profile Definitions</a></h3>
+<p><strong>high:</strong></p>
+<pre><code class="language-toml">[security]
+seccomp_enabled = true
+capability_mode = "strict"
+network_isolation = true
+audit_logging = true
+</code></pre>
+<p><strong>development:</strong></p>
+<pre><code class="language-toml">[security]
+seccomp_enabled = false
+capability_mode = "permissive"
+network_isolation = false
+audit_logging = false
+</code></pre>
+<p><strong>ai-sandbox:</strong></p>
+<pre><code class="language-toml">[security]
+seccomp_enabled = true
+capability_mode = "strict"
+network_isolation = false  # AI needs network
+audit_logging = true
+resource_limits.cpu_percent = 80
+resource_limits.memory_percent = 75
+</code></pre>
+<h2 id="next-steps-2"><a class="header" href="#next-steps-2">Next Steps</a></h2>
+<ul>
+<li><a href="#architecture-overview">Architecture Overview</a> - Understand HyperMachine internals</li>
+<li><a href="#security-overview">Security Guide</a> - Configure security settings</li>
+<li><a href="#ai-integration-overview">AI Integration</a> - Set up AI agent access</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h1>
+<p>HyperMachine is a modular hypervisor framework supporting both Type-1 (bare-metal) and Type-2 (hosted) virtualization.</p>
+<h2 id="system-architecture"><a class="header" href="#system-architecture">System Architecture</a></h2>
+<pre><code>+---------------------------------------------------------+
+|                   AI Agent Interface                     |
+|            (MCP Server - OpenAI/Claude/Gemini)          |
++---------------------------------------------------------+
+|                    Remote API Layer                      |
+|                  (gRPC - REST - WebSocket)              |
++-------------+-------------+-------------+----------------+
+|     CPU     |     GPU     |   Network   |     Memory     |
+|  Emulation  |   Vulkan    |   TAP/TUN   |   Management   |
++-------------+-------------+-------------+----------------+
+|                     HyperMachine Core                    |
+|         HV2 (KVM/WHPX/HVF) - HV1 (VMX/SVM bare-metal)  |
++---------------------------------------------------------+
+|                      Hardware                            |
+|          CPU (VT-x/AMD-V) - GPU - NIC - Storage         |
++---------------------------------------------------------+
+</code></pre>
+<h2 id="components"><a class="header" href="#components">Components</a></h2>
+<h3 id="hypermachine-core-hv2-core"><a class="header" href="#hypermachine-core-hv2-core">HyperMachine Core (<code>hv2-core</code>)</a></h3>
+<p>The core virtualization engine providing:</p>
+<ul>
+<li><strong>CPU Virtualization</strong> - Hardware-assisted (KVM, WHPX, HVF) or emulated</li>
+<li><strong>Memory Management</strong> - EPT/NPT, memory ballooning, zero-copy transfers</li>
+<li><strong>Device Emulation</strong> - virtio devices, ACPI, PCI passthrough</li>
+<li><strong>Interrupt Handling</strong> - APIC emulation, MSI/MSI-X support</li>
+</ul>
+<h3 id="type-1-hypervisor-hv1-boot"><a class="header" href="#type-1-hypervisor-hv1-boot">Type-1 Hypervisor (<code>hv1-boot</code>)</a></h3>
+<p>Bare-metal hypervisor booting directly on hardware:</p>
+<ul>
+<li>Custom bootloader (UEFI/BIOS)</li>
+<li>Direct VMX/SVM control</li>
+<li>Minimal attack surface</li>
+<li>Suitable for high-security deployments</li>
+</ul>
+<h3 id="type-2-hypervisor-hv2-core"><a class="header" href="#type-2-hypervisor-hv2-core">Type-2 Hypervisor (<code>hv2-core</code>)</a></h3>
+<p>Hosted hypervisor running on existing OS:</p>
+<ul>
+<li>Uses host OS hypervisor APIs (KVM, WHPX, HVF)</li>
+<li>Easy installation and integration</li>
+<li>Suitable for development and general use</li>
+</ul>
+<h3 id="api-layer-hv2-api"><a class="header" href="#api-layer-hv2-api">API Layer (<code>hv2-api</code>)</a></h3>
+<p>Multiple API interfaces for different use cases:</p>
+<ul>
+<li><strong>REST API</strong> - HTTP/JSON for web integration</li>
+<li><strong>gRPC API</strong> - High-performance binary protocol</li>
+<li><strong>WebSocket</strong> - Real-time streaming and console access</li>
+</ul>
+<h3 id="ai-agent-interface-hv2-agent"><a class="header" href="#ai-agent-interface-hv2-agent">AI Agent Interface (<code>hv2-agent</code>)</a></h3>
+<p>Specialized layer for AI agent integration:</p>
+<ul>
+<li><strong>MCP Server</strong> - Model Context Protocol implementation</li>
+<li><strong>Tool Definitions</strong> - Native formats for OpenAI, Anthropic, Google</li>
+<li><strong>Semantic Operations</strong> - High-level VM operations as tools</li>
+</ul>
+<h3 id="cli--gui-hm-cli-hm-gui"><a class="header" href="#cli--gui-hm-cli-hm-gui">CLI &amp; GUI (<code>hm-cli</code>, <code>hm-gui</code>)</a></h3>
+<p>User interfaces:</p>
+<ul>
+<li><strong>CLI</strong> - Command-line interface for scripting and automation</li>
+<li><strong>GUI</strong> - Desktop application with AI-driven automation API</li>
+</ul>
+<h2 id="data-flow"><a class="header" href="#data-flow">Data Flow</a></h2>
+<h3 id="vm-creation-flow"><a class="header" href="#vm-creation-flow">VM Creation Flow</a></h3>
+<pre><code>┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│  AI Agent    │────▶│  MCP Server  │────▶│   VM Core    │
+│  (Claude)    │     │  (Tool Call) │     │  (Create VM) │
+└──────────────┘     └──────────────┘     └──────────────┘
+                                                  │
+                     ┌──────────────┐     ┌──────────────┐
+                     │   Response   │◀────│  Hypervisor  │
+                     │   (VM ID)    │     │  (KVM/WHPX)  │
+                     └──────────────┘     └──────────────┘
+</code></pre>
+<h3 id="memory-architecture"><a class="header" href="#memory-architecture">Memory Architecture</a></h3>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                    Guest Physical Memory                 │
+├─────────────────────────────────────────────────────────┤
+│                    EPT/NPT Translation                   │
+├─────────────────────────────────────────────────────────┤
+│                    Host Physical Memory                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐│
+│  │  VM 1    │  │  VM 2    │  │  Shared  │  │  Device  ││
+│  │  Memory  │  │  Memory  │  │  Pages   │  │  Memory  ││
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘│
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="crate-structure"><a class="header" href="#crate-structure">Crate Structure</a></h2>
+<pre><code>crates/
+├── hm-cli          # CLI application + MCP server
+├── hm-gui          # Desktop GUI with automation API
+├── hv1-boot        # Type-1 bare-metal bootloader
+├── hv2-core        # Core virtualization engine
+│   ├── cpu/        # CPU emulation and VMX/SVM
+│   ├── memory/     # Memory management
+│   ├── device/     # Device emulation
+│   ├── crypto/     # FIPS 140-3 cryptography
+│   └── network/    # Network stack
+├── hv2-api         # REST/gRPC API layer
+└── hv2-agent       # AI agent interface
+</code></pre>
+<h2 id="platform-support"><a class="header" href="#platform-support">Platform Support</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Platform</th><th>Hypervisor Backend</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td>Linux</td><td>KVM</td><td>✅ Full support</td></tr>
+<tr><td>Windows</td><td>WHPX</td><td>✅ Full support</td></tr>
+<tr><td>macOS</td><td>HVF</td><td>✅ Full support</td></tr>
+<tr><td>Bare-metal</td><td>VMX/SVM</td><td>🚧 In development</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="next-steps-3"><a class="header" href="#next-steps-3">Next Steps</a></h2>
+<ul>
+<li><a href="#type-1-hypervisor">Type-1 Hypervisor</a> - Bare-metal architecture details</li>
+<li><a href="#type-2-hypervisor">Type-2 Hypervisor</a> - Hosted mode architecture</li>
+<li><a href="#memory-management">Memory Management</a> - Memory subsystem details</li>
+<li><a href="#gpu-virtualization">GPU Virtualization</a> - GPU passthrough and virtual GPU</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="type-1-hypervisor"><a class="header" href="#type-1-hypervisor">Type-1 Hypervisor</a></h1>
+<p>The Type-1 (bare-metal) hypervisor runs directly on hardware without a host operating system.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                     Guest VMs                            │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐           │
+│  │   VM 1    │  │   VM 2    │  │   VM N    │           │
+│  │  (Linux)  │  │ (Windows) │  │  (Guest)  │           │
+│  └───────────┘  └───────────┘  └───────────┘           │
+├─────────────────────────────────────────────────────────┤
+│              HyperMachine Type-1 Hypervisor             │
+│         (Direct VMX/SVM control, no host OS)            │
+├─────────────────────────────────────────────────────────┤
+│                      Hardware                            │
+│    CPU (VT-x/AMD-V)  •  RAM  •  GPU  •  NIC  •  Storage│
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="boot-process"><a class="header" href="#boot-process">Boot Process</a></h2>
+<h3 id="uefi-boot"><a class="header" href="#uefi-boot">UEFI Boot</a></h3>
+<ol>
+<li><strong>Firmware Initialization</strong> - UEFI firmware loads HyperMachine bootloader</li>
+<li><strong>Memory Detection</strong> - Detect and map physical memory via UEFI memory map</li>
+<li><strong>CPU Initialization</strong> - Enable VMX/SVM on all cores</li>
+<li><strong>Hypervisor Setup</strong> - Initialize VMCS/VMCB structures</li>
+<li><strong>Service VM Boot</strong> - Launch management VM for administration</li>
+</ol>
+<h3 id="boot-sequence"><a class="header" href="#boot-sequence">Boot Sequence</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Simplified boot sequence
+fn hypervisor_main(boot_info: &amp;BootInfo) {
+    // Initialize memory management
+    let mut memory = PhysicalMemory::from_uefi_map(&amp;boot_info.memory_map);
+    
+    // Enable VMX on all cores
+    for cpu in 0..boot_info.cpu_count {
+        vmx::enable_vmx(cpu)?;
+        vmx::setup_vmcs(cpu)?;
+    }
+    
+    // Initialize device passthrough
+    iommu::initialize()?;
+    
+    // Launch service VM
+    let service_vm = Vm::create_service_vm(&amp;memory)?;
+    service_vm.start()?;
+}
+<span class="boring">}</span></code></pre>
+<h2 id="vmxsvm-implementation"><a class="header" href="#vmxsvm-implementation">VMX/SVM Implementation</a></h2>
+<h3 id="intel-vt-x-vmx"><a class="header" href="#intel-vt-x-vmx">Intel VT-x (VMX)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Vmcs {
+    guest_state: GuestState,
+    host_state: HostState,
+    vm_execution_controls: ExecutionControls,
+    vm_exit_controls: ExitControls,
+    vm_entry_controls: EntryControls,
+}
+
+impl Vmcs {
+    pub fn vm_enter(&amp;mut self) -&gt; VmExitReason {
+        // Save host state
+        self.save_host_state();
+        
+        // Load guest state
+        self.load_guest_state();
+        
+        // Execute VMLAUNCH/VMRESUME
+        unsafe {
+            vmx::vmlaunch()
+        }
+    }
+    
+    pub fn handle_vm_exit(&amp;mut self, reason: VmExitReason) {
+        match reason {
+            VmExitReason::IoInstruction(port, direction) =&gt; {
+                self.emulate_io(port, direction);
+            }
+            VmExitReason::Msr(msr, direction) =&gt; {
+                self.emulate_msr(msr, direction);
+            }
+            VmExitReason::Ept(violation) =&gt; {
+                self.handle_ept_violation(violation);
+            }
+            // ... other exit reasons
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="amd-v-svm"><a class="header" href="#amd-v-svm">AMD-V (SVM)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Vmcb {
+    control_area: VmcbControl,
+    state_save_area: VmcbStateSave,
+}
+
+impl Vmcb {
+    pub fn vm_run(&amp;mut self) -&gt; VmExitCode {
+        unsafe {
+            svm::vmrun(&amp;mut self.control_area, &amp;mut self.state_save_area)
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="memory-virtualization"><a class="header" href="#memory-virtualization">Memory Virtualization</a></h2>
+<h3 id="extended-page-tables-ept---intel"><a class="header" href="#extended-page-tables-ept---intel">Extended Page Tables (EPT) - Intel</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Ept {
+    pml4: Box&lt;EptPml4&gt;,
+}
+
+impl Ept {
+    pub fn map_guest_memory(
+        &amp;mut self,
+        guest_physical: u64,
+        host_physical: u64,
+        permissions: EptPermissions,
+    ) {
+        let pml4_idx = (guest_physical &gt;&gt; 39) &amp; 0x1FF;
+        let pdpt_idx = (guest_physical &gt;&gt; 30) &amp; 0x1FF;
+        let pd_idx = (guest_physical &gt;&gt; 21) &amp; 0x1FF;
+        let pt_idx = (guest_physical &gt;&gt; 12) &amp; 0x1FF;
+        
+        // Walk and create page tables as needed
+        // Map guest physical to host physical with permissions
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="nested-page-tables-npt---amd"><a class="header" href="#nested-page-tables-npt---amd">Nested Page Tables (NPT) - AMD</a></h3>
+<p>Similar structure to EPT, using AMD’s nested paging implementation.</p>
+<h2 id="device-passthrough"><a class="header" href="#device-passthrough">Device Passthrough</a></h2>
+<h3 id="iommu-vt-d--amd-vi"><a class="header" href="#iommu-vt-d--amd-vi">IOMMU (VT-d / AMD-Vi)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Iommu {
+    dmar_units: Vec&lt;DmarUnit&gt;,
+    device_mappings: HashMap&lt;PciAddress, VmId&gt;,
+}
+
+impl Iommu {
+    pub fn assign_device_to_vm(
+        &amp;mut self,
+        device: PciAddress,
+        vm: VmId,
+    ) -&gt; Result&lt;()&gt; {
+        // Program IOMMU to redirect device DMA to VM's memory space
+        let domain = self.get_or_create_domain(vm);
+        domain.map_device(device)?;
+        
+        // Update interrupt remapping
+        self.configure_interrupt_remapping(device, vm)?;
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="security-considerations"><a class="header" href="#security-considerations">Security Considerations</a></h2>
+<h3 id="isolation-guarantees"><a class="header" href="#isolation-guarantees">Isolation Guarantees</a></h3>
+<ul>
+<li><strong>Memory Isolation</strong> - EPT/NPT prevents VMs from accessing each other’s memory</li>
+<li><strong>Device Isolation</strong> - IOMMU prevents DMA attacks</li>
+<li><strong>Interrupt Isolation</strong> - Interrupt remapping prevents interrupt injection</li>
+</ul>
+<h3 id="attack-surface"><a class="header" href="#attack-surface">Attack Surface</a></h3>
+<p>The Type-1 hypervisor has a minimal attack surface:</p>
+<ul>
+<li>No host OS kernel vulnerabilities</li>
+<li>Direct hardware control</li>
+<li>Small trusted computing base (TCB)</li>
+</ul>
+<h2 id="use-cases"><a class="header" href="#use-cases">Use Cases</a></h2>
+<ul>
+<li><strong>High-Security Environments</strong> - Government, financial services</li>
+<li><strong>Cloud Infrastructure</strong> - Multi-tenant isolation</li>
+<li><strong>Embedded Systems</strong> - Automotive, industrial control</li>
+<li><strong>AI Compute Clusters</strong> - Isolated GPU workloads</li>
+</ul>
+<h2 id="next-steps-4"><a class="header" href="#next-steps-4">Next Steps</a></h2>
+<ul>
+<li><a href="#type-2-hypervisor">Type-2 Hypervisor</a> - Hosted mode for development</li>
+<li><a href="#memory-management">Memory Management</a> - Memory subsystem details</li>
+<li><a href="#security-overview">Security Overview</a> - Security architecture</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="type-2-hypervisor"><a class="header" href="#type-2-hypervisor">Type-2 Hypervisor</a></h1>
+<p>The Type-2 (hosted) hypervisor runs on top of an existing operating system, leveraging the host’s hypervisor APIs.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                     Guest VMs                            │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐           │
+│  │   VM 1    │  │   VM 2    │  │   VM N    │           │
+│  │  (Linux)  │  │ (Windows) │  │  (Guest)  │           │
+│  └───────────┘  └───────────┘  └───────────┘           │
+├─────────────────────────────────────────────────────────┤
+│              HyperMachine Type-2 (hv2-core)             │
+├─────────────────────────────────────────────────────────┤
+│                   Host Hypervisor API                    │
+│            KVM (Linux) / WHPX (Windows) / HVF (macOS)   │
+├─────────────────────────────────────────────────────────┤
+│                      Host OS Kernel                      │
+├─────────────────────────────────────────────────────────┤
+│                       Hardware                           │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="platform-backends"><a class="header" href="#platform-backends">Platform Backends</a></h2>
+<h3 id="linux---kvm"><a class="header" href="#linux---kvm">Linux - KVM</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct KvmBackend {
+    kvm: File,           // /dev/kvm
+    vm_fd: VmFd,         // VM file descriptor
+    vcpus: Vec&lt;VcpuFd&gt;,  // vCPU file descriptors
+}
+
+impl KvmBackend {
+    pub fn new() -&gt; Result&lt;Self&gt; {
+        let kvm = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/kvm")?;
+        
+        // Check KVM API version
+        let api_version = unsafe { ioctl(&amp;kvm, KVM_GET_API_VERSION) };
+        assert_eq!(api_version, 12);
+        
+        // Create VM
+        let vm_fd = unsafe { ioctl(&amp;kvm, KVM_CREATE_VM, 0) };
+        
+        Ok(Self { kvm, vm_fd, vcpus: vec![] })
+    }
+    
+    pub fn create_vcpu(&amp;mut self, id: u32) -&gt; Result&lt;VcpuFd&gt; {
+        let vcpu_fd = unsafe { ioctl(&amp;self.vm_fd, KVM_CREATE_VCPU, id) };
+        self.vcpus.push(vcpu_fd);
+        Ok(vcpu_fd)
+    }
+    
+    pub fn run_vcpu(&amp;self, vcpu: &amp;VcpuFd) -&gt; Result&lt;KvmExit&gt; {
+        unsafe { ioctl(vcpu, KVM_RUN, 0) }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="windows---whpx"><a class="header" href="#windows---whpx">Windows - WHPX</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct WhpxBackend {
+    partition: WHV_PARTITION_HANDLE,
+    vcpus: Vec&lt;WhpxVcpu&gt;,
+}
+
+impl WhpxBackend {
+    pub fn new() -&gt; Result&lt;Self&gt; {
+        // Check WHPX capability
+        let capability = unsafe {
+            WHvGetCapability(WHvCapabilityCodeHypervisorPresent)
+        }?;
+        
+        if !capability.HypervisorPresent {
+            return Err(Error::HypervisorNotAvailable);
+        }
+        
+        // Create partition
+        let partition = unsafe { WHvCreatePartition() }?;
+        
+        // Configure partition
+        unsafe {
+            WHvSetPartitionProperty(
+                partition,
+                WHvPartitionPropertyCodeProcessorCount,
+                &amp;vcpu_count,
+            )?;
+        }
+        
+        // Setup partition
+        unsafe { WHvSetupPartition(partition) }?;
+        
+        Ok(Self { partition, vcpus: vec![] })
+    }
+    
+    pub fn run_vcpu(&amp;self, vcpu: &amp;WhpxVcpu) -&gt; Result&lt;WhpxExitContext&gt; {
+        unsafe {
+            WHvRunVirtualProcessor(
+                self.partition,
+                vcpu.index,
+                &amp;mut exit_context,
+            )
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="macos---hypervisorframework-hvf"><a class="header" href="#macos---hypervisorframework-hvf">macOS - Hypervisor.framework (HVF)</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HvfBackend {
+    vcpus: Vec&lt;hv_vcpuid_t&gt;,
+}
+
+impl HvfBackend {
+    pub fn new() -&gt; Result&lt;Self&gt; {
+        // Create VM
+        let result = unsafe { hv_vm_create(HV_VM_DEFAULT) };
+        if result != HV_SUCCESS {
+            return Err(Error::HypervisorNotAvailable);
+        }
+        
+        Ok(Self { vcpus: vec![] })
+    }
+    
+    pub fn create_vcpu(&amp;mut self) -&gt; Result&lt;hv_vcpuid_t&gt; {
+        let mut vcpu: hv_vcpuid_t = 0;
+        unsafe { hv_vcpu_create(&amp;mut vcpu, HV_VCPU_DEFAULT) }?;
+        self.vcpus.push(vcpu);
+        Ok(vcpu)
+    }
+    
+    pub fn run_vcpu(&amp;self, vcpu: hv_vcpuid_t) -&gt; Result&lt;HvfExit&gt; {
+        unsafe { hv_vcpu_run(vcpu) }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="unified-backend-interface"><a class="header" href="#unified-backend-interface">Unified Backend Interface</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait HypervisorBackend {
+    fn create_vm(&amp;mut self, config: &amp;VmConfig) -&gt; Result&lt;VmHandle&gt;;
+    fn create_vcpu(&amp;mut self, vm: &amp;VmHandle, id: u32) -&gt; Result&lt;VcpuHandle&gt;;
+    fn run_vcpu(&amp;self, vcpu: &amp;VcpuHandle) -&gt; Result&lt;VmExit&gt;;
+    fn map_memory(&amp;mut self, vm: &amp;VmHandle, mapping: MemoryMapping) -&gt; Result&lt;()&gt;;
+    fn set_vcpu_registers(&amp;mut self, vcpu: &amp;VcpuHandle, regs: &amp;Registers) -&gt; Result&lt;()&gt;;
+    fn get_vcpu_registers(&amp;self, vcpu: &amp;VcpuHandle) -&gt; Result&lt;Registers&gt;;
+}
+
+// Platform-specific implementations
+#[cfg(target_os = "linux")]
+pub type PlatformBackend = KvmBackend;
+
+#[cfg(target_os = "windows")]
+pub type PlatformBackend = WhpxBackend;
+
+#[cfg(target_os = "macos")]
+pub type PlatformBackend = HvfBackend;
+<span class="boring">}</span></code></pre>
+<h2 id="vm-lifecycle"><a class="header" href="#vm-lifecycle">VM Lifecycle</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct Vm {
+    backend: Box&lt;dyn HypervisorBackend&gt;,
+    config: VmConfig,
+    state: VmState,
+    vcpus: Vec&lt;Vcpu&gt;,
+    memory: GuestMemory,
+    devices: DeviceManager,
+}
+
+impl Vm {
+    pub fn create(config: VmConfig) -&gt; Result&lt;Self&gt; {
+        let backend = PlatformBackend::new()?;
+        let vm_handle = backend.create_vm(&amp;config)?;
+        
+        // Setup memory
+        let memory = GuestMemory::new(config.memory_mb * 1024 * 1024)?;
+        backend.map_memory(&amp;vm_handle, memory.as_mapping())?;
+        
+        // Create vCPUs
+        let vcpus: Vec&lt;Vcpu&gt; = (0..config.cpu_cores)
+            .map(|id| Vcpu::new(&amp;backend, &amp;vm_handle, id))
+            .collect::&lt;Result&lt;_&gt;&gt;()?;
+        
+        // Initialize devices
+        let devices = DeviceManager::new(&amp;config)?;
+        
+        Ok(Self {
+            backend,
+            config,
+            state: VmState::Created,
+            vcpus,
+            memory,
+            devices,
+        })
+    }
+    
+    pub fn start(&amp;mut self) -&gt; Result&lt;()&gt; {
+        self.state = VmState::Running;
+        
+        // Start vCPU threads
+        for vcpu in &amp;mut self.vcpus {
+            vcpu.start()?;
+        }
+        
+        Ok(())
+    }
+    
+    pub fn stop(&amp;mut self) -&gt; Result&lt;()&gt; {
+        self.state = VmState::Stopped;
+        
+        for vcpu in &amp;mut self.vcpus {
+            vcpu.stop()?;
+        }
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="device-emulation"><a class="header" href="#device-emulation">Device Emulation</a></h2>
+<h3 id="virtio-devices"><a class="header" href="#virtio-devices">virtio Devices</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub trait VirtioDevice {
+    fn device_type(&amp;self) -&gt; u32;
+    fn read_config(&amp;self, offset: u64, data: &amp;mut [u8]);
+    fn write_config(&amp;mut self, offset: u64, data: &amp;[u8]);
+    fn activate(&amp;mut self, queues: Vec&lt;VirtQueue&gt;) -&gt; Result&lt;()&gt;;
+}
+
+// Example: virtio-blk
+pub struct VirtioBlock {
+    disk: Box&lt;dyn BlockDevice&gt;,
+    config: VirtioBlockConfig,
+}
+
+impl VirtioDevice for VirtioBlock {
+    fn device_type(&amp;self) -&gt; u32 { VIRTIO_BLK_DEVICE_ID }
+    
+    fn activate(&amp;mut self, queues: Vec&lt;VirtQueue&gt;) -&gt; Result&lt;()&gt; {
+        let request_queue = &amp;queues[0];
+        
+        // Process block requests
+        while let Some(desc_chain) = request_queue.pop() {
+            let request = self.parse_request(&amp;desc_chain)?;
+            match request.request_type {
+                VIRTIO_BLK_T_IN =&gt; self.handle_read(request)?,
+                VIRTIO_BLK_T_OUT =&gt; self.handle_write(request)?,
+                _ =&gt; {}
+            }
+        }
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="advantages"><a class="header" href="#advantages">Advantages</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Aspect</th><th>Type-2 Advantage</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Installation</strong></td><td>No special boot requirements</td></tr>
+<tr><td><strong>Development</strong></td><td>Easy debugging with host tools</td></tr>
+<tr><td><strong>Hardware Support</strong></td><td>Leverages host OS drivers</td></tr>
+<tr><td><strong>Integration</strong></td><td>Works with existing workflows</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<ul>
+<li><strong>VM Exit Overhead</strong> - Each VM exit requires context switch to userspace</li>
+<li><strong>Memory Mapping</strong> - Use huge pages for better TLB efficiency</li>
+<li><strong>I/O Virtualization</strong> - Use virtio for optimal performance</li>
+</ul>
+<h2 id="next-steps-5"><a class="header" href="#next-steps-5">Next Steps</a></h2>
+<ul>
+<li><a href="#memory-management">Memory Management</a> - Memory architecture details</li>
+<li><a href="#gpu-virtualization">GPU Virtualization</a> - GPU passthrough and virtual GPU</li>
+<li><a href="#type-1-hypervisor">Type-1 Hypervisor</a> - Bare-metal alternative</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="memory-management"><a class="header" href="#memory-management">Memory Management</a></h1>
+<p>HyperMachine provides advanced memory virtualization with hardware-assisted translation, memory ballooning, and zero-copy operations.</p>
+<h2 id="memory-architecture-1"><a class="header" href="#memory-architecture-1">Memory Architecture</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                   Guest Virtual Address                  │
+│                      (Guest Page Tables)                 │
+├─────────────────────────────────────────────────────────┤
+│                  Guest Physical Address                  │
+│                      (EPT/NPT Translation)               │
+├─────────────────────────────────────────────────────────┤
+│                   Host Physical Address                  │
+│                    (Actual RAM/MMIO)                     │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="guest-memory-layout"><a class="header" href="#guest-memory-layout">Guest Memory Layout</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct GuestMemory {
+    regions: Vec&lt;MemoryRegion&gt;,
+    total_size: usize,
+}
+
+pub struct MemoryRegion {
+    guest_address: u64,      // Guest physical address
+    host_address: *mut u8,   // Host virtual address (mmap'd)
+    size: usize,
+    flags: MemoryFlags,
+}
+
+impl GuestMemory {
+    pub fn new(size_mb: usize) -&gt; Result&lt;Self&gt; {
+        let size = size_mb * 1024 * 1024;
+        
+        // Allocate host memory (huge pages if available)
+        let host_mem = unsafe {
+            mmap(
+                std::ptr::null_mut(),
+                size,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+                -1,
+                0,
+            )
+        };
+        
+        let region = MemoryRegion {
+            guest_address: 0,
+            host_address: host_mem as *mut u8,
+            size,
+            flags: MemoryFlags::READ | MemoryFlags::WRITE,
+        };
+        
+        Ok(Self {
+            regions: vec![region],
+            total_size: size,
+        })
+    }
+    
+    pub fn read(&amp;self, guest_addr: u64, buf: &amp;mut [u8]) -&gt; Result&lt;()&gt; {
+        let host_ptr = self.translate(guest_addr)?;
+        unsafe {
+            std::ptr::copy_nonoverlapping(host_ptr, buf.as_mut_ptr(), buf.len());
+        }
+        Ok(())
+    }
+    
+    pub fn write(&amp;mut self, guest_addr: u64, data: &amp;[u8]) -&gt; Result&lt;()&gt; {
+        let host_ptr = self.translate_mut(guest_addr)?;
+        unsafe {
+            std::ptr::copy_nonoverlapping(data.as_ptr(), host_ptr, data.len());
+        }
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="extended-page-tables-ept"><a class="header" href="#extended-page-tables-ept">Extended Page Tables (EPT)</a></h2>
+<p>Intel EPT provides hardware-assisted guest-to-host address translation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct EptManager {
+    pml4: Box&lt;EptPml4&gt;,
+    allocator: PageAllocator,
+}
+
+#[repr(C, align(4096))]
+pub struct EptPml4 {
+    entries: [EptEntry; 512],
+}
+
+#[repr(transparent)]
+pub struct EptEntry(u64);
+
+impl EptEntry {
+    const READ: u64 = 1 &lt;&lt; 0;
+    const WRITE: u64 = 1 &lt;&lt; 1;
+    const EXECUTE: u64 = 1 &lt;&lt; 2;
+    const MEMORY_TYPE_MASK: u64 = 0x7 &lt;&lt; 3;
+    const HUGE_PAGE: u64 = 1 &lt;&lt; 7;
+    const ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
+    
+    pub fn new(addr: u64, flags: u64) -&gt; Self {
+        Self((addr &amp; Self::ADDR_MASK) | flags)
+    }
+    
+    pub fn set_permissions(&amp;mut self, read: bool, write: bool, exec: bool) {
+        self.0 &amp;= !0x7;
+        if read { self.0 |= Self::READ; }
+        if write { self.0 |= Self::WRITE; }
+        if exec { self.0 |= Self::EXECUTE; }
+    }
+}
+
+impl EptManager {
+    pub fn map_page(
+        &amp;mut self,
+        guest_phys: u64,
+        host_phys: u64,
+        flags: EptFlags,
+    ) -&gt; Result&lt;()&gt; {
+        let pml4_idx = (guest_phys &gt;&gt; 39) &amp; 0x1FF;
+        let pdpt_idx = (guest_phys &gt;&gt; 30) &amp; 0x1FF;
+        let pd_idx = (guest_phys &gt;&gt; 21) &amp; 0x1FF;
+        let pt_idx = (guest_phys &gt;&gt; 12) &amp; 0x1FF;
+        
+        // Walk page tables, creating entries as needed
+        let pdpt = self.get_or_create_pdpt(pml4_idx)?;
+        let pd = self.get_or_create_pd(pdpt, pdpt_idx)?;
+        let pt = self.get_or_create_pt(pd, pd_idx)?;
+        
+        // Map the page
+        pt.entries[pt_idx as usize] = EptEntry::new(
+            host_phys,
+            flags.bits(),
+        );
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="memory-ballooning"><a class="header" href="#memory-ballooning">Memory Ballooning</a></h2>
+<p>Dynamic memory adjustment using virtio-balloon:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct MemoryBalloon {
+    inflated_pages: Vec&lt;u64&gt;,
+    target_pages: usize,
+    current_pages: usize,
+}
+
+impl MemoryBalloon {
+    pub fn inflate(&amp;mut self, num_pages: usize) -&gt; Result&lt;()&gt; {
+        // Guest returns pages to host
+        for _ in 0..num_pages {
+            let page = self.guest_allocate_page()?;
+            self.inflated_pages.push(page);
+            
+            // Advise host that page is no longer needed
+            unsafe {
+                madvise(
+                    page as *mut c_void,
+                    PAGE_SIZE,
+                    MADV_DONTNEED,
+                );
+            }
+        }
+        self.current_pages -= num_pages;
+        Ok(())
+    }
+    
+    pub fn deflate(&amp;mut self, num_pages: usize) -&gt; Result&lt;()&gt; {
+        // Host returns pages to guest
+        for _ in 0..num_pages {
+            if let Some(page) = self.inflated_pages.pop() {
+                self.guest_free_page(page)?;
+            }
+        }
+        self.current_pages += num_pages;
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="zero-copy-operations"><a class="header" href="#zero-copy-operations">Zero-Copy Operations</a></h2>
+<p>Efficient data transfer between host and guest:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ZeroCopyBuffer {
+    host_addr: *mut u8,
+    guest_addr: u64,
+    size: usize,
+    shared: bool,
+}
+
+impl ZeroCopyBuffer {
+    /// Create a shared memory region visible to both host and guest
+    pub fn new_shared(size: usize) -&gt; Result&lt;Self&gt; {
+        // Create shared memory
+        let fd = memfd_create("hm-shared", MFD_CLOEXEC)?;
+        ftruncate(fd, size as i64)?;
+        
+        let host_addr = mmap(
+            std::ptr::null_mut(),
+            size,
+            PROT_READ | PROT_WRITE,
+            MAP_SHARED,
+            fd,
+            0,
+        )? as *mut u8;
+        
+        Ok(Self {
+            host_addr,
+            guest_addr: 0, // Set when mapped to guest
+            size,
+            shared: true,
+        })
+    }
+    
+    /// Transfer data from host to guest without copying
+    pub fn write_to_guest(&amp;self, data: &amp;[u8], offset: usize) -&gt; Result&lt;()&gt; {
+        if offset + data.len() &gt; self.size {
+            return Err(Error::OutOfBounds);
+        }
+        
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                self.host_addr.add(offset),
+                data.len(),
+            );
+        }
+        
+        // Memory fence to ensure visibility
+        std::sync::atomic::fence(Ordering::SeqCst);
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="memory-types"><a class="header" href="#memory-types">Memory Types</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Use Case</th><th>Caching</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Normal RAM</strong></td><td>Guest memory</td><td>Write-back</td></tr>
+<tr><td><strong>MMIO</strong></td><td>Device registers</td><td>Uncacheable</td></tr>
+<tr><td><strong>ROM</strong></td><td>BIOS/UEFI</td><td>Write-protected</td></tr>
+<tr><td><strong>Shared</strong></td><td>Host-guest communication</td><td>Write-back</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="huge-pages"><a class="header" href="#huge-pages">Huge Pages</a></h2>
+<p>Using huge pages improves TLB efficiency:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub fn allocate_huge_pages(size: usize) -&gt; Result&lt;*mut u8&gt; {
+    // Try 1GB pages first
+    let addr = unsafe {
+        mmap(
+            std::ptr::null_mut(),
+            size,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_1GB,
+            -1,
+            0,
+        )
+    };
+    
+    if addr != MAP_FAILED {
+        return Ok(addr as *mut u8);
+    }
+    
+    // Fall back to 2MB pages
+    let addr = unsafe {
+        mmap(
+            std::ptr::null_mut(),
+            size,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_HUGE_2MB,
+            -1,
+            0,
+        )
+    };
+    
+    if addr != MAP_FAILED {
+        return Ok(addr as *mut u8);
+    }
+    
+    // Fall back to regular pages
+    let addr = unsafe {
+        mmap(
+            std::ptr::null_mut(),
+            size,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANONYMOUS,
+            -1,
+            0,
+        )
+    };
+    
+    if addr == MAP_FAILED {
+        return Err(Error::AllocationFailed);
+    }
+    
+    Ok(addr as *mut u8)
+}
+<span class="boring">}</span></code></pre>
+<h2 id="performance-metrics"><a class="header" href="#performance-metrics">Performance Metrics</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Latency</th></tr>
+</thead>
+<tbody>
+<tr><td>EPT walk (cached)</td><td>~10 ns</td></tr>
+<tr><td>EPT walk (uncached)</td><td>~100 ns</td></tr>
+<tr><td>Page fault handling</td><td>~1-10 μs</td></tr>
+<tr><td>Balloon inflate</td><td>~1 ms/1000 pages</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="next-steps-6"><a class="header" href="#next-steps-6">Next Steps</a></h2>
+<ul>
+<li><a href="#gpu-virtualization">GPU Virtualization</a> - GPU memory management</li>
+<li><a href="#architecture-overview">Architecture Overview</a> - System architecture</li>
+<li><a href="#type-2-hypervisor">Type-2 Hypervisor</a> - Platform-specific memory</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="gpu-virtualization"><a class="header" href="#gpu-virtualization">GPU Virtualization</a></h1>
+<p>HyperMachine provides multiple GPU virtualization modes for different use cases.</p>
+<h2 id="gpu-modes"><a class="header" href="#gpu-modes">GPU Modes</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th>Performance</th><th>Isolation</th><th>Use Case</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Passthrough</strong></td><td>Native</td><td>Full</td><td>ML training, gaming</td></tr>
+<tr><td><strong>Virtual GPU (vGPU)</strong></td><td>80-95%</td><td>Shared</td><td>Multi-tenant</td></tr>
+<tr><td><strong>Software Rendering</strong></td><td>Low</td><td>Full</td><td>Testing</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="gpu-passthrough"><a class="header" href="#gpu-passthrough">GPU Passthrough</a></h2>
+<p>Direct assignment of a physical GPU to a VM using IOMMU:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct GpuPassthrough {
+    pci_device: PciDevice,
+    iommu_group: u32,
+    vfio_device: VfioDevice,
+}
+
+impl GpuPassthrough {
+    pub fn new(pci_address: &amp;str) -&gt; Result&lt;Self&gt; {
+        // Parse PCI address (e.g., "0000:01:00.0")
+        let pci_device = PciDevice::from_address(pci_address)?;
+        
+        // Find IOMMU group
+        let iommu_group = pci_device.iommu_group()?;
+        
+        // Unbind from host driver
+        pci_device.unbind_driver()?;
+        
+        // Bind to vfio-pci
+        pci_device.bind_driver("vfio-pci")?;
+        
+        // Open VFIO device
+        let vfio_device = VfioDevice::open(iommu_group, &amp;pci_device)?;
+        
+        Ok(Self {
+            pci_device,
+            iommu_group,
+            vfio_device,
+        })
+    }
+    
+    pub fn attach_to_vm(&amp;self, vm: &amp;mut Vm) -&gt; Result&lt;()&gt; {
+        // Map device BARs to guest
+        for bar in self.vfio_device.bars() {
+            vm.map_mmio_region(bar.guest_addr, bar.host_addr, bar.size)?;
+        }
+        
+        // Setup interrupt forwarding
+        let irq = self.vfio_device.irq_info()?;
+        vm.register_irq(irq)?;
+        
+        // Configure MSI-X if available
+        if let Some(msix) = self.vfio_device.msix_info() {
+            vm.configure_msix(msix)?;
+        }
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h3 id="iommu-configuration"><a class="header" href="#iommu-configuration">IOMMU Configuration</a></h3>
+<pre><code class="language-bash"># Enable IOMMU in GRUB
+GRUB_CMDLINE_LINUX="intel_iommu=on iommu=pt"
+
+# Or for AMD
+GRUB_CMDLINE_LINUX="amd_iommu=on iommu=pt"
+</code></pre>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct IommuManager {
+    groups: HashMap&lt;u32, IommuGroup&gt;,
+}
+
+impl IommuManager {
+    pub fn isolate_device(&amp;mut self, device: &amp;PciDevice) -&gt; Result&lt;()&gt; {
+        let group = self.groups.get_mut(&amp;device.iommu_group())?;
+        
+        // Ensure all devices in group are bound to vfio
+        for dev in group.devices() {
+            if dev.driver() != "vfio-pci" {
+                dev.unbind_driver()?;
+                dev.bind_driver("vfio-pci")?;
+            }
+        }
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="virtual-gpu-vgpu"><a class="header" href="#virtual-gpu-vgpu">Virtual GPU (vGPU)</a></h2>
+<p>Share a single GPU across multiple VMs:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct VirtualGpu {
+    physical_gpu: Arc&lt;PhysicalGpu&gt;,
+    vm_id: VmId,
+    vram_slice: VramSlice,
+    command_queue: CommandQueue,
+}
+
+impl VirtualGpu {
+    pub fn new(physical: Arc&lt;PhysicalGpu&gt;, vram_mb: usize) -&gt; Result&lt;Self&gt; {
+        // Allocate VRAM slice
+        let vram_slice = physical.allocate_vram(vram_mb * 1024 * 1024)?;
+        
+        // Create command queue
+        let command_queue = physical.create_queue()?;
+        
+        Ok(Self {
+            physical_gpu: physical,
+            vm_id: VmId::new(),
+            vram_slice,
+            command_queue,
+        })
+    }
+    
+    pub fn submit_commands(&amp;self, commands: &amp;[GpuCommand]) -&gt; Result&lt;()&gt; {
+        // Translate guest addresses to host
+        let translated: Vec&lt;_&gt; = commands.iter()
+            .map(|cmd| self.translate_command(cmd))
+            .collect::&lt;Result&lt;_&gt;&gt;()?;
+        
+        // Submit to physical GPU
+        self.command_queue.submit(&amp;translated)?;
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="vulkanwebgpu-support"><a class="header" href="#vulkanwebgpu-support">Vulkan/WebGPU Support</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct VulkanVirtualDevice {
+    instance: ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    device: ash::Device,
+}
+
+impl VulkanVirtualDevice {
+    pub fn create_for_vm(vm: &amp;Vm) -&gt; Result&lt;Self&gt; {
+        // Create Vulkan instance with required extensions
+        let instance = Self::create_instance()?;
+        
+        // Select physical device
+        let physical_device = Self::select_gpu(&amp;instance)?;
+        
+        // Create logical device with compute queues
+        let device = Self::create_device(&amp;instance, physical_device)?;
+        
+        Ok(Self {
+            instance,
+            physical_device,
+            device,
+        })
+    }
+    
+    pub fn allocate_buffer(&amp;self, size: usize) -&gt; Result&lt;VulkanBuffer&gt; {
+        let buffer_info = vk::BufferCreateInfo::builder()
+            .size(size as u64)
+            .usage(vk::BufferUsageFlags::STORAGE_BUFFER)
+            .sharing_mode(vk::SharingMode::EXCLUSIVE);
+        
+        let buffer = unsafe {
+            self.device.create_buffer(&amp;buffer_info, None)?
+        };
+        
+        // Allocate and bind memory
+        let memory = self.allocate_device_memory(buffer)?;
+        unsafe { self.device.bind_buffer_memory(buffer, memory, 0)? };
+        
+        Ok(VulkanBuffer { buffer, memory })
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="cudaopencl-support"><a class="header" href="#cudaopencl-support">CUDA/OpenCL Support</a></h2>
+<p>For passthrough GPUs, CUDA and OpenCL work natively:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct CudaSupport {
+    passthrough: GpuPassthrough,
+}
+
+impl CudaSupport {
+    /// Configure VM for CUDA support
+    pub fn configure_vm(&amp;self, vm: &amp;mut Vm) -&gt; Result&lt;()&gt; {
+        // Attach GPU via passthrough
+        self.passthrough.attach_to_vm(vm)?;
+        
+        // Map NVIDIA device files
+        vm.add_device_node("/dev/nvidia0")?;
+        vm.add_device_node("/dev/nvidiactl")?;
+        vm.add_device_node("/dev/nvidia-uvm")?;
+        
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="gpu-scheduling"><a class="header" href="#gpu-scheduling">GPU Scheduling</a></h2>
+<p>Fair scheduling across multiple VMs:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct GpuScheduler {
+    vgpus: Vec&lt;Arc&lt;VirtualGpu&gt;&gt;,
+    time_slice_ms: u64,
+    current_index: usize,
+}
+
+impl GpuScheduler {
+    pub fn schedule(&amp;mut self) {
+        loop {
+            let vgpu = &amp;self.vgpus[self.current_index];
+            
+            // Run vGPU for time slice
+            let start = Instant::now();
+            while start.elapsed().as_millis() &lt; self.time_slice_ms as u128 {
+                if let Some(work) = vgpu.pending_work() {
+                    work.execute();
+                } else {
+                    break;
+                }
+            }
+            
+            // Move to next vGPU
+            self.current_index = (self.current_index + 1) % self.vgpus.len();
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="performance-considerations-1"><a class="header" href="#performance-considerations-1">Performance Considerations</a></h2>
+<h3 id="passthrough-performance"><a class="header" href="#passthrough-performance">Passthrough Performance</a></h3>
+<ul>
+<li><strong>Latency</strong>: Native (~0% overhead)</li>
+<li><strong>Bandwidth</strong>: Full PCIe bandwidth</li>
+<li><strong>Features</strong>: All GPU features available</li>
+</ul>
+<h3 id="vgpu-performance"><a class="header" href="#vgpu-performance">vGPU Performance</a></h3>
+<ul>
+<li><strong>Latency</strong>: 5-20% overhead from scheduling</li>
+<li><strong>Bandwidth</strong>: Shared across VMs</li>
+<li><strong>Features</strong>: Most features, some limitations</li>
+</ul>
+<h2 id="configuration-1"><a class="header" href="#configuration-1">Configuration</a></h2>
+<pre><code class="language-toml"># config.toml
+[gpu]
+mode = "passthrough"  # passthrough, vgpu, software
+
+[gpu.passthrough]
+device = "0000:01:00.0"
+iommu_group = 1
+
+[gpu.vgpu]
+vram_mb = 4096
+max_vms = 4
+scheduling = "fair"  # fair, priority
+
+[gpu.vulkan]
+enabled = true
+validation_layers = false
+</code></pre>
+<h2 id="next-steps-7"><a class="header" href="#next-steps-7">Next Steps</a></h2>
+<ul>
+<li><a href="#memory-management">Memory Management</a> - GPU memory in guest</li>
+<li><a href="#architecture-overview">Architecture Overview</a> - System architecture</li>
+<li><a href="#security-overview">Security</a> - GPU isolation</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="ai-integration-overview"><a class="header" href="#ai-integration-overview">AI Integration Overview</a></h1>
+<p>HyperMachine is designed from the ground up for AI agent orchestration, providing first-class integration with major LLM providers.</p>
+<h2 id="why-ai-first"><a class="header" href="#why-ai-first">Why AI-First?</a></h2>
+<p>Modern AI agents need to:</p>
+<ul>
+<li><strong>Create isolated environments</strong> for code execution</li>
+<li><strong>Manage compute resources</strong> dynamically</li>
+<li><strong>Run untrusted code</strong> safely</li>
+<li><strong>Scale GPU workloads</strong> efficiently</li>
+</ul>
+<p>HyperMachine provides all of this through a semantic API that AI agents can understand and use.</p>
+<h2 id="integration-methods"><a class="header" href="#integration-methods">Integration Methods</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                      AI Agent                            │
+│              (GPT-4, Claude, Gemini, etc.)              │
+└────────────────────────┬────────────────────────────────┘
+                         │
+        ┌────────────────┼────────────────┐
+        │                │                │
+        ▼                ▼                ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│  MCP Server   │ │   REST API    │ │  Python SDK   │
+│  (Native)     │ │  (HTTP/JSON)  │ │  (Wrapper)    │
+└───────────────┘ └───────────────┘ └───────────────┘
+        │                │                │
+        └────────────────┼────────────────┘
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │   HyperMachine Core │
+              └─────────────────────┘
+</code></pre>
+<h2 id="quick-comparison"><a class="header" href="#quick-comparison">Quick Comparison</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Method</th><th>Best For</th><th>Latency</th><th>Complexity</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>MCP Server</strong></td><td>Native LLM integration</td><td>Low</td><td>Simple</td></tr>
+<tr><td><strong>REST API</strong></td><td>Custom applications</td><td>Medium</td><td>Medium</td></tr>
+<tr><td><strong>Python SDK</strong></td><td>Python AI frameworks</td><td>Low</td><td>Simple</td></tr>
+<tr><td><strong>GUI Automation</strong></td><td>Desktop control</td><td>Medium</td><td>Simple</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="mcp-server"><a class="header" href="#mcp-server">MCP Server</a></h2>
+<p>The Model Context Protocol server provides native LLM integration:</p>
+<pre><code class="language-bash"># Start MCP server
+hm mcp serve --api-key "your-key"
+
+# Discover tools
+curl http://localhost:8080/mcp/tools
+</code></pre>
+<p>AI agents can discover and call tools directly:</p>
+<pre><code class="language-json">{
+  "tools": [
+    {
+      "name": "vm.create",
+      "description": "Create a new virtual machine",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "cpu_cores": { "type": "integer" },
+          "memory_mb": { "type": "integer" },
+          "enable_gpu": { "type": "boolean" }
+        }
+      }
+    }
+  ]
+}
+</code></pre>
+<h2 id="llm-specific-formats"><a class="header" href="#llm-specific-formats">LLM-Specific Formats</a></h2>
+<p>HyperMachine provides tool definitions in native formats for each LLM:</p>
+<h3 id="openai-gpt-4-o1-o3"><a class="header" href="#openai-gpt-4-o1-o3">OpenAI (GPT-4, o1, o3)</a></h3>
+<pre><code class="language-bash">curl http://localhost:8080/agentic/tools/openai
+</code></pre>
+<pre><code class="language-json">{
+  "type": "function",
+  "function": {
+    "name": "vm_create",
+    "description": "Create a new virtual machine",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "cpu_cores": { "type": "integer" }
+      },
+      "required": ["name"]
+    }
+  }
+}
+</code></pre>
+<h3 id="anthropic-claude-1"><a class="header" href="#anthropic-claude-1">Anthropic (Claude)</a></h3>
+<pre><code class="language-bash">curl http://localhost:8080/agentic/tools/anthropic
+</code></pre>
+<pre><code class="language-json">{
+  "name": "vm_create",
+  "description": "Create a new virtual machine",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "name": { "type": "string" },
+      "cpu_cores": { "type": "integer" }
+    },
+    "required": ["name"]
+  }
+}
+</code></pre>
+<h3 id="google-gemini"><a class="header" href="#google-gemini">Google (Gemini)</a></h3>
+<pre><code class="language-bash">curl http://localhost:8080/agentic/tools/gemini
+</code></pre>
+<pre><code class="language-json">{
+  "name": "vm_create",
+  "description": "Create a new virtual machine",
+  "parameters": {
+    "type": "OBJECT",
+    "properties": {
+      "name": { "type": "STRING" },
+      "cpu_cores": { "type": "INTEGER" }
+    },
+    "required": ["name"]
+  }
+}
+</code></pre>
+<h2 id="available-tools"><a class="header" href="#available-tools">Available Tools</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Category</th><th>Tools</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>VM Lifecycle</strong></td><td><code>vm.create</code>, <code>vm.start</code>, <code>vm.stop</code>, <code>vm.delete</code></td></tr>
+<tr><td><strong>VM Info</strong></td><td><code>vm.list</code>, <code>vm.get</code>, <code>vm.status</code></td></tr>
+<tr><td><strong>Execution</strong></td><td><code>vm.exec</code>, <code>vm.exec_script</code>, <code>vm.upload</code>, <code>vm.download</code></td></tr>
+<tr><td><strong>Snapshots</strong></td><td><code>vm.snapshot.create</code>, <code>vm.snapshot.restore</code>, <code>vm.snapshot.list</code></td></tr>
+<tr><td><strong>Network</strong></td><td><code>vm.network.configure</code>, <code>vm.network.port_forward</code></td></tr>
+<tr><td><strong>GPU</strong></td><td><code>vm.gpu.attach</code>, <code>vm.gpu.detach</code>, <code>vm.gpu.list</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="example-ai-code-executor"><a class="header" href="#example-ai-code-executor">Example: AI Code Executor</a></h2>
+<pre><code class="language-python">import openai
+import requests
+
+class AICodeExecutor:
+    def __init__(self, hm_url: str, api_key: str):
+        self.hm_url = hm_url
+        self.api_key = api_key
+        self.tools = self._fetch_tools()
+    
+    def _fetch_tools(self):
+        return requests.get(
+            f"{self.hm_url}/agentic/tools/openai"
+        ).json()
+    
+    def execute_tool(self, name: str, arguments: dict):
+        return requests.post(
+            f"{self.hm_url}/mcp/call",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={"tool": name, "arguments": arguments}
+        ).json()
+    
+    def run_code(self, code: str, language: str = "python"):
+        # Create sandbox VM
+        vm = self.execute_tool("vm.create", {
+            "name": f"sandbox-{uuid.uuid4().hex[:8]}",
+            "cpu_cores": 2,
+            "memory_mb": 4096,
+        })
+        
+        try:
+            # Start VM
+            self.execute_tool("vm.start", {"vm_id": vm["id"]})
+            
+            # Execute code
+            result = self.execute_tool("vm.exec", {
+                "vm_id": vm["id"],
+                "command": f"{language} -c '{code}'"
+            })
+            
+            return result
+        finally:
+            # Clean up
+            self.execute_tool("vm.delete", {"vm_id": vm["id"]})
+</code></pre>
+<h2 id="security-model"><a class="header" href="#security-model">Security Model</a></h2>
+<p>AI agents operate within defined security boundaries:</p>
+<ul>
+<li><strong>API Key Authentication</strong> - All operations require valid API key</li>
+<li><strong>Rate Limiting</strong> - Prevent resource exhaustion</li>
+<li><strong>Resource Quotas</strong> - Limit VMs, memory, GPU per key</li>
+<li><strong>Audit Logging</strong> - Track all AI operations</li>
+<li><strong>Network Isolation</strong> - VMs isolated by default</li>
+</ul>
+<h2 id="next-steps-8"><a class="header" href="#next-steps-8">Next Steps</a></h2>
+<ul>
+<li><a href="#mcp-server-1">MCP Server</a> - MCP protocol details</li>
+<li><a href="#llm-tool-formats">Tool Formats</a> - LLM-specific formats</li>
+<li><a href="#python-sdk-1">Python SDK</a> - Python integration</li>
+<li><a href="#gui-automation">GUI Automation</a> - Desktop automation</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="mcp-server-1"><a class="header" href="#mcp-server-1">MCP Server</a></h1>
+<p>The Model Context Protocol (MCP) server provides a standardized interface for AI agents to interact with HyperMachine.</p>
+<h2 id="starting-the-server"><a class="header" href="#starting-the-server">Starting the Server</a></h2>
+<pre><code class="language-bash"># Basic startup
+hm mcp serve --api-key "your-secret-key"
+
+# With custom port and TLS
+hm mcp serve \
+  --port 8443 \
+  --tls-cert /etc/ssl/cert.pem \
+  --tls-key /etc/ssl/key.pem \
+  --api-key "your-secret-key"
+
+# Using environment variables
+export HM_API_KEY="your-secret-key"
+export HM_MCP_PORT=8080
+hm mcp serve
+</code></pre>
+<h2 id="endpoints"><a class="header" href="#endpoints">Endpoints</a></h2>
+<h3 id="tool-discovery"><a class="header" href="#tool-discovery">Tool Discovery</a></h3>
+<pre><code class="language-bash"># List all available tools
+GET /mcp/tools
+
+# Response
+{
+  "tools": [
+    {
+      "name": "vm.create",
+      "description": "Create a new virtual machine with specified resources",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the virtual machine"
+          },
+          "cpu_cores": {
+            "type": "integer",
+            "description": "Number of CPU cores",
+            "default": 2
+          },
+          "memory_mb": {
+            "type": "integer",
+            "description": "Memory in megabytes",
+            "default": 4096
+          },
+          "enable_gpu": {
+            "type": "boolean",
+            "description": "Enable GPU support",
+            "default": false
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  ]
+}
+</code></pre>
+<h3 id="tool-execution"><a class="header" href="#tool-execution">Tool Execution</a></h3>
+<pre><code class="language-bash"># Execute a tool
+POST /mcp/call
+Content-Type: application/json
+Authorization: Bearer your-secret-key
+
+{
+  "tool": "vm.create",
+  "arguments": {
+    "name": "my-sandbox",
+    "cpu_cores": 4,
+    "memory_mb": 8192,
+    "enable_gpu": true
+  }
+}
+
+# Response
+{
+  "result": {
+    "id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "name": "my-sandbox",
+    "status": "created",
+    "cpu_cores": 4,
+    "memory_mb": 8192,
+    "gpu_enabled": true
+  }
+}
+</code></pre>
+<h3 id="llm-specific-tool-formats"><a class="header" href="#llm-specific-tool-formats">LLM-Specific Tool Formats</a></h3>
+<pre><code class="language-bash"># OpenAI format (GPT-4, o1, o3)
+GET /agentic/tools/openai
+
+# Anthropic format (Claude)
+GET /agentic/tools/anthropic
+
+# Google format (Gemini)
+GET /agentic/tools/gemini
+</code></pre>
+<h2 id="available-tools-1"><a class="header" href="#available-tools-1">Available Tools</a></h2>
+<h3 id="vm-lifecycle-1"><a class="header" href="#vm-lifecycle-1">VM Lifecycle</a></h3>
+<h4 id="vmcreate"><a class="header" href="#vmcreate"><code>vm.create</code></a></h4>
+<p>Create a new virtual machine.</p>
+<pre><code class="language-json">{
+  "tool": "vm.create",
+  "arguments": {
+    "name": "my-vm",
+    "cpu_cores": 4,
+    "memory_mb": 8192,
+    "disk_gb": 100,
+    "enable_gpu": true,
+    "network_mode": "nat",
+    "image": "ubuntu-22.04"
+  }
+}
+</code></pre>
+<h4 id="vmstart"><a class="header" href="#vmstart"><code>vm.start</code></a></h4>
+<p>Start a virtual machine.</p>
+<pre><code class="language-json">{
+  "tool": "vm.start",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+</code></pre>
+<h4 id="vmstop"><a class="header" href="#vmstop"><code>vm.stop</code></a></h4>
+<p>Stop a virtual machine.</p>
+<pre><code class="language-json">{
+  "tool": "vm.stop",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "force": false
+  }
+}
+</code></pre>
+<h4 id="vmdelete"><a class="header" href="#vmdelete"><code>vm.delete</code></a></h4>
+<p>Delete a virtual machine.</p>
+<pre><code class="language-json">{
+  "tool": "vm.delete",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+</code></pre>
+<h3 id="vm-information"><a class="header" href="#vm-information">VM Information</a></h3>
+<h4 id="vmlist"><a class="header" href="#vmlist"><code>vm.list</code></a></h4>
+<p>List all virtual machines.</p>
+<pre><code class="language-json">{
+  "tool": "vm.list",
+  "arguments": {
+    "status": "running",
+    "limit": 10
+  }
+}
+</code></pre>
+<h4 id="vmget"><a class="header" href="#vmget"><code>vm.get</code></a></h4>
+<p>Get details of a specific VM.</p>
+<pre><code class="language-json">{
+  "tool": "vm.get",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+</code></pre>
+<h3 id="code-execution"><a class="header" href="#code-execution">Code Execution</a></h3>
+<h4 id="vmexec"><a class="header" href="#vmexec"><code>vm.exec</code></a></h4>
+<p>Execute a command in a VM.</p>
+<pre><code class="language-json">{
+  "tool": "vm.exec",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "command": "python -c 'print(\"Hello, AI!\")'",
+    "timeout_secs": 60
+  }
+}
+
+// Response
+{
+  "result": {
+    "exit_code": 0,
+    "stdout": "Hello, AI!\n",
+    "stderr": "",
+    "duration_ms": 150
+  }
+}
+</code></pre>
+<h4 id="vmexec_script"><a class="header" href="#vmexec_script"><code>vm.exec_script</code></a></h4>
+<p>Execute a script file in a VM.</p>
+<pre><code class="language-json">{
+  "tool": "vm.exec_script",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "script": "#!/bin/bash\necho 'Hello'\ndate",
+    "interpreter": "/bin/bash"
+  }
+}
+</code></pre>
+<h3 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h3>
+<h4 id="vmupload"><a class="header" href="#vmupload"><code>vm.upload</code></a></h4>
+<p>Upload a file to a VM.</p>
+<pre><code class="language-json">{
+  "tool": "vm.upload",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "path": "/home/user/data.json",
+    "content": "{\"key\": \"value\"}",
+    "encoding": "utf-8"
+  }
+}
+</code></pre>
+<h4 id="vmdownload"><a class="header" href="#vmdownload"><code>vm.download</code></a></h4>
+<p>Download a file from a VM.</p>
+<pre><code class="language-json">{
+  "tool": "vm.download",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "path": "/home/user/output.txt"
+  }
+}
+</code></pre>
+<h3 id="snapshots"><a class="header" href="#snapshots">Snapshots</a></h3>
+<h4 id="vmsnapshotcreate"><a class="header" href="#vmsnapshotcreate"><code>vm.snapshot.create</code></a></h4>
+<p>Create a VM snapshot.</p>
+<pre><code class="language-json">{
+  "tool": "vm.snapshot.create",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "name": "before-experiment"
+  }
+}
+</code></pre>
+<h4 id="vmsnapshotrestore"><a class="header" href="#vmsnapshotrestore"><code>vm.snapshot.restore</code></a></h4>
+<p>Restore a VM from snapshot.</p>
+<pre><code class="language-json">{
+  "tool": "vm.snapshot.restore",
+  "arguments": {
+    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
+    "snapshot_id": "snap-123456"
+  }
+}
+</code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>Errors are returned with structured information:</p>
+<pre><code class="language-json">{
+  "error": {
+    "code": "VM_NOT_FOUND",
+    "message": "Virtual machine not found",
+    "details": {
+      "vm_id": "vm-invalid-id"
+    }
+  }
+}
+</code></pre>
+<h3 id="error-codes"><a class="header" href="#error-codes">Error Codes</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>VM_NOT_FOUND</code></td><td>VM does not exist</td></tr>
+<tr><td><code>VM_ALREADY_RUNNING</code></td><td>VM is already running</td></tr>
+<tr><td><code>VM_NOT_RUNNING</code></td><td>VM is not running</td></tr>
+<tr><td><code>RESOURCE_EXHAUSTED</code></td><td>Quota exceeded</td></tr>
+<tr><td><code>INVALID_ARGUMENT</code></td><td>Invalid parameter</td></tr>
+<tr><td><code>UNAUTHORIZED</code></td><td>Invalid API key</td></tr>
+<tr><td><code>INTERNAL_ERROR</code></td><td>Server error</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="rate-limiting"><a class="header" href="#rate-limiting">Rate Limiting</a></h2>
+<p>Default rate limits:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Limit</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vm.create</code></td><td>10/minute</td></tr>
+<tr><td><code>vm.exec</code></td><td>100/minute</td></tr>
+<tr><td><code>vm.list</code></td><td>60/minute</td></tr>
+<tr><td>Other</td><td>120/minute</td></tr>
+</tbody>
+</table>
+</div>
+<p>Rate limit headers:</p>
+<pre><code>X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1640995200
+</code></pre>
+<h2 id="websocket-streaming"><a class="header" href="#websocket-streaming">WebSocket Streaming</a></h2>
+<p>For long-running operations, use WebSocket:</p>
+<pre><code class="language-javascript">const ws = new WebSocket('wss://localhost:8080/mcp/stream');
+
+ws.onopen = () =&gt; {
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    vm_id: 'vm-550e8400-e29b-41d4-a716-446655440000',
+    channels: ['console', 'metrics']
+  }));
+};
+
+ws.onmessage = (event) =&gt; {
+  const data = JSON.parse(event.data);
+  console.log('Received:', data);
+};
+</code></pre>
+<h2 id="next-steps-9"><a class="header" href="#next-steps-9">Next Steps</a></h2>
+<ul>
+<li><a href="#llm-tool-formats">Tool Formats</a> - LLM-specific tool definitions</li>
+<li><a href="#python-sdk-1">Python SDK</a> - Python client library</li>
+<li><a href="#gui-automation">GUI Automation</a> - Desktop automation API</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="llm-tool-formats"><a class="header" href="#llm-tool-formats">LLM Tool Formats</a></h1>
+<p>HyperMachine provides tool definitions in native formats for each major LLM provider.</p>
+<h2 id="openai-format"><a class="header" href="#openai-format">OpenAI Format</a></h2>
+<p>For GPT-4, GPT-4o, o1, o3, and other OpenAI models.</p>
+<h3 id="fetch-tools"><a class="header" href="#fetch-tools">Fetch Tools</a></h3>
+<pre><code class="language-bash">curl http://localhost:8080/agentic/tools/openai
+</code></pre>
+<h3 id="format-structure"><a class="header" href="#format-structure">Format Structure</a></h3>
+<pre><code class="language-json">[
+  {
+    "type": "function",
+    "function": {
+      "name": "vm_create",
+      "description": "Create a new virtual machine with specified resources including CPU, memory, and optional GPU support",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique name for the virtual machine"
+          },
+          "cpu_cores": {
+            "type": "integer",
+            "description": "Number of CPU cores (1-64)",
+            "minimum": 1,
+            "maximum": 64
+          },
+          "memory_mb": {
+            "type": "integer",
+            "description": "Memory in megabytes (512-262144)",
+            "minimum": 512
+          },
+          "enable_gpu": {
+            "type": "boolean",
+            "description": "Enable GPU passthrough or virtual GPU"
+          }
+        },
+        "required": ["name"]
+      }
+    }
+  }
+]
+</code></pre>
+<h3 id="usage-with-openai-sdk"><a class="header" href="#usage-with-openai-sdk">Usage with OpenAI SDK</a></h3>
+<pre><code class="language-python">import openai
+import requests
+import json
+
+# Fetch HyperMachine tools
+tools = requests.get("http://localhost:8080/agentic/tools/openai").json()
+
+# Create OpenAI client
+client = openai.OpenAI()
+
+# Chat with tool support
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "user", "content": "Create a VM named 'ml-sandbox' with 8 CPUs and 32GB RAM for machine learning"}
+    ],
+    tools=tools,
+    tool_choice="auto"
+)
+
+# Handle tool calls
+if response.choices[0].message.tool_calls:
+    for tool_call in response.choices[0].message.tool_calls:
+        # Execute the tool
+        result = requests.post(
+            "http://localhost:8080/mcp/call",
+            headers={"Authorization": "Bearer your-api-key"},
+            json={
+                "tool": tool_call.function.name.replace("_", "."),
+                "arguments": json.loads(tool_call.function.arguments)
+            }
+        ).json()
+        
+        print(f"Tool result: {result}")
+</code></pre>
+<h2 id="anthropic-format"><a class="header" href="#anthropic-format">Anthropic Format</a></h2>
+<p>For Claude 4, Claude Sonnet, Claude Haiku, and other Anthropic models.</p>
+<h3 id="fetch-tools-1"><a class="header" href="#fetch-tools-1">Fetch Tools</a></h3>
+<pre><code class="language-bash">curl http://localhost:8080/agentic/tools/anthropic
+</code></pre>
+<h3 id="format-structure-1"><a class="header" href="#format-structure-1">Format Structure</a></h3>
+<pre><code class="language-json">[
+  {
+    "name": "vm_create",
+    "description": "Create a new virtual machine with specified resources including CPU, memory, and optional GPU support",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Unique name for the virtual machine"
+        },
+        "cpu_cores": {
+          "type": "integer",
+          "description": "Number of CPU cores (1-64)"
+        },
+        "memory_mb": {
+          "type": "integer",
+          "description": "Memory in megabytes (512-262144)"
+        },
+        "enable_gpu": {
+          "type": "boolean",
+          "description": "Enable GPU passthrough or virtual GPU"
+        }
+      },
+      "required": ["name"]
+    }
+  }
+]
+</code></pre>
+<h3 id="usage-with-anthropic-sdk"><a class="header" href="#usage-with-anthropic-sdk">Usage with Anthropic SDK</a></h3>
+<pre><code class="language-python">import anthropic
+import requests
+import json
+
+# Fetch HyperMachine tools
+tools = requests.get("http://localhost:8080/agentic/tools/anthropic").json()
+
+# Create Anthropic client
+client = anthropic.Anthropic()
+
+# Chat with tool support
+response = client.messages.create(
+    model="claude-sonnet-4-20250514",
+    max_tokens=1024,
+    messages=[
+        {"role": "user", "content": "Create a VM for running Python experiments"}
+    ],
+    tools=tools
+)
+
+# Handle tool use
+for content in response.content:
+    if content.type == "tool_use":
+        # Execute the tool
+        result = requests.post(
+            "http://localhost:8080/mcp/call",
+            headers={"Authorization": "Bearer your-api-key"},
+            json={
+                "tool": content.name.replace("_", "."),
+                "arguments": content.input
+            }
+        ).json()
+        
+        print(f"Tool result: {result}")
+</code></pre>
+<h2 id="google-gemini-format"><a class="header" href="#google-gemini-format">Google Gemini Format</a></h2>
+<p>For Gemini 2.5, Gemini Pro, and other Google models.</p>
+<h3 id="fetch-tools-2"><a class="header" href="#fetch-tools-2">Fetch Tools</a></h3>
+<pre><code class="language-bash">curl http://localhost:8080/agentic/tools/gemini
+</code></pre>
+<h3 id="format-structure-2"><a class="header" href="#format-structure-2">Format Structure</a></h3>
+<pre><code class="language-json">[
+  {
+    "name": "vm_create",
+    "description": "Create a new virtual machine with specified resources including CPU, memory, and optional GPU support",
+    "parameters": {
+      "type": "OBJECT",
+      "properties": {
+        "name": {
+          "type": "STRING",
+          "description": "Unique name for the virtual machine"
+        },
+        "cpu_cores": {
+          "type": "INTEGER",
+          "description": "Number of CPU cores (1-64)"
+        },
+        "memory_mb": {
+          "type": "INTEGER",
+          "description": "Memory in megabytes (512-262144)"
+        },
+        "enable_gpu": {
+          "type": "BOOLEAN",
+          "description": "Enable GPU passthrough or virtual GPU"
+        }
+      },
+      "required": ["name"]
+    }
+  }
+]
+</code></pre>
+<h3 id="usage-with-google-generative-ai-sdk"><a class="header" href="#usage-with-google-generative-ai-sdk">Usage with Google Generative AI SDK</a></h3>
+<pre><code class="language-python">import google.generativeai as genai
+import requests
+
+# Fetch HyperMachine tools
+tools_response = requests.get("http://localhost:8080/agentic/tools/gemini").json()
+
+# Convert to Gemini format
+tools = [genai.protos.Tool(function_declarations=tools_response)]
+
+# Configure Gemini
+genai.configure(api_key="your-gemini-api-key")
+model = genai.GenerativeModel("gemini-2.5-pro", tools=tools)
+
+# Chat with tool support
+chat = model.start_chat()
+response = chat.send_message("Create a VM for data analysis with GPU support")
+
+# Handle function calls
+for part in response.parts:
+    if fn := part.function_call:
+        # Execute the tool
+        result = requests.post(
+            "http://localhost:8080/mcp/call",
+            headers={"Authorization": "Bearer your-api-key"},
+            json={
+                "tool": fn.name.replace("_", "."),
+                "arguments": dict(fn.args)
+            }
+        ).json()
+        
+        print(f"Tool result: {result}")
+</code></pre>
+<h2 id="tool-name-mapping"><a class="header" href="#tool-name-mapping">Tool Name Mapping</a></h2>
+<p>HyperMachine uses dot notation internally, but LLMs often prefer underscores:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Internal Name</th><th>LLM Name</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vm.create</code></td><td><code>vm_create</code></td></tr>
+<tr><td><code>vm.start</code></td><td><code>vm_start</code></td></tr>
+<tr><td><code>vm.exec</code></td><td><code>vm_exec</code></td></tr>
+<tr><td><code>vm.snapshot.create</code></td><td><code>vm_snapshot_create</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>The MCP server automatically handles this translation.</p>
+<h2 id="complete-tool-list"><a class="header" href="#complete-tool-list">Complete Tool List</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vm_create</code></td><td>Create a new VM</td></tr>
+<tr><td><code>vm_start</code></td><td>Start a VM</td></tr>
+<tr><td><code>vm_stop</code></td><td>Stop a VM</td></tr>
+<tr><td><code>vm_delete</code></td><td>Delete a VM</td></tr>
+<tr><td><code>vm_list</code></td><td>List all VMs</td></tr>
+<tr><td><code>vm_get</code></td><td>Get VM details</td></tr>
+<tr><td><code>vm_exec</code></td><td>Execute command in VM</td></tr>
+<tr><td><code>vm_exec_script</code></td><td>Execute script in VM</td></tr>
+<tr><td><code>vm_upload</code></td><td>Upload file to VM</td></tr>
+<tr><td><code>vm_download</code></td><td>Download file from VM</td></tr>
+<tr><td><code>vm_snapshot_create</code></td><td>Create snapshot</td></tr>
+<tr><td><code>vm_snapshot_restore</code></td><td>Restore snapshot</td></tr>
+<tr><td><code>vm_snapshot_list</code></td><td>List snapshots</td></tr>
+<tr><td><code>vm_gpu_attach</code></td><td>Attach GPU to VM</td></tr>
+<tr><td><code>vm_gpu_detach</code></td><td>Detach GPU from VM</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="custom-tool-extensions"><a class="header" href="#custom-tool-extensions">Custom Tool Extensions</a></h2>
+<p>You can extend the tool set with custom operations:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In your HyperMachine extension
+#[mcp_tool]
+pub fn my_custom_tool(
+    #[description("Input parameter")]
+    param: String,
+) -&gt; Result&lt;String&gt; {
+    // Implementation
+    Ok(format!("Result: {}", param))
+}
+<span class="boring">}</span></code></pre>
+<h2 id="next-steps-10"><a class="header" href="#next-steps-10">Next Steps</a></h2>
+<ul>
+<li><a href="#mcp-server-1">MCP Server</a> - Server configuration</li>
+<li><a href="#python-sdk-1">Python SDK</a> - High-level Python interface</li>
+<li><a href="#gui-automation">GUI Automation</a> - Desktop control</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="python-sdk-1"><a class="header" href="#python-sdk-1">Python SDK</a></h1>
+<p>The HyperMachine Python SDK provides a high-level interface for managing virtual machines.</p>
+<h2 id="installation-1"><a class="header" href="#installation-1">Installation</a></h2>
+<pre><code class="language-bash">pip install hypermachine
+</code></pre>
+<h2 id="quick-start-1"><a class="header" href="#quick-start-1">Quick Start</a></h2>
+<pre><code class="language-python">from hypermachine import HyperMachine
+
+# Connect to HyperMachine
+hm = HyperMachine("http://localhost:8080", api_key="your-api-key")
+
+# Create a VM
+vm = hm.create_vm(
+    name="my-sandbox",
+    cpu=4,
+    memory="8G",
+    gpu=True
+)
+
+# Start the VM
+vm.start()
+
+# Execute a command
+result = vm.exec("echo 'Hello, World!'")
+print(result.stdout)  # Hello, World!
+
+# Stop and delete
+vm.stop()
+vm.delete()
+</code></pre>
+<h2 id="hypermachine-client"><a class="header" href="#hypermachine-client">HyperMachine Client</a></h2>
+<h3 id="connection"><a class="header" href="#connection">Connection</a></h3>
+<pre><code class="language-python">from hypermachine import HyperMachine
+
+# Basic connection
+hm = HyperMachine("http://localhost:8080", api_key="your-key")
+
+# With TLS
+hm = HyperMachine(
+    "https://localhost:8443",
+    api_key="your-key",
+    verify_ssl=True,
+    ca_cert="/path/to/ca.pem"
+)
+
+# From environment
+import os
+hm = HyperMachine(
+    os.environ["HM_URL"],
+    api_key=os.environ["HM_API_KEY"]
+)
+</code></pre>
+<h3 id="vm-management"><a class="header" href="#vm-management">VM Management</a></h3>
+<pre><code class="language-python"># Create VM with all options
+vm = hm.create_vm(
+    name="ml-workstation",
+    cpu=8,
+    memory="32G",
+    disk="100G",
+    gpu=True,
+    gpu_type="passthrough",  # or "vgpu"
+    network="nat",  # or "bridge"
+    image="ubuntu-22.04"
+)
+
+# List VMs
+vms = hm.list_vms()
+for vm in vms:
+    print(f"{vm.name}: {vm.status}")
+
+# Get specific VM
+vm = hm.get_vm("my-sandbox")
+
+# Find VM by name
+vm = hm.find_vm(name="my-sandbox")
+</code></pre>
+<h2 id="vm-object"><a class="header" href="#vm-object">VM Object</a></h2>
+<h3 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h3>
+<pre><code class="language-python"># Start
+vm.start()
+vm.wait_until_running(timeout=60)
+
+# Stop (graceful)
+vm.stop()
+
+# Stop (force)
+vm.stop(force=True)
+
+# Restart
+vm.restart()
+
+# Pause/Resume
+vm.pause()
+vm.resume()
+
+# Delete
+vm.delete()
+</code></pre>
+<h3 id="status"><a class="header" href="#status">Status</a></h3>
+<pre><code class="language-python"># Check status
+print(vm.status)  # "running", "stopped", "paused"
+
+# Get full info
+info = vm.info()
+print(f"CPU: {info.cpu_cores}")
+print(f"Memory: {info.memory_mb}MB")
+print(f"GPU: {info.gpu_enabled}")
+
+# Check if running
+if vm.is_running():
+    print("VM is running")
+</code></pre>
+<h3 id="command-execution"><a class="header" href="#command-execution">Command Execution</a></h3>
+<pre><code class="language-python"># Simple command
+result = vm.exec("uname -a")
+print(result.stdout)
+print(result.stderr)
+print(result.exit_code)
+
+# With timeout
+result = vm.exec("long-running-script.sh", timeout=300)
+
+# As specific user
+result = vm.exec("whoami", user="root")
+
+# With environment variables
+result = vm.exec("echo $MY_VAR", env={"MY_VAR": "hello"})
+
+# Working directory
+result = vm.exec("ls", cwd="/home/user/project")
+</code></pre>
+<h3 id="script-execution"><a class="header" href="#script-execution">Script Execution</a></h3>
+<pre><code class="language-python"># Run a script
+script = """
+#!/bin/bash
+echo "Starting setup..."
+apt-get update
+apt-get install -y python3 python3-pip
+pip install numpy pandas
+echo "Setup complete!"
+"""
+
+result = vm.exec_script(script, interpreter="/bin/bash")
+
+# Python script
+python_code = """
+import sys
+print(f"Python version: {sys.version}")
+print("Hello from VM!")
+"""
+
+result = vm.exec_script(python_code, interpreter="python3")
+</code></pre>
+<h3 id="file-operations-1"><a class="header" href="#file-operations-1">File Operations</a></h3>
+<pre><code class="language-python"># Upload file
+vm.upload("/home/user/data.json", '{"key": "value"}')
+
+# Upload from local file
+vm.upload_file("/home/user/model.pkl", "local_model.pkl")
+
+# Download file
+content = vm.download("/home/user/output.txt")
+
+# Download to local file
+vm.download_file("/home/user/results.csv", "local_results.csv")
+
+# Check if file exists
+if vm.file_exists("/home/user/data.json"):
+    print("File exists")
+
+# List directory
+files = vm.list_dir("/home/user")
+for f in files:
+    print(f"{f.name}: {f.size} bytes")
+</code></pre>
+<h3 id="snapshots-1"><a class="header" href="#snapshots-1">Snapshots</a></h3>
+<pre><code class="language-python"># Create snapshot
+snapshot = vm.create_snapshot("before-experiment")
+
+# List snapshots
+snapshots = vm.list_snapshots()
+for s in snapshots:
+    print(f"{s.name}: {s.created_at}")
+
+# Restore snapshot
+vm.restore_snapshot(snapshot.id)
+
+# Delete snapshot
+vm.delete_snapshot(snapshot.id)
+</code></pre>
+<h3 id="gpu-operations"><a class="header" href="#gpu-operations">GPU Operations</a></h3>
+<pre><code class="language-python"># Attach GPU
+vm.attach_gpu(device="0000:01:00.0", mode="passthrough")
+
+# List GPUs
+gpus = vm.list_gpus()
+for gpu in gpus:
+    print(f"{gpu.name}: {gpu.memory_mb}MB")
+
+# Detach GPU
+vm.detach_gpu()
+</code></pre>
+<h3 id="console-access"><a class="header" href="#console-access">Console Access</a></h3>
+<pre><code class="language-python"># Get console output
+output = vm.console_output(lines=100)
+print(output)
+
+# Interactive console (returns WebSocket URL)
+ws_url = vm.console_websocket()
+</code></pre>
+<h2 id="context-manager"><a class="header" href="#context-manager">Context Manager</a></h2>
+<pre><code class="language-python"># Automatic cleanup
+with hm.create_vm("temp-sandbox", cpu=2, memory="4G") as vm:
+    vm.start()
+    result = vm.exec("python -c 'print(1+1)'")
+    print(result.stdout)  # 2
+# VM is automatically stopped and deleted
+</code></pre>
+<h2 id="async-support"><a class="header" href="#async-support">Async Support</a></h2>
+<pre><code class="language-python">import asyncio
+from hypermachine import AsyncHyperMachine
+
+async def main():
+    hm = AsyncHyperMachine("http://localhost:8080", api_key="your-key")
+    
+    # Create VMs in parallel
+    vms = await asyncio.gather(
+        hm.create_vm("vm-1", cpu=2, memory="4G"),
+        hm.create_vm("vm-2", cpu=2, memory="4G"),
+        hm.create_vm("vm-3", cpu=2, memory="4G"),
+    )
+    
+    # Start all VMs
+    await asyncio.gather(*[vm.start() for vm in vms])
+    
+    # Run commands in parallel
+    results = await asyncio.gather(*[
+        vm.exec("hostname") for vm in vms
+    ])
+    
+    for vm, result in zip(vms, results):
+        print(f"{vm.name}: {result.stdout}")
+
+asyncio.run(main())
+</code></pre>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
+<pre><code class="language-python">from hypermachine import (
+    HyperMachineError,
+    VMNotFoundError,
+    VMAlreadyRunningError,
+    QuotaExceededError,
+)
+
+try:
+    vm = hm.get_vm("nonexistent")
+except VMNotFoundError:
+    print("VM not found")
+
+try:
+    vm.start()
+except VMAlreadyRunningError:
+    print("VM is already running")
+
+try:
+    hm.create_vm("test", cpu=1000, memory="1TB")
+except QuotaExceededError as e:
+    print(f"Quota exceeded: {e.message}")
+</code></pre>
+<h2 id="configuration-2"><a class="header" href="#configuration-2">Configuration</a></h2>
+<pre><code class="language-python">from hypermachine import HyperMachine, Config
+
+config = Config(
+    timeout=60,
+    retry_count=3,
+    retry_delay=1.0,
+    verify_ssl=True,
+)
+
+hm = HyperMachine(
+    "https://localhost:8443",
+    api_key="your-key",
+    config=config
+)
+</code></pre>
+<h2 id="next-steps-11"><a class="header" href="#next-steps-11">Next Steps</a></h2>
+<ul>
+<li><a href="#mcp-server-1">MCP Server</a> - Direct API access</li>
+<li><a href="#llm-tool-formats">Tool Formats</a> - LLM integration</li>
+<li><a href="#gui-automation">GUI Automation</a> - Desktop control</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="gui-automation"><a class="header" href="#gui-automation">GUI Automation</a></h1>
+<p>HyperMachine includes a desktop GUI with a <strong>semantic automation API</strong> that enables AI agents to control the application programmatically.</p>
+<h2 id="why-semantic-automation"><a class="header" href="#why-semantic-automation">Why Semantic Automation?</a></h2>
+<p>Traditional GUI automation (screen-based) has problems:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Approach</th><th>Deterministic</th><th>Fast</th><th>Layout Independent</th></tr>
+</thead>
+<tbody>
+<tr><td>Screen capture (Anthropic Computer Use)</td><td>❌</td><td>❌</td><td>❌</td></tr>
+<tr><td>DOM scraping</td><td>⚠️</td><td>⚠️</td><td>❌</td></tr>
+<tr><td><strong>Semantic API (HyperMachine)</strong></td><td>✅</td><td>✅</td><td>✅</td></tr>
+</tbody>
+</table>
+</div>
+<p>HyperMachine’s semantic API provides:</p>
+<ul>
+<li><strong>Deterministic execution</strong> - Commands always produce the same result</li>
+<li><strong>Fast response</strong> - No image processing or screen capture</li>
+<li><strong>Layout independent</strong> - Works regardless of window size or theme</li>
+</ul>
+<h2 id="architecture-1"><a class="header" href="#architecture-1">Architecture</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                      AI Agent                            │
+│                (LLM with tool calling)                   │
+└────────────────────────┬────────────────────────────────┘
+                         │ JSON commands
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│               AutomationHandle                           │
+│          (Async command channel)                         │
+└────────────────────────┬────────────────────────────────┘
+                         │ GuiCommand
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                   GUI Event Loop                         │
+│             (egui/eframe application)                    │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="available-tools-13-total"><a class="header" href="#available-tools-13-total">Available Tools (13 total)</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Tool</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>gui.navigate</code></td><td>Navigate to a view (welcome, vm_details, console, settings)</td></tr>
+<tr><td><code>gui.dialog.open</code></td><td>Open a dialog (create_vm, settings, about)</td></tr>
+<tr><td><code>gui.dialog.close</code></td><td>Close current dialog</td></tr>
+<tr><td><code>gui.dialog.submit</code></td><td>Submit dialog form</td></tr>
+<tr><td><code>gui.vm.select</code></td><td>Select VM by id, name, or partial match</td></tr>
+<tr><td><code>gui.vm.action</code></td><td>Perform VM action (start, stop, pause, delete, console)</td></tr>
+<tr><td><code>gui.form.set_field</code></td><td>Set a form field value</td></tr>
+<tr><td><code>gui.form.get_field</code></td><td>Get a form field value</td></tr>
+<tr><td><code>gui.get_state</code></td><td>Query current GUI state</td></tr>
+<tr><td><code>gui.list_vms</code></td><td>List VMs visible in GUI</td></tr>
+<tr><td><code>gui.get_selected_vm</code></td><td>Get currently selected VM</td></tr>
+<tr><td><code>gui.refresh</code></td><td>Refresh the GUI state</td></tr>
+<tr><td><code>gui.screenshot</code></td><td>Capture current GUI state as description</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="rust-api"><a class="header" href="#rust-api">Rust API</a></h2>
+<h3 id="basic-usage"><a class="header" href="#basic-usage">Basic Usage</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use hm_gui::{AutomationHandle, GuiCommand, DialogType, FormType};
+
+// Create automation handle
+let (handle, receiver) = AutomationHandle::new();
+
+// AI agent controls the GUI
+handle.open_dialog(DialogType::CreateVm)?;
+handle.set_field(FormType::CreateVm, "name", "ai-sandbox")?;
+handle.set_field(FormType::CreateVm, "cpus", 4)?;
+handle.set_field(FormType::CreateVm, "memory_mb", 8192)?;
+handle.execute(GuiCommand::SubmitDialog(DialogType::CreateVm))?;
+<span class="boring">}</span></code></pre>
+<h3 id="complete-example"><a class="header" href="#complete-example">Complete Example</a></h3>
+<pre class="playground"><code class="language-rust">use hm_gui::{App, AutomationHandle, GuiCommand};
+use std::thread;
+
+fn main() {
+    // Create automation handle
+    let (handle, receiver) = AutomationHandle::new();
+    
+    // Spawn GUI thread
+    let gui_handle = handle.clone();
+    thread::spawn(move || {
+        let app = App::new_with_automation(receiver);
+        eframe::run_native("HyperMachine", options, Box::new(|_| Ok(Box::new(app))));
+    });
+    
+    // AI agent thread
+    thread::spawn(move || {
+        // Wait for GUI to initialize
+        thread::sleep(Duration::from_secs(1));
+        
+        // Navigate to VM list
+        handle.execute(GuiCommand::Navigate("vm_list".into())).unwrap();
+        
+        // Open create VM dialog
+        handle.execute(GuiCommand::OpenDialog("create_vm".into())).unwrap();
+        
+        // Fill form
+        handle.execute(GuiCommand::SetFormField {
+            form: "create_vm".into(),
+            field: "name".into(),
+            value: "ai-created-vm".into(),
+        }).unwrap();
+        
+        handle.execute(GuiCommand::SetFormField {
+            form: "create_vm".into(),
+            field: "cpus".into(),
+            value: "4".into(),
+        }).unwrap();
+        
+        // Submit
+        handle.execute(GuiCommand::SubmitDialog("create_vm".into())).unwrap();
+        
+        // Get state
+        let state = handle.get_state().unwrap();
+        println!("Current view: {}", state.current_view);
+    });
+}</code></pre>
+<h2 id="json-command-protocol"><a class="header" href="#json-command-protocol">JSON Command Protocol</a></h2>
+<p>AI agents send commands as JSON:</p>
+<h3 id="navigate"><a class="header" href="#navigate">Navigate</a></h3>
+<pre><code class="language-json">{"type": "Navigate", "params": "vm_list"}
+</code></pre>
+<h3 id="open-dialog"><a class="header" href="#open-dialog">Open Dialog</a></h3>
+<pre><code class="language-json">{"type": "OpenDialog", "params": "create_vm"}
+</code></pre>
+<h3 id="set-form-field"><a class="header" href="#set-form-field">Set Form Field</a></h3>
+<pre><code class="language-json">{
+  "type": "SetFormField",
+  "params": {
+    "form": "create_vm",
+    "field": "name",
+    "value": "my-vm"
+  }
+}
+</code></pre>
+<h3 id="submit-dialog"><a class="header" href="#submit-dialog">Submit Dialog</a></h3>
+<pre><code class="language-json">{"type": "SubmitDialog", "params": "create_vm"}
+</code></pre>
+<h3 id="select-vm"><a class="header" href="#select-vm">Select VM</a></h3>
+<pre><code class="language-json">{"type": "SelectVm", "params": {"by": "name", "value": "my-vm"}}
+</code></pre>
+<h3 id="vm-action"><a class="header" href="#vm-action">VM Action</a></h3>
+<pre><code class="language-json">{"type": "VmAction", "params": {"action": "start", "vm_id": "vm-123"}}
+</code></pre>
+<h3 id="get-state"><a class="header" href="#get-state">Get State</a></h3>
+<pre><code class="language-json">{"type": "GetState"}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "current_view": "vm_list",
+  "selected_vm": "vm-123",
+  "dialogs_open": [],
+  "vms": [
+    {"id": "vm-123", "name": "my-vm", "status": "running"}
+  ]
+}
+</code></pre>
+<h2 id="llm-tool-definitions"><a class="header" href="#llm-tool-definitions">LLM Tool Definitions</a></h2>
+<h3 id="openai-format-1"><a class="header" href="#openai-format-1">OpenAI Format</a></h3>
+<pre><code class="language-json">{
+  "type": "function",
+  "function": {
+    "name": "gui_navigate",
+    "description": "Navigate to a view in the HyperMachine GUI",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "view": {
+          "type": "string",
+          "enum": ["welcome", "vm_list", "vm_details", "console", "settings"],
+          "description": "Target view to navigate to"
+        }
+      },
+      "required": ["view"]
+    }
+  }
+}
+</code></pre>
+<h3 id="fetch-gui-tools"><a class="header" href="#fetch-gui-tools">Fetch GUI Tools</a></h3>
+<pre><code class="language-bash"># Get GUI tools in OpenAI format
+curl http://localhost:8080/agentic/gui-tools/openai
+
+# Get GUI tools in Anthropic format
+curl http://localhost:8080/agentic/gui-tools/anthropic
+</code></pre>
+<h2 id="integration-example"><a class="header" href="#integration-example">Integration Example</a></h2>
+<h3 id="python-ai-agent-controlling-gui"><a class="header" href="#python-ai-agent-controlling-gui">Python AI Agent Controlling GUI</a></h3>
+<pre><code class="language-python">import openai
+import requests
+import json
+
+# Get GUI tools
+gui_tools = requests.get(
+    "http://localhost:8080/agentic/gui-tools/openai"
+).json()
+
+client = openai.OpenAI()
+
+def execute_gui_command(command: dict) -&gt; dict:
+    """Execute a GUI command via the automation API."""
+    return requests.post(
+        "http://localhost:8080/gui/execute",
+        json=command
+    ).json()
+
+# Chat loop
+messages = [
+    {"role": "system", "content": "You control a VM management GUI. Use the provided tools to help the user manage VMs."},
+    {"role": "user", "content": "Create a new VM called 'data-processor' with 8 CPUs and 16GB RAM"}
+]
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=messages,
+    tools=gui_tools,
+    tool_choice="auto"
+)
+
+# Execute tool calls
+for tool_call in response.choices[0].message.tool_calls or []:
+    args = json.loads(tool_call.function.arguments)
+    
+    if tool_call.function.name == "gui_navigate":
+        execute_gui_command({"type": "Navigate", "params": args["view"]})
+    
+    elif tool_call.function.name == "gui_dialog_open":
+        execute_gui_command({"type": "OpenDialog", "params": args["dialog"]})
+    
+    elif tool_call.function.name == "gui_form_set_field":
+        execute_gui_command({
+            "type": "SetFormField",
+            "params": {
+                "form": args["form"],
+                "field": args["field"],
+                "value": args["value"]
+            }
+        })
+    
+    elif tool_call.function.name == "gui_dialog_submit":
+        execute_gui_command({"type": "SubmitDialog", "params": args["dialog"]})
+</code></pre>
+<h2 id="views-and-dialogs"><a class="header" href="#views-and-dialogs">Views and Dialogs</a></h2>
+<h3 id="available-views"><a class="header" href="#available-views">Available Views</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>View</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>welcome</code></td><td>Welcome screen with quick actions</td></tr>
+<tr><td><code>vm_list</code></td><td>List of all VMs</td></tr>
+<tr><td><code>vm_details</code></td><td>Details of selected VM</td></tr>
+<tr><td><code>console</code></td><td>VM console output</td></tr>
+<tr><td><code>settings</code></td><td>Application settings</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="available-dialogs"><a class="header" href="#available-dialogs">Available Dialogs</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Dialog</th><th>Fields</th></tr>
+</thead>
+<tbody>
+<tr><td><code>create_vm</code></td><td>name, cpus, memory_mb, disk_gb, enable_gpu</td></tr>
+<tr><td><code>settings</code></td><td>theme, api_key, data_dir</td></tr>
+<tr><td><code>about</code></td><td>(read-only info)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="testing"><a class="header" href="#testing">Testing</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_ai_creates_vm_through_gui() {
+        let (handle, receiver) = AutomationHandle::new();
+        
+        // Simulate AI creating a VM
+        handle.execute(GuiCommand::OpenDialog("create_vm".into())).unwrap();
+        handle.execute(GuiCommand::SetFormField {
+            form: "create_vm".into(),
+            field: "name".into(),
+            value: "test-vm".into(),
+        }).unwrap();
+        handle.execute(GuiCommand::SubmitDialog("create_vm".into())).unwrap();
+        
+        // Verify state
+        let state = handle.get_state().unwrap();
+        assert!(state.vms.iter().any(|vm| vm.name == "test-vm"));
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="next-steps-12"><a class="header" href="#next-steps-12">Next Steps</a></h2>
+<ul>
+<li><a href="#ai-integration-overview">AI Overview</a> - AI integration overview</li>
+<li><a href="#mcp-server-1">MCP Server</a> - API-based control</li>
+<li><a href="#python-sdk-1">Python SDK</a> - Python integration</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="rest-api"><a class="header" href="#rest-api">REST API</a></h1>
+<p>HyperMachine provides a RESTful HTTP API for VM management.</p>
+<h2 id="base-url"><a class="header" href="#base-url">Base URL</a></h2>
+<pre><code>http://localhost:8080/api/v1
+</code></pre>
+<h2 id="authentication"><a class="header" href="#authentication">Authentication</a></h2>
+<p>All requests require an API key:</p>
+<pre><code class="language-bash">curl -H "Authorization: Bearer your-api-key" http://localhost:8080/api/v1/vms
+</code></pre>
+<h2 id="endpoints-1"><a class="header" href="#endpoints-1">Endpoints</a></h2>
+<h3 id="virtual-machines"><a class="header" href="#virtual-machines">Virtual Machines</a></h3>
+<h4 id="list-vms"><a class="header" href="#list-vms">List VMs</a></h4>
+<pre><code class="language-http">GET /api/v1/vms
+</code></pre>
+<p>Query parameters:</p>
+<ul>
+<li><code>status</code> - Filter by status (running, stopped, paused)</li>
+<li><code>limit</code> - Max results (default: 100)</li>
+<li><code>offset</code> - Pagination offset</li>
+</ul>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "vms": [
+    {
+      "id": "vm-550e8400-e29b-41d4-a716-446655440000",
+      "name": "my-vm",
+      "status": "running",
+      "cpu_cores": 4,
+      "memory_mb": 8192,
+      "created_at": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+</code></pre>
+<h4 id="create-vm"><a class="header" href="#create-vm">Create VM</a></h4>
+<pre><code class="language-http">POST /api/v1/vms
+Content-Type: application/json
+
+{
+  "name": "my-vm",
+  "cpu_cores": 4,
+  "memory_mb": 8192,
+  "disk_gb": 100,
+  "enable_gpu": true,
+  "network_mode": "nat",
+  "image": "ubuntu-22.04"
+}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "id": "vm-550e8400-e29b-41d4-a716-446655440000",
+  "name": "my-vm",
+  "status": "created",
+  "cpu_cores": 4,
+  "memory_mb": 8192,
+  "disk_gb": 100,
+  "gpu_enabled": true,
+  "network_mode": "nat",
+  "created_at": "2025-01-15T10:30:00Z"
+}
+</code></pre>
+<h4 id="get-vm"><a class="header" href="#get-vm">Get VM</a></h4>
+<pre><code class="language-http">GET /api/v1/vms/{vm_id}
+</code></pre>
+<h4 id="delete-vm"><a class="header" href="#delete-vm">Delete VM</a></h4>
+<pre><code class="language-http">DELETE /api/v1/vms/{vm_id}
+</code></pre>
+<h4 id="start-vm"><a class="header" href="#start-vm">Start VM</a></h4>
+<pre><code class="language-http">POST /api/v1/vms/{vm_id}/start
+</code></pre>
+<h4 id="stop-vm"><a class="header" href="#stop-vm">Stop VM</a></h4>
+<pre><code class="language-http">POST /api/v1/vms/{vm_id}/stop
+
+{
+  "force": false
+}
+</code></pre>
+<h4 id="execute-command"><a class="header" href="#execute-command">Execute Command</a></h4>
+<pre><code class="language-http">POST /api/v1/vms/{vm_id}/exec
+Content-Type: application/json
+
+{
+  "command": "echo 'Hello, World!'",
+  "timeout_secs": 60
+}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{
+  "exit_code": 0,
+  "stdout": "Hello, World!\n",
+  "stderr": "",
+  "duration_ms": 50
+}
+</code></pre>
+<h3 id="snapshots-2"><a class="header" href="#snapshots-2">Snapshots</a></h3>
+<h4 id="create-snapshot"><a class="header" href="#create-snapshot">Create Snapshot</a></h4>
+<pre><code class="language-http">POST /api/v1/vms/{vm_id}/snapshots
+Content-Type: application/json
+
+{
+  "name": "before-experiment"
+}
+</code></pre>
+<h4 id="list-snapshots"><a class="header" href="#list-snapshots">List Snapshots</a></h4>
+<pre><code class="language-http">GET /api/v1/vms/{vm_id}/snapshots
+</code></pre>
+<h4 id="restore-snapshot"><a class="header" href="#restore-snapshot">Restore Snapshot</a></h4>
+<pre><code class="language-http">POST /api/v1/vms/{vm_id}/snapshots/{snapshot_id}/restore
+</code></pre>
+<h3 id="files"><a class="header" href="#files">Files</a></h3>
+<h4 id="upload-file"><a class="header" href="#upload-file">Upload File</a></h4>
+<pre><code class="language-http">POST /api/v1/vms/{vm_id}/files
+Content-Type: application/json
+
+{
+  "path": "/home/user/data.txt",
+  "content": "file contents here",
+  "encoding": "utf-8"
+}
+</code></pre>
+<h4 id="download-file"><a class="header" href="#download-file">Download File</a></h4>
+<pre><code class="language-http">GET /api/v1/vms/{vm_id}/files?path=/home/user/data.txt
+</code></pre>
+<h2 id="error-responses"><a class="header" href="#error-responses">Error Responses</a></h2>
+<pre><code class="language-json">{
+  "error": {
+    "code": "VM_NOT_FOUND",
+    "message": "Virtual machine not found",
+    "details": {
+      "vm_id": "vm-invalid-id"
+    }
+  }
+}
+</code></pre>
+<h2 id="http-status-codes"><a class="header" href="#http-status-codes">HTTP Status Codes</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Code</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td>200</td><td>Success</td></tr>
+<tr><td>201</td><td>Created</td></tr>
+<tr><td>400</td><td>Bad Request</td></tr>
+<tr><td>401</td><td>Unauthorized</td></tr>
+<tr><td>404</td><td>Not Found</td></tr>
+<tr><td>429</td><td>Rate Limited</td></tr>
+<tr><td>500</td><td>Internal Error</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="grpc-api"><a class="header" href="#grpc-api">gRPC API</a></h1>
+<p>HyperMachine provides a high-performance gRPC API for low-latency operations.</p>
+<h2 id="service-definition"><a class="header" href="#service-definition">Service Definition</a></h2>
+<pre><code class="language-protobuf">syntax = "proto3";
+
+package hypermachine.v1;
+
+service HyperMachine {
+  // VM lifecycle
+  rpc CreateVm(CreateVmRequest) returns (Vm);
+  rpc GetVm(GetVmRequest) returns (Vm);
+  rpc ListVms(ListVmsRequest) returns (ListVmsResponse);
+  rpc DeleteVm(DeleteVmRequest) returns (Empty);
+  rpc StartVm(StartVmRequest) returns (Empty);
+  rpc StopVm(StopVmRequest) returns (Empty);
+  
+  // Execution
+  rpc ExecCommand(ExecCommandRequest) returns (ExecCommandResponse);
+  rpc ExecStream(ExecStreamRequest) returns (stream ExecStreamResponse);
+  
+  // Files
+  rpc UploadFile(UploadFileRequest) returns (Empty);
+  rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse);
+  
+  // Snapshots
+  rpc CreateSnapshot(CreateSnapshotRequest) returns (Snapshot);
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (Empty);
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+  
+  // Console streaming
+  rpc ConsoleStream(ConsoleStreamRequest) returns (stream ConsoleStreamResponse);
+}
+
+message Vm {
+  string id = 1;
+  string name = 2;
+  VmStatus status = 3;
+  int32 cpu_cores = 4;
+  int64 memory_mb = 5;
+  bool gpu_enabled = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+enum VmStatus {
+  VM_STATUS_UNSPECIFIED = 0;
+  VM_STATUS_CREATED = 1;
+  VM_STATUS_RUNNING = 2;
+  VM_STATUS_STOPPED = 3;
+  VM_STATUS_PAUSED = 4;
+}
+
+message CreateVmRequest {
+  string name = 1;
+  int32 cpu_cores = 2;
+  int64 memory_mb = 3;
+  int64 disk_gb = 4;
+  bool enable_gpu = 5;
+  string network_mode = 6;
+  string image = 7;
+}
+
+message ExecCommandRequest {
+  string vm_id = 1;
+  string command = 2;
+  int32 timeout_secs = 3;
+  map&lt;string, string&gt; environment = 4;
+  string working_dir = 5;
+}
+
+message ExecCommandResponse {
+  int32 exit_code = 1;
+  bytes stdout = 2;
+  bytes stderr = 3;
+  int64 duration_ms = 4;
+}
+</code></pre>
+<h2 id="client-usage"><a class="header" href="#client-usage">Client Usage</a></h2>
+<h3 id="rust"><a class="header" href="#rust">Rust</a></h3>
+<pre class="playground"><code class="language-rust">use hypermachine::grpc::HyperMachineClient;
+use tonic::transport::Channel;
+
+#[tokio::main]
+async fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
+    let channel = Channel::from_static("http://localhost:50051")
+        .connect()
+        .await?;
+    
+    let mut client = HyperMachineClient::new(channel);
+    
+    // Create VM
+    let request = tonic::Request::new(CreateVmRequest {
+        name: "grpc-vm".into(),
+        cpu_cores: 4,
+        memory_mb: 8192,
+        ..Default::default()
+    });
+    
+    let response = client.create_vm(request).await?;
+    println!("Created VM: {:?}", response.into_inner());
+    
+    Ok(())
+}</code></pre>
+<h3 id="python"><a class="header" href="#python">Python</a></h3>
+<pre><code class="language-python">import grpc
+from hypermachine_pb2 import CreateVmRequest
+from hypermachine_pb2_grpc import HyperMachineStub
+
+channel = grpc.insecure_channel('localhost:50051')
+stub = HyperMachineStub(channel)
+
+# Create VM
+request = CreateVmRequest(
+    name="grpc-vm",
+    cpu_cores=4,
+    memory_mb=8192
+)
+
+response = stub.CreateVm(request)
+print(f"Created VM: {response.id}")
+</code></pre>
+<h3 id="go"><a class="header" href="#go">Go</a></h3>
+<pre><code class="language-go">package main
+
+import (
+    "context"
+    pb "github.com/nervosys/hypermachine/proto"
+    "google.golang.org/grpc"
+)
+
+func main() {
+    conn, _ := grpc.Dial("localhost:50051", grpc.WithInsecure())
+    defer conn.Close()
+    
+    client := pb.NewHyperMachineClient(conn)
+    
+    resp, _ := client.CreateVm(context.Background(), &amp;pb.CreateVmRequest{
+        Name:     "grpc-vm",
+        CpuCores: 4,
+        MemoryMb: 8192,
+    })
+    
+    fmt.Printf("Created VM: %s\n", resp.Id)
+}
+</code></pre>
+<h2 id="streaming"><a class="header" href="#streaming">Streaming</a></h2>
+<h3 id="console-stream"><a class="header" href="#console-stream">Console Stream</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let request = tonic::Request::new(ConsoleStreamRequest {
+    vm_id: vm.id.clone(),
+});
+
+let mut stream = client.console_stream(request).await?.into_inner();
+
+while let Some(response) = stream.message().await? {
+    print!("{}", String::from_utf8_lossy(&amp;response.data));
+}
+<span class="boring">}</span></code></pre>
+<h3 id="exec-stream"><a class="header" href="#exec-stream">Exec Stream</a></h3>
+<p>For long-running commands with real-time output:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let request = tonic::Request::new(ExecStreamRequest {
+    vm_id: vm.id.clone(),
+    command: "tail -f /var/log/syslog".into(),
+});
+
+let mut stream = client.exec_stream(request).await?.into_inner();
+
+while let Some(response) = stream.message().await? {
+    match response.output_type {
+        OutputType::Stdout =&gt; print!("{}", String::from_utf8_lossy(&amp;response.data)),
+        OutputType::Stderr =&gt; eprint!("{}", String::from_utf8_lossy(&amp;response.data)),
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="configuration-3"><a class="header" href="#configuration-3">Configuration</a></h2>
+<pre><code class="language-toml">[grpc]
+enabled = true
+port = 50051
+max_message_size_mb = 16
+keepalive_secs = 60
+
+[grpc.tls]
+enabled = true
+cert = "/etc/hypermachine/grpc-cert.pem"
+key = "/etc/hypermachine/grpc-key.pem"
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cli-reference"><a class="header" href="#cli-reference">CLI Reference</a></h1>
+<p>The <code>hm</code> command-line interface for managing HyperMachine.</p>
+<h2 id="global-options"><a class="header" href="#global-options">Global Options</a></h2>
+<pre><code class="language-bash">hm [OPTIONS] &lt;COMMAND&gt;
+
+Options:
+  --config &lt;FILE&gt;     Config file path
+  --log-level &lt;LEVEL&gt; Log level (trace, debug, info, warn, error)
+  --quiet             Suppress output
+  --json              Output as JSON
+  -h, --help          Print help
+  -V, --version       Print version
+</code></pre>
+<h2 id="commands"><a class="header" href="#commands">Commands</a></h2>
+<h3 id="type-2-hosted-hypervisor"><a class="header" href="#type-2-hosted-hypervisor">Type-2 (Hosted) Hypervisor</a></h3>
+<h4 id="create-vm-1"><a class="header" href="#create-vm-1">Create VM</a></h4>
+<pre><code class="language-bash">hm t2 create [OPTIONS] --name &lt;NAME&gt;
+
+Options:
+  --name &lt;NAME&gt;       VM name (required)
+  --cpu &lt;N&gt;           CPU cores [default: 2]
+  --memory &lt;SIZE&gt;     Memory (e.g., 4G, 4096M) [default: 4G]
+  --disk &lt;SIZE&gt;       Disk size [default: 20G]
+  --gpu               Enable GPU
+  --network &lt;MODE&gt;    Network mode (nat, bridge, host) [default: nat]
+  --image &lt;IMAGE&gt;     Base image
+
+Examples:
+  hm t2 create --name dev --cpu 4 --memory 8G
+  hm t2 create --name ml --cpu 8 --memory 32G --gpu --disk 100G
+</code></pre>
+<h4 id="list-vms-1"><a class="header" href="#list-vms-1">List VMs</a></h4>
+<pre><code class="language-bash">hm t2 list [OPTIONS]
+
+Options:
+  --status &lt;STATUS&gt;   Filter by status (running, stopped, paused)
+  --format &lt;FORMAT&gt;   Output format (table, json, yaml)
+
+Examples:
+  hm t2 list
+  hm t2 list --status running
+  hm t2 list --json
+</code></pre>
+<h4 id="start-vm-1"><a class="header" href="#start-vm-1">Start VM</a></h4>
+<pre><code class="language-bash">hm t2 start &lt;NAME|ID&gt;
+
+Examples:
+  hm t2 start my-vm
+  hm t2 start vm-550e8400
+</code></pre>
+<h4 id="stop-vm-1"><a class="header" href="#stop-vm-1">Stop VM</a></h4>
+<pre><code class="language-bash">hm t2 stop [OPTIONS] &lt;NAME|ID&gt;
+
+Options:
+  --force    Force stop (don't wait for graceful shutdown)
+
+Examples:
+  hm t2 stop my-vm
+  hm t2 stop --force my-vm
+</code></pre>
+<h4 id="delete-vm-1"><a class="header" href="#delete-vm-1">Delete VM</a></h4>
+<pre><code class="language-bash">hm t2 delete [OPTIONS] &lt;NAME|ID&gt;
+
+Options:
+  --force    Don't prompt for confirmation
+
+Examples:
+  hm t2 delete my-vm
+  hm t2 delete --force my-vm
+</code></pre>
+<h4 id="execute-command-1"><a class="header" href="#execute-command-1">Execute Command</a></h4>
+<pre><code class="language-bash">hm t2 exec [OPTIONS] &lt;NAME|ID&gt; -- &lt;COMMAND&gt;
+
+Options:
+  --timeout &lt;SECS&gt;    Command timeout [default: 60]
+  --user &lt;USER&gt;       Run as user
+
+Examples:
+  hm t2 exec my-vm -- uname -a
+  hm t2 exec my-vm -- python -c "print('hello')"
+  hm t2 exec --user root my-vm -- apt update
+</code></pre>
+<h4 id="console"><a class="header" href="#console">Console</a></h4>
+<pre><code class="language-bash">hm t2 console &lt;NAME|ID&gt;
+
+# Attach to VM console (Ctrl+] to detach)
+</code></pre>
+<h4 id="snapshots-3"><a class="header" href="#snapshots-3">Snapshots</a></h4>
+<pre><code class="language-bash"># Create snapshot
+hm t2 snapshot create &lt;VM&gt; --name &lt;NAME&gt;
+
+# List snapshots
+hm t2 snapshot list &lt;VM&gt;
+
+# Restore snapshot
+hm t2 snapshot restore &lt;VM&gt; &lt;SNAPSHOT&gt;
+
+# Delete snapshot
+hm t2 snapshot delete &lt;VM&gt; &lt;SNAPSHOT&gt;
+
+Examples:
+  hm t2 snapshot create my-vm --name before-update
+  hm t2 snapshot list my-vm
+  hm t2 snapshot restore my-vm before-update
+</code></pre>
+<h3 id="mcp-server-2"><a class="header" href="#mcp-server-2">MCP Server</a></h3>
+<h4 id="start-server"><a class="header" href="#start-server">Start Server</a></h4>
+<pre><code class="language-bash">hm mcp serve [OPTIONS]
+
+Options:
+  --port &lt;PORT&gt;       Listen port [default: 8080]
+  --host &lt;HOST&gt;       Listen address [default: 127.0.0.1]
+  --api-key &lt;KEY&gt;     API key (or use HM_API_KEY env var)
+  --tls-cert &lt;FILE&gt;   TLS certificate
+  --tls-key &lt;FILE&gt;    TLS private key
+
+Examples:
+  hm mcp serve --api-key "secret"
+  hm mcp serve --port 8443 --tls-cert cert.pem --tls-key key.pem
+</code></pre>
+<h4 id="list-tools"><a class="header" href="#list-tools">List Tools</a></h4>
+<pre><code class="language-bash">hm mcp tools [OPTIONS]
+
+Options:
+  --format &lt;FORMAT&gt;   Format (mcp, openai, anthropic, gemini)
+
+Examples:
+  hm mcp tools
+  hm mcp tools --format openai
+</code></pre>
+<h3 id="system"><a class="header" href="#system">System</a></h3>
+<h4 id="doctor"><a class="header" href="#doctor">Doctor</a></h4>
+<p>Check system requirements:</p>
+<pre><code class="language-bash">hm doctor
+
+# Output:
+# ✓ Hypervisor support: KVM
+# ✓ CPU virtualization: Intel VT-x
+# ✓ IOMMU support: Intel VT-d
+# ✓ GPU passthrough: Available
+</code></pre>
+<h4 id="version"><a class="header" href="#version">Version</a></h4>
+<pre><code class="language-bash">hm version
+
+# hypermachine 0.1.0
+# Built: 2025-01-15
+# Rust: 1.75.0
+</code></pre>
+<h2 id="environment-variables-1"><a class="header" href="#environment-variables-1">Environment Variables</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variable</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><code>HM_API_KEY</code></td><td>MCP server API key</td></tr>
+<tr><td><code>HM_LOG_LEVEL</code></td><td>Log level</td></tr>
+<tr><td><code>HM_CONFIG_FILE</code></td><td>Config file path</td></tr>
+<tr><td><code>HM_DATA_DIR</code></td><td>Data directory</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="completion"><a class="header" href="#completion">Completion</a></h2>
+<p>Generate shell completions:</p>
+<pre><code class="language-bash"># Bash
+hm completion bash &gt; /etc/bash_completion.d/hm
+
+# Zsh
+hm completion zsh &gt; ~/.zsh/completions/_hm
+
+# Fish
+hm completion fish &gt; ~/.config/fish/completions/hm.fish
+
+# PowerShell
+hm completion powershell &gt; $PROFILE.d/hm.ps1
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="security-overview"><a class="header" href="#security-overview">Security Overview</a></h1>
+<p>HyperMachine is designed with security as a first-class concern.</p>
+<h2 id="security-model-1"><a class="header" href="#security-model-1">Security Model</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────┐
+│                    API Layer                             │
+│     Authentication • Rate Limiting • Input Validation   │
+├─────────────────────────────────────────────────────────┤
+│                 Access Control                           │
+│       Capabilities • Resource Quotas • Policies         │
+├─────────────────────────────────────────────────────────┤
+│                  VM Isolation                            │
+│      Memory • Network • Filesystem • Devices            │
+├─────────────────────────────────────────────────────────┤
+│                 Cryptography                             │
+│     FIPS 140-3 • Key Management • Secure Boot          │
+├─────────────────────────────────────────────────────────┤
+│                  Audit System                            │
+│       Logging • Monitoring • Compliance                 │
+└─────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="key-security-features"><a class="header" href="#key-security-features">Key Security Features</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Feature</th><th>Description</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>FIPS 140-3 Cryptography</strong></td><td>Government-grade encryption</td></tr>
+<tr><td><strong>Seccomp Filtering</strong></td><td>Restrict syscalls available to VMs</td></tr>
+<tr><td><strong>Capability-based Access</strong></td><td>Fine-grained permission control</td></tr>
+<tr><td><strong>Memory Isolation</strong></td><td>EPT/NPT hardware isolation</td></tr>
+<tr><td><strong>Network Isolation</strong></td><td>Per-VM network namespaces</td></tr>
+<tr><td><strong>Audit Logging</strong></td><td>Complete operation history</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="threat-model"><a class="header" href="#threat-model">Threat Model</a></h2>
+<h3 id="protected-against"><a class="header" href="#protected-against">Protected Against</a></h3>
+<ul>
+<li><strong>VM Escape</strong> - Hardware-assisted isolation (EPT/NPT)</li>
+<li><strong>Side-channel Attacks</strong> - CPU isolation, memory randomization</li>
+<li><strong>Network Attacks</strong> - Isolated virtual networks, firewall</li>
+<li><strong>DMA Attacks</strong> - IOMMU/VT-d isolation</li>
+<li><strong>Privilege Escalation</strong> - Minimal host kernel exposure</li>
+</ul>
+<h3 id="trust-boundaries"><a class="header" href="#trust-boundaries">Trust Boundaries</a></h3>
+<ol>
+<li><strong>API Layer</strong> - Authentication, input validation</li>
+<li><strong>Hypervisor Core</strong> - VM isolation</li>
+<li><strong>Hardware</strong> - CPU virtualization extensions</li>
+</ol>
+<h2 id="security-profiles-1"><a class="header" href="#security-profiles-1">Security Profiles</a></h2>
+<pre><code class="language-bash"># High security (production)
+hm t2 create --name secure-vm --security-profile high
+
+# AI sandbox (isolated but network-enabled)
+hm t2 create --name ai-vm --security-profile ai-sandbox
+</code></pre>
+<h3 id="profile-definitions-1"><a class="header" href="#profile-definitions-1">Profile Definitions</a></h3>
+<p><strong>high:</strong></p>
+<ul>
+<li>Seccomp enabled (strict)</li>
+<li>No network access</li>
+<li>Read-only root filesystem</li>
+<li>Audit all operations</li>
+</ul>
+<p><strong>ai-sandbox:</strong></p>
+<ul>
+<li>Seccomp enabled</li>
+<li>Network allowed (monitored)</li>
+<li>CPU/memory limits</li>
+<li>Full audit logging</li>
+</ul>
+<h2 id="next-steps-13"><a class="header" href="#next-steps-13">Next Steps</a></h2>
+<ul>
+<li><a href="#cryptography">Cryptography</a> - Encryption details</li>
+<li><a href="#access-control">Access Control</a> - Permission system</li>
+<li><a href="#audit-logging">Audit Logging</a> - Compliance logging</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cryptography"><a class="header" href="#cryptography">Cryptography</a></h1>
+<p>HyperMachine implements FIPS 140-3 compliant cryptographic modules.</p>
+<h2 id="supported-algorithms"><a class="header" href="#supported-algorithms">Supported Algorithms</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Type</th><th>Algorithms</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Symmetric</strong></td><td>AES-128/256-GCM, AES-128/256-CBC</td></tr>
+<tr><td><strong>Hash</strong></td><td>SHA-256, SHA-384, SHA-512</td></tr>
+<tr><td><strong>MAC</strong></td><td>HMAC-SHA-256, HMAC-SHA-512</td></tr>
+<tr><td><strong>KDF</strong></td><td>HKDF-SHA-256, PBKDF2-SHA-256</td></tr>
+<tr><td><strong>Asymmetric</strong></td><td>RSA-2048/3072/4096, ECDSA P-256/P-384/P-521</td></tr>
+<tr><td><strong>Post-Quantum</strong></td><td>ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+)</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<h3 id="symmetric-encryption"><a class="header" href="#symmetric-encryption">Symmetric Encryption</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use hv2_core::crypto::{Aes256Gcm, Cipher};
+
+let key = Aes256Gcm::generate_key();
+let cipher = Aes256Gcm::new(&amp;key);
+
+let plaintext = b"sensitive data";
+let ciphertext = cipher.encrypt(plaintext)?;
+let decrypted = cipher.decrypt(&amp;ciphertext)?;
+<span class="boring">}</span></code></pre>
+<h3 id="hashing"><a class="header" href="#hashing">Hashing</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use hv2_core::crypto::Sha256;
+
+let hash = Sha256::digest(b"data to hash");
+println!("SHA-256: {}", hex::encode(hash));
+<span class="boring">}</span></code></pre>
+<h3 id="post-quantum"><a class="header" href="#post-quantum">Post-Quantum</a></h3>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use hv2_core::crypto::MlKem768;
+
+// Key encapsulation
+let (public_key, secret_key) = MlKem768::keypair();
+let (ciphertext, shared_secret) = public_key.encapsulate();
+let decapsulated = secret_key.decapsulate(&amp;ciphertext);
+<span class="boring">}</span></code></pre>
+<h2 id="fips-mode"><a class="header" href="#fips-mode">FIPS Mode</a></h2>
+<p>Enable FIPS 140-3 mode:</p>
+<pre><code class="language-toml">[crypto]
+fips_mode = true
+</code></pre>
+<p>In FIPS mode, only approved algorithms are available.</p>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>Throughput</th></tr>
+</thead>
+<tbody>
+<tr><td>AES-256-GCM encrypt</td><td>~600 MiB/s</td></tr>
+<tr><td>AES-256-GCM decrypt</td><td>~700 MiB/s</td></tr>
+<tr><td>SHA-256</td><td>~3.7 GiB/s</td></tr>
+<tr><td>SHA-512</td><td>~3.5 GiB/s</td></tr>
+</tbody>
+</table>
+</div>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="access-control"><a class="header" href="#access-control">Access Control</a></h1>
+<p>HyperMachine uses capability-based access control for fine-grained permissions.</p>
+<h2 id="api-key-permissions"><a class="header" href="#api-key-permissions">API Key Permissions</a></h2>
+<pre><code class="language-toml"># config.toml
+[[api_keys]]
+key = "prod-key-xxxxx"
+name = "Production"
+permissions = ["vm.create", "vm.start", "vm.stop", "vm.list"]
+quotas = { max_vms = 10, max_memory_gb = 64 }
+
+[[api_keys]]
+key = "dev-key-xxxxx"
+name = "Development"
+permissions = ["*"]  # Full access
+quotas = { max_vms = 5, max_memory_gb = 32 }
+</code></pre>
+<h2 id="permission-categories"><a class="header" href="#permission-categories">Permission Categories</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Category</th><th>Permissions</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>VM Lifecycle</strong></td><td><code>vm.create</code>, <code>vm.delete</code>, <code>vm.start</code>, <code>vm.stop</code></td></tr>
+<tr><td><strong>VM Info</strong></td><td><code>vm.list</code>, <code>vm.get</code></td></tr>
+<tr><td><strong>Execution</strong></td><td><code>vm.exec</code>, <code>vm.upload</code>, <code>vm.download</code></td></tr>
+<tr><td><strong>Snapshots</strong></td><td><code>snapshot.create</code>, <code>snapshot.restore</code></td></tr>
+<tr><td><strong>GPU</strong></td><td><code>gpu.attach</code>, <code>gpu.detach</code></td></tr>
+<tr><td><strong>Admin</strong></td><td><code>admin.config</code>, <code>admin.users</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="resource-quotas"><a class="header" href="#resource-quotas">Resource Quotas</a></h2>
+<pre><code class="language-toml">[quotas.default]
+max_vms = 5
+max_cpu_cores = 16
+max_memory_gb = 32
+max_disk_gb = 500
+max_gpu = 1
+</code></pre>
+<h2 id="rate-limiting-1"><a class="header" href="#rate-limiting-1">Rate Limiting</a></h2>
+<pre><code class="language-toml">[rate_limits]
+default_rpm = 120  # Requests per minute
+vm_create_rpm = 10
+vm_exec_rpm = 100
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="audit-logging"><a class="header" href="#audit-logging">Audit Logging</a></h1>
+<p>HyperMachine provides comprehensive audit logging for compliance and security.</p>
+<h2 id="log-format"><a class="header" href="#log-format">Log Format</a></h2>
+<pre><code class="language-json">{
+  "timestamp": "2025-01-15T10:30:00.123Z",
+  "event": "vm.create",
+  "actor": {
+    "type": "api_key",
+    "id": "key-xxxxx",
+    "name": "Production"
+  },
+  "resource": {
+    "type": "vm",
+    "id": "vm-550e8400",
+    "name": "my-vm"
+  },
+  "action": "create",
+  "result": "success",
+  "details": {
+    "cpu_cores": 4,
+    "memory_mb": 8192
+  },
+  "source_ip": "192.168.1.100"
+}
+</code></pre>
+<h2 id="configuration-4"><a class="header" href="#configuration-4">Configuration</a></h2>
+<pre><code class="language-toml">[audit]
+enabled = true
+log_path = "/var/log/hypermachine/audit.log"
+rotation = "daily"
+retention_days = 90
+format = "json"
+
+# Events to log
+events = [
+  "vm.*",
+  "snapshot.*",
+  "auth.*",
+  "admin.*"
+]
+</code></pre>
+<h2 id="log-destinations"><a class="header" href="#log-destinations">Log Destinations</a></h2>
+<ul>
+<li><strong>File</strong> - Local JSON/text files</li>
+<li><strong>Syslog</strong> - System logging</li>
+<li><strong>Elasticsearch</strong> - Centralized search</li>
+<li><strong>CloudWatch</strong> - AWS logging</li>
+</ul>
+<h2 id="compliance"><a class="header" href="#compliance">Compliance</a></h2>
+<p>Supports requirements for:</p>
+<ul>
+<li>SOC 2 Type II</li>
+<li>HIPAA</li>
+<li>PCI DSS</li>
+<li>FedRAMP</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="kubernetes-deployment"><a class="header" href="#kubernetes-deployment">Kubernetes Deployment</a></h1>
+<p>Deploy HyperMachine on Kubernetes using Helm.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li>Kubernetes 1.25+</li>
+<li>Helm 3.0+</li>
+<li>Privileged container support (for hypervisor)</li>
+</ul>
+<h2 id="install-with-helm"><a class="header" href="#install-with-helm">Install with Helm</a></h2>
+<pre><code class="language-bash"># Add Helm repository
+helm repo add hypermachine https://charts.hypermachine.io
+helm repo update
+
+# Install
+helm install hypermachine hypermachine/hypermachine \
+  --namespace hypermachine \
+  --create-namespace \
+  --set apiKey="your-secret-key"
+</code></pre>
+<h2 id="configuration-5"><a class="header" href="#configuration-5">Configuration</a></h2>
+<pre><code class="language-yaml"># values.yaml
+replicaCount: 3
+
+image:
+  repository: ghcr.io/nervosys/hypermachine
+  tag: latest
+
+resources:
+  requests:
+    cpu: "2"
+    memory: "4Gi"
+  limits:
+    cpu: "8"
+    memory: "16Gi"
+
+service:
+  type: LoadBalancer
+  port: 8080
+
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  size: 100Gi
+
+config:
+  apiKey: ""  # Set via --set or secret
+  logLevel: "info"
+  
+securityContext:
+  privileged: true  # Required for KVM
+</code></pre>
+<h2 id="production-setup"><a class="header" href="#production-setup">Production Setup</a></h2>
+<pre><code class="language-bash">helm install hypermachine hypermachine/hypermachine \
+  --namespace hypermachine \
+  --create-namespace \
+  --values production-values.yaml \
+  --set apiKey="$(kubectl get secret hm-secrets -o jsonpath='{.data.api-key}' | base64 -d)"
+</code></pre>
+<h2 id="scaling"><a class="header" href="#scaling">Scaling</a></h2>
+<pre><code class="language-bash"># Scale replicas
+kubectl scale deployment hypermachine --replicas=5
+
+# Horizontal Pod Autoscaler
+kubectl autoscale deployment hypermachine --min=3 --max=10 --cpu-percent=70
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="terraform-deployment"><a class="header" href="#terraform-deployment">Terraform Deployment</a></h1>
+<p>Infrastructure as Code for HyperMachine on AWS, Azure, and GCP.</p>
+<h2 id="aws-eks"><a class="header" href="#aws-eks">AWS EKS</a></h2>
+<pre><code class="language-hcl"># main.tf
+module "hypermachine" {
+  source = "github.com/nervosys/terraform-hypermachine-aws"
+  
+  cluster_name     = "hypermachine-prod"
+  region           = "us-west-2"
+  node_count       = 3
+  instance_type    = "m6i.xlarge"
+  
+  enable_gpu_nodes = true
+  gpu_node_count   = 2
+  gpu_instance_type = "g5.xlarge"
+}
+
+output "cluster_endpoint" {
+  value = module.hypermachine.cluster_endpoint
+}
+</code></pre>
+<h2 id="azure-aks"><a class="header" href="#azure-aks">Azure AKS</a></h2>
+<pre><code class="language-hcl">module "hypermachine" {
+  source = "github.com/nervosys/terraform-hypermachine-azure"
+  
+  resource_group_name = "hypermachine-rg"
+  location            = "westus2"
+  cluster_name        = "hypermachine-prod"
+  node_count          = 3
+  vm_size             = "Standard_D4s_v3"
+}
+</code></pre>
+<h2 id="gcp-gke"><a class="header" href="#gcp-gke">GCP GKE</a></h2>
+<pre><code class="language-hcl">module "hypermachine" {
+  source = "github.com/nervosys/terraform-hypermachine-gcp"
+  
+  project_id   = "my-project"
+  region       = "us-central1"
+  cluster_name = "hypermachine-prod"
+  node_count   = 3
+  machine_type = "n2-standard-4"
+}
+</code></pre>
+<h2 id="usage-1"><a class="header" href="#usage-1">Usage</a></h2>
+<pre><code class="language-bash">cd deploy/terraform
+terraform init
+terraform plan -var="environment=production"
+terraform apply -var="environment=production"
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="docker-deployment"><a class="header" href="#docker-deployment">Docker Deployment</a></h1>
+<p>Run HyperMachine in Docker containers.</p>
+<h2 id="quick-start-2"><a class="header" href="#quick-start-2">Quick Start</a></h2>
+<pre><code class="language-bash">docker run -it --privileged \
+  -p 8080:8080 \
+  -v /var/lib/hypermachine:/data \
+  -e HM_API_KEY="your-secret-key" \
+  ghcr.io/nervosys/hypermachine:latest
+</code></pre>
+<h2 id="docker-compose"><a class="header" href="#docker-compose">Docker Compose</a></h2>
+<pre><code class="language-yaml"># docker-compose.yml
+version: '3.8'
+
+services:
+  hypermachine:
+    image: ghcr.io/nervosys/hypermachine:latest
+    privileged: true
+    ports:
+      - "8080:8080"
+      - "50051:50051"
+    volumes:
+      - hm-data:/data
+      - /dev/kvm:/dev/kvm
+    environment:
+      - HM_API_KEY=${HM_API_KEY}
+      - HM_LOG_LEVEL=info
+    restart: unless-stopped
+
+volumes:
+  hm-data:
+</code></pre>
+<h2 id="run"><a class="header" href="#run">Run</a></h2>
+<pre><code class="language-bash"># Start
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+</code></pre>
+<h2 id="gpu-support"><a class="header" href="#gpu-support">GPU Support</a></h2>
+<pre><code class="language-yaml">services:
+  hypermachine:
+    image: ghcr.io/nervosys/hypermachine:latest
+    privileged: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+</code></pre>
+<h2 id="building-custom-image"><a class="header" href="#building-custom-image">Building Custom Image</a></h2>
+<pre><code class="language-dockerfile">FROM ghcr.io/nervosys/hypermachine:latest
+
+COPY config.toml /etc/hypermachine/config.toml
+COPY custom-scripts/ /opt/scripts/
+
+ENV HM_CONFIG_FILE=/etc/hypermachine/config.toml
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="development-setup"><a class="header" href="#development-setup">Development Setup</a></h1>
+<p>Set up a development environment for contributing to HyperMachine.</p>
+<h2 id="prerequisites-1"><a class="header" href="#prerequisites-1">Prerequisites</a></h2>
+<ul>
+<li>Rust 1.75+</li>
+<li>Linux with KVM, Windows with WHPX, or macOS with HVF</li>
+<li>Git</li>
+</ul>
+<h2 id="clone-and-build"><a class="header" href="#clone-and-build">Clone and Build</a></h2>
+<pre><code class="language-bash">git clone https://github.com/nervosys/HyperMachine
+cd HyperMachine
+
+# Build all crates
+cargo build
+
+# Build release
+cargo build --release
+
+# Run tests
+cargo test --workspace
+</code></pre>
+<h2 id="development-workflow"><a class="header" href="#development-workflow">Development Workflow</a></h2>
+<pre><code class="language-bash"># Run the CLI
+cargo run -p hm-cli -- t2 list
+
+# Run with logging
+RUST_LOG=debug cargo run -p hm-cli -- t2 list
+
+# Run the GUI
+cargo run -p hm-gui
+
+# Run MCP server
+cargo run -p hm-cli -- mcp serve --api-key test
+</code></pre>
+<h2 id="ide-setup"><a class="header" href="#ide-setup">IDE Setup</a></h2>
+<h3 id="vs-code"><a class="header" href="#vs-code">VS Code</a></h3>
+<p>Recommended extensions:</p>
+<ul>
+<li>rust-analyzer</li>
+<li>CodeLLDB</li>
+<li>Even Better TOML</li>
+</ul>
+<h3 id="intellijclion"><a class="header" href="#intellijclion">IntelliJ/CLion</a></h3>
+<ul>
+<li>Install Rust plugin</li>
+<li>Open as Cargo project</li>
+</ul>
+<h2 id="running-tests"><a class="header" href="#running-tests">Running Tests</a></h2>
+<pre><code class="language-bash"># All tests
+cargo test --workspace
+
+# Specific crate
+cargo test -p hv2-core
+
+# With output
+cargo test -- --nocapture
+
+# Integration tests
+cargo test --test integration
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="code-style"><a class="header" href="#code-style">Code Style</a></h1>
+<p>HyperMachine follows standard Rust conventions with some project-specific guidelines.</p>
+<h2 id="formatting"><a class="header" href="#formatting">Formatting</a></h2>
+<pre><code class="language-bash"># Format code
+cargo fmt
+
+# Check formatting
+cargo fmt --check
+</code></pre>
+<h2 id="linting"><a class="header" href="#linting">Linting</a></h2>
+<pre><code class="language-bash"># Run clippy
+cargo clippy --workspace -- -D warnings
+
+# Fix auto-fixable issues
+cargo clippy --fix
+</code></pre>
+<h2 id="naming-conventions"><a class="header" href="#naming-conventions">Naming Conventions</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Element</th><th>Convention</th><th>Example</th></tr>
+</thead>
+<tbody>
+<tr><td>Crates</td><td><code>kebab-case</code></td><td><code>hv2-core</code></td></tr>
+<tr><td>Modules</td><td><code>snake_case</code></td><td><code>memory_manager</code></td></tr>
+<tr><td>Types</td><td><code>PascalCase</code></td><td><code>VirtualMachine</code></td></tr>
+<tr><td>Functions</td><td><code>snake_case</code></td><td><code>create_vm</code></td></tr>
+<tr><td>Constants</td><td><code>SCREAMING_SNAKE</code></td><td><code>MAX_CPU_CORES</code></td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<p>Use <code>thiserror</code> for error types:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum VmError {
+    #[error("VM not found: {0}")]
+    NotFound(String),
+    
+    #[error("VM already running")]
+    AlreadyRunning,
+    
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+<span class="boring">}</span></code></pre>
+<h2 id="documentation"><a class="header" href="#documentation">Documentation</a></h2>
+<p>All public items must have documentation:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>/// Creates a new virtual machine with the specified configuration.
+///
+/// # Arguments
+///
+/// * `config` - The VM configuration
+///
+/// # Returns
+///
+/// The created VM handle, or an error if creation failed.
+///
+/// # Example
+///
+/// ```
+/// let vm = Vm::create(VmConfig {
+///     name: "test".into(),
+///     cpu_cores: 4,
+///     memory_mb: 8192,
+/// })?;
+/// ```
+pub fn create(config: VmConfig) -&gt; Result&lt;Vm&gt; {
+    // ...
+}
+<span class="boring">}</span></code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="testing-1"><a class="header" href="#testing-1">Testing</a></h1>
+<p>Guidelines for writing and running tests in HyperMachine.</p>
+<h2 id="test-structure"><a class="header" href="#test-structure">Test Structure</a></h2>
+<pre><code>crates/
+  hv2-core/
+    src/
+    tests/           # Integration tests
+      integration.rs
+    benches/         # Benchmarks
+      crypto_bench.rs
+</code></pre>
+<h2 id="unit-tests"><a class="header" href="#unit-tests">Unit Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_vm_creation() {
+        let config = VmConfig {
+            name: "test".into(),
+            cpu_cores: 2,
+            memory_mb: 4096,
+        };
+        
+        let vm = Vm::create(config).unwrap();
+        assert_eq!(vm.name(), "test");
+        assert_eq!(vm.status(), VmStatus::Created);
+    }
+    
+    #[test]
+    fn test_vm_not_found() {
+        let result = Vm::get("nonexistent");
+        assert!(matches!(result, Err(VmError::NotFound(_))));
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="integration-tests"><a class="header" href="#integration-tests">Integration Tests</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// tests/integration.rs
+use hypermachine::prelude::*;
+
+#[test]
+fn test_full_vm_lifecycle() {
+    let hm = HyperMachine::new_local().unwrap();
+    
+    // Create
+    let vm = hm.create_vm("integration-test", 2, 4096).unwrap();
+    assert_eq!(vm.status(), VmStatus::Created);
+    
+    // Start
+    vm.start().unwrap();
+    assert_eq!(vm.status(), VmStatus::Running);
+    
+    // Execute
+    let result = vm.exec("echo hello").unwrap();
+    assert_eq!(result.stdout.trim(), "hello");
+    
+    // Stop
+    vm.stop().unwrap();
+    assert_eq!(vm.status(), VmStatus::Stopped);
+    
+    // Delete
+    vm.delete().unwrap();
+}
+<span class="boring">}</span></code></pre>
+<h2 id="running-tests-1"><a class="header" href="#running-tests-1">Running Tests</a></h2>
+<pre><code class="language-bash"># All tests
+cargo test --workspace
+
+# Specific crate
+cargo test -p hv2-core
+
+# Specific test
+cargo test test_vm_creation
+
+# With output
+cargo test -- --nocapture
+
+# Ignored tests (require hardware)
+cargo test -- --ignored
+</code></pre>
+<h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
+<pre><code class="language-bash">cargo bench -p hv2-core --bench crypto_bench
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
+
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
