@@ -63,9 +63,10 @@ impl UsbSpeed {
 }
 
 /// Port state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum PortState {
     /// Port is disconnected
+    #[default]
     Disconnected,
     /// Port is disabled
     Disabled,
@@ -75,12 +76,6 @@ pub enum PortState {
     Enabled,
     /// Port is suspended
     Suspended,
-}
-
-impl Default for PortState {
-    fn default() -> Self {
-        Self::Disconnected
-    }
 }
 
 /// Port register set
@@ -693,9 +688,10 @@ impl Interrupter {
 }
 
 /// Slot state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SlotState {
     /// Slot is disabled
+    #[default]
     Disabled,
     /// Slot is enabled
     Enabled,
@@ -705,12 +701,6 @@ pub enum SlotState {
     Addressed,
     /// Slot is configured
     Configured,
-}
-
-impl Default for SlotState {
-    fn default() -> Self {
-        Self::Disabled
-    }
 }
 
 /// Device slot
@@ -841,20 +831,15 @@ pub mod usbsts {
 }
 
 /// xHCI controller state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum XhciState {
     /// Controller halted
+    #[default]
     Halted,
     /// Controller running
     Running,
     /// Controller in reset
     Reset,
-}
-
-impl Default for XhciState {
-    fn default() -> Self {
-        Self::Halted
-    }
 }
 
 /// xHCI controller statistics

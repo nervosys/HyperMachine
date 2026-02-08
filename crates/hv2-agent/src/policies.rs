@@ -552,7 +552,7 @@ impl RateLimitSpec {
 }
 
 /// Resource quota specification
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QuotaSpec {
     /// Maximum number of VMs
     pub max_vms: Option<u32>,
@@ -566,19 +566,6 @@ pub struct QuotaSpec {
     pub max_network_interfaces: Option<u32>,
     /// Maximum snapshots per VM
     pub max_snapshots_per_vm: Option<u32>,
-}
-
-impl Default for QuotaSpec {
-    fn default() -> Self {
-        Self {
-            max_vms: None,
-            max_memory: None,
-            max_cpus: None,
-            max_storage: None,
-            max_network_interfaces: None,
-            max_snapshots_per_vm: None,
-        }
-    }
 }
 
 impl QuotaSpec {

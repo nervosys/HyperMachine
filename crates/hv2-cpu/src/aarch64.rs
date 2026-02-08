@@ -155,7 +155,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
         self.data
             .get(addr)
             .copied()
-            .ok_or(CpuError::InvalidMemoryAccess.into())
+            .ok_or(CpuError::InvalidMemoryAccess)
     }
 
     fn read_u16(&self, addr: u64) -> Result<u16> {
@@ -163,7 +163,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
         if addr + 1 < self.data.len() {
             Ok(u16::from_le_bytes([self.data[addr], self.data[addr + 1]]))
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -177,7 +177,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
                 self.data[addr + 3],
             ]))
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -195,7 +195,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
                 self.data[addr + 7],
             ]))
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -205,7 +205,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr] = value;
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -217,7 +217,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr + 1] = bytes[1];
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -228,7 +228,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr..addr + 4].copy_from_slice(&bytes);
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -239,7 +239,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr..addr + 8].copy_from_slice(&bytes);
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 }
@@ -438,7 +438,7 @@ impl AArch64Cpu {
     pub fn fetch_instruction<M: MemoryAccess>(&self, memory: &M) -> Result<u32> {
         // Check PC alignment (must be 4-byte aligned)
         if (self.regs.pc & 3) != 0 {
-            return Err(CpuError::InvalidMemoryAccess.into());
+            return Err(CpuError::InvalidMemoryAccess);
         }
         memory.read_u32(self.regs.pc)
     }
@@ -473,7 +473,7 @@ impl AArch64Cpu {
             }
 
             _ => {
-                Err(CpuError::UnsupportedInstruction(format!("0x{:08X}", opcode)).into())
+                Err(CpuError::UnsupportedInstruction(format!("0x{:08X}", opcode)))
             }
         }
     }
@@ -489,7 +489,7 @@ impl AArch64Cpu {
                 let op_sub = (opcode >> 30) & 1; // SUB if 1
                 let s = (opcode >> 29) & 1; // Set flags if 1
                 let imm12 = ((opcode >> 10) & 0xFFF) as u64;
-                let shift = ((opcode >> 22) & 0x3) as u32;
+                let shift = ((opcode >> 22) & 0x3);
                 let rn = ((opcode >> 5) & 0x1F) as u8;
                 let rd = (opcode & 0x1F) as u8;
 
@@ -525,7 +525,7 @@ impl AArch64Cpu {
             0b101 => {
                 let sf = (opcode >> 31) & 1;
                 let opc = (opcode >> 29) & 0x3;
-                let hw = ((opcode >> 21) & 0x3) as u32;
+                let hw = ((opcode >> 21) & 0x3);
                 let imm16 = ((opcode >> 5) & 0xFFFF) as u64;
                 let rd = (opcode & 0x1F) as u8;
 
@@ -541,7 +541,7 @@ impl AArch64Cpu {
                         let mask = !(0xFFFFu64 << shift);
                         (old & mask) | imm
                     }
-                    _ => return Err(CpuError::InvalidInstruction.into()),
+                    _ => return Err(CpuError::InvalidInstruction),
                 };
 
                 if sf == 1 {
@@ -556,13 +556,13 @@ impl AArch64Cpu {
                 let sf = (opcode >> 31) & 1;
                 let opc = (opcode >> 29) & 0x3;
                 let n = (opcode >> 22) & 1;
-                let immr = ((opcode >> 16) & 0x3F) as u32;
-                let imms = ((opcode >> 10) & 0x3F) as u32;
+                let immr = ((opcode >> 16) & 0x3F);
+                let imms = ((opcode >> 10) & 0x3F);
                 let rn = ((opcode >> 5) & 0x1F) as u8;
                 let rd = (opcode & 0x1F) as u8;
 
                 // Decode bitmask immediate (simplified)
-                let imm = decode_bitmask(n as u32, imms, immr, sf == 1);
+                let imm = decode_bitmask(n, imms, immr, sf == 1);
                 let operand1 = if sf == 1 {
                     self.get_xreg(rn)
                 } else {
@@ -589,7 +589,7 @@ impl AArch64Cpu {
                 }
             }
 
-            _ => return Err(CpuError::UnsupportedInstruction(format!("DP-Imm op={}", op)).into()),
+            _ => return Err(CpuError::UnsupportedInstruction(format!("DP-Imm op={}", op))),
         }
 
         self.regs.pc += 4;
@@ -655,7 +655,7 @@ impl AArch64Cpu {
                     // RET
                     self.regs.pc = self.get_xreg(rn);
                 }
-                _ => return Err(CpuError::UnsupportedInstruction(format!("BR opc={}", opc)).into()),
+                _ => return Err(CpuError::UnsupportedInstruction(format!("BR opc={}", opc))),
             }
             return Ok(());
         }
@@ -686,7 +686,7 @@ impl AArch64Cpu {
                 }
                 0b011 => {
                     // BRK
-                    return Err(CpuError::Execution(format!("BRK #{}", imm16)).into());
+                    return Err(CpuError::Execution(format!("BRK #{}", imm16)));
                 }
                 _ => {}
             }
@@ -745,7 +745,7 @@ impl AArch64Cpu {
             return Ok(());
         }
 
-        Err(CpuError::UnsupportedInstruction(format!("Branch/Sys 0x{:08X}", opcode)).into())
+        Err(CpuError::UnsupportedInstruction(format!("Branch/Sys 0x{:08X}", opcode)))
     }
 
     /// Execute Load/Store instructions
@@ -810,7 +810,7 @@ impl AArch64Cpu {
             let rt2 = ((opcode >> 10) & 0x1F) as u8;
 
             let scale = if (opcode >> 31) & 1 == 1 { 3 } else { 2 };
-            let offset = (sign_extend(imm7 as u64, 7) as i64) << scale;
+            let offset = sign_extend(imm7 as u64, 7) << scale;
 
             let base = if rn == 31 { self.regs.sp } else { self.get_xreg(rn) };
             let addr = (base as i64 + offset) as u64;
@@ -839,7 +839,7 @@ impl AArch64Cpu {
             return Ok(());
         }
 
-        Err(CpuError::UnsupportedInstruction(format!("Load/Store 0x{:08X}", opcode)).into())
+        Err(CpuError::UnsupportedInstruction(format!("Load/Store 0x{:08X}", opcode)))
     }
 
     /// Execute Data Processing (Register) instructions
@@ -853,7 +853,7 @@ impl AArch64Cpu {
             let shift_type = ((opcode >> 22) & 0x3) as u8;
             let n = (opcode >> 21) & 1;
             let rm = ((opcode >> 16) & 0x1F) as u8;
-            let imm6 = ((opcode >> 10) & 0x3F) as u32;
+            let imm6 = ((opcode >> 10) & 0x3F);
             let rn = ((opcode >> 5) & 0x1F) as u8;
             let rd = (opcode & 0x1F) as u8;
 
@@ -910,7 +910,7 @@ impl AArch64Cpu {
             let s = (opcode >> 29) & 1;
             let shift_type = ((opcode >> 22) & 0x3) as u8;
             let rm = ((opcode >> 16) & 0x1F) as u8;
-            let imm6 = ((opcode >> 10) & 0x3F) as u32;
+            let imm6 = ((opcode >> 10) & 0x3F);
             let rn = ((opcode >> 5) & 0x1F) as u8;
             let rd = (opcode & 0x1F) as u8;
 
@@ -957,7 +957,7 @@ impl AArch64Cpu {
             return Ok(());
         }
 
-        Err(CpuError::UnsupportedInstruction(format!("DP-Reg 0x{:08X}", opcode)).into())
+        Err(CpuError::UnsupportedInstruction(format!("DP-Reg 0x{:08X}", opcode)))
     }
 
     /// Update NZCV flags

@@ -478,9 +478,10 @@ impl InterleavingMode {
 }
 
 /// Memory allocation policy for NUMA-aware allocation
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum AllocationPolicy {
     /// Allocate from the local node only
+    #[default]
     Local,
     /// Allocate from the preferred node, fall back to others
     Preferred(NodeId),
@@ -511,12 +512,6 @@ impl AllocationPolicy {
     /// Create a bound allocation policy
     pub fn bind(node: NodeId) -> Self {
         AllocationPolicy::Bind(node)
-    }
-}
-
-impl Default for AllocationPolicy {
-    fn default() -> Self {
-        AllocationPolicy::Local
     }
 }
 

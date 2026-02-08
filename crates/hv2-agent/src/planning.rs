@@ -59,13 +59,14 @@ impl std::error::Error for PlanningError {}
 pub type PlanningResult<T> = Result<T, PlanningError>;
 
 /// Priority level for goals and actions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Priority {
     /// Critical priority - must be addressed immediately.
     Critical,
     /// High priority.
     High,
     /// Normal priority.
+    #[default]
     Normal,
     /// Low priority.
     Low,
@@ -85,12 +86,6 @@ impl Ord for Priority {
     }
 }
 
-impl Default for Priority {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
 impl Priority {
     /// Get numeric value for comparison.
     pub fn value(&self) -> u8 {
@@ -105,9 +100,10 @@ impl Priority {
 }
 
 /// Goal status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GoalStatus {
     /// Goal is pending.
+    #[default]
     Pending,
     /// Goal is being pursued.
     Active,
@@ -119,12 +115,6 @@ pub enum GoalStatus {
     Abandoned,
     /// Goal failed.
     Failed,
-}
-
-impl Default for GoalStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
 }
 
 /// A condition that must be satisfied.
@@ -491,9 +481,10 @@ impl PlanAction {
 }
 
 /// Plan status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlanStatus {
     /// Plan is being constructed.
+    #[default]
     Building,
     /// Plan is ready for execution.
     Ready,
@@ -505,12 +496,6 @@ pub enum PlanStatus {
     Failed,
     /// Plan was cancelled.
     Cancelled,
-}
-
-impl Default for PlanStatus {
-    fn default() -> Self {
-        Self::Building
-    }
 }
 
 /// A step in a plan.
@@ -690,9 +675,10 @@ impl Plan {
 }
 
 /// Planning algorithm type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PlanningAlgorithm {
     /// Forward state-space search.
+    #[default]
     ForwardSearch,
     /// Backward (regression) search.
     BackwardSearch,
@@ -700,12 +686,6 @@ pub enum PlanningAlgorithm {
     GreedyBestFirst,
     /// A* search.
     AStar,
-}
-
-impl Default for PlanningAlgorithm {
-    fn default() -> Self {
-        Self::ForwardSearch
-    }
 }
 
 /// Planning configuration.

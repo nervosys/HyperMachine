@@ -184,7 +184,7 @@ impl CpuController {
 }
 
 /// Cpuset controller configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CpusetController {
     /// CPUs to use (e.g., "0-3" or "0,2,4")
     pub cpus: String,
@@ -194,17 +194,6 @@ pub struct CpusetController {
     pub cpu_exclusive: bool,
     /// Memory exclusive
     pub mem_exclusive: bool,
-}
-
-impl Default for CpusetController {
-    fn default() -> Self {
-        Self {
-            cpus: String::new(),
-            mems: String::new(),
-            cpu_exclusive: false,
-            mem_exclusive: false,
-        }
-    }
 }
 
 impl CpusetController {

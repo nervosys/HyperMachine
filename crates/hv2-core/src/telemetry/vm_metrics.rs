@@ -859,7 +859,7 @@ impl VmMetrics {
 
     /// Get boot time
     pub fn boot_time(&self) -> Option<Duration> {
-        self.boot_time.read().ok()?.clone()
+        *self.boot_time.read().ok()?
     }
 
     /// Record snapshot

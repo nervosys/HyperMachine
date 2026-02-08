@@ -9,11 +9,12 @@ use std::fmt;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Metric type classification
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MetricType {
     /// Counter - monotonically increasing value
     Counter,
     /// Gauge - value that can go up or down
+    #[default]
     Gauge,
     /// Histogram - distribution of values
     Histogram,
@@ -32,12 +33,6 @@ impl fmt::Display for MetricType {
             MetricType::Summary => write!(f, "summary"),
             MetricType::Info => write!(f, "info"),
         }
-    }
-}
-
-impl Default for MetricType {
-    fn default() -> Self {
-        MetricType::Gauge
     }
 }
 

@@ -708,7 +708,7 @@ impl FipsCrypto {
             let mut t = Vec::new();
             let mut counter = 1u8;
 
-            let iterations = (output_len + 31) / 32;
+            let iterations = output_len.div_ceil(32);
 
             for _ in 0..iterations {
                 let mut input = t.clone();

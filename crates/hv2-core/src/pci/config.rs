@@ -178,7 +178,7 @@ impl ConfigStats {
 }
 
 /// BAR configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BarConfig {
     /// Current value
     pub value: u32,
@@ -188,17 +188,6 @@ pub struct BarConfig {
     pub is_upper: bool,
     /// Whether BAR is enabled
     pub enabled: bool,
-}
-
-impl Default for BarConfig {
-    fn default() -> Self {
-        Self {
-            value: 0,
-            size_mask: 0,
-            is_upper: false,
-            enabled: false,
-        }
-    }
 }
 
 impl BarConfig {

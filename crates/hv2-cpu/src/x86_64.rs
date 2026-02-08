@@ -175,7 +175,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
         if addr < self.data.len() {
             Ok(self.data[addr])
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -184,7 +184,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
         if addr + 1 < self.data.len() {
             Ok(u16::from_le_bytes([self.data[addr], self.data[addr + 1]]))
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -198,7 +198,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
                 self.data[addr + 3],
             ]))
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -216,7 +216,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
                 self.data[addr + 7],
             ]))
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -226,7 +226,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr] = value;
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -238,7 +238,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr + 1] = bytes[1];
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -249,7 +249,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr..addr + 4].copy_from_slice(&bytes);
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 
@@ -260,7 +260,7 @@ impl<'a> MemoryAccess for SliceMemory<'a> {
             self.data[addr..addr + 8].copy_from_slice(&bytes);
             Ok(())
         } else {
-            Err(CpuError::InvalidMemoryAccess.into())
+            Err(CpuError::InvalidMemoryAccess)
         }
     }
 }
@@ -487,7 +487,7 @@ impl X86_64Cpu {
         // Check IDT bounds
         let entry_offset = (interrupt.vector as u64) * 16;
         if entry_offset + 15 > self.idtr.limit as u64 {
-            return Err(CpuError::InvalidInterrupt(interrupt.vector).into());
+            return Err(CpuError::InvalidInterrupt(interrupt.vector));
         }
 
         // Read IDT entry
@@ -509,7 +509,7 @@ impl X86_64Cpu {
         };
 
         if !entry.is_present() {
-            return Err(CpuError::InvalidInterrupt(interrupt.vector).into());
+            return Err(CpuError::InvalidInterrupt(interrupt.vector));
         }
 
         let handler = entry.handler_address();
@@ -586,7 +586,7 @@ impl X86_64Cpu {
         }
 
         if bytes.is_empty() {
-            return Err(CpuError::InvalidMemoryAccess.into());
+            return Err(CpuError::InvalidMemoryAccess);
         }
 
         Ok(bytes)
@@ -600,7 +600,7 @@ impl X86_64Cpu {
 
         let rip = self.regs.rip as usize;
         if rip >= memory.len() {
-            return Err(CpuError::InvalidMemoryAccess.into());
+            return Err(CpuError::InvalidMemoryAccess);
         }
 
         let opcode = memory[rip];
@@ -634,7 +634,7 @@ impl X86_64Cpu {
             // MOV AL, imm8 (0xB0)
             0xB0 => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 self.regs.rax = (self.regs.rax & 0xFFFF_FFFF_FFFF_FF00) | (bytes[1] as u64);
                 self.regs.rip += 2;
@@ -643,7 +643,7 @@ impl X86_64Cpu {
             // MOV CL, imm8 (0xB1)
             0xB1 => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 self.regs.rcx = (self.regs.rcx & 0xFFFF_FFFF_FFFF_FF00) | (bytes[1] as u64);
                 self.regs.rip += 2;
@@ -652,7 +652,7 @@ impl X86_64Cpu {
             // MOV DL, imm8 (0xB2)
             0xB2 => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 self.regs.rdx = (self.regs.rdx & 0xFFFF_FFFF_FFFF_FF00) | (bytes[1] as u64);
                 self.regs.rip += 2;
@@ -661,7 +661,7 @@ impl X86_64Cpu {
             // MOV BL, imm8 (0xB3)
             0xB3 => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 self.regs.rbx = (self.regs.rbx & 0xFFFF_FFFF_FFFF_FF00) | (bytes[1] as u64);
                 self.regs.rip += 2;
@@ -670,7 +670,7 @@ impl X86_64Cpu {
             // MOV EAX, imm32 (0xB8)
             0xB8 => {
                 if bytes.len() < 5 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 let imm = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
                 self.regs.rax = imm as u64;
@@ -680,7 +680,7 @@ impl X86_64Cpu {
             // MOV ECX, imm32 (0xB9)
             0xB9 => {
                 if bytes.len() < 5 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 let imm = u32::from_le_bytes([bytes[1], bytes[2], bytes[3], bytes[4]]);
                 self.regs.rcx = imm as u64;
@@ -843,7 +843,7 @@ impl X86_64Cpu {
             // XOR r/m, r (0x31)
             0x31 => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 let modrm = bytes[1];
                 let reg = (modrm >> 3) & 0x07;
@@ -863,7 +863,7 @@ impl X86_64Cpu {
             // CMP AL, imm8 (0x3C)
             0x3C => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 let al = (self.regs.rax & 0xFF) as u8;
                 let imm = bytes[1];
@@ -875,7 +875,7 @@ impl X86_64Cpu {
             // TEST AL, imm8 (0xA8)
             0xA8 => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 let al = (self.regs.rax & 0xFF) as u8;
                 let imm = bytes[1];
@@ -892,7 +892,7 @@ impl X86_64Cpu {
             // INT imm8 (0xCD)
             0xCD => {
                 if bytes.len() < 2 {
-                    return Err(CpuError::InvalidInstruction.into());
+                    return Err(CpuError::InvalidInstruction);
                 }
                 let vector = bytes[1];
                 self.regs.rip += 2;
@@ -943,7 +943,7 @@ impl X86_64Cpu {
 
             // Unknown opcode
             _ => {
-                return Err(CpuError::UnsupportedInstruction(format!("0x{:02X}", opcode)).into());
+                return Err(CpuError::UnsupportedInstruction(format!("0x{:02X}", opcode)));
             }
         }
 

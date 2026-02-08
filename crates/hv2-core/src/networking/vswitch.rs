@@ -211,7 +211,7 @@ impl Default for VlanSet {
 }
 
 /// Port state (STP)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum PortState {
     /// Port is disabled
     Disabled,
@@ -222,13 +222,8 @@ pub enum PortState {
     /// Port is learning (STP)
     Learning,
     /// Port is forwarding
+    #[default]
     Forwarding,
-}
-
-impl Default for PortState {
-    fn default() -> Self {
-        Self::Forwarding
-    }
 }
 
 /// Port type

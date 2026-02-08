@@ -70,7 +70,7 @@ pub enum ConnState {
 }
 
 /// TCP connection state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TcpState {
     /// SYN sent
     SynSent,
@@ -89,13 +89,8 @@ pub enum TcpState {
     /// Time wait
     TimeWait,
     /// Closed
+    #[default]
     Closed,
-}
-
-impl Default for TcpState {
-    fn default() -> Self {
-        Self::Closed
-    }
 }
 
 /// Connection tuple (5-tuple)
@@ -435,9 +430,10 @@ pub enum FilterAction {
 }
 
 /// IP address match
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum IpMatch {
     /// Any address
+    #[default]
     Any,
     /// Exact address
     Exact(IpAddr),
@@ -482,16 +478,11 @@ impl IpMatch {
     }
 }
 
-impl Default for IpMatch {
-    fn default() -> Self {
-        Self::Any
-    }
-}
-
 /// Port match
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum PortMatch {
     /// Any port
+    #[default]
     Any,
     /// Exact port
     Exact(u16),
@@ -516,16 +507,11 @@ impl PortMatch {
     }
 }
 
-impl Default for PortMatch {
-    fn default() -> Self {
-        Self::Any
-    }
-}
-
 /// Protocol match
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ProtocolMatch {
     /// Any protocol
+    #[default]
     Any,
     /// Specific protocol
     Exact(IpProtocol),
@@ -541,12 +527,6 @@ impl ProtocolMatch {
             Self::Exact(p) => proto == *p,
             Self::Set(protos) => protos.contains(&proto),
         }
-    }
-}
-
-impl Default for ProtocolMatch {
-    fn default() -> Self {
-        Self::Any
     }
 }
 
