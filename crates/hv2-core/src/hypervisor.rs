@@ -155,8 +155,37 @@ pub trait HypervisorBackend: Send + Sync {
     /// This queues an interrupt to be delivered to the guest when interrupts are enabled.
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()>;
 
+    /// Inject an exception into a vCPU
+    ///
+    /// Delivers a CPU exception (vector 0-31) to the guest, optionally with an
+    /// error code. Used for re-injecting exceptions like #GP, #PF, #UD, etc.
+    ///
+    /// The default implementation falls back to `inject_interrupt` without
+    /// the error code, which works for simple exception types.
+    async fn inject_exception(
+        &self,
+        vcpu: &VCpu,
+        vector: u8,
+        error_code: Option<u32>,
+    ) -> Result<()> {
+        let _ = error_code;
+        self.inject_interrupt(vcpu, vector).await
+    }
+
     /// Shutdown the hypervisor
     async fn shutdown(&mut self) -> Result<()>;
+
+    /// Set the result of an I/O IN operation
+    ///
+    /// After handling a `VmExit::Io` with `IoDirection::In`, the hypervisor must
+    /// write the read data back into the guest's EAX register (masked by size)
+    /// before resuming execution.
+    ///
+    /// The default implementation is a no-op for backends that handle this
+    /// internally or don't yet support it.
+    async fn set_io_result(&self, _vcpu: &VCpu, _data: u32, _size: u8) -> Result<()> {
+        Ok(())
+    }
 
     /// Allow downcasting to concrete types
     fn as_any(&self) -> &dyn std::any::Any;
@@ -185,8 +214,15 @@ impl HypervisorVm {
     }
 
     /// Map guest memory
+    ///
+    /// Note: Memory mapping is handled through the backend-specific implementations
+    /// (e.g., `WhpxBackend::map_memory`, `KvmVm::map_memory`). This method is
+    /// provided for future use when `HypervisorVm` holds a backend reference.
+    #[allow(dead_code)]
     pub async fn map_memory(&self, _guest_addr: u64, _size: u64, _host_ptr: *mut u8) -> Result<()> {
-        // TODO: Implement platform-specific memory mapping
+        tracing::warn!(
+            "HypervisorVm::map_memory is a stub — use backend-specific map_memory instead"
+        );
         Ok(())
     }
 }
@@ -828,6 +864,97 @@ pub mod whpx {
             Ok(())
         }
 
+        async fn inject_exception(
+            &self,
+            vcpu: &VCpu,
+            vector: u8,
+            error_code: Option<u32>,
+        ) -> Result<()> {
+            let partition = self
+                .partition
+                .ok_or(Error::Hypervisor("WHPX partition not created".to_string()))?;
+
+            // WHV pending interruption format (64-bit register):
+            //   Bits 7:0:   InterruptionVector
+            //   Bits 10:8:  InterruptionType (3 = hardware exception)
+            //   Bit 11:     DeliverErrorCode
+            //   Bit 31:     InterruptionPending (valid)
+            //   Bits 63:32: ErrorCode (when DeliverErrorCode is set)
+            let mut pending: u64 = 0x80000000 | 0x300 | (vector as u64);
+
+            if let Some(code) = error_code {
+                pending |= 0x800; // DeliverErrorCode bit
+                pending |= (code as u64) << 32; // Error code in upper 32 bits
+            }
+
+            let reg_name = WhvRegisterName::PendingInterruption as u32;
+            let hr = unsafe {
+                WHvSetVirtualProcessorRegisters(
+                    partition,
+                    vcpu.id(),
+                    &reg_name,
+                    1,
+                    &pending as *const _ as *const c_void,
+                )
+            };
+
+            if hr != WHV_SUCCESS {
+                return Err(Error::Hypervisor(format!(
+                    "Failed to inject exception: 0x{:08X}",
+                    hr
+                )));
+            }
+
+            tracing::debug!(
+                "Injected exception: vector={} error_code={:?} into vCPU {}",
+                vector,
+                error_code,
+                vcpu.id()
+            );
+            Ok(())
+        }
+
+        async fn set_io_result(&self, vcpu: &VCpu, data: u32, size: u8) -> Result<()> {
+            let partition = self
+                .partition
+                .ok_or(Error::Hypervisor("WHPX partition not created".to_string()))?;
+
+            // Mask the data by access size
+            let masked: u64 = match size {
+                1 => (data & 0xFF) as u64,
+                2 => (data & 0xFFFF) as u64,
+                4 => data as u64,
+                _ => data as u64,
+            };
+
+            let reg_name = WhvRegisterName::Rax as u32;
+            let hr = unsafe {
+                WHvSetVirtualProcessorRegisters(
+                    partition,
+                    vcpu.id(),
+                    &reg_name,
+                    1,
+                    &masked as *const _ as *const c_void,
+                )
+            };
+
+            if hr != WHV_SUCCESS {
+                return Err(Error::Hypervisor(format!(
+                    "Failed to set IO result (RAX) for vCPU {}: 0x{:08X}",
+                    vcpu.id(),
+                    hr
+                )));
+            }
+
+            tracing::trace!(
+                "Set IO IN result: vCPU={} data={:#x} size={}",
+                vcpu.id(),
+                masked,
+                size
+            );
+            Ok(())
+        }
+
         async fn shutdown(&mut self) -> Result<()> {
             if let Some(partition) = self.partition.take() {
                 // Cleanup virtual processors
@@ -1336,6 +1463,101 @@ pub mod hvf {
 
                 tracing::debug!("Queued interrupt {} for vCPU {}", vector, vcpu.id());
             }
+            Ok(())
+        }
+
+        async fn inject_exception(
+            &self,
+            vcpu: &VCpu,
+            vector: u8,
+            error_code: Option<u32>,
+        ) -> Result<()> {
+            let states = self.vcpu_states.read();
+            let state = states.get(&vcpu.id()).ok_or(Error::Hypervisor(format!(
+                "HVF vCPU {} not found",
+                vcpu.id()
+            )))?;
+
+            // VMX VM-entry interruption-info format (VMCS 0x4016):
+            //   Bits 7:0:   Vector
+            //   Bits 10:8:  Type (3 = hardware exception)
+            //   Bit 11:     Deliver error code
+            //   Bit 31:     Valid
+            let mut info: u64 = 0x80000000 | 0x300 | (vector as u64);
+
+            if error_code.is_some() {
+                info |= 0x800; // Deliver error code bit
+            }
+
+            unsafe {
+                let hr = hv_vmx_vcpu_write_vmcs(
+                    state.hv_vcpu,
+                    VmcsField::VmEntryInterruptionInfo as u32,
+                    info,
+                );
+                if hr != 0 {
+                    return Err(Error::Hypervisor(format!(
+                        "Failed to write VM-entry interruption info: 0x{:08X}",
+                        hr
+                    )));
+                }
+
+                // Set error code if present
+                if let Some(code) = error_code {
+                    let hr = hv_vmx_vcpu_write_vmcs(
+                        state.hv_vcpu,
+                        VmcsField::VmEntryExceptionErrorCode as u32,
+                        code as u64,
+                    );
+                    if hr != 0 {
+                        return Err(Error::Hypervisor(format!(
+                            "Failed to write exception error code: 0x{:08X}",
+                            hr
+                        )));
+                    }
+                }
+            }
+
+            tracing::debug!(
+                "Injected exception: vector={} error_code={:?} into vCPU {}",
+                vector,
+                error_code,
+                vcpu.id()
+            );
+            Ok(())
+        }
+
+        async fn set_io_result(&self, vcpu: &VCpu, data: u32, size: u8) -> Result<()> {
+            let states = self.vcpu_states.read();
+            let state = states.get(&vcpu.id()).ok_or(Error::Hypervisor(format!(
+                "HVF vCPU {} not found",
+                vcpu.id()
+            )))?;
+
+            // Mask the data by access size
+            let masked: u64 = match size {
+                1 => (data & 0xFF) as u64,
+                2 => (data & 0xFFFF) as u64,
+                4 => data as u64,
+                _ => data as u64,
+            };
+
+            let hr = unsafe { hv_vcpu_write_register(state.hv_vcpu, HvX86Reg::Rax as u32, masked) };
+
+            if hr != 0 {
+                return Err(Error::Hypervisor(format!(
+                    "Failed to set IO result (RAX) for vCPU {}: 0x{:08X}",
+                    vcpu.id(),
+                    hr
+                )));
+            }
+
+            tracing::trace!(
+                "Set IO IN result: vCPU={} data={:#x} size={}",
+                vcpu.id(),
+                masked,
+                size
+            );
             Ok(())
         }
 

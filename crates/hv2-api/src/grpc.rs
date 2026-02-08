@@ -242,10 +242,70 @@ impl VmService for VMServiceImpl {
 
     async fn stream_events(
         &self,
-        _request: Request<StreamEventsRequest>,
+        request: Request<StreamEventsRequest>,
     ) -> std::result::Result<Response<Self::StreamEventsStream>, Status> {
-        // TODO: Implement event streaming
-        Err(Status::unimplemented("Event streaming not yet implemented"))
+        let req = request.into_inner();
+        let vm_id = req.vm_id.clone();
+
+        // Find the VM
+        let vms = self.vms.read().await;
+        let vm = vms
+            .get(&vm_id)
+            .ok_or_else(|| Status::not_found(format!("VM {} not found", vm_id)))?;
+
+        // Subscribe to the VM's event bus
+        let mut event_rx = vm.vm().subscribe_events();
+        drop(vms); // Release read lock
+
+        // Create a channel for the gRPC response stream
+        let (tx, rx) = tokio::sync::mpsc::channel(128);
+
+        // Spawn a background task to forward events
+        let stream_vm_id = vm_id.clone();
+        tokio::spawn(async move {
+            loop {
+                match event_rx.recv().await {
+                    Ok(event) => {
+                        // Convert core VmEvent to proto VmEvent
+                        let event_type = format!("{:?}", event.event_type);
+                        let data = serde_json::to_string(&event.event_type)
+                            .unwrap_or_default();
+
+                        let proto_event = VmEvent {
+                            vm_id: event.vm_name,
+                            event_type,
+                            timestamp: event.timestamp.to_string(),
+                            data,
+                        };
+
+                        if tx.send(Ok(proto_event)).await.is_err() {
+                            // Client disconnected
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(
+                            "Event stream for VM {} lagged by {} events",
+                            stream_vm_id,
+                            n
+                        );
+                        // Continue receiving — some events were dropped
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        // Event bus closed (VM probably shut down)
+                        tracing::info!(
+                            "Event stream closed for VM {}",
+                            stream_vm_id
+                        );
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(
+            rx,
+        )))
     }
 }
 
