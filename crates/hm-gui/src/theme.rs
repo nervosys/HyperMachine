@@ -3,6 +3,7 @@
 use egui::{Color32, CornerRadius, FontFamily, FontId, Stroke, Style, TextStyle, Visuals};
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 pub struct AppColors {
     pub primary: Color32,
     pub primary_dark: Color32,

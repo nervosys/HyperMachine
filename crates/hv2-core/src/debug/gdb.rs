@@ -301,6 +301,61 @@ impl GdbRegisters {
 
         result
     }
+    /// Deserialize registers from hex string (GDB 'G' packet data)
+    ///
+    /// Parses the same format produced by `to_hex()`:
+    /// - 16 GPRs (64-bit each, little-endian byte order)
+    /// - RIP (64-bit)
+    /// - EFLAGS (32-bit)
+    /// - 6 segment registers (32-bit each: CS, SS, DS, ES, FS, GS)
+    pub fn from_hex(hex: &[u8]) -> Option<Self> {
+        // Minimum: 16 GPRs * 16 + RIP * 16 + EFLAGS * 8 + 6 segs * 8 = 328
+        if hex.len() < 328 {
+            return None;
+        }
+
+        let bytes = parse_hex(hex)?;
+        let mut regs = GdbRegisters::default();
+        let mut offset = 0;
+
+        // 16 GPRs (8 bytes each, byte-swapped)
+        for i in 0..16 {
+            let val = u64::from_be_bytes(bytes[offset..offset + 8].try_into().ok()?);
+            regs.gprs[i] = val.swap_bytes();
+            offset += 8;
+        }
+
+        // RIP (8 bytes, byte-swapped)
+        let val = u64::from_be_bytes(bytes[offset..offset + 8].try_into().ok()?);
+        regs.rip = val.swap_bytes();
+        offset += 8;
+
+        // EFLAGS (4 bytes, byte-swapped)
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.rflags = val.swap_bytes() as u64;
+        offset += 4;
+
+        // Segment registers (4 bytes each, byte-swapped)
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.cs = val.swap_bytes();
+        offset += 4;
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.ss = val.swap_bytes();
+        offset += 4;
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.ds = val.swap_bytes();
+        offset += 4;
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.es = val.swap_bytes();
+        offset += 4;
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.fs = val.swap_bytes();
+        offset += 4;
+        let val = u32::from_be_bytes(bytes[offset..offset + 4].try_into().ok()?);
+        regs.gs = val.swap_bytes();
+
+        Some(regs)
+    }
 }
 
 /// GDB target operations trait
@@ -663,8 +718,13 @@ impl GdbStub {
                 self.format_packet(&regs.to_hex())
             }
             'G' => {
-                // Write all registers (TODO: parse and set)
-                self.ok_response()
+                // Write all registers
+                if let Some(regs) = GdbRegisters::from_hex(args) {
+                    target.set_registers(&regs);
+                    self.ok_response()
+                } else {
+                    self.error_response(0x01)
+                }
             }
             'p' => {
                 // Read single register

@@ -55,6 +55,7 @@ pub fn vm_list_item(ui: &mut Ui, vm: &VmState, selected: bool) -> VmAction {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum VmAction { None, Select, Start, Stop, Pause, Resume, Delete, OpenConsole }
 
 pub fn vm_details_panel(ui: &mut Ui, vm: &VmState) -> VmAction {
