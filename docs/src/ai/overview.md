@@ -39,12 +39,12 @@ HyperMachine provides all of this through a semantic API that AI agents can unde
 
 ## Quick Comparison
 
-| Method | Best For | Latency | Complexity |
-|--------|----------|---------|------------|
-| **MCP Server** | Native LLM integration | Low | Simple |
-| **REST API** | Custom applications | Medium | Medium |
-| **Python SDK** | Python AI frameworks | Low | Simple |
-| **GUI Automation** | Desktop control | Medium | Simple |
+| Method             | Best For               | Latency | Complexity |
+| ------------------ | ---------------------- | ------- | ---------- |
+| **MCP Server**     | Native LLM integration | Low     | Simple     |
+| **REST API**       | Custom applications    | Medium  | Medium     |
+| **Python SDK**     | Python AI frameworks   | Low     | Simple     |
+| **GUI Automation** | Desktop control        | Medium  | Simple     |
 
 ## MCP Server
 
@@ -152,14 +152,14 @@ curl http://localhost:8080/agentic/tools/gemini
 
 ## Available Tools
 
-| Category | Tools |
-|----------|-------|
-| **VM Lifecycle** | `vm.create`, `vm.start`, `vm.stop`, `vm.delete` |
-| **VM Info** | `vm.list`, `vm.get`, `vm.status` |
-| **Execution** | `vm.exec`, `vm.exec_script`, `vm.upload`, `vm.download` |
-| **Snapshots** | `vm.snapshot.create`, `vm.snapshot.restore`, `vm.snapshot.list` |
-| **Network** | `vm.network.configure`, `vm.network.port_forward` |
-| **GPU** | `vm.gpu.attach`, `vm.gpu.detach`, `vm.gpu.list` |
+| Category         | Tools                                                           |
+| ---------------- | --------------------------------------------------------------- |
+| **VM Lifecycle** | `vm.create`, `vm.start`, `vm.stop`, `vm.delete`                 |
+| **VM Info**      | `vm.list`, `vm.get`, `vm.status`                                |
+| **Execution**    | `vm.exec`, `vm.exec_script`, `vm.upload`, `vm.download`         |
+| **Snapshots**    | `vm.snapshot.create`, `vm.snapshot.restore`, `vm.snapshot.list` |
+| **Network**      | `vm.network.configure`, `vm.network.port_forward`               |
+| **GPU**          | `vm.gpu.attach`, `vm.gpu.detach`, `vm.gpu.list`                 |
 
 ## Example: AI Code Executor
 

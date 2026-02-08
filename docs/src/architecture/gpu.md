@@ -4,11 +4,11 @@ HyperMachine provides multiple GPU virtualization modes for different use cases.
 
 ## GPU Modes
 
-| Mode | Performance | Isolation | Use Case |
-|------|-------------|-----------|----------|
-| **Passthrough** | Native | Full | ML training, gaming |
-| **Virtual GPU (vGPU)** | 80-95% | Shared | Multi-tenant |
-| **Software Rendering** | Low | Full | Testing |
+| Mode                   | Performance | Isolation | Use Case            |
+| ---------------------- | ----------- | --------- | ------------------- |
+| **Passthrough**        | Native      | Full      | ML training, gaming |
+| **Virtual GPU (vGPU)** | 80-95%      | Shared    | Multi-tenant        |
+| **Software Rendering** | Low         | Full      | Testing             |
 
 ## GPU Passthrough
 

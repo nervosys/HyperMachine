@@ -194,12 +194,12 @@ hm version
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `HM_API_KEY` | MCP server API key |
-| `HM_LOG_LEVEL` | Log level |
-| `HM_CONFIG_FILE` | Config file path |
-| `HM_DATA_DIR` | Data directory |
+| Variable         | Description        |
+| ---------------- | ------------------ |
+| `HM_API_KEY`     | MCP server API key |
+| `HM_LOG_LEVEL`   | Log level          |
+| `HM_CONFIG_FILE` | Config file path   |
+| `HM_DATA_DIR`    | Data directory     |
 
 ## Completion
 

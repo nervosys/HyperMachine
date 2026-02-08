@@ -64,15 +64,15 @@ operation_timeout_secs = 300
 
 ## Environment Variables
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `HM_API_KEY` | API key for authentication | None |
-| `HM_LOG_LEVEL` | Logging verbosity | `info` |
-| `HM_DATA_DIR` | Data storage directory | Platform-specific |
-| `HM_CONFIG_FILE` | Custom config file path | Default location |
-| `HM_HYPERVISOR` | Force hypervisor backend | `auto` |
-| `HM_TLS_CERT` | TLS certificate path | None |
-| `HM_TLS_KEY` | TLS private key path | None |
+| Variable         | Description                | Default           |
+| ---------------- | -------------------------- | ----------------- |
+| `HM_API_KEY`     | API key for authentication | None              |
+| `HM_LOG_LEVEL`   | Logging verbosity          | `info`            |
+| `HM_DATA_DIR`    | Data storage directory     | Platform-specific |
+| `HM_CONFIG_FILE` | Custom config file path    | Default location  |
+| `HM_HYPERVISOR`  | Force hypervisor backend   | `auto`            |
+| `HM_TLS_CERT`    | TLS certificate path       | None              |
+| `HM_TLS_KEY`     | TLS private key path       | None              |
 
 ## Command-Line Arguments
 

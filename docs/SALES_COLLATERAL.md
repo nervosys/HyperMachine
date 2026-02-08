@@ -10,13 +10,13 @@ HyperMachine is a next-generation hypervisor built from the ground up for AI-dri
 
 ### Key Differentiators
 
-| Feature | Legacy Hypervisors | HyperMachine |
-|---------|-------------------|--------------|
-| API Design | Human-centric GUIs | AI-native APIs |
-| Agent Integration | Requires custom scripting | Built-in tool formats |
-| Security Compliance | Partial | FIPS, CMMC, SOC 2 ready |
-| Memory Safety | C/C++ based | Rust (memory-safe) |
-| Startup Time | Minutes | Milliseconds |
+| Feature             | Legacy Hypervisors        | HyperMachine            |
+| ------------------- | ------------------------- | ----------------------- |
+| API Design          | Human-centric GUIs        | AI-native APIs          |
+| Agent Integration   | Requires custom scripting | Built-in tool formats   |
+| Security Compliance | Partial                   | FIPS, CMMC, SOC 2 ready |
+| Memory Safety       | C/C++ based               | Rust (memory-safe)      |
+| Startup Time        | Minutes                   | Milliseconds            |
 
 ---
 
@@ -133,31 +133,31 @@ HyperMachine is a next-generation hypervisor built from the ground up for AI-dri
 
 ### vs. VMware ESXi
 
-| Aspect | VMware | HyperMachine |
-|--------|--------|--------------|
-| License Cost | $$$$ | $-$$ |
-| AI Integration | Requires vRA + custom scripts | Native |
-| Memory Safety | No (C++) | Yes (Rust) |
-| Startup Time | Minutes | <100ms |
-| Cloud-Native | Bolt-on | Built-in |
+| Aspect         | VMware                        | HyperMachine |
+| -------------- | ----------------------------- | ------------ |
+| License Cost   | $$$$                          | $-$$         |
+| AI Integration | Requires vRA + custom scripts | Native       |
+| Memory Safety  | No (C++)                      | Yes (Rust)   |
+| Startup Time   | Minutes                       | <100ms       |
+| Cloud-Native   | Bolt-on                       | Built-in     |
 
 ### vs. KVM/QEMU
 
-| Aspect | KVM/QEMU | HyperMachine |
-|--------|----------|--------------|
-| Complexity | High (many moving parts) | Unified binary |
-| Windows Support | Limited | Native WHPX |
-| AI Agent Support | DIY | Native |
-| Commercial Support | Fragmented | Single vendor |
+| Aspect             | KVM/QEMU                 | HyperMachine   |
+| ------------------ | ------------------------ | -------------- |
+| Complexity         | High (many moving parts) | Unified binary |
+| Windows Support    | Limited                  | Native WHPX    |
+| AI Agent Support   | DIY                      | Native         |
+| Commercial Support | Fragmented               | Single vendor  |
 
 ### vs. Hyper-V
 
-| Aspect | Hyper-V | HyperMachine |
-|--------|---------|--------------|
-| Platform | Windows only | Cross-platform |
-| AI Integration | PowerShell scripts | Native APIs |
-| Open Source | No | Yes (Apache 2.0) |
-| Customization | Limited | Full control |
+| Aspect         | Hyper-V            | HyperMachine     |
+| -------------- | ------------------ | ---------------- |
+| Platform       | Windows only       | Cross-platform   |
+| AI Integration | PowerShell scripts | Native APIs      |
+| Open Source    | No                 | Yes (Apache 2.0) |
+| Customization  | Limited            | Full control     |
 
 ---
 
@@ -191,12 +191,12 @@ HyperMachine is a next-generation hypervisor built from the ground up for AI-dri
 
 ### Annual Savings
 
-| Category | Current Cost | With HyperMachine | Savings |
-|----------|--------------|-------------------|---------|
-| Labor | $300,000 | $75,000 | $225,000 |
-| Licensing | $200,000 | $50,000 | $150,000 |
-| Downtime | $100,000 | $10,000 | $90,000 |
-| **Total** | **$600,000** | **$135,000** | **$465,000** |
+| Category  | Current Cost | With HyperMachine | Savings      |
+| --------- | ------------ | ----------------- | ------------ |
+| Labor     | $300,000     | $75,000           | $225,000     |
+| Licensing | $200,000     | $50,000           | $150,000     |
+| Downtime  | $100,000     | $10,000           | $90,000      |
+| **Total** | **$600,000** | **$135,000**      | **$465,000** |
 
 **Payback Period:** 3 months
 

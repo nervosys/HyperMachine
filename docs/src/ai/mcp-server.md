@@ -323,26 +323,26 @@ Errors are returned with structured information:
 
 ### Error Codes
 
-| Code | Description |
-|------|-------------|
-| `VM_NOT_FOUND` | VM does not exist |
+| Code                 | Description           |
+| -------------------- | --------------------- |
+| `VM_NOT_FOUND`       | VM does not exist     |
 | `VM_ALREADY_RUNNING` | VM is already running |
-| `VM_NOT_RUNNING` | VM is not running |
-| `RESOURCE_EXHAUSTED` | Quota exceeded |
-| `INVALID_ARGUMENT` | Invalid parameter |
-| `UNAUTHORIZED` | Invalid API key |
-| `INTERNAL_ERROR` | Server error |
+| `VM_NOT_RUNNING`     | VM is not running     |
+| `RESOURCE_EXHAUSTED` | Quota exceeded        |
+| `INVALID_ARGUMENT`   | Invalid parameter     |
+| `UNAUTHORIZED`       | Invalid API key       |
+| `INTERNAL_ERROR`     | Server error          |
 
 ## Rate Limiting
 
 Default rate limits:
 
-| Operation | Limit |
-|-----------|-------|
-| `vm.create` | 10/minute |
-| `vm.exec` | 100/minute |
-| `vm.list` | 60/minute |
-| Other | 120/minute |
+| Operation   | Limit      |
+| ----------- | ---------- |
+| `vm.create` | 10/minute  |
+| `vm.exec`   | 100/minute |
+| `vm.list`   | 60/minute  |
+| Other       | 120/minute |
 
 Rate limit headers:
 

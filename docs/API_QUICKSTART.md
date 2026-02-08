@@ -139,28 +139,28 @@ curl http://localhost:8080/agentic/ontology
 
 ### Virtual Machines
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/vms` | List all VMs |
-| POST | `/api/v1/vms` | Create a new VM |
-| GET | `/api/v1/vms/{id}` | Get VM details |
-| DELETE | `/api/v1/vms/{id}` | Delete a VM |
-| POST | `/api/v1/vms/{id}/start` | Start a VM |
-| POST | `/api/v1/vms/{id}/stop` | Stop a VM |
-| POST | `/api/v1/vms/{id}/pause` | Pause a VM |
-| POST | `/api/v1/vms/{id}/resume` | Resume a paused VM |
-| GET | `/api/v1/vms/{id}/metrics` | Get VM metrics |
-| POST | `/api/v1/vms/{id}/script` | Execute a script |
+| Method | Endpoint                   | Description        |
+| ------ | -------------------------- | ------------------ |
+| GET    | `/api/v1/vms`              | List all VMs       |
+| POST   | `/api/v1/vms`              | Create a new VM    |
+| GET    | `/api/v1/vms/{id}`         | Get VM details     |
+| DELETE | `/api/v1/vms/{id}`         | Delete a VM        |
+| POST   | `/api/v1/vms/{id}/start`   | Start a VM         |
+| POST   | `/api/v1/vms/{id}/stop`    | Stop a VM          |
+| POST   | `/api/v1/vms/{id}/pause`   | Pause a VM         |
+| POST   | `/api/v1/vms/{id}/resume`  | Resume a paused VM |
+| GET    | `/api/v1/vms/{id}/metrics` | Get VM metrics     |
+| POST   | `/api/v1/vms/{id}/script`  | Execute a script   |
 
 ### Agent Discovery
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/agentic/ontology` | Full JSON-LD ontology |
-| GET | `/agentic/tools/openai` | OpenAI function format |
-| GET | `/agentic/tools/anthropic` | Anthropic tool format |
-| GET | `/agentic/tools/gemini` | Gemini function format |
-| GET | `/.well-known/ai-plugin.json` | ChatGPT plugin manifest |
+| Method | Endpoint                      | Description             |
+| ------ | ----------------------------- | ----------------------- |
+| GET    | `/agentic/ontology`           | Full JSON-LD ontology   |
+| GET    | `/agentic/tools/openai`       | OpenAI function format  |
+| GET    | `/agentic/tools/anthropic`    | Anthropic tool format   |
+| GET    | `/agentic/tools/gemini`       | Gemini function format  |
+| GET    | `/.well-known/ai-plugin.json` | ChatGPT plugin manifest |
 
 ---
 
@@ -205,23 +205,23 @@ All errors return standard HTTP status codes with JSON body:
 }
 ```
 
-| Code | Meaning |
-|------|---------|
-| 400 | Bad Request - Invalid parameters |
-| 401 | Unauthorized - Invalid API key |
-| 404 | Not Found - Resource doesn't exist |
-| 409 | Conflict - Operation conflicts with current state |
-| 500 | Internal Error - Server-side failure |
+| Code | Meaning                                           |
+| ---- | ------------------------------------------------- |
+| 400  | Bad Request - Invalid parameters                  |
+| 401  | Unauthorized - Invalid API key                    |
+| 404  | Not Found - Resource doesn't exist                |
+| 409  | Conflict - Operation conflicts with current state |
+| 500  | Internal Error - Server-side failure              |
 
 ---
 
 ## Rate Limits
 
-| Tier | Requests/min | Concurrent VMs |
-|------|--------------|----------------|
-| Free | 60 | 5 |
-| Pro | 600 | 50 |
-| Enterprise | Unlimited | Unlimited |
+| Tier       | Requests/min | Concurrent VMs |
+| ---------- | ------------ | -------------- |
+| Free       | 60           | 5              |
+| Pro        | 600          | 50             |
+| Enterprise | Unlimited    | Unlimited      |
 
 ---
 

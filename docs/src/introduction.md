@@ -12,14 +12,14 @@
 
 ## Key Features
 
-| Category | Capabilities |
-|----------|-------------|
-| **Performance** | Zero-copy memory, JIT compilation, hardware GPU virtualization |
-| **Networking** | Full TCP/IP stack, TAP/TUN, gRPC/REST APIs, distributed orchestration |
-| **GPU** | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL |
-| **AI-First** | MCP server, scriptable API, WASM plugins, LLM tool formats |
-| **GUI** | Desktop app, AI-driven automation, semantic control API |
-| **Security** | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
+| Category        | Capabilities                                                                 |
+| --------------- | ---------------------------------------------------------------------------- |
+| **Performance** | Zero-copy memory, JIT compilation, hardware GPU virtualization               |
+| **Networking**  | Full TCP/IP stack, TAP/TUN, gRPC/REST APIs, distributed orchestration        |
+| **GPU**         | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL                         |
+| **AI-First**    | MCP server, scriptable API, WASM plugins, LLM tool formats                   |
+| **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
+| **Security**    | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
 
 ## Why HyperMachine?
 

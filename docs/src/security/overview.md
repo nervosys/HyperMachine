@@ -25,14 +25,14 @@ HyperMachine is designed with security as a first-class concern.
 
 ## Key Security Features
 
-| Feature | Description |
-|---------|-------------|
-| **FIPS 140-3 Cryptography** | Government-grade encryption |
-| **Seccomp Filtering** | Restrict syscalls available to VMs |
-| **Capability-based Access** | Fine-grained permission control |
-| **Memory Isolation** | EPT/NPT hardware isolation |
-| **Network Isolation** | Per-VM network namespaces |
-| **Audit Logging** | Complete operation history |
+| Feature                     | Description                        |
+| --------------------------- | ---------------------------------- |
+| **FIPS 140-3 Cryptography** | Government-grade encryption        |
+| **Seccomp Filtering**       | Restrict syscalls available to VMs |
+| **Capability-based Access** | Fine-grained permission control    |
+| **Memory Isolation**        | EPT/NPT hardware isolation         |
+| **Network Isolation**       | Per-VM network namespaces          |
+| **Audit Logging**           | Complete operation history         |
 
 ## Threat Model
 

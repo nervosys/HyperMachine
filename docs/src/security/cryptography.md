@@ -4,13 +4,13 @@ HyperMachine implements FIPS 140-3 compliant cryptographic modules.
 
 ## Supported Algorithms
 
-| Type | Algorithms |
-|------|------------|
-| **Symmetric** | AES-128/256-GCM, AES-128/256-CBC |
-| **Hash** | SHA-256, SHA-384, SHA-512 |
-| **MAC** | HMAC-SHA-256, HMAC-SHA-512 |
-| **KDF** | HKDF-SHA-256, PBKDF2-SHA-256 |
-| **Asymmetric** | RSA-2048/3072/4096, ECDSA P-256/P-384/P-521 |
+| Type             | Algorithms                                             |
+| ---------------- | ------------------------------------------------------ |
+| **Symmetric**    | AES-128/256-GCM, AES-128/256-CBC                       |
+| **Hash**         | SHA-256, SHA-384, SHA-512                              |
+| **MAC**          | HMAC-SHA-256, HMAC-SHA-512                             |
+| **KDF**          | HKDF-SHA-256, PBKDF2-SHA-256                           |
+| **Asymmetric**   | RSA-2048/3072/4096, ECDSA P-256/P-384/P-521            |
 | **Post-Quantum** | ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+) |
 
 ## Usage
@@ -61,9 +61,9 @@ In FIPS mode, only approved algorithms are available.
 
 ## Performance
 
-| Operation | Throughput |
-|-----------|------------|
+| Operation           | Throughput |
+| ------------------- | ---------- |
 | AES-256-GCM encrypt | ~600 MiB/s |
 | AES-256-GCM decrypt | ~700 MiB/s |
-| SHA-256 | ~3.7 GiB/s |
-| SHA-512 | ~3.5 GiB/s |
+| SHA-256             | ~3.7 GiB/s |
+| SHA-512             | ~3.5 GiB/s |
