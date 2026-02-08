@@ -570,15 +570,35 @@ async fn handle_t1(command: T1Commands) -> Result<()> {
                 script
             };
 
-            let _ = Duration::from_secs(timeout);
+            let _timeout_duration = Duration::from_secs(timeout);
 
-            // TODO: Execute script when hypervisor API is ready
-            println!(
-                "{}",
-                "⚠ Script execution requires running hypervisor with API support".yellow()
-            );
-            println!("{}", "Script content:".dimmed());
-            println!("{}", script_content.dimmed());
+            let result = manager
+                .execute_script(&name, &script_content, timeout)
+                .await?;
+
+            if result.success {
+                println!("{}", "✓ Script executed successfully".green().bold());
+            } else {
+                println!("{}", "✗ Script execution failed".red().bold());
+            }
+
+            if !result.stdout.is_empty() {
+                println!("{}", "stdout:".dimmed());
+                println!("{}", result.stdout);
+            }
+            if !result.stderr.is_empty() {
+                println!("{}", "stderr:".yellow());
+                println!("{}", result.stderr);
+            }
+            if let Some(code) = result.exit_code {
+                println!("{}", format!("Exit code: {}", code).dimmed());
+            }
+            if let Some(ms) = result.duration_ms {
+                println!(
+                    "{}",
+                    format!("Completed in {:.1}s", ms as f64 / 1000.0).dimmed()
+                );
+            }
         }
     }
 
