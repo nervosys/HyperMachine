@@ -269,12 +269,12 @@ impl VirtioDevice for VirtioBlock {
 
 ## Advantages
 
-| Aspect | Type-2 Advantage |
-|--------|------------------|
-| **Installation** | No special boot requirements |
-| **Development** | Easy debugging with host tools |
-| **Hardware Support** | Leverages host OS drivers |
-| **Integration** | Works with existing workflows |
+| Aspect               | Type-2 Advantage               |
+| -------------------- | ------------------------------ |
+| **Installation**     | No special boot requirements   |
+| **Development**      | Easy debugging with host tools |
+| **Hardware Support** | Leverages host OS drivers      |
+| **Integration**      | Works with existing workflows  |
 
 ## Performance Considerations
 

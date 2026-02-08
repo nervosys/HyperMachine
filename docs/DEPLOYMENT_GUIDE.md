@@ -18,23 +18,23 @@ Production deployment guide for HyperMachine Type-2 Hypervisor.
 
 ### Minimum Requirements
 
-| Component | Requirement |
-|-----------|-------------|
-| CPU | x86_64 with VT-x/AMD-V |
-| RAM | 8 GB (+ VM allocations) |
-| Storage | 50 GB SSD |
-| OS | Windows 10/11, Windows Server 2019+ |
-| Features | Hyper-V Platform enabled |
+| Component | Requirement                         |
+| --------- | ----------------------------------- |
+| CPU       | x86_64 with VT-x/AMD-V              |
+| RAM       | 8 GB (+ VM allocations)             |
+| Storage   | 50 GB SSD                           |
+| OS        | Windows 10/11, Windows Server 2019+ |
+| Features  | Hyper-V Platform enabled            |
 
 ### Recommended for Production
 
-| Component | Requirement |
-|-----------|-------------|
-| CPU | 16+ cores with VT-d/AMD-Vi |
-| RAM | 64 GB+ ECC |
-| Storage | NVMe SSD, RAID configuration |
-| Network | 10 Gbps, SR-IOV capable |
-| GPU | NVIDIA/AMD with passthrough support |
+| Component | Requirement                         |
+| --------- | ----------------------------------- |
+| CPU       | 16+ cores with VT-d/AMD-Vi          |
+| RAM       | 64 GB+ ECC                          |
+| Storage   | NVMe SSD, RAID configuration        |
+| Network   | 10 Gbps, SR-IOV capable             |
+| GPU       | NVIDIA/AMD with passthrough support |
 
 ### Hardware Virtualization Check
 

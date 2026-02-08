@@ -255,34 +255,34 @@ for part in response.parts:
 
 HyperMachine uses dot notation internally, but LLMs often prefer underscores:
 
-| Internal Name | LLM Name |
-|--------------|----------|
-| `vm.create` | `vm_create` |
-| `vm.start` | `vm_start` |
-| `vm.exec` | `vm_exec` |
+| Internal Name        | LLM Name             |
+| -------------------- | -------------------- |
+| `vm.create`          | `vm_create`          |
+| `vm.start`           | `vm_start`           |
+| `vm.exec`            | `vm_exec`            |
 | `vm.snapshot.create` | `vm_snapshot_create` |
 
 The MCP server automatically handles this translation.
 
 ## Complete Tool List
 
-| Tool | Description |
-|------|-------------|
-| `vm_create` | Create a new VM |
-| `vm_start` | Start a VM |
-| `vm_stop` | Stop a VM |
-| `vm_delete` | Delete a VM |
-| `vm_list` | List all VMs |
-| `vm_get` | Get VM details |
-| `vm_exec` | Execute command in VM |
-| `vm_exec_script` | Execute script in VM |
-| `vm_upload` | Upload file to VM |
-| `vm_download` | Download file from VM |
-| `vm_snapshot_create` | Create snapshot |
-| `vm_snapshot_restore` | Restore snapshot |
-| `vm_snapshot_list` | List snapshots |
-| `vm_gpu_attach` | Attach GPU to VM |
-| `vm_gpu_detach` | Detach GPU from VM |
+| Tool                  | Description           |
+| --------------------- | --------------------- |
+| `vm_create`           | Create a new VM       |
+| `vm_start`            | Start a VM            |
+| `vm_stop`             | Stop a VM             |
+| `vm_delete`           | Delete a VM           |
+| `vm_list`             | List all VMs          |
+| `vm_get`              | Get VM details        |
+| `vm_exec`             | Execute command in VM |
+| `vm_exec_script`      | Execute script in VM  |
+| `vm_upload`           | Upload file to VM     |
+| `vm_download`         | Download file from VM |
+| `vm_snapshot_create`  | Create snapshot       |
+| `vm_snapshot_restore` | Restore snapshot      |
+| `vm_snapshot_list`    | List snapshots        |
+| `vm_gpu_attach`       | Attach GPU to VM      |
+| `vm_gpu_detach`       | Detach GPU from VM    |
 
 ## Custom Tool Extensions
 

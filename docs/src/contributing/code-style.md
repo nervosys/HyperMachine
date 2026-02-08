@@ -24,13 +24,13 @@ cargo clippy --fix
 
 ## Naming Conventions
 
-| Element | Convention | Example |
-|---------|------------|---------|
-| Crates | `kebab-case` | `hv2-core` |
-| Modules | `snake_case` | `memory_manager` |
-| Types | `PascalCase` | `VirtualMachine` |
-| Functions | `snake_case` | `create_vm` |
-| Constants | `SCREAMING_SNAKE` | `MAX_CPU_CORES` |
+| Element   | Convention        | Example          |
+| --------- | ----------------- | ---------------- |
+| Crates    | `kebab-case`      | `hv2-core`       |
+| Modules   | `snake_case`      | `memory_manager` |
+| Types     | `PascalCase`      | `VirtualMachine` |
+| Functions | `snake_case`      | `create_vm`      |
+| Constants | `SCREAMING_SNAKE` | `MAX_CPU_CORES`  |
 
 ## Error Handling
 

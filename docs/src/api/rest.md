@@ -192,12 +192,12 @@ GET /api/v1/vms/{vm_id}/files?path=/home/user/data.txt
 
 ## HTTP Status Codes
 
-| Code | Description |
-|------|-------------|
-| 200 | Success |
-| 201 | Created |
-| 400 | Bad Request |
-| 401 | Unauthorized |
-| 404 | Not Found |
-| 429 | Rate Limited |
-| 500 | Internal Error |
+| Code | Description    |
+| ---- | -------------- |
+| 200  | Success        |
+| 201  | Created        |
+| 400  | Bad Request    |
+| 401  | Unauthorized   |
+| 404  | Not Found      |
+| 429  | Rate Limited   |
+| 500  | Internal Error |

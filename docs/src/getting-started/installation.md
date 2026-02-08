@@ -6,12 +6,12 @@ This guide covers installing HyperMachine on various platforms.
 
 ### System Requirements
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| CPU | x86_64 with VT-x/AMD-V | Modern CPU with VT-d/AMD-Vi |
-| RAM | 8 GB | 32 GB+ |
-| Storage | 20 GB | 100 GB+ SSD |
-| OS | Linux 5.10+, Windows 10+, macOS 12+ | Latest stable |
+| Component | Minimum                             | Recommended                 |
+| --------- | ----------------------------------- | --------------------------- |
+| CPU       | x86_64 with VT-x/AMD-V              | Modern CPU with VT-d/AMD-Vi |
+| RAM       | 8 GB                                | 32 GB+                      |
+| Storage   | 20 GB                               | 100 GB+ SSD                 |
+| OS        | Linux 5.10+, Windows 10+, macOS 12+ | Latest stable               |
 
 ### Platform-Specific Requirements
 

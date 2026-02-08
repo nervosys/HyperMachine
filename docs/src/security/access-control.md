@@ -21,14 +21,14 @@ quotas = { max_vms = 5, max_memory_gb = 32 }
 
 ## Permission Categories
 
-| Category | Permissions |
-|----------|-------------|
+| Category         | Permissions                                     |
+| ---------------- | ----------------------------------------------- |
 | **VM Lifecycle** | `vm.create`, `vm.delete`, `vm.start`, `vm.stop` |
-| **VM Info** | `vm.list`, `vm.get` |
-| **Execution** | `vm.exec`, `vm.upload`, `vm.download` |
-| **Snapshots** | `snapshot.create`, `snapshot.restore` |
-| **GPU** | `gpu.attach`, `gpu.detach` |
-| **Admin** | `admin.config`, `admin.users` |
+| **VM Info**      | `vm.list`, `vm.get`                             |
+| **Execution**    | `vm.exec`, `vm.upload`, `vm.download`           |
+| **Snapshots**    | `snapshot.create`, `snapshot.restore`           |
+| **GPU**          | `gpu.attach`, `gpu.detach`                      |
+| **Admin**        | `admin.config`, `admin.users`                   |
 
 ## Resource Quotas
 

@@ -6,11 +6,11 @@ HyperMachine includes a desktop GUI with a **semantic automation API** that enab
 
 Traditional GUI automation (screen-based) has problems:
 
-| Approach | Deterministic | Fast | Layout Independent |
-|----------|--------------|------|-------------------|
-| Screen capture (Anthropic Computer Use) | ❌ | ❌ | ❌ |
-| DOM scraping | ⚠️ | ⚠️ | ❌ |
-| **Semantic API (HyperMachine)** | ✅ | ✅ | ✅ |
+| Approach                                | Deterministic | Fast | Layout Independent |
+| --------------------------------------- | ------------- | ---- | ------------------ |
+| Screen capture (Anthropic Computer Use) | ❌             | ❌    | ❌                  |
+| DOM scraping                            | ⚠️             | ⚠️    | ❌                  |
+| **Semantic API (HyperMachine)**         | ✅             | ✅    | ✅                  |
 
 HyperMachine's semantic API provides:
 
@@ -41,21 +41,21 @@ HyperMachine's semantic API provides:
 
 ## Available Tools (13 total)
 
-| Tool | Description |
-|------|-------------|
-| `gui.navigate` | Navigate to a view (welcome, vm_details, console, settings) |
-| `gui.dialog.open` | Open a dialog (create_vm, settings, about) |
-| `gui.dialog.close` | Close current dialog |
-| `gui.dialog.submit` | Submit dialog form |
-| `gui.vm.select` | Select VM by id, name, or partial match |
-| `gui.vm.action` | Perform VM action (start, stop, pause, delete, console) |
-| `gui.form.set_field` | Set a form field value |
-| `gui.form.get_field` | Get a form field value |
-| `gui.get_state` | Query current GUI state |
-| `gui.list_vms` | List VMs visible in GUI |
-| `gui.get_selected_vm` | Get currently selected VM |
-| `gui.refresh` | Refresh the GUI state |
-| `gui.screenshot` | Capture current GUI state as description |
+| Tool                  | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| `gui.navigate`        | Navigate to a view (welcome, vm_details, console, settings) |
+| `gui.dialog.open`     | Open a dialog (create_vm, settings, about)                  |
+| `gui.dialog.close`    | Close current dialog                                        |
+| `gui.dialog.submit`   | Submit dialog form                                          |
+| `gui.vm.select`       | Select VM by id, name, or partial match                     |
+| `gui.vm.action`       | Perform VM action (start, stop, pause, delete, console)     |
+| `gui.form.set_field`  | Set a form field value                                      |
+| `gui.form.get_field`  | Get a form field value                                      |
+| `gui.get_state`       | Query current GUI state                                     |
+| `gui.list_vms`        | List VMs visible in GUI                                     |
+| `gui.get_selected_vm` | Get currently selected VM                                   |
+| `gui.refresh`         | Refresh the GUI state                                       |
+| `gui.screenshot`      | Capture current GUI state as description                    |
 
 ## Rust API
 
@@ -291,21 +291,21 @@ for tool_call in response.choices[0].message.tool_calls or []:
 
 ### Available Views
 
-| View | Description |
-|------|-------------|
-| `welcome` | Welcome screen with quick actions |
-| `vm_list` | List of all VMs |
-| `vm_details` | Details of selected VM |
-| `console` | VM console output |
-| `settings` | Application settings |
+| View         | Description                       |
+| ------------ | --------------------------------- |
+| `welcome`    | Welcome screen with quick actions |
+| `vm_list`    | List of all VMs                   |
+| `vm_details` | Details of selected VM            |
+| `console`    | VM console output                 |
+| `settings`   | Application settings              |
 
 ### Available Dialogs
 
-| Dialog | Fields |
-|--------|--------|
+| Dialog      | Fields                                     |
+| ----------- | ------------------------------------------ |
 | `create_vm` | name, cpus, memory_mb, disk_gb, enable_gpu |
-| `settings` | theme, api_key, data_dir |
-| `about` | (read-only info) |
+| `settings`  | theme, api_key, data_dir                   |
+| `about`     | (read-only info)                           |
 
 ## Testing
 

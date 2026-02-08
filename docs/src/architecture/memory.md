@@ -249,12 +249,12 @@ impl ZeroCopyBuffer {
 
 ## Memory Types
 
-| Type | Use Case | Caching |
-|------|----------|---------|
-| **Normal RAM** | Guest memory | Write-back |
-| **MMIO** | Device registers | Uncacheable |
-| **ROM** | BIOS/UEFI | Write-protected |
-| **Shared** | Host-guest communication | Write-back |
+| Type           | Use Case                 | Caching         |
+| -------------- | ------------------------ | --------------- |
+| **Normal RAM** | Guest memory             | Write-back      |
+| **MMIO**       | Device registers         | Uncacheable     |
+| **ROM**        | BIOS/UEFI                | Write-protected |
+| **Shared**     | Host-guest communication | Write-back      |
 
 ## Huge Pages
 
@@ -316,12 +316,12 @@ pub fn allocate_huge_pages(size: usize) -> Result<*mut u8> {
 
 ## Performance Metrics
 
-| Operation | Latency |
-|-----------|---------|
-| EPT walk (cached) | ~10 ns |
-| EPT walk (uncached) | ~100 ns |
-| Page fault handling | ~1-10 μs |
-| Balloon inflate | ~1 ms/1000 pages |
+| Operation           | Latency          |
+| ------------------- | ---------------- |
+| EPT walk (cached)   | ~10 ns           |
+| EPT walk (uncached) | ~100 ns          |
+| Page fault handling | ~1-10 μs         |
+| Balloon inflate     | ~1 ms/1000 pages |
 
 ## Next Steps
 

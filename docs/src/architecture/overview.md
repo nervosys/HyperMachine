@@ -125,12 +125,12 @@ crates/
 
 ## Platform Support
 
-| Platform | Hypervisor Backend | Status |
-|----------|-------------------|--------|
-| Linux | KVM | ✅ Full support |
-| Windows | WHPX | ✅ Full support |
-| macOS | HVF | ✅ Full support |
-| Bare-metal | VMX/SVM | 🚧 In development |
+| Platform   | Hypervisor Backend | Status           |
+| ---------- | ------------------ | ---------------- |
+| Linux      | KVM                | ✅ Full support   |
+| Windows    | WHPX               | ✅ Full support   |
+| macOS      | HVF                | ✅ Full support   |
+| Bare-metal | VMX/SVM            | 🚧 In development |
 
 ## Next Steps
 
