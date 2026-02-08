@@ -10,11 +10,10 @@
 //! # Modules
 //!
 //! - `fips`: FIPS 140-3 compliant symmetric crypto operations
-//! - `asymmetric`: RSA and ECDSA operations (TODO: fix compile errors)
-//! - `pqc`: Post-quantum cryptography (TODO: fix compile errors)
+//! - `asymmetric`: RSA and ECDSA operations
+//! - `pqc`: Post-quantum cryptography
 
 pub mod fips;
-// TODO: Fix compile errors in these modules
 pub mod asymmetric;
 pub mod pqc;
 

@@ -148,7 +148,11 @@ impl fmt::Display for CryptoError {
                 write!(f, "Invalid key length: expected {}, got {}", expected, got)
             }
             Self::InvalidNonceLength { expected, got } => {
-                write!(f, "Invalid nonce length: expected {}, got {}", expected, got)
+                write!(
+                    f,
+                    "Invalid nonce length: expected {}, got {}",
+                    expected, got
+                )
             }
             Self::AuthenticationFailed => write!(f, "Authentication failed"),
             Self::EncryptionFailed(msg) => write!(f, "Encryption failed: {}", msg),
@@ -357,7 +361,7 @@ impl FipsCrypto {
     /// Generate cryptographically secure random bytes
     pub fn random_bytes(&self, buffer: &mut [u8]) -> CryptoResult<()> {
         use rand::RngCore;
-        
+
         // Use rand's thread_rng which uses the OS CSPRNG
         // On Windows this uses BCryptGenRandom internally
         // On Linux this uses getrandom(2) or /dev/urandom
@@ -459,12 +463,17 @@ impl FipsCrypto {
 
         #[cfg(feature = "ring")]
         {
-            use ring::aead::{Aad, BoundKey, Nonce, NonceSequence, SealingKey, UnboundKey, AES_256_GCM};
+            use ring::aead::{
+                Aad, BoundKey, Nonce, NonceSequence, SealingKey, UnboundKey, AES_256_GCM,
+            };
 
             struct SingleNonce(Option<[u8; 12]>);
             impl NonceSequence for SingleNonce {
                 fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-                    self.0.take().map(Nonce::assume_unique_for_key).ok_or(ring::error::Unspecified)
+                    self.0
+                        .take()
+                        .map(Nonce::assume_unique_for_key)
+                        .ok_or(ring::error::Unspecified)
                 }
             }
 
@@ -477,7 +486,8 @@ impl FipsCrypto {
             let mut sealing_key = SealingKey::new(unbound_key, SingleNonce(Some(nonce_arr)));
 
             let mut in_out = plaintext.to_vec();
-            sealing_key.seal_in_place_append_tag(Aad::from(aad), &mut in_out)
+            sealing_key
+                .seal_in_place_append_tag(Aad::from(aad), &mut in_out)
                 .map_err(|_| CryptoError::EncryptionFailed("Seal failed".into()))?;
 
             return Ok(in_out);
@@ -506,12 +516,17 @@ impl FipsCrypto {
     ) -> CryptoResult<Vec<u8>> {
         #[cfg(feature = "ring")]
         {
-            use ring::aead::{Aad, BoundKey, Nonce, NonceSequence, OpeningKey, UnboundKey, AES_256_GCM};
+            use ring::aead::{
+                Aad, BoundKey, Nonce, NonceSequence, OpeningKey, UnboundKey, AES_256_GCM,
+            };
 
             struct SingleNonce(Option<[u8; 12]>);
             impl NonceSequence for SingleNonce {
                 fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-                    self.0.take().map(Nonce::assume_unique_for_key).ok_or(ring::error::Unspecified)
+                    self.0
+                        .take()
+                        .map(Nonce::assume_unique_for_key)
+                        .ok_or(ring::error::Unspecified)
                 }
             }
 
@@ -524,7 +539,8 @@ impl FipsCrypto {
             let mut opening_key = OpeningKey::new(unbound_key, SingleNonce(Some(nonce_arr)));
 
             let mut in_out = ciphertext.to_vec();
-            let plaintext = opening_key.open_in_place(Aad::from(aad), &mut in_out)
+            let plaintext = opening_key
+                .open_in_place(Aad::from(aad), &mut in_out)
                 .map_err(|_| CryptoError::AuthenticationFailed)?;
 
             return Ok(plaintext.to_vec());
@@ -675,7 +691,8 @@ impl FipsCrypto {
             use ring::hkdf::{Salt, HKDF_SHA256};
             let salt = Salt::new(HKDF_SHA256, salt);
             let prk = salt.extract(ikm);
-            let okm = prk.expand(&[info], HkdfLen(output_len))
+            let okm = prk
+                .expand(&[info], HkdfLen(output_len))
                 .map_err(|_| CryptoError::KeyDerivationFailed("HKDF expand failed".into()))?;
             let mut out = vec![0u8; output_len];
             okm.fill(&mut out)
@@ -741,10 +758,9 @@ impl FipsCrypto {
         #[cfg(feature = "ring")]
         {
             let expected = [
-                0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
-                0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
-                0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
-                0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+                0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f,
+                0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
+                0x78, 0x52, 0xb8, 0x55,
             ];
             if empty_hash != expected {
                 return Err(CryptoError::SelfTestFailed("SHA-256 KAT failed".into()));
@@ -881,8 +897,12 @@ mod tests {
         let plaintext = b"Hello, HyperMachine!";
         let aad = b"additional data";
 
-        let ciphertext = crypto.aes_gcm_encrypt(key.as_bytes(), plaintext, aad).unwrap();
-        let decrypted = crypto.aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad).unwrap();
+        let ciphertext = crypto
+            .aes_gcm_encrypt(key.as_bytes(), plaintext, aad)
+            .unwrap();
+        let decrypted = crypto
+            .aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad)
+            .unwrap();
 
         assert_eq!(decrypted, plaintext);
     }

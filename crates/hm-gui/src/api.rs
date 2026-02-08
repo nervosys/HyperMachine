@@ -33,7 +33,7 @@ fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
-    #[serde(default, alias = "name")]
+    #[serde(default)]
     pub id: String,
     pub name: String,
     pub state: VmStateApi,
@@ -221,4 +221,5 @@ impl ApiClient {
     }
 }
 
+#[allow(dead_code)]
 pub type SharedApiClient = Arc<RwLock<ApiClient>>;

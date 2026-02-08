@@ -3368,9 +3368,10 @@ impl WhpxVcpu {
     /// - **Long Mode Compatibility**: 32-bit code in 64-bit mode (EFER.LMA=1, CS.L=0)
     /// - **Long Mode 64-Bit**: True 64-bit mode (EFER.LMA=1, CS.L=1)
     ///
-    /// Note: This implementation currently doesn't check the code segment (CS.L)
-    /// bit, so it cannot distinguish between compatibility and 64-bit modes.
-    /// Both are reported as LongMode64Bit if EFER.LMA is set.
+    /// Distinguishes between all x86 CPU modes by checking:
+    /// - CR0.PE for protected mode
+    /// - EFER.LMA for long mode activation
+    /// - CS.L (bit 9 of segment attributes) for 64-bit vs compatibility mode
     ///
     /// # Example
     ///
@@ -3387,8 +3388,8 @@ impl WhpxVcpu {
     /// match mode {
     ///     CpuMode::RealMode => println!("16-bit real mode"),
     ///     CpuMode::ProtectedMode => println!("32-bit protected mode"),
+    ///     CpuMode::LongModeCompatibility => println!("32-bit compatibility mode"),
     ///     CpuMode::LongMode64Bit => println!("64-bit long mode"),
-    ///     _ => println!("Other mode"),
     /// }
     /// # Ok(())
     /// # }
@@ -3399,12 +3400,20 @@ impl WhpxVcpu {
     /// Returns an error if the WHPX API call fails.
     #[cfg(target_os = "windows")]
     pub fn get_cpu_mode(&self) -> Result<CpuMode> {
+        use super::whpx_ffi::WHV_REGISTER_NAME::*;
+
         let cr = self.get_control_registers()?;
 
         if cr.is_long_mode_active() {
-            // In long mode (could be compatibility or 64-bit)
-            // TODO: Check CS.L bit to distinguish
-            Ok(CpuMode::LongMode64Bit)
+            // In long mode — check CS.L bit to distinguish 64-bit from compatibility
+            let cs_values = self.get_registers(&[WHvX64RegisterCs])?;
+            let cs_attrs = unsafe { cs_values[0].Segment.Attributes };
+            // CS.L is bit 9 (0x200) in the WHPX segment attribute format
+            if cs_attrs & 0x200 != 0 {
+                Ok(CpuMode::LongMode64Bit)
+            } else {
+                Ok(CpuMode::LongModeCompatibility)
+            }
         } else if cr.is_protected_mode() {
             Ok(CpuMode::ProtectedMode)
         } else {
@@ -4679,7 +4688,6 @@ pub enum CpuMode {
 
     /// Long mode compatibility sub-mode (32-bit code in 64-bit mode)
     /// EFER.LMA=1, CS.L=0
-    #[allow(dead_code)]
     LongModeCompatibility,
 
     /// Long mode 64-bit sub-mode (true 64-bit mode)

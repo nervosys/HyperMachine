@@ -16,6 +16,7 @@ pub struct AutomationHandle {
     /// Channel for sending commands to the GUI
     command_tx: Sender<AutomationRequest>,
     /// Shared response storage (last response)
+    #[allow(dead_code)]
     response_store: Arc<Mutex<Option<CommandResult>>>,
 }
 

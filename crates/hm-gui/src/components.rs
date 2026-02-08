@@ -71,6 +71,7 @@ pub fn vm_list_sidebar(ui: &mut Ui, state: &mut AppState) -> SidebarAction {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum SidebarAction { None, SelectVm(String), StartVm(String), StopVm(String), PauseVm(String), ResumeVm(String), OpenConsole(String) }
 
 pub fn main_content(ui: &mut Ui, state: &mut AppState) -> ContentAction {
@@ -87,6 +88,7 @@ pub fn main_content(ui: &mut Ui, state: &mut AppState) -> ContentAction {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ContentAction { None, StartVm(String), StopVm(String), PauseVm(String), ResumeVm(String), DeleteVm(String), CloseConsole, SendKey(String, u32, bool), SendMouse(String, i32, i32, u8, i32) }
 
 impl ContentAction {

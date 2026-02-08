@@ -4,7 +4,6 @@
 //! Each command is atomic, validated, and returns a structured result.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// A command that can be sent to the GUI for automation
 #[derive(Debug, Clone, Serialize, Deserialize)]
