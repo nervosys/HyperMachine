@@ -74,22 +74,17 @@ impl fmt::Display for MemoryType {
 }
 
 /// Importance level for memory items
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
 pub enum Importance {
     /// Low importance, may be forgotten quickly
     Low = 1,
     /// Normal importance
+    #[default]
     Normal = 2,
     /// High importance, retained longer
     High = 3,
     /// Critical importance, never forgotten
     Critical = 4,
-}
-
-impl Default for Importance {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 impl Importance {

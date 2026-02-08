@@ -50,22 +50,17 @@ impl std::fmt::Display for CommError {
 impl std::error::Error for CommError {}
 
 /// Message priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
 pub enum MessagePriority {
     /// Low priority - can be delayed
     Low = 0,
     /// Normal priority
+    #[default]
     Normal = 1,
     /// High priority - process quickly
     High = 2,
     /// Critical - immediate processing
     Critical = 3,
-}
-
-impl Default for MessagePriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Message types

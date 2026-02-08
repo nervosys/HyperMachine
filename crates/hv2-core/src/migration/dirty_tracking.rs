@@ -31,8 +31,8 @@ pub struct DirtyBitmap {
 impl DirtyBitmap {
     /// Create a new dirty bitmap for a memory region
     pub fn new(base_gpa: u64, size: u64) -> Self {
-        let num_pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-        let num_words = ((num_pages + PAGES_PER_WORD - 1) / PAGES_PER_WORD) as usize;
+        let num_pages = size.div_ceil(PAGE_SIZE);
+        let num_words = (num_pages.div_ceil(PAGES_PER_WORD)) as usize;
 
         let mut bitmap = Vec::with_capacity(num_words);
         for _ in 0..num_words {

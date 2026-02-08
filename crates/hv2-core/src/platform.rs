@@ -37,7 +37,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 /// Platform feature flags
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct PlatformFeatures {
     /// Hardware virtualization available (VT-x/AMD-V/ARM VHE)
     pub hardware_virt: bool,
@@ -55,21 +55,6 @@ pub struct PlatformFeatures {
     pub virtual_interrupt_delivery: bool,
     /// PML (Page Modification Logging)
     pub page_modification_logging: bool,
-}
-
-impl Default for PlatformFeatures {
-    fn default() -> Self {
-        Self {
-            hardware_virt: false,
-            nested_virt: false,
-            extended_page_tables: false,
-            apic_virtualization: false,
-            posted_interrupts: false,
-            vmcs_shadowing: false,
-            virtual_interrupt_delivery: false,
-            page_modification_logging: false,
-        }
-    }
 }
 
 impl PlatformFeatures {

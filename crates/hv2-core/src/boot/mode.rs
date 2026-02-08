@@ -510,13 +510,13 @@ pub mod pte {
 /// Returns the page table bytes to write to guest memory
 pub fn create_identity_page_tables_64(base: u64, memory_size: u64) -> Vec<u8> {
     // Calculate how many 2MB pages we need
-    let num_2mb_pages = (memory_size + 0x1FFFFF) / 0x200000;
+    let num_2mb_pages = memory_size.div_ceil(0x200000);
     
     // Calculate table structure
     // - PML4: 1 page (512 entries, each covers 512GB)
     // - PDPT: 1 page (512 entries, each covers 1GB)  
     // - PD: N pages (512 entries each, each entry covers 2MB)
-    let num_pd_pages = (num_2mb_pages + 511) / 512;
+    let num_pd_pages = num_2mb_pages.div_ceil(512);
     let total_pages = 2 + num_pd_pages; // PML4 + PDPT + PDs
     
     let mut tables = vec![0u8; total_pages as usize * 4096];

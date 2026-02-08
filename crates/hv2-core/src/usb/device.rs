@@ -7,9 +7,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// USB device state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum DeviceState {
     /// Device is not attached
+    #[default]
     Detached,
     /// Device is attached but not powered
     Attached,
@@ -23,12 +24,6 @@ pub enum DeviceState {
     Configured,
     /// Device is suspended
     Suspended,
-}
-
-impl Default for DeviceState {
-    fn default() -> Self {
-        Self::Detached
-    }
 }
 
 /// USB device class

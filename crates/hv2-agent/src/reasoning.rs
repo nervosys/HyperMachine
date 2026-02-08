@@ -62,22 +62,17 @@ impl std::error::Error for ReasoningError {}
 pub type ReasoningResult<T> = Result<T, ReasoningError>;
 
 /// Truth value for facts
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
 pub enum TruthValue {
     /// Definitely true
     True,
     /// Definitely false
     False,
     /// Unknown
+    #[default]
     Unknown,
     /// Probably true (with confidence)
     Probable(f64),
-}
-
-impl Default for TruthValue {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl TruthValue {

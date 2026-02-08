@@ -111,8 +111,8 @@ pub struct DirtyPageTracker {
 impl DirtyPageTracker {
     /// Create a new dirty page tracker
     pub fn new(base_gpa: u64, size: u64) -> Self {
-        let page_count = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-        let bitmap_size = ((page_count + 63) / 64) as usize;
+        let page_count = size.div_ceil(PAGE_SIZE);
+        let bitmap_size = (page_count.div_ceil(64)) as usize;
 
         Self {
             bitmap: vec![0; bitmap_size],
@@ -126,8 +126,8 @@ impl DirtyPageTracker {
 
     /// Create with custom page size
     pub fn with_page_size(base_gpa: u64, size: u64, page_size: u64) -> Self {
-        let page_count = (size + page_size - 1) / page_size;
-        let bitmap_size = ((page_count + 63) / 64) as usize;
+        let page_count = size.div_ceil(page_size);
+        let bitmap_size = (page_count.div_ceil(64)) as usize;
 
         Self {
             bitmap: vec![0; bitmap_size],
@@ -371,7 +371,7 @@ impl MemorySnapshotManager {
 
     /// Add a memory region to track
     pub fn add_region(&mut self, gpa_start: u64, size: u64) {
-        let page_count = ((size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
+        let page_count = (size.div_ceil(PAGE_SIZE)) as usize;
         self.regions.insert(
             gpa_start,
             MemoryRegion {
@@ -416,7 +416,7 @@ impl MemorySnapshotManager {
 
         // Mark pages as dirty
         let start_page = offset / PAGE_SIZE as usize;
-        let end_page = (offset + data.len() + PAGE_SIZE as usize - 1) / PAGE_SIZE as usize;
+        let end_page = (offset + data.len()).div_ceil(PAGE_SIZE as usize);
         for page in start_page..end_page.min(region.page_states.len()) {
             region.page_states[page] = PageState::Dirty;
         }

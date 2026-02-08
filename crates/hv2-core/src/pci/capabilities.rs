@@ -188,10 +188,7 @@ pub struct CapabilityHeader {
 impl CapabilityHeader {
     /// Create new capability header
     pub fn new(id: CapabilityId, next: u8) -> Self {
-        Self {
-            id: id as u8,
-            next,
-        }
+        Self { id: id as u8, next }
     }
 
     /// Parse from config space
@@ -527,7 +524,7 @@ pub struct MsixCapability {
 impl MsixCapability {
     /// Create new MSI-X capability
     pub fn new(offset: u8, table_size: u16, table_bar: u8, pba_bar: u8) -> Self {
-        let pba_qwords = (table_size as usize + 63) / 64;
+        let pba_qwords = (table_size as usize).div_ceil(64);
         Self {
             offset,
             control: MsixControl::new(table_size),
@@ -584,7 +581,10 @@ impl MsixCapability {
     pub fn is_pending(&self, vector: u16) -> bool {
         let qword = (vector / 64) as usize;
         let bit = vector % 64;
-        self.pba.get(qword).map(|v| v & (1 << bit) != 0).unwrap_or(false)
+        self.pba
+            .get(qword)
+            .map(|v| v & (1 << bit) != 0)
+            .unwrap_or(false)
     }
 
     /// Set vector pending
@@ -900,7 +900,7 @@ impl PcieCapability {
         // Device Capabilities
         let device_caps = 0x00008000 | // Function Level Reset
             (0x02 << 0) |  // Max Payload Size 512B capable
-            (0x01 << 3);   // Phantom Functions supported
+            (0x01 << 3); // Phantom Functions supported
 
         // Link Capabilities
         let link_caps = (max_speed as u32)
@@ -980,10 +980,10 @@ impl PcieCapability {
     pub fn set_link_state(&mut self, speed: PcieLinkSpeed, width: PcieLinkWidth) {
         self.current_speed = speed;
         self.current_width = width;
-        self.link_status.0 =
-            (self.link_status.0 & !(PcieLinkStatus::SPEED_MASK | PcieLinkStatus::WIDTH_MASK))
-                | (speed as u16)
-                | ((width as u16) << 4);
+        self.link_status.0 = (self.link_status.0
+            & !(PcieLinkStatus::SPEED_MASK | PcieLinkStatus::WIDTH_MASK))
+            | (speed as u16)
+            | ((width as u16) << 4);
     }
 }
 

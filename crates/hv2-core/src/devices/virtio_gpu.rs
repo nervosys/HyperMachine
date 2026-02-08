@@ -241,7 +241,7 @@ impl Resource2d {
 }
 
 /// Cursor state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Cursor {
     /// Scanout ID
     pub scanout_id: u32,
@@ -257,20 +257,6 @@ pub struct Cursor {
     pub hot_y: u32,
     /// Cursor visibility
     pub visible: bool,
-}
-
-impl Default for Cursor {
-    fn default() -> Self {
-        Self {
-            scanout_id: 0,
-            x: 0,
-            y: 0,
-            resource_id: 0,
-            hot_x: 0,
-            hot_y: 0,
-            visible: false,
-        }
-    }
 }
 
 /// Scanout configuration
@@ -295,7 +281,11 @@ impl Scanout {
             id,
             resource_id: 0,
             rect: Rect::new(0, 0, width, height),
-            framebuffer: Framebuffer::new(FramebufferConfig::new(width, height, PixelFormat::Xrgb32)),
+            framebuffer: Framebuffer::new(FramebufferConfig::new(
+                width,
+                height,
+                PixelFormat::Xrgb32,
+            )),
             enabled: false,
         }
     }
@@ -385,7 +375,11 @@ impl VirtioGpu {
     }
 
     /// Set display info for a scanout
-    pub fn set_display_info(&mut self, scanout_id: u32, info: DisplayInfo) -> Result<(), GpuResponse> {
+    pub fn set_display_info(
+        &mut self,
+        scanout_id: u32,
+        info: DisplayInfo,
+    ) -> Result<(), GpuResponse> {
         if scanout_id >= self.num_scanouts {
             return Err(GpuResponse::ErrInvalidScanoutId);
         }
@@ -536,11 +530,7 @@ impl VirtioGpu {
     }
 
     /// Transfer data from resource to framebuffer
-    pub fn resource_flush(
-        &mut self,
-        resource_id: u32,
-        rect: Rect,
-    ) -> Result<(), GpuResponse> {
+    pub fn resource_flush(&mut self, resource_id: u32, rect: Rect) -> Result<(), GpuResponse> {
         if !self.resources.contains_key(&resource_id) {
             return Err(GpuResponse::ErrInvalidResourceId);
         }
@@ -556,8 +546,7 @@ impl VirtioGpu {
                     // Simple copy (assumes same format, no scaling)
                     for y in 0..src_rect.height.min(dst_rect.height) {
                         for x in 0..src_rect.width.min(dst_rect.width) {
-                            if let Some(color) =
-                                resource.get_pixel(src_rect.x + x, src_rect.y + y)
+                            if let Some(color) = resource.get_pixel(src_rect.x + x, src_rect.y + y)
                             {
                                 scanout.framebuffer.set_pixel(x, y, color);
                             }
@@ -834,7 +823,9 @@ mod tests {
         gpu.set_scanout(0, 1, Rect::new(0, 0, 100, 100)).unwrap();
 
         // Set a pixel in the resource
-        gpu.get_resource_mut(1).unwrap().set_pixel(10, 10, Color::RED);
+        gpu.get_resource_mut(1)
+            .unwrap()
+            .set_pixel(10, 10, Color::RED);
 
         // Flush
         gpu.resource_flush(1, Rect::new(0, 0, 100, 100)).unwrap();

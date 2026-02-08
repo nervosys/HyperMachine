@@ -50,7 +50,7 @@ impl PixelFormat {
 
     /// Bytes per pixel (rounded up)
     pub fn bytes_per_pixel(&self) -> u32 {
-        (self.bits_per_pixel() + 7) / 8
+        self.bits_per_pixel().div_ceil(8)
     }
 
     /// Has alpha channel

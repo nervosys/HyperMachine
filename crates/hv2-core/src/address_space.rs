@@ -610,7 +610,10 @@ impl GuestAddressSpace {
     /// Get a mutable slice of guest memory (unsafe, returns raw pointer)
     ///
     /// # Safety  
-    /// Caller must ensure the address range is valid, writable, and not MMIO
+    /// Caller must ensure the address range is valid, writable, and not MMIO.
+    /// Takes `&self` because the underlying memory is raw-pointer-based guest RAM
+    /// shared across vCPUs — requiring `&mut self` would be overly restrictive.
+    #[allow(clippy::mut_from_ref)]
     pub unsafe fn get_slice_mut(&self, guest_addr: GuestPhysAddr, len: usize) -> Result<&mut [u8]> {
         let host_addr = self.translate(guest_addr)?;
         Ok(std::slice::from_raw_parts_mut(host_addr as *mut u8, len))

@@ -277,14 +277,14 @@ impl SnapshotManager {
         // Validate parent for incremental
         if let Some(parent_id) = &options.parent_id {
             if !self.catalog.contains_key(parent_id) {
-                return Err(SnapshotError::InvalidParent(parent_id.clone()));
+                return Err(SnapshotError::InvalidParent(*parent_id));
             }
         }
 
         // Create snapshot info
         let id = SnapshotId::generate();
         let name = options.name.unwrap_or_else(|| format!("Snapshot {}", id));
-        let mut info = SnapshotInfo::new(id.clone(), &name)
+        let mut info = SnapshotInfo::new(id, &name)
             .with_type(options.snapshot_type)
             .with_description(options.description.unwrap_or_default());
 
@@ -298,8 +298,8 @@ impl SnapshotManager {
             info = info.with_tag(&tag, "");
         }
 
-        self.catalog.insert(id.clone(), info);
-        self.active_snapshot = Some(id.clone());
+        self.catalog.insert(id, info);
+        self.active_snapshot = Some(id);
         self.stats.snapshots_started += 1;
 
         Ok(id)
@@ -309,7 +309,6 @@ impl SnapshotManager {
     pub fn add_cpu_state(&mut self, cpu: CpuSnapshot) -> SnapshotResult<()> {
         let id = self
             .active_snapshot
-            .clone()
             .ok_or(SnapshotError::InvalidState(SnapshotState::Invalid))?;
 
         if let Some(info) = self.catalog.get_mut(&id) {
@@ -323,7 +322,6 @@ impl SnapshotManager {
     pub fn add_memory_region(&mut self, region: MemoryRegionSnapshot) -> SnapshotResult<()> {
         let id = self
             .active_snapshot
-            .clone()
             .ok_or(SnapshotError::InvalidState(SnapshotState::Invalid))?;
 
         if let Some(info) = self.catalog.get_mut(&id) {
@@ -337,7 +335,6 @@ impl SnapshotManager {
     pub fn add_device(&mut self, device: &dyn Snapshottable) -> SnapshotResult<()> {
         let _id = self
             .active_snapshot
-            .clone()
             .ok_or(SnapshotError::InvalidState(SnapshotState::Invalid))?;
 
         self.device_manager
@@ -385,18 +382,18 @@ impl SnapshotManager {
     pub fn delete_snapshot(&mut self, id: &SnapshotId) -> SnapshotResult<()> {
         // Check if snapshot exists
         if !self.catalog.contains_key(id) {
-            return Err(SnapshotError::NotFound(id.clone()));
+            return Err(SnapshotError::NotFound(*id));
         }
 
         // Check if snapshot is in use (being restored)
         if self.active_snapshot.as_ref() == Some(id) {
-            return Err(SnapshotError::InUse(id.clone()));
+            return Err(SnapshotError::InUse(*id));
         }
 
         // Check if snapshot is parent of other snapshots
         for info in self.catalog.values() {
             if info.parent_id.as_ref() == Some(id) {
-                return Err(SnapshotError::InUse(id.clone()));
+                return Err(SnapshotError::InUse(*id));
             }
         }
 
@@ -413,17 +410,14 @@ impl SnapshotManager {
             return Err(SnapshotError::InvalidState(SnapshotState::Restoring));
         }
 
-        let info = self
-            .catalog
-            .get(id)
-            .ok_or_else(|| SnapshotError::NotFound(id.clone()))?;
+        let info = self.catalog.get(id).ok_or(SnapshotError::NotFound(*id))?;
 
         // Check snapshot state
         if info.state != SnapshotState::Valid {
-            return Err(SnapshotError::InvalidState(info.state.clone()));
+            return Err(SnapshotError::InvalidState(info.state));
         }
 
-        self.active_snapshot = Some(id.clone());
+        self.active_snapshot = Some(*id);
         self.stats.restores_started += 1;
 
         Ok(info)
@@ -480,7 +474,7 @@ impl SnapshotManager {
                         .any(|i| i.parent_id.as_ref() == Some(*id))
             })
             .min_by_key(|(_, info)| info.created_at)
-            .map(|(id, _)| id.clone());
+            .map(|(id, _)| *id);
 
         if let Some(id) = oldest {
             self.delete_snapshot(&id)?;
@@ -508,12 +502,12 @@ impl SnapshotManager {
     /// Get snapshot chain (for incremental)
     pub fn get_chain(&self, id: &SnapshotId) -> Vec<&SnapshotInfo> {
         let mut chain = Vec::new();
-        let mut current_id = Some(id.clone());
+        let mut current_id = Some(*id);
 
         while let Some(id) = current_id {
             if let Some(info) = self.catalog.get(&id) {
                 chain.push(info);
-                current_id = info.parent_id.clone();
+                current_id = info.parent_id;
             } else {
                 break;
             }

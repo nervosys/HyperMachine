@@ -95,22 +95,17 @@ impl TaskStatus {
 }
 
 /// Task priority
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
 pub enum TaskPriority {
     /// Low priority
     Low = 0,
     /// Normal priority
+    #[default]
     Normal = 1,
     /// High priority
     High = 2,
     /// Critical priority
     Critical = 3,
-}
-
-impl Default for TaskPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 /// Task output/result

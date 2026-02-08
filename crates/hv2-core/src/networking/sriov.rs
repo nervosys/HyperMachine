@@ -176,20 +176,15 @@ pub struct VirtualFunction {
 }
 
 /// VF link state
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum VfLinkState {
     /// Auto (follows PF)
+    #[default]
     Auto,
     /// Always up
     Enable,
     /// Always down
     Disable,
-}
-
-impl Default for VfLinkState {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 impl VirtualFunction {

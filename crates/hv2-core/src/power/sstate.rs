@@ -415,7 +415,7 @@ impl SStateManager {
         }
 
         // Create wake event
-        let wake_event = WakeEvent::new(source.clone(), current);
+        let wake_event = WakeEvent::new(source, current);
 
         // Record in history
         if self.wake_history.len() >= self.max_wake_history {

@@ -4,8 +4,8 @@
 //! and Configuration Table implementations.
 
 use super::types::{
-    AllocateType, Guid, Handle, MemoryAttribute, MemoryDescriptor, MemoryType, Status,
-    TableHeader, Time, TimeCapabilities, guids,
+    guids, AllocateType, Guid, Handle, MemoryAttribute, MemoryDescriptor, MemoryType, Status,
+    TableHeader, Time, TimeCapabilities,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -469,7 +469,7 @@ impl BootServices {
     /// Allocate pool
     pub fn allocate_pool(&mut self, memory_type: MemoryType, size: u64) -> Result<u64, Status> {
         // Round up to page size and allocate pages
-        let pages = (size + 4095) / 4096;
+        let pages = size.div_ceil(4096);
         self.allocate_pages(AllocateType::AllocateAnyPages, memory_type, pages, 0)
     }
 
@@ -504,7 +504,12 @@ impl BootServices {
     }
 
     /// Set timer
-    pub fn set_timer(&mut self, event_id: u64, delay_type: TimerDelay, trigger_time: u64) -> Status {
+    pub fn set_timer(
+        &mut self,
+        event_id: u64,
+        delay_type: TimerDelay,
+        trigger_time: u64,
+    ) -> Status {
         if let Some(event) = self.events.get_mut(&event_id) {
             if !event.is_timer() {
                 return Status::INVALID_PARAMETER;
@@ -810,7 +815,11 @@ impl SystemTable {
     /// Add configuration table
     pub fn add_configuration_table(&mut self, guid: Guid, table_address: u64) {
         // Replace if exists
-        if let Some(entry) = self.configuration_tables.iter_mut().find(|t| t.vendor_guid == guid) {
+        if let Some(entry) = self
+            .configuration_tables
+            .iter_mut()
+            .find(|t| t.vendor_guid == guid)
+        {
             entry.vendor_table = table_address;
         } else {
             self.configuration_tables
@@ -893,7 +902,12 @@ mod tests {
         bs.init_default_memory_map(0x10000000);
 
         let addr = bs
-            .allocate_pages(AllocateType::AllocateAnyPages, MemoryType::LoaderData, 10, 0)
+            .allocate_pages(
+                AllocateType::AllocateAnyPages,
+                MemoryType::LoaderData,
+                10,
+                0,
+            )
             .unwrap();
 
         let status = bs.free_pages(addr, 10);
@@ -967,20 +981,14 @@ mod tests {
         let mut bs = BootServices::new();
         let mut handle = Handle::NULL;
 
-        let status = bs.install_protocol_interface(
-            &mut handle,
-            guids::EFI_LOADED_IMAGE_PROTOCOL,
-            0x1000,
-        );
+        let status =
+            bs.install_protocol_interface(&mut handle, guids::EFI_LOADED_IMAGE_PROTOCOL, 0x1000);
         assert!(status.is_success());
         assert!(!handle.is_null());
 
         // Installing same protocol again should fail
-        let status = bs.install_protocol_interface(
-            &mut handle,
-            guids::EFI_LOADED_IMAGE_PROTOCOL,
-            0x2000,
-        );
+        let status =
+            bs.install_protocol_interface(&mut handle, guids::EFI_LOADED_IMAGE_PROTOCOL, 0x2000);
         assert!(status.is_error());
     }
 
@@ -1007,7 +1015,10 @@ mod tests {
         bs.install_protocol_interface(&mut h1, guids::EFI_BLOCK_IO_PROTOCOL, 0x1000);
         bs.install_protocol_interface(&mut h2, guids::EFI_BLOCK_IO_PROTOCOL, 0x2000);
 
-        let handles = bs.locate_handle(LocateSearchType::ByProtocol, Some(&guids::EFI_BLOCK_IO_PROTOCOL));
+        let handles = bs.locate_handle(
+            LocateSearchType::ByProtocol,
+            Some(&guids::EFI_BLOCK_IO_PROTOCOL),
+        );
         assert_eq!(handles.len(), 2);
 
         let handles = bs.locate_handle(LocateSearchType::AllHandles, None);
@@ -1049,7 +1060,8 @@ mod tests {
         assert!(bs.is_exited());
 
         // Operations after exit should fail
-        let result = bs.allocate_pages(AllocateType::AllocateAnyPages, MemoryType::LoaderData, 1, 0);
+        let result =
+            bs.allocate_pages(AllocateType::AllocateAnyPages, MemoryType::LoaderData, 1, 0);
         assert!(result.is_err());
     }
 
@@ -1058,7 +1070,8 @@ mod tests {
         let mut bs = BootServices::new();
         bs.init_default_memory_map(0x10000000);
 
-        bs.allocate_pages(AllocateType::AllocateAnyPages, MemoryType::LoaderData, 1, 0).unwrap();
+        bs.allocate_pages(AllocateType::AllocateAnyPages, MemoryType::LoaderData, 1, 0)
+            .unwrap();
         bs.create_event(0, Tpl::Callback).unwrap();
 
         let stats = bs.stats().snapshot();
@@ -1080,8 +1093,14 @@ mod tests {
         st.add_configuration_table(guids::EFI_SMBIOS_TABLE, 0xF0000);
 
         assert_eq!(st.number_of_table_entries(), 2);
-        assert_eq!(st.get_configuration_table(&guids::EFI_ACPI_TABLE), Some(0xE0000));
-        assert_eq!(st.get_configuration_table(&guids::EFI_SMBIOS_TABLE), Some(0xF0000));
+        assert_eq!(
+            st.get_configuration_table(&guids::EFI_ACPI_TABLE),
+            Some(0xE0000)
+        );
+        assert_eq!(
+            st.get_configuration_table(&guids::EFI_SMBIOS_TABLE),
+            Some(0xF0000)
+        );
     }
 
     #[test]
@@ -1092,7 +1111,10 @@ mod tests {
         st.add_configuration_table(guids::EFI_ACPI_TABLE, 0xF0000);
 
         assert_eq!(st.number_of_table_entries(), 1);
-        assert_eq!(st.get_configuration_table(&guids::EFI_ACPI_TABLE), Some(0xF0000));
+        assert_eq!(
+            st.get_configuration_table(&guids::EFI_ACPI_TABLE),
+            Some(0xF0000)
+        );
     }
 
     #[test]

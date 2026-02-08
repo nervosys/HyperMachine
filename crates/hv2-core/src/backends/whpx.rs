@@ -4410,7 +4410,7 @@ impl WhpxVcpu {
                 current_module_addr
             );
             // Align next module to 4KB boundary
-            current_module_addr += ((module.data.len() as u64 + 4095) / 4096) * 4096;
+            current_module_addr += (module.data.len() as u64).div_ceil(4096) * 4096;
         }
 
         // Step 6: Create and write multiboot_info structure
