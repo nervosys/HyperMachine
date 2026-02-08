@@ -11,7 +11,7 @@
 //! - Connect to a running hypervisor via network API
 //! - Build bootable hypervisor images
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -168,6 +168,21 @@ pub struct T1VmRegistry {
     pub version: u32,
 }
 
+
+/// Result of executing a script on a T1 VM
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct T1ScriptResult {
+    /// Whether the script completed successfully
+    pub success: bool,
+    /// Standard output from the script
+    pub stdout: String,
+    /// Standard error from the script
+    pub stderr: String,
+    /// Exit code of the script
+    pub exit_code: Option<i32>,
+    /// Execution duration in milliseconds
+    pub duration_ms: Option<u64>,
+}
 /// Remote hypervisor connection settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct T1HypervisorConnection {
@@ -264,8 +279,7 @@ impl T1Manager {
         let registry = self.registry.read().await;
         let path = self.config_dir.join("t1-registry.json");
         let data = serde_json::to_string_pretty(&*registry)?;
-        std::fs::write(&path, data)
-            .with_context(|| "Failed to save T1 registry")?;
+        std::fs::write(&path, data).with_context(|| "Failed to save T1 registry")?;
         Ok(())
     }
 
@@ -279,7 +293,7 @@ impl T1Manager {
         network_sriov: bool,
     ) -> Result<T1VmConfig> {
         let mut registry = self.registry.write().await;
-        
+
         // Check if VM already exists
         if registry.vms.contains_key(name) {
             bail!("T1 VM '{}' already exists", name);
@@ -303,16 +317,18 @@ impl T1Manager {
 
         registry.vms.insert(name.to_string(), config.clone());
         drop(registry);
-        
+
         self.save_registry().await?;
-        
+
         Ok(config)
     }
 
     /// Get a T1 VM configuration
     pub async fn get_vm(&self, name: &str) -> Result<T1VmConfig> {
         let registry = self.registry.read().await;
-        registry.vms.get(name)
+        registry
+            .vms
+            .get(name)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("T1 VM '{}' not found", name))
     }
@@ -326,14 +342,14 @@ impl T1Manager {
     /// Delete a T1 VM configuration
     pub async fn delete_vm(&self, name: &str) -> Result<()> {
         let mut registry = self.registry.write().await;
-        
+
         if registry.vms.remove(name).is_none() {
             bail!("T1 VM '{}' not found", name);
         }
 
         drop(registry);
         self.save_registry().await?;
-        
+
         Ok(())
     }
 
@@ -341,7 +357,7 @@ impl T1Manager {
     pub async fn get_vm_status(&self, name: &str) -> Result<T1VmMetrics> {
         // First check if config exists
         let config = self.get_vm(name).await?;
-        
+
         // Try to get runtime status from hypervisor
         if let Some(conn) = self.connection.read().await.as_ref() {
             match self.query_hypervisor_status(conn, name).await {
@@ -364,19 +380,62 @@ impl T1Manager {
         })
     }
 
+    /// Build an HTTP client for the hypervisor API
+    fn build_client(conn: &T1HypervisorConnection) -> Result<reqwest::Client> {
+        let mut builder = reqwest::Client::builder().timeout(std::time::Duration::from_secs(10));
+
+        if conn.tls {
+            // Accept self-signed certs for local hypervisor connections
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+
+        builder
+            .build()
+            .with_context(|| "Failed to create HTTP client")
+    }
+
+    /// Build the base URL for the hypervisor API
+    fn base_url(conn: &T1HypervisorConnection) -> String {
+        let scheme = if conn.tls { "https" } else { "http" };
+        format!("{}://{}:{}", scheme, conn.endpoint, conn.port)
+    }
+
     /// Query hypervisor for VM status (internal)
     async fn query_hypervisor_status(
         &self,
         conn: &T1HypervisorConnection,
         name: &str,
     ) -> Result<T1VmMetrics> {
-        // Build API URL
-        let scheme = if conn.tls { "https" } else { "http" };
-        let url = format!("{}://{}:{}/api/v1/vms/{}", scheme, conn.endpoint, conn.port, name);
+        let client = Self::build_client(conn)?;
+        let url = format!("{}/api/v1/vms/{}", Self::base_url(conn), name);
 
-        // TODO: Implement actual HTTP client when hypervisor API is ready
-        // For now, return an error indicating no connection
-        bail!("T1 hypervisor API not yet available at {}", url);
+        let mut request = client.get(&url);
+        if let Some(token) = &conn.auth_token {
+            request = request.bearer_auth(token);
+        }
+
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("Failed to connect to T1 hypervisor at {}", url))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!(
+                "T1 hypervisor returned {} for VM '{}': {}",
+                status,
+                name,
+                body
+            );
+        }
+
+        let metrics: T1VmMetrics = response
+            .json()
+            .await
+            .with_context(|| format!("Failed to parse VM status response for '{}'", name))?;
+
+        Ok(metrics)
     }
 
     /// Start a VM (requires hypervisor connection)
@@ -393,8 +452,27 @@ impl T1Manager {
             );
         }
 
-        // TODO: Implement actual start when hypervisor API is ready
-        bail!("T1 hypervisor start API not yet available");
+        let conn = conn.as_ref().unwrap();
+        let client = Self::build_client(conn)?;
+        let url = format!("{}/api/v1/vms/{}/start", Self::base_url(conn), name);
+
+        let mut request = client.post(&url);
+        if let Some(token) = &conn.auth_token {
+            request = request.bearer_auth(token);
+        }
+
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("Failed to connect to T1 hypervisor to start '{}'", name))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("Failed to start VM '{}': {} {}", name, status, body);
+        }
+
+        Ok(())
     }
 
     /// Stop a VM (requires hypervisor connection)
@@ -410,17 +488,35 @@ impl T1Manager {
             );
         }
 
-        // TODO: Implement actual stop when hypervisor API is ready
-        bail!("T1 hypervisor stop API not yet available");
+        let conn = conn.as_ref().unwrap();
+        let client = Self::build_client(conn)?;
+        let url = format!("{}/api/v1/vms/{}/stop", Self::base_url(conn), name);
+
+        let mut request = client.post(&url);
+        if let Some(token) = &conn.auth_token {
+            request = request.bearer_auth(token);
+        }
+
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("Failed to connect to T1 hypervisor to stop '{}'", name))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("Failed to stop VM '{}': {} {}", name, status, body);
+        }
+
+        Ok(())
     }
 
     /// Configure hypervisor connection
     pub async fn set_connection(&self, conn: T1HypervisorConnection) -> Result<()> {
         let conn_path = self.config_dir.join("hypervisor.json");
         let data = serde_json::to_string_pretty(&conn)?;
-        std::fs::write(&conn_path, data)
-            .with_context(|| "Failed to save hypervisor connection")?;
-        
+        std::fs::write(&conn_path, data).with_context(|| "Failed to save hypervisor connection")?;
+
         *self.connection.write().await = Some(conn);
         Ok(())
     }
@@ -434,10 +530,18 @@ impl T1Manager {
     pub async fn ping_hypervisor(&self) -> Result<bool> {
         let conn = self.connection.read().await;
         if let Some(conn) = conn.as_ref() {
-            // TODO: Implement actual ping when hypervisor API is ready
-            let scheme = if conn.tls { "https" } else { "http" };
-            let _url = format!("{}://{}:{}/health", scheme, conn.endpoint, conn.port);
-            Ok(false) // Not reachable yet
+            let client = Self::build_client(conn)?;
+            let url = format!("{}/health", Self::base_url(conn));
+
+            let mut request = client.get(&url);
+            if let Some(token) = &conn.auth_token {
+                request = request.bearer_auth(token);
+            }
+
+            match request.send().await {
+                Ok(response) => Ok(response.status().is_success()),
+                Err(_) => Ok(false),
+            }
         } else {
             Ok(false)
         }
@@ -451,21 +555,76 @@ impl T1Manager {
 
     /// Import VM configuration from JSON
     pub async fn import_config(&self, json: &str) -> Result<T1VmConfig> {
-        let config: T1VmConfig = serde_json::from_str(json)
-            .with_context(|| "Invalid T1 VM configuration JSON")?;
-        
+        let config: T1VmConfig =
+            serde_json::from_str(json).with_context(|| "Invalid T1 VM configuration JSON")?;
+
         let mut registry = self.registry.write().await;
-        
+
         if registry.vms.contains_key(&config.name) {
             bail!("T1 VM '{}' already exists", config.name);
         }
 
         registry.vms.insert(config.name.clone(), config.clone());
         drop(registry);
-        
+
         self.save_registry().await?;
-        
+
         Ok(config)
+    }
+
+    /// Execute a script on a running T1 VM via hypervisor API
+    pub async fn execute_script(
+        &self,
+        name: &str,
+        script: &str,
+        timeout_secs: u64,
+    ) -> Result<T1ScriptResult> {
+        // Verify config exists
+        let _config = self.get_vm(name).await?;
+
+        let conn = self.connection.read().await;
+        if conn.is_none() {
+            bail!(
+                "No T1 hypervisor connection configured.\n\
+                 Configure connection with: hm t1 connect <endpoint>"
+            );
+        }
+
+        let conn = conn.as_ref().unwrap();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout_secs + 5))
+            .build()
+            .with_context(|| "Failed to create HTTP client")?;
+
+        let url = format!("{}/api/v1/vms/{}/exec", Self::base_url(conn), name);
+
+        let body = serde_json::json!({
+            "script": script,
+            "timeout": timeout_secs,
+        });
+
+        let mut request = client.post(&url).json(&body);
+        if let Some(token) = &conn.auth_token {
+            request = request.bearer_auth(token);
+        }
+
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("Failed to execute script on VM '{}'", name))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("Script execution failed on '{}': {} {}", name, status, body);
+        }
+
+        let result: T1ScriptResult = response
+            .json()
+            .await
+            .with_context(|| "Failed to parse script execution response")?;
+
+        Ok(result)
     }
 }
 
@@ -478,9 +637,12 @@ mod tests {
     async fn test_create_vm() {
         let dir = tempdir().unwrap();
         let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
-        
-        let config = manager.create_vm("test-vm", 4, 8, false, false).await.unwrap();
-        
+
+        let config = manager
+            .create_vm("test-vm", 4, 8, false, false)
+            .await
+            .unwrap();
+
         assert_eq!(config.name, "test-vm");
         assert_eq!(config.cpu_cores, 4);
         assert_eq!(config.memory_gb, 8);
@@ -490,10 +652,10 @@ mod tests {
     async fn test_list_vms() {
         let dir = tempdir().unwrap();
         let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
-        
+
         manager.create_vm("vm1", 2, 4, false, false).await.unwrap();
         manager.create_vm("vm2", 4, 8, true, true).await.unwrap();
-        
+
         let vms = manager.list_vms().await;
         assert_eq!(vms.len(), 2);
     }
@@ -502,10 +664,13 @@ mod tests {
     async fn test_delete_vm() {
         let dir = tempdir().unwrap();
         let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
-        
-        manager.create_vm("test-vm", 4, 8, false, false).await.unwrap();
+
+        manager
+            .create_vm("test-vm", 4, 8, false, false)
+            .await
+            .unwrap();
         manager.delete_vm("test-vm").await.unwrap();
-        
+
         let vms = manager.list_vms().await;
         assert!(vms.is_empty());
     }
