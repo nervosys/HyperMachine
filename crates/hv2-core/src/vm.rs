@@ -652,10 +652,16 @@ impl VM {
                 data,
             } => {
                 stats.io_exits.fetch_add(1, Ordering::Relaxed);
-                Self::handle_io_static(
+                let io_result = Self::handle_io_static(
                     port, direction, size, data, vm_name, devices, pic, event_bus,
                 )
                 .await?;
+
+                // Write IO IN data back to guest RAX
+                if let Some((in_data, in_size)) = io_result {
+                    backend.set_io_result(vcpu, in_data, in_size).await?;
+                }
+
                 Ok(true)
             }
 
@@ -683,6 +689,17 @@ impl VM {
                     vector,
                     error_code
                 );
+
+                // Fatal exceptions (double fault, triple fault) should stop the VM
+                if vector == 8 {
+                    tracing::error!("Double fault — stopping VM");
+                    *state.write() = VMState::Stopped;
+                    exit_notify.notify_waiters();
+                    return Ok(false);
+                }
+
+                // Re-inject the exception into the guest so its IDT handler runs
+                backend.inject_exception(vcpu, vector, error_code).await?;
                 Ok(true)
             }
 
@@ -785,16 +802,19 @@ impl VM {
     }
 
     /// Static I/O handler
+    ///
+    /// Returns `Some((data, size))` for IO IN operations so the caller can
+    /// write the result back to guest RAX via `set_io_result()`.
     async fn handle_io_static(
         port: u16,
         direction: IoDirection,
-        _size: u8,
+        size: u8,
         mut data: u32,
         vm_name: &str,
         devices: &DeviceManager,
         pic: &Pic8259,
         event_bus: &EventBus,
-    ) -> Result<()> {
+    ) -> Result<Option<(u32, u8)>> {
         match direction {
             IoDirection::Out => {
                 tracing::debug!("IO OUT: port={:#x} data={:#x}", port, data);
@@ -809,6 +829,7 @@ impl VM {
                 }
 
                 event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, true));
+                Ok(None)
             }
 
             IoDirection::In => {
@@ -826,10 +847,9 @@ impl VM {
 
                 event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, false));
                 tracing::debug!("IO IN result: {:#x}", data);
+                Ok(Some((data, size)))
             }
         }
-
-        Ok(())
     }
 
     /// Static HLT handler
@@ -937,8 +957,17 @@ impl VM {
                     vector,
                     error_code
                 );
-                // For now, just log and continue
-                // TODO: Proper exception injection into guest
+
+                // Fatal exceptions (double fault) should stop the VM
+                if vector == 8 {
+                    tracing::error!("Double fault — stopping VM");
+                    return Ok(false);
+                }
+
+                // Re-inject the exception into the guest so its IDT handler runs
+                self.backend
+                    .inject_exception(vcpu, vector, error_code)
+                    .await?;
                 Ok(true)
             }
 
@@ -1099,7 +1128,8 @@ impl VM {
                     false,
                 ));
 
-                // TODO: Return data to guest via backend interface
+                // Write IO IN data back to guest RAX
+                self.backend.set_io_result(_vcpu, data, size).await?;
                 tracing::debug!("IO IN result: {:#x}", data);
             }
         }

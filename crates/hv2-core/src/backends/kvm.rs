@@ -48,6 +48,7 @@ use crate::hypervisor::{
 };
 use crate::{Error, IoDirection, Result, VCpu, VmExit};
 use async_trait::async_trait;
+use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
@@ -76,6 +77,8 @@ pub struct KvmBackend {
     run_mmap_size: usize,
     /// Active VMs (for cleanup on drop)
     vms: Arc<RwLock<Vec<Arc<KvmVm>>>>,
+    /// vCPU lookup: maps VCpu::id() → KvmVcpu
+    vcpu_map: RwLock<HashMap<u32, Arc<KvmVcpu>>>,
 }
 
 impl KvmBackend {
@@ -122,6 +125,7 @@ impl KvmBackend {
                 capabilities,
                 run_mmap_size,
                 vms: Arc::new(RwLock::new(Vec::new())),
+                vcpu_map: RwLock::new(HashMap::new()),
             })
         }
     }
@@ -198,6 +202,12 @@ impl HypervisorBackend for KvmBackend {
         // Track VM for cleanup
         self.vms.write().unwrap().push(kvm_vm.clone());
 
+        // Create vCPUs and register them in the lookup map
+        for i in 0..vcpu_count {
+            let kvm_vcpu = kvm_vm.create_vcpu(i)?;
+            self.vcpu_map.write().unwrap().insert(i, kvm_vcpu);
+        }
+
         Ok(HypervisorVm::new(
             HypervisorPlatform::Kvm,
             vcpu_count,
@@ -206,36 +216,56 @@ impl HypervisorBackend for KvmBackend {
     }
 
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
-        // For now, return a stub implementation
-        // Full implementation requires integrating with KvmVm/KvmVcpu
-        tracing::debug!("KVM: Running vCPU {}", vcpu.id());
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap();
+            map.get(&vcpu.id()).cloned().ok_or_else(|| {
+                Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id()))
+            })?
+        };
 
-        // TODO: Implement full KVM vCPU execution
-        // This will be completed after we integrate KvmVm/KvmVcpu with the VM structure
-
-        Ok(VmExit::Hlt)
+        // Run the vCPU until it exits — this blocks until a VM exit occurs
+        kvm_vcpu.run()
     }
 
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
-        tracing::debug!(
-            "KVM: Injecting interrupt {} into vCPU {}",
-            vector,
-            vcpu.id()
-        );
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap();
+            map.get(&vcpu.id()).cloned().ok_or_else(|| {
+                Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id()))
+            })?
+        };
 
-        // TODO: Implement interrupt injection
-        // This requires access to the vCPU file descriptor
+        kvm_vcpu.inject_interrupt(vector)
+    }
 
-        Ok(())
+    async fn set_io_result(&self, vcpu: &VCpu, data: u32, size: u8) -> Result<()> {
+        // KVM handles IO IN data through the kvm_run shared memory region.
+        // After an IO IN exit, the hypervisor writes the result to the data
+        // buffer at kvm_run.io.data_offset and calls KVM_RUN again.
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap();
+            map.get(&vcpu.id()).cloned().ok_or_else(|| {
+                Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id()))
+            })?
+        };
+
+        kvm_vcpu.set_io_data(data, size)
     }
 
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down KVM backend");
 
+        // Clear vCPU map
+        self.vcpu_map.write().unwrap().clear();
+
         // VMs will be automatically closed when dropped
         self.vms.write().unwrap().clear();
 
         Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -596,6 +626,28 @@ impl KvmVcpu {
                 ))
             })
         }
+    }
+
+    /// Write IO IN data to the kvm_run data buffer
+    ///
+    /// After a `KVM_EXIT_IO` with direction=IN, the hypervisor must write the
+    /// read data into the buffer at `kvm_run.io.data_offset` before calling
+    /// `KVM_RUN` again. KVM will then load it into guest RAX automatically.
+    pub fn set_io_data(&self, data: u32, size: u8) -> Result<()> {
+        unsafe {
+            let run = self.run.as_ref();
+            let data_ptr =
+                (run as *const kvm_run as usize + run.exit_data.io.data_offset as usize)
+                    as *mut u8;
+
+            match size {
+                1 => std::ptr::write(data_ptr, data as u8),
+                2 => std::ptr::write(data_ptr as *mut u16, data as u16),
+                4 => std::ptr::write(data_ptr as *mut u32, data),
+                _ => std::ptr::write(data_ptr as *mut u32, data),
+            }
+        }
+        Ok(())
     }
 
     /// Get vCPU ID
