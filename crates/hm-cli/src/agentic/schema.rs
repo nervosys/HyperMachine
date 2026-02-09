@@ -248,7 +248,7 @@ impl CompactSchema {
         let ontology = HyperMachineOntology::build();
         let mut tools = Vec::new();
         
-        for (_category, operations) in &ontology.operations {
+        for operations in ontology.operations.values() {
             for op in operations {
                 let mut params = serde_json::Map::new();
                 for param in &op.parameters {

@@ -184,9 +184,9 @@ impl Fact {
 
     /// Check if this fact matches a pattern
     pub fn matches(&self, subject: Option<&str>, predicate: Option<&str>, object: Option<&str>) -> bool {
-        let subj_match = subject.map_or(true, |s| self.subject == s);
-        let pred_match = predicate.map_or(true, |p| self.predicate == p);
-        let obj_match = object.map_or(true, |o| self.object == o);
+        let subj_match = subject.is_none_or(|s| self.subject == s);
+        let pred_match = predicate.is_none_or(|p| self.predicate == p);
+        let obj_match = object.is_none_or(|o| self.object == o);
         subj_match && pred_match && obj_match
     }
 }

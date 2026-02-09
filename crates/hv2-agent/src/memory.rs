@@ -519,9 +519,9 @@ impl SemanticMemory {
         self.facts
             .values()
             .filter(|f| {
-                subject.map_or(true, |s| f.subject == s)
-                    && relation.map_or(true, |r| f.relation == r)
-                    && object.map_or(true, |o| f.object == o)
+                subject.is_none_or(|s| f.subject == s)
+                    && relation.is_none_or(|r| f.relation == r)
+                    && object.is_none_or(|o| f.object == o)
             })
             .collect()
     }

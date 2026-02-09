@@ -691,7 +691,7 @@ impl AgentOrchestrator {
     pub fn subscribe_event(&self, agent_id: &str, event_type: EventType) {
         let mut subs = self.event_subscribers.write().unwrap();
         subs.entry(event_type)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(agent_id.to_string());
     }
 

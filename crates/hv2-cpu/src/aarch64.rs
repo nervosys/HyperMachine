@@ -489,7 +489,7 @@ impl AArch64Cpu {
                 let op_sub = (opcode >> 30) & 1; // SUB if 1
                 let s = (opcode >> 29) & 1; // Set flags if 1
                 let imm12 = ((opcode >> 10) & 0xFFF) as u64;
-                let shift = ((opcode >> 22) & 0x3);
+                let shift = (opcode >> 22) & 0x3;
                 let rn = ((opcode >> 5) & 0x1F) as u8;
                 let rd = (opcode & 0x1F) as u8;
 
@@ -525,7 +525,7 @@ impl AArch64Cpu {
             0b101 => {
                 let sf = (opcode >> 31) & 1;
                 let opc = (opcode >> 29) & 0x3;
-                let hw = ((opcode >> 21) & 0x3);
+                let hw = (opcode >> 21) & 0x3;
                 let imm16 = ((opcode >> 5) & 0xFFFF) as u64;
                 let rd = (opcode & 0x1F) as u8;
 
@@ -556,8 +556,8 @@ impl AArch64Cpu {
                 let sf = (opcode >> 31) & 1;
                 let opc = (opcode >> 29) & 0x3;
                 let n = (opcode >> 22) & 1;
-                let immr = ((opcode >> 16) & 0x3F);
-                let imms = ((opcode >> 10) & 0x3F);
+                let immr = (opcode >> 16) & 0x3F;
+                let imms = (opcode >> 10) & 0x3F;
                 let rn = ((opcode >> 5) & 0x1F) as u8;
                 let rd = (opcode & 0x1F) as u8;
 
@@ -853,7 +853,7 @@ impl AArch64Cpu {
             let shift_type = ((opcode >> 22) & 0x3) as u8;
             let n = (opcode >> 21) & 1;
             let rm = ((opcode >> 16) & 0x1F) as u8;
-            let imm6 = ((opcode >> 10) & 0x3F);
+            let imm6 = (opcode >> 10) & 0x3F;
             let rn = ((opcode >> 5) & 0x1F) as u8;
             let rd = (opcode & 0x1F) as u8;
 
@@ -910,7 +910,7 @@ impl AArch64Cpu {
             let s = (opcode >> 29) & 1;
             let shift_type = ((opcode >> 22) & 0x3) as u8;
             let rm = ((opcode >> 16) & 0x1F) as u8;
-            let imm6 = ((opcode >> 10) & 0x3F);
+            let imm6 = (opcode >> 10) & 0x3F;
             let rn = ((opcode >> 5) & 0x1F) as u8;
             let rd = (opcode & 0x1F) as u8;
 

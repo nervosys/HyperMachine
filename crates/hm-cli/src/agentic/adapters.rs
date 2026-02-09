@@ -125,7 +125,7 @@ impl ProviderAdapter {
     pub fn to_openai(ontology: &HyperMachineOntology) -> Vec<OpenAITool> {
         let mut tools = Vec::new();
 
-        for (_category, operations) in &ontology.operations {
+        for operations in ontology.operations.values() {
             for op in operations {
                 tools.push(Self::operation_to_openai(op));
             }
@@ -138,7 +138,7 @@ impl ProviderAdapter {
     pub fn to_anthropic(ontology: &HyperMachineOntology) -> Vec<AnthropicTool> {
         let mut tools = Vec::new();
 
-        for (_category, operations) in &ontology.operations {
+        for operations in ontology.operations.values() {
             for op in operations {
                 tools.push(Self::operation_to_anthropic(op));
             }
@@ -151,7 +151,7 @@ impl ProviderAdapter {
     pub fn to_gemini(ontology: &HyperMachineOntology) -> GeminiTool {
         let mut declarations = Vec::new();
 
-        for (_category, operations) in &ontology.operations {
+        for operations in ontology.operations.values() {
             for op in operations {
                 declarations.push(Self::operation_to_gemini(op));
             }
@@ -166,7 +166,7 @@ impl ProviderAdapter {
     pub fn to_generic(ontology: &HyperMachineOntology) -> Vec<serde_json::Value> {
         let mut tools = Vec::new();
 
-        for (_category, operations) in &ontology.operations {
+        for operations in ontology.operations.values() {
             for op in operations {
                 tools.push(json!({
                     "name": op.id,

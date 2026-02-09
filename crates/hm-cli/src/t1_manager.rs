@@ -42,7 +42,7 @@ pub struct T1VmConfig {
 }
 
 /// Network configuration for T1 VM
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct T1NetworkConfig {
     /// Enable SR-IOV network
     pub sriov: bool,
@@ -50,16 +50,6 @@ pub struct T1NetworkConfig {
     pub mac_address: Option<String>,
     /// VLAN tag
     pub vlan: Option<u16>,
-}
-
-impl Default for T1NetworkConfig {
-    fn default() -> Self {
-        Self {
-            sriov: false,
-            mac_address: None,
-            vlan: None,
-        }
-    }
 }
 
 /// Boot configuration for T1 VM

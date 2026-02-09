@@ -621,7 +621,7 @@ impl Clone for FilterRule {
             state: self.state.clone(),
             in_interface: self.in_interface.clone(),
             out_interface: self.out_interface.clone(),
-            action: self.action.clone(),
+            action: self.action,
             nat_target: self.nat_target.clone(),
             packets: AtomicU64::new(self.packets.load(Ordering::Relaxed)),
             bytes: AtomicU64::new(self.bytes.load(Ordering::Relaxed)),
