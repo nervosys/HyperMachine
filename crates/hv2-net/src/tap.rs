@@ -293,9 +293,7 @@ mod platform {
             // In a full implementation, this would enumerate network adapters
             // from the registry and find the TAP adapter by component ID.
             // For now, return a placeholder path.
-            Ok(format!(
-                "\\\\.\\Global\\{{00000000-0000-0000-0000-000000000000}}.tap"
-            ))
+            Ok("\\\\.\\Global\\{00000000-0000-0000-0000-000000000000}.tap".to_string())
         }
 
         fn set_media_status(handle: HANDLE, connected: bool) -> Result<()> {

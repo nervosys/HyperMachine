@@ -711,7 +711,7 @@ impl LearningSystem {
 
     /// Should update (based on frequency)
     pub fn should_update(&self) -> bool {
-        self.config.enabled && self.step % self.config.update_frequency == 0
+        self.config.enabled && self.step.is_multiple_of(self.config.update_frequency)
     }
 
     /// Perform update (placeholder for actual learning)

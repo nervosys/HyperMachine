@@ -28,3 +28,6 @@ build/
 SESSION*_SUMMARY.md
 SESSION*_VISUAL.txt
 PROGRESS_SESSION*.md
+clippy_full.txt
+clippy_warnings.txt
+clippy_check.txt

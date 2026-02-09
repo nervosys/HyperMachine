@@ -554,7 +554,7 @@ mod tests {
     #[test]
     fn test_snapshot_error_display() {
         let id = SnapshotId::generate();
-        let err = SnapshotError::NotFound(id.clone());
+        let err = SnapshotError::NotFound(id);
         assert!(format!("{}", err).contains(&id.to_string()));
     }
 
@@ -678,7 +678,7 @@ mod tests {
         manager.complete_snapshot().unwrap();
 
         let child_id = manager
-            .begin_snapshot(CreateSnapshotOptions::incremental(parent_id.clone()))
+            .begin_snapshot(CreateSnapshotOptions::incremental(parent_id))
             .unwrap();
         manager.complete_snapshot().unwrap();
 
@@ -768,12 +768,12 @@ mod tests {
         manager.complete_snapshot().unwrap();
 
         let inc1_id = manager
-            .begin_snapshot(CreateSnapshotOptions::incremental(base_id.clone()))
+            .begin_snapshot(CreateSnapshotOptions::incremental(base_id))
             .unwrap();
         manager.complete_snapshot().unwrap();
 
         let inc2_id = manager
-            .begin_snapshot(CreateSnapshotOptions::incremental(inc1_id.clone()))
+            .begin_snapshot(CreateSnapshotOptions::incremental(inc1_id))
             .unwrap();
         manager.complete_snapshot().unwrap();
 
@@ -794,7 +794,7 @@ mod tests {
         manager.complete_snapshot().unwrap();
 
         manager
-            .begin_snapshot(CreateSnapshotOptions::incremental(parent_id.clone()))
+            .begin_snapshot(CreateSnapshotOptions::incremental(parent_id))
             .unwrap();
         manager.complete_snapshot().unwrap();
 

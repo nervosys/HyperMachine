@@ -155,7 +155,7 @@ fn console_view(ui: &mut Ui, vm: &VmState) -> ContentAction {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui.button("Close").clicked() { action = ContentAction::CloseConsole; }
             ui.separator();
-            if ui.button("Fullscreen").clicked() {}
+            ui.button("Fullscreen").clicked();
             if ui.button("Ctrl+Alt+Del").clicked() {}
         });
     });

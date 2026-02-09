@@ -33,17 +33,14 @@ pub fn vm_list_item(ui: &mut Ui, vm: &VmState, selected: bool) -> VmAction {
                 if vm.operation_pending.is_some() {
                     ui.spinner();
                 } else {
-                    if vm.state == crate::api::VmStateApi::Running {
-                        if ui.button(RichText::new(icons::CONSOLE).size(18.0)).clicked() { action = VmAction::OpenConsole; }
-                    }
+                    if vm.state == crate::api::VmStateApi::Running
+                        && ui.button(RichText::new(icons::CONSOLE).size(18.0)).clicked() { action = VmAction::OpenConsole; }
                     if vm.can_start() {
                         if ui.add(success_button(icons::PLAY)).clicked() { action = VmAction::Start; }
-                    } else if vm.can_stop() {
-                        if ui.add(danger_button(icons::STOP)).clicked() { action = VmAction::Stop; }
-                    }
-                    if vm.can_pause() {
-                        if ui.button(icons::PAUSE).clicked() { action = VmAction::Pause; }
-                    }
+                    } else if vm.can_stop()
+                        && ui.add(danger_button(icons::STOP)).clicked() { action = VmAction::Stop; }
+                    if vm.can_pause()
+                        && ui.button(icons::PAUSE).clicked() { action = VmAction::Pause; }
                 }
             });
         });
@@ -77,14 +74,13 @@ pub fn vm_details_panel(ui: &mut Ui, vm: &VmState) -> VmAction {
             ui.spinner();
             if let Some(op) = &vm.operation_pending { ui.label(format!("{}...", op)); }
         } else {
-            if vm.can_start() { if ui.add(success_button(&format!("{} Start", icons::PLAY))).clicked() { action = VmAction::Start; } }
-            if vm.can_pause() { if ui.button(format!("{} Pause", icons::PAUSE)).clicked() { action = VmAction::Pause; } }
-            if vm.can_stop() { if ui.add(danger_button(&format!("{} Stop", icons::STOP))).clicked() { action = VmAction::Stop; } }
-            if vm.state == crate::api::VmStateApi::Running {
-                if ui.add(primary_button(&format!("{} Console", icons::CONSOLE))).clicked() { action = VmAction::OpenConsole; }
-            }
+            if vm.can_start() && ui.add(success_button(&format!("{} Start", icons::PLAY))).clicked() { action = VmAction::Start; }
+            if vm.can_pause() && ui.button(format!("{} Pause", icons::PAUSE)).clicked() { action = VmAction::Pause; }
+            if vm.can_stop() && ui.add(danger_button(&format!("{} Stop", icons::STOP))).clicked() { action = VmAction::Stop; }
+            if vm.state == crate::api::VmStateApi::Running
+                && ui.add(primary_button(&format!("{} Console", icons::CONSOLE))).clicked() { action = VmAction::OpenConsole; }
             ui.add_space(16.0);
-            if vm.can_delete() { if ui.add(danger_button(&format!("{} Delete", icons::DELETE))).clicked() { action = VmAction::Delete; } }
+            if vm.can_delete() && ui.add(danger_button(&format!("{} Delete", icons::DELETE))).clicked() { action = VmAction::Delete; }
         }
     });
 
