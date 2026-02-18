@@ -31,10 +31,7 @@
 //! interfaces instead of emulated hardware.
 
 use crate::hypervisor::HypervisorPlatform;
-use crate::{Error, Result};
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Platform feature flags
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

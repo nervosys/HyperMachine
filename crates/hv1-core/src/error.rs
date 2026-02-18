@@ -119,7 +119,10 @@ mod tests {
 
     #[test]
     fn test_error_display() {
-        assert_eq!(format!("{}", Error::NoHardwareSupport), "No hardware virtualization support");
+        assert_eq!(
+            format!("{}", Error::NoHardwareSupport),
+            "No hardware virtualization support"
+        );
         assert_eq!(format!("{}", Error::VmxonFailed), "VMXON failed");
     }
 }

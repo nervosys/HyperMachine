@@ -1,7 +1,7 @@
 //! Example: Basic VM creation and management
 
-use hv2_agent::AgentVM;
 use anyhow::Result;
+use hv2_agent::AgentVM;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -9,7 +9,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     println!("Creating VM...");
-    
+
     // Create a new VM
     let vm = AgentVM::builder()
         .name("example-vm")
@@ -34,7 +34,10 @@ async fn main() -> Result<()> {
     println!("\nVM Metrics:");
     println!("  State: {:?}", metrics.state);
     println!("  vCPUs: {}", metrics.vcpu_count);
-    println!("  Memory: {} GB", metrics.memory_size / (1024 * 1024 * 1024));
+    println!(
+        "  Memory: {} GB",
+        metrics.memory_size / (1024 * 1024 * 1024)
+    );
 
     // Pause the VM
     println!("\nPausing VM...");

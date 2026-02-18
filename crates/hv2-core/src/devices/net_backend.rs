@@ -116,7 +116,7 @@ impl Default for NullBackend {
 
 impl NetworkBackend for NullBackend {
     fn send(&self, packet: &[u8]) -> Result<()> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.tx_packets += 1;
         stats.tx_bytes += packet.len() as u64;
         stats.dropped += 1; // Null backend drops everything
@@ -140,7 +140,7 @@ impl NetworkBackend for NullBackend {
     }
 
     fn stats(&self) -> NetworkStats {
-        *self.stats.read().unwrap()
+        *self.stats.read().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -172,12 +172,12 @@ impl LoopbackBackend {
 
     /// Clear the packet queue
     pub fn clear(&self) {
-        self.queue.lock().unwrap().clear();
+        self.queue.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get queue length
     pub fn queue_len(&self) -> usize {
-        self.queue.lock().unwrap().len()
+        self.queue.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 
@@ -189,19 +189,19 @@ impl Default for LoopbackBackend {
 
 impl NetworkBackend for LoopbackBackend {
     fn send(&self, packet: &[u8]) -> Result<()> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.tx_packets += 1;
         stats.tx_bytes += packet.len() as u64;
 
         // Echo back to receive queue
-        self.queue.lock().unwrap().push_back(packet.to_vec());
+        self.queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet.to_vec());
         Ok(())
     }
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
-        let packet = self.queue.lock().unwrap().pop_front();
+        let packet = self.queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front();
         if let Some(ref p) = packet {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.rx_packets += 1;
             stats.rx_bytes += p.len() as u64;
         }
@@ -221,7 +221,7 @@ impl NetworkBackend for LoopbackBackend {
     }
 
     fn stats(&self) -> NetworkStats {
-        *self.stats.read().unwrap()
+        *self.stats.read().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -300,12 +300,12 @@ impl UserBackend {
 
     /// Queue a packet for the guest to receive
     pub fn inject_packet(&self, packet: Vec<u8>) {
-        self.rx_queue.lock().unwrap().push_back(packet);
+        self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet);
     }
 
     /// Set connected state
     pub fn set_connected(&self, connected: bool) {
-        *self.connected.write().unwrap() = connected;
+        *self.connected.write().unwrap_or_else(|e| e.into_inner()) = connected;
     }
 
     /// Handle ARP request
@@ -378,7 +378,7 @@ impl NetworkBackend for UserBackend {
             return Ok(()); // Invalid frame
         }
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.tx_packets += 1;
         stats.tx_bytes += packet.len() as u64;
 
@@ -389,7 +389,7 @@ impl NetworkBackend for UserBackend {
             0x0806 => {
                 // ARP
                 if let Some(reply) = self.handle_arp(packet) {
-                    self.rx_queue.lock().unwrap().push_back(reply);
+                    self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(reply);
                 }
             }
             0x0800 => {
@@ -402,7 +402,7 @@ impl NetworkBackend for UserBackend {
                         if dst_port == 67 || dst_port == 68 {
                             // DHCP
                             if let Some(reply) = self.handle_dhcp(packet) {
-                                self.rx_queue.lock().unwrap().push_back(reply);
+                                self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(reply);
                             }
                         }
                     }
@@ -419,9 +419,9 @@ impl NetworkBackend for UserBackend {
     }
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
-        let packet = self.rx_queue.lock().unwrap().pop_front();
+        let packet = self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front();
         if let Some(ref p) = packet {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.rx_packets += 1;
             stats.rx_bytes += p.len() as u64;
         }
@@ -433,7 +433,7 @@ impl NetworkBackend for UserBackend {
     }
 
     fn is_connected(&self) -> bool {
-        *self.connected.read().unwrap()
+        *self.connected.read().unwrap_or_else(|e| e.into_inner())
     }
 
     fn name(&self) -> &'static str {
@@ -441,7 +441,7 @@ impl NetworkBackend for UserBackend {
     }
 
     fn stats(&self) -> NetworkStats {
-        *self.stats.read().unwrap()
+        *self.stats.read().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -500,13 +500,13 @@ impl TapBackend {
         // In a real implementation:
         // Linux: open("/dev/net/tun"), ioctl(TUNSETIFF)
         // Windows: Open TAP-Windows adapter
-        *self.connected.write().unwrap() = true;
+        *self.connected.write().unwrap_or_else(|e| e.into_inner()) = true;
         Ok(())
     }
 
     /// Close TAP device
     pub fn close(&self) {
-        *self.connected.write().unwrap() = false;
+        *self.connected.write().unwrap_or_else(|e| e.into_inner()) = false;
     }
 
     /// Get device name
@@ -516,17 +516,17 @@ impl TapBackend {
 
     /// Inject a packet (for testing)
     pub fn inject_packet(&self, packet: Vec<u8>) {
-        self.rx_queue.lock().unwrap().push_back(packet);
+        self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet);
     }
 }
 
 impl NetworkBackend for TapBackend {
     fn send(&self, packet: &[u8]) -> Result<()> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.tx_packets += 1;
         stats.tx_bytes += packet.len() as u64;
 
-        if !*self.connected.read().unwrap() {
+        if !*self.connected.read().unwrap_or_else(|e| e.into_inner()) {
             stats.tx_errors += 1;
         }
 
@@ -536,9 +536,9 @@ impl NetworkBackend for TapBackend {
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
         // In a real implementation, read from TAP fd (non-blocking)
-        let packet = self.rx_queue.lock().unwrap().pop_front();
+        let packet = self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front();
         if let Some(ref p) = packet {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.rx_packets += 1;
             stats.rx_bytes += p.len() as u64;
         }
@@ -550,7 +550,7 @@ impl NetworkBackend for TapBackend {
     }
 
     fn is_connected(&self) -> bool {
-        *self.connected.read().unwrap()
+        *self.connected.read().unwrap_or_else(|e| e.into_inner())
     }
 
     fn name(&self) -> &'static str {
@@ -558,7 +558,7 @@ impl NetworkBackend for TapBackend {
     }
 
     fn stats(&self) -> NetworkStats {
-        *self.stats.read().unwrap()
+        *self.stats.read().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -645,7 +645,7 @@ mod tests {
         arp_request[0..6].copy_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]); // Broadcast
         arp_request[6..12].copy_from_slice(&backend.guest_mac); // Source
         arp_request[12..14].copy_from_slice(&[0x08, 0x06]); // ARP
-        // ARP payload
+                                                            // ARP payload
         arp_request[14..16].copy_from_slice(&[0x00, 0x01]); // Ethernet
         arp_request[16..18].copy_from_slice(&[0x08, 0x00]); // IPv4
         arp_request[18] = 6; // HW size

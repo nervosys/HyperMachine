@@ -9,54 +9,44 @@
 //! - Knowledge representation with triples
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::fmt;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 /// Reasoning error types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ReasoningError {
     /// Fact already exists
+    #[error("Fact already exists: {0}")]
     FactExists(String),
     /// Fact not found
+    #[error("Fact not found: {0}")]
     FactNotFound(String),
     /// Rule already exists
+    #[error("Rule already exists: {0}")]
     RuleExists(String),
     /// Rule not found
+    #[error("Rule not found: {0}")]
     RuleNotFound(String),
     /// Invalid rule definition
+    #[error("Invalid rule: {0}")]
     InvalidRule(String),
     /// Goal not achievable
+    #[error("Goal unreachable: {0}")]
     GoalUnreachable(String),
     /// Inference cycle detected
+    #[error("Cycle detected: {0}")]
     CycleDetected(String),
     /// Maximum inference depth exceeded
+    #[error("Max depth exceeded: {0}")]
     MaxDepthExceeded(u32),
     /// Invalid belief
+    #[error("Invalid belief: {0}")]
     InvalidBelief(String),
     /// Decision error
+    #[error("Decision error: {0}")]
     DecisionError(String),
 }
-
-impl fmt::Display for ReasoningError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::FactExists(s) => write!(f, "Fact already exists: {}", s),
-            Self::FactNotFound(s) => write!(f, "Fact not found: {}", s),
-            Self::RuleExists(s) => write!(f, "Rule already exists: {}", s),
-            Self::RuleNotFound(s) => write!(f, "Rule not found: {}", s),
-            Self::InvalidRule(s) => write!(f, "Invalid rule: {}", s),
-            Self::GoalUnreachable(s) => write!(f, "Goal unreachable: {}", s),
-            Self::CycleDetected(s) => write!(f, "Cycle detected: {}", s),
-            Self::MaxDepthExceeded(d) => write!(f, "Max depth exceeded: {}", d),
-            Self::InvalidBelief(s) => write!(f, "Invalid belief: {}", s),
-            Self::DecisionError(s) => write!(f, "Decision error: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for ReasoningError {}
 
 /// Result type for reasoning operations
 pub type ReasoningResult<T> = Result<T, ReasoningError>;
@@ -111,8 +101,12 @@ impl TruthValue {
         match (self, other) {
             (Self::True, _) | (_, Self::True) => Self::True,
             (Self::False, Self::False) => Self::False,
-            (Self::Probable(p1), Self::Probable(p2)) => Self::Probable(1.0 - (1.0 - p1) * (1.0 - p2)),
-            (Self::Probable(p), Self::False) | (Self::False, Self::Probable(p)) => Self::Probable(*p),
+            (Self::Probable(p1), Self::Probable(p2)) => {
+                Self::Probable(1.0 - (1.0 - p1) * (1.0 - p2))
+            }
+            (Self::Probable(p), Self::False) | (Self::False, Self::Probable(p)) => {
+                Self::Probable(*p)
+            }
             _ => Self::Unknown,
         }
     }
@@ -183,7 +177,12 @@ impl Fact {
     }
 
     /// Check if this fact matches a pattern
-    pub fn matches(&self, subject: Option<&str>, predicate: Option<&str>, object: Option<&str>) -> bool {
+    pub fn matches(
+        &self,
+        subject: Option<&str>,
+        predicate: Option<&str>,
+        object: Option<&str>,
+    ) -> bool {
         let subj_match = subject.is_none_or(|s| self.subject == s);
         let pred_match = predicate.is_none_or(|p| self.predicate == p);
         let obj_match = object.is_none_or(|o| self.object == o);
@@ -408,7 +407,9 @@ impl KnowledgeBase {
 
     /// Remove a fact
     pub fn remove(&mut self, id: &str) -> ReasoningResult<Fact> {
-        let fact = self.facts.remove(id)
+        let fact = self
+            .facts
+            .remove(id)
             .ok_or_else(|| ReasoningError::FactNotFound(id.to_string()))?;
 
         // Update indexes
@@ -1077,7 +1078,9 @@ impl DecisionTree {
 
     /// Evaluate the tree
     pub fn evaluate(&self, kb: &KnowledgeBase) -> ReasoningResult<(String, f64)> {
-        let root_id = self.root.as_ref()
+        let root_id = self
+            .root
+            .as_ref()
             .ok_or_else(|| ReasoningError::DecisionError("No root node".to_string()))?;
 
         self.evaluate_node(root_id, kb)
@@ -1085,11 +1088,17 @@ impl DecisionTree {
 
     /// Evaluate a single node
     fn evaluate_node(&self, node_id: &str, kb: &KnowledgeBase) -> ReasoningResult<(String, f64)> {
-        let node = self.nodes.get(node_id)
+        let node = self
+            .nodes
+            .get(node_id)
             .ok_or_else(|| ReasoningError::DecisionError(format!("Node not found: {}", node_id)))?;
 
         match &node.node_type {
-            DecisionNodeType::Condition { pattern, if_true, if_false } => {
+            DecisionNodeType::Condition {
+                pattern,
+                if_true,
+                if_false,
+            } => {
                 let facts = kb.query(
                     pattern.subject.as_deref(),
                     pattern.predicate.as_deref(),
@@ -1099,9 +1108,7 @@ impl DecisionTree {
                 let next_node = if !facts.is_empty() { if_true } else { if_false };
                 self.evaluate_node(next_node, kb)
             }
-            DecisionNodeType::Decision { value, confidence } => {
-                Ok((value.clone(), *confidence))
-            }
+            DecisionNodeType::Decision { value, confidence } => Ok((value.clone(), *confidence)),
         }
     }
 
@@ -1177,7 +1184,8 @@ impl Desire {
 
     /// Add desired state
     pub fn with_desired(mut self, key: &str, value: &str) -> Self {
-        self.desired_state.insert(key.to_string(), value.to_string());
+        self.desired_state
+            .insert(key.to_string(), value.to_string());
         self
     }
 
@@ -1370,7 +1378,7 @@ impl SharedReasoner {
 
     /// Assert a fact
     pub fn assert_fact(&self, fact: Fact) -> ReasoningResult<()> {
-        self.inner.write().unwrap().assert_fact(fact)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).assert_fact(fact)
     }
 
     /// Query facts
@@ -1382,7 +1390,7 @@ impl SharedReasoner {
     ) -> Vec<Fact> {
         self.inner
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .query(subject, predicate, object)
             .into_iter()
             .cloned()
@@ -1391,17 +1399,17 @@ impl SharedReasoner {
 
     /// Run inference
     pub fn infer(&self) -> ReasoningResult<Vec<Fact>> {
-        self.inner.write().unwrap().infer()
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).infer()
     }
 
     /// Get fact count
     pub fn fact_count(&self) -> usize {
-        self.inner.read().unwrap().fact_count()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).fact_count()
     }
 
     /// Get rule count
     pub fn rule_count(&self) -> usize {
-        self.inner.read().unwrap().rule_count()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).rule_count()
     }
 }
 
@@ -1448,7 +1456,10 @@ mod tests {
         assert_eq!(fact.predicate, "knows");
         assert_eq!(fact.object, "bob");
         assert_eq!(fact.truth, TruthValue::True);
-        assert_eq!(fact.metadata.get("source"), Some(&"observation".to_string()));
+        assert_eq!(
+            fact.metadata.get("source"),
+            Some(&"observation".to_string())
+        );
     }
 
     #[test]
@@ -1519,8 +1530,12 @@ mod tests {
     fn test_inference_engine_facts() {
         let mut engine = InferenceEngine::new();
 
-        engine.assert_fact(Fact::new("socrates", "is", "human")).unwrap();
-        engine.assert_fact(Fact::new("plato", "is", "human")).unwrap();
+        engine
+            .assert_fact(Fact::new("socrates", "is", "human"))
+            .unwrap();
+        engine
+            .assert_fact(Fact::new("plato", "is", "human"))
+            .unwrap();
 
         assert_eq!(engine.fact_count(), 2);
 
@@ -1675,8 +1690,7 @@ mod tests {
 
     #[test]
     fn test_belief_creation() {
-        let belief = Belief::new("belief-1", "world", "state", "peaceful")
-            .with_confidence(0.85);
+        let belief = Belief::new("belief-1", "world", "state", "peaceful").with_confidence(0.85);
 
         assert_eq!(belief.id, "belief-1");
         assert_eq!(belief.subject, "world");
@@ -1691,7 +1705,10 @@ mod tests {
 
         assert_eq!(desire.id, "desire-1");
         assert_eq!(desire.priority, 10);
-        assert_eq!(desire.desired_state.get("location"), Some(&"safe".to_string()));
+        assert_eq!(
+            desire.desired_state.get("location"),
+            Some(&"safe".to_string())
+        );
     }
 
     #[test]
@@ -1745,7 +1762,7 @@ mod tests {
         let mut agent = BdiAgent::new("agent-1");
 
         agent.add_intention(Intention::new("i1", "d1", vec!["a1".to_string()]));
-        
+
         let mut completed = Intention::new("i2", "d2", vec!["a2".to_string()]);
         completed.status = IntentionStatus::Completed;
         agent.add_intention(completed);
@@ -1800,13 +1817,12 @@ mod tests {
         let planner = Planner::new();
         let mut kb = KnowledgeBase::new();
 
-        let goal = Goal::new("goal-1", "Have food")
-            .with_postcondition(
-                FactPattern::any()
-                    .with_subject("agent")
-                    .with_predicate("has")
-                    .with_object("food"),
-            );
+        let goal = Goal::new("goal-1", "Have food").with_postcondition(
+            FactPattern::any()
+                .with_subject("agent")
+                .with_predicate("has")
+                .with_object("food"),
+        );
 
         // Goal not satisfied initially
         let plan = planner.plan(&goal, &kb);

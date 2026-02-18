@@ -92,7 +92,7 @@ impl FrameAllocator {
     /// Allocate multiple contiguous frames
     pub fn allocate_frames(&mut self, count: usize) -> Result<PhysAddr> {
         let size = count as u64 * PAGE_SIZE as u64;
-        
+
         if self.next_frame + size > self.end_frame {
             return Err(Error::OutOfMemory);
         }
@@ -172,7 +172,10 @@ impl EptEntry {
 
     /// Create an entry for a 2MB page
     pub const fn page_2m(phys_addr: u64, flags: u64) -> Self {
-        Self::new(phys_addr, flags | Self::READ | Self::WRITE | Self::EXECUTE | Self::LARGE_PAGE)
+        Self::new(
+            phys_addr,
+            flags | Self::READ | Self::WRITE | Self::EXECUTE | Self::LARGE_PAGE,
+        )
     }
 
     /// Create an entry pointing to a page table
@@ -349,8 +352,8 @@ impl GuestMemoryMapper {
     /// Translate guest physical address to host physical address
     pub fn translate(&self, guest_phys: u64) -> Option<u64> {
         for region in self.regions[..self.count].iter().filter_map(|r| r.as_ref()) {
-            if guest_phys >= region.guest_phys_addr 
-                && guest_phys < region.guest_phys_addr + region.size 
+            if guest_phys >= region.guest_phys_addr
+                && guest_phys < region.guest_phys_addr + region.size
             {
                 let offset = guest_phys - region.guest_phys_addr;
                 return Some(region.host_phys_addr + offset);

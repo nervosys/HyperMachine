@@ -47,7 +47,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant, SystemTime};
 
 /// Agent orchestrator - coordinates multiple agents
@@ -295,44 +295,33 @@ pub enum ConflictResolution {
 }
 
 /// Orchestration error
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
 pub enum OrchestrationError {
     /// Agent not found
+    #[error("Agent not found: {0}")]
     AgentNotFound(String),
     /// VM not found
+    #[error("VM not found: {0}")]
     VmNotFound(String),
     /// Claim already exists
+    #[error("VM '{vm}' already claimed by '{owner}'")]
     ClaimExists { vm: String, owner: String },
     /// No claim exists
+    #[error("No claim on VM: {0}")]
     NoClaim(String),
     /// Permission denied
+    #[error("Permission denied for agent '{agent}' to perform '{action}'")]
     PermissionDenied { agent: String, action: String },
     /// Conflict detected
+    #[error("Conflict: {0:?}")]
     Conflict(Conflict),
     /// Rate limit exceeded
+    #[error("Rate limit exceeded for agent: {0}")]
     RateLimitExceeded(String),
     /// Internal error
+    #[error("Internal error: {0}")]
     Internal(String),
 }
-
-impl std::fmt::Display for OrchestrationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::AgentNotFound(id) => write!(f, "Agent not found: {}", id),
-            Self::VmNotFound(vm) => write!(f, "VM not found: {}", vm),
-            Self::ClaimExists { vm, owner } => write!(f, "VM '{}' already claimed by '{}'", vm, owner),
-            Self::NoClaim(vm) => write!(f, "No claim on VM: {}", vm),
-            Self::PermissionDenied { agent, action } => {
-                write!(f, "Permission denied for agent '{}' to perform '{}'", agent, action)
-            }
-            Self::Conflict(c) => write!(f, "Conflict: {:?}", c.conflict_type),
-            Self::RateLimitExceeded(agent) => write!(f, "Rate limit exceeded for agent: {}", agent),
-            Self::Internal(msg) => write!(f, "Internal error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for OrchestrationError {}
 
 impl AgentOrchestrator {
     /// Create a new orchestrator
@@ -359,10 +348,12 @@ impl AgentOrchestrator {
         name: &str,
         role: AgentRole,
     ) -> Result<AgentInfo, OrchestrationError> {
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write().unwrap_or_else(|e| e.into_inner());
 
         if agents.len() >= self.config.max_agents {
-            return Err(OrchestrationError::Internal("Maximum agents reached".to_string()));
+            return Err(OrchestrationError::Internal(
+                "Maximum agents reached".to_string(),
+            ));
         }
 
         let info = AgentInfo {
@@ -381,7 +372,7 @@ impl AgentOrchestrator {
         // Initialize message queue
         self.agent_messages
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(id.to_string(), VecDeque::new());
 
         // Emit event
@@ -392,34 +383,37 @@ impl AgentOrchestrator {
 
     /// Unregister an agent
     pub fn unregister_agent(&self, agent_id: &str) -> Result<(), OrchestrationError> {
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write().unwrap_or_else(|e| e.into_inner());
 
         if agents.remove(agent_id).is_none() {
             return Err(OrchestrationError::AgentNotFound(agent_id.to_string()));
         }
 
         // Release all claims
-        let mut claims = self.vm_claims.write().unwrap();
+        let mut claims = self.vm_claims.write().unwrap_or_else(|e| e.into_inner());
         claims.retain(|_, claim| claim.agent_id != agent_id);
 
         // Remove from channels
-        let mut channels = self.channels.write().unwrap();
+        let mut channels = self.channels.write().unwrap_or_else(|e| e.into_inner());
         for channel in channels.values_mut() {
             channel.subscribers.remove(agent_id);
         }
 
         // Clear message queue
-        self.agent_messages.write().unwrap().remove(agent_id);
+        self.agent_messages.write().unwrap_or_else(|e| e.into_inner()).remove(agent_id);
 
         // Emit event
-        self.emit_event(EventType::AgentDisconnected, json!({ "agent_id": agent_id }));
+        self.emit_event(
+            EventType::AgentDisconnected,
+            json!({ "agent_id": agent_id }),
+        );
 
         Ok(())
     }
 
     /// Update agent heartbeat
     pub fn heartbeat(&self, agent_id: &str) -> Result<(), OrchestrationError> {
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write().unwrap_or_else(|e| e.into_inner());
         let agent = agents
             .get_mut(agent_id)
             .ok_or_else(|| OrchestrationError::AgentNotFound(agent_id.to_string()))?;
@@ -442,7 +436,7 @@ impl AgentOrchestrator {
     ) -> Result<VmClaim, OrchestrationError> {
         // Verify agent exists and has permission
         {
-            let agents = self.agents.read().unwrap();
+            let agents = self.agents.read().unwrap_or_else(|e| e.into_inner());
             let agent = agents
                 .get(agent_id)
                 .ok_or_else(|| OrchestrationError::AgentNotFound(agent_id.to_string()))?;
@@ -457,7 +451,7 @@ impl AgentOrchestrator {
         }
 
         // Check for existing claim
-        let mut claims = self.vm_claims.write().unwrap();
+        let mut claims = self.vm_claims.write().unwrap_or_else(|e| e.into_inner());
         if let Some(existing) = claims.get(vm_name) {
             if existing.agent_id != agent_id && existing.expires_at > Instant::now() {
                 return Err(OrchestrationError::ClaimExists {
@@ -480,7 +474,7 @@ impl AgentOrchestrator {
         claims.insert(vm_name.to_string(), claim.clone());
 
         // Update agent's claimed VMs
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.claimed_vms.insert(vm_name.to_string());
         }
@@ -490,7 +484,7 @@ impl AgentOrchestrator {
 
     /// Release a VM claim
     pub fn release_vm(&self, agent_id: &str, vm_name: &str) -> Result<(), OrchestrationError> {
-        let mut claims = self.vm_claims.write().unwrap();
+        let mut claims = self.vm_claims.write().unwrap_or_else(|e| e.into_inner());
         let claim = claims
             .get(vm_name)
             .ok_or_else(|| OrchestrationError::NoClaim(vm_name.to_string()))?;
@@ -498,14 +492,17 @@ impl AgentOrchestrator {
         if claim.agent_id != agent_id {
             return Err(OrchestrationError::PermissionDenied {
                 agent: agent_id.to_string(),
-                action: format!("release claim on '{}' owned by '{}'", vm_name, claim.agent_id),
+                action: format!(
+                    "release claim on '{}' owned by '{}'",
+                    vm_name, claim.agent_id
+                ),
             });
         }
 
         claims.remove(vm_name);
 
         // Update agent's claimed VMs
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(agent) = agents.get_mut(agent_id) {
             agent.claimed_vms.remove(vm_name);
         }
@@ -521,7 +518,7 @@ impl AgentOrchestrator {
         write: bool,
     ) -> Result<bool, OrchestrationError> {
         // Verify agent exists
-        let agents = self.agents.read().unwrap();
+        let agents = self.agents.read().unwrap_or_else(|e| e.into_inner());
         let agent = agents
             .get(agent_id)
             .ok_or_else(|| OrchestrationError::AgentNotFound(agent_id.to_string()))?;
@@ -537,7 +534,7 @@ impl AgentOrchestrator {
         }
 
         // Check claims
-        let claims = self.vm_claims.read().unwrap();
+        let claims = self.vm_claims.read().unwrap_or_else(|e| e.into_inner());
         if let Some(claim) = claims.get(vm_name) {
             if claim.exclusive && claim.agent_id != agent_id && claim.expires_at > Instant::now() {
                 // VM is claimed by another agent
@@ -560,7 +557,7 @@ impl AgentOrchestrator {
     ) -> Result<String, OrchestrationError> {
         // Verify sender exists
         {
-            let agents = self.agents.read().unwrap();
+            let agents = self.agents.read().unwrap_or_else(|e| e.into_inner());
             if !agents.contains_key(from) {
                 return Err(OrchestrationError::AgentNotFound(from.to_string()));
             }
@@ -581,7 +578,7 @@ impl AgentOrchestrator {
             requires_ack: message_type == MessageType::Request,
         };
 
-        let mut queues = self.agent_messages.write().unwrap();
+        let mut queues = self.agent_messages.write().unwrap_or_else(|e| e.into_inner());
         if let Some(queue) = queues.get_mut(to) {
             // Check queue size
             if queue.len() >= self.config.message_queue_size {
@@ -602,13 +599,13 @@ impl AgentOrchestrator {
     ) -> Result<usize, OrchestrationError> {
         // Verify sender exists
         {
-            let agents = self.agents.read().unwrap();
+            let agents = self.agents.read().unwrap_or_else(|e| e.into_inner());
             if !agents.contains_key(from) {
                 return Err(OrchestrationError::AgentNotFound(from.to_string()));
             }
         }
 
-        let channels = self.channels.read().unwrap();
+        let channels = self.channels.read().unwrap_or_else(|e| e.into_inner());
         let channel_info = match channels.get(channel) {
             Some(c) => c.clone(),
             None => return Ok(0),
@@ -626,7 +623,7 @@ impl AgentOrchestrator {
             requires_ack: false,
         };
 
-        let mut queues = self.agent_messages.write().unwrap();
+        let mut queues = self.agent_messages.write().unwrap_or_else(|e| e.into_inner());
         let mut delivered = 0;
 
         for subscriber in &channel_info.subscribers {
@@ -642,7 +639,7 @@ impl AgentOrchestrator {
         }
 
         // Store in channel history
-        let mut channels = self.channels.write().unwrap();
+        let mut channels = self.channels.write().unwrap_or_else(|e| e.into_inner());
         if let Some(ch) = channels.get_mut(channel) {
             if ch.history.len() >= ch.max_history {
                 ch.history.pop_front();
@@ -657,19 +654,21 @@ impl AgentOrchestrator {
     pub fn subscribe(&self, agent_id: &str, channel: &str) -> Result<(), OrchestrationError> {
         // Verify agent exists
         {
-            let agents = self.agents.read().unwrap();
+            let agents = self.agents.read().unwrap_or_else(|e| e.into_inner());
             if !agents.contains_key(agent_id) {
                 return Err(OrchestrationError::AgentNotFound(agent_id.to_string()));
             }
         }
 
-        let mut channels = self.channels.write().unwrap();
-        let channel_info = channels.entry(channel.to_string()).or_insert_with(|| Channel {
-            name: channel.to_string(),
-            subscribers: HashSet::new(),
-            history: VecDeque::new(),
-            max_history: 100,
-        });
+        let mut channels = self.channels.write().unwrap_or_else(|e| e.into_inner());
+        let channel_info = channels
+            .entry(channel.to_string())
+            .or_insert_with(|| Channel {
+                name: channel.to_string(),
+                subscribers: HashSet::new(),
+                history: VecDeque::new(),
+                max_history: 100,
+            });
 
         channel_info.subscribers.insert(agent_id.to_string());
         Ok(())
@@ -677,7 +676,7 @@ impl AgentOrchestrator {
 
     /// Receive pending messages for an agent
     pub fn receive_messages(&self, agent_id: &str, limit: usize) -> Vec<AgentMessage> {
-        let mut queues = self.agent_messages.write().unwrap();
+        let mut queues = self.agent_messages.write().unwrap_or_else(|e| e.into_inner());
         match queues.get_mut(agent_id) {
             Some(queue) => {
                 let count = std::cmp::min(limit, queue.len());
@@ -689,7 +688,7 @@ impl AgentOrchestrator {
 
     /// Subscribe to event type
     pub fn subscribe_event(&self, agent_id: &str, event_type: EventType) {
-        let mut subs = self.event_subscribers.write().unwrap();
+        let mut subs = self.event_subscribers.write().unwrap_or_else(|e| e.into_inner());
         subs.entry(event_type)
             .or_default()
             .push(agent_id.to_string());
@@ -697,7 +696,7 @@ impl AgentOrchestrator {
 
     /// Emit an event
     pub fn emit_event(&self, event_type: EventType, data: JsonValue) {
-        let subs = self.event_subscribers.read().unwrap();
+        let subs = self.event_subscribers.read().unwrap_or_else(|e| e.into_inner());
         if let Some(subscribers) = subs.get(&event_type) {
             let message = AgentMessage {
                 id: generate_id(),
@@ -713,7 +712,7 @@ impl AgentOrchestrator {
                 requires_ack: false,
             };
 
-            let mut queues = self.agent_messages.write().unwrap();
+            let mut queues = self.agent_messages.write().unwrap_or_else(|e| e.into_inner());
             for agent_id in subscribers {
                 if let Some(queue) = queues.get_mut(agent_id) {
                     if queue.len() < self.config.message_queue_size {
@@ -726,13 +725,13 @@ impl AgentOrchestrator {
 
     /// List all registered agents
     pub fn list_agents(&self) -> Vec<AgentInfo> {
-        let agents = self.agents.read().unwrap();
+        let agents = self.agents.read().unwrap_or_else(|e| e.into_inner());
         agents.values().cloned().collect()
     }
 
     /// List all VM claims
     pub fn list_claims(&self) -> Vec<VmClaim> {
-        let claims = self.vm_claims.read().unwrap();
+        let claims = self.vm_claims.read().unwrap_or_else(|e| e.into_inner());
         claims.values().cloned().collect()
     }
 
@@ -745,7 +744,7 @@ impl AgentOrchestrator {
         let mut conflicts = Vec::new();
 
         // Check for expired claims
-        let claims = self.vm_claims.read().unwrap();
+        let claims = self.vm_claims.read().unwrap_or_else(|e| e.into_inner());
         for claim in claims.values() {
             if claim.expires_at <= Instant::now() {
                 conflicts.push(Conflict {
@@ -765,11 +764,11 @@ impl AgentOrchestrator {
     /// Clean up expired claims and disconnected agents
     pub fn cleanup(&self) {
         // Clean expired claims
-        let mut claims = self.vm_claims.write().unwrap();
+        let mut claims = self.vm_claims.write().unwrap_or_else(|e| e.into_inner());
         claims.retain(|_, claim| claim.expires_at > Instant::now());
 
         // Mark agents as disconnected if no heartbeat
-        let mut agents = self.agents.write().unwrap();
+        let mut agents = self.agents.write().unwrap_or_else(|e| e.into_inner());
         let timeout = Duration::from_secs(60);
         for agent in agents.values_mut() {
             if agent.last_heartbeat.elapsed() > timeout {
@@ -820,7 +819,7 @@ fn generate_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_nanos();
     format!("{:032x}", timestamp)
 }
@@ -926,9 +925,9 @@ impl Workflow {
 
     /// Check if workflow is complete
     pub fn is_complete(&self) -> bool {
-        self.tasks.iter().all(|t| {
-            t.state == TaskState::Completed || t.state == TaskState::Cancelled
-        })
+        self.tasks
+            .iter()
+            .all(|t| t.state == TaskState::Completed || t.state == TaskState::Cancelled)
     }
 }
 
@@ -974,7 +973,10 @@ mod tests {
 
         // Agent 2 tries to claim same VM
         let result = orch.claim_vm("agent-2", "vm-1", None, None);
-        assert!(matches!(result, Err(OrchestrationError::ClaimExists { .. })));
+        assert!(matches!(
+            result,
+            Err(OrchestrationError::ClaimExists { .. })
+        ));
     }
 
     #[test]

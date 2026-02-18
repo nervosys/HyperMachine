@@ -315,7 +315,7 @@ impl McpServer {
 
     /// Register the default HyperMachine tools
     fn register_default_tools(&self) {
-        let mut tools = self.tools.write().unwrap();
+        let mut tools = self.tools.write().unwrap_or_else(|e| e.into_inner());
 
         // VM Lifecycle tools
         tools.insert(
@@ -994,7 +994,7 @@ impl McpServer {
         agent_id: &str,
         capabilities: AgentCapabilities,
     ) -> Result<Arc<AgentSession>, String> {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
         if sessions.len() >= self.config.max_sessions {
             return Err("Maximum sessions reached".to_string());
         }
@@ -1013,7 +1013,7 @@ impl McpServer {
             owned_vms: RwLock::new(Vec::new()),
         });
 
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
         sessions.insert(session_id, Arc::clone(&session));
 
         Ok(session)
@@ -1021,7 +1021,7 @@ impl McpServer {
 
     /// List available tools
     pub fn list_tools(&self, capabilities: &AgentCapabilities) -> Vec<McpTool> {
-        let tools = self.tools.read().unwrap();
+        let tools = self.tools.read().unwrap_or_else(|e| e.into_inner());
         tools
             .values()
             .filter(|tool| {
@@ -1037,7 +1037,7 @@ impl McpServer {
 
     /// Get a specific tool definition
     pub fn get_tool(&self, name: &str) -> Option<McpTool> {
-        let tools = self.tools.read().unwrap();
+        let tools = self.tools.read().unwrap_or_else(|e| e.into_inner());
         tools.get(name).cloned()
     }
 
@@ -1050,12 +1050,12 @@ impl McpServer {
         let start = Instant::now();
 
         // Update last activity
-        *session.last_activity.write().unwrap() = Instant::now();
+        *session.last_activity.write().unwrap_or_else(|e| e.into_inner()) = Instant::now();
 
         // Check rate limit
         {
-            let mut count = session.call_count.write().unwrap();
-            let mut window_start = session.rate_limit_window_start.write().unwrap();
+            let mut count = session.call_count.write().unwrap_or_else(|e| e.into_inner());
+            let mut window_start = session.rate_limit_window_start.write().unwrap_or_else(|e| e.into_inner());
             let now = Instant::now();
             let window_duration = Duration::from_secs(60);
 
@@ -1143,7 +1143,7 @@ impl McpServer {
                 error: response.error.clone(),
                 execution_time_ms: response.execution_time_ms,
             };
-            self.audit_log.write().unwrap().push(entry);
+            self.audit_log.write().unwrap_or_else(|e| e.into_inner()).push(entry);
         }
 
         response
@@ -1153,8 +1153,8 @@ impl McpServer {
     async fn execute_tool_impl(
         &self,
         tool_name: &str,
-        params: &JsonValue,
-        session: &AgentSession,
+        _params: &JsonValue,
+        _session: &AgentSession,
     ) -> Result<JsonValue, String> {
         // This is a placeholder - actual implementation would dispatch to real handlers
         match tool_name {
@@ -1177,7 +1177,7 @@ impl McpServer {
                 "memory_usage_percent": 0.0
             })),
             "agent.list" => {
-                let sessions = self.sessions.read().unwrap();
+                let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
                 let agents: Vec<JsonValue> = sessions
                     .values()
                     .map(|s| {
@@ -1199,7 +1199,7 @@ impl McpServer {
 
     /// Get audit log entries
     pub fn get_audit_log(&self, limit: usize) -> Vec<AuditEntry> {
-        let log = self.audit_log.read().unwrap();
+        let log = self.audit_log.read().unwrap_or_else(|e| e.into_inner());
         log.iter().rev().take(limit).cloned().collect()
     }
 }
@@ -1234,13 +1234,13 @@ impl AgentSession {
 
     /// Set session state
     pub fn set_state(&self, key: &str, value: JsonValue) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
         state.insert(key.to_string(), value);
     }
 
     /// Get session state
     pub fn get_state(&self, key: &str) -> Option<JsonValue> {
-        let state = self.state.read().unwrap();
+        let state = self.state.read().unwrap_or_else(|e| e.into_inner());
         state.get(key).cloned()
     }
 }
@@ -1250,7 +1250,7 @@ fn uuid_v4() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_nanos();
     format!("{:032x}", timestamp)
 }

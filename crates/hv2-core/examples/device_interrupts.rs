@@ -5,16 +5,14 @@
 
 use hv2_core::{Pic8259, SerialDevice, TimerDevice};
 use std::sync::Arc;
-use tokio;
 use tracing::{info, Level};
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
-    info!("=== HV2 Device Interrupt Demo ===\n");
+    info!("=== HyperMachine Device Interrupt Demo ===\n");
 
     // Create PIC
     let pic = Arc::new(Pic8259::new());

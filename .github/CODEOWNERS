@@ -1,0 +1,34 @@
+# Default owners for all files
+* @nervosys/hypermachine-team
+
+# Hypervisor core
+/crates/hv1-*/ @nervosys/hypervisor-team
+/crates/hv2-core/ @nervosys/hypervisor-team
+/crates/hv2-cpu/ @nervosys/hypervisor-team
+
+# GPU and networking
+/crates/hv2-gpu/ @nervosys/hypervisor-team
+/crates/hv2-net/ @nervosys/hypervisor-team
+
+# CLI tools
+/crates/hv2-cli/ @nervosys/hypervisor-team
+/crates/hm-cli/ @nervosys/hypervisor-team
+
+# API and agent
+/crates/hv2-api/ @nervosys/api-team
+/crates/hv2-agent/ @nervosys/ai-team
+
+# GUI
+/crates/hm-gui/ @nervosys/gui-team
+
+# Documentation and examples
+/docs/ @nervosys/hypermachine-team
+/examples/ @nervosys/hypermachine-team
+
+# Security
+/docs/security/ @nervosys/infra-team
+SECURITY.md @nervosys/infra-team
+
+# Infrastructure
+/deploy/ @nervosys/infra-team
+/.github/workflows/ @nervosys/infra-team

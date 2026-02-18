@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{get, post},
     Json, Router,
 };
 use hv2_agent::AgentVM;
@@ -500,22 +500,33 @@ async fn execute_script(
         )
     })?;
 
-    // Suppress unused variable warning
-    let _ = req.timeout_seconds;
+    // Apply timeout if specified (default: 30 seconds)
+    let timeout = std::time::Duration::from_secs(req.timeout_seconds.unwrap_or(30));
 
-    match vm.execute_agent_script(&req.script).await {
-        Ok(result) => Ok(Json(ExecuteScriptResponse {
+    let script_future = vm.execute_agent_script(&req.script);
+    match tokio::time::timeout(timeout, script_future).await {
+        Ok(Ok(result)) => Ok(Json(ExecuteScriptResponse {
             id,
             success: true,
             result: Some(result),
             error: None,
             execution_time_ms: start.elapsed().as_millis() as u64,
         })),
-        Err(e) => Ok(Json(ExecuteScriptResponse {
+        Ok(Err(e)) => Ok(Json(ExecuteScriptResponse {
             id,
             success: false,
             result: None,
             error: Some(e.to_string()),
+            execution_time_ms: start.elapsed().as_millis() as u64,
+        })),
+        Err(_) => Ok(Json(ExecuteScriptResponse {
+            id,
+            success: false,
+            result: None,
+            error: Some(format!(
+                "Script execution timed out after {}s",
+                timeout.as_secs()
+            )),
             execution_time_ms: start.elapsed().as_millis() as u64,
         })),
     }

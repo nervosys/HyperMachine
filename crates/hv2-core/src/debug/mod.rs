@@ -123,14 +123,14 @@ impl DebugManager {
 
     /// Add memory region
     pub fn add_memory_region(&self, region: MemoryRegion) {
-        self.memory_inspector.write().unwrap().add_region(region);
+        self.memory_inspector.write().unwrap_or_else(|e| e.into_inner()).add_region(region);
     }
 
     /// Walk page tables
     pub fn walk_page_tables(&self, cr3: u64, vaddr: u64, is_long_mode: bool) -> PageWalkResult {
         self.page_walker
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .walk(cr3, vaddr, is_long_mode)
     }
 
@@ -143,14 +143,14 @@ impl DebugManager {
     ) -> Option<InterruptDescriptor> {
         self.idt_inspector
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .read_descriptor(idtr, vector, is_long_mode)
     }
 
     /// Get debug statistics
     pub fn stats(&self) -> DebugStats {
         let gdb_stats = self.gdb_stub.stats();
-        let regions = self.memory_inspector.read().unwrap().regions().len();
+        let regions = self.memory_inspector.read().unwrap_or_else(|e| e.into_inner()).regions().len();
         let vcpus = self.cpu_inspector.all_states().len();
         let events = self.cpu_inspector.event_count();
 

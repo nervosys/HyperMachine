@@ -5,7 +5,7 @@
 //! network connectivity to virtual machines.
 
 use crate::{NetError, Result};
-use std::io::{self, Read, Write};
+use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -127,7 +127,10 @@ mod platform {
     impl TapHandle {
         pub fn create(config: &TapConfig) -> Result<Self> {
             // Open /dev/net/tun
-            let tun_path = CString::new("/dev/net/tun").unwrap();
+            // SAFETY: CString::new on a literal without embedded NULs never fails
+            let tun_path = CString::new("/dev/net/tun").expect("static path has no NUL bytes");
+            // SAFETY: `tun_path` is a valid CString. `libc::open` is a standard POSIX
+            // syscall; `fd` is checked for errors immediately after.
             let fd = unsafe { libc::open(tun_path.as_ptr(), libc::O_RDWR | libc::O_NONBLOCK) };
             if fd < 0 {
                 return Err(NetError::Io(io::Error::last_os_error()));
@@ -155,8 +158,11 @@ mod platform {
 
             // Create the TAP device
             const TUNSETIFF: u64 = 0x400454ca;
+            // SAFETY: `fd` is a valid open file descriptor and `ifr` is properly
+            // initialized. Return value is checked immediately.
             let ret = unsafe { libc::ioctl(fd, TUNSETIFF, &ifr) };
             if ret < 0 {
+                // SAFETY: `fd` is valid; closing on error path.
                 unsafe { libc::close(fd) };
                 return Err(NetError::Io(io::Error::last_os_error()));
             }
@@ -177,6 +183,7 @@ mod platform {
         }
 
         pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+            // SAFETY: self.fd is a valid open TAP fd; buf is a valid mutable slice.
             let ret = unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut _, buf.len()) };
             if ret < 0 {
                 Err(io::Error::last_os_error())
@@ -186,6 +193,7 @@ mod platform {
         }
 
         pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
+            // SAFETY: self.fd is a valid open TAP fd; buf is a valid byte slice.
             let ret = unsafe { libc::write(self.fd, buf.as_ptr() as *const _, buf.len()) };
             if ret < 0 {
                 Err(io::Error::last_os_error())
@@ -204,6 +212,7 @@ mod platform {
             } else {
                 flags & !libc::O_NONBLOCK
             };
+            // SAFETY: self.fd is valid; F_SETFL is standard POSIX.
             let ret = unsafe { libc::fcntl(self.fd, libc::F_SETFL, flags) };
             if ret < 0 {
                 return Err(io::Error::last_os_error());
@@ -214,6 +223,7 @@ mod platform {
 
     impl Drop for TapHandle {
         fn drop(&mut self) {
+            // SAFETY: self.fd is a valid open TAP fd from create().
             unsafe { libc::close(self.fd) };
         }
     }
@@ -262,6 +272,7 @@ mod platform {
                 .chain(std::iter::once(0))
                 .collect();
 
+            // SAFETY: path_wide is a valid NUL-terminated wide string. Standard Win32 file open.
             let handle = unsafe {
                 CreateFileW(
                     path_wide.as_ptr(),
@@ -301,6 +312,8 @@ mod platform {
             let status: DWORD = if connected { 1 } else { 0 };
             let mut bytes_returned: DWORD = 0;
 
+            // SAFETY: handle is a valid open TAP device handle. DeviceIoControl with
+            // TAP_WIN_IOCTL_SET_MEDIA_STATUS is a well-defined TAP-Windows ioctl.
             let ret = unsafe {
                 winapi::um::ioapiset::DeviceIoControl(
                     handle,
@@ -326,6 +339,7 @@ mod platform {
 
         pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
             let mut bytes_read: DWORD = 0;
+            // SAFETY: self.handle is a valid open TAP device handle; buf is a valid mutable slice.
             let ret = unsafe {
                 ReadFile(
                     self.handle,
@@ -344,6 +358,7 @@ mod platform {
 
         pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
             let mut bytes_written: DWORD = 0;
+            // SAFETY: self.handle is a valid open TAP device handle; buf is a valid byte slice.
             let ret = unsafe {
                 WriteFile(
                     self.handle,
@@ -369,6 +384,7 @@ mod platform {
     impl Drop for TapHandle {
         fn drop(&mut self) {
             let _ = Self::set_media_status(self.handle, false);
+            // SAFETY: self.handle is a valid HANDLE from CreateFileW in create().
             unsafe { CloseHandle(self.handle) };
         }
     }
@@ -403,6 +419,8 @@ mod platform {
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(0);
 
+            // SAFETY: Creating a PF_SYSTEM socket for utun control. Standard macOS syscall;
+            // `fd` is checked for errors immediately after.
             let fd =
                 unsafe { libc::socket(libc::PF_SYSTEM, libc::SOCK_DGRAM, libc::SYSPROTO_CONTROL) };
             if fd < 0 {
@@ -425,6 +443,8 @@ mod platform {
         }
 
         pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+            // SAFETY: `self.fd` is a valid utun file descriptor opened in `create()`.
+            // `buf` is a valid mutable byte slice.
             let ret = unsafe { libc::read(self.fd, buf.as_mut_ptr() as *mut _, buf.len()) };
             if ret < 0 {
                 Err(io::Error::last_os_error())
@@ -434,6 +454,7 @@ mod platform {
         }
 
         pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
+            // SAFETY: `self.fd` is a valid utun file descriptor. `buf` is a valid byte slice.
             let ret = unsafe { libc::write(self.fd, buf.as_ptr() as *const _, buf.len()) };
             if ret < 0 {
                 Err(io::Error::last_os_error())
@@ -443,6 +464,7 @@ mod platform {
         }
 
         pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+            // SAFETY: self.fd is a valid open utun fd. fcntl F_GETFL is standard POSIX.
             let flags = unsafe { libc::fcntl(self.fd, libc::F_GETFL) };
             if flags < 0 {
                 return Err(io::Error::last_os_error());
@@ -452,6 +474,7 @@ mod platform {
             } else {
                 flags & !libc::O_NONBLOCK
             };
+            // SAFETY: self.fd is valid; F_SETFL is standard POSIX.
             let ret = unsafe { libc::fcntl(self.fd, libc::F_SETFL, flags) };
             if ret < 0 {
                 return Err(io::Error::last_os_error());
@@ -462,6 +485,7 @@ mod platform {
 
     impl Drop for TapHandle {
         fn drop(&mut self) {
+            // SAFETY: self.fd is a valid open utun fd from create().
             unsafe { libc::close(self.fd) };
         }
     }
@@ -658,7 +682,7 @@ pub fn generate_mac() -> [u8; 6] {
 
     let seed = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_nanos() as u64;
 
     // Simple PRNG

@@ -4,13 +4,19 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine REST and gRPC API server"
 
 [dependencies]
 hv2-core = { path = "../hv2-core" }
 hv2-agent = { path = "../hv2-agent" }
 
 tokio = { workspace = true }
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -29,12 +35,17 @@ axum = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
 uuid = { workspace = true }
+chrono = { workspace = true }
+reqwest = { workspace = true }
 
 [build-dependencies]
 tonic-build = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "api_bench"

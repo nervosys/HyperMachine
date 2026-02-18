@@ -11,9 +11,7 @@ use hv2_core::{
     VMConfig, VmExit, VM,
 };
 use std::sync::Arc;
-use tokio;
 use tracing::{info, Level};
-use tracing_subscriber;
 
 async fn initialize_pic(pic: &mut Pic8259) -> Result<(), Box<dyn std::error::Error>> {
     // ICW1: Start initialization
@@ -156,7 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
-    info!("=== HV2 VM with Interrupts Demo ===\n");
+    info!("=== HyperMachine VM with Interrupts Demo ===\n");
 
     // Create VM
     let config = VMConfig {

@@ -68,13 +68,6 @@ Expand-Archive hm.zip -DestinationPath C:\Program Files\HyperMachine
 cargo install hypermachine
 ```
 
-### Docker
-
-```bash
-docker pull ghcr.io/nervosys/hypermachine:latest
-docker run -it --privileged ghcr.io/nervosys/hypermachine:latest
-```
-
 ## Verify Installation
 
 ```bash

@@ -3,7 +3,7 @@
 //! This module provides interrupt remapping support for both
 //! Intel VT-d and AMD IOMMU platforms.
 
-use super::types::{DeviceId, DomainId, IommuStats};
+use super::types::DeviceId;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -333,7 +333,9 @@ impl MsiMessage {
 
     /// Get delivery mode
     pub fn delivery_mode(&self) -> DeliveryMode {
-        DeliveryMode::from_u8(((self.data & Self::DELIVERY_MODE_MASK) >> Self::DELIVERY_MODE_SHIFT) as u8)
+        DeliveryMode::from_u8(
+            ((self.data & Self::DELIVERY_MODE_MASK) >> Self::DELIVERY_MODE_SHIFT) as u8,
+        )
     }
 
     /// Check if level triggered
@@ -343,7 +345,8 @@ impl MsiMessage {
 
     /// Set destination
     pub fn set_destination(&mut self, dest: u8) {
-        self.address = (self.address & !Self::DEST_ID_MASK) | ((dest as u64) << Self::DEST_ID_SHIFT);
+        self.address =
+            (self.address & !Self::DEST_ID_MASK) | ((dest as u64) << Self::DEST_ID_SHIFT);
     }
 
     /// Set vector
@@ -614,7 +617,11 @@ impl AmdInterruptRemapTable {
             _ => DeliveryMode::Fixed,
         };
 
-        Some(MsiMessage::new(irte.destination(), irte.vector(), delivery_mode))
+        Some(MsiMessage::new(
+            irte.destination(),
+            irte.vector(),
+            delivery_mode,
+        ))
     }
 
     /// Get statistics

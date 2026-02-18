@@ -12,42 +12,27 @@ use super::types::{CState, PowerEvent, PowerStats};
 pub type CStateResult<T> = Result<T, CStateError>;
 
 /// C-state management error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CStateError {
     /// Invalid CPU ID
+    #[error("Invalid CPU ID: {0}")]
     InvalidCpu(u32),
     /// C-state not supported
+    #[error("C-state {0} not supported")]
     StateNotSupported(CState),
     /// Latency constraint violation
-    LatencyConstraint { requested: CState, max_latency_us: u32 },
+    #[error("C-state {requested} exceeds latency constraint of {max_latency_us}us")]
+    LatencyConstraint {
+        requested: CState,
+        max_latency_us: u32,
+    },
     /// Governor error
+    #[error("Governor error: {0}")]
     GovernorError(String),
     /// CPU offline
+    #[error("CPU {0} is offline")]
     CpuOffline(u32),
 }
-
-impl std::fmt::Display for CStateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CStateError::InvalidCpu(id) => write!(f, "Invalid CPU ID: {}", id),
-            CStateError::StateNotSupported(s) => write!(f, "C-state {} not supported", s),
-            CStateError::LatencyConstraint {
-                requested,
-                max_latency_us,
-            } => {
-                write!(
-                    f,
-                    "C-state {} exceeds latency constraint of {}us",
-                    requested, max_latency_us
-                )
-            }
-            CStateError::GovernorError(msg) => write!(f, "Governor error: {}", msg),
-            CStateError::CpuOffline(id) => write!(f, "CPU {} is offline", id),
-        }
-    }
-}
-
-impl std::error::Error for CStateError {}
 
 /// C-state governor policy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

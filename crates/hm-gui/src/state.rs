@@ -239,9 +239,9 @@ impl VmState {
             VmStateApi::Stopped => egui::Color32::from_rgb(0x9e, 0x9e, 0x9e), // Gray
             VmStateApi::Paused => egui::Color32::from_rgb(0xff, 0x98, 0x00),  // Orange
             VmStateApi::Error => egui::Color32::from_rgb(0xf4, 0x43, 0x36),   // Red
-            VmStateApi::Creating
-            | VmStateApi::Starting
-            | VmStateApi::Stopping => egui::Color32::from_rgb(0x21, 0x96, 0xf3), // Blue
+            VmStateApi::Creating | VmStateApi::Starting | VmStateApi::Stopping => {
+                egui::Color32::from_rgb(0x21, 0x96, 0xf3)
+            } // Blue
         }
     }
 }
@@ -271,7 +271,7 @@ impl Default for CreateVmForm {
             network_enabled: true,
             error: None,
             creating: false,
-        cancelled: false,
+            cancelled: false,
         }
     }
 }
@@ -296,4 +296,3 @@ impl CreateVmForm {
         Ok(())
     }
 }
-

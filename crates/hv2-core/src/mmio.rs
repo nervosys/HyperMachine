@@ -133,7 +133,7 @@ impl Default for MmioManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DeviceType, SerialDevice};
+    use crate::SerialDevice;
 
     #[tokio::test]
     async fn test_mmio_mapping() {

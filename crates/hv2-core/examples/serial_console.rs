@@ -8,7 +8,7 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    println!("🖥️  HV2 Serial Console Example");
+    println!("🖥️  HyperMachine Serial Console Example");
     println!("{}", "=".repeat(50));
 
     // Create MMIO manager
@@ -16,10 +16,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✓ MMIO manager created");
 
     // Create serial device (COM1 at standard address 0x3F8)
-    let serial = Arc::new(RwLock::new(SerialDevice::new("COM1".to_string(), 0x3F8)));
+    let mut serial_dev = SerialDevice::new("COM1".to_string(), 0x3F8);
 
     // Initialize device
-    serial.write().init().await?;
+    serial_dev.init().await?;
+    let serial = Arc::new(RwLock::new(serial_dev));
 
     // Map device to MMIO
     mmio.map_device(0x3F8, 8, serial.clone())?;
@@ -50,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Simulate host input to guest
     println!("\n📥 Host sending input to guest...");
-    serial.read().input(b"Hello from host!\n");
+    serial.read().input(b"Hello from host!\n")?;
 
     // Guest reads from serial port
     println!("✓ Guest reading from serial port...");
@@ -75,8 +76,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test multiple serial ports
     println!("\n🔌 Adding second serial port (COM2)...");
-    let serial2 = Arc::new(RwLock::new(SerialDevice::new("COM2".to_string(), 0x2F8)));
-    serial2.write().init().await?;
+    let mut serial2_dev = SerialDevice::new("COM2".to_string(), 0x2F8);
+    serial2_dev.init().await?;
+    let serial2 = Arc::new(RwLock::new(serial2_dev));
     mmio.map_device(0x2F8, 8, serial2.clone())?;
 
     println!("✓ COM2 mapped to 0x2F8-0x2FF");

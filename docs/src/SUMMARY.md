@@ -41,7 +41,6 @@
 
 - [Kubernetes](./deployment/kubernetes.md)
 - [Terraform](./deployment/terraform.md)
-- [Docker](./deployment/docker.md)
 
 # Contributing
 

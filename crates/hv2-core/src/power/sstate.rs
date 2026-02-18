@@ -13,44 +13,33 @@ use super::types::{PowerEvent, PowerStats, SState, WakeEvent, WakeSource};
 pub type SStateResult<T> = Result<T, SStateError>;
 
 /// S-state management error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SStateError {
     /// Transition not allowed from current state
+    #[error("Invalid transition from {from} to {to}")]
     InvalidTransition { from: SState, to: SState },
     /// State not supported
+    #[error("State {0} not supported")]
     StateNotSupported(SState),
     /// Transition in progress
+    #[error("Transition already in progress")]
     TransitionInProgress,
     /// Wake source not enabled
+    #[error("Wake source {0} disabled")]
     WakeSourceDisabled(WakeSource),
     /// Device blocking transition
+    #[error("Device {0} blocking transition")]
     DeviceBlocking(String),
     /// Timeout during transition
+    #[error("Transition timeout")]
     Timeout,
     /// Memory save failed
+    #[error("Failed to save memory state")]
     MemorySaveFailed,
     /// Resume failed
+    #[error("Failed to resume")]
     ResumeFailed,
 }
-
-impl std::fmt::Display for SStateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SStateError::InvalidTransition { from, to } => {
-                write!(f, "Invalid transition from {} to {}", from, to)
-            }
-            SStateError::StateNotSupported(s) => write!(f, "State {} not supported", s),
-            SStateError::TransitionInProgress => write!(f, "Transition already in progress"),
-            SStateError::WakeSourceDisabled(w) => write!(f, "Wake source {} disabled", w),
-            SStateError::DeviceBlocking(d) => write!(f, "Device {} blocking transition", d),
-            SStateError::Timeout => write!(f, "Transition timeout"),
-            SStateError::MemorySaveFailed => write!(f, "Failed to save memory state"),
-            SStateError::ResumeFailed => write!(f, "Failed to resume"),
-        }
-    }
-}
-
-impl std::error::Error for SStateError {}
 
 /// S-state transition phase
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

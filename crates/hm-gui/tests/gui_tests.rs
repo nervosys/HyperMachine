@@ -52,16 +52,20 @@ mod create_vm_form_tests {
 
     #[test]
     fn test_validate_success() {
-        let mut form = hm_gui::state::CreateVmForm::default();
-        form.name = "test-vm".to_string();
+        let form = hm_gui::state::CreateVmForm {
+            name: "test-vm".to_string(),
+            ..hm_gui::state::CreateVmForm::default()
+        };
         assert!(form.validate().is_ok());
     }
 
     #[test]
     fn test_form_reset() {
-        let mut form = hm_gui::state::CreateVmForm::default();
-        form.name = "modified".to_string();
-        form.cancelled = true;
+        let mut form = hm_gui::state::CreateVmForm {
+            name: "modified".to_string(),
+            cancelled: true,
+            ..hm_gui::state::CreateVmForm::default()
+        };
         form.reset();
         assert!(form.name.is_empty());
         assert!(!form.cancelled);
@@ -90,8 +94,10 @@ mod dialog_workflow_tests {
 
     #[test]
     fn test_cancel_dialog_flow() {
-        let mut state = hm_gui::state::AppState::default();
-        state.show_create_dialog = true;
+        let mut state = hm_gui::state::AppState {
+            show_create_dialog: true,
+            ..hm_gui::state::AppState::default()
+        };
         state.create_form.name = "Test".to_string();
         state.create_form.cancelled = true;
         if state.create_form.cancelled {
@@ -113,9 +119,9 @@ mod theme_tests {
 
 mod agentic_tests {
     use hm_gui::{
-        AgentCapabilities, AutomationHandle, CommandResult, DialogType, FormFieldParams,
-        FormType, GuiCommand, NavigateParams, SelectVmParams, SelectionMode, ViewType,
-        get_anthropic_tools, get_gemini_tools, get_gui_tools, get_openai_tools,
+        get_anthropic_tools, get_gemini_tools, get_gui_tools, get_openai_tools, AgentCapabilities,
+        AutomationHandle, CommandResult, DialogType, FormFieldParams, FormType, GuiCommand,
+        NavigateParams, SelectVmParams, SelectionMode, ViewType,
     };
 
     #[test]
@@ -188,7 +194,7 @@ mod agentic_tests {
     fn test_gui_tools_available() {
         let tools = get_gui_tools();
         assert!(!tools.is_empty());
-        
+
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"gui.navigate"));
         assert!(tool_names.contains(&"gui.dialog.open"));
@@ -204,7 +210,7 @@ mod agentic_tests {
     fn test_openai_tools_format() {
         let tools = get_openai_tools();
         assert!(!tools.is_empty());
-        
+
         let first = &tools[0];
         assert_eq!(first.get("type").unwrap(), "function");
         assert!(first.get("function").is_some());
@@ -215,7 +221,7 @@ mod agentic_tests {
     fn test_anthropic_tools_format() {
         let tools = get_anthropic_tools();
         assert!(!tools.is_empty());
-        
+
         let first = &tools[0];
         assert!(first.get("name").is_some());
         assert!(first.get("input_schema").is_some());
@@ -225,7 +231,7 @@ mod agentic_tests {
     fn test_gemini_tools_format() {
         let tools = get_gemini_tools();
         assert!(!tools.is_empty());
-        
+
         let first = &tools[0];
         assert!(first.get("function_declarations").is_some());
     }

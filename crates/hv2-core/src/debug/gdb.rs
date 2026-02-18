@@ -4,9 +4,8 @@
 //! GDB remote serial protocol (RSP).
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 /// GDB packet state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -389,41 +388,30 @@ pub trait GdbTarget {
 }
 
 /// GDB stub error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum GdbError {
     /// Invalid packet
+    #[error("Invalid packet: {0}")]
     InvalidPacket(String),
     /// Checksum error
+    #[error("Checksum error")]
     ChecksumError,
     /// Unknown command
+    #[error("Unknown command: {0}")]
     UnknownCommand(char),
     /// Invalid address
+    #[error("Invalid address: 0x{0:x}")]
     InvalidAddress(u64),
     /// Memory access failed
+    #[error("Memory error at 0x{0:x} size {1}")]
     MemoryError(u64, usize),
     /// Register access failed
+    #[error("Register error: {0}")]
     RegisterError(usize),
     /// Connection closed
+    #[error("Connection closed")]
     ConnectionClosed,
 }
-
-impl std::fmt::Display for GdbError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidPacket(msg) => write!(f, "Invalid packet: {}", msg),
-            Self::ChecksumError => write!(f, "Checksum error"),
-            Self::UnknownCommand(cmd) => write!(f, "Unknown command: {}", cmd),
-            Self::InvalidAddress(addr) => write!(f, "Invalid address: 0x{:x}", addr),
-            Self::MemoryError(addr, size) => {
-                write!(f, "Memory error at 0x{:x} size {}", addr, size)
-            }
-            Self::RegisterError(reg) => write!(f, "Register error: {}", reg),
-            Self::ConnectionClosed => write!(f, "Connection closed"),
-        }
-    }
-}
-
-impl std::error::Error for GdbError {}
 
 /// Result type for GDB operations
 pub type GdbResult<T> = Result<T, GdbError>;
@@ -613,28 +601,28 @@ impl GdbStub {
     pub fn add_breakpoint(&self, bp_type: BreakpointType, addr: u64, size: u64) -> u64 {
         let id = self.next_bp_id.fetch_add(1, Ordering::SeqCst);
         let bp = Breakpoint::new(id, bp_type, addr, size);
-        self.breakpoints.write().unwrap().insert(addr, bp);
+        self.breakpoints.write().unwrap_or_else(|e| e.into_inner()).insert(addr, bp);
         id
     }
 
     /// Remove breakpoint
     pub fn remove_breakpoint(&self, addr: u64) -> Option<Breakpoint> {
-        self.breakpoints.write().unwrap().remove(&addr)
+        self.breakpoints.write().unwrap_or_else(|e| e.into_inner()).remove(&addr)
     }
 
     /// Check if address has breakpoint
     pub fn has_breakpoint(&self, addr: u64) -> bool {
-        self.breakpoints.read().unwrap().contains_key(&addr)
+        self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).contains_key(&addr)
     }
 
     /// Get breakpoint at address
     pub fn get_breakpoint(&self, addr: u64) -> Option<Breakpoint> {
-        self.breakpoints.read().unwrap().get(&addr).cloned()
+        self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).get(&addr).cloned()
     }
 
     /// Check watchpoint hit
     pub fn check_watchpoint(&self, addr: u64, is_write: bool) -> Option<Breakpoint> {
-        let bps = self.breakpoints.read().unwrap();
+        let bps = self.breakpoints.read().unwrap_or_else(|e| e.into_inner());
         for bp in bps.values() {
             if !bp.enabled {
                 continue;
@@ -654,12 +642,12 @@ impl GdbStub {
 
     /// List all breakpoints
     pub fn list_breakpoints(&self) -> Vec<Breakpoint> {
-        self.breakpoints.read().unwrap().values().cloned().collect()
+        self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
     }
 
     /// Clear all breakpoints
     pub fn clear_breakpoints(&self) {
-        self.breakpoints.write().unwrap().clear();
+        self.breakpoints.write().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Format packet for sending
@@ -685,7 +673,7 @@ impl GdbStub {
 
     /// Process incoming data
     pub fn process_data(&self, data: &[u8]) -> Vec<GdbResult<Vec<u8>>> {
-        let mut parser = self.parser.write().unwrap();
+        let mut parser = self.parser.write().unwrap_or_else(|e| e.into_inner());
         let mut results = Vec::new();
 
         for &byte in data {
@@ -940,7 +928,7 @@ impl GdbStub {
         GdbStats {
             connected: self.is_connected(),
             single_step: self.is_single_step(),
-            breakpoint_count: self.breakpoints.read().unwrap().len(),
+            breakpoint_count: self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).len(),
             no_ack_mode: self.no_ack_mode.load(Ordering::Acquire),
         }
     }

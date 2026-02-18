@@ -1,0 +1,31 @@
+# Cross-platform line ending normalization
+* text=auto eol=lf
+
+# Rust sources
+*.rs text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+
+# Documentation
+*.md text eol=lf
+*.rst text eol=lf
+*.txt text eol=lf
+
+# CI / Config
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+
+# Shell scripts
+*.sh text eol=lf
+
+# Windows scripts — keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ico binary
+*.wasm binary

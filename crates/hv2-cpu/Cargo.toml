@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine CPU virtualization and instruction decoding"
 
 [dependencies]
 hv2-core = { path = "../hv2-core" }
@@ -11,6 +17,9 @@ hv2-core = { path = "../hv2-core" }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[lints]
+workspace = true
 
 [[example]]
 name = "instruction_test"

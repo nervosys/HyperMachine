@@ -20,6 +20,7 @@ pub struct PciAddress {
 
 impl PciAddress {
     /// Create new PCI address
+    #[must_use]
     pub fn new(bus: u8, device: u8, function: u8) -> Self {
         Self {
             segment: 0,
@@ -30,6 +31,7 @@ impl PciAddress {
     }
 
     /// Create with segment
+    #[must_use]
     pub fn with_segment(segment: u16, bus: u8, device: u8, function: u8) -> Self {
         Self {
             segment,

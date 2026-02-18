@@ -385,8 +385,13 @@ impl RuntimeServices {
         match (current_name, current_guid) {
             (None, None) | (Some(""), _) => {
                 // Return first variable
-                let (guid, name) = keys.first().unwrap();
-                let var = self.variables.get(&(*guid, name.clone())).unwrap();
+                let (guid, name) = keys
+                    .first()
+                    .expect("keys guaranteed non-empty after is_empty check");
+                let var = self
+                    .variables
+                    .get(&(*guid, name.clone()))
+                    .ok_or(Status::NOT_FOUND)?;
                 Ok((&var.name, &var.guid))
             }
             (Some(name), Some(guid)) => {
@@ -396,7 +401,7 @@ impl RuntimeServices {
 
                 for key in &keys {
                     if found {
-                        let var = self.variables.get(*key).unwrap();
+                        let var = self.variables.get(*key).ok_or(Status::NOT_FOUND)?;
                         return Ok((&var.name, &var.guid));
                     }
                     if **key == current_key {
@@ -479,9 +484,11 @@ impl RuntimeServices {
         self.stats.reset_calls.fetch_add(1, Ordering::Relaxed);
         self.reset_requested = Some(reset_type);
 
-        // In a real implementation, this would never return
-        // For testing, we panic
-        panic!("System reset requested: {:?}", reset_type);
+        // In a real implementation, this would trigger a VM shutdown.
+        // Using abort() instead of panic!() to avoid stack unwinding
+        // in a context where the VM should simply halt.
+        eprintln!("System reset requested: {:?}", reset_type);
+        std::process::abort();
     }
 
     /// Check if reset was requested (for testing)

@@ -4,7 +4,6 @@
 //! perform on virtual machines, with validation and safety checks.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
@@ -13,45 +12,36 @@ use serde::{Deserialize, Serialize};
 pub type ActionResult<T> = Result<T, ActionError>;
 
 /// Action execution errors
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ActionError {
     /// Action not supported
+    #[error("Action not supported: {0}")]
     NotSupported(String),
     /// Invalid parameters
+    #[error("Invalid parameters: {0}")]
     InvalidParameters(String),
     /// Permission denied
+    #[error("Permission denied: {0}")]
     PermissionDenied(String),
     /// Resource not available
+    #[error("Resource unavailable: {0}")]
     ResourceUnavailable(String),
     /// Action timed out
+    #[error("Action timed out: {0}")]
     Timeout(String),
     /// Action already in progress
+    #[error("Action already in progress: {0}")]
     AlreadyInProgress(String),
     /// VM not found
+    #[error("VM not found: {0}")]
     VmNotFound(String),
     /// Action failed
+    #[error("Action failed: {0}")]
     Failed(String),
     /// Action cancelled
+    #[error("Action cancelled")]
     Cancelled,
 }
-
-impl std::fmt::Display for ActionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ActionError::NotSupported(msg) => write!(f, "Action not supported: {}", msg),
-            ActionError::InvalidParameters(msg) => write!(f, "Invalid parameters: {}", msg),
-            ActionError::PermissionDenied(msg) => write!(f, "Permission denied: {}", msg),
-            ActionError::ResourceUnavailable(msg) => write!(f, "Resource unavailable: {}", msg),
-            ActionError::Timeout(msg) => write!(f, "Action timed out: {}", msg),
-            ActionError::AlreadyInProgress(msg) => write!(f, "Action already in progress: {}", msg),
-            ActionError::VmNotFound(msg) => write!(f, "VM not found: {}", msg),
-            ActionError::Failed(msg) => write!(f, "Action failed: {}", msg),
-            ActionError::Cancelled => write!(f, "Action cancelled"),
-        }
-    }
-}
-
-impl std::error::Error for ActionError {}
 
 /// Action category for organization and permissions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -685,7 +675,7 @@ impl ActionQueue {
 
     /// Enqueue an action
     pub fn enqueue(&self, request: ActionRequest) -> ActionResult<()> {
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         if pending.len() >= self.max_size {
             return Err(ActionError::ResourceUnavailable(
                 "Action queue full".to_string(),
@@ -697,12 +687,12 @@ impl ActionQueue {
 
     /// Dequeue the next action
     pub fn dequeue(&self) -> Option<ActionRequest> {
-        let mut pending = self.pending.lock().unwrap();
+        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
         if pending.is_empty() {
             return None;
         }
         let request = pending.remove(0);
-        self.in_progress.lock().unwrap().push(request.id);
+        self.in_progress.lock().unwrap_or_else(|e| e.into_inner()).push(request.id);
         Some(request)
     }
 
@@ -710,23 +700,23 @@ impl ActionQueue {
     pub fn complete(&self, request_id: u64) {
         self.in_progress
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .retain(|id| *id != request_id);
     }
 
     /// Get pending count
     pub fn pending_count(&self) -> usize {
-        self.pending.lock().unwrap().len()
+        self.pending.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Get in-progress count
     pub fn in_progress_count(&self) -> usize {
-        self.in_progress.lock().unwrap().len()
+        self.in_progress.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Check if action is in progress
     pub fn is_in_progress(&self, request_id: u64) -> bool {
-        self.in_progress.lock().unwrap().contains(&request_id)
+        self.in_progress.lock().unwrap_or_else(|e| e.into_inner()).contains(&request_id)
     }
 }
 

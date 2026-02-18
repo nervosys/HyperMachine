@@ -18,12 +18,12 @@ pub mod state;
 pub mod theme;
 pub mod widgets;
 
+pub use agentic::{get_anthropic_tools, get_gemini_tools, get_gui_tools, get_openai_tools};
 pub use agentic::{
     ActionInfo, AgentCapabilities, AutomationError, AutomationHandle, AutomationReceiver,
     AvailableActions, CommandResult, DialogType, FormFieldParams, FormType, GuiCommand,
     GuiStateSnapshot, GuiToolDefinition, NavigateParams, SelectVmParams, SelectionMode,
     ToggleParams, ToggleSetting, ViewType, VmActionType,
 };
-pub use agentic::{get_anthropic_tools, get_gemini_tools, get_gui_tools, get_openai_tools};
 pub use app::HyperMachineApp;
 pub use state::{AppState, CreateVmForm, VmCounts, VmState};

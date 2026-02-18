@@ -415,7 +415,9 @@ impl MetricLabels {
     }
 
     /// Insert a label (HashMap-style API for compatibility)
-    pub fn insert(&mut self, name: String, value: String) {
+    pub fn insert(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        let name = name.into();
+        let value = value.into();
         // Check if label already exists and update it
         for label in &mut self.labels {
             if label.name == name {
@@ -916,8 +918,8 @@ mod tests {
         assert_eq!(uint_val.as_u64(), Some(100));
         assert_eq!(uint_val.as_i64(), Some(100));
 
-        let float_val = MetricValue::Float(3.14);
-        assert_eq!(float_val.as_f64(), Some(3.14));
+        let float_val = MetricValue::Float(std::f64::consts::PI);
+        assert_eq!(float_val.as_f64(), Some(std::f64::consts::PI));
         assert_eq!(float_val.as_u64(), Some(3));
         assert_eq!(float_val.as_i64(), Some(3));
 

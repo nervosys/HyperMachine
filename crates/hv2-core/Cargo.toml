@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine Type-2 hypervisor core engine"
 
 [dependencies]
 tokio = { workspace = true }
@@ -19,8 +25,8 @@ memmap2 = { workspace = true }
 bincode = { workspace = true }
 toml = { workspace = true }
 chrono = { workspace = true }
-bitflags = "2.4"
-rand = "0.8"
+bitflags = { workspace = true }
+rand = { workspace = true }
 
 [features]
 default = []
@@ -31,6 +37,9 @@ ring = ["fips"]
 proptest = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "crypto_bench"

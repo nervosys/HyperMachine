@@ -1,7 +1,7 @@
 //! Example: AI agent script execution
 
-use hv2_agent::AgentVM;
 use anyhow::Result;
+use hv2_agent::AgentVM;
 use std::time::Duration;
 
 #[tokio::main]
@@ -10,7 +10,7 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     println!("Creating VM with AI agent support...");
-    
+
     // Create VM with custom script timeout
     let vm = AgentVM::builder()
         .name("ai-agent-vm")

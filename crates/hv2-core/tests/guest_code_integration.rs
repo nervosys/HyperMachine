@@ -212,7 +212,7 @@ async fn test_protected_mode_gdt() {
     // Look for typical protected mode instruction sequences
     // This is a basic sanity check
     assert!(
-        stage2_pmode.len() > 0,
+        !stage2_pmode.is_empty(),
         "Stage 2 protected mode binary should not be empty"
     );
 }

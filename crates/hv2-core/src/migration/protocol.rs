@@ -6,10 +6,12 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use super::dirty_tracking::{DirtyTracker, PAGE_SIZE};
-use super::state::{CpuState, DeviceState, MemoryRegionState, SerializeError, SerializeResult, StateSerializer, VmState};
+use super::state::{
+    CpuState, DeviceState, SerializeError, SerializeResult,
+};
 
 /// Migration stage
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,19 +165,11 @@ pub enum MigrationMessage {
         pages: Vec<PageData>,
     },
     /// CPU state
-    CpuState {
-        cpu_id: u32,
-        state: CpuState,
-    },
+    CpuState { cpu_id: u32, state: CpuState },
     /// Device state
-    DeviceState {
-        device: DeviceState,
-    },
+    DeviceState { device: DeviceState },
     /// End of iteration
-    IterationEnd {
-        iteration: u32,
-        dirty_pages: u64,
-    },
+    IterationEnd { iteration: u32, dirty_pages: u64 },
     /// Request to pause VM
     PauseRequest,
     /// VM paused acknowledgment
@@ -183,19 +177,13 @@ pub enum MigrationMessage {
     /// Migration complete
     Complete,
     /// Migration failed
-    Failed {
-        error: String,
-    },
+    Failed { error: String },
     /// Cancel migration
     Cancel,
     /// Post-copy page fault request
-    PageFault {
-        gpa: u64,
-    },
+    PageFault { gpa: u64 },
     /// Post-copy page response
-    PageResponse {
-        page: PageData,
-    },
+    PageResponse { page: PageData },
 }
 
 /// Migration progress callback
@@ -245,7 +233,7 @@ impl MigrationController {
 
     /// Get current stage
     pub fn stage(&self) -> MigrationStage {
-        *self.stage.read().unwrap()
+        *self.stage.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get role
@@ -260,47 +248,53 @@ impl MigrationController {
 
     /// Get statistics
     pub fn stats(&self) -> MigrationStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Start migration
     pub fn start(&self) -> SerializeResult<()> {
-        let mut stage = self.stage.write().unwrap();
+        let mut stage = self.stage.write().unwrap_or_else(|e| e.into_inner());
         if *stage != MigrationStage::Idle {
-            return Err(SerializeError::InvalidFormat("Migration already in progress".into()));
+            return Err(SerializeError::InvalidFormat(
+                "Migration already in progress".into(),
+            ));
         }
 
         *stage = MigrationStage::Setup;
-        *self.start_time.write().unwrap() = Some(Instant::now());
+        *self.start_time.write().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
 
         Ok(())
     }
 
     /// Transition to pre-copy stage
     pub fn begin_precopy(&self) -> SerializeResult<()> {
-        let mut stage = self.stage.write().unwrap();
+        let mut stage = self.stage.write().unwrap_or_else(|e| e.into_inner());
         if *stage != MigrationStage::Setup {
-            return Err(SerializeError::InvalidFormat("Invalid stage for precopy".into()));
+            return Err(SerializeError::InvalidFormat(
+                "Invalid stage for precopy".into(),
+            ));
         }
 
         *stage = MigrationStage::PreCopy;
-        *self.precopy_start.write().unwrap() = Some(Instant::now());
+        *self.precopy_start.write().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
 
         Ok(())
     }
 
     /// Transition to stop-and-copy stage
     pub fn begin_stop_and_copy(&self) -> SerializeResult<()> {
-        let mut stage = self.stage.write().unwrap();
+        let mut stage = self.stage.write().unwrap_or_else(|e| e.into_inner());
         if *stage != MigrationStage::PreCopy {
-            return Err(SerializeError::InvalidFormat("Invalid stage for stop-and-copy".into()));
+            return Err(SerializeError::InvalidFormat(
+                "Invalid stage for stop-and-copy".into(),
+            ));
         }
 
         *stage = MigrationStage::StopAndCopy;
 
         // Record precopy time
-        if let Some(start) = *self.precopy_start.read().unwrap() {
-            let mut stats = self.stats.write().unwrap();
+        if let Some(start) = *self.precopy_start.read().unwrap_or_else(|e| e.into_inner()) {
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.precopy_time_ms = start.elapsed().as_millis() as u64;
         }
 
@@ -309,9 +303,11 @@ impl MigrationController {
 
     /// Complete migration
     pub fn complete(&self) -> SerializeResult<()> {
-        let mut stage = self.stage.write().unwrap();
+        let mut stage = self.stage.write().unwrap_or_else(|e| e.into_inner());
         if *stage != MigrationStage::StopAndCopy && *stage != MigrationStage::PostCopy {
-            return Err(SerializeError::InvalidFormat("Invalid stage for completion".into()));
+            return Err(SerializeError::InvalidFormat(
+                "Invalid stage for completion".into(),
+            ));
         }
 
         *stage = MigrationStage::Completed;
@@ -321,13 +317,13 @@ impl MigrationController {
 
     /// Fail migration
     pub fn fail(&self, _error: &str) {
-        *self.stage.write().unwrap() = MigrationStage::Failed;
+        *self.stage.write().unwrap_or_else(|e| e.into_inner()) = MigrationStage::Failed;
     }
 
     /// Cancel migration
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
-        *self.stage.write().unwrap() = MigrationStage::Cancelled;
+        *self.stage.write().unwrap_or_else(|e| e.into_inner()) = MigrationStage::Cancelled;
     }
 
     /// Check if cancelled
@@ -337,7 +333,7 @@ impl MigrationController {
 
     /// Add pages to transfer queue
     pub fn queue_pages(&self, pages: Vec<PageData>) {
-        let mut pending = self.pending_pages.write().unwrap();
+        let mut pending = self.pending_pages.write().unwrap_or_else(|e| e.into_inner());
         for page in pages {
             pending.push_back(page);
         }
@@ -345,7 +341,7 @@ impl MigrationController {
 
     /// Get next batch of pages to transfer
     pub fn get_pages_batch(&self, max_pages: usize) -> Vec<PageData> {
-        let mut pending = self.pending_pages.write().unwrap();
+        let mut pending = self.pending_pages.write().unwrap_or_else(|e| e.into_inner());
         let mut batch = Vec::with_capacity(max_pages);
 
         for _ in 0..max_pages {
@@ -364,7 +360,7 @@ impl MigrationController {
         self.bytes_transferred.fetch_add(bytes, Ordering::Relaxed);
         self.pages_transferred.fetch_add(pages, Ordering::Relaxed);
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.total_bytes += bytes;
         stats.total_pages += pages;
         stats.iteration_pages += pages;
@@ -372,7 +368,7 @@ impl MigrationController {
 
     /// Start new iteration
     pub fn start_iteration(&self) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.iteration += 1;
         stats.iteration_pages = 0;
     }
@@ -384,7 +380,7 @@ impl MigrationController {
         // 2. Max iterations reached
         // 3. Expected downtime acceptable
 
-        let stats = self.stats.read().unwrap();
+        let stats = self.stats.read().unwrap_or_else(|e| e.into_inner());
 
         if dirty_pages <= self.config.dirty_threshold {
             return true;
@@ -401,7 +397,8 @@ impl MigrationController {
             u64::MAX
         };
 
-        expected_downtime_ms <= self.config.max_downtime_ms && dirty_rate < stats.transfer_rate / PAGE_SIZE as f64
+        expected_downtime_ms <= self.config.max_downtime_ms
+            && dirty_rate < stats.transfer_rate / PAGE_SIZE as f64
     }
 
     /// Update transfer rate
@@ -409,13 +406,13 @@ impl MigrationController {
         let bytes = self.bytes_transferred.swap(0, Ordering::AcqRel);
         let rate = bytes as f64 / elapsed_secs;
 
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.transfer_rate = rate;
     }
 
     /// Update dirty rate
     pub fn update_dirty_rate(&self, dirty_rate: f64) {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.dirty_rate = dirty_rate;
 
         // Update expected downtime
@@ -432,7 +429,7 @@ impl MigrationController {
 
     /// Get pending page count
     pub fn pending_page_count(&self) -> usize {
-        self.pending_pages.read().unwrap().len()
+        self.pending_pages.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 
@@ -477,7 +474,7 @@ impl PreCopyMigration {
 
         // Get dirty pages
         let dirty_pages = {
-            let tracker = self.dirty_tracker.read().unwrap();
+            let tracker = self.dirty_tracker.read().unwrap_or_else(|e| e.into_inner());
             tracker.dirty_pages()
         };
 
@@ -494,7 +491,7 @@ impl PreCopyMigration {
 
         // Clear dirty bits
         {
-            let tracker = self.dirty_tracker.read().unwrap();
+            let tracker = self.dirty_tracker.read().unwrap_or_else(|e| e.into_inner());
             tracker.clear_all();
         }
 
@@ -527,32 +524,32 @@ impl MigrationStream {
 
     /// Send a message
     pub fn send(&self, msg: MigrationMessage) {
-        self.outgoing.write().unwrap().push_back(msg);
+        self.outgoing.write().unwrap_or_else(|e| e.into_inner()).push_back(msg);
     }
 
     /// Receive a message
     pub fn receive(&self) -> Option<MigrationMessage> {
-        self.incoming.write().unwrap().pop_front()
+        self.incoming.write().unwrap_or_else(|e| e.into_inner()).pop_front()
     }
 
     /// Push incoming message (from network)
     pub fn push_incoming(&self, msg: MigrationMessage) {
-        self.incoming.write().unwrap().push_back(msg);
+        self.incoming.write().unwrap_or_else(|e| e.into_inner()).push_back(msg);
     }
 
     /// Pop outgoing message (for network)
     pub fn pop_outgoing(&self) -> Option<MigrationMessage> {
-        self.outgoing.write().unwrap().pop_front()
+        self.outgoing.write().unwrap_or_else(|e| e.into_inner()).pop_front()
     }
 
     /// Check if has outgoing messages
     pub fn has_outgoing(&self) -> bool {
-        !self.outgoing.read().unwrap().is_empty()
+        !self.outgoing.read().unwrap_or_else(|e| e.into_inner()).is_empty()
     }
 
     /// Check if has incoming messages
     pub fn has_incoming(&self) -> bool {
-        !self.incoming.read().unwrap().is_empty()
+        !self.incoming.read().unwrap_or_else(|e| e.into_inner()).is_empty()
     }
 }
 
@@ -602,14 +599,16 @@ mod tests {
 
     #[test]
     fn test_migration_controller_creation() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
         assert_eq!(controller.stage(), MigrationStage::Idle);
         assert_eq!(controller.role(), MigrationRole::Source);
     }
 
     #[test]
     fn test_migration_controller_transitions() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         assert!(controller.start().is_ok());
         assert_eq!(controller.stage(), MigrationStage::Setup);
@@ -626,7 +625,8 @@ mod tests {
 
     #[test]
     fn test_migration_controller_invalid_transition() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         // Can't begin precopy from Idle
         assert!(controller.begin_precopy().is_err());
@@ -640,7 +640,8 @@ mod tests {
 
     #[test]
     fn test_migration_controller_cancel() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         assert!(!controller.is_cancelled());
         controller.cancel();
@@ -650,7 +651,8 @@ mod tests {
 
     #[test]
     fn test_migration_controller_queue_pages() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         let pages = vec![
             PageData::new(0x1000, vec![1; 4096]),
@@ -669,7 +671,8 @@ mod tests {
 
     #[test]
     fn test_migration_controller_record_transfer() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         controller.record_transfer(4096, 1);
         controller.record_transfer(8192, 2);
@@ -681,7 +684,8 @@ mod tests {
 
     #[test]
     fn test_migration_controller_iteration() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         controller.start_iteration();
         assert_eq!(controller.stats().iteration, 1);
@@ -696,7 +700,8 @@ mod tests {
 
     #[test]
     fn test_should_stop_and_copy() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         // Below threshold
         assert!(controller.should_stop_and_copy(100, 100.0));
@@ -799,7 +804,8 @@ mod tests {
 
     #[test]
     fn test_controller_fail() {
-        let controller = MigrationController::new(MigrationRole::Source, MigrationConfig::default());
+        let controller =
+            MigrationController::new(MigrationRole::Source, MigrationConfig::default());
 
         controller.start().unwrap();
         controller.fail("test error");

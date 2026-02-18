@@ -7,16 +7,14 @@ use hv2_core::{
     hypervisor::{create_backend, HypervisorBackend},
     IoDirection, VCpu, VmExit,
 };
-use tokio;
 use tracing::{info, Level};
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
-    info!("=== HV2 VM Exit Handling Demo ===\n");
+    info!("=== HyperMachine VM Exit Handling Demo ===\n");
 
     // Create hypervisor backend
     let backend = create_backend()?;
@@ -172,6 +170,30 @@ async fn demonstrate_exit_loop(
 
             VmExit::Debug { ref info } => {
                 info!("  Debug event: {}", info);
+            }
+
+            VmExit::Hypercall { nr, .. } => {
+                info!("  Hypercall nr={:#x}", nr);
+            }
+
+            VmExit::SystemEvent { type_, flags } => {
+                info!("  System event: type={} flags={:#x}", type_, flags);
+            }
+
+            VmExit::Nmi => {
+                info!("  NMI received");
+            }
+
+            VmExit::Rdmsr { index } => {
+                info!("  RDMSR index={:#x}", index);
+            }
+
+            VmExit::Wrmsr { index, data } => {
+                info!("  WRMSR index={:#x} data={:#x}", index, data);
+            }
+
+            VmExit::IoapicEoi { vector } => {
+                info!("  IOAPIC EOI vector={}", vector);
             }
 
             VmExit::Unknown { reason } => {

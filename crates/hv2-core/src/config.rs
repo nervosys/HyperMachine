@@ -4,7 +4,7 @@ use crate::Result;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     pub vm: VmConfig,
     pub network: NetworkConfig,
@@ -20,11 +20,31 @@ pub struct VmConfig {
     pub memory_mb: u64,
 }
 
+impl Default for VmConfig {
+    fn default() -> Self {
+        Self {
+            name: "default".to_string(),
+            vcpus: 2,
+            memory_mb: 2048,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
     pub enabled: bool,
     pub interface: String,
     pub ip_address: Option<String>,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            interface: "tap0".to_string(),
+            ip_address: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,11 +54,31 @@ pub struct GpuConfig {
     pub passthrough: bool,
 }
 
+impl Default for GpuConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            device: "default".to_string(),
+            passthrough: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentConfig {
     pub enabled: bool,
     pub script_timeout_seconds: u64,
     pub max_memory_mb: u64,
+}
+
+impl Default for AgentConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            script_timeout_seconds: 300,
+            max_memory_mb: 512,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,34 +88,12 @@ pub struct ObservabilityConfig {
     pub otlp_endpoint: Option<String>,
 }
 
-impl Default for Config {
+impl Default for ObservabilityConfig {
     fn default() -> Self {
         Self {
-            vm: VmConfig {
-                name: "default".to_string(),
-                vcpus: 2,
-                memory_mb: 2048,
-            },
-            network: NetworkConfig {
-                enabled: false,
-                interface: "tap0".to_string(),
-                ip_address: None,
-            },
-            gpu: GpuConfig {
-                enabled: false,
-                device: "default".to_string(),
-                passthrough: false,
-            },
-            agent: AgentConfig {
-                enabled: true,
-                script_timeout_seconds: 300,
-                max_memory_mb: 512,
-            },
-            observability: ObservabilityConfig {
-                tracing: true,
-                metrics: true,
-                otlp_endpoint: None,
-            },
+            tracing: true,
+            metrics: true,
+            otlp_endpoint: None,
         }
     }
 }

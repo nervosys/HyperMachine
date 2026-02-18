@@ -1,8 +1,6 @@
-//! HV2 Command-Line Interface
+//! HyperMachine Command-Line Interface
 
 #![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -12,7 +10,7 @@ use std::time::Duration;
 
 #[derive(Parser)]
 #[command(name = "hv2")]
-#[command(about = "HV2 - High-performance Type 2 Hypervisor with AI agent support", long_about = None)]
+#[command(about = "HyperMachine - High-performance Type 2 Hypervisor with AI agent support", long_about = None)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -127,7 +125,7 @@ async fn main() -> Result<()> {
                 if network { "enabled" } else { "disabled" }
             );
 
-            let vm = AgentVM::builder()
+            let _vm = AgentVM::builder()
                 .name(name.clone())
                 .cpu_cores(cpu)
                 .memory_gb(memory)
@@ -201,7 +199,7 @@ async fn main() -> Result<()> {
             grpc_port,
             rest_port,
         } => {
-            println!("{}", "Starting HV2 API servers...".cyan().bold());
+            println!("{}", "Starting HyperMachine API servers...".cyan().bold());
             println!("  gRPC: {}", format!("0.0.0.0:{}", grpc_port).green());
             println!(
                 "  REST: {}",
@@ -236,7 +234,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Version => {
-            println!("HV2 v{}", env!("CARGO_PKG_VERSION"));
+            println!("HyperMachine v{}", env!("CARGO_PKG_VERSION"));
             println!("A high-performance Type 2 Hypervisor with AI agent support");
         }
     }

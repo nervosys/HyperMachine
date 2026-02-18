@@ -45,12 +45,14 @@ metadata:
   namespace: hypermachine
 type: Opaque
 stringData:
-  API_KEY: "${API_KEY:-changeme}"
+  # IMPORTANT: Replace these placeholder values before deploying.
+  # Use kubectl create secret or an external secrets operator in production.
+  API_KEY: "changeme"
   TLS_CERT: |
     # Add your TLS certificate here
   TLS_KEY: |
     # Add your TLS private key here
-  DB_PASSWORD: "${DB_PASSWORD:-changeme}"
+  DB_PASSWORD: "changeme"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -204,11 +206,11 @@ metadata:
     app.kubernetes.io/name: hypermachine
     app.kubernetes.io/component: api
   annotations:
-    kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
+  ingressClassName: nginx
   tls:
     - hosts:
         - api.hypermachine.io
@@ -348,6 +350,15 @@ spec:
         - protocol: TCP
           port: 50051
   egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow application traffic
     - to:
         - namespaceSelector: {}
       ports:

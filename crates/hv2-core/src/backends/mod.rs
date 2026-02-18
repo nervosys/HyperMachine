@@ -38,3 +38,13 @@ pub mod whpx;
 
 #[cfg(target_os = "windows")]
 pub use whpx::WhpxBackend;
+
+// macOS HVF backend
+#[cfg(target_os = "macos")]
+pub mod hvf_ffi;
+
+#[cfg(target_os = "macos")]
+pub mod hvf;
+
+#[cfg(target_os = "macos")]
+pub use hvf::HvfBackend;

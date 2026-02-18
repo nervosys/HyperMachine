@@ -18,9 +18,13 @@ fn bench_aes_gcm_encrypt(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
             b.iter(|| {
                 crypto
-                    .aes_gcm_encrypt(black_box(key.as_bytes()), black_box(&plaintext), black_box(aad))
-                    .unwrap()
-            })
+                    .aes_gcm_encrypt(
+                        black_box(key.as_bytes()),
+                        black_box(&plaintext),
+                        black_box(aad),
+                    )
+                    .unwrap();
+            });
         });
     }
     group.finish();
@@ -35,15 +39,21 @@ fn bench_aes_gcm_decrypt(c: &mut Criterion) {
 
     for size in [64, 256, 1024, 4096, 16384, 65536].iter() {
         let plaintext = vec![0u8; *size];
-        let ciphertext = crypto.aes_gcm_encrypt(key.as_bytes(), &plaintext, aad).unwrap();
+        let ciphertext = crypto
+            .aes_gcm_encrypt(key.as_bytes(), &plaintext, aad)
+            .unwrap();
 
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
             b.iter(|| {
                 crypto
-                    .aes_gcm_decrypt(black_box(key.as_bytes()), black_box(&ciphertext), black_box(aad))
-                    .unwrap()
-            })
+                    .aes_gcm_decrypt(
+                        black_box(key.as_bytes()),
+                        black_box(&ciphertext),
+                        black_box(aad),
+                    )
+                    .unwrap();
+            });
         });
     }
     group.finish();
@@ -58,7 +68,7 @@ fn bench_sha256(c: &mut Criterion) {
         let data = vec![0u8; *size];
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
-            b.iter(|| crypto.sha256(black_box(&data)).unwrap())
+            b.iter(|| crypto.sha256(black_box(&data)).unwrap());
         });
     }
     group.finish();
@@ -73,7 +83,7 @@ fn bench_sha512(c: &mut Criterion) {
         let data = vec![0u8; *size];
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
-            b.iter(|| crypto.sha512(black_box(&data)).unwrap())
+            b.iter(|| crypto.sha512(black_box(&data)).unwrap());
         });
     }
     group.finish();
@@ -89,7 +99,11 @@ fn bench_hmac_sha256(c: &mut Criterion) {
         let data = vec![0u8; *size];
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
-            b.iter(|| crypto.hmac_sha256(black_box(&key), black_box(&data)).unwrap())
+            b.iter(|| {
+                crypto
+                    .hmac_sha256(black_box(&key), black_box(&data))
+                    .unwrap();
+            });
         });
     }
     group.finish();
@@ -111,8 +125,8 @@ fn bench_hkdf(c: &mut Criterion) {
                 b.iter(|| {
                     crypto
                         .hkdf_sha256(black_box(&salt), black_box(&ikm), black_box(info), len)
-                        .unwrap()
-                })
+                        .unwrap();
+                });
             },
         );
     }
@@ -128,7 +142,7 @@ fn bench_random_bytes(c: &mut Criterion) {
         let mut buffer = vec![0u8; *size];
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
-            b.iter(|| crypto.random_bytes(black_box(&mut buffer)).unwrap())
+            b.iter(|| crypto.random_bytes(black_box(&mut buffer)).unwrap());
         });
     }
     group.finish();
@@ -138,11 +152,19 @@ fn bench_key_generation(c: &mut Criterion) {
     let crypto = FipsCrypto::new(FipsMode::Enabled).unwrap();
 
     c.bench_function("generate_aes128_key", |b| {
-        b.iter(|| crypto.generate_aes_key(black_box(AesKeySize::Aes128)).unwrap())
+        b.iter(|| {
+            crypto
+                .generate_aes_key(black_box(AesKeySize::Aes128))
+                .unwrap();
+        });
     });
 
     c.bench_function("generate_aes256_key", |b| {
-        b.iter(|| crypto.generate_aes_key(black_box(AesKeySize::Aes256)).unwrap())
+        b.iter(|| {
+            crypto
+                .generate_aes_key(black_box(AesKeySize::Aes256))
+                .unwrap();
+        });
     });
 }
 
@@ -150,8 +172,8 @@ fn bench_self_tests(c: &mut Criterion) {
     c.bench_function("fips_self_tests", |b| {
         b.iter(|| {
             let mut crypto = FipsCrypto::new(black_box(FipsMode::Enabled)).unwrap();
-            crypto.run_self_tests().unwrap()
-        })
+            crypto.run_self_tests().unwrap();
+        });
     });
 }
 

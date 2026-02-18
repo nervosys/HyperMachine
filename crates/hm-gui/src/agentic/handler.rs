@@ -59,9 +59,7 @@ impl AutomationHandle {
             })
             .map_err(|_| AutomationError::ChannelClosed)?;
 
-        response_rx
-            .recv()
-            .map_err(|_| AutomationError::NoResponse)
+        response_rx.recv().map_err(|_| AutomationError::NoResponse)
     }
 
     /// Send a command without waiting for result (non-blocking)
@@ -80,8 +78,8 @@ impl AutomationHandle {
 
     /// Execute a command from JSON
     pub fn execute_json(&self, json: &str) -> Result<CommandResult, AutomationError> {
-        let command: GuiCommand =
-            serde_json::from_str(json).map_err(|e| AutomationError::InvalidCommand(e.to_string()))?;
+        let command: GuiCommand = serde_json::from_str(json)
+            .map_err(|e| AutomationError::InvalidCommand(e.to_string()))?;
         self.execute(command)
     }
 
@@ -266,10 +264,13 @@ mod tests {
     #[test]
     fn test_automation_handle_creation() {
         let (handle, _receiver) = AutomationHandle::new();
-        assert!(handle.command_tx.send(AutomationRequest {
-            command: GuiCommand::GetState,
-            response_tx: channel().0,
-        }).is_ok());
+        assert!(handle
+            .command_tx
+            .send(AutomationRequest {
+                command: GuiCommand::GetState,
+                response_tx: channel().0,
+            })
+            .is_ok());
     }
 
     #[test]

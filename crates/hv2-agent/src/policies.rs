@@ -15,39 +15,30 @@ use std::time::{Duration, SystemTime};
 pub type PolicyResult<T> = Result<T, PolicyError>;
 
 /// Policy errors
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PolicyError {
     /// Permission denied by policy
+    #[error("Permission denied: {0}")]
     PermissionDenied(String),
     /// Policy not found
+    #[error("Policy not found: {0}")]
     PolicyNotFound(String),
     /// Policy conflict detected
+    #[error("Policy conflict: {0}")]
     PolicyConflict(String),
     /// Policy evaluation failed
+    #[error("Evaluation failed: {0}")]
     EvaluationFailed(String),
     /// Time-based restriction
+    #[error("Time restriction: {0}")]
     TimeRestriction(String),
     /// Resource quota exceeded
+    #[error("Quota exceeded: {0}")]
     QuotaExceeded(String),
     /// Invalid policy configuration
+    #[error("Invalid policy: {0}")]
     InvalidPolicy(String),
 }
-
-impl std::fmt::Display for PolicyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::PermissionDenied(msg) => write!(f, "Permission denied: {}", msg),
-            Self::PolicyNotFound(msg) => write!(f, "Policy not found: {}", msg),
-            Self::PolicyConflict(msg) => write!(f, "Policy conflict: {}", msg),
-            Self::EvaluationFailed(msg) => write!(f, "Evaluation failed: {}", msg),
-            Self::TimeRestriction(msg) => write!(f, "Time restriction: {}", msg),
-            Self::QuotaExceeded(msg) => write!(f, "Quota exceeded: {}", msg),
-            Self::InvalidPolicy(msg) => write!(f, "Invalid policy: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for PolicyError {}
 
 /// Policy effect
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]

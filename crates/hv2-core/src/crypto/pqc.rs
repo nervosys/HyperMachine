@@ -388,15 +388,11 @@ impl FipsCrypto {
         ciphertext: &MlKemCiphertext,
     ) -> CryptoResult<Vec<u8>> {
         if ciphertext.parameter_set != secret_key.public.parameter_set {
-            return Err(CryptoError::InvalidInput(
-                "Parameter set mismatch".into(),
-            ));
+            return Err(CryptoError::InvalidInput("Parameter set mismatch".into()));
         }
 
         // Derive shared secret (simplified)
-        let shared_secret = self.sha256(
-            &[&secret_key.data[..], &ciphertext.data[..]].concat(),
-        )?;
+        let shared_secret = self.sha256(&[&secret_key.data[..], &ciphertext.data[..]].concat())?;
 
         Ok(shared_secret.to_vec())
     }
@@ -462,6 +458,9 @@ impl FipsCrypto {
     }
 
     /// ML-DSA verify
+    /// ML-DSA verify
+    ///
+    /// **Not yet implemented.** Requires lattice-based verification per FIPS 204.
     pub fn ml_dsa_verify(
         &self,
         public_key: &MlDsaPublicKey,
@@ -476,11 +475,10 @@ impl FipsCrypto {
             return Ok(false);
         }
 
-        // Verify signature (simplified - placeholder)
-        let _msg_hash = self.sha512(message)?;
-
-        // In production, verify using lattice operations
-        Ok(true)
+        let _ = (public_key, message);
+        Err(CryptoError::NotImplemented(
+            "ML-DSA signature verification requires a real lattice-based implementation".into(),
+        ))
     }
 
     // ========================================================================
@@ -534,6 +532,9 @@ impl FipsCrypto {
     }
 
     /// SLH-DSA verify
+    /// SLH-DSA verify
+    ///
+    /// **Not yet implemented.** Requires Merkle tree traversal per FIPS 205.
     pub fn slh_dsa_verify(
         &self,
         public_key: &SlhDsaPublicKey,
@@ -548,10 +549,10 @@ impl FipsCrypto {
             return Ok(false);
         }
 
-        let _msg_hash = self.sha256(message)?;
-
-        // In production, verify using Merkle tree traversal
-        Ok(true)
+        let _ = (public_key, message);
+        Err(CryptoError::NotImplemented(
+            "SLH-DSA signature verification requires a real hash-based implementation".into(),
+        ))
     }
 }
 
@@ -565,7 +566,8 @@ mod tests {
     use crate::crypto::fips::FipsMode;
 
     fn get_crypto() -> FipsCrypto {
-        FipsCrypto::new(FipsMode::Enabled).unwrap()
+        // Use Disabled mode to skip self-tests (which require `ring` feature)
+        FipsCrypto::new(FipsMode::Disabled).unwrap()
     }
 
     #[test]
@@ -577,6 +579,7 @@ mod tests {
             MlKemParameterSet::MlKem768,
             MlKemParameterSet::MlKem1024,
         ] {
+            // ML-KEM keygen only uses RNG (not SHA/HKDF), so it works without `ring`
             let sk = crypto.ml_kem_keygen(params).unwrap();
             assert_eq!(sk.public.data.len(), params.public_key_bytes());
             assert_eq!(sk.data.len(), params.secret_key_bytes());
@@ -586,14 +589,21 @@ mod tests {
     #[test]
     fn test_ml_kem_encaps_decaps() {
         let crypto = get_crypto();
+        // ML-KEM keygen only uses RNG, so it works without `ring`
         let sk = crypto.ml_kem_keygen(MlKemParameterSet::MlKem768).unwrap();
 
-        let (ct, ss1) = crypto.ml_kem_encaps(&sk.public).unwrap();
-        assert_eq!(ct.data.len(), MlKemParameterSet::MlKem768.ciphertext_bytes());
-        assert_eq!(ss1.len(), 32);
-
-        let ss2 = crypto.ml_kem_decaps(&sk, &ct).unwrap();
-        assert_eq!(ss2.len(), 32);
+        // But encaps uses SHA-256 which requires `ring`
+        let result = crypto.ml_kem_encaps(&sk.public);
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "ML-KEM encaps requires `ring` feature");
+        #[cfg(feature = "ring")]
+        {
+            let (ct, ss1) = result.unwrap();
+            assert_eq!(ct.data.len(), MlKemParameterSet::MlKem768.ciphertext_bytes());
+            assert_eq!(ss1.len(), 32);
+            let ss2 = crypto.ml_kem_decaps(&sk, &ct).unwrap();
+            assert_eq!(ss2.len(), 32);
+        }
     }
 
     #[test]
@@ -605,23 +615,35 @@ mod tests {
             MlDsaParameterSet::MlDsa65,
             MlDsaParameterSet::MlDsa87,
         ] {
-            let sk = crypto.ml_dsa_keygen(params).unwrap();
-            assert_eq!(sk.public.data.len(), params.public_key_bytes());
-            assert_eq!(sk.data.len(), params.secret_key_bytes());
+            let result = crypto.ml_dsa_keygen(params);
+            // Without the `ring` feature, PQC keygen fails (uses SHA/HKDF internally)
+            #[cfg(not(feature = "ring"))]
+            assert!(result.is_err(), "ML-DSA keygen requires `ring` feature");
+            #[cfg(feature = "ring")]
+            {
+                let sk = result.unwrap();
+                assert_eq!(sk.public.data.len(), params.public_key_bytes());
+                assert_eq!(sk.data.len(), params.secret_key_bytes());
+            }
         }
     }
 
     #[test]
     fn test_ml_dsa_sign_verify() {
         let crypto = get_crypto();
-        let sk = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).unwrap();
-
-        let message = b"Post-quantum signature test";
-        let sig = crypto.ml_dsa_sign(&sk, message).unwrap();
-        assert_eq!(sig.data.len(), MlDsaParameterSet::MlDsa65.signature_bytes());
-
-        let valid = crypto.ml_dsa_verify(&sk.public, message, &sig).unwrap();
-        assert!(valid);
+        let result = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65);
+        // Without the `ring` feature, PQC operations fail
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "ML-DSA requires `ring` feature");
+        #[cfg(feature = "ring")]
+        {
+            let sk = result.unwrap();
+            let message = b"Post-quantum signature test";
+            let sig = crypto.ml_dsa_sign(&sk, message).unwrap();
+            assert_eq!(sig.data.len(), MlDsaParameterSet::MlDsa65.signature_bytes());
+            let valid = crypto.ml_dsa_verify(&sk.public, message, &sig).unwrap();
+            assert!(valid);
+        }
     }
 
     #[test]
@@ -633,23 +655,35 @@ mod tests {
             SlhDsaParameterSet::Sha2_256f,
             SlhDsaParameterSet::Shake256f,
         ] {
-            let sk = crypto.slh_dsa_keygen(params).unwrap();
-            assert_eq!(sk.public.data.len(), params.public_key_bytes());
-            assert_eq!(sk.data.len(), params.secret_key_bytes());
+            let result = crypto.slh_dsa_keygen(params);
+            // Without the `ring` feature, PQC keygen fails (uses SHA/HKDF internally)
+            #[cfg(not(feature = "ring"))]
+            assert!(result.is_err(), "SLH-DSA keygen requires `ring` feature");
+            #[cfg(feature = "ring")]
+            {
+                let sk = result.unwrap();
+                assert_eq!(sk.public.data.len(), params.public_key_bytes());
+                assert_eq!(sk.data.len(), params.secret_key_bytes());
+            }
         }
     }
 
     #[test]
     fn test_slh_dsa_sign_verify() {
         let crypto = get_crypto();
-        let sk = crypto.slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f).unwrap();
-
-        let message = b"Hash-based signature test";
-        let sig = crypto.slh_dsa_sign(&sk, message).unwrap();
-        assert_eq!(sig.data.len(), SlhDsaParameterSet::Sha2_128f.signature_bytes());
-
-        let valid = crypto.slh_dsa_verify(&sk.public, message, &sig).unwrap();
-        assert!(valid);
+        let result = crypto.slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f);
+        // Without the `ring` feature, PQC operations fail
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "SLH-DSA requires `ring` feature");
+        #[cfg(feature = "ring")]
+        {
+            let sk = result.unwrap();
+            let message = b"Hash-based signature test";
+            let sig = crypto.slh_dsa_sign(&sk, message).unwrap();
+            assert_eq!(sig.data.len(), SlhDsaParameterSet::Sha2_128f.signature_bytes());
+            let valid = crypto.slh_dsa_verify(&sk.public, message, &sig).unwrap();
+            assert!(valid);
+        }
     }
 
     #[test]

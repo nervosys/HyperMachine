@@ -211,7 +211,7 @@ impl RtcDevice {
 
     /// Read from index port (0x70) - returns NMI status
     pub fn read_index(&self) -> u8 {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.nmi_disabled {
             0x80
         } else {
@@ -221,31 +221,31 @@ impl RtcDevice {
 
     /// Write to index port (0x70)
     pub fn write_index(&self, value: u8) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.nmi_disabled = (value & 0x80) != 0;
         state.index = value & 0x7F;
     }
 
     /// Read from data port (0x71)
     pub fn read_data(&self) -> u8 {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.read_data()
     }
 
     /// Write to data port (0x71)
     pub fn write_data(&self, value: u8) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.write_data(value);
     }
 
     /// Check if the RTC has a pending interrupt (IRQ 8)
     pub fn has_pending_interrupt(&self) -> bool {
-        self.state.lock().unwrap().has_pending_interrupt()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).has_pending_interrupt()
     }
 
     /// Trigger a periodic interrupt (called by timer subsystem)
     pub fn trigger_periodic(&self) -> bool {
-        self.state.lock().unwrap().trigger_periodic_interrupt()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).trigger_periodic_interrupt()
     }
 }
 
@@ -267,7 +267,7 @@ impl Device for RtcDevice {
 
     async fn init(&mut self) -> Result<()> {
         // Initialize time on first boot
-        self.state.lock().unwrap().update_time();
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).update_time();
         Ok(())
     }
 
@@ -301,7 +301,7 @@ impl Device for RtcDevice {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         *state = RtcState::new();
         state.update_time();
         Ok(())

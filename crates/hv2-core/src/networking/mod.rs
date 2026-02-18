@@ -22,6 +22,6 @@ pub use sriov::{
 };
 
 pub use vswitch::{
-    EthernetFrame, MacAddress, MacEntry, MacTable, Port, PortState, PortStats, PortType,
-    StpState, SwitchStats, VirtualSwitch, VlanId, VlanMode, VlanSet,
+    EthernetFrame, MacAddress, MacEntry, MacTable, Port, PortState, PortStats, PortType, StpState,
+    SwitchStats, VirtualSwitch, VlanId, VlanMode, VlanSet,
 };

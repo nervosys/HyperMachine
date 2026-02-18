@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    println!("🚀 HV2 Advanced VM Example\n");
+    println!("🚀 HyperMachine Advanced VM Example\n");
 
     // Detect hypervisor platform
     let platform = HypervisorPlatform::detect();

@@ -3,7 +3,6 @@
 //! Tests the integration of device emulation with the I/O handler system.
 
 use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
-use hv2_core::hypervisor::HypervisorBackend;
 use std::sync::{Arc, RwLock};
 
 #[tokio::test]

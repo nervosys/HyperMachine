@@ -15,39 +15,30 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 /// Perception error types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum PerceptionError {
     /// Sensor not found
+    #[error("Sensor not found: {0}")]
     SensorNotFound(String),
     /// Sensor already registered
+    #[error("Sensor already registered: {0}")]
     SensorAlreadyRegistered(String),
     /// Observable not found
+    #[error("Observable not found: {0}")]
     ObservableNotFound(String),
     /// Sensor read failed
+    #[error("Sensor read failed: {0}")]
     ReadFailed(String),
     /// Invalid sensor configuration
+    #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
     /// Perception timeout
+    #[error("Perception timeout after {0:?}")]
     Timeout(Duration),
     /// Sensor disabled
+    #[error("Sensor disabled: {0}")]
     SensorDisabled(String),
 }
-
-impl fmt::Display for PerceptionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SensorNotFound(s) => write!(f, "Sensor not found: {}", s),
-            Self::SensorAlreadyRegistered(s) => write!(f, "Sensor already registered: {}", s),
-            Self::ObservableNotFound(s) => write!(f, "Observable not found: {}", s),
-            Self::ReadFailed(s) => write!(f, "Sensor read failed: {}", s),
-            Self::InvalidConfig(s) => write!(f, "Invalid configuration: {}", s),
-            Self::Timeout(d) => write!(f, "Perception timeout after {:?}", d),
-            Self::SensorDisabled(s) => write!(f, "Sensor disabled: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for PerceptionError {}
 
 /// Result type for perception operations
 pub type PerceptionResult<T> = Result<T, PerceptionError>;
@@ -860,29 +851,29 @@ impl SharedPerception {
 
     /// Register a sensor
     pub fn register_sensor(&self, sensor: Sensor) -> PerceptionResult<()> {
-        self.inner.write().unwrap().register_sensor(sensor)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).register_sensor(sensor)
     }
 
     /// Read from a sensor
     pub fn read(&self, sensor_id: &str, observable: &str) -> PerceptionResult<Observation> {
-        self.inner.write().unwrap().read(sensor_id, observable)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).read(sensor_id, observable)
     }
 
     /// Subscribe to observations
     pub fn subscribe(&self, id: &str, filter: PerceptionFilter) {
-        self.inner.write().unwrap().subscribe(id, filter);
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).subscribe(id, filter);
     }
 
     /// Unsubscribe
     pub fn unsubscribe(&self, id: &str) {
-        self.inner.write().unwrap().unsubscribe(id);
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).unsubscribe(id);
     }
 
     /// Get current value
     pub fn get_value(&self, name: &str) -> Option<ObservationValue> {
         self.inner
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .world_model()
             .get_value(name)
             .cloned()
@@ -890,7 +881,7 @@ impl SharedPerception {
 
     /// Get sensor count
     pub fn sensor_count(&self) -> usize {
-        self.inner.read().unwrap().sensor_count()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).sensor_count()
     }
 }
 
@@ -926,8 +917,8 @@ mod tests {
         assert_eq!(i.as_int(), Some(42));
         assert_eq!(i.as_float(), Some(42.0));
 
-        let f = ObservationValue::Float(3.14);
-        assert_eq!(f.as_float(), Some(3.14));
+        let f = ObservationValue::Float(std::f64::consts::PI);
+        assert_eq!(f.as_float(), Some(std::f64::consts::PI));
 
         let s = ObservationValue::String("test".to_string());
         assert_eq!(s.as_str(), Some("test"));

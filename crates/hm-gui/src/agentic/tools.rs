@@ -352,7 +352,7 @@ mod tests {
     fn test_get_gui_tools() {
         let tools = get_gui_tools();
         assert!(!tools.is_empty());
-        
+
         // Check for essential tools
         let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"gui.navigate"));
@@ -365,7 +365,7 @@ mod tests {
     fn test_openai_format() {
         let tools = get_openai_tools();
         assert!(!tools.is_empty());
-        
+
         let first = &tools[0];
         assert!(first.get("type").is_some());
         assert!(first.get("function").is_some());
@@ -375,7 +375,7 @@ mod tests {
     fn test_anthropic_format() {
         let tools = get_anthropic_tools();
         assert!(!tools.is_empty());
-        
+
         let first = &tools[0];
         assert!(first.get("name").is_some());
         assert!(first.get("input_schema").is_some());

@@ -3,9 +3,11 @@
 //! This module provides the EFI System Table, Boot Services,
 //! and Configuration Table implementations.
 
+#[cfg(test)]
+use super::types::guids;
 use super::types::{
-    guids, AllocateType, Guid, Handle, MemoryAttribute, MemoryDescriptor, MemoryType, Status,
-    TableHeader, Time, TimeCapabilities,
+    AllocateType, Guid, Handle, MemoryAttribute, MemoryDescriptor, MemoryType, Status,
+    TableHeader,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -8,14 +8,16 @@ use tokio::sync::RwLock;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    println!("🚀 HV2 End-to-End Integration Example");
+    println!("🚀 HyperMachine End-to-End Integration Example");
     println!("{}", "=".repeat(50));
 
     // Step 1: Show VM configuration concept
     println!("\n⚙️  VM Configuration Concept:");
-    let mut config = VMConfig::default();
-    config.vcpu_count = 1;
-    config.memory_size = 64 * 1024 * 1024; // 64 MB
+    let config = VMConfig {
+        vcpu_count: 1,
+        memory_size: 64 * 1024 * 1024, // 64 MB
+        ..VMConfig::default()
+    };
     println!("  • VCPUs: {}", config.vcpu_count);
     println!("  • Memory: {} MB", config.memory_size / (1024 * 1024));
 

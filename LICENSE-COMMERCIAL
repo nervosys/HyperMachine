@@ -1,0 +1,42 @@
+# Commercial License for HyperMachine
+
+Copyright (c) 2024–2026 Nervosys and HyperMachine Contributors.
+
+## Summary
+
+This software is dual-licensed. You may use it under the terms of the
+GNU Affero General Public License v3 (AGPL-3.0), **or** you may obtain a
+commercial license that removes the AGPL's copyleft obligations.
+
+## When You Need a Commercial License
+
+A commercial license is required if you wish to:
+
+- Use HyperMachine in proprietary software without releasing your source
+  code under the AGPL-3.0.
+- Distribute derivative works under your own license terms.
+- Use HyperMachine under terms that are incompatible with the AGPL-3.0.
+
+## What the Commercial License Provides
+
+- Freedom from AGPL-3.0 copyleft and source-disclosure obligations.
+- Permission to create and distribute derivative works under your own
+  license terms.
+- Access to commercial support and SLA options (depending on tier).
+- Indemnification and warranty provisions (depending on tier).
+
+## How to Obtain a Commercial License
+
+Contact us for pricing and terms:
+
+- **Email:** licensing@nervosys.com
+- **Web:** https://nervosys.com/licensing
+
+Commercial licenses are available on a per-organization, per-product,
+or enterprise-wide basis.
+
+## Dual-License Notice
+
+Unless you have obtained a separate commercial license from Nervosys,
+this software is provided under the terms of the OCL v1 license.
+See the [LICENSE](LICENSE) file for the full OCL text.

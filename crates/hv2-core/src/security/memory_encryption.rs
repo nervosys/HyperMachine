@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 /// Page size for encryption (4KB)
 pub const PAGE_SIZE: u64 = 4096;
@@ -206,47 +206,36 @@ impl Default for EncryptionConfig {
 }
 
 /// Encryption error types
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EncryptionError {
     /// Technology not supported
+    #[error("Encryption technology not supported: {0:?}")]
     NotSupported(EncryptionTechnology),
     /// Key ID not found
+    #[error("Key not found: {0:?}")]
     KeyNotFound(KeyId),
     /// Key in invalid state
+    #[error("Invalid key state: {0:?}")]
     InvalidKeyState(KeyState),
     /// Page already encrypted
+    #[error("Page already encrypted: 0x{0:x}")]
     AlreadyEncrypted(u64),
     /// Page not encrypted
+    #[error("Page not encrypted: 0x{0:x}")]
     NotEncrypted(u64),
     /// Maximum keys exceeded
+    #[error("Maximum number of keys exceeded")]
     MaxKeysExceeded,
     /// Invalid C-bit position
+    #[error("Invalid C-bit position")]
     InvalidCbitPosition,
     /// Attestation failed
+    #[error("Attestation failed: {0}")]
     AttestationFailed(String),
     /// Hardware error
+    #[error("Hardware error: {0}")]
     HardwareError(String),
 }
-
-impl std::fmt::Display for EncryptionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NotSupported(tech) => {
-                write!(f, "Encryption technology not supported: {:?}", tech)
-            }
-            Self::KeyNotFound(id) => write!(f, "Key not found: {:?}", id),
-            Self::InvalidKeyState(state) => write!(f, "Invalid key state: {:?}", state),
-            Self::AlreadyEncrypted(addr) => write!(f, "Page already encrypted: 0x{:x}", addr),
-            Self::NotEncrypted(addr) => write!(f, "Page not encrypted: 0x{:x}", addr),
-            Self::MaxKeysExceeded => write!(f, "Maximum number of keys exceeded"),
-            Self::InvalidCbitPosition => write!(f, "Invalid C-bit position"),
-            Self::AttestationFailed(msg) => write!(f, "Attestation failed: {}", msg),
-            Self::HardwareError(msg) => write!(f, "Hardware error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for EncryptionError {}
 
 /// Result type for encryption operations
 pub type EncryptionResult<T> = Result<T, EncryptionError>;
@@ -310,7 +299,7 @@ impl EncryptionManager {
 
     /// Create a new encryption key
     pub fn create_key(&self, key_id: KeyId, is_guest_key: bool) -> EncryptionResult<()> {
-        let mut keys = self.keys.write().unwrap();
+        let mut keys = self.keys.write().unwrap_or_else(|e| e.into_inner());
 
         if keys.len() >= self.config.max_key_ids as usize {
             return Err(EncryptionError::MaxKeysExceeded);
@@ -325,12 +314,12 @@ impl EncryptionManager {
 
     /// Get key metadata
     pub fn get_key(&self, key_id: KeyId) -> Option<KeyMetadata> {
-        self.keys.read().unwrap().get(&key_id).cloned()
+        self.keys.read().unwrap_or_else(|e| e.into_inner()).get(&key_id).cloned()
     }
 
     /// Revoke a key
     pub fn revoke_key(&self, key_id: KeyId) -> EncryptionResult<()> {
-        let mut keys = self.keys.write().unwrap();
+        let mut keys = self.keys.write().unwrap_or_else(|e| e.into_inner());
         let key = keys
             .get_mut(&key_id)
             .ok_or(EncryptionError::KeyNotFound(key_id))?;
@@ -351,7 +340,7 @@ impl EncryptionManager {
 
         // Verify key exists and is active
         {
-            let keys = self.keys.read().unwrap();
+            let keys = self.keys.read().unwrap_or_else(|e| e.into_inner());
             let key = keys
                 .get(&key_id)
                 .ok_or(EncryptionError::KeyNotFound(key_id))?;
@@ -362,7 +351,7 @@ impl EncryptionManager {
 
         let page_gpa = gpa & !(PAGE_SIZE - 1);
 
-        let mut pages = self.page_states.write().unwrap();
+        let mut pages = self.page_states.write().unwrap_or_else(|e| e.into_inner());
         if let Some(PageEncryptionState::Encrypted(_)) = pages.get(&page_gpa) {
             return Err(EncryptionError::AlreadyEncrypted(page_gpa));
         }
@@ -372,7 +361,7 @@ impl EncryptionManager {
         self.operations.fetch_add(1, Ordering::Relaxed);
 
         // Update key page count
-        if let Some(key) = self.keys.write().unwrap().get_mut(&key_id) {
+        if let Some(key) = self.keys.write().unwrap_or_else(|e| e.into_inner()).get_mut(&key_id) {
             key.page_count += 1;
         }
 
@@ -383,12 +372,12 @@ impl EncryptionManager {
     pub fn share_page(&self, gpa: u64) -> EncryptionResult<()> {
         let page_gpa = gpa & !(PAGE_SIZE - 1);
 
-        let mut pages = self.page_states.write().unwrap();
+        let mut pages = self.page_states.write().unwrap_or_else(|e| e.into_inner());
         let old_state = pages.insert(page_gpa, PageEncryptionState::Shared);
 
         if let Some(PageEncryptionState::Encrypted(key_id)) = old_state {
             self.encrypted_pages.fetch_sub(1, Ordering::Relaxed);
-            if let Some(key) = self.keys.write().unwrap().get_mut(&key_id) {
+            if let Some(key) = self.keys.write().unwrap_or_else(|e| e.into_inner()).get_mut(&key_id) {
                 key.page_count = key.page_count.saturating_sub(1);
             }
         }
@@ -404,7 +393,7 @@ impl EncryptionManager {
         let page_gpa = gpa & !(PAGE_SIZE - 1);
         self.page_states
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .get(&page_gpa)
             .copied()
             .unwrap_or(PageEncryptionState::Shared)
@@ -441,19 +430,19 @@ impl EncryptionManager {
             enabled: self.is_enabled(),
             encrypted_pages: self.encrypted_pages.load(Ordering::Relaxed),
             shared_pages: self.shared_pages.load(Ordering::Relaxed),
-            key_count: self.keys.read().unwrap().len() as u32,
+            key_count: self.keys.read().unwrap_or_else(|e| e.into_inner()).len() as u32,
             operations: self.operations.load(Ordering::Relaxed),
         }
     }
 
     /// Get number of keys
     pub fn key_count(&self) -> usize {
-        self.keys.read().unwrap().len()
+        self.keys.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// List all key IDs
     pub fn list_keys(&self) -> Vec<KeyId> {
-        self.keys.read().unwrap().keys().copied().collect()
+        self.keys.read().unwrap_or_else(|e| e.into_inner()).keys().copied().collect()
     }
 }
 

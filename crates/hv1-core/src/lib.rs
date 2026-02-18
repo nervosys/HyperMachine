@@ -51,15 +51,15 @@ extern crate alloc;
 pub mod arch;
 pub mod boot;
 pub mod cpu;
+pub mod device;
 pub mod error;
+pub mod interrupt;
 pub mod memory;
-pub mod vmx;
+pub mod serial;
 pub mod svm;
 pub mod vcpu;
 pub mod vm;
-pub mod interrupt;
-pub mod device;
-pub mod serial;
+pub mod vmx;
 
 pub use error::{Error, Result};
 
@@ -124,7 +124,7 @@ impl HypervisorCapabilities {
     pub fn detect() -> Self {
         let vendor = CpuVendor::detect();
         let cpuid = raw_cpuid::CpuId::new();
-        
+
         let mut caps = Self {
             vendor,
             vmx_supported: false,
@@ -167,7 +167,7 @@ pub fn initialize() -> Result<()> {
 
     // Detect capabilities
     let caps = HypervisorCapabilities::detect();
-    
+
     if !caps.is_virtualization_supported() {
         return Err(Error::NoHardwareSupport);
     }

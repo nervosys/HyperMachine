@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use super::types::{VmcsAccessType, VmcsField, VmxInstructionError, VmxResult};
+use super::types::{VmcsField, VmxInstructionError, VmxResult};
 
 /// Shadow VMCS state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

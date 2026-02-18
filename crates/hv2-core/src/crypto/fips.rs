@@ -106,73 +106,57 @@ impl Default for FipsStatus {
 // ============================================================================
 
 /// Cryptographic operation errors
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum CryptoError {
     /// FIPS self-test failed
+    #[error("FIPS self-test failed: {0}")]
     SelfTestFailed(String),
     /// Invalid key length
+    #[error("Invalid key length: expected {expected}, got {got}")]
     InvalidKeyLength { expected: usize, got: usize },
     /// Invalid nonce/IV length
+    #[error("Invalid nonce length: expected {expected}, got {got}")]
     InvalidNonceLength { expected: usize, got: usize },
     /// Authentication failed
+    #[error("Authentication failed")]
     AuthenticationFailed,
     /// Encryption failed
+    #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
     /// Decryption failed
+    #[error("Decryption failed: {0}")]
     DecryptionFailed(String),
     /// Key generation failed
+    #[error("Key generation failed: {0}")]
     KeyGenerationFailed(String),
     /// Algorithm not approved in FIPS mode
+    #[error("Algorithm not approved in FIPS mode: {0}")]
     AlgorithmNotApproved(String),
     /// Random number generation failed
+    #[error("RNG failed: {0}")]
     RngFailed(String),
     /// Signature verification failed
+    #[error("Signature verification failed")]
     SignatureVerificationFailed,
     /// Invalid signature format
+    #[error("Invalid signature format")]
     InvalidSignature,
     /// Key derivation failed
+    #[error("Key derivation failed: {0}")]
     KeyDerivationFailed(String),
     /// Hash computation failed
+    #[error("Hash computation failed: {0}")]
     HashFailed(String),
     /// Invalid input parameters
+    #[error("Invalid input: {0}")]
     InvalidInput(String),
     /// Unsupported algorithm
+    #[error("Unsupported algorithm: {0}")]
     UnsupportedAlgorithm(String),
+    /// Operation not implemented (placeholder crypto removed)
+    #[error("Not implemented: {0}")]
+    NotImplemented(String),
 }
-
-impl fmt::Display for CryptoError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::SelfTestFailed(msg) => write!(f, "FIPS self-test failed: {}", msg),
-            Self::InvalidKeyLength { expected, got } => {
-                write!(f, "Invalid key length: expected {}, got {}", expected, got)
-            }
-            Self::InvalidNonceLength { expected, got } => {
-                write!(
-                    f,
-                    "Invalid nonce length: expected {}, got {}",
-                    expected, got
-                )
-            }
-            Self::AuthenticationFailed => write!(f, "Authentication failed"),
-            Self::EncryptionFailed(msg) => write!(f, "Encryption failed: {}", msg),
-            Self::DecryptionFailed(msg) => write!(f, "Decryption failed: {}", msg),
-            Self::KeyGenerationFailed(msg) => write!(f, "Key generation failed: {}", msg),
-            Self::AlgorithmNotApproved(alg) => {
-                write!(f, "Algorithm not approved in FIPS mode: {}", alg)
-            }
-            Self::RngFailed(msg) => write!(f, "RNG failed: {}", msg),
-            Self::SignatureVerificationFailed => write!(f, "Signature verification failed"),
-            Self::InvalidSignature => write!(f, "Invalid signature format"),
-            Self::KeyDerivationFailed(msg) => write!(f, "Key derivation failed: {}", msg),
-            Self::HashFailed(msg) => write!(f, "Hash computation failed: {}", msg),
-            Self::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
-            Self::UnsupportedAlgorithm(alg) => write!(f, "Unsupported algorithm: {}", alg),
-        }
-    }
-}
-
-impl std::error::Error for CryptoError {}
 
 pub type CryptoResult<T> = Result<T, CryptoError>;
 
@@ -493,17 +477,12 @@ impl FipsCrypto {
             return Ok(in_out);
         }
 
-        // Fallback: simple placeholder (replace with real implementation)
         #[cfg(not(feature = "ring"))]
         {
-            let mut output = plaintext.to_vec();
-            // XOR with key (NOT SECURE - placeholder only)
-            for (i, byte) in output.iter_mut().enumerate() {
-                *byte ^= key[i % key.len()] ^ nonce[i % nonce.len()];
-            }
-            // Append fake tag
-            output.extend_from_slice(&[0u8; 16]);
-            Ok(output)
+            let _ = (key, nonce, plaintext, aad);
+            Err(CryptoError::NotImplemented(
+                "AES-GCM encryption requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -548,16 +527,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            // Placeholder decryption
-            if ciphertext.len() < 16 {
-                return Err(CryptoError::AuthenticationFailed);
-            }
-            let data = &ciphertext[..ciphertext.len() - 16];
-            let mut output = data.to_vec();
-            for (i, byte) in output.iter_mut().enumerate() {
-                *byte ^= key[i % key.len()] ^ nonce[i % nonce.len()];
-            }
-            Ok(output)
+            let _ = (key, nonce, ciphertext, aad);
+            Err(CryptoError::NotImplemented(
+                "AES-GCM decryption requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -578,12 +551,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            // Simple placeholder - use actual SHA-256 in production
-            let mut hash = [0u8; 32];
-            for (i, byte) in data.iter().enumerate() {
-                hash[i % 32] ^= byte;
-            }
-            Ok(hash)
+            let _ = data;
+            Err(CryptoError::NotImplemented(
+                "SHA-256 requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -600,11 +571,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            let mut hash = [0u8; 48];
-            for (i, byte) in data.iter().enumerate() {
-                hash[i % 48] ^= byte;
-            }
-            Ok(hash)
+            let _ = data;
+            Err(CryptoError::NotImplemented(
+                "SHA-384 requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -621,11 +591,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            let mut hash = [0u8; 64];
-            for (i, byte) in data.iter().enumerate() {
-                hash[i % 64] ^= byte;
-            }
-            Ok(hash)
+            let _ = data;
+            Err(CryptoError::NotImplemented(
+                "SHA-512 requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -647,10 +616,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            // Placeholder - combine key and data hash
-            let mut combined = key.to_vec();
-            combined.extend_from_slice(data);
-            self.sha256(&combined)
+            let _ = (key, data);
+            Err(CryptoError::NotImplemented(
+                "HMAC-SHA256 requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -668,9 +637,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            let mut combined = key.to_vec();
-            combined.extend_from_slice(data);
-            self.sha512(&combined)
+            let _ = (key, data);
+            Err(CryptoError::NotImplemented(
+                "HMAC-SHA512 requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -702,32 +672,10 @@ impl FipsCrypto {
 
         #[cfg(not(feature = "ring"))]
         {
-            // Simplified HKDF placeholder
-            let mut output = vec![0u8; output_len];
-            let prk = self.hmac_sha256(salt, ikm)?;
-            let mut t = Vec::new();
-            let mut counter = 1u8;
-
-            let iterations = output_len.div_ceil(32);
-
-            for _ in 0..iterations {
-                let mut input = t.clone();
-                input.extend_from_slice(info);
-                input.push(counter);
-                t = self.hmac_sha256(&prk, &input)?.to_vec();
-
-                for (i, byte) in t.iter().enumerate() {
-                    let pos = ((counter as usize - 1) * 32) + i;
-                    if pos < output_len {
-                        output[pos] = *byte;
-                    }
-                }
-                if counter == 255 {
-                    break;
-                }
-                counter = counter.wrapping_add(1);
-            }
-            Ok(output)
+            let _ = (salt, ikm, info, output_len);
+            Err(CryptoError::NotImplemented(
+                "HKDF-SHA256 requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -897,29 +845,41 @@ mod tests {
         let plaintext = b"Hello, HyperMachine!";
         let aad = b"additional data";
 
-        let ciphertext = crypto
-            .aes_gcm_encrypt(key.as_bytes(), plaintext, aad)
-            .unwrap();
-        let decrypted = crypto
-            .aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad)
-            .unwrap();
-
-        assert_eq!(decrypted, plaintext);
+        // Without the `ring` feature, AES-GCM operations return NotImplemented
+        let result = crypto.aes_gcm_encrypt(key.as_bytes(), plaintext, aad);
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "AES-GCM encrypt requires `ring` feature");
+        #[cfg(feature = "ring")]
+        {
+            let ciphertext = result.unwrap();
+            let decrypted = crypto
+                .aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad)
+                .unwrap();
+            assert_eq!(decrypted, plaintext);
+        }
     }
 
     #[test]
     fn test_sha256() {
         let crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
-        let hash = crypto.sha256(b"test").unwrap();
-        assert_eq!(hash.len(), 32);
+        let result = crypto.sha256(b"test");
+        // Without the `ring` feature, SHA-256 returns NotImplemented
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "SHA-256 requires `ring` feature");
+        #[cfg(feature = "ring")]
+        assert_eq!(result.unwrap().len(), 32);
     }
 
     #[test]
     fn test_hmac_sha256() {
         let crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
         let key = [0u8; 32];
-        let mac = crypto.hmac_sha256(&key, b"test").unwrap();
-        assert_eq!(mac.len(), 32);
+        let result = crypto.hmac_sha256(&key, b"test");
+        // Without the `ring` feature, HMAC-SHA256 returns NotImplemented
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "HMAC-SHA256 requires `ring` feature");
+        #[cfg(feature = "ring")]
+        assert_eq!(result.unwrap().len(), 32);
     }
 
     #[test]
@@ -929,8 +889,12 @@ mod tests {
         let ikm = b"input key material";
         let info = b"context";
 
-        let output = crypto.hkdf_sha256(&salt, ikm, info, 64).unwrap();
-        assert_eq!(output.len(), 64);
+        let result = crypto.hkdf_sha256(&salt, ikm, info, 64);
+        // Without the `ring` feature, HKDF returns NotImplemented
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "HKDF requires `ring` feature");
+        #[cfg(feature = "ring")]
+        assert_eq!(result.unwrap().len(), 64);
     }
 
     #[test]
@@ -960,8 +924,15 @@ mod tests {
     #[test]
     fn test_self_tests() {
         let mut crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
-        crypto.run_self_tests().unwrap();
-        assert!(crypto.status.self_test_passed);
+        let result = crypto.run_self_tests();
+        // Without the `ring` feature, self-tests fail (crypto ops return NotImplemented)
+        #[cfg(not(feature = "ring"))]
+        assert!(result.is_err(), "Self-tests require `ring` feature");
+        #[cfg(feature = "ring")]
+        {
+            result.unwrap();
+            assert!(crypto.status.self_test_passed);
+        }
     }
 
     #[test]

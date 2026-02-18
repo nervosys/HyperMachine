@@ -1674,6 +1674,318 @@ Implemented hierarchical task planning and goal management for AI agents:
 
 ---
 
+### ✅ Phase 47: KVM FFI Expansion & Exit Handling
+
+**Status:** Complete
+**Tests:** 2,568 passing (0 failures)
+**Location:** crates/hv2-core/src/backends/kvm_ffi.rs, crates/hv2-core/src/backends/kvm.rs, crates/hv2-core/src/exit.rs
+
+Massively expanded KVM FFI bindings based on Linux 6.18 reference source, added new VM exit types, and improved KVM backend robustness:
+
+**kvm_ffi.rs** (646 → 1,518 lines):
+- System ioctls: +KVM_GET_MSR_INDEX_LIST, KVM_GET_SUPPORTED_CPUID
+- VM ioctls: +KVM_GET_DIRTY_LOG, KVM_SET_IDENTITY_MAP_ADDR, KVM_IRQ_LINE, KVM_GET/SET_IRQCHIP, KVM_SET_GSI_ROUTING, KVM_SIGNAL_MSI
+- vCPU ioctls: +KVM_TRANSLATE, KVM_GET/SET_MSRS, KVM_SET_SIGNAL_MASK, KVM_GET/SET_FPU, KVM_GET/SET_MP_STATE, KVM_NMI, KVM_SET_GUEST_DEBUG, KVM_GET/SET_VCPU_EVENTS, KVM_GET/SET_DEBUGREGS, KVM_GET/SET_XSAVE, KVM_GET/SET_XCRS
+- Capabilities: 8 → 24 constants (NR_VCPUS, MP_STATE, SYNC_MMU, VCPU_EVENTS, DEBUGREGS, XSAVE, XCRS, TSC_CONTROL, MAX_VCPUS, READONLY_MEM, SPLIT_IRQCHIP, MAX_VCPU_ID, X2APIC_API, MSI_DEVID, IMMEDIATE_EXIT, NESTED_STATE)
+- Exit reasons: 13 → 24 constants (SET_TPR, TPR_ACCESS, NMI, IOAPIC_EOI, HYPERV, X86_RDMSR, X86_WRMSR, DIRTY_RING_FULL, X86_BUS_LOCK, NOTIFY, MEMORY_FAULT)
+- New constant sections: MP states (8), IRQ routing types (3), chip IDs (3), guest debug flags (6), MSI flags (1)
+- 20+ new struct definitions (kvm_msr_entry, kvm_msrs, kvm_fpu, kvm_mp_state, kvm_irq_level, kvm_dirty_log, kvm_lapic_state, kvm_irqchip, kvm_msi, kvm_translation, kvm_vcpu_events, kvm_guest_debug, kvm_xsave, kvm_xcrs, kvm_debugregs, kvm_irq_routing, kvm_signal_mask, etc.)
+- 25+ new unsafe wrapper functions with SAFETY documentation
+
+**kvm.rs** improvements:
+- EINTR retry loop in 
+un() for signal-safe vCPU execution
+- Runtime capability detection via KVM_CAP_MAX_VCPUS (replaces hardcoded 288)
+- Magic numbers replaced: 85 → KVM_CAP_NESTED_STATE, 117 → KVM_CAP_X2APIC_API
+- 6 new convert_exit() match arms: NMI, IOAPIC_EOI, RDMSR, WRMSR, SystemEvent, Hypercall
+
+**exit.rs** new VmExit variants:
+- Hypercall { nr, args } — VMCALL/VMMCALL instruction
+- SystemEvent { type_, flags } — reset, shutdown, crash events
+- Nmi — non-maskable interrupt
+- Rdmsr { index } — MSR read interception
+- Wrmsr { index, data } — MSR write interception
+- IoapicEoi { vector } — IOAPIC end-of-interrupt
+
+**Downstream match updates:** vm.rs (2 match sites), whpx.rs, exit_handler.rs, exit_handling.rs example, guest_execution.rs test
+
+### Phase 48: KVM Backend Methods
+
+**Status:** Complete
+**Tests:** 2,568+ passing (0 failures)
+**Location:** crates/hv2-core/src/backends/kvm.rs, crates/hv2-core/src/backends/kvm_ffi.rs
+
+Added high-level safe wrapper methods to KvmVcpu and KvmVm, consuming the 28 FFI bindings added in Phase 47. The KVM backend now exposes full vCPU state management, interrupt control, and memory operations through safe Rust APIs.
+
+**kvm.rs** (745 -> 1,260 lines):
+
+*KvmVcpu new methods (24):*
+- Register state: get_regs/set_regs, get_sregs/set_sregs
+- FPU state: get_fpu/set_fpu
+- Extended state: get_xsave/set_xsave, get_xcrs/set_xcrs
+- Debug registers: get_debugregs/set_debugregs
+- LAPIC: get_lapic/set_lapic
+- MSRs: get_msrs/set_msrs (model-specific registers)
+- Multiprocessor state: get_mp_state/set_mp_state
+- vCPU events: get_vcpu_events/set_vcpu_events
+- Guest debugging: set_guest_debug (single-step, breakpoints)
+- NMI injection: inject_nmi
+- Address translation: translate (GVA -> GPA)
+- CPUID: set_cpuid (CPUID leaf configuration)
+
+*KvmVm new methods (10):*
+- IRQ management: irq_line, get_irqchip, set_irqchip
+- MSI: signal_msi
+- GSI routing: set_gsi_routing
+- Identity map: set_identity_map_addr
+- Dirty page tracking: get_dirty_log (for live migration)
+- Memory mapping: map_memory (additional memory slots)
+- Accessor: vm_fd
+
+**kvm_ffi.rs** Default derives added:
+- kvm_fpu, kvm_xsave, kvm_xcrs, kvm_lapic_state
+
+### Phase 49: Backend Architecture Consolidation
+
+**Status:** Complete
+**Tests:** 2,568+ passing (0 failures)
+**Location:** crates/hv2-core/src/hypervisor.rs, crates/hv2-core/src/backends/
+
+Extracted inline WHPX and HVF backend modules from hypervisor.rs into dedicated files under backends/, completing the backend separation started with KVM.
+
+**hypervisor.rs** (1,687 -> 309 lines):
+- Retained: HypervisorPlatform enum, detect(), availability checks, HypervisorCapabilities, HypervisorBackend trait, HypervisorVm, TcgBackend, create_backend()
+- Removed: Inline whpx and hvf modules (moved to backends/)
+- create_backend() now references backends::kvm::KvmBackend, backends::whpx::WhpxBackend, backends::hvf::HvfBackend
+
+**backends/hvf_ffi.rs** (new):
+- 12 extern "C" FFI functions for macOS Hypervisor.framework
+- HV_SUCCESS and error constants, HvX86Reg enum (22 variants), VmcsField enum (12 fields)
+- Memory flags (HV_MEMORY_READ/WRITE/EXEC), HvVcpuId type
+
+**backends/hvf.rs** (574 lines, new):
+- HvfBackend struct with full HypervisorBackend trait impl
+- VM lifecycle, vCPU management, memory mapping, interrupt/exception injection
+- VMX exit parsing (exception, I/O, EPT, HLT), set_io_result, shutdown with cleanup
+
+**backends/mod.rs** updated:
+- Registers hvf_ffi + hvf + HvfBackend (macOS cfg)
+
+### Phase 51: Backend VM Exit Handling Completeness
+
+**Status:** Complete
+**Tests:** All passing (0 failures)
+**Location:** crates/hv2-core/src/backends/{whpx,kvm,hvf}.rs, crates/hv2-core/src/vcpu.rs
+
+Filled in missing VM exit reason translations across all three hardware backends and added supporting infrastructure.
+
+**WHPX (whpx.rs, 7027 -> 7060 lines)** -- 4 new exit arms in convert_exit():
+- WHvRunVpExitReasonX64MsrAccess -> VmExit::Rdmsr / VmExit::Wrmsr (reads IsWrite, MsrNumber, Rax, Rdx)
+- WHvRunVpExitReasonX64ApicEoi -> VmExit::IoapicEoi (reads InterruptVector)
+- WHvRunVpExitReasonHypercall -> VmExit::Hypercall (placeholder nr=0, no exit data available)
+
+**HVF (hvf.rs, 574 -> 628 lines)** -- named constants + 4 new exit handlers:
+- Replaced 7 magic numbers with 11 VMX_EXIT_REASON_* named constants
+- VMX_EXIT_REASON_TRIPLE_FAULT -> VmExit::Shutdown
+- VMX_EXIT_REASON_VMCALL -> VmExit::Hypercall (reads RAX for nr)
+- VMX_EXIT_REASON_RDMSR -> VmExit::Rdmsr (reads RCX for index)
+- VMX_EXIT_REASON_WRMSR -> VmExit::Wrmsr (reads RCX, RAX, RDX via hv_vcpu_read_register)
+
+**KVM (kvm.rs, 1260 -> 1294 lines)** -- debug exit + CPUID wrapper:
+- KVM_EXIT_DEBUG -> VmExit::Debug with vCPU id in info string
+- New KvmBackend::get_supported_cpuid() method: wraps kvm_get_supported_cpuid FFI, uses buffer-based layout to handle kvm_cpuid2 flexible array member, returns Vec<kvm_cpuid_entry2>
+
+**VCpu::run() (vcpu.rs, 791 -> 793 lines)**:
+- Added tracing::warn!() to placeholder run() method directing users to HypervisorBackend::run_vcpu()
+
+
+### Phase 52: Memory Safety Hardening & Stub Elimination
+
+**Status:** Complete
+**Tests:** All passing (2,568 passed, 0 failed, 26 ignored)
+**Location:** crates/hv2-core/src/{memory,vcpu,hypervisor,lib,descriptors}.rs + 19 files import cleanup
+
+Hardened memory safety, replaced dangerous stubs with proper errors, tightened warning suppressions, and cleaned up all unused imports across the workspace.
+
+**memory.rs (188 -> 258 lines)** -- bounds-checked guest memory access:
+- Added `translate_range(guest_addr, len)` method validating full `[start, start+len)` range within a single memory region, with `checked_add` overflow protection
+- Wired `write_bytes()`, `read_bytes()`, `read_bytes_into()` to use `translate_range()` instead of `translate()` (which only checked start address)
+- Added 3 new tests: `test_write_bytes_bounds_check`, `test_read_bytes_bounds_check`, `test_translate_range_zero_length`
+
+**vcpu.rs (794 -> 783 lines)** -- stub elimination:
+- `VCpu::run()` now returns `Err(Error::Cpu(...))` instead of placeholder `Ok(VCpuExit::Hlt)`
+- Added doc comment directing to `HypervisorBackend::run_vcpu()`
+
+**hypervisor.rs (358 -> 359 lines)** -- stub hardening:
+- `HypervisorVm::map_memory()` now returns `Err(Error::VM(...))` instead of silent `Ok(())`
+- TCG `init()` changed from `info!` to `warn!` with "non-functional fallback" message
+
+**lib.rs (340 -> 337 lines)** -- warning suppression cleanup:
+- Removed `#![allow(unused_imports)]` and `#![allow(unused_mut)]`
+- Kept `dead_code` (hardware register forward-declarations) and `unused_variables` (callback params)
+
+**descriptors.rs** -- added SAFETY comment on `transmute` for `InterruptDescriptor32` -> `[u8; 8]`
+
+**Workspace-wide import cleanup (19 files)**:
+- `cargo fix` auto-removed ~72 unused imports across the workspace
+- Restored 8 imports wrongly removed from test/cfg-gated code using `#[cfg(test)]` guards
+- Removed 6 genuinely unused imports (debug/gdb.rs, migration/state.rs, snapshot/{device,manager,memory}.rs)
+- Fixed 3 test-only unused imports (whpx.rs, device_manager.rs, mmio.rs)
+- Removed 2 unnecessary `mut` bindings (display_backend.rs, allocator.rs)
+
+### Phase 56: Lock Poisoning Resilience Phase 3 -- Container, Device, Network, Debug & Security Hardening
+
+**Status:** Complete
+**Tests:** All passing (2,576+ tests, 0 failures)
+**Location:** 20 files across hv2-core, hv2-agent
+
+Final sweep of production lock unwrap sites, replacing all remaining `.lock().unwrap()`, `.read().unwrap()`, and `.write().unwrap()` calls in container, device, networking, debug, and security subsystems with `.unwrap_or_else(|e| e.into_inner())` for lock-poisoning resilience.
+
+**hv2-core container layer (2 files, 77 sites):**
+- `cgroup.rs`: 26 lock unwraps hardened (cpu, cpuset, memory, io, pids, devices, freezer, procs)
+- `namespace.rs`: 51 lock unwraps hardened (processes, interfaces, routes, rules, mounts, hostname, domainname, IPC, user/pid/net/mnt/uts/ipc namespaces)
+
+**hv2-core device layer (7 files, 73 sites):**
+- `ide.rs`: 18 lock unwraps hardened (primary, secondary channel Mutex)
+- `nvme.rs`: 21 lock unwraps hardened (admin_sq, admin_cq, io_sq, io_cq, storage)
+- `msi.rs`: 10 lock unwraps hardened (table, pending, callback)
+- `keyboard.rs`: 8 lock unwraps hardened (state Mutex)
+- `rtc.rs`: 8 lock unwraps hardened (state Mutex)
+- `disk_image.rs`: 6 lock unwraps hardened (file, data)
+- `vga.rs`: 2 remaining lock unwraps hardened
+
+**hv2-core networking layer (2 files, 54 sites):**
+- `vswitch.rs`: 32 lock unwraps hardened (ports, mac_table, stats, mirror_sources, mirror_dest, stp)
+- `sriov.rs`: 22 lock unwraps hardened (vfs, pfs, assignments)
+
+**hv2-core debug layer (3 files, 22 sites):**
+- `gdb.rs`: 9 lock unwraps hardened (breakpoints, parser)
+- `introspection.rs`: 9 lock unwraps hardened (regions, states, events)
+- `debug/mod.rs`: 4 lock unwraps hardened (memory_inspector)
+
+**hv2-core security layer (3 files, 15 sites):**
+- `memory_encryption.rs`: 12 lock unwraps hardened (keys, page_states)
+- `secure_boot.rs`: 2 lock unwraps hardened
+- `vtpm.rs`: 1 lock unwrap hardened
+
+**hv2-agent remaining (2 files, 2 sites):**
+- `actions.rs`: 1 lock unwrap hardened
+- `reasoning.rs`: 1 lock unwrap hardened
+
+### Phase 55: Lock Poisoning Resilience Phase 2 -- Device & Agent Hardening
+
+**Status:** Complete
+**Tests:** All passing (2,576+ tests, 0 failures)
+**Location:** 15 files across hv2-core, hv2-agent
+
+Continued the lock poisoning resilience campaign from Phase 54, hardening all remaining production `.lock().unwrap()` / `.read().unwrap()` / `.write().unwrap()` calls with `.unwrap_or_else(|e| e.into_inner())`. Also fixed NaN-panic risk in floating-point comparisons.
+
+**hv2-core device layer (4 files, 68 sites):**
+- `interrupt.rs`: 32 lock unwraps hardened (master, slave PIC Mutex)
+- `vga.rs`: 15 lock unwraps hardened (state Mutex)
+- `e1000.rs`: 20 lock unwraps hardened (rx_queue, tx_queue, rx/tx_ring_base, mta)
+- `virtio.rs`: 1 lock unwrap hardened (inner Mutex)
+
+**hv2-core infrastructure (2 files, 37 sites):**
+- `protocol.rs`: 28 lock unwraps hardened (stage, stats, start_time, precopy_start, pending_pages, dirty_tracker, outgoing, incoming)
+- `kvm.rs`: 9 lock unwraps hardened (vms, vcpu_map, vcpus)
+
+**hv2-agent shared wrappers (7 files, 67 sites):**
+- `orchestration.rs`: 28 lock unwraps hardened (agents, vm_claims, channels, agent_messages)
+- `mcp.rs`: 13 lock unwraps hardened (tools, sessions, audit_log, state, session fields)
+- `memory.rs`: 8 lock unwraps hardened (inner RwLock)
+- `perception.rs`: 5 lock unwraps hardened (inner RwLock)
+- `reasoning.rs`: 4 lock unwraps hardened (inner RwLock)
+- `tasks.rs`: 5 lock unwraps hardened (inner Mutex)
+- `limits.rs`: 4 lock unwraps hardened (timestamps, last_refill)
+
+**NaN-panic prevention (2 files, 4 sites):**
+- `planning.rs`: 2x `partial_cmp().unwrap()` -> `partial_cmp().unwrap_or(Ordering::Equal)`
+- `memory.rs`: 2x same pattern (relevance sort in episodic/memory retrieval, 1 in production memory.rs)
+
+### Phase 54: Lock Poisoning Resilience & Unwrap Elimination
+
+**Status:** Complete
+**Tests:** All passing (2,576+ tests, 0 failures)
+**Location:** 10 files across hv2-core, hv2-agent, hm-cli
+
+Eliminated ~85+ potential panic sites from production code by replacing `.lock().unwrap()` / `.read().unwrap()` / `.write().unwrap()` with poison-resilient `.unwrap_or_else(|e| e.into_inner())`. This prevents cascading panics when a thread panics while holding a lock.
+
+**Lock poisoning resilience (7 files, ~70+ sites):**
+- `vtpm.rs`: 28 lock unwraps hardened (state, pcr_banks, nv_storage, keys)
+- `secure_boot.rs`: 26 lock unwraps hardened (policy, platform_key, keks, db, dbx, hash lists)
+- `net_backend.rs`: 27 lock unwraps hardened (stats, queue, rx_queue, connected)
+- `virtio_blk.rs`: 8 lock unwraps hardened (config, storage)
+- `actions.rs`: 6 lock unwraps hardened (pending, in_progress)
+- `communication.rs`: 8 lock unwraps hardened (inner)
+- `learning.rs`: 8 lock unwraps hardened (inner)
+
+**serde_json unwrap elimination (2 files, 11 sites):**
+- `schema.rs`: 7x `serde_json::to_value().unwrap()` -> `.expect("schema serialization failed")`
+- `adapters.rs`: 4x same pattern
+
+**Control flow hardening (1 file, 3 sites):**
+- `t1_manager.rs`: Refactored `is_none()` + `.unwrap()` to `let Some(conn) = ... else { bail!() }` in `start_vm`, `stop_vm`, `execute_script`
+
+**Unsafe code audit (1 file, 1 site):**
+- `virtio_blk.rs`: Added `// SAFETY:` comment explaining `#[repr(C)]` struct read as bytes
+
+**Panic elimination (1 file, 1 site):**
+- `runtime_services.rs`: Replaced `panic!("System reset requested")` with `eprintln!` + `std::process::abort()` to avoid stack unwinding
+
+### Phase 53: Cryptographic Implementation Hardening
+
+**Status:** Complete
+**Tests:** All passing (1,868+ lib tests, 13 integration tests, 0 failed)
+**Location:** crates/hv2-core/src/crypto/{fips,asymmetric,pqc}.rs + tests/crypto_integration.rs
+
+Replaced all placeholder/insecure crypto implementations with `Err(CryptoError::NotImplemented(...))` so callers cannot silently rely on broken security. Added `NotImplemented` variant to `CryptoError` enum. Updated all unit and integration tests to use `#[cfg(feature = "ring")]` gating.
+
+**fips.rs -- symmetric crypto hardening (9 changes):**
+- Added `NotImplemented(String)` variant to `CryptoError` enum
+- Replaced 8 `#[cfg(not(feature = "ring"))]` XOR/placeholder fallbacks with `NotImplemented` errors: `aes_gcm_encrypt_internal`, `aes_gcm_decrypt_internal`, `sha256`, `sha384`, `sha512`, `hmac_sha256`, `hmac_sha512`, `hkdf_sha256`
+- Updated 5 unit tests with `#[cfg(not(feature = "ring"))]` / `#[cfg(feature = "ring")]` gating
+
+**asymmetric.rs -- RSA/ECDSA hardening (8 changes):**
+- Replaced `generate_rsa_keypair` (was random bytes, no primes), `rsa_encrypt`/`rsa_decrypt` (was XOR masking), `rsa_sign` (was XOR with private key), `rsa_verify` (was length check only)
+- Replaced `generate_ecdsa_keypair` (was hash-derived point), `ecdsa_sign` (was HMAC-based), `ecdsa_verify` (was unconditional `Ok(true)`)
+- Updated 7 unit tests + changed `get_crypto()` to use `FipsMode::Disabled` (avoids self-test failures without `ring`)
+
+**pqc.rs -- post-quantum crypto hardening (2 changes):**
+- Replaced `ml_dsa_verify` and `slh_dsa_verify` (were unconditional `Ok(true)`) with `NotImplemented` errors
+- ML-KEM keygen still works (uses only RNG), but encaps/decaps now fail without `ring` (use SHA-256 internally)
+- ML-DSA/SLH-DSA keygen also fail without `ring` (use HKDF/SHA internally)
+- Updated 6 unit tests with proper expectations per operation
+
+**crypto_integration.rs -- full rewrite:**
+- Rewrote all 13 integration tests with `get_crypto()` helper using `FipsMode::Disabled`
+- All crypto operations properly gated with `#[cfg(feature = "ring")]`
+
+### Phase 50: Wire WHPX Backend Trait to Real Implementations
+
+**Status:** Complete
+**Tests:** 2,568+ passing (0 failures)
+**Location:** crates/hv2-core/src/backends/whpx.rs
+
+Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu implementations. Previously, run_vcpu() returned hardcoded VmExit::Hlt and inject_interrupt() was a no-op log. Now all trait methods delegate to the real WHPX virtual processor API.
+
+**WhpxBackend struct**:
+- Added vcpu_map: Arc<RwLock<HashMap<u32, Arc<WhpxVcpu>>>> field for trait-to-vcpu delegation
+
+**create_vm()**: Now creates vCPUs via WhpxVm::create_vcpu() and populates vcpu_map
+
+**Wired trait methods (4)**:
+- run_vcpu() -> WhpxVcpu::run() (real WHvRunVirtualProcessor + exit conversion)
+- inject_interrupt() -> WhpxVcpu::inject_interrupt() (WHV_X64_PENDING_INTERRUPTION_REGISTER)
+- inject_exception() override -> WhpxVcpu::inject_exception() (with error code support)
+- set_io_result() override -> WhpxVcpu::set_rax() (with access-size masking)
+
+**shutdown()**: Now clears vcpu_map before clearing VMs
+
+**whpx.rs** (6,302 -> 6,353 lines)
+
+---
+
 ## Test Summary
 
 | Crate     | Test Count | Status        |

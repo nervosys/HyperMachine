@@ -47,7 +47,9 @@ impl SpanProcessor for SimpleSpanProcessor {
     }
 
     fn on_end(&self, span: SpanData) {
-        let _ = self.exporter.export(vec![span]);
+        if let Err(e) = self.exporter.export(vec![span]) {
+            tracing::warn!(error = %e, "SimpleSpanProcessor: span export failed");
+        }
     }
 
     fn force_flush(&self) -> Result<(), TracerError> {

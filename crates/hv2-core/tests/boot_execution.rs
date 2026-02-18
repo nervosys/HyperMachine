@@ -420,7 +420,7 @@ async fn test_boot_error_handling() {
 
                 match LinuxBootProtocol::validate_params(&params) {
                     Ok(_) => {
-                        println!("  ⚠ Linux validation should have failed (missing signature)")
+                        println!("  ⚠ Linux validation should have failed (missing signature)");
                     }
                     Err(_) => println!("  ✓ Invalid Linux kernel rejected"),
                 }
@@ -452,7 +452,7 @@ async fn test_boot_error_handling() {
                 invalid_sector[511] = 0x55;
                 match vcpu.boot_real_mode(&vm, &invalid_sector, 0x80).await {
                     Ok(_) => {
-                        println!("  ⚠ Boot sector validation should have failed (wrong signature)")
+                        println!("  ⚠ Boot sector validation should have failed (wrong signature)");
                     }
                     Err(_) => println!("  ✓ Invalid boot sector signature rejected"),
                 }

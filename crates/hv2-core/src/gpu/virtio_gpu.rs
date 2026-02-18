@@ -3,7 +3,7 @@
 //! This module provides a VirtIO-GPU device with 2D operations,
 //! scanout configuration, and resource management.
 
-use super::core::{Color, DisplayMode, DisplaySurface, GpuStats, PixelFormat, Rect, Scanout};
+use super::core::{Color, DisplayMode, DisplaySurface, PixelFormat, Rect, Scanout};
 use super::framebuffer::Framebuffer;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -568,39 +568,30 @@ pub struct DisplayInfo {
 }
 
 /// VirtIO GPU error
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum VirtioGpuError {
     /// Invalid command
+    #[error("invalid command")]
     InvalidCommand,
     /// Invalid resource ID
+    #[error("invalid resource ID")]
     InvalidResourceId,
     /// Invalid scanout ID
+    #[error("invalid scanout ID")]
     InvalidScanoutId,
     /// Resource already exists
+    #[error("resource already exists")]
     ResourceExists,
     /// Invalid parameter
+    #[error("invalid parameter")]
     InvalidParameter,
     /// Out of memory
+    #[error("out of memory")]
     OutOfMemory,
     /// Backing not attached
+    #[error("backing not attached")]
     BackingNotAttached,
 }
-
-impl std::fmt::Display for VirtioGpuError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidCommand => write!(f, "invalid command"),
-            Self::InvalidResourceId => write!(f, "invalid resource ID"),
-            Self::InvalidScanoutId => write!(f, "invalid scanout ID"),
-            Self::ResourceExists => write!(f, "resource already exists"),
-            Self::InvalidParameter => write!(f, "invalid parameter"),
-            Self::OutOfMemory => write!(f, "out of memory"),
-            Self::BackingNotAttached => write!(f, "backing not attached"),
-        }
-    }
-}
-
-impl std::error::Error for VirtioGpuError {}
 
 #[cfg(test)]
 mod tests {

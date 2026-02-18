@@ -3,9 +3,8 @@
 //! This module provides memory capture, storage, and restoration functionality
 //! for VM snapshots, including dirty page tracking and compression support.
 
-use std::collections::{HashMap, HashSet};
-use std::io::{self, Read, Write};
-use std::time::{Duration, Instant};
+use std::collections::HashMap;
+use std::time::Instant;
 
 use super::types::{CompressionType, MemoryRegionSnapshot};
 
@@ -13,64 +12,33 @@ use super::types::{CompressionType, MemoryRegionSnapshot};
 pub type MemoryResult<T> = Result<T, MemorySnapshotError>;
 
 /// Memory snapshot error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum MemorySnapshotError {
     /// Memory region not found
+    #[error("Memory region not found at GPA {0:#x}")]
     RegionNotFound(u64),
     /// Invalid address
+    #[error("Invalid memory address: GPA {gpa:#x}, size {size}")]
     InvalidAddress { gpa: u64, size: u64 },
     /// Compression error
+    #[error("Compression error: {0}")]
     CompressionError(String),
     /// Decompression error
+    #[error("Decompression error: {0}")]
     DecompressionError(String),
     /// I/O error
+    #[error("I/O error: {0}")]
     IoError(String),
     /// Checksum mismatch
+    #[error("Checksum mismatch: expected {expected:#x}, got {actual:#x}")]
     ChecksumMismatch { expected: u32, actual: u32 },
     /// Buffer too small
+    #[error("Buffer too small: required {required}, provided {provided}")]
     BufferTooSmall { required: usize, provided: usize },
     /// Page not dirty
+    #[error("Page at GPA {0:#x} is not dirty")]
     PageNotDirty(u64),
 }
-
-impl std::fmt::Display for MemorySnapshotError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MemorySnapshotError::RegionNotFound(gpa) => {
-                write!(f, "Memory region not found at GPA {:#x}", gpa)
-            }
-            MemorySnapshotError::InvalidAddress { gpa, size } => {
-                write!(f, "Invalid memory address: GPA {:#x}, size {}", gpa, size)
-            }
-            MemorySnapshotError::CompressionError(msg) => {
-                write!(f, "Compression error: {}", msg)
-            }
-            MemorySnapshotError::DecompressionError(msg) => {
-                write!(f, "Decompression error: {}", msg)
-            }
-            MemorySnapshotError::IoError(msg) => write!(f, "I/O error: {}", msg),
-            MemorySnapshotError::ChecksumMismatch { expected, actual } => {
-                write!(
-                    f,
-                    "Checksum mismatch: expected {:#x}, got {:#x}",
-                    expected, actual
-                )
-            }
-            MemorySnapshotError::BufferTooSmall { required, provided } => {
-                write!(
-                    f,
-                    "Buffer too small: required {}, provided {}",
-                    required, provided
-                )
-            }
-            MemorySnapshotError::PageNotDirty(gpa) => {
-                write!(f, "Page at GPA {:#x} is not dirty", gpa)
-            }
-        }
-    }
-}
-
-impl std::error::Error for MemorySnapshotError {}
 
 /// Page size constant
 pub const PAGE_SIZE: u64 = 4096;

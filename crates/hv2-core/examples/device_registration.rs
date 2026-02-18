@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    println!("🔌 HV2 Device Registration Example");
+    println!("🔌 HyperMachine Device Registration Example");
     println!("{}", "=".repeat(50));
 
     // Create device manager

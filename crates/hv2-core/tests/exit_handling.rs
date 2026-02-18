@@ -2,7 +2,7 @@
 //!
 //! This test suite validates the VM execution loop and exit handling mechanism.
 
-use hv2_core::{IoDirection, Result, VMConfig, VmExit, VM};
+use hv2_core::{Result, VMConfig, VmExit, VM};
 use std::sync::Arc;
 
 /// Helper function to create a test VM with standard configuration

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/nervosys/HyperMachine/security/advisories/new
+    about: Report security vulnerabilities privately via GitHub Security Advisories
+  - name: Questions & Discussions
+    url: https://github.com/nervosys/HyperMachine/discussions
+    about: Ask questions and discuss ideas in GitHub Discussions

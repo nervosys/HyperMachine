@@ -13,101 +13,40 @@ use serde::{Deserialize, Serialize};
 pub type LimitResult<T> = Result<T, LimitError>;
 
 /// Resource limit errors
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum LimitError {
     /// Memory limit exceeded
+    #[error("Memory limit exceeded: requested {requested} bytes, limit {limit} bytes")]
     MemoryExceeded { limit: u64, requested: u64 },
     /// CPU time limit exceeded
+    #[error("CPU time limit exceeded: used {used:?}, limit {limit:?}")]
     CpuTimeExceeded { limit: Duration, used: Duration },
     /// Execution time limit exceeded
+    #[error("Execution time limit exceeded: elapsed {elapsed:?}, limit {limit:?}")]
     ExecutionTimeExceeded { limit: Duration, elapsed: Duration },
     /// Operation count exceeded
+    #[error("Operation count limit exceeded: count {count}, limit {limit}")]
     OperationCountExceeded { limit: u64, count: u64 },
     /// Rate limit exceeded
+    #[error("Rate limit exceeded: {current} ops in {window:?} (limit: {limit} ops)")]
     RateLimitExceeded {
         limit: u64,
         current: u64,
         window: Duration,
     },
     /// Concurrent operation limit exceeded
+    #[error("Concurrency limit exceeded: {current} concurrent (limit: {limit})")]
     ConcurrencyExceeded { limit: u32, current: u32 },
     /// IO operations limit exceeded
+    #[error("IO limit exceeded: {used} bytes used, limit {limit} bytes")]
     IoLimitExceeded { limit: u64, used: u64 },
     /// Network bandwidth limit exceeded
+    #[error("Network limit exceeded: {used} bytes used, limit {limit} bytes")]
     NetworkLimitExceeded { limit: u64, used: u64 },
     /// Custom limit exceeded
+    #[error("Custom limit exceeded: {0}")]
     Custom(String),
 }
-
-impl std::fmt::Display for LimitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LimitError::MemoryExceeded { limit, requested } => {
-                write!(
-                    f,
-                    "Memory limit exceeded: requested {} bytes, limit {} bytes",
-                    requested, limit
-                )
-            }
-            LimitError::CpuTimeExceeded { limit, used } => {
-                write!(
-                    f,
-                    "CPU time limit exceeded: used {:?}, limit {:?}",
-                    used, limit
-                )
-            }
-            LimitError::ExecutionTimeExceeded { limit, elapsed } => {
-                write!(
-                    f,
-                    "Execution time limit exceeded: elapsed {:?}, limit {:?}",
-                    elapsed, limit
-                )
-            }
-            LimitError::OperationCountExceeded { limit, count } => {
-                write!(
-                    f,
-                    "Operation count limit exceeded: count {}, limit {}",
-                    count, limit
-                )
-            }
-            LimitError::RateLimitExceeded {
-                limit,
-                current,
-                window,
-            } => {
-                write!(
-                    f,
-                    "Rate limit exceeded: {} ops in {:?} (limit: {} ops)",
-                    current, window, limit
-                )
-            }
-            LimitError::ConcurrencyExceeded { limit, current } => {
-                write!(
-                    f,
-                    "Concurrency limit exceeded: {} concurrent (limit: {})",
-                    current, limit
-                )
-            }
-            LimitError::IoLimitExceeded { limit, used } => {
-                write!(
-                    f,
-                    "IO limit exceeded: {} bytes used, limit {} bytes",
-                    used, limit
-                )
-            }
-            LimitError::NetworkLimitExceeded { limit, used } => {
-                write!(
-                    f,
-                    "Network limit exceeded: {} bytes used, limit {} bytes",
-                    used, limit
-                )
-            }
-            LimitError::Custom(msg) => write!(f, "Custom limit exceeded: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for LimitError {}
 
 /// Resource limits configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,7 +247,7 @@ impl RateLimiter {
     /// Try to acquire a permit
     pub fn try_acquire(&self) -> LimitResult<()> {
         let now = Instant::now();
-        let mut timestamps = self.timestamps.write().unwrap();
+        let mut timestamps = self.timestamps.write().unwrap_or_else(|e| e.into_inner());
 
         // Remove expired timestamps
         let cutoff = now - self.window;
@@ -331,14 +270,14 @@ impl RateLimiter {
     /// Get current count within window
     pub fn current_count(&self) -> u64 {
         let now = Instant::now();
-        let timestamps = self.timestamps.read().unwrap();
+        let timestamps = self.timestamps.read().unwrap_or_else(|e| e.into_inner());
         let cutoff = now - self.window;
         timestamps.iter().filter(|t| **t > cutoff).count() as u64
     }
 
     /// Reset the rate limiter
     pub fn reset(&self) {
-        self.timestamps.write().unwrap().clear();
+        self.timestamps.write().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get the limit
@@ -371,7 +310,7 @@ impl ConcurrencyLimiter {
     }
 
     /// Try to acquire a permit
-    pub fn try_acquire(&self) -> LimitResult<ConcurrencyGuard> {
+    pub fn try_acquire(&self) -> LimitResult<ConcurrencyGuard<'_>> {
         loop {
             let current = self.current.load(Ordering::Relaxed);
             if current >= self.limit as u64 {
@@ -474,7 +413,7 @@ impl TokenBucket {
     /// Refill tokens based on elapsed time
     fn refill(&self) {
         let now = Instant::now();
-        let mut last_refill = self.last_refill.write().unwrap();
+        let mut last_refill = self.last_refill.write().unwrap_or_else(|e| e.into_inner());
         let elapsed = now.duration_since(*last_refill);
 
         let new_tokens = (elapsed.as_secs_f64() * self.rate as f64) as u64;
@@ -662,7 +601,7 @@ impl ResourceEnforcer {
     }
 
     /// Try to acquire concurrency permit
-    pub fn try_concurrent(&self) -> LimitResult<ConcurrencyGuard> {
+    pub fn try_concurrent(&self) -> LimitResult<ConcurrencyGuard<'_>> {
         self.concurrency_limiter.try_acquire()
     }
 

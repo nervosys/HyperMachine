@@ -34,11 +34,11 @@ impl CpuData {
     /// Create new CPU data for the current CPU
     pub fn new(index: u32) -> Self {
         let cpuid = raw_cpuid::CpuId::new();
-        
+
         let vendor = detect_vendor(&cpuid);
         let id = get_apic_id(&cpuid);
         let is_bsp = index == 0;
-        
+
         Self {
             id,
             index,
@@ -83,7 +83,8 @@ impl CpuData {
 
 /// Detect CPU vendor
 fn detect_vendor<R: raw_cpuid::CpuIdReader>(cpuid: &raw_cpuid::CpuId<R>) -> CpuVendor {
-    cpuid.get_vendor_info()
+    cpuid
+        .get_vendor_info()
         .map(|v| {
             if v.as_str() == "GenuineIntel" {
                 CpuVendor::Intel
@@ -98,7 +99,8 @@ fn detect_vendor<R: raw_cpuid::CpuIdReader>(cpuid: &raw_cpuid::CpuId<R>) -> CpuV
 
 /// Get the APIC ID of the current CPU
 fn get_apic_id<R: raw_cpuid::CpuIdReader>(cpuid: &raw_cpuid::CpuId<R>) -> u32 {
-    cpuid.get_feature_info()
+    cpuid
+        .get_feature_info()
         .map(|f| f.initial_local_apic_id() as u32)
         .unwrap_or(0)
 }
@@ -190,17 +192,17 @@ pub enum CpuidLeaf {
 }
 
 /// Virtualize CPUID for guest
-/// 
+///
 /// This function filters and modifies CPUID results for the guest,
 /// hiding hypervisor presence or adjusting feature flags as needed.
 pub fn virtualize_cpuid(leaf: u32, subleaf: u32, hide_hypervisor: bool) -> CpuidResult {
     let mut result = cpuid(leaf, subleaf);
-    
+
     if hide_hypervisor {
         match leaf {
             // Hide VMX/SVM feature bits and hypervisor present bit
             0x1 => {
-                result.ecx &= !(1 << 5);  // Clear VMX bit
+                result.ecx &= !(1 << 5); // Clear VMX bit
                 result.ecx &= !(1 << 31); // Clear hypervisor present bit
             }
             // Return 0 for hypervisor-specific leaves
@@ -214,14 +216,14 @@ pub fn virtualize_cpuid(leaf: u32, subleaf: u32, hide_hypervisor: bool) -> Cpuid
             _ => {}
         }
     }
-    
+
     result
 }
 
 /// MSR access helpers
 pub mod msr {
     /// Read an MSR
-    /// 
+    ///
     /// # Safety
     /// Reading certain MSRs can cause undefined behavior or faults.
     #[inline]
@@ -230,7 +232,7 @@ pub mod msr {
     }
 
     /// Write to an MSR
-    /// 
+    ///
     /// # Safety
     /// Writing to certain MSRs can cause undefined behavior or system instability.
     #[inline]

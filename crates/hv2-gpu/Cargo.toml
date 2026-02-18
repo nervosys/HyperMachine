@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine GPU virtualization with Vulkan and WebGPU"
 
 [dependencies]
 hv2-core = { path = "../hv2-core" }
@@ -17,3 +23,6 @@ tracing = { workspace = true }
 # GPU support
 wgpu = { workspace = true }
 ash = { workspace = true }
+
+[lints]
+workspace = true

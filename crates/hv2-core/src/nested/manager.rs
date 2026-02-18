@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use super::ept::NestedEptManager;
-use super::shadow_vmcs::{ShadowVmcs, ShadowVmcsCache};
+use super::shadow_vmcs::ShadowVmcsCache;
 use super::types::{
     NestedGuestState, NestedLevel, NestedStats, SavedL1State, VmExitReason, VmxCapabilities,
     VmxInstructionError,
@@ -16,57 +16,48 @@ use super::types::{
 pub type NestedResult<T> = Result<T, NestedError>;
 
 /// Nested virtualization errors
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum NestedError {
     /// VMX is not enabled
+    #[error("VMX is not enabled")]
     VmxNotEnabled,
     /// VMX is already enabled
+    #[error("VMX is already enabled")]
     VmxAlreadyEnabled,
     /// Invalid VMCS address
+    #[error("Invalid VMCS address: {0:#x}")]
     InvalidVmcsAddress(u64),
     /// No current VMCS
+    #[error("No current VMCS")]
     NoCurrentVmcs,
     /// Invalid VMCS state
+    #[error("Invalid VMCS state")]
     InvalidVmcsState,
     /// VMCS already launched
+    #[error("VMCS already launched")]
     VmcsAlreadyLaunched,
     /// VMCS not launched
+    #[error("VMCS not launched")]
     VmcsNotLaunched,
     /// Invalid VMCS field
+    #[error("Invalid VMCS field: {0:#x}")]
     InvalidVmcsField(u32),
     /// Not in L2
+    #[error("Not in L2 guest")]
     NotInL2,
     /// Already in L2
+    #[error("Already in L2 guest")]
     AlreadyInL2,
     /// VMX instruction error
+    #[error("VMX instruction error: {0:?}")]
     VmxInstructionError(VmxInstructionError),
     /// EPT misconfiguration
+    #[error("EPT misconfiguration at GPA {0:#x}")]
     EptMisconfiguration(u64),
     /// Invalid guest state
+    #[error("Invalid guest state: {0}")]
     InvalidGuestState(String),
 }
-
-impl std::fmt::Display for NestedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::VmxNotEnabled => write!(f, "VMX is not enabled"),
-            Self::VmxAlreadyEnabled => write!(f, "VMX is already enabled"),
-            Self::InvalidVmcsAddress(addr) => write!(f, "Invalid VMCS address: {:#x}", addr),
-            Self::NoCurrentVmcs => write!(f, "No current VMCS"),
-            Self::InvalidVmcsState => write!(f, "Invalid VMCS state"),
-            Self::VmcsAlreadyLaunched => write!(f, "VMCS already launched"),
-            Self::VmcsNotLaunched => write!(f, "VMCS not launched"),
-            Self::InvalidVmcsField(field) => write!(f, "Invalid VMCS field: {:#x}", field),
-            Self::NotInL2 => write!(f, "Not in L2 guest"),
-            Self::AlreadyInL2 => write!(f, "Already in L2 guest"),
-            Self::VmxInstructionError(err) => write!(f, "VMX instruction error: {:?}", err),
-            Self::EptMisconfiguration(gpa) => write!(f, "EPT misconfiguration at GPA {:#x}", gpa),
-            Self::InvalidGuestState(msg) => write!(f, "Invalid guest state: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for NestedError {}
 
 impl From<VmxInstructionError> for NestedError {
     fn from(err: VmxInstructionError) -> Self {
@@ -366,7 +357,11 @@ impl NestedManager {
     }
 
     /// Handle VMLAUNCH instruction
-    pub fn handle_vmlaunch(&mut self, vcpu_id: u32, l1_state: SavedL1State) -> NestedResult<L2EntryInfo> {
+    pub fn handle_vmlaunch(
+        &mut self,
+        vcpu_id: u32,
+        l1_state: SavedL1State,
+    ) -> NestedResult<L2EntryInfo> {
         let state = self
             .vcpu_states
             .get_mut(&vcpu_id)
@@ -396,7 +391,11 @@ impl NestedManager {
     }
 
     /// Handle VMRESUME instruction
-    pub fn handle_vmresume(&mut self, vcpu_id: u32, l1_state: SavedL1State) -> NestedResult<L2EntryInfo> {
+    pub fn handle_vmresume(
+        &mut self,
+        vcpu_id: u32,
+        l1_state: SavedL1State,
+    ) -> NestedResult<L2EntryInfo> {
         let state = self
             .vcpu_states
             .get_mut(&vcpu_id)
@@ -431,7 +430,10 @@ impl NestedManager {
         L2EntryInfo {
             rip: state.vmcs_cache.vmread(VmcsField::GUEST_RIP.0).unwrap_or(0),
             rsp: state.vmcs_cache.vmread(VmcsField::GUEST_RSP.0).unwrap_or(0),
-            rflags: state.vmcs_cache.vmread(VmcsField::GUEST_RFLAGS.0).unwrap_or(0x2),
+            rflags: state
+                .vmcs_cache
+                .vmread(VmcsField::GUEST_RFLAGS.0)
+                .unwrap_or(0x2),
             cr0: state.vmcs_cache.vmread(VmcsField::GUEST_CR0.0).unwrap_or(0),
             cr3: state.vmcs_cache.vmread(VmcsField::GUEST_CR3.0).unwrap_or(0),
             cr4: state.vmcs_cache.vmread(VmcsField::GUEST_CR4.0).unwrap_or(0),
@@ -451,7 +453,11 @@ impl NestedManager {
     }
 
     /// Handle an L2 exit
-    pub fn handle_l2_exit(&mut self, vcpu_id: u32, exit_info: L2ExitInfo) -> NestedResult<ExitDisposition> {
+    pub fn handle_l2_exit(
+        &mut self,
+        vcpu_id: u32,
+        exit_info: L2ExitInfo,
+    ) -> NestedResult<ExitDisposition> {
         let state = self
             .vcpu_states
             .get_mut(&vcpu_id)
@@ -536,7 +542,9 @@ impl NestedManager {
 
     /// Get mutable nested EPT manager for a vCPU
     pub fn ept_manager_mut(&mut self, vcpu_id: u32) -> Option<&mut NestedEptManager> {
-        self.vcpu_states.get_mut(&vcpu_id).map(|s| &mut s.ept_manager)
+        self.vcpu_states
+            .get_mut(&vcpu_id)
+            .map(|s| &mut s.ept_manager)
     }
 
     /// Get VMCS cache for a vCPU
@@ -546,7 +554,9 @@ impl NestedManager {
 
     /// Get mutable VMCS cache for a vCPU
     pub fn vmcs_cache_mut(&mut self, vcpu_id: u32) -> Option<&mut ShadowVmcsCache> {
-        self.vcpu_states.get_mut(&vcpu_id).map(|s| &mut s.vmcs_cache)
+        self.vcpu_states
+            .get_mut(&vcpu_id)
+            .map(|s| &mut s.vmcs_cache)
     }
 
     /// Handle INVEPT instruction
@@ -940,13 +950,3 @@ mod tests {
         assert!(manager.vmcs_cache_mut(0).is_some());
     }
 }
-
-
-
-
-
-
-
-
-
-

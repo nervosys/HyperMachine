@@ -221,8 +221,8 @@ impl JaegerSpanExporter {
 
     fn convert_span(&self, span: &SpanData) -> JaegerSpan {
         let trace_bytes = span.context.trace_id.as_bytes();
-        let trace_id_high = u64::from_be_bytes(trace_bytes[0..8].try_into().unwrap());
-        let trace_id_low = u64::from_be_bytes(trace_bytes[8..16].try_into().unwrap());
+        let trace_id_high = u64::from_be_bytes(trace_bytes[0..8].try_into().expect("TraceId is always 16 bytes"));
+        let trace_id_low = u64::from_be_bytes(trace_bytes[8..16].try_into().expect("TraceId is always 16 bytes"));
 
         let mut tags = Vec::new();
 
@@ -290,39 +290,6 @@ impl JaegerSpanExporter {
             logs,
         }
     }
-
-    /// Serialize spans to Thrift binary format (simplified)
-    #[allow(dead_code)]
-    fn serialize_batch(&self, spans: &[JaegerSpan]) -> Vec<u8> {
-        // Simplified binary format - in production would use proper Thrift
-        let mut buffer = Vec::new();
-
-        // Batch header
-        buffer.extend_from_slice(b"JAEG");
-        buffer.extend_from_slice(&(spans.len() as u32).to_be_bytes());
-
-        for span in spans {
-            // Trace ID
-            buffer.extend_from_slice(&span.trace_id_high.to_be_bytes());
-            buffer.extend_from_slice(&span.trace_id_low.to_be_bytes());
-            // Span ID
-            buffer.extend_from_slice(&span.span_id.to_be_bytes());
-            // Parent span ID
-            buffer.extend_from_slice(&span.parent_span_id.to_be_bytes());
-            // Flags
-            buffer.push(span.flags);
-            // Start time
-            buffer.extend_from_slice(&span.start_time.to_be_bytes());
-            // Duration
-            buffer.extend_from_slice(&span.duration.to_be_bytes());
-            // Operation name length and data
-            buffer.extend_from_slice(&(span.operation_name.len() as u16).to_be_bytes());
-            buffer.extend_from_slice(span.operation_name.as_bytes());
-        }
-
-        buffer
-    }
-}
 
 impl SpanExporter for JaegerSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
@@ -599,51 +566,6 @@ impl OtlpSpanExporter {
             config,
             buffer: Mutex::new(Vec::new()),
         }
-    }
-
-    /// Serialize spans to OTLP protobuf format (simplified representation)
-    #[allow(dead_code)]
-    fn serialize_protobuf(&self, spans: &[SpanData]) -> Vec<u8> {
-        // Simplified - in production would use proper protobuf encoding
-        let mut buffer = Vec::new();
-
-        // Version marker
-        buffer.extend_from_slice(b"OTLP");
-        buffer.extend_from_slice(&1u32.to_le_bytes()); // Version 1
-
-        // Number of spans
-        buffer.extend_from_slice(&(spans.len() as u32).to_le_bytes());
-
-        for span in spans {
-            // Trace ID (16 bytes)
-            buffer.extend_from_slice(&span.context.trace_id.as_bytes());
-            // Span ID (8 bytes)
-            buffer.extend_from_slice(&span.context.span_id.as_bytes());
-            // Parent span ID (8 bytes, 0 if none)
-            if let Some(parent) = span.parent_span_id {
-                buffer.extend_from_slice(&parent.as_bytes());
-            } else {
-                buffer.extend_from_slice(&[0u8; 8]);
-            }
-            // Name length and data
-            let name_bytes = span.name.as_bytes();
-            buffer.extend_from_slice(&(name_bytes.len() as u16).to_le_bytes());
-            buffer.extend_from_slice(name_bytes);
-            // Span kind (1 byte)
-            buffer.push(match span.kind {
-                SpanKind::Internal => 0,
-                SpanKind::Server => 1,
-                SpanKind::Client => 2,
-                SpanKind::Producer => 3,
-                SpanKind::Consumer => 4,
-            });
-            // Start time (8 bytes)
-            buffer.extend_from_slice(&span.start_time.to_le_bytes());
-            // End time (8 bytes)
-            buffer.extend_from_slice(&span.end_time.to_le_bytes());
-        }
-
-        buffer
     }
 
     /// Serialize to JSON format

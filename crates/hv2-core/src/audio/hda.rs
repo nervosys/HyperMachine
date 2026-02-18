@@ -4,8 +4,8 @@
 //! codec discovery, stream management, and widget support.
 
 use super::core::{
-    AudioBuffer, AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
-    SampleRate, StereoVolume, StreamDirection, StreamState, Volume,
+    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
+    SampleRate, StreamDirection,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};

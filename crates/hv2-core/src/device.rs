@@ -86,9 +86,10 @@ impl DeviceManager {
     /// Register a device
     pub async fn register_device(
         &self,
-        name: String,
+        name: impl Into<String>,
         device: Arc<RwLock<dyn Device>>,
     ) -> Result<()> {
+        let name = name.into();
         let mut devices = self.devices.write().await;
 
         if devices.contains_key(&name) {

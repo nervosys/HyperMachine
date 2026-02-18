@@ -37,7 +37,7 @@ impl AgentSchema {
     /// Build the complete schema
     pub fn build() -> Self {
         let ontology = HyperMachineOntology::build();
-        
+
         Self {
             schema: "https://json-schema.org/draft/2020-12/schema".to_string(),
             id: "https://hypermachine.dev/schema/agent/v1".to_string(),
@@ -53,19 +53,24 @@ impl AgentSchema {
 
     fn build_definitions(ontology: &HyperMachineOntology) -> serde_json::Value {
         let mut defs = serde_json::Map::new();
-        
+
         for type_def in &ontology.types {
             let mut def = serde_json::Map::new();
             def.insert("description".to_string(), json!(type_def.description));
-            
+
             match type_def.base.as_str() {
                 "enum" => {
                     def.insert("type".to_string(), json!("string"));
-                    let values: Vec<&str> = type_def.values.iter().map(|v| v.value.as_str()).collect();
+                    let values: Vec<&str> =
+                        type_def.values.iter().map(|v| v.value.as_str()).collect();
                     def.insert("enum".to_string(), json!(values));
-                    
+
                     // Add descriptions as x-enum-descriptions
-                    let descriptions: Vec<&str> = type_def.values.iter().map(|v| v.description.as_str()).collect();
+                    let descriptions: Vec<&str> = type_def
+                        .values
+                        .iter()
+                        .map(|v| v.description.as_str())
+                        .collect();
                     def.insert("x-enum-descriptions".to_string(), json!(descriptions));
                 }
                 "object" => {
@@ -86,28 +91,28 @@ impl AgentSchema {
                     def.insert("type".to_string(), json!(base));
                 }
             }
-            
+
             defs.insert(type_def.name.clone(), serde_json::Value::Object(def));
         }
-        
+
         serde_json::Value::Object(defs)
     }
 
     fn build_operations(ontology: &HyperMachineOntology) -> serde_json::Value {
         let mut ops = serde_json::Map::new();
-        
+
         for (category, operations) in &ontology.operations {
             let mut cat_ops = Vec::new();
-            
+
             for op in operations {
                 let mut params = serde_json::Map::new();
                 let mut required = Vec::new();
-                
+
                 for param in &op.parameters {
                     let mut p = serde_json::Map::new();
                     p.insert("type".to_string(), json!(Self::map_type(&param.param_type)));
                     p.insert("description".to_string(), json!(param.description));
-                    
+
                     if let Some(ref default) = param.default {
                         p.insert("default".to_string(), default.clone());
                     }
@@ -122,14 +127,14 @@ impl AgentSchema {
                     if !param.enum_values.is_empty() {
                         p.insert("enum".to_string(), json!(param.enum_values));
                     }
-                    
+
                     params.insert(param.name.clone(), serde_json::Value::Object(p));
-                    
+
                     if param.required {
                         required.push(param.name.clone());
                     }
                 }
-                
+
                 cat_ops.push(json!({
                     "id": op.id,
                     "name": op.name,
@@ -153,24 +158,28 @@ impl AgentSchema {
                     })).collect::<Vec<_>>()
                 }));
             }
-            
+
             ops.insert(category.clone(), json!(cat_ops));
         }
-        
+
         serde_json::Value::Object(ops)
     }
 
     fn build_examples(ontology: &HyperMachineOntology) -> serde_json::Value {
-        json!(ontology.examples.iter().map(|ex| json!({
-            "title": ex.title,
-            "description": ex.description,
-            "steps": ex.operations.iter().map(|step| json!({
-                "operation": step.operation,
-                "arguments": step.arguments,
-                "expected": step.expected,
-                "comment": step.comment
-            })).collect::<Vec<_>>()
-        })).collect::<Vec<_>>())
+        json!(ontology
+            .examples
+            .iter()
+            .map(|ex| json!({
+                "title": ex.title,
+                "description": ex.description,
+                "steps": ex.operations.iter().map(|step| json!({
+                    "operation": step.operation,
+                    "arguments": step.arguments,
+                    "expected": step.expected,
+                    "comment": step.comment
+                })).collect::<Vec<_>>()
+            }))
+            .collect::<Vec<_>>())
     }
 
     fn build_quick_reference() -> serde_json::Value {
@@ -247,7 +256,7 @@ impl CompactSchema {
     pub fn build() -> Self {
         let ontology = HyperMachineOntology::build();
         let mut tools = Vec::new();
-        
+
         for operations in ontology.operations.values() {
             for op in operations {
                 let mut params = serde_json::Map::new();
@@ -258,10 +267,10 @@ impl CompactSchema {
                             json!({"t": Self::short_type(&param.param_type), "r": true})
                         } else {
                             json!({"t": Self::short_type(&param.param_type)})
-                        }
+                        },
                     );
                 }
-                
+
                 tools.push(CompactTool {
                     id: op.id.clone(),
                     desc: op.description.clone(),
@@ -270,7 +279,7 @@ impl CompactSchema {
                 });
             }
         }
-        
+
         Self {
             version: ontology.version,
             tools,
@@ -294,45 +303,45 @@ pub struct SchemaEndpoints;
 impl SchemaEndpoints {
     /// Get the full ontology
     pub fn ontology() -> serde_json::Value {
-        serde_json::to_value(HyperMachineOntology::build()).unwrap()
+        serde_json::to_value(HyperMachineOntology::build()).expect("schema serialization failed")
     }
 
     /// Get the full schema
     pub fn full_schema() -> serde_json::Value {
-        serde_json::to_value(AgentSchema::build()).unwrap()
+        serde_json::to_value(AgentSchema::build()).expect("schema serialization failed")
     }
 
     /// Get compact schema
     pub fn compact_schema() -> serde_json::Value {
-        serde_json::to_value(CompactSchema::build()).unwrap()
+        serde_json::to_value(CompactSchema::build()).expect("schema serialization failed")
     }
 
     /// Get provider-specific configuration
     pub fn provider_config(provider: LlmProvider) -> serde_json::Value {
         use super::adapters::ProviderConfig;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderConfig::for_provider(provider, &ontology)).unwrap()
+        serde_json::to_value(ProviderConfig::for_provider(provider, &ontology)).expect("schema serialization failed")
     }
 
     /// Get tools in OpenAI format
     pub fn openai_tools() -> serde_json::Value {
         use super::adapters::ProviderAdapter;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderAdapter::to_openai(&ontology)).unwrap()
+        serde_json::to_value(ProviderAdapter::to_openai(&ontology)).expect("schema serialization failed")
     }
 
     /// Get tools in Anthropic format
     pub fn anthropic_tools() -> serde_json::Value {
         use super::adapters::ProviderAdapter;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderAdapter::to_anthropic(&ontology)).unwrap()
+        serde_json::to_value(ProviderAdapter::to_anthropic(&ontology)).expect("schema serialization failed")
     }
 
     /// Get tools in Gemini format
     pub fn gemini_tools() -> serde_json::Value {
         use super::adapters::ProviderAdapter;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderAdapter::to_gemini(&ontology)).unwrap()
+        serde_json::to_value(ProviderAdapter::to_gemini(&ontology)).expect("schema serialization failed")
     }
 
     /// Get capabilities summary
@@ -358,7 +367,7 @@ mod tests {
     fn test_compact_schema_build() {
         let schema = CompactSchema::build();
         assert!(!schema.tools.is_empty());
-        
+
         let create = schema.tools.iter().find(|t| t.id == "vm.create").unwrap();
         assert!(create.example.is_some());
     }
@@ -367,10 +376,10 @@ mod tests {
     fn test_schema_endpoints() {
         let ontology = SchemaEndpoints::ontology();
         assert_eq!(ontology["version"], "1.0.0");
-        
+
         let openai = SchemaEndpoints::openai_tools();
-        assert!(openai.as_array().unwrap().len() > 0);
-        
+        assert!(!openai.as_array().unwrap().is_empty());
+
         let caps = SchemaEndpoints::capabilities();
         assert!(caps["operations"].as_array().is_some());
     }

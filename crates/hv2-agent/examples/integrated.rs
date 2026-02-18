@@ -9,14 +9,15 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    println!("🤖 HV2 Integrated Example: AI + Devices");
+    println!("🤖 HyperMachine Integrated Example: AI + Devices");
     println!("{}", "=".repeat(60));
 
     // Create MMIO manager and serial device
     let mmio = Arc::new(MmioManager::new());
-    let serial = Arc::new(RwLock::new(SerialDevice::new("COM1".to_string(), 0x3F8)));
+    let mut serial_dev = SerialDevice::new("COM1".to_string(), 0x3F8);
 
-    serial.write().init().await?;
+    serial_dev.init().await?;
+    let serial = Arc::new(RwLock::new(serial_dev));
     mmio.map_device(0x3F8, 8, serial.clone())?;
     println!("✓ Serial console initialized at 0x3F8");
 
@@ -118,8 +119,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Simulate sending commands to guest
     println!("\n📥 Sending commands to guest via serial...");
-    serial.read().input(b"echo 'Hello from AI'\n");
-    serial.read().input(b"uname -a\n");
+    serial.read().input(b"echo 'Hello from AI'\n")?;
+    serial.read().input(b"uname -a\n")?;
 
     // Simulate guest reading commands
     println!("  Guest reading commands:");

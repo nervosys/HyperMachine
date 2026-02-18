@@ -4,7 +4,7 @@
 //! Model Context Protocol pattern. Compatible with OpenAI function calling
 //! and Anthropic tool use.
 
-use crate::vm_manager::{VmManager, VmMetrics, VmState};
+use crate::vm_manager::{VmManager, VmMetrics};
 use anyhow::Result;
 use axum::{
     body::Body,

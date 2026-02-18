@@ -9,10 +9,9 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 use wgpu::{
-    Adapter, Backend, Backends, BindGroup, BindGroupLayout, Buffer, BufferUsages, CommandEncoder,
-    ComputePipeline, Device, DeviceDescriptor, Features, Instance, InstanceDescriptor,
-    InstanceFlags, Limits, MemoryHints, PowerPreference, Queue, RenderPipeline,
-    RequestAdapterOptions, ShaderModule, Surface, Texture, TextureDescriptor, TextureDimension,
+    Adapter, Backends, Buffer, BufferUsages, Device, DeviceDescriptor, Features, Instance,
+    InstanceDescriptor, InstanceFlags, Limits, MemoryHints, PowerPreference, Queue,
+    RequestAdapterOptions, ShaderModule, Texture, TextureDescriptor, TextureDimension,
     TextureFormat, TextureUsages,
 };
 
@@ -431,7 +430,7 @@ impl VirtualGpu {
     }
 
     /// Submit a command buffer
-    pub async fn submit_commands(&self, commands: Vec<u8>) -> Result<()> {
+    pub async fn submit_commands(&self, _commands: &[u8]) -> Result<()> {
         let device = self
             .device
             .as_ref()

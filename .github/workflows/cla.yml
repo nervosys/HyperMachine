@@ -1,0 +1,44 @@
+# CLA Bot — Contributor License Agreement check
+#
+# Requires contributors to sign the CLA before their pull requests can be
+# merged. Uses the CLA Assistant Lite action backed by a signatures file
+# stored in the default branch.
+
+name: CLA
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  cla-check:
+    if: |
+      (github.event_name == 'pull_request_target') ||
+      (github.event_name == 'issue_comment' && github.event.comment.body == 'recheck')
+    runs-on: ubuntu-latest
+    steps:
+      - name: CLA Assistant
+        uses: contributor-assistant/github-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          path-to-signatures: "signatures/cla.json"
+          path-to-document: "https://github.com/${{ github.repository }}/blob/master/CLA.md"
+          branch: "master"
+          allowlist: "dependabot[bot],github-actions[bot],renovate[bot]"
+          custom-notsigned-prcomment: |
+            Thank you for your contribution! Before we can merge this PR, you
+            need to sign our [Contributor License Agreement](https://github.com/${{ github.repository }}/blob/master/CLA.md).
+
+            Please reply with the following comment to sign:
+
+            > I have read the CLA Document and I hereby sign the CLA
+
+          custom-pr-sign-comment: "I have read the CLA Document and I hereby sign the CLA"

@@ -109,6 +109,9 @@ impl Rsdp {
     pub fn to_bytes(&self) -> Vec<u8> {
         let size = mem::size_of::<Rsdp>();
         let mut bytes = vec![0u8; size];
+        // SAFETY: `Rsdp` is `#[repr(C, packed)]` and composed entirely of integer
+        // fields. Reading `size` bytes from `self` into a freshly allocated buffer
+        // of the same size is safe.
         unsafe {
             std::ptr::copy_nonoverlapping(self as *const _ as *const u8, bytes.as_mut_ptr(), size);
         }
@@ -664,6 +667,9 @@ impl Fadt {
     pub fn to_bytes(&self) -> Vec<u8> {
         let size = mem::size_of::<Fadt>();
         let mut bytes = vec![0u8; size];
+        // SAFETY: `Fadt` is `#[repr(C, packed)]` and composed entirely of integer
+        // fields. Reading `size` bytes from `self` into a freshly allocated buffer
+        // of the same size is safe.
         unsafe {
             std::ptr::copy_nonoverlapping(self as *const _ as *const u8, bytes.as_mut_ptr(), size);
         }

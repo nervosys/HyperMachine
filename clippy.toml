@@ -1,0 +1,11 @@
+# Clippy configuration for HyperMachine
+# https://doc.rust-lang.org/clippy/configuration.html
+
+# Allow functions with many arguments (hypervisor APIs often need many params)
+too-many-arguments-threshold = 10
+
+# Allow complex types (callback signatures, trait objects)
+type-complexity-threshold = 300
+
+# Cognitive complexity threshold
+cognitive-complexity-threshold = 30

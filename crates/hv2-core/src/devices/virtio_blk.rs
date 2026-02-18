@@ -141,12 +141,12 @@ impl BlockRequestHeader {
             sector,
         }
     }
-    
+
     /// Get request type
     pub fn get_type(&self) -> RequestType {
         RequestType::from(self.request_type)
     }
-    
+
     /// Parse from bytes
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         if bytes.len() < 16 {
@@ -156,12 +156,12 @@ impl BlockRequestHeader {
             request_type: u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
             reserved: u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
             sector: u64::from_le_bytes([
-                bytes[8], bytes[9], bytes[10], bytes[11],
-                bytes[12], bytes[13], bytes[14], bytes[15],
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15],
             ]),
         })
     }
-    
+
     /// Convert to bytes
     pub fn to_bytes(&self) -> [u8; 16] {
         let mut bytes = [0u8; 16];
@@ -190,11 +190,8 @@ impl DiskGeometry {
         // Use standard CHS translation
         let heads = 16u8;
         let spt = 63u8;
-        let cylinders = std::cmp::min(
-            sectors / (heads as u64 * spt as u64),
-            65535,
-        ) as u16;
-        
+        let cylinders = std::cmp::min(sectors / (heads as u64 * spt as u64), 65535) as u16;
+
         Self {
             cylinders,
             heads,
@@ -257,7 +254,7 @@ impl BlockConfig {
             num_queues: 1,
         }
     }
-    
+
     /// Get size in bytes
     pub fn size_bytes(&self) -> u64 {
         self.capacity * VIRTIO_BLK_SECTOR_SIZE as u64
@@ -292,14 +289,14 @@ impl VirtioBlock {
             | features::VIRTIO_BLK_F_GEOMETRY
             | features::VIRTIO_BLK_F_BLK_SIZE
             | features::VIRTIO_BLK_F_FLUSH;
-        
+
         if read_only {
             features |= features::VIRTIO_BLK_F_RO;
         }
-        
+
         let mut device_id = [0u8; 20];
         device_id[..12].copy_from_slice(b"AetherVMDisk");
-        
+
         Self {
             features: AtomicU64::new(features),
             driver_features: AtomicU64::new(0),
@@ -311,53 +308,54 @@ impl VirtioBlock {
             device_id,
         }
     }
-    
+
     /// Get device features
     pub fn features(&self) -> u64 {
         self.features.load(Ordering::Relaxed)
     }
-    
+
     /// Set driver features
     pub fn set_driver_features(&self, features: u64) {
         let valid = features & self.features.load(Ordering::Relaxed);
         self.driver_features.store(valid, Ordering::Relaxed);
     }
-    
+
     /// Get driver features
     pub fn driver_features(&self) -> u64 {
         self.driver_features.load(Ordering::Relaxed)
     }
-    
+
     /// Get device status
     pub fn status(&self) -> u32 {
         self.status.load(Ordering::Relaxed)
     }
-    
+
     /// Set device status
     pub fn set_status(&self, status: u32) {
         self.status.store(status, Ordering::Relaxed);
     }
-    
+
     /// Read configuration
     pub fn read_config(&self, offset: u64, size: u8) -> u64 {
-        let config = self.config.read().unwrap();
+        let config = self.config.read().unwrap_or_else(|e| e.into_inner());
+        // SAFETY: BlockConfig is #[repr(C)] with no padding holes that could
+        // cause UB when read as bytes. The pointer is valid for the lifetime
+        // of the RwLockReadGuard `config`, and the size is exactly
+        // size_of::<BlockConfig>() bytes.
         let bytes = unsafe {
             std::slice::from_raw_parts(
                 &*config as *const BlockConfig as *const u8,
                 std::mem::size_of::<BlockConfig>(),
             )
         };
-        
+
         if offset as usize + size as usize > bytes.len() {
             return 0;
         }
-        
+
         match size {
             1 => bytes[offset as usize] as u64,
-            2 => u16::from_le_bytes([
-                bytes[offset as usize],
-                bytes[offset as usize + 1],
-            ]) as u64,
+            2 => u16::from_le_bytes([bytes[offset as usize], bytes[offset as usize + 1]]) as u64,
             4 => u32::from_le_bytes([
                 bytes[offset as usize],
                 bytes[offset as usize + 1],
@@ -377,7 +375,7 @@ impl VirtioBlock {
             _ => 0,
         }
     }
-    
+
     /// Process a block request
     pub fn process_request(&self, header: &BlockRequestHeader, data: &mut [u8]) -> Status {
         match header.get_type() {
@@ -390,112 +388,112 @@ impl VirtioBlock {
             RequestType::Unknown => Status::Unsupported,
         }
     }
-    
+
     /// Handle read request
     fn handle_read(&self, sector: u64, data: &mut [u8]) -> Status {
         let offset = sector * VIRTIO_BLK_SECTOR_SIZE as u64;
-        let storage = self.storage.read().unwrap();
-        
+        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
+
         if offset as usize + data.len() > storage.len() {
             return Status::IoErr;
         }
-        
+
         data.copy_from_slice(&storage[offset as usize..offset as usize + data.len()]);
         Status::Ok
     }
-    
+
     /// Handle write request
     fn handle_write(&self, sector: u64, data: &[u8]) -> Status {
         if self.read_only.load(Ordering::Relaxed) {
             return Status::IoErr;
         }
-        
+
         let offset = sector * VIRTIO_BLK_SECTOR_SIZE as u64;
-        let mut storage = self.storage.write().unwrap();
-        
+        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
+
         if offset as usize + data.len() > storage.len() {
             return Status::IoErr;
         }
-        
+
         storage[offset as usize..offset as usize + data.len()].copy_from_slice(data);
         Status::Ok
     }
-    
+
     /// Handle flush request
     fn handle_flush(&self) -> Status {
         // No-op for in-memory storage
         Status::Ok
     }
-    
+
     /// Handle get device ID request
     fn handle_get_id(&self, data: &mut [u8]) -> Status {
         let len = std::cmp::min(data.len(), self.device_id.len());
         data[..len].copy_from_slice(&self.device_id[..len]);
         Status::Ok
     }
-    
+
     /// Handle discard request
     fn handle_discard(&self, sector: u64, num_sectors: u64) -> Status {
         if self.read_only.load(Ordering::Relaxed) {
             return Status::IoErr;
         }
-        
+
         // For in-memory storage, just zero the region
         let offset = sector * VIRTIO_BLK_SECTOR_SIZE as u64;
         let length = num_sectors * VIRTIO_BLK_SECTOR_SIZE as u64;
-        let mut storage = self.storage.write().unwrap();
-        
+        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
+
         if offset as usize + length as usize > storage.len() {
             return Status::IoErr;
         }
-        
+
         storage[offset as usize..offset as usize + length as usize].fill(0);
         Status::Ok
     }
-    
+
     /// Handle write zeroes request
     fn handle_write_zeroes(&self, sector: u64, num_sectors: u64) -> Status {
         self.handle_discard(sector, num_sectors)
     }
-    
+
     /// Get capacity in sectors
     pub fn capacity(&self) -> u64 {
-        self.config.read().unwrap().capacity
+        self.config.read().unwrap_or_else(|e| e.into_inner()).capacity
     }
-    
+
     /// Get capacity in bytes
     pub fn capacity_bytes(&self) -> u64 {
-        self.config.read().unwrap().size_bytes()
+        self.config.read().unwrap_or_else(|e| e.into_inner()).size_bytes()
     }
-    
+
     /// Check if read-only
     pub fn is_read_only(&self) -> bool {
         self.read_only.load(Ordering::Relaxed)
     }
-    
+
     /// Set interrupt pending
     pub fn set_interrupt(&self, pending: bool) {
         self.interrupt_pending.store(pending, Ordering::Relaxed);
     }
-    
+
     /// Check and clear interrupt
     pub fn check_interrupt(&self) -> bool {
         self.interrupt_pending.swap(false, Ordering::Relaxed)
     }
-    
+
     /// Read from storage directly (for testing)
     pub fn read_storage(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
-        let storage = self.storage.read().unwrap();
+        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
         if offset as usize + buf.len() > storage.len() {
             return Err(crate::Error::Memory(format!("Read past end of storage")));
         }
         buf.copy_from_slice(&storage[offset as usize..offset as usize + buf.len()]);
         Ok(())
     }
-    
+
     /// Write to storage directly (for testing)
     pub fn write_storage(&self, offset: u64, data: &[u8]) -> Result<()> {
-        let mut storage = self.storage.write().unwrap();
+        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
         if offset as usize + data.len() > storage.len() {
             return Err(crate::Error::Memory(format!("Write past end of storage")));
         }
@@ -521,7 +519,7 @@ mod tests {
     #[test]
     fn test_virtio_block_creation() {
         let dev = VirtioBlock::new(1024 * 1024, false);
-        
+
         assert_eq!(dev.capacity_bytes(), 1024 * 1024);
         assert!(!dev.is_read_only());
     }
@@ -529,7 +527,7 @@ mod tests {
     #[test]
     fn test_virtio_block_read_only() {
         let dev = VirtioBlock::new(1024 * 1024, true);
-        
+
         assert!(dev.is_read_only());
         assert!(dev.features() & features::VIRTIO_BLK_F_RO != 0);
     }
@@ -537,13 +535,13 @@ mod tests {
     #[test]
     fn test_block_request_header() {
         let header = BlockRequestHeader::new(RequestType::Out, 42);
-        
+
         assert_eq!(header.get_type(), RequestType::Out);
         assert_eq!(header.sector, 42);
-        
+
         let bytes = header.to_bytes();
         let parsed = BlockRequestHeader::from_bytes(&bytes).unwrap();
-        
+
         assert_eq!(parsed.get_type(), RequestType::Out);
         assert_eq!(parsed.sector, 42);
     }
@@ -551,51 +549,51 @@ mod tests {
     #[test]
     fn test_read_write() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         // Write some data
         let write_header = BlockRequestHeader::new(RequestType::Out, 0);
         let write_data = [0x42u8; 512];
         let status = dev.process_request(&write_header, &mut write_data.clone());
         assert_eq!(status, Status::Ok);
-        
+
         // Read it back
         let read_header = BlockRequestHeader::new(RequestType::In, 0);
         let mut read_data = [0u8; 512];
         let status = dev.process_request(&read_header, &mut read_data);
         assert_eq!(status, Status::Ok);
-        
+
         assert_eq!(read_data, write_data);
     }
 
     #[test]
     fn test_read_only_write_fails() {
         let dev = VirtioBlock::new(4096, true);
-        
+
         let header = BlockRequestHeader::new(RequestType::Out, 0);
         let data = [0x42u8; 512];
         let status = dev.process_request(&header, &mut data.clone());
-        
+
         assert_eq!(status, Status::IoErr);
     }
 
     #[test]
     fn test_flush() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         let header = BlockRequestHeader::new(RequestType::Flush, 0);
         let status = dev.process_request(&header, &mut []);
-        
+
         assert_eq!(status, Status::Ok);
     }
 
     #[test]
     fn test_get_id() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         let header = BlockRequestHeader::new(RequestType::GetId, 0);
         let mut id = [0u8; 20];
         let status = dev.process_request(&header, &mut id);
-        
+
         assert_eq!(status, Status::Ok);
         assert_eq!(&id[..12], b"AetherVMDisk");
     }
@@ -603,19 +601,19 @@ mod tests {
     #[test]
     fn test_out_of_bounds() {
         let dev = VirtioBlock::new(512, false);
-        
+
         // Try to read past end
         let header = BlockRequestHeader::new(RequestType::In, 2);
         let mut data = [0u8; 512];
         let status = dev.process_request(&header, &mut data);
-        
+
         assert_eq!(status, Status::IoErr);
     }
 
     #[test]
     fn test_config_read() {
         let dev = VirtioBlock::new(1024 * 1024 * 1024, false); // 1GB
-        
+
         // Read capacity (offset 0, 8 bytes)
         let capacity = dev.read_config(0, 8);
         assert_eq!(capacity, 1024 * 1024 * 1024 / 512); // In sectors
@@ -624,10 +622,10 @@ mod tests {
     #[test]
     fn test_driver_features() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         // Try to set invalid features
         dev.set_driver_features(0xFFFF_FFFF_FFFF_FFFF);
-        
+
         // Should be masked to supported features
         let actual = dev.driver_features();
         assert_eq!(actual, actual & dev.features());
@@ -636,7 +634,7 @@ mod tests {
     #[test]
     fn test_disk_geometry() {
         let geom = DiskGeometry::from_capacity(2 * 1024 * 1024); // ~1GB in sectors
-        
+
         assert!(geom.cylinders > 0);
         assert_eq!(geom.heads, 16);
         assert_eq!(geom.sectors, 63);
@@ -653,12 +651,12 @@ mod tests {
     #[test]
     fn test_interrupt() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         assert!(!dev.check_interrupt());
-        
+
         dev.set_interrupt(true);
         assert!(dev.check_interrupt());
-        
+
         // Should be cleared after check
         assert!(!dev.check_interrupt());
     }
@@ -666,10 +664,10 @@ mod tests {
     #[test]
     fn test_write_zeroes() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         // Write some data first
         dev.write_storage(0, &[0xFF; 512]).unwrap();
-        
+
         // Write zeroes
         let header = BlockRequestHeader::new(RequestType::WriteZeroes, 0);
         let mut dummy = [0u8; 0]; // Length from sector count in real impl
@@ -680,13 +678,13 @@ mod tests {
     #[test]
     fn test_direct_storage_access() {
         let dev = VirtioBlock::new(4096, false);
-        
+
         let data = [0x42u8; 512];
         dev.write_storage(512, &data).unwrap();
-        
+
         let mut buf = [0u8; 512];
         dev.read_storage(512, &mut buf).unwrap();
-        
+
         assert_eq!(buf, data);
     }
 }

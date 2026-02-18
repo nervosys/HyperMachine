@@ -42,14 +42,14 @@ pub mod gdt_flags {
     pub const RW: u8 = 1 << 1;
     /// Access byte: Accessed
     pub const ACCESSED: u8 = 1 << 0;
-    
+
     /// Flags: Granularity (4KB pages)
     pub const GRANULARITY: u8 = 1 << 3;
     /// Flags: Size (32-bit protected mode)
     pub const SIZE_32: u8 = 1 << 2;
     /// Flags: Long mode (64-bit code segment)
     pub const LONG_MODE: u8 = 1 << 1;
-    
+
     /// Common: kernel code segment (32-bit)
     pub const KERNEL_CODE_32: u8 = PRESENT | DPL_0 | DESCRIPTOR_TYPE | EXECUTABLE | RW;
     /// Common: kernel data segment
@@ -82,7 +82,7 @@ pub mod idt_flags {
     pub const DPL_0: u8 = 0 << 5;
     /// DPL 3 (user)
     pub const DPL_3: u8 = 3 << 5;
-    
+
     /// Kernel interrupt gate
     pub const KERNEL_INTERRUPT: u8 = PRESENT | DPL_0 | INTERRUPT_GATE_64;
     /// Kernel trap gate
@@ -121,7 +121,7 @@ impl GdtEntry64 {
             base_high: 0,
         }
     }
-    
+
     /// Create a code segment descriptor for 32-bit protected mode
     pub const fn code_32(base: u32, limit: u32, dpl: u8) -> Self {
         let access = gdt_flags::PRESENT
@@ -132,17 +132,14 @@ impl GdtEntry64 {
         let flags = gdt_flags::GRANULARITY | gdt_flags::SIZE_32;
         Self::new(base, limit, access, flags)
     }
-    
+
     /// Create a data segment descriptor for 32-bit protected mode
     pub const fn data_32(base: u32, limit: u32, dpl: u8) -> Self {
-        let access = gdt_flags::PRESENT
-            | (dpl << 5)
-            | gdt_flags::DESCRIPTOR_TYPE
-            | gdt_flags::RW;
+        let access = gdt_flags::PRESENT | (dpl << 5) | gdt_flags::DESCRIPTOR_TYPE | gdt_flags::RW;
         let flags = gdt_flags::GRANULARITY | gdt_flags::SIZE_32;
         Self::new(base, limit, access, flags)
     }
-    
+
     /// Create a code segment descriptor for 64-bit long mode
     pub const fn code_64(dpl: u8) -> Self {
         let access = gdt_flags::PRESENT
@@ -153,22 +150,19 @@ impl GdtEntry64 {
         let flags = gdt_flags::LONG_MODE;
         Self::new(0, 0, access, flags)
     }
-    
+
     /// Create a data segment descriptor for 64-bit long mode
     pub const fn data_64(dpl: u8) -> Self {
-        let access = gdt_flags::PRESENT
-            | (dpl << 5)
-            | gdt_flags::DESCRIPTOR_TYPE
-            | gdt_flags::RW;
+        let access = gdt_flags::PRESENT | (dpl << 5) | gdt_flags::DESCRIPTOR_TYPE | gdt_flags::RW;
         let flags = 0;
         Self::new(0, 0, access, flags)
     }
-    
+
     /// Create a new GDT entry with explicit fields
     pub const fn new(base: u32, limit: u32, access: u8, flags: u8) -> Self {
         let limit_low = limit as u16;
         let limit_high = ((limit >> 16) & 0x0F) as u8;
-        
+
         Self {
             limit_low,
             base_low: base as u16,
@@ -178,7 +172,7 @@ impl GdtEntry64 {
             base_high: (base >> 24) as u8,
         }
     }
-    
+
     /// Convert to bytes
     pub fn to_bytes(&self) -> [u8; 8] {
         let limit_low = self.limit_low;
@@ -232,7 +226,7 @@ impl TssDescriptor64 {
             reserved: 0,
         }
     }
-    
+
     /// Convert to bytes
     pub fn to_bytes(&self) -> [u8; 16] {
         let limit_low = self.limit_low;
@@ -313,7 +307,7 @@ impl Default for Tss64 {
 impl Tss64 {
     /// TSS size
     pub const SIZE: usize = 104;
-    
+
     /// Create a new TSS with kernel stack
     pub fn new(kernel_stack: u64) -> Self {
         Self {
@@ -321,7 +315,7 @@ impl Tss64 {
             ..Default::default()
         }
     }
-    
+
     /// Set an IST entry
     pub fn set_ist(&mut self, index: usize, stack: u64) -> Result<()> {
         match index {
@@ -336,7 +330,7 @@ impl Tss64 {
         }
         Ok(())
     }
-    
+
     /// Convert to bytes
     pub fn to_bytes(&self) -> [u8; Self::SIZE] {
         let reserved0 = self.reserved0;
@@ -354,7 +348,7 @@ impl Tss64 {
         let reserved2 = self.reserved2;
         let reserved3 = self.reserved3;
         let iomap_base = self.iomap_base;
-        
+
         let mut bytes = [0u8; Self::SIZE];
         bytes[0..4].copy_from_slice(&reserved0.to_le_bytes());
         bytes[4..12].copy_from_slice(&rsp0.to_le_bytes());
@@ -398,7 +392,7 @@ pub struct IdtEntry64 {
 impl IdtEntry64 {
     /// Entry size
     pub const SIZE: usize = 16;
-    
+
     /// Create a null entry
     pub const fn null() -> Self {
         Self {
@@ -411,7 +405,7 @@ impl IdtEntry64 {
             reserved: 0,
         }
     }
-    
+
     /// Create an interrupt gate
     pub fn interrupt_gate(handler: u64, selector: u16, ist: u8, dpl: u8) -> Self {
         Self {
@@ -424,7 +418,7 @@ impl IdtEntry64 {
             reserved: 0,
         }
     }
-    
+
     /// Create a trap gate
     pub fn trap_gate(handler: u64, selector: u16, ist: u8, dpl: u8) -> Self {
         Self {
@@ -437,7 +431,7 @@ impl IdtEntry64 {
             reserved: 0,
         }
     }
-    
+
     /// Convert to bytes
     pub fn to_bytes(&self) -> [u8; Self::SIZE] {
         let offset_low = self.offset_low;
@@ -445,7 +439,7 @@ impl IdtEntry64 {
         let offset_middle = self.offset_middle;
         let offset_high = self.offset_high;
         let reserved = self.reserved;
-        
+
         let mut bytes = [0u8; Self::SIZE];
         bytes[0..2].copy_from_slice(&offset_low.to_le_bytes());
         bytes[2..4].copy_from_slice(&selector.to_le_bytes());
@@ -476,7 +470,7 @@ impl DescriptorTableRegister {
             base,
         }
     }
-    
+
     /// Convert to bytes (for writing to memory)
     pub fn to_bytes(&self) -> [u8; 10] {
         let limit = self.limit;
@@ -502,7 +496,7 @@ impl IdtBuilder {
             code_selector,
         }
     }
-    
+
     /// Set an interrupt gate for a vector
     pub fn set_interrupt_gate(&mut self, vector: u8, handler: u64, ist: u8) -> &mut Self {
         self.entries[vector as usize] = IdtEntry64::interrupt_gate(
@@ -513,18 +507,13 @@ impl IdtBuilder {
         );
         self
     }
-    
+
     /// Set a trap gate for a vector
     pub fn set_trap_gate(&mut self, vector: u8, handler: u64, ist: u8) -> &mut Self {
-        self.entries[vector as usize] = IdtEntry64::trap_gate(
-            handler,
-            self.code_selector,
-            ist,
-            0,
-        );
+        self.entries[vector as usize] = IdtEntry64::trap_gate(handler, self.code_selector, ist, 0);
         self
     }
-    
+
     /// Set a user-callable interrupt gate (DPL 3)
     pub fn set_user_interrupt_gate(&mut self, vector: u8, handler: u64, ist: u8) -> &mut Self {
         self.entries[vector as usize] = IdtEntry64::interrupt_gate(
@@ -535,7 +524,7 @@ impl IdtBuilder {
         );
         self
     }
-    
+
     /// Build the IDT as bytes
     pub fn build(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(256 * IdtEntry64::SIZE);
@@ -544,7 +533,7 @@ impl IdtBuilder {
         }
         bytes
     }
-    
+
     /// Get the size of the IDT
     pub const fn size() -> usize {
         256 * IdtEntry64::SIZE
@@ -595,7 +584,7 @@ pub mod exceptions {
     pub const VIRTUALIZATION: u8 = 20;
     /// Control Protection Exception
     pub const CONTROL_PROTECTION: u8 = 21;
-    
+
     /// Returns true if the exception pushes an error code
     pub const fn has_error_code(vector: u8) -> bool {
         matches!(
@@ -627,26 +616,26 @@ impl GdtBuilder {
         builder.entries.extend_from_slice(&[0u8; 8]);
         builder
     }
-    
+
     /// Add a 64-bit GDT entry
     pub fn add_entry(&mut self, entry: GdtEntry64) -> u16 {
         let selector = self.entries.len() as u16;
         self.entries.extend_from_slice(&entry.to_bytes());
         selector
     }
-    
+
     /// Add a TSS descriptor (16 bytes)
     pub fn add_tss(&mut self, tss: TssDescriptor64) -> u16 {
         let selector = self.entries.len() as u16;
         self.entries.extend_from_slice(&tss.to_bytes());
         selector
     }
-    
+
     /// Build the GDT as bytes
     pub fn build(&self) -> Vec<u8> {
         self.entries.clone()
     }
-    
+
     /// Get the current size
     pub fn size(&self) -> usize {
         self.entries.len()
@@ -679,22 +668,22 @@ impl StandardGdt64 {
     /// Create a standard 64-bit GDT
     pub fn new(tss_base: u64) -> Self {
         let mut builder = GdtBuilder::new();
-        
+
         // Entry 1: Kernel code (64-bit)
         let kernel_code = builder.add_entry(GdtEntry64::code_64(0));
-        
+
         // Entry 2: Kernel data
         let kernel_data = builder.add_entry(GdtEntry64::data_64(0));
-        
+
         // Entry 3: User code (64-bit)
         let user_code = builder.add_entry(GdtEntry64::code_64(3));
-        
+
         // Entry 4: User data
         let user_data = builder.add_entry(GdtEntry64::data_64(3));
-        
+
         // Entry 5-6: TSS (16 bytes)
         let tss = builder.add_tss(TssDescriptor64::new(tss_base, Tss64::SIZE as u32 - 1));
-        
+
         Self {
             data: builder.build(),
             kernel_code,
@@ -719,12 +708,12 @@ mod tests {
     #[test]
     fn test_gdt_entry_code_64() {
         let entry = GdtEntry64::code_64(0);
-        
+
         // Check access byte
         let bytes = entry.to_bytes();
         assert_eq!(bytes[5] & gdt_flags::PRESENT, gdt_flags::PRESENT);
         assert_eq!(bytes[5] & gdt_flags::EXECUTABLE, gdt_flags::EXECUTABLE);
-        
+
         // Check long mode flag
         assert_eq!(bytes[6] >> 4 & gdt_flags::LONG_MODE, gdt_flags::LONG_MODE);
     }
@@ -733,7 +722,7 @@ mod tests {
     fn test_gdt_entry_data_64() {
         let entry = GdtEntry64::data_64(0);
         let bytes = entry.to_bytes();
-        
+
         assert_eq!(bytes[5] & gdt_flags::PRESENT, gdt_flags::PRESENT);
         assert_eq!(bytes[5] & gdt_flags::EXECUTABLE, 0); // Not executable
     }
@@ -742,7 +731,7 @@ mod tests {
     fn test_gdt_entry_code_32() {
         let entry = GdtEntry64::code_32(0, 0xFFFFF, 0);
         let bytes = entry.to_bytes();
-        
+
         // Check granularity and size flags
         let flags = bytes[6] >> 4;
         assert_eq!(flags & gdt_flags::GRANULARITY, gdt_flags::GRANULARITY);
@@ -754,15 +743,18 @@ mod tests {
         let tss_base: u64 = 0x1234567890ABCDEF;
         let desc = TssDescriptor64::new(tss_base, 103);
         let bytes = desc.to_bytes();
-        
+
         // Check limit
         assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 103);
-        
+
         // Check base low
         assert_eq!(u16::from_le_bytes([bytes[2], bytes[3]]), 0xCDEF);
-        
+
         // Check base upper
-        assert_eq!(u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]), 0x12345678);
+        assert_eq!(
+            u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+            0x12345678
+        );
     }
 
     #[test]
@@ -787,13 +779,13 @@ mod tests {
         let mut tss = Tss64::default();
         tss.set_ist(1, 0x1000).unwrap();
         tss.set_ist(7, 0x7000).unwrap();
-        
+
         // Copy packed fields to avoid unaligned reference errors
         let ist1 = tss.ist1;
         let ist7 = tss.ist7;
         assert_eq!(ist1, 0x1000);
         assert_eq!(ist7, 0x7000);
-        
+
         // Invalid index
         assert!(tss.set_ist(0, 0).is_err());
         assert!(tss.set_ist(8, 0).is_err());
@@ -803,20 +795,23 @@ mod tests {
     fn test_idt_entry_interrupt_gate() {
         let handler: u64 = 0x0000_1000_0000_5678;
         let entry = IdtEntry64::interrupt_gate(handler, 0x08, 1, 0);
-        
+
         let bytes = entry.to_bytes();
-        
+
         // Check offset parts
         assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 0x5678);
         assert_eq!(u16::from_le_bytes([bytes[6], bytes[7]]), 0x0000);
-        assert_eq!(u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]), 0x0000_1000);
-        
+        assert_eq!(
+            u32::from_le_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+            0x0000_1000
+        );
+
         // Check selector
         assert_eq!(u16::from_le_bytes([bytes[2], bytes[3]]), 0x08);
-        
+
         // Check IST
         assert_eq!(bytes[4], 1);
-        
+
         // Check type
         assert_eq!(bytes[5] & 0x0F, idt_flags::INTERRUPT_GATE_64);
         assert_eq!(bytes[5] & idt_flags::PRESENT, idt_flags::PRESENT);
@@ -825,11 +820,11 @@ mod tests {
     #[test]
     fn test_idt_builder() {
         let mut builder = IdtBuilder::new(0x08);
-        
+
         builder.set_interrupt_gate(0, 0x1000, 0);
         builder.set_trap_gate(14, 0x2000, 1);
         builder.set_user_interrupt_gate(0x80, 0x3000, 0);
-        
+
         let idt = builder.build();
         assert_eq!(idt.len(), 256 * 16);
     }
@@ -838,20 +833,25 @@ mod tests {
     fn test_descriptor_table_register() {
         let dtr = DescriptorTableRegister::new(0x1000, 256);
         let bytes = dtr.to_bytes();
-        
+
         // Limit should be size - 1
         assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 255);
-        assert_eq!(u64::from_le_bytes([bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9]]), 0x1000);
+        assert_eq!(
+            u64::from_le_bytes([
+                bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9]
+            ]),
+            0x1000
+        );
     }
 
     #[test]
     fn test_gdt_builder() {
         let mut builder = GdtBuilder::new();
-        
+
         let code = builder.add_entry(GdtEntry64::code_64(0));
         let data = builder.add_entry(GdtEntry64::data_64(0));
-        
-        assert_eq!(code, 8);  // After null descriptor
+
+        assert_eq!(code, 8); // After null descriptor
         assert_eq!(data, 16); // After code descriptor
         assert_eq!(builder.size(), 24);
     }
@@ -859,14 +859,14 @@ mod tests {
     #[test]
     fn test_standard_gdt64() {
         let gdt = StandardGdt64::new(0x5000);
-        
+
         // Check selectors
         assert_eq!(gdt.kernel_code, 8);
         assert_eq!(gdt.kernel_data, 16);
         assert_eq!(gdt.user_code, 24);
         assert_eq!(gdt.user_data, 32);
         assert_eq!(gdt.tss, 40);
-        
+
         // GDT should be 56 bytes (null + 4 segments + TSS)
         assert_eq!(gdt.data.len(), 56);
     }
@@ -884,13 +884,15 @@ mod tests {
     fn test_tss64_to_bytes() {
         let tss = Tss64::new(0xDEAD_BEEF);
         let bytes = tss.to_bytes();
-        
+
         assert_eq!(bytes.len(), Tss64::SIZE);
-        
+
         // Check RSP0 at offset 4
-        let rsp0 = u64::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]]);
+        let rsp0 = u64::from_le_bytes([
+            bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
+        ]);
         assert_eq!(rsp0, 0xDEAD_BEEF);
-        
+
         // Check iomap_base at offset 102
         let iomap = u16::from_le_bytes([bytes[102], bytes[103]]);
         assert_eq!(iomap, 104);

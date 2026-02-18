@@ -44,7 +44,7 @@ persistence:
   size: 10Gi
   storageClass: standard
 
-monitoring:
+metrics:
   serviceMonitor:
     enabled: true
     interval: 30s
@@ -54,10 +54,16 @@ monitoring:
     memoryThreshold: 80
 
 # Reduced security for easier debugging
-securityContext:
+podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
+
+securityContext:
   readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
 
 # Allow debug endpoints
 extraArgs:

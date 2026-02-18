@@ -10,8 +10,8 @@
 //! - 0x60: Data port (read/write)
 //! - 0x64: Status register (read) / Command register (write)
 
-use crate::{Device, DeviceType, Error, Result};
 use crate::interrupt::Pic8259;
+use crate::{Device, DeviceType, Error, Result};
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -130,7 +130,7 @@ impl KeyboardState {
         if self.output_buffer.len() < 16 {
             self.output_buffer.push_back(data);
             self.update_status();
-            
+
             // Raise IRQ 1 if keyboard interrupts are enabled
             if (self.ccb & CCB_INT_KBD) != 0 {
                 if let Some(ref pic) = self.pic {
@@ -290,36 +290,36 @@ impl KeyboardDevice {
 
     /// Set the PIC for interrupt generation
     pub fn set_pic(&self, pic: Arc<Pic8259>) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.pic = Some(pic);
     }
 
     /// Read from data port (0x60)
     pub fn read_data(&self) -> u8 {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.pop_output().unwrap_or(0)
     }
 
     /// Write to data port (0x60)
     pub fn write_data(&self, data: u8) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.handle_data_write(data);
     }
 
     /// Read from status port (0x64)
     pub fn read_status(&self) -> u8 {
-        self.state.lock().unwrap().status
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).status
     }
 
     /// Write to command port (0x64)
     pub fn write_command(&self, cmd: u8) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.handle_controller_command(cmd);
     }
 
     /// Inject a key scancode (called when user presses/releases a key)
     pub fn inject_scancode(&self, scancode: u8) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         if state.kbd_enabled {
             state.push_output(scancode);
         }
@@ -327,7 +327,7 @@ impl KeyboardDevice {
 
     /// Check if keyboard has pending interrupt (IRQ 1)
     pub fn has_pending_interrupt(&self) -> bool {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.output_buffer_full() && (state.ccb & CCB_INT_KBD) != 0
     }
 }
@@ -396,7 +396,7 @@ impl Device for KeyboardDevice {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         *state = KeyboardState::new();
         Ok(())
     }
@@ -573,7 +573,7 @@ mod tests {
 
         // Verify IRQ 1 was raised (output buffer full + interrupts enabled)
         assert!(kbd.has_pending_interrupt());
-        
+
         // Verify scancode is in buffer
         assert_eq!(kbd.read_data(), 0x1E);
     }

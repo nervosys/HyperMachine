@@ -640,104 +640,104 @@ impl Cgroup {
 
     /// Get CPU controller
     pub fn cpu(&self) -> CpuController {
-        self.cpu.read().unwrap().clone()
+        self.cpu.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Set CPU controller
     pub fn set_cpu(&self, cpu: CpuController) {
-        *self.cpu.write().unwrap() = cpu;
+        *self.cpu.write().unwrap_or_else(|e| e.into_inner()) = cpu;
     }
 
     /// Get cpuset controller
     pub fn cpuset(&self) -> CpusetController {
-        self.cpuset.read().unwrap().clone()
+        self.cpuset.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Set cpuset controller
     pub fn set_cpuset(&self, cpuset: CpusetController) {
-        *self.cpuset.write().unwrap() = cpuset;
+        *self.cpuset.write().unwrap_or_else(|e| e.into_inner()) = cpuset;
     }
 
     /// Get memory controller
     pub fn memory(&self) -> MemoryController {
-        self.memory.read().unwrap().clone()
+        self.memory.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Set memory controller
     pub fn set_memory(&self, memory: MemoryController) {
-        *self.memory.write().unwrap() = memory;
+        *self.memory.write().unwrap_or_else(|e| e.into_inner()) = memory;
     }
 
     /// Get I/O controller
     pub fn io(&self) -> IoController {
-        self.io.read().unwrap().clone()
+        self.io.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Set I/O controller
     pub fn set_io(&self, io: IoController) {
-        *self.io.write().unwrap() = io;
+        *self.io.write().unwrap_or_else(|e| e.into_inner()) = io;
     }
 
     /// Get PIDs controller
     pub fn pids(&self) -> PidsController {
-        self.pids.read().unwrap().clone()
+        self.pids.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Set PIDs controller
     pub fn set_pids(&self, pids: PidsController) {
-        *self.pids.write().unwrap() = pids;
+        *self.pids.write().unwrap_or_else(|e| e.into_inner()) = pids;
     }
 
     /// Get devices controller
     pub fn devices(&self) -> DevicesController {
-        self.devices.read().unwrap().clone()
+        self.devices.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Set devices controller
     pub fn set_devices(&self, devices: DevicesController) {
-        *self.devices.write().unwrap() = devices;
+        *self.devices.write().unwrap_or_else(|e| e.into_inner()) = devices;
     }
 
     /// Get freezer state
     pub fn freezer_state(&self) -> FreezerState {
-        *self.freezer.read().unwrap()
+        *self.freezer.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Freeze processes
     pub fn freeze(&self) {
-        *self.freezer.write().unwrap() = FreezerState::Frozen;
+        *self.freezer.write().unwrap_or_else(|e| e.into_inner()) = FreezerState::Frozen;
     }
 
     /// Thaw processes
     pub fn thaw(&self) {
-        *self.freezer.write().unwrap() = FreezerState::Thawed;
+        *self.freezer.write().unwrap_or_else(|e| e.into_inner()) = FreezerState::Thawed;
     }
 
     /// Add process
     pub fn add_proc(&self, pid: u32) {
-        let mut procs = self.procs.write().unwrap();
+        let mut procs = self.procs.write().unwrap_or_else(|e| e.into_inner());
         if !procs.contains(&pid) {
             procs.push(pid);
         }
         // Update PID counter
-        self.pids.write().unwrap().current = procs.len() as u64;
+        self.pids.write().unwrap_or_else(|e| e.into_inner()).current = procs.len() as u64;
     }
 
     /// Remove process
     pub fn remove_proc(&self, pid: u32) {
-        let mut procs = self.procs.write().unwrap();
+        let mut procs = self.procs.write().unwrap_or_else(|e| e.into_inner());
         procs.retain(|&p| p != pid);
-        self.pids.write().unwrap().current = procs.len() as u64;
+        self.pids.write().unwrap_or_else(|e| e.into_inner()).current = procs.len() as u64;
     }
 
     /// List processes
     pub fn list_procs(&self) -> Vec<u32> {
-        self.procs.read().unwrap().clone()
+        self.procs.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Check if process can be added (PID limit)
     pub fn can_add_proc(&self) -> bool {
-        !self.pids.read().unwrap().at_limit()
+        !self.pids.read().unwrap_or_else(|e| e.into_inner()).at_limit()
     }
 }
 
@@ -779,7 +779,7 @@ impl CgroupManager {
     pub fn create(&self, relative_path: &str) -> Arc<Cgroup> {
         let path = self.root.join(relative_path);
 
-        let mut cgroups = self.cgroups.write().unwrap();
+        let mut cgroups = self.cgroups.write().unwrap_or_else(|e| e.into_inner());
         if let Some(existing) = cgroups.get(&path) {
             return existing.clone();
         }
@@ -794,24 +794,24 @@ impl CgroupManager {
     /// Get cgroup by path
     pub fn get(&self, relative_path: &str) -> Option<Arc<Cgroup>> {
         let path = self.root.join(relative_path);
-        self.cgroups.read().unwrap().get(&path).cloned()
+        self.cgroups.read().unwrap_or_else(|e| e.into_inner()).get(&path).cloned()
     }
 
     /// Delete cgroup
     pub fn delete(&self, relative_path: &str) -> bool {
         let path = self.root.join(relative_path);
-        let mut cgroups = self.cgroups.write().unwrap();
+        let mut cgroups = self.cgroups.write().unwrap_or_else(|e| e.into_inner());
         cgroups.remove(&path).is_some()
     }
 
     /// List all cgroups
     pub fn list(&self) -> Vec<Arc<Cgroup>> {
-        self.cgroups.read().unwrap().values().cloned().collect()
+        self.cgroups.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
     }
 
     /// Get cgroup count
     pub fn count(&self) -> usize {
-        self.cgroups.read().unwrap().len()
+        self.cgroups.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Get manager statistics

@@ -54,6 +54,31 @@ pub enum VgaColor {
     White = 15,
 }
 
+impl VgaColor {
+    /// Safely convert a `u8` to a `VgaColor`, defaulting to `Black` for out-of-range values.
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Self::Black,
+            1 => Self::Blue,
+            2 => Self::Green,
+            3 => Self::Cyan,
+            4 => Self::Red,
+            5 => Self::Magenta,
+            6 => Self::Brown,
+            7 => Self::LightGray,
+            8 => Self::DarkGray,
+            9 => Self::LightBlue,
+            10 => Self::LightGreen,
+            11 => Self::LightCyan,
+            12 => Self::LightRed,
+            13 => Self::LightMagenta,
+            14 => Self::Yellow,
+            15 => Self::White,
+            _ => Self::Black,
+        }
+    }
+}
+
 /// VGA character attribute
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VgaAttribute {
@@ -84,8 +109,8 @@ impl VgaAttribute {
         let blink = (byte & 0x80) != 0;
 
         Self {
-            foreground: unsafe { std::mem::transmute(fg) },
-            background: unsafe { std::mem::transmute(bg) },
+            foreground: VgaColor::from_u8(fg),
+            background: VgaColor::from_u8(bg),
             blink,
         }
     }
@@ -310,23 +335,23 @@ impl VgaDevice {
 
     /// Read from CRTC index register (0x3D4)
     pub fn read_crtc_index(&self) -> u8 {
-        self.state.lock().unwrap().crtc_index
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).crtc_index
     }
 
     /// Write to CRTC index register (0x3D4)
     pub fn write_crtc_index(&self, value: u8) {
-        self.state.lock().unwrap().crtc_index = value;
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).crtc_index = value;
     }
 
     /// Read from CRTC data register (0x3D5)
     pub fn read_crtc_data(&self) -> u8 {
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         state.crtc_regs[state.crtc_index as usize]
     }
 
     /// Write to CRTC data register (0x3D5)
     pub fn write_crtc_data(&self, value: u8) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let index = state.crtc_index;
         state.crtc_regs[index as usize] = value;
 
@@ -352,7 +377,7 @@ impl VgaDevice {
                 offset
             )));
         }
-        Ok(self.state.lock().unwrap().read_buffer(offset as usize))
+        Ok(self.state.lock().unwrap_or_else(|e| e.into_inner()).read_buffer(offset as usize))
     }
 
     /// Write to text buffer (MMIO)
@@ -365,34 +390,34 @@ impl VgaDevice {
         }
         self.state
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .write_buffer(offset as usize, value);
         Ok(())
     }
 
     /// Clear screen
     pub fn clear(&self) {
-        self.state.lock().unwrap().clear();
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get cursor position
     pub fn get_cursor(&self) -> (usize, usize) {
-        self.state.lock().unwrap().get_cursor()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).get_cursor()
     }
 
     /// Set cursor position
     pub fn set_cursor(&self, row: usize, col: usize) {
-        self.state.lock().unwrap().set_cursor(row, col);
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).set_cursor(row, col);
     }
 
     /// Get text content (for debugging)
     pub fn get_text(&self) -> String {
-        self.state.lock().unwrap().get_text()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).get_text()
     }
 
     /// Write string at current cursor position
     pub fn write_string(&self, s: &str, attr: VgaAttribute) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let mut pos = state.cursor_pos as usize;
 
         for ch in s.chars() {
@@ -416,12 +441,12 @@ impl VgaDevice {
 
     /// Write character at cursor with auto-scroll
     pub fn put_char(&self, ch: u8, attr: VgaAttribute) {
-        self.state.lock().unwrap().put_char(ch, attr);
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).put_char(ch, attr);
     }
 
     /// Write string with auto-scroll support
     pub fn put_string(&self, s: &str, attr: VgaAttribute) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         for ch in s.bytes() {
             state.put_char(ch, attr);
         }
@@ -429,7 +454,7 @@ impl VgaDevice {
 
     /// Scroll display up by one line
     pub fn scroll_up(&self) {
-        self.state.lock().unwrap().scroll_up();
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).scroll_up();
     }
 
     /// Fill region with character
@@ -444,7 +469,7 @@ impl VgaDevice {
     ) {
         self.state
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .fill_region(start_row, start_col, end_row, end_col, ch, attr);
     }
 
@@ -453,7 +478,7 @@ impl VgaDevice {
         if row >= VGA_HEIGHT || col >= VGA_WIDTH {
             return None;
         }
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         let idx = row * VGA_WIDTH + col;
         let cell = state.buffer[idx];
         Some((cell.character, cell.attribute))
@@ -511,7 +536,7 @@ impl Device for VgaDevice {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
         *state = VgaState::new();
         Ok(())
     }

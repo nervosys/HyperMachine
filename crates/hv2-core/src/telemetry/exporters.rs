@@ -2,41 +2,32 @@
 //!
 //! Export metrics in various formats for external consumption.
 
-use super::collector::{MetricCollector, MetricRegistry};
 use super::types::{
-    HistogramData, MetricFamily, MetricLabels, MetricSample, MetricType, MetricValue,
+    HistogramData, MetricFamily, MetricLabels, MetricType, MetricValue,
 };
+#[cfg(test)]
+use super::types::MetricSample;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Error type for exporter operations
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ExporterError {
     /// Serialization error
+    #[error("Serialization error: {0}")]
     SerializationError(String),
     /// IO error
+    #[error("IO error: {0}")]
     IoError(String),
     /// Format error
+    #[error("Format error: {0}")]
     FormatError(String),
     /// Network error
+    #[error("Network error: {0}")]
     NetworkError(String),
 }
-
-impl std::fmt::Display for ExporterError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExporterError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
-            ExporterError::IoError(msg) => write!(f, "IO error: {}", msg),
-            ExporterError::FormatError(msg) => write!(f, "Format error: {}", msg),
-            ExporterError::NetworkError(msg) => write!(f, "Network error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for ExporterError {}
 
 /// Result type for exporter operations
 pub type ExporterResult<T> = Result<T, ExporterError>;

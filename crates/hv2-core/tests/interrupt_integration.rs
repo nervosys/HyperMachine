@@ -154,11 +154,11 @@ async fn test_multiple_irqs() {
 
     for irq in test_irqs {
         pic.raise_irq(irq)
-            .expect(&format!("Failed to raise IRQ {}", irq));
+            .unwrap_or_else(|_| panic!("Failed to raise IRQ {}", irq));
 
         let vector = pic
             .get_pending_interrupt()
-            .expect(&format!("No interrupt pending for IRQ {}", irq));
+            .unwrap_or_else(|| panic!("No interrupt pending for IRQ {}", irq));
         assert_eq!(
             vector,
             0x20 + irq,
@@ -169,7 +169,7 @@ async fn test_multiple_irqs() {
         );
 
         pic.acknowledge_interrupt(vector)
-            .expect(&format!("Failed to acknowledge IRQ {}", irq));
+            .unwrap_or_else(|_| panic!("Failed to acknowledge IRQ {}", irq));
     }
 
     // Verify no more interrupts pending

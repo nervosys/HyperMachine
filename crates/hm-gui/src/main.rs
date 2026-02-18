@@ -66,10 +66,10 @@ fn load_icon() -> egui::IconData {
 
             if dist < size as f32 / 2.0 - 2.0 {
                 // Blue gradient circle
-                rgba[idx] = 0x2d;     // R
+                rgba[idx] = 0x2d; // R
                 rgba[idx + 1] = 0x7d; // G
                 rgba[idx + 2] = 0xf2; // B
-                rgba[idx + 3] = 255;  // A
+                rgba[idx + 3] = 255; // A
             } else if dist < size as f32 / 2.0 {
                 // Border
                 rgba[idx] = 0x1a;

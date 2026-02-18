@@ -189,7 +189,7 @@ hm version
 
 # hypermachine 0.1.0
 # Built: 2025-01-15
-# Rust: 1.75.0
+# Rust: 1.87.0
 ```
 
 ## Environment Variables

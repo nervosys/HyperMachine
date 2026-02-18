@@ -7,36 +7,27 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::topology::NumaTopology;
-use super::types::{AllocationPolicy, InterleavingMode, MemoryRange, NodeId, NodeStats};
+use super::types::{AllocationPolicy, InterleavingMode, MemoryRange, NodeId};
 
 /// Error type for allocation failures
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum AllocError {
     /// No memory available on any node
+    #[error("Out of memory")]
     OutOfMemory,
     /// No memory available on the requested node
+    #[error("Out of memory on {0}")]
     NodeOutOfMemory(NodeId),
     /// Invalid node specified
+    #[error("Invalid node: {0}")]
     InvalidNode(NodeId),
     /// Allocation size is too large
+    #[error("Allocation too large")]
     AllocationTooLarge,
     /// Alignment is invalid
+    #[error("Invalid alignment")]
     InvalidAlignment,
 }
-
-impl std::fmt::Display for AllocError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AllocError::OutOfMemory => write!(f, "Out of memory"),
-            AllocError::NodeOutOfMemory(node) => write!(f, "Out of memory on {}", node),
-            AllocError::InvalidNode(node) => write!(f, "Invalid node: {}", node),
-            AllocError::AllocationTooLarge => write!(f, "Allocation too large"),
-            AllocError::InvalidAlignment => write!(f, "Invalid alignment"),
-        }
-    }
-}
-
-impl std::error::Error for AllocError {}
 
 /// Result type for allocation operations
 pub type AllocResult<T> = Result<T, AllocError>;
@@ -635,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_numa_allocator_simple() {
-        let mut allocator = NumaAllocator::simple(2, 0x1_0000_0000);
+        let allocator = NumaAllocator::simple(2, 0x1_0000_0000);
 
         assert_eq!(allocator.total_memory(), 0x2_0000_0000);
         assert_eq!(allocator.total_free_memory(), 0x2_0000_0000);

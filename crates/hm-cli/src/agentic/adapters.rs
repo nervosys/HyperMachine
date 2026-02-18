@@ -450,7 +450,7 @@ impl ProviderConfig {
         match provider {
             LlmProvider::OpenAI => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_openai(ontology)).unwrap(),
+                tools: serde_json::to_value(ProviderAdapter::to_openai(ontology)).expect("schema serialization failed"),
                 system_prompt: SystemPrompts::for_openai(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -461,7 +461,7 @@ impl ProviderConfig {
             },
             LlmProvider::Anthropic => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_anthropic(ontology)).unwrap(),
+                tools: serde_json::to_value(ProviderAdapter::to_anthropic(ontology)).expect("schema serialization failed"),
                 system_prompt: SystemPrompts::for_anthropic(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -472,7 +472,7 @@ impl ProviderConfig {
             },
             LlmProvider::Google => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_gemini(ontology)).unwrap(),
+                tools: serde_json::to_value(ProviderAdapter::to_gemini(ontology)).expect("schema serialization failed"),
                 system_prompt: SystemPrompts::for_gemini(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -483,7 +483,7 @@ impl ProviderConfig {
             },
             LlmProvider::Generic => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_generic(ontology)).unwrap(),
+                tools: serde_json::to_value(ProviderAdapter::to_generic(ontology)).expect("schema serialization failed"),
                 system_prompt: SystemPrompts::generic(),
                 hints: ProviderHints {
                     temperature: 0.0,

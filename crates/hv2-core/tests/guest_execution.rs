@@ -247,6 +247,24 @@ impl HypervisorBackend for MockHypervisorBackend {
                 VmExit::Debug { info } => {
                     tracing::debug!("VM Exit #{}: Debug - {}", count, info);
                 }
+                VmExit::Hypercall { nr, .. } => {
+                    tracing::debug!("VM Exit #{}: Hypercall nr={:#x}", count, nr);
+                }
+                VmExit::SystemEvent { type_, flags } => {
+                    tracing::debug!("VM Exit #{}: SystemEvent type={} flags={:#x}", count, type_, flags);
+                }
+                VmExit::Nmi => {
+                    tracing::debug!("VM Exit #{}: NMI", count);
+                }
+                VmExit::Rdmsr { index } => {
+                    tracing::debug!("VM Exit #{}: RDMSR index={:#x}", count, index);
+                }
+                VmExit::Wrmsr { index, data } => {
+                    tracing::debug!("VM Exit #{}: WRMSR index={:#x} data={:#x}", count, index, data);
+                }
+                VmExit::IoapicEoi { vector } => {
+                    tracing::debug!("VM Exit #{}: IOAPIC EOI vector={}", count, vector);
+                }
                 VmExit::Unknown { reason } => {
                     tracing::warn!("VM Exit #{}: Unknown exit reason: 0x{:X}", count, reason);
                 }
@@ -325,23 +343,12 @@ fn setup_boot_vcpu(vcpu: &VCpu) -> Result<()> {
     use hv2_core::RegisterSet;
 
     // Set CS:IP to 0x0000:0x7C00 (standard boot sector address)
-    let mut regs = RegisterSet::default();
-
-    regs.cs = 0x0000;
-    regs.rip = 0x7C00; // IP in 16-bit mode is low 16 bits of RIP
-
-    // Set other segment registers to 0
-    regs.ds = 0x0000;
-    regs.es = 0x0000;
-    regs.ss = 0x0000;
-    regs.fs = 0x0000;
-    regs.gs = 0x0000;
-
-    // Set stack pointer (SP)
-    regs.rsp = 0x7C00; // SP in 16-bit mode is low 16 bits of RSP
-
-    // Set flags (IF = 1 for interrupts enabled)
-    regs.rflags = 0x0202;
+    let regs = RegisterSet {
+        rip: 0x7C00,    // IP in 16-bit mode is low 16 bits of RIP
+        rsp: 0x7C00,    // SP in 16-bit mode is low 16 bits of RSP
+        rflags: 0x0202, // IF = 1 for interrupts enabled
+        ..RegisterSet::default()
+    };
 
     // Log before moving regs
     tracing::debug!(
@@ -767,11 +774,7 @@ async fn test_load_all_guest_examples() {
         let code = load_guest_binary(example);
 
         // Determine load address based on file type
-        let load_addr = if example.ends_with(".img") {
-            0x7C00 // Multi-stage images start at boot sector
-        } else {
-            0x7C00 // Single binaries also at boot sector
-        };
+        let load_addr = 0x7C00; // All binaries load at boot sector address
 
         load_guest_code(&vm, &code, load_addr)
             .unwrap_or_else(|e| panic!("Failed to load {}: {}", example, e));
@@ -1221,11 +1224,12 @@ async fn test_multi_vcpu_state_management() {
     let vcpu1 = vm.vcpu(1).expect("Failed to get vCPU 1");
 
     use hv2_core::RegisterSet;
-    let mut regs = RegisterSet::default();
-    regs.cs = 0x0000;
-    regs.rip = 0x8000;
-    regs.rsp = 0x9000;
-    regs.rflags = 0x0202;
+    let regs = RegisterSet {
+        rip: 0x8000,
+        rsp: 0x9000,
+        rflags: 0x0202,
+        ..RegisterSet::default()
+    };
     vcpu1.set_registers(regs);
     track_entry_point_change(&vm, 0x0000, 0x8000);
 

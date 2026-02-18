@@ -423,7 +423,11 @@ impl AArch64Cpu {
         // Mask interrupts
         self.regs.pstate |= pstate::I | pstate::F;
 
-        tracing::trace!("Taking {:?} exception, jumping to 0x{:x}", exc_type, self.regs.pc);
+        tracing::trace!(
+            "Taking {:?} exception, jumping to 0x{:x}",
+            exc_type,
+            self.regs.pc
+        );
 
         Ok(())
     }
@@ -472,9 +476,10 @@ impl AArch64Cpu {
                 Ok(())
             }
 
-            _ => {
-                Err(CpuError::UnsupportedInstruction(format!("0x{:08X}", opcode)))
-            }
+            _ => Err(CpuError::UnsupportedInstruction(format!(
+                "0x{:08X}",
+                opcode
+            ))),
         }
     }
 
@@ -579,7 +584,7 @@ impl AArch64Cpu {
                         self.update_nzcv(res, false, false, sf == 1);
                         res
                     }
-                    _ => unreachable!(),
+                    _ => unreachable!("2-bit opc value exceeded 0..=3"),
                 };
 
                 if sf == 1 {
@@ -589,7 +594,12 @@ impl AArch64Cpu {
                 }
             }
 
-            _ => return Err(CpuError::UnsupportedInstruction(format!("DP-Imm op={}", op))),
+            _ => {
+                return Err(CpuError::UnsupportedInstruction(format!(
+                    "DP-Imm op={}",
+                    op
+                )))
+            }
         }
 
         self.regs.pc += 4;
@@ -602,8 +612,8 @@ impl AArch64Cpu {
         opcode: u32,
         memory: &mut M,
     ) -> Result<()> {
-        let op0 = (opcode >> 29) & 0x7;
-        let op1 = (opcode >> 22) & 0x7F;
+        let _op0 = (opcode >> 29) & 0x7;
+        let _op1 = (opcode >> 22) & 0x7F;
 
         // Unconditional branch (immediate)
         if (opcode >> 26) == 0b000101 {
@@ -745,16 +755,15 @@ impl AArch64Cpu {
             return Ok(());
         }
 
-        Err(CpuError::UnsupportedInstruction(format!("Branch/Sys 0x{:08X}", opcode)))
+        Err(CpuError::UnsupportedInstruction(format!(
+            "Branch/Sys 0x{:08X}",
+            opcode
+        )))
     }
 
     /// Execute Load/Store instructions
-    fn execute_load_store<M: MemoryAccess>(
-        &mut self,
-        opcode: u32,
-        memory: &mut M,
-    ) -> Result<()> {
-        let op = (opcode >> 22) & 0x3FF;
+    fn execute_load_store<M: MemoryAccess>(&mut self, opcode: u32, memory: &mut M) -> Result<()> {
+        let _op = (opcode >> 22) & 0x3FF;
         let size = (opcode >> 30) & 0x3;
         let v = (opcode >> 26) & 1; // Vector register if 1
         let opc = (opcode >> 22) & 0x3;
@@ -773,7 +782,11 @@ impl AArch64Cpu {
             let scale = size as u64;
             let offset = imm12 << scale;
 
-            let base = if rn == 31 { self.regs.sp } else { self.get_xreg(rn) };
+            let base = if rn == 31 {
+                self.regs.sp
+            } else {
+                self.get_xreg(rn)
+            };
             let addr = base.wrapping_add(offset);
 
             let is_load = (opc & 1) == 1;
@@ -784,7 +797,7 @@ impl AArch64Cpu {
                     1 => memory.read_u16(addr)? as u64,
                     2 => memory.read_u32(addr)? as u64,
                     3 => memory.read_u64(addr)?,
-                    _ => unreachable!(),
+                    _ => unreachable!("2-bit size value exceeded 0..=3"),
                 };
                 self.set_xreg(rt, value);
             } else {
@@ -794,7 +807,7 @@ impl AArch64Cpu {
                     1 => memory.write_u16(addr, value as u16)?,
                     2 => memory.write_u32(addr, value as u32)?,
                     3 => memory.write_u64(addr, value)?,
-                    _ => unreachable!(),
+                    _ => unreachable!("2-bit size value exceeded 0..=3"),
                 }
             }
 
@@ -804,7 +817,7 @@ impl AArch64Cpu {
 
         // Load/Store pair
         if (opcode >> 25) & 0x7F == 0b0101001 {
-            let opc = (opcode >> 23) & 0x3;
+            let _opc = (opcode >> 23) & 0x3;
             let l = (opcode >> 22) & 1;
             let imm7 = ((opcode >> 15) & 0x7F) as i32;
             let rt2 = ((opcode >> 10) & 0x1F) as u8;
@@ -812,7 +825,11 @@ impl AArch64Cpu {
             let scale = if (opcode >> 31) & 1 == 1 { 3 } else { 2 };
             let offset = sign_extend(imm7 as u64, 7) << scale;
 
-            let base = if rn == 31 { self.regs.sp } else { self.get_xreg(rn) };
+            let base = if rn == 31 {
+                self.regs.sp
+            } else {
+                self.get_xreg(rn)
+            };
             let addr = (base as i64 + offset) as u64;
 
             if l == 1 {
@@ -839,13 +856,16 @@ impl AArch64Cpu {
             return Ok(());
         }
 
-        Err(CpuError::UnsupportedInstruction(format!("Load/Store 0x{:08X}", opcode)))
+        Err(CpuError::UnsupportedInstruction(format!(
+            "Load/Store 0x{:08X}",
+            opcode
+        )))
     }
 
     /// Execute Data Processing (Register) instructions
     fn execute_data_processing_reg(&mut self, opcode: u32) -> Result<()> {
         let sf = (opcode >> 31) & 1;
-        let op = (opcode >> 21) & 0x7FF;
+        let _op = (opcode >> 21) & 0x7FF;
 
         // Logical (shifted register)
         if (opcode >> 24) & 0x1F == 0b01010 {
@@ -870,10 +890,10 @@ impl AArch64Cpu {
 
             // Apply shift
             operand2 = match shift_type {
-                0 => operand2 << imm6,        // LSL
-                1 => operand2 >> imm6,        // LSR
+                0 => operand2 << imm6,                 // LSL
+                1 => operand2 >> imm6,                 // LSR
                 2 => (operand2 as i64 >> imm6) as u64, // ASR
-                3 => operand2.rotate_right(imm6), // ROR
+                3 => operand2.rotate_right(imm6),      // ROR
                 _ => operand2,
             };
 
@@ -891,7 +911,7 @@ impl AArch64Cpu {
                     self.update_nzcv(res, false, false, sf == 1);
                     res
                 }
-                _ => unreachable!(),
+                _ => unreachable!("2-bit opc value exceeded 0..=3"),
             };
 
             if sf == 1 {
@@ -927,8 +947,8 @@ impl AArch64Cpu {
 
             // Apply shift
             operand2 = match shift_type {
-                0 => operand2 << imm6,        // LSL
-                1 => operand2 >> imm6,        // LSR
+                0 => operand2 << imm6,                 // LSL
+                1 => operand2 >> imm6,                 // LSR
                 2 => (operand2 as i64 >> imm6) as u64, // ASR
                 _ => operand2,
             };
@@ -957,7 +977,10 @@ impl AArch64Cpu {
             return Ok(());
         }
 
-        Err(CpuError::UnsupportedInstruction(format!("DP-Reg 0x{:08X}", opcode)))
+        Err(CpuError::UnsupportedInstruction(format!(
+            "DP-Reg 0x{:08X}",
+            opcode
+        )))
     }
 
     /// Update NZCV flags
@@ -1002,14 +1025,14 @@ impl AArch64Cpu {
         let v = (self.regs.pstate & pstate::V) != 0;
 
         let result = match cond >> 1 {
-            0b000 => z,           // EQ/NE
-            0b001 => c,           // CS/CC
-            0b010 => n,           // MI/PL
-            0b011 => v,           // VS/VC
-            0b100 => c && !z,     // HI/LS
-            0b101 => n == v,      // GE/LT
+            0b000 => z,            // EQ/NE
+            0b001 => c,            // CS/CC
+            0b010 => n,            // MI/PL
+            0b011 => v,            // VS/VC
+            0b100 => c && !z,      // HI/LS
+            0b101 => n == v,       // GE/LT
             0b110 => n == v && !z, // GT/LE
-            0b111 => true,        // AL
+            0b111 => true,         // AL
             _ => true,
         };
 
@@ -1054,11 +1077,15 @@ fn sign_extend(value: u64, bits: u32) -> i64 {
 
 /// Decode bitmask immediate (simplified)
 fn decode_bitmask(n: u32, imms: u32, immr: u32, is_64bit: bool) -> u64 {
-    let len = if n == 1 { 6 } else { (imms >> 1).leading_zeros() - 26 };
+    let len = if n == 1 {
+        6
+    } else {
+        (imms >> 1).leading_zeros() - 26
+    };
     let levels = (1u32 << len) - 1;
     let s = imms & levels;
     let r = immr & levels;
-    let diff = s.wrapping_sub(r);
+    let _diff = s.wrapping_sub(r);
     let esize = 1u64 << len;
     let welem = (1u64 << (s + 1)) - 1;
     let elem = welem.rotate_right(r);

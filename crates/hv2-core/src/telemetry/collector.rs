@@ -3,7 +3,7 @@
 //! Infrastructure for collecting, registering, and querying metrics.
 
 use super::types::{
-    HistogramData, MetricFamily, MetricLabels, MetricSample, MetricType, MetricValue, Timestamp,
+    HistogramData, MetricFamily, MetricLabels, MetricSample, MetricType, MetricValue,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,40 +12,27 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 /// Error type for collector operations
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum CollectorError {
     /// Metric not found
+    #[error("Metric not found: {0}")]
     MetricNotFound(String),
     /// Metric already exists
+    #[error("Metric already exists: {0}")]
     MetricAlreadyExists(String),
     /// Type mismatch
+    #[error("Type mismatch: expected {expected}, got {actual}")]
     TypeMismatch {
         expected: MetricType,
         actual: MetricType,
     },
     /// Invalid operation
+    #[error("Invalid operation: {0}")]
     InvalidOperation(String),
     /// Registry error
+    #[error("Registry error: {0}")]
     RegistryError(String),
 }
-
-impl std::fmt::Display for CollectorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CollectorError::MetricNotFound(name) => write!(f, "Metric not found: {}", name),
-            CollectorError::MetricAlreadyExists(name) => {
-                write!(f, "Metric already exists: {}", name)
-            }
-            CollectorError::TypeMismatch { expected, actual } => {
-                write!(f, "Type mismatch: expected {}, got {}", expected, actual)
-            }
-            CollectorError::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
-            CollectorError::RegistryError(msg) => write!(f, "Registry error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for CollectorError {}
 
 /// Result type for collector operations
 pub type CollectorResult<T> = Result<T, CollectorError>;
@@ -701,12 +688,15 @@ pub struct MetricCollector {
     last_collection: RwLock<Option<Instant>>,
 }
 
+/// Default metric collection interval.
+const DEFAULT_COLLECTION_INTERVAL: Duration = Duration::from_secs(15);
+
 impl MetricCollector {
     /// Create a new collector
     pub fn new() -> Self {
         Self {
             registry: Arc::new(MetricRegistry::new()),
-            collection_interval: Duration::from_secs(15),
+            collection_interval: DEFAULT_COLLECTION_INTERVAL,
             last_collection: RwLock::new(None),
         }
     }
@@ -715,7 +705,7 @@ impl MetricCollector {
     pub fn with_registry(registry: Arc<MetricRegistry>) -> Self {
         Self {
             registry,
-            collection_interval: Duration::from_secs(15),
+            collection_interval: DEFAULT_COLLECTION_INTERVAL,
             last_collection: RwLock::new(None),
         }
     }

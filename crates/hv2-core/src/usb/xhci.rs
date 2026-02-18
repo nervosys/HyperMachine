@@ -3,9 +3,8 @@
 //! This module implements the eXtensible Host Controller Interface (xHCI)
 //! for USB 3.0/3.1/3.2 host controller emulation.
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// xHCI capability registers offset
 pub const XHCI_CAP_LENGTH: u32 = 0x20;
@@ -661,12 +660,7 @@ pub struct Interrupter {
 impl Interrupter {
     /// Create new interrupter
     pub fn new() -> Self {
-        Self {
-            iman: 0,
-            imod: 0,
-            event_ring: EventRing::new(),
-            pending: false,
-        }
+        Self::default()
     }
 
     /// Check if interrupt enabled

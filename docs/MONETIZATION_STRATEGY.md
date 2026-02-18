@@ -57,7 +57,7 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 │                        STANDARD                                  │
 │        $500/node/year | Business Hours | Community Support       │
 ├─────────────────────────────────────────────────────────────────┤
-│                     OPEN SOURCE (AGPLv3)                         │
+│                     OPEN SOURCE (AGPL-3.0)                       │
 │           Free | Self-Support | Community Contributions          │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -84,7 +84,7 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 
 ### Open Source (Community Edition)
 
-**License:** AGPL-3.0 (requires source disclosure for modifications)
+**License:** AGPL-3.0 (GNU Affero General Public License v3) or Commercial License (proprietary use)
 
 **Includes:**
 - Full T1 and T2 hypervisor functionality
@@ -102,7 +102,7 @@ HyperMachine's unique value proposition—AI-native hypervisor with both Type-1 
 **Price:** $500/node/year
 
 **Adds:**
-- Commercial license (no AGPL obligations)
+- Commercial license (no AGPL copyleft obligations)
 - Security patch notifications
 - Email support (business hours)
 - Access to private security advisories

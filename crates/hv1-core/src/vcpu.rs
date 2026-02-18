@@ -171,7 +171,7 @@ impl Vcpu {
     /// Create a new vCPU
     pub fn new(vendor: CpuVendor) -> Self {
         let id = VCPU_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
-        
+
         Self {
             id,
             state: VcpuState::Uninitialized,
@@ -220,7 +220,7 @@ impl Vcpu {
             }
             _ => return Err(Error::NoHardwareSupport),
         }
-        
+
         self.state = VcpuState::Ready;
         Ok(())
     }
@@ -230,15 +230,15 @@ impl Vcpu {
         // Set up registers for real mode
         self.registers.cr.cr0 = 0x0000_0010; // ET bit set
         self.registers.gp.rflags = 0x0000_0002; // Reserved bit set
-        
+
         // CS:IP = 0xFFFF:0x0000 (reset vector at 0xFFFF0)
         self.registers.seg.cs.selector = 0xF000;
         self.registers.seg.cs.base = 0xFFFF_0000;
         self.registers.seg.cs.limit = 0xFFFF;
         self.registers.seg.cs.attributes = 0x009B; // Present, code, readable
-        
+
         self.registers.gp.rip = 0xFFF0;
-        
+
         // Data segments
         for seg in [
             &mut self.registers.seg.ds,
@@ -252,7 +252,7 @@ impl Vcpu {
             seg.limit = 0xFFFF;
             seg.attributes = 0x0093; // Present, data, writable
         }
-        
+
         // GDTR and IDTR
         self.registers.dt.gdtr_base = 0;
         self.registers.dt.gdtr_limit = 0xFFFF;
@@ -267,18 +267,18 @@ impl Vcpu {
         self.registers.cr.cr4 = 0x0000_0020; // PAE
         self.registers.cr.efer = 0x0000_0500; // LME, LMA
         self.registers.cr.cr3 = cr3;
-        
+
         // Set up RIP and RSP
         self.registers.gp.rip = entry_point;
         self.registers.gp.rsp = stack_pointer;
         self.registers.gp.rflags = 0x0000_0002;
-        
+
         // 64-bit code segment
         self.registers.seg.cs.selector = 0x08;
         self.registers.seg.cs.base = 0;
         self.registers.seg.cs.limit = 0xFFFF_FFFF;
         self.registers.seg.cs.attributes = 0xA09B; // Long mode, code, readable
-        
+
         // Data segments
         for seg in [
             &mut self.registers.seg.ds,
@@ -305,7 +305,7 @@ impl Vcpu {
     }
 
     /// Run the vCPU (VM entry)
-    /// 
+    ///
     /// # Safety
     /// This function performs VM entry which has significant side effects.
     pub unsafe fn run(&mut self) -> Result<VmExitInfo> {
@@ -335,7 +335,7 @@ impl Vcpu {
         // Execute VMLAUNCH/VMRESUME
         // Sync registers from VMCS
         // Return exit info
-        
+
         // Placeholder - actual implementation would use vmx module
         Err(Error::VmlaunchFailed)
     }
@@ -346,7 +346,7 @@ impl Vcpu {
         // Execute VMRUN
         // Sync registers from VMCB
         // Return exit info
-        
+
         // Placeholder - actual implementation would use svm module
         Err(Error::VmrunFailed)
     }

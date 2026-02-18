@@ -65,9 +65,11 @@
 //! | 0x390  | Timer CCR          | Timer Current Count              |
 //! | 0x3E0  | Timer DCR          | Timer Divide Configuration       |
 
-use crate::{Error, Result};
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use crate::Result;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::RwLock;
+#[cfg(test)]
+use std::sync::Arc;
 
 /// LAPIC base address (standard location)
 pub const LAPIC_BASE: u64 = 0xFEE0_0000;
@@ -308,7 +310,7 @@ pub mod timer_div {
     pub const DIV_32: u32 = 0b1000;
     pub const DIV_64: u32 = 0b1001;
     pub const DIV_128: u32 = 0b1010;
-    
+
     /// Get divisor from DCR value
     pub fn get_divisor(dcr: u32) -> u32 {
         let bits = ((dcr & 0x8) >> 1) | (dcr & 0x3);
@@ -391,7 +393,7 @@ impl LocalApic {
             tpr: AtomicU32::new(0),
             ldr: AtomicU32::new(0),
             dfr: AtomicU32::new(0xFFFF_FFFF), // Flat model by default
-            svr: AtomicU32::new(0xFF), // Vector 0xFF, disabled
+            svr: AtomicU32::new(0xFF),        // Vector 0xFF, disabled
             esr: AtomicU32::new(0),
             icr: AtomicU64::new(0),
             lvt_timer: AtomicU32::new(lvt::MASKED),
@@ -411,7 +413,7 @@ impl LocalApic {
             eoi_callback: RwLock::new(None),
         }
     }
-    
+
     /// Set IPI callback
     pub fn set_ipi_callback<F>(&self, callback: F)
     where
@@ -419,7 +421,7 @@ impl LocalApic {
     {
         *self.ipi_callback.write().unwrap() = Some(Box::new(callback));
     }
-    
+
     /// Set EOI callback
     pub fn set_eoi_callback<F>(&self, callback: F)
     where
@@ -427,17 +429,17 @@ impl LocalApic {
     {
         *self.eoi_callback.write().unwrap() = Some(Box::new(callback));
     }
-    
+
     /// Get the APIC ID
     pub fn id(&self) -> u8 {
         self.id
     }
-    
+
     /// Check if APIC is enabled
     pub fn is_enabled(&self) -> bool {
         self.enabled.load(Ordering::Relaxed)
     }
-    
+
     /// Read from MMIO address
     pub fn read(&self, offset: u64) -> Result<u32> {
         match offset {
@@ -500,7 +502,7 @@ impl LocalApic {
             }
         }
     }
-    
+
     /// Write to MMIO address
     pub fn write(&self, offset: u64, value: u32) -> Result<()> {
         match offset {
@@ -526,7 +528,7 @@ impl LocalApic {
                 self.svr.store(value, Ordering::Relaxed);
                 let new_enabled = value & svr::APIC_ENABLE != 0;
                 self.enabled.store(new_enabled, Ordering::Relaxed);
-                
+
                 if !old_enabled && new_enabled {
                     // APIC just enabled - could trigger pending interrupts
                 }
@@ -579,7 +581,7 @@ impl LocalApic {
         }
         Ok(())
     }
-    
+
     /// Handle EOI write
     fn handle_eoi(&self) {
         // Find highest priority in-service interrupt
@@ -587,7 +589,7 @@ impl LocalApic {
             let isr = self.isr.read().unwrap();
             self.find_highest_set_bit(&isr)
         };
-        
+
         if let Some(vec) = vector {
             // Clear ISR bit
             {
@@ -596,7 +598,7 @@ impl LocalApic {
                 let bit = vec % 32;
                 isr[idx] &= !(1 << bit);
             }
-            
+
             // Check TMR for level-triggered
             let is_level = {
                 let tmr = self.tmr.read().unwrap();
@@ -604,7 +606,7 @@ impl LocalApic {
                 let bit = vec % 32;
                 tmr[idx] & (1 << bit) != 0
             };
-            
+
             if is_level {
                 // Notify IOAPIC
                 if let Some(ref cb) = *self.eoi_callback.read().unwrap() {
@@ -613,14 +615,17 @@ impl LocalApic {
             }
         }
     }
-    
+
     /// Handle ICR write (send IPI)
     fn handle_icr_write(&self, icr: u64) {
         let vector = (icr & icr::VECTOR_MASK) as u8;
-        let delmode = IcrDeliveryMode::from_bits(((icr & icr::DELMODE_MASK) >> icr::DELMODE_SHIFT) as u8);
-        let dest_short = IcrDestShorthand::from_bits(((icr & icr::DESTSHORT_MASK) >> icr::DESTSHORT_SHIFT) as u8);
+        let delmode =
+            IcrDeliveryMode::from_bits(((icr & icr::DELMODE_MASK) >> icr::DELMODE_SHIFT) as u8);
+        let dest_short = IcrDestShorthand::from_bits(
+            ((icr & icr::DESTSHORT_MASK) >> icr::DESTSHORT_SHIFT) as u8,
+        );
         let dest = ((icr & icr::DEST_MASK) >> icr::DEST_SHIFT) as u8;
-        
+
         // Determine destination(s) based on shorthand
         let targets = match dest_short {
             IcrDestShorthand::SelfOnly => vec![self.id],
@@ -628,7 +633,7 @@ impl LocalApic {
             IcrDestShorthand::AllExcludingSelf => vec![0xFE], // Special: broadcast except self
             IcrDestShorthand::None => vec![dest],
         };
-        
+
         // Deliver via callback
         if let Some(ref cb) = *self.ipi_callback.read().unwrap() {
             for &target in &targets {
@@ -636,29 +641,29 @@ impl LocalApic {
             }
         }
     }
-    
+
     /// Accept an interrupt
     pub fn accept_interrupt(&self, vector: u8, level_triggered: bool) {
         if !self.is_enabled() || vector < 16 {
             return;
         }
-        
+
         let idx = (vector / 32) as usize;
         let bit = vector % 32;
-        
+
         // Set IRR
         {
             let mut irr = self.irr.write().unwrap();
             irr[idx] |= 1 << bit;
         }
-        
+
         // Set TMR if level-triggered
         if level_triggered {
             let mut tmr = self.tmr.write().unwrap();
             tmr[idx] |= 1 << bit;
         }
     }
-    
+
     /// Get pending interrupt (highest priority from IRR that beats PPR)
     pub fn get_pending_interrupt(&self) -> Option<u8> {
         let ppr = {
@@ -666,10 +671,10 @@ impl LocalApic {
             let isr_prio = self.get_highest_isr_priority() as u32;
             std::cmp::max(tpr & 0xF0, isr_prio << 4) as u8
         };
-        
+
         let irr = self.irr.read().unwrap();
         let vector = self.find_highest_set_bit(&irr)?;
-        
+
         // Check if vector priority beats PPR
         if (vector & 0xF0) > ppr {
             Some(vector)
@@ -677,33 +682,31 @@ impl LocalApic {
             None
         }
     }
-    
+
     /// Acknowledge interrupt (move from IRR to ISR)
     pub fn acknowledge_interrupt(&self, vector: u8) {
         let idx = (vector / 32) as usize;
         let bit = vector % 32;
-        
+
         // Clear IRR
         {
             let mut irr = self.irr.write().unwrap();
             irr[idx] &= !(1 << bit);
         }
-        
+
         // Set ISR
         {
             let mut isr = self.isr.write().unwrap();
             isr[idx] |= 1 << bit;
         }
     }
-    
+
     /// Get highest priority in ISR
     fn get_highest_isr_priority(&self) -> u8 {
         let isr = self.isr.read().unwrap();
-        self.find_highest_set_bit(&isr)
-            .map(|v| v >> 4)
-            .unwrap_or(0)
+        self.find_highest_set_bit(&isr).map(|v| v >> 4).unwrap_or(0)
     }
-    
+
     /// Find highest set bit in 256-bit register
     fn find_highest_set_bit(&self, regs: &[u32; 8]) -> Option<u8> {
         for i in (0..8).rev() {
@@ -714,52 +717,54 @@ impl LocalApic {
         }
         None
     }
-    
+
     /// Timer tick (call periodically)
     pub fn timer_tick(&self) {
         let timer_mode = TimerMode::from_bits(
-            ((self.lvt_timer.load(Ordering::Relaxed) & lvt::TIMER_MODE_MASK) >> lvt::TIMER_MODE_SHIFT) as u8
+            ((self.lvt_timer.load(Ordering::Relaxed) & lvt::TIMER_MODE_MASK)
+                >> lvt::TIMER_MODE_SHIFT) as u8,
         );
-        
+
         if timer_mode == TimerMode::TscDeadline {
             return; // TSC deadline mode handled separately
         }
-        
+
         let ccr = self.timer_ccr.load(Ordering::Relaxed);
         if ccr == 0 {
             return;
         }
-        
+
         let divisor = timer_div::get_divisor(self.timer_dcr.load(Ordering::Relaxed));
         let new_ccr = ccr.saturating_sub(divisor);
         self.timer_ccr.store(new_ccr, Ordering::Relaxed);
-        
+
         if new_ccr == 0 {
             // Timer expired
             let lvt = self.lvt_timer.load(Ordering::Relaxed);
-            
+
             if lvt & lvt::MASKED == 0 {
                 let vector = (lvt & lvt::VECTOR_MASK) as u8;
                 self.accept_interrupt(vector, false);
             }
-            
+
             // Reload if periodic
             if timer_mode == TimerMode::Periodic {
-                self.timer_ccr.store(self.timer_icr.load(Ordering::Relaxed), Ordering::Relaxed);
+                self.timer_ccr
+                    .store(self.timer_icr.load(Ordering::Relaxed), Ordering::Relaxed);
             }
         }
     }
-    
+
     /// Get timer divisor
     pub fn get_timer_divisor(&self) -> u32 {
         timer_div::get_divisor(self.timer_dcr.load(Ordering::Relaxed))
     }
-    
+
     /// Inject an external interrupt (from IOAPIC)
     pub fn inject_external_interrupt(&self, vector: u8, level_triggered: bool) {
         self.accept_interrupt(vector, level_triggered);
     }
-    
+
     /// Reset the LAPIC
     pub fn reset(&self) {
         self.enabled.store(false, Ordering::Relaxed);
@@ -779,7 +784,7 @@ impl LocalApic {
         self.timer_icr.store(0, Ordering::Relaxed);
         self.timer_ccr.store(0, Ordering::Relaxed);
         self.timer_dcr.store(0, Ordering::Relaxed);
-        
+
         *self.isr.write().unwrap() = [0; 8];
         *self.tmr.write().unwrap() = [0; 8];
         *self.irr.write().unwrap() = [0; 8];
@@ -826,14 +831,14 @@ mod tests {
     #[test]
     fn test_lapic_enable() {
         let lapic = LocalApic::new(0);
-        
+
         // Initially disabled
         assert!(!lapic.is_enabled());
-        
+
         // Enable via SVR
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0xFF).unwrap();
         assert!(lapic.is_enabled());
-        
+
         // Disable
         lapic.write(regs::SVR, 0xFF).unwrap();
         assert!(!lapic.is_enabled());
@@ -842,7 +847,7 @@ mod tests {
     #[test]
     fn test_tpr_read_write() {
         let lapic = LocalApic::new(0);
-        
+
         lapic.write(regs::TPR, 0x42).unwrap();
         assert_eq!(lapic.read(regs::TPR).unwrap(), 0x42);
     }
@@ -850,15 +855,15 @@ mod tests {
     #[test]
     fn test_lvt_timer() {
         let lapic = LocalApic::new(0);
-        
+
         // Default is masked
         let lvt = lapic.read(regs::LVT_TIMER).unwrap();
         assert!(lvt & lvt::MASKED != 0);
-        
+
         // Configure timer
         let config = 0x30 | (TimerMode::Periodic as u32) << lvt::TIMER_MODE_SHIFT;
         lapic.write(regs::LVT_TIMER, config).unwrap();
-        
+
         let lvt = lapic.read(regs::LVT_TIMER).unwrap();
         assert_eq!(lvt & lvt::VECTOR_MASK, 0x30);
         assert!(lvt & lvt::MASKED == 0);
@@ -867,10 +872,10 @@ mod tests {
     #[test]
     fn test_timer_icr_ccr() {
         let lapic = LocalApic::new(0);
-        
+
         // Set initial count
         lapic.write(regs::TIMER_ICR, 1000).unwrap();
-        
+
         // CCR should be loaded with ICR
         assert_eq!(lapic.read(regs::TIMER_CCR).unwrap(), 1000);
     }
@@ -878,10 +883,10 @@ mod tests {
     #[test]
     fn test_timer_divisor() {
         let lapic = LocalApic::new(0);
-        
+
         lapic.write(regs::TIMER_DCR, timer_div::DIV_16).unwrap();
         assert_eq!(lapic.get_timer_divisor(), 16);
-        
+
         lapic.write(regs::TIMER_DCR, timer_div::DIV_1).unwrap();
         assert_eq!(lapic.get_timer_divisor(), 1);
     }
@@ -890,9 +895,9 @@ mod tests {
     fn test_accept_interrupt() {
         let lapic = LocalApic::new(0);
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0xFF).unwrap();
-        
+
         lapic.accept_interrupt(0x42, false);
-        
+
         // Check IRR
         let irr = lapic.read(regs::IRR_BASE + 0x20).unwrap(); // 0x42 is in register 2
         assert!(irr & (1 << 2) != 0); // bit 2 (0x42 % 32)
@@ -902,14 +907,14 @@ mod tests {
     fn test_interrupt_acknowledge() {
         let lapic = LocalApic::new(0);
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0xFF).unwrap();
-        
+
         lapic.accept_interrupt(0x42, false);
         lapic.acknowledge_interrupt(0x42);
-        
+
         // IRR should be cleared
         let irr = lapic.read(regs::IRR_BASE + 0x20).unwrap();
         assert!(irr & (1 << 2) == 0);
-        
+
         // ISR should be set
         let isr = lapic.read(regs::ISR_BASE + 0x20).unwrap();
         assert!(isr & (1 << 2) != 0);
@@ -919,13 +924,13 @@ mod tests {
     fn test_eoi() {
         let lapic = LocalApic::new(0);
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0xFF).unwrap();
-        
+
         lapic.accept_interrupt(0x42, false);
         lapic.acknowledge_interrupt(0x42);
-        
+
         // EOI
         lapic.write(regs::EOI, 0).unwrap();
-        
+
         // ISR should be cleared
         let isr = lapic.read(regs::ISR_BASE + 0x20).unwrap();
         assert!(isr & (1 << 2) == 0);
@@ -935,23 +940,23 @@ mod tests {
     fn test_icr_write() {
         let lapic = LocalApic::new(0);
         use std::sync::atomic::AtomicU8;
-        
+
         let received_dest = Arc::new(AtomicU8::new(0));
         let received_vec = Arc::new(AtomicU8::new(0));
-        
+
         let dest_clone = received_dest.clone();
         let vec_clone = received_vec.clone();
-        
+
         lapic.set_ipi_callback(move |dest, vec, _mode| {
             dest_clone.store(dest, Ordering::Relaxed);
             vec_clone.store(vec, Ordering::Relaxed);
         });
-        
+
         // Write destination to ICR high
         lapic.write(regs::ICR_HIGH, 3 << 24).unwrap();
         // Write vector and trigger to ICR low
         lapic.write(regs::ICR_LOW, 0x42).unwrap();
-        
+
         assert_eq!(received_dest.load(Ordering::Relaxed), 3);
         assert_eq!(received_vec.load(Ordering::Relaxed), 0x42);
     }
@@ -960,26 +965,26 @@ mod tests {
     fn test_timer_tick_oneshot() {
         let lapic = LocalApic::new(0);
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0xFF).unwrap();
-        
+
         // Configure one-shot timer with vector 0x30
         lapic.write(regs::LVT_TIMER, 0x30).unwrap();
         lapic.write(regs::TIMER_DCR, timer_div::DIV_1).unwrap();
         lapic.write(regs::TIMER_ICR, 3).unwrap();
-        
+
         // Tick 3 times
         lapic.timer_tick();
         assert_eq!(lapic.read(regs::TIMER_CCR).unwrap(), 2);
-        
+
         lapic.timer_tick();
         assert_eq!(lapic.read(regs::TIMER_CCR).unwrap(), 1);
-        
+
         lapic.timer_tick();
         assert_eq!(lapic.read(regs::TIMER_CCR).unwrap(), 0);
-        
+
         // Should have triggered interrupt
         let irr = lapic.read(regs::IRR_BASE + 0x10).unwrap();
         assert!(irr & (1 << 16) != 0); // 0x30 % 32 = 16
-        
+
         // One-shot: should stay at 0
         lapic.timer_tick();
         assert_eq!(lapic.read(regs::TIMER_CCR).unwrap(), 0);
@@ -989,17 +994,17 @@ mod tests {
     fn test_timer_tick_periodic() {
         let lapic = LocalApic::new(0);
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0xFF).unwrap();
-        
+
         // Configure periodic timer
         let lvt = 0x30 | ((TimerMode::Periodic as u32) << lvt::TIMER_MODE_SHIFT);
         lapic.write(regs::LVT_TIMER, lvt).unwrap();
         lapic.write(regs::TIMER_DCR, timer_div::DIV_1).unwrap();
         lapic.write(regs::TIMER_ICR, 2).unwrap();
-        
+
         // First period
         lapic.timer_tick();
         lapic.timer_tick();
-        
+
         // Should reload
         assert_eq!(lapic.read(regs::TIMER_CCR).unwrap(), 2);
     }
@@ -1016,9 +1021,9 @@ mod tests {
         let lapic = LocalApic::new(0);
         lapic.write(regs::SVR, svr::APIC_ENABLE | 0x42).unwrap();
         lapic.write(regs::TPR, 0x80).unwrap();
-        
+
         lapic.reset();
-        
+
         assert!(!lapic.is_enabled());
         assert_eq!(lapic.read(regs::TPR).unwrap(), 0);
         assert_eq!(lapic.read(regs::SVR).unwrap(), 0xFF);

@@ -48,30 +48,21 @@ pub trait DisplayBackend: Send + Sync {
 }
 
 /// Display error types
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DisplayError {
     /// Display not connected
+    #[error("Display not connected")]
     NotConnected,
     /// Resolution not supported
+    #[error("Resolution not supported")]
     ResolutionNotSupported,
     /// Invalid framebuffer format
+    #[error("Invalid framebuffer format")]
     InvalidFormat,
     /// Backend-specific error
+    #[error("Backend error: {0}")]
     BackendError(String),
 }
-
-impl std::fmt::Display for DisplayError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DisplayError::NotConnected => write!(f, "Display not connected"),
-            DisplayError::ResolutionNotSupported => write!(f, "Resolution not supported"),
-            DisplayError::InvalidFormat => write!(f, "Invalid framebuffer format"),
-            DisplayError::BackendError(msg) => write!(f, "Backend error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for DisplayError {}
 
 /// Null display backend (discards all output)
 #[derive(Debug)]
@@ -157,7 +148,11 @@ impl MemoryDisplayBackend {
     /// Create a new memory display backend
     pub fn new(width: u32, height: u32) -> Self {
         Self {
-            framebuffer: Framebuffer::new(FramebufferConfig::new(width, height, PixelFormat::Xrgb32)),
+            framebuffer: Framebuffer::new(FramebufferConfig::new(
+                width,
+                height,
+                PixelFormat::Xrgb32,
+            )),
             connected: true,
             update_count: 0,
             title: String::new(),
@@ -218,7 +213,8 @@ impl DisplayBackend for MemoryDisplayBackend {
     }
 
     fn set_resolution(&mut self, width: u32, height: u32) -> Result<(), DisplayError> {
-        self.framebuffer.resize(FramebufferConfig::new(width, height, PixelFormat::Xrgb32));
+        self.framebuffer
+            .resize(FramebufferConfig::new(width, height, PixelFormat::Xrgb32));
         Ok(())
     }
 
@@ -439,7 +435,10 @@ impl DisplayManager {
     }
 
     /// Update all displays
-    pub fn update_all(&mut self, framebuffer: &Framebuffer) -> Vec<(usize, Result<(), DisplayError>)> {
+    pub fn update_all(
+        &mut self,
+        framebuffer: &Framebuffer,
+    ) -> Vec<(usize, Result<(), DisplayError>)> {
         let mut results = Vec::new();
         for (i, backend) in self.backends.iter_mut().enumerate() {
             let result = backend.update(framebuffer);
@@ -553,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_memory_backend() {
-        let mut backend = MemoryDisplayBackend::new(100, 100);
+        let backend = MemoryDisplayBackend::new(100, 100);
         assert_eq!(backend.name(), "memory");
         assert!(backend.is_connected());
         assert_eq!(backend.resolution(), (100, 100));

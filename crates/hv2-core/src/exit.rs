@@ -4,7 +4,6 @@
 //! When a VM exits hardware virtualization mode, it returns an exit reason
 //! that the hypervisor must handle before resuming execution.
 
-use crate::Result;
 
 /// Direction of I/O operation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +86,60 @@ pub enum VmExit {
     Debug {
         /// Debug information string
         info: String,
+    },
+
+    /// Hypercall from the guest
+    ///
+    /// The guest issued a hypercall (VMCALL/VMMCALL instruction).
+    Hypercall {
+        /// Hypercall number
+        nr: u64,
+        /// Hypercall arguments
+        args: [u64; 6],
+    },
+
+    /// System event (e.g. reset, shutdown, crash)
+    ///
+    /// A system-level event occurred in the guest, such as a reset
+    /// request or a guest crash notification.
+    SystemEvent {
+        /// Event type (e.g. KVM_SYSTEM_EVENT_SHUTDOWN, RESET, CRASH)
+        type_: u32,
+        /// Event flags
+        flags: u64,
+    },
+
+    /// Non-maskable interrupt
+    ///
+    /// A non-maskable interrupt (NMI) was delivered to the guest.
+    Nmi,
+
+    /// MSR read (RDMSR instruction)
+    ///
+    /// The guest attempted to read a model-specific register that the
+    /// hypervisor must handle.
+    Rdmsr {
+        /// MSR index being read
+        index: u32,
+    },
+
+    /// MSR write (WRMSR instruction)
+    ///
+    /// The guest attempted to write a model-specific register that the
+    /// hypervisor must handle.
+    Wrmsr {
+        /// MSR index being written
+        index: u32,
+        /// Data being written
+        data: u64,
+    },
+
+    /// IOAPIC end-of-interrupt
+    ///
+    /// An end-of-interrupt (EOI) was signalled for an IOAPIC vector.
+    IoapicEoi {
+        /// Interrupt vector that completed
+        vector: u8,
     },
 
     /// Unknown or unhandled exit reason
@@ -201,6 +254,16 @@ impl std::fmt::Display for VmExit {
                 }
             }
             VmExit::Debug { info } => write!(f, "DEBUG: {}", info),
+            VmExit::Hypercall { nr, .. } => write!(f, "HYPERCALL nr={:#x}", nr),
+            VmExit::SystemEvent { type_, flags } => {
+                write!(f, "SYSTEM_EVENT type={} flags={:#x}", type_, flags)
+            }
+            VmExit::Nmi => write!(f, "NMI"),
+            VmExit::Rdmsr { index } => write!(f, "RDMSR index={:#x}", index),
+            VmExit::Wrmsr { index, data } => {
+                write!(f, "WRMSR index={:#x} data={:#x}", index, data)
+            }
+            VmExit::IoapicEoi { vector } => write!(f, "IOAPIC_EOI vector={}", vector),
             VmExit::Unknown { reason } => write!(f, "UNKNOWN exit reason={}", reason),
         }
     }

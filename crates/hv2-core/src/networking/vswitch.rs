@@ -3,9 +3,9 @@
 //! This module provides a software-based virtual switch with support for
 //! MAC learning, VLAN tagging, spanning tree protocol, and port mirroring.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 /// MAC address (6 bytes)
@@ -762,32 +762,32 @@ impl VirtualSwitch {
     pub fn add_port(&self, name: &str, port_type: PortType) -> PortId {
         let id = self.next_port_id.fetch_add(1, Ordering::SeqCst) as PortId;
         let port = Port::new(id, name, port_type);
-        self.ports.write().unwrap().insert(id, port);
+        self.ports.write().unwrap_or_else(|e| e.into_inner()).insert(id, port);
         id
     }
 
     /// Remove port
     pub fn remove_port(&self, port_id: PortId) -> Option<Port> {
-        let port = self.ports.write().unwrap().remove(&port_id);
+        let port = self.ports.write().unwrap_or_else(|e| e.into_inner()).remove(&port_id);
         if port.is_some() {
-            self.mac_table.write().unwrap().flush_port(port_id);
+            self.mac_table.write().unwrap_or_else(|e| e.into_inner()).flush_port(port_id);
         }
         port
     }
 
     /// Get port
     pub fn get_port(&self, port_id: PortId) -> Option<Port> {
-        self.ports.read().unwrap().get(&port_id).cloned()
+        self.ports.read().unwrap_or_else(|e| e.into_inner()).get(&port_id).cloned()
     }
 
     /// List all ports
     pub fn list_ports(&self) -> Vec<Port> {
-        self.ports.read().unwrap().values().cloned().collect()
+        self.ports.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
     }
 
     /// Set port state
     pub fn set_port_state(&self, port_id: PortId, state: PortState) -> bool {
-        if let Some(port) = self.ports.write().unwrap().get_mut(&port_id) {
+        if let Some(port) = self.ports.write().unwrap_or_else(|e| e.into_inner()).get_mut(&port_id) {
             port.state = state;
             true
         } else {
@@ -797,7 +797,7 @@ impl VirtualSwitch {
 
     /// Set port VLAN mode
     pub fn set_port_vlan(&self, port_id: PortId, mode: VlanMode) -> bool {
-        if let Some(port) = self.ports.write().unwrap().get_mut(&port_id) {
+        if let Some(port) = self.ports.write().unwrap_or_else(|e| e.into_inner()).get_mut(&port_id) {
             port.vlan_mode = mode;
             true
         } else {
@@ -807,7 +807,7 @@ impl VirtualSwitch {
 
     /// Enable/disable port
     pub fn set_port_enabled(&self, port_id: PortId, enabled: bool) -> bool {
-        if let Some(port) = self.ports.write().unwrap().get_mut(&port_id) {
+        if let Some(port) = self.ports.write().unwrap_or_else(|e| e.into_inner()).get_mut(&port_id) {
             port.admin_enabled = enabled;
             true
         } else {
@@ -817,7 +817,7 @@ impl VirtualSwitch {
 
     /// Set port link state
     pub fn set_port_link(&self, port_id: PortId, up: bool) -> bool {
-        if let Some(port) = self.ports.write().unwrap().get_mut(&port_id) {
+        if let Some(port) = self.ports.write().unwrap_or_else(|e| e.into_inner()).get_mut(&port_id) {
             port.link_up = up;
             true
         } else {
@@ -831,10 +831,10 @@ impl VirtualSwitch {
         ingress_port: PortId,
         frame: &EthernetFrame,
     ) -> Vec<(PortId, EthernetFrame)> {
-        let mut stats = self.stats.write().unwrap();
+        let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
         stats.rx_frames += 1;
 
-        let ports = self.ports.read().unwrap();
+        let ports = self.ports.read().unwrap_or_else(|e| e.into_inner());
 
         // Get ingress port
         let in_port = match ports.get(&ingress_port) {
@@ -859,7 +859,7 @@ impl VirtualSwitch {
 
         // Update port stats
         drop(ports);
-        if let Some(port) = self.ports.write().unwrap().get_mut(&ingress_port) {
+        if let Some(port) = self.ports.write().unwrap_or_else(|e| e.into_inner()).get_mut(&ingress_port) {
             port.stats.add_rx(
                 frame.size() as u64,
                 frame.is_multicast(),
@@ -869,14 +869,14 @@ impl VirtualSwitch {
 
         // MAC learning
         if !frame.src_mac.is_multicast() && !frame.src_mac.is_broadcast() {
-            let ports = self.ports.read().unwrap();
+            let ports = self.ports.read().unwrap_or_else(|e| e.into_inner());
             if let Some(port) = ports.get(&ingress_port) {
                 if port.can_learn() {
                     drop(ports);
                     if self
                         .mac_table
                         .write()
-                        .unwrap()
+                        .unwrap_or_else(|e| e.into_inner())
                         .learn(frame.src_mac, ingress_port, vlan)
                     {
                         stats.mac_learned += 1;
@@ -897,7 +897,7 @@ impl VirtualSwitch {
             self.get_flood_ports(ingress_port, vlan)
         } else {
             // Unicast lookup
-            let mac_table = self.mac_table.read().unwrap();
+            let mac_table = self.mac_table.read().unwrap_or_else(|e| e.into_inner());
             if let Some(entry) = mac_table.lookup(frame.dst_mac, vlan) {
                 stats.mac_hits += 1;
                 stats.forwarded_unicast += 1;
@@ -916,7 +916,7 @@ impl VirtualSwitch {
 
         // Build output frames
         let mut output = Vec::new();
-        let ports = self.ports.read().unwrap();
+        let ports = self.ports.read().unwrap_or_else(|e| e.into_inner());
 
         for port_id in egress_ports {
             if let Some(port) = ports.get(&port_id) {
@@ -948,7 +948,7 @@ impl VirtualSwitch {
 
     /// Get flood ports for VLAN
     fn get_flood_ports(&self, ingress_port: PortId, vlan: VlanId) -> Vec<PortId> {
-        let ports = self.ports.read().unwrap();
+        let ports = self.ports.read().unwrap_or_else(|e| e.into_inner());
         ports
             .values()
             .filter(|p| {
@@ -967,8 +967,8 @@ impl VirtualSwitch {
         ingress_port: PortId,
         frame: &EthernetFrame,
     ) -> Option<(PortId, EthernetFrame)> {
-        let sources = self.mirror_sources.read().unwrap();
-        let dest = self.mirror_dest.read().unwrap();
+        let sources = self.mirror_sources.read().unwrap_or_else(|e| e.into_inner());
+        let dest = self.mirror_dest.read().unwrap_or_else(|e| e.into_inner());
 
         if sources.contains(&ingress_port) {
             if let Some(mirror_port) = *dest {
@@ -980,14 +980,14 @@ impl VirtualSwitch {
 
     /// Configure port mirroring
     pub fn set_mirror(&self, sources: Vec<PortId>, destination: PortId) {
-        *self.mirror_sources.write().unwrap() = sources.into_iter().collect();
-        *self.mirror_dest.write().unwrap() = Some(destination);
+        *self.mirror_sources.write().unwrap_or_else(|e| e.into_inner()) = sources.into_iter().collect();
+        *self.mirror_dest.write().unwrap_or_else(|e| e.into_inner()) = Some(destination);
     }
 
     /// Disable port mirroring
     pub fn disable_mirror(&self) {
-        self.mirror_sources.write().unwrap().clear();
-        *self.mirror_dest.write().unwrap() = None;
+        self.mirror_sources.write().unwrap_or_else(|e| e.into_inner()).clear();
+        *self.mirror_dest.write().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Enable STP
@@ -999,7 +999,7 @@ impl VirtualSwitch {
     pub fn disable_stp(&self) {
         self.stp_enabled.store(false, Ordering::Release);
         // Set all ports to forwarding
-        for port in self.ports.write().unwrap().values_mut() {
+        for port in self.ports.write().unwrap_or_else(|e| e.into_inner()).values_mut() {
             port.state = PortState::Forwarding;
         }
     }
@@ -1011,38 +1011,38 @@ impl VirtualSwitch {
 
     /// Get STP state
     pub fn stp_state(&self) -> StpState {
-        self.stp.read().unwrap().clone()
+        self.stp.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Age MAC table
     pub fn age_mac_table(&self) -> usize {
-        self.mac_table.write().unwrap().age()
+        self.mac_table.write().unwrap_or_else(|e| e.into_inner()).age()
     }
 
     /// Flush MAC table
     pub fn flush_mac_table(&self) {
-        self.mac_table.write().unwrap().flush_dynamic();
+        self.mac_table.write().unwrap_or_else(|e| e.into_inner()).flush_dynamic();
     }
 
     /// Add static MAC entry
     pub fn add_static_mac(&self, mac: MacAddress, port: PortId, vlan: VlanId) -> bool {
-        self.mac_table.write().unwrap().add_static(mac, port, vlan)
+        self.mac_table.write().unwrap_or_else(|e| e.into_inner()).add_static(mac, port, vlan)
     }
 
     /// Get MAC table entries
     pub fn mac_entries(&self) -> Vec<MacEntry> {
-        self.mac_table.read().unwrap().entries().cloned().collect()
+        self.mac_table.read().unwrap_or_else(|e| e.into_inner()).entries().cloned().collect()
     }
 
     /// Get statistics
     pub fn stats(&self) -> SwitchStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Reset statistics
     pub fn reset_stats(&self) {
-        *self.stats.write().unwrap() = SwitchStats::default();
-        for port in self.ports.write().unwrap().values_mut() {
+        *self.stats.write().unwrap_or_else(|e| e.into_inner()) = SwitchStats::default();
+        for port in self.ports.write().unwrap_or_else(|e| e.into_inner()).values_mut() {
             port.stats = PortStats::default();
         }
     }

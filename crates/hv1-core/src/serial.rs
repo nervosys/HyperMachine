@@ -17,16 +17,16 @@ pub mod port {
 
 /// UART register offsets
 mod reg {
-    pub const DATA: u16 = 0;          // Data register (R/W)
-    pub const IER: u16 = 1;           // Interrupt Enable Register
-    pub const IIR: u16 = 2;           // Interrupt ID Register (Read)
-    pub const FCR: u16 = 2;           // FIFO Control Register (Write)
-    pub const LCR: u16 = 3;           // Line Control Register
-    pub const MCR: u16 = 4;           // Modem Control Register
-    pub const LSR: u16 = 5;           // Line Status Register
-    pub const MSR: u16 = 6;           // Modem Status Register
-    pub const DLL: u16 = 0;           // Divisor Latch Low (when DLAB=1)
-    pub const DLH: u16 = 1;           // Divisor Latch High (when DLAB=1)
+    pub const DATA: u16 = 0; // Data register (R/W)
+    pub const IER: u16 = 1; // Interrupt Enable Register
+    pub const IIR: u16 = 2; // Interrupt ID Register (Read)
+    pub const FCR: u16 = 2; // FIFO Control Register (Write)
+    pub const LCR: u16 = 3; // Line Control Register
+    pub const MCR: u16 = 4; // Modem Control Register
+    pub const LSR: u16 = 5; // Line Status Register
+    pub const MSR: u16 = 6; // Modem Status Register
+    pub const DLL: u16 = 0; // Divisor Latch Low (when DLAB=1)
+    pub const DLH: u16 = 1; // Divisor Latch High (when DLAB=1)
 }
 
 /// Line Status Register bits
@@ -84,55 +84,61 @@ impl SerialPort {
     }
 
     /// Initialize the serial port
-    /// 
+    ///
     /// # Safety
     /// This function performs I/O port operations.
     pub unsafe fn init(&mut self) {
         // Disable interrupts
         self.write_reg(reg::IER, 0x00);
-        
+
         // Enable DLAB to set baud rate
         self.write_reg(reg::LCR, lcr::DLAB);
-        
+
         // Set divisor to 1 (115200 baud)
         self.write_reg(reg::DLL, 0x01);
         self.write_reg(reg::DLH, 0x00);
-        
+
         // 8 data bits, no parity, 1 stop bit
         self.write_reg(reg::LCR, lcr::DATA_8 | lcr::STOP_1 | lcr::PARITY_NONE);
-        
+
         // Enable FIFO, clear buffers, 14-byte threshold
-        self.write_reg(reg::FCR, fcr::ENABLE | fcr::CLEAR_RX | fcr::CLEAR_TX | fcr::TRIGGER_14);
-        
+        self.write_reg(
+            reg::FCR,
+            fcr::ENABLE | fcr::CLEAR_RX | fcr::CLEAR_TX | fcr::TRIGGER_14,
+        );
+
         // Enable DTR, RTS, and OUT2
         self.write_reg(reg::MCR, 0x0B);
-        
+
         self.initialized = true;
     }
 
     /// Initialize with a specific baud rate
     pub unsafe fn init_with_baud(&mut self, baud: u32) {
         let divisor = (115200 / baud) as u16;
-        
+
         // Disable interrupts
         self.write_reg(reg::IER, 0x00);
-        
+
         // Enable DLAB to set baud rate
         self.write_reg(reg::LCR, lcr::DLAB);
-        
+
         // Set divisor
         self.write_reg(reg::DLL, (divisor & 0xFF) as u8);
         self.write_reg(reg::DLH, ((divisor >> 8) & 0xFF) as u8);
-        
+
         // 8 data bits, no parity, 1 stop bit
         self.write_reg(reg::LCR, lcr::DATA_8 | lcr::STOP_1 | lcr::PARITY_NONE);
-        
+
         // Enable FIFO, clear buffers, 14-byte threshold
-        self.write_reg(reg::FCR, fcr::ENABLE | fcr::CLEAR_RX | fcr::CLEAR_TX | fcr::TRIGGER_14);
-        
+        self.write_reg(
+            reg::FCR,
+            fcr::ENABLE | fcr::CLEAR_RX | fcr::CLEAR_TX | fcr::TRIGGER_14,
+        );
+
         // Enable DTR, RTS, and OUT2
         self.write_reg(reg::MCR, 0x0B);
-        
+
         self.initialized = true;
     }
 
@@ -214,13 +220,13 @@ impl Write for SerialPort {
 }
 
 /// Global serial port for debugging (COM1)
-/// 
+///
 /// # Safety
 /// Must be initialized before use.
 pub static mut SERIAL1: SerialPort = SerialPort::new(port::COM1);
 
 /// Initialize the global serial port
-/// 
+///
 /// # Safety
 /// Must only be called once during initialization.
 #[allow(static_mut_refs)]
@@ -300,7 +306,7 @@ impl VirtualSerial {
     /// Handle port read
     pub fn read_port(&self, port: u16) -> u8 {
         let offset = port - self.base;
-        
+
         match offset {
             0 if self.lcr & lcr::DLAB != 0 => (self.divisor & 0xFF) as u8,
             0 => self.rx_buffer[self.rx_tail],
@@ -325,7 +331,7 @@ impl VirtualSerial {
     /// Handle port write
     pub fn write_port(&mut self, port: u16, value: u8) {
         let offset = port - self.base;
-        
+
         match offset {
             0 if self.lcr & lcr::DLAB != 0 => {
                 self.divisor = (self.divisor & 0xFF00) | value as u16;

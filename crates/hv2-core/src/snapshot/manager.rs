@@ -4,82 +4,52 @@
 //! for creating, storing, and restoring VM snapshots.
 
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime};
+use std::path::PathBuf;
 
-use super::device::{DeviceResult, DeviceStateError, DeviceStateManager, Snapshottable};
-use super::memory::{MemoryResult, MemorySnapshotConfig, MemorySnapshotManager};
+use super::device::{DeviceStateManager, Snapshottable};
+use super::memory::{MemorySnapshotConfig, MemorySnapshotManager};
 use super::types::{
     CompressionType, CpuSnapshot, MemoryRegionSnapshot, SnapshotId, SnapshotInfo, SnapshotState,
-    SnapshotType, VmSnapshot,
+    SnapshotType,
 };
 
 /// Snapshot manager result
 pub type SnapshotResult<T> = Result<T, SnapshotError>;
 
 /// Snapshot manager error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SnapshotError {
     /// Snapshot not found
+    #[error("Snapshot not found: {0}")]
     NotFound(SnapshotId),
     /// Snapshot already exists
+    #[error("Snapshot already exists: {0}")]
     AlreadyExists(SnapshotId),
     /// Invalid snapshot state
+    #[error("Invalid snapshot state: {0:?}")]
     InvalidState(SnapshotState),
     /// IO error
+    #[error("IO error: {0}")]
     IoError(String),
     /// Memory snapshot error
+    #[error("Memory error: {0}")]
     MemoryError(String),
     /// Device state error
+    #[error("Device error: {0}")]
     DeviceError(String),
     /// Invalid parent snapshot
+    #[error("Invalid parent snapshot: {0}")]
     InvalidParent(SnapshotId),
     /// Snapshot in use
+    #[error("Snapshot in use: {0}")]
     InUse(SnapshotId),
     /// Storage full
+    #[error("Snapshot storage full")]
     StorageFull,
     /// Invalid configuration
+    #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
 }
-
-impl std::fmt::Display for SnapshotError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SnapshotError::NotFound(id) => {
-                write!(f, "Snapshot not found: {}", id)
-            }
-            SnapshotError::AlreadyExists(id) => {
-                write!(f, "Snapshot already exists: {}", id)
-            }
-            SnapshotError::InvalidState(state) => {
-                write!(f, "Invalid snapshot state: {:?}", state)
-            }
-            SnapshotError::IoError(msg) => {
-                write!(f, "IO error: {}", msg)
-            }
-            SnapshotError::MemoryError(msg) => {
-                write!(f, "Memory error: {}", msg)
-            }
-            SnapshotError::DeviceError(msg) => {
-                write!(f, "Device error: {}", msg)
-            }
-            SnapshotError::InvalidParent(id) => {
-                write!(f, "Invalid parent snapshot: {}", id)
-            }
-            SnapshotError::InUse(id) => {
-                write!(f, "Snapshot in use: {}", id)
-            }
-            SnapshotError::StorageFull => write!(f, "Snapshot storage full"),
-            SnapshotError::InvalidConfig(msg) => {
-                write!(f, "Invalid configuration: {}", msg)
-            }
-        }
-    }
-}
-
-impl std::error::Error for SnapshotError {}
 
 /// Snapshot manager configuration
 #[derive(Debug, Clone)]

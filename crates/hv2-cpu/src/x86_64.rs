@@ -5,7 +5,6 @@
 //! and memory access.
 
 use crate::{CpuError, Result};
-use std::sync::Arc;
 
 /// x86-64 general-purpose registers
 #[derive(Debug, Clone, Copy, Default)]
@@ -82,6 +81,7 @@ pub struct IdtEntry {
 
 impl IdtEntry {
     /// Get the full handler address
+    #[inline]
     pub fn handler_address(&self) -> u64 {
         (self.offset_low as u64)
             | ((self.offset_mid as u64) << 16)
@@ -89,21 +89,25 @@ impl IdtEntry {
     }
 
     /// Check if entry is present
+    #[inline]
     pub fn is_present(&self) -> bool {
         (self.type_attr & 0x80) != 0
     }
 
     /// Get the gate type
+    #[inline]
     pub fn gate_type(&self) -> u8 {
         self.type_attr & 0x0F
     }
 
     /// Check if it's a trap gate (doesn't clear IF)
+    #[inline]
     pub fn is_trap_gate(&self) -> bool {
         self.gate_type() == 0x0F
     }
 
     /// Get the DPL (Descriptor Privilege Level)
+    #[inline]
     pub fn dpl(&self) -> u8 {
         (self.type_attr >> 5) & 0x03
     }
@@ -943,7 +947,10 @@ impl X86_64Cpu {
 
             // Unknown opcode
             _ => {
-                return Err(CpuError::UnsupportedInstruction(format!("0x{:02X}", opcode)));
+                return Err(CpuError::UnsupportedInstruction(format!(
+                    "0x{:02X}",
+                    opcode
+                )));
             }
         }
 

@@ -31,30 +31,30 @@ pub struct Selectors {
 /// Initialize the GDT with TSS
 pub fn init_gdt(tss: &'static TaskStateSegment) -> (GlobalDescriptorTable, Selectors) {
     let mut gdt = GlobalDescriptorTable::new();
-    
+
     let code_selector = gdt.append(Descriptor::kernel_code_segment());
     let data_selector = gdt.append(Descriptor::kernel_data_segment());
     let tss_selector = gdt.append(Descriptor::tss_segment(tss));
-    
+
     let selectors = Selectors {
         code_selector,
         data_selector,
         tss_selector,
     };
-    
+
     (gdt, selectors)
 }
 
 /// Create a new TSS with interrupt stacks
 pub fn create_tss(stack: &'static [u8; INTERRUPT_STACK_SIZE]) -> TaskStateSegment {
     let mut tss = TaskStateSegment::new();
-    
+
     // Set up the double fault stack
     tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
         let stack_start = VirtAddr::from_ptr(stack.as_ptr());
         stack_start + INTERRUPT_STACK_SIZE as u64
     };
-    
+
     tss
 }
 
@@ -99,9 +99,9 @@ impl CpuFeatures {
     /// Detect CPU features
     pub fn detect() -> Self {
         let cpuid = raw_cpuid::CpuId::new();
-        
+
         let mut features = CpuFeatures::default();
-        
+
         if let Some(info) = cpuid.get_feature_info() {
             features.sse = info.has_sse();
             features.sse2 = info.has_sse2();
@@ -113,19 +113,19 @@ impl CpuFeatures {
             features.xsave = info.has_xsave();
             features.vmx = info.has_vmx();
         }
-        
+
         if let Some(info) = cpuid.get_extended_feature_info() {
             features.avx2 = info.has_avx2();
             features.invpcid = info.has_invpcid();
         }
-        
+
         if let Some(info) = cpuid.get_extended_processor_and_feature_identifiers() {
             features.svm = info.has_svm();
             features.page_1gb = info.has_1gib_pages();
             features.nx = info.has_execute_disable();
             features.rdtscp = info.has_rdtscp();
         }
-        
+
         features
     }
 }

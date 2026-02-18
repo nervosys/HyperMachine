@@ -48,7 +48,7 @@ pub enum VmcsField {
     VirtualProcessorId = 0x0000,
     PostedInterruptVector = 0x0002,
     EptpIndex = 0x0004,
-    
+
     // 16-bit guest-state fields
     GuestEsSelector = 0x0800,
     GuestCsSelector = 0x0802,
@@ -59,7 +59,7 @@ pub enum VmcsField {
     GuestLdtrSelector = 0x080C,
     GuestTrSelector = 0x080E,
     GuestInterruptStatus = 0x0810,
-    
+
     // 16-bit host-state fields
     HostEsSelector = 0x0C00,
     HostCsSelector = 0x0C02,
@@ -68,7 +68,7 @@ pub enum VmcsField {
     HostFsSelector = 0x0C08,
     HostGsSelector = 0x0C0A,
     HostTrSelector = 0x0C0C,
-    
+
     // 64-bit control fields
     IoAddress = 0x2000,
     TscOffset = 0x2010,
@@ -87,10 +87,10 @@ pub enum VmcsField {
     XssExitingBitmap = 0x202C,
     EnclsExitingBitmap = 0x202E,
     TscMultiplier = 0x2032,
-    
+
     // 64-bit read-only data fields
     GuestPhysicalAddress = 0x2400,
-    
+
     // 64-bit guest-state fields
     VmcsLinkPointer = 0x2800,
     GuestIa32Debugctl = 0x2802,
@@ -102,12 +102,12 @@ pub enum VmcsField {
     GuestPdpte2 = 0x280E,
     GuestPdpte3 = 0x2810,
     GuestIa32Bndcfgs = 0x2812,
-    
+
     // 64-bit host-state fields
     HostIa32Pat = 0x2C00,
     HostIa32Efer = 0x2C02,
     HostIa32PerfGlobalCtrl = 0x2C04,
-    
+
     // 32-bit control fields
     PinBasedVmExecControls = 0x4000,
     CpuBasedVmExecControls = 0x4002,
@@ -127,7 +127,7 @@ pub enum VmcsField {
     SecondaryVmExecControls = 0x401E,
     PleGap = 0x4020,
     PleWindow = 0x4022,
-    
+
     // 32-bit read-only data fields
     VmInstructionError = 0x4400,
     VmExitReason = 0x4402,
@@ -137,7 +137,7 @@ pub enum VmcsField {
     IdtVectoringErrorCode = 0x440A,
     VmExitInstructionLen = 0x440C,
     VmExitInstructionInfo = 0x440E,
-    
+
     // 32-bit guest-state fields
     GuestEsLimit = 0x4800,
     GuestCsLimit = 0x4802,
@@ -162,10 +162,10 @@ pub enum VmcsField {
     GuestSmbase = 0x4828,
     GuestIa32SysenterCs = 0x482A,
     VmxPreemptionTimerValue = 0x482E,
-    
+
     // 32-bit host-state fields
     HostIa32SysenterCs = 0x4C00,
-    
+
     // Natural-width control fields
     Cr0GuestHostMask = 0x6000,
     Cr4GuestHostMask = 0x6002,
@@ -175,7 +175,7 @@ pub enum VmcsField {
     Cr3Target1 = 0x600A,
     Cr3Target2 = 0x600C,
     Cr3Target3 = 0x600E,
-    
+
     // Natural-width read-only data fields
     ExitQualification = 0x6400,
     IoRcx = 0x6402,
@@ -183,7 +183,7 @@ pub enum VmcsField {
     IoRdi = 0x6406,
     IoRip = 0x6408,
     GuestLinearAddress = 0x640A,
-    
+
     // Natural-width guest-state fields
     GuestCr0 = 0x6800,
     GuestCr3 = 0x6802,
@@ -205,7 +205,7 @@ pub enum VmcsField {
     GuestPendingDebugExceptions = 0x6822,
     GuestIa32SysenterEsp = 0x6824,
     GuestIa32SysenterEip = 0x6826,
-    
+
     // Natural-width host-state fields
     HostCr0 = 0x6C00,
     HostCr3 = 0x6C02,
@@ -343,7 +343,7 @@ impl VmcsRegion {
             let basic = x86::msr::rdmsr(msr::IA32_VMX_BASIC);
             (basic & 0x7FFF_FFFF) as u32
         };
-        
+
         Self {
             revision_id,
             abort_indicator: 0,
@@ -374,7 +374,7 @@ impl VmxonRegion {
             let basic = x86::msr::rdmsr(msr::IA32_VMX_BASIC);
             (basic & 0x7FFF_FFFF) as u32
         };
-        
+
         Self {
             revision_id,
             reserved: [0; 4092],
@@ -391,7 +391,8 @@ impl Default for VmxonRegion {
 /// Check if VMX is supported
 pub fn is_supported() -> bool {
     let cpuid = raw_cpuid::CpuId::new();
-    cpuid.get_feature_info()
+    cpuid
+        .get_feature_info()
         .map(|f| f.has_vmx())
         .unwrap_or(false)
 }
@@ -404,7 +405,7 @@ pub fn initialize() -> Result<()> {
 
     // Check IA32_FEATURE_CONTROL MSR
     let feature_control = unsafe { x86::msr::rdmsr(msr::IA32_FEATURE_CONTROL) };
-    
+
     // Bit 0: Lock bit
     // Bit 2: Enable VMX outside SMX
     if feature_control & 0x1 != 0 && feature_control & 0x4 == 0 {
@@ -441,7 +442,7 @@ pub fn initialize() -> Result<()> {
 pub unsafe fn vmxon(vmxon_region: &VmxonRegion) -> Result<()> {
     let addr = vmxon_region as *const _ as u64;
     let mut flags: u64;
-    
+
     asm!(
         "vmxon [{0}]",
         "pushfq",
@@ -450,12 +451,12 @@ pub unsafe fn vmxon(vmxon_region: &VmxonRegion) -> Result<()> {
         out(reg) flags,
         options(nostack)
     );
-    
+
     // Check CF and ZF flags
     if flags & 0x41 != 0 {
         return Err(Error::VmxonFailed);
     }
-    
+
     Ok(())
 }
 
@@ -470,20 +471,20 @@ pub unsafe fn vmxoff() -> Result<()> {
 pub unsafe fn vmclear(vmcs_region: &VmcsRegion) -> Result<()> {
     let addr = vmcs_region as *const _ as u64;
     let mut flags: u64;
-    
+
     asm!(
         "vmclear [{0}]",
-        "pushfq", 
+        "pushfq",
         "pop {1}",
         in(reg) &addr,
         out(reg) flags,
         options(nostack)
     );
-    
+
     if flags & 0x41 != 0 {
         return Err(Error::VmclearFailed);
     }
-    
+
     Ok(())
 }
 
@@ -491,7 +492,7 @@ pub unsafe fn vmclear(vmcs_region: &VmcsRegion) -> Result<()> {
 pub unsafe fn vmptrld(vmcs_region: &VmcsRegion) -> Result<()> {
     let addr = vmcs_region as *const _ as u64;
     let mut flags: u64;
-    
+
     asm!(
         "vmptrld [{0}]",
         "pushfq",
@@ -500,18 +501,18 @@ pub unsafe fn vmptrld(vmcs_region: &VmcsRegion) -> Result<()> {
         out(reg) flags,
         options(nostack)
     );
-    
+
     if flags & 0x41 != 0 {
         return Err(Error::VmptrldFailed);
     }
-    
+
     Ok(())
 }
 
 /// Write to VMCS field
 pub unsafe fn vmwrite(field: VmcsField, value: u64) -> Result<()> {
     let mut flags: u64;
-    
+
     asm!(
         "vmwrite {1}, {0}",
         "pushfq",
@@ -521,11 +522,11 @@ pub unsafe fn vmwrite(field: VmcsField, value: u64) -> Result<()> {
         out(reg) flags,
         options(nostack)
     );
-    
+
     if flags & 0x41 != 0 {
         return Err(Error::VmwriteFailed);
     }
-    
+
     Ok(())
 }
 
@@ -533,7 +534,7 @@ pub unsafe fn vmwrite(field: VmcsField, value: u64) -> Result<()> {
 pub unsafe fn vmread(field: VmcsField) -> Result<u64> {
     let mut value: u64;
     let mut flags: u64;
-    
+
     asm!(
         "vmread {0}, {1}",
         "pushfq",
@@ -543,11 +544,11 @@ pub unsafe fn vmread(field: VmcsField) -> Result<u64> {
         out(reg) flags,
         options(nostack)
     );
-    
+
     if flags & 0x41 != 0 {
         return Err(Error::VmreadFailed);
     }
-    
+
     Ok(value)
 }
 
@@ -555,7 +556,7 @@ pub unsafe fn vmread(field: VmcsField) -> Result<u64> {
 #[allow(unused_assignments)]
 pub unsafe fn vmlaunch() -> Result<()> {
     let mut flags: u64;
-    
+
     asm!(
         "vmlaunch",
         "pushfq",
@@ -563,7 +564,7 @@ pub unsafe fn vmlaunch() -> Result<()> {
         out(reg) flags,
         options(nostack)
     );
-    
+
     // If we get here, vmlaunch failed
     Err(Error::VmlaunchFailed)
 }
@@ -572,7 +573,7 @@ pub unsafe fn vmlaunch() -> Result<()> {
 #[allow(unused_assignments)]
 pub unsafe fn vmresume() -> Result<()> {
     let mut flags: u64;
-    
+
     asm!(
         "vmresume",
         "pushfq",
@@ -580,7 +581,7 @@ pub unsafe fn vmresume() -> Result<()> {
         out(reg) flags,
         options(nostack)
     );
-    
+
     // If we get here, vmresume failed
     Err(Error::VmresumeFailed)
 }
