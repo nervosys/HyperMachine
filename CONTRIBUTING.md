@@ -1,14 +1,14 @@
-# Contributing to HV2
+# Contributing to HyperMachine
 
-Thank you for your interest in contributing to HV2! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to HyperMachine! This document provides guidelines and information for contributors.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/hv2.git`
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/HyperMachine.git`
 3. Create a branch: `git checkout -b feature/my-feature`
 4. Make your changes
-5. Run tests: `cargo test --all`
+5. Run tests: `cargo test --workspace --exclude hv1-core --exclude hv1-boot`
 6. Submit a pull request
 
 ## Development Setup
@@ -23,22 +23,19 @@ Thank you for your interest in contributing to HV2! This document provides guide
 
 ```bash
 # Build all crates
-cargo build --all
+cargo build --workspace --exclude hv1-core --exclude hv1-boot
 
 # Build with release optimizations
-cargo build --all --release
+cargo build --workspace --exclude hv1-core --exclude hv1-boot --release
 
 # Run tests
-cargo test --all
-
-# Run examples
-cargo run --example basic
+cargo test --workspace --exclude hv1-core --exclude hv1-boot
 ```
 
 ## Code Style
 
-- Follow Rust standard formatting: `cargo fmt`
-- Ensure no clippy warnings: `cargo clippy --all`
+- Follow Rust standard formatting: `cargo fmt --all -- --check`
+- Ensure no clippy warnings: `cargo clippy --workspace --exclude hv1-core --exclude hv1-boot -- -D warnings`
 - Write documentation for public APIs
 - Add tests for new functionality
 
@@ -51,11 +48,13 @@ cargo run --example basic
 
 ## Pull Request Process
 
-1. Update documentation for any API changes
-2. Add tests for new features
-3. Ensure all tests pass
-4. Update CHANGELOG.md
-5. Request review from maintainers
+1. **Sign the CLA** — First-time contributors must sign our [Contributor License Agreement](CLA.md).
+   The CLA bot will prompt you automatically on your first pull request.
+2. Update documentation for any API changes
+3. Add tests for new features
+4. Ensure all tests pass
+5. Update CHANGELOG.md
+6. Request review from maintainers
 
 ## Code of Conduct
 

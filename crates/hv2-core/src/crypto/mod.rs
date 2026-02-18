@@ -13,8 +13,8 @@
 //! - `asymmetric`: RSA and ECDSA operations
 //! - `pqc`: Post-quantum cryptography
 
-pub mod fips;
 pub mod asymmetric;
+pub mod fips;
 pub mod pqc;
 
 pub use fips::{

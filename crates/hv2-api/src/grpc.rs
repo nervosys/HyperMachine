@@ -268,8 +268,7 @@ impl VmService for VMServiceImpl {
                     Ok(event) => {
                         // Convert core VmEvent to proto VmEvent
                         let event_type = format!("{:?}", event.event_type);
-                        let data = serde_json::to_string(&event.event_type)
-                            .unwrap_or_default();
+                        let data = serde_json::to_string(&event.event_type).unwrap_or_default();
 
                         let proto_event = VmEvent {
                             vm_id: event.vm_name,
@@ -293,10 +292,7 @@ impl VmService for VMServiceImpl {
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         // Event bus closed (VM probably shut down)
-                        tracing::info!(
-                            "Event stream closed for VM {}",
-                            stream_vm_id
-                        );
+                        tracing::info!("Event stream closed for VM {}", stream_vm_id);
                         break;
                     }
                 }

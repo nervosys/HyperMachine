@@ -1,12 +1,15 @@
 [package]
 name = "hm-gui"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 description = "HyperMachine Desktop GUI - virt-manager style interface"
-license = "Apache-2.0"
-repository = "https://github.com/nervosys/AetherVM"
-keywords = ["hypervisor", "gui", "virtualization", "desktop"]
-categories = ["virtualization", "gui"]
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [dependencies]
 # GUI framework
@@ -15,25 +18,25 @@ egui = "0.31"
 egui_extras = { version = "0.31", features = ["image"] }
 
 # Async runtime
-tokio = { version = "1.42", features = ["full"] }
+tokio = { workspace = true }
 
 # HTTP client for API communication
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { workspace = true }
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Base64 decoding for framebuffer data
 base64 = "0.22"
 
 # Error handling
-anyhow = "1.0"
-thiserror = "2"
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 
 # Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 # Image handling for screen display
 image = "0.25"
@@ -49,6 +52,9 @@ chrono.workspace = true
 default = []
 vnc = []     # Future: VNC protocol support
 spice = []   # Future: SPICE protocol support
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "hypermachine-gui"

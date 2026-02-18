@@ -2,12 +2,21 @@
 reference/
 
 .DS_Store
+Thumbs.db
+Desktop.ini
 target/
 **/*.rs.bk
 *.pdb
-Cargo.lock
+# Cargo.lock — committed for reproducible binary builds
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
 
 # VM images and state
 *.img
@@ -23,6 +32,28 @@ logs/
 # Build artifacts
 dist/
 build/
+
+# Coverage output
+tarpaulin-report.*
+codecov.json
+lcov.info
+
+# Profiling artifacts
+*.profraw
+*.profdata
+perf.data*
+flamegraph.svg
+*.flamegraph
+
+# Fuzzing artifacts
+fuzz/corpus/
+fuzz/artifacts/
+
+# Generated CI artifacts
+sbom.json
+
+# WASM build artifacts
+*.wasm
 
 # Development session files
 SESSION*_SUMMARY.md

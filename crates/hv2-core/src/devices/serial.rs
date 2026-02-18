@@ -50,6 +50,7 @@ pub struct SerialDevice {
 
 impl SerialDevice {
     /// Create a new serial device at the given base address
+    #[must_use]
     pub fn new(name: String, base_address: u64) -> Self {
         // Determine IRQ based on standard COM port addresses
         let irq_number = match base_address {
@@ -264,7 +265,7 @@ mod tests {
         device.init().await.unwrap();
 
         // Test input
-        device.input(b"Hello");
+        device.input(b"Hello").unwrap();
 
         // Read data
         let mut buf = [0u8; 1];

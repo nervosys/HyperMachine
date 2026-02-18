@@ -13,8 +13,8 @@ fn bench_guest_memory_allocation(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, sz| {
             b.iter(|| {
                 let memory = GuestMemory::new(*sz as u64).unwrap();
-                memory.allocate_region(black_box(*sz as u64), false)
-            })
+                let _ = memory.allocate_region(black_box(*sz as u64), false);
+            });
         });
     }
     group.finish();
@@ -27,7 +27,7 @@ fn bench_guest_memory_read(c: &mut Criterion) {
         let _ = memory.allocate_region(*size as u64 + 4096, false);
         group.throughput(Throughput::Bytes(*size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, sz| {
-            b.iter(|| memory.read_bytes(black_box(0), black_box(*sz)))
+            b.iter(|| memory.read_bytes(black_box(0), black_box(*sz)));
         });
     }
     group.finish();
@@ -36,13 +36,18 @@ fn bench_guest_memory_read(c: &mut Criterion) {
 fn bench_control_registers_serialization(c: &mut Criterion) {
     let regs = ControlRegisters::default();
     c.bench_function("control_registers/serialize", |b| {
-        b.iter(|| bincode::serialize(black_box(&regs)).unwrap())
+        b.iter(|| bincode::serialize(black_box(&regs)).unwrap());
     });
     let serialized = bincode::serialize(&regs).unwrap();
     c.bench_function("control_registers/deserialize", |b| {
-        b.iter(|| bincode::deserialize::<ControlRegisters>(black_box(&serialized)).unwrap())
+        b.iter(|| bincode::deserialize::<ControlRegisters>(black_box(&serialized)).unwrap());
     });
 }
 
-criterion_group!(benches, bench_guest_memory_allocation, bench_guest_memory_read, bench_control_registers_serialization);
+criterion_group!(
+    benches,
+    bench_guest_memory_allocation,
+    bench_guest_memory_read,
+    bench_control_registers_serialization
+);
 criterion_main!(benches);

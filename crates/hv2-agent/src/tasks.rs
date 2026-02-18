@@ -10,51 +10,42 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 /// Result type for task operations
 pub type TaskResult<T> = Result<T, TaskError>;
 
 /// Task operation errors
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TaskError {
     /// Task not found
+    #[error("Task not found: {0}")]
     TaskNotFound(String),
     /// Task already exists
+    #[error("Task already exists: {0}")]
     TaskExists(String),
     /// Task execution failed
+    #[error("Execution failed: {0}")]
     ExecutionFailed(String),
     /// Task timed out
+    #[error("Task timeout: {0}")]
     Timeout(String),
     /// Task cancelled
+    #[error("Task cancelled: {0}")]
     Cancelled(String),
     /// Dependency error
+    #[error("Dependency error: {0}")]
     DependencyError(String),
     /// Invalid state transition
+    #[error("Invalid state: {0}")]
     InvalidState(String),
     /// Workflow error
+    #[error("Workflow error: {0}")]
     WorkflowError(String),
     /// Retry limit exceeded
+    #[error("Retry limit exceeded: {0}")]
     RetryLimitExceeded(String),
 }
-
-impl std::fmt::Display for TaskError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TaskNotFound(id) => write!(f, "Task not found: {}", id),
-            Self::TaskExists(id) => write!(f, "Task already exists: {}", id),
-            Self::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
-            Self::Timeout(msg) => write!(f, "Task timeout: {}", msg),
-            Self::Cancelled(msg) => write!(f, "Task cancelled: {}", msg),
-            Self::DependencyError(msg) => write!(f, "Dependency error: {}", msg),
-            Self::InvalidState(msg) => write!(f, "Invalid state: {}", msg),
-            Self::WorkflowError(msg) => write!(f, "Workflow error: {}", msg),
-            Self::RetryLimitExceeded(msg) => write!(f, "Retry limit exceeded: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for TaskError {}
 
 /// Task status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -95,7 +86,9 @@ impl TaskStatus {
 }
 
 /// Task priority
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
 pub enum TaskPriority {
     /// Low priority
     Low = 0,
@@ -902,18 +895,18 @@ impl TaskScheduler {
     /// Submit a task
     pub fn submit(&self, task: Task) -> TaskResult<String> {
         let id = task.id.clone();
-        self.inner.lock().unwrap().add(task)?;
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).add(task)?;
         Ok(id)
     }
 
     /// Get task status
     pub fn status(&self, id: &str) -> Option<TaskStatus> {
-        self.inner.lock().unwrap().get(id).map(|t| t.status)
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).get(id).map(|t| t.status)
     }
 
     /// Cancel a task
     pub fn cancel(&self, id: &str) -> TaskResult<()> {
-        let mut guard = self.inner.lock().unwrap();
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let task = guard
             .get_mut(id)
             .ok_or_else(|| TaskError::TaskNotFound(id.to_string()))?;
@@ -922,12 +915,12 @@ impl TaskScheduler {
 
     /// Get pending count
     pub fn pending_count(&self) -> usize {
-        self.inner.lock().unwrap().pending_count()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).pending_count()
     }
 
     /// Get total count
     pub fn total_count(&self) -> usize {
-        self.inner.lock().unwrap().len()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 }
 

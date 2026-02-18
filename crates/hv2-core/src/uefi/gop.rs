@@ -3,7 +3,7 @@
 //! This module provides the UEFI Graphics Output Protocol implementation
 //! for framebuffer-based graphics output.
 
-use super::types::{Guid, Handle, Status, guids};
+use super::types::{guids, Guid, Handle, Status};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// GOP pixel format
@@ -133,7 +133,8 @@ impl GopModeInfo {
 
     /// Get framebuffer size in bytes
     pub fn framebuffer_size(&self) -> u64 {
-        let stride_bytes = self.pixels_per_scan_line as u64 * self.pixel_format.bytes_per_pixel() as u64;
+        let stride_bytes =
+            self.pixels_per_scan_line as u64 * self.pixel_format.bytes_per_pixel() as u64;
         stride_bytes * self.vertical_resolution as u64
     }
 
@@ -717,7 +718,10 @@ mod tests {
 
     #[test]
     fn test_gop_pixel_format() {
-        assert_eq!(GopPixelFormat::BlueGreenRedReserved8BitPerColor.bytes_per_pixel(), 4);
+        assert_eq!(
+            GopPixelFormat::BlueGreenRedReserved8BitPerColor.bytes_per_pixel(),
+            4
+        );
         assert!(GopPixelFormat::BlueGreenRedReserved8BitPerColor.has_framebuffer());
         assert!(!GopPixelFormat::BltOnly.has_framebuffer());
     }
@@ -935,9 +939,9 @@ mod tests {
         // Direct framebuffer access
         let fb = gop.framebuffer_mut();
         fb[0] = 255; // Blue
-        fb[1] = 0;   // Green
-        fb[2] = 0;   // Red
-        fb[3] = 0;   // Reserved
+        fb[1] = 0; // Green
+        fb[2] = 0; // Red
+        fb[3] = 0; // Reserved
 
         let pixel = gop.get_pixel(0, 0).unwrap();
         assert_eq!(pixel.blue, 255);
@@ -953,17 +957,7 @@ mod tests {
         gop.set_pixel(1, 0, GopBltPixel::GREEN);
 
         // Copy to different location
-        let status = gop.blt(
-            None,
-            GopBltOperation::VideoToVideo,
-            0,
-            0,
-            10,
-            10,
-            2,
-            1,
-            0,
-        );
+        let status = gop.blt(None, GopBltOperation::VideoToVideo, 0, 0, 10, 10, 2, 1, 0);
         assert!(status.is_success());
 
         // Verify copy
@@ -978,7 +972,11 @@ mod tests {
         let mut gop = GraphicsOutputProtocol::new();
         let initial_count = gop.max_mode();
 
-        gop.add_mode(GopModeInfo::new(1920, 1080, GopPixelFormat::BlueGreenRedReserved8BitPerColor));
+        gop.add_mode(GopModeInfo::new(
+            1920,
+            1080,
+            GopPixelFormat::BlueGreenRedReserved8BitPerColor,
+        ));
 
         assert_eq!(gop.max_mode(), initial_count + 1);
     }

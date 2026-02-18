@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine networking with TCP/IP stack and virtio-net"
 
 [dependencies]
 hv2-core = { path = "../hv2-core" }
@@ -23,3 +29,6 @@ winapi = { version = "0.3", features = [
     "minwindef",
     "ioapiset",
 ] }
+
+[lints]
+workspace = true

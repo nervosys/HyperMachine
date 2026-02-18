@@ -184,6 +184,12 @@ impl StandardExitHandler {
             VmExit::Shutdown => self.handle_shutdown(ctx),
             VmExit::Unknown { reason } => self.handle_unknown(*reason, ctx),
             VmExit::Debug { .. } => Ok(ExitHandlerResult::Continue),
+            VmExit::Hypercall { .. }
+            | VmExit::SystemEvent { .. }
+            | VmExit::Nmi
+            | VmExit::Rdmsr { .. }
+            | VmExit::Wrmsr { .. }
+            | VmExit::IoapicEoi { .. } => Ok(ExitHandlerResult::Continue),
         }
     }
 }
@@ -293,7 +299,9 @@ impl VmExitHandler for StandardExitHandler {
     fn handle_hlt(&self, _ctx: &ExitContext) -> Result<ExitHandlerResult> {
         // Check for pending interrupts
         if let Some(vector) = self.pic.get_pending_interrupt() {
-            self.pic.acknowledge_interrupt(vector);
+            if let Err(e) = self.pic.acknowledge_interrupt(vector) {
+                tracing::warn!(vector, error = %e, "PIC acknowledge failed in HLT handler");
+            }
             return Ok(ExitHandlerResult::InjectInterrupt(vector));
         }
 
@@ -304,7 +312,9 @@ impl VmExitHandler for StandardExitHandler {
     fn handle_interrupt_window(&self, _ctx: &ExitContext) -> Result<ExitHandlerResult> {
         // Interrupt window opened - check for pending interrupts
         if let Some(vector) = self.pic.get_pending_interrupt() {
-            self.pic.acknowledge_interrupt(vector);
+            if let Err(e) = self.pic.acknowledge_interrupt(vector) {
+                tracing::warn!(vector, error = %e, "PIC acknowledge failed in interrupt window handler");
+            }
             return Ok(ExitHandlerResult::InjectInterrupt(vector));
         }
 

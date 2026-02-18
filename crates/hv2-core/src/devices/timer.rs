@@ -121,6 +121,7 @@ pub struct TimerDevice {
 
 impl TimerDevice {
     /// Create a new timer device
+    #[must_use]
     pub fn new(name: String, base_address: u64) -> Self {
         Self {
             name,

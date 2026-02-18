@@ -2,7 +2,6 @@
 
 use crate::VMState;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tokio::sync::broadcast;
 
 /// VM event type
@@ -52,16 +51,22 @@ pub struct VmEvent {
 
 impl VmEvent {
     /// Create a new VM event
-    pub fn new(vm_name: String, event_type: VmEventType) -> Self {
+    #[must_use]
+    pub fn new(vm_name: impl Into<String>, event_type: VmEventType) -> Self {
         Self {
-            vm_name,
+            vm_name: vm_name.into(),
             timestamp: chrono::Utc::now().timestamp_millis(),
             event_type,
         }
     }
 
     /// Create a state change event
-    pub fn state_changed(vm_name: String, old_state: VMState, new_state: VMState) -> Self {
+    #[must_use]
+    pub fn state_changed(
+        vm_name: impl Into<String>,
+        old_state: VMState,
+        new_state: VMState,
+    ) -> Self {
         Self::new(
             vm_name,
             VmEventType::StateChanged {
@@ -72,22 +77,36 @@ impl VmEvent {
     }
 
     /// Create a vCPU started event
-    pub fn vcpu_started(vm_name: String, vcpu_id: u32) -> Self {
+    #[must_use]
+    pub fn vcpu_started(vm_name: impl Into<String>, vcpu_id: u32) -> Self {
         Self::new(vm_name, VmEventType::VCpuStarted { vcpu_id })
     }
 
     /// Create a vCPU stopped event
-    pub fn vcpu_stopped(vm_name: String, vcpu_id: u32) -> Self {
+    #[must_use]
+    pub fn vcpu_stopped(vm_name: impl Into<String>, vcpu_id: u32) -> Self {
         Self::new(vm_name, VmEventType::VCpuStopped { vcpu_id })
     }
 
     /// Create an error event
-    pub fn error(vm_name: String, message: String) -> Self {
-        Self::new(vm_name, VmEventType::Error { message })
+    #[must_use]
+    pub fn error(vm_name: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::new(
+            vm_name,
+            VmEventType::Error {
+                message: message.into(),
+            },
+        )
     }
 
     /// Create a memory access event
-    pub fn memory_access(vm_name: String, address: u64, size: u64, is_write: bool) -> Self {
+    #[must_use]
+    pub fn memory_access(
+        vm_name: impl Into<String>,
+        address: u64,
+        size: u64,
+        is_write: bool,
+    ) -> Self {
         Self::new(
             vm_name,
             VmEventType::Custom {
@@ -102,7 +121,8 @@ impl VmEvent {
     }
 
     /// Create an I/O operation event
-    pub fn io_operation(vm_name: String, port: u16, is_write: bool) -> Self {
+    #[must_use]
+    pub fn io_operation(vm_name: impl Into<String>, port: u16, is_write: bool) -> Self {
         Self::new(
             vm_name,
             VmEventType::Custom {
@@ -117,7 +137,8 @@ impl VmEvent {
     }
 
     /// Create a device interrupt event
-    pub fn device_interrupt(vm_name: String, vector: u32) -> Self {
+    #[must_use]
+    pub fn device_interrupt(vm_name: impl Into<String>, vector: u32) -> Self {
         Self::new(
             vm_name,
             VmEventType::Custom {

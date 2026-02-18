@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}
+  labels:
+    {{- include "hypermachine.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.http.port }}
+      targetPort: {{ .Values.service.http.targetPort }}
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.service.grpc.port }}
+      targetPort: {{ .Values.service.grpc.targetPort }}
+      protocol: TCP
+    {{- if .Values.metrics.enabled }}
+    - name: metrics
+      port: {{ .Values.service.metrics.port }}
+      targetPort: {{ .Values.service.metrics.targetPort }}
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- include "hypermachine.selectorLabels" . | nindent 4 }}

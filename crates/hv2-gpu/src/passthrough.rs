@@ -5,11 +5,10 @@
 //! on Linux and similar mechanisms on other platforms.
 
 use crate::{GpuError, Result};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 /// PCI device address
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -209,7 +208,10 @@ impl VfioContainer {
         use std::ffi::CString;
         use std::os::unix::io::RawFd;
 
-        let path = CString::new("/dev/vfio/vfio").unwrap();
+        // SAFETY: CString::new on a literal without embedded NULs never fails
+        let path = CString::new("/dev/vfio/vfio").expect("static path has no NUL bytes");
+        // SAFETY: `path` is a valid NUL-terminated C string. Standard POSIX open;
+        // return value is checked immediately.
         let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDWR) };
         if fd < 0 {
             return Err(GpuError::NotAvailable(
@@ -220,8 +222,10 @@ impl VfioContainer {
         // Check VFIO API version
         const VFIO_GET_API_VERSION: u64 = 0x3B64;
         const VFIO_API_VERSION: i32 = 0;
+        // SAFETY: `fd` is a valid open VFIO container file descriptor.
         let version = unsafe { libc::ioctl(fd, VFIO_GET_API_VERSION) };
         if version != VFIO_API_VERSION {
+            // SAFETY: fd is a valid open file descriptor from the successful open above.
             unsafe { libc::close(fd) };
             return Err(GpuError::NotAvailable(format!(
                 "VFIO API version mismatch: {} != {}",
@@ -239,7 +243,10 @@ impl VfioContainer {
     pub fn add_group(&mut self, group_id: u32) -> Result<()> {
         use std::ffi::CString;
 
-        let group_path = CString::new(format!("/dev/vfio/{}", group_id)).unwrap();
+        // SAFETY: group_id is a u32, format! output contains no NUL bytes
+        let group_path = CString::new(format!("/dev/vfio/{}", group_id))
+            .expect("u32 format output has no NUL bytes");
+        // SAFETY: group_path is a valid NUL-terminated C string. Standard POSIX open.
         let group_fd = unsafe { libc::open(group_path.as_ptr(), libc::O_RDWR) };
         if group_fd < 0 {
             return Err(GpuError::NotAvailable(format!(
@@ -250,8 +257,10 @@ impl VfioContainer {
 
         // Set container for group
         const VFIO_GROUP_SET_CONTAINER: u64 = 0x3B66;
+        // SAFETY: group_fd is a valid open VFIO group fd; self.fd is a valid container fd.
         let ret = unsafe { libc::ioctl(group_fd, VFIO_GROUP_SET_CONTAINER, &self.fd) };
         if ret < 0 {
+            // SAFETY: group_fd is a valid fd that we just opened above.
             unsafe { libc::close(group_fd) };
             return Err(GpuError::InitFailed(format!(
                 "Failed to set container for group {}",
@@ -271,8 +280,14 @@ impl VfioContainer {
             GpuError::NotAvailable(format!("IOMMU group {} not in container", group_id))
         })?;
 
-        let name = CString::new(device_name).unwrap();
+        let name = CString::new(device_name).map_err(|_| {
+            GpuError::NotAvailable(format!(
+                "Device name '{}' contains interior NUL byte",
+                device_name
+            ))
+        })?;
         const VFIO_GROUP_GET_DEVICE_FD: u64 = 0x3B6A;
+        // SAFETY: group_fd is a valid open VFIO group fd; name is a NUL-terminated C string.
         let device_fd = unsafe { libc::ioctl(*group_fd, VFIO_GROUP_GET_DEVICE_FD, name.as_ptr()) };
         if device_fd < 0 {
             return Err(GpuError::NotAvailable(format!(
@@ -289,8 +304,10 @@ impl VfioContainer {
 impl Drop for VfioContainer {
     fn drop(&mut self) {
         for (_, group_fd) in self.groups.drain() {
+            // SAFETY: group_fd is a valid fd from a successful libc::open call.
             unsafe { libc::close(group_fd) };
         }
+        // SAFETY: self.fd is a valid fd from a successful libc::open call in new().
         unsafe { libc::close(self.fd) };
     }
 }
@@ -314,6 +331,7 @@ pub struct GpuPassthrough {
     /// Statistics
     stats: Arc<PassthroughStats>,
     /// Interrupt handler
+    #[allow(clippy::type_complexity)]
     interrupt_handler: RwLock<Option<Arc<dyn Fn(u32) + Send + Sync>>>,
 }
 
@@ -469,7 +487,7 @@ impl GpuPassthrough {
         tracing::info!("Attaching GPU passthrough: {}", self.config.pci_address);
 
         // Discover device first
-        let device_info = self.discover().await?;
+        let _device_info = self.discover().await?;
 
         #[cfg(target_os = "linux")]
         {
@@ -549,7 +567,7 @@ impl GpuPassthrough {
     }
 
     /// Read from a MMIO region
-    pub async fn mmio_read(&self, bar: u8, offset: u64, size: u8) -> Result<u64> {
+    pub async fn mmio_read(&self, _bar: u8, _offset: u64, _size: u8) -> Result<u64> {
         if !self.is_attached() {
             return Err(GpuError::NotAvailable("Device not attached".into()));
         }
@@ -573,7 +591,7 @@ impl GpuPassthrough {
     }
 
     /// Write to a MMIO region
-    pub async fn mmio_write(&self, bar: u8, offset: u64, size: u8, value: u64) -> Result<()> {
+    pub async fn mmio_write(&self, _bar: u8, _offset: u64, _size: u8, _value: u64) -> Result<()> {
         if !self.is_attached() {
             return Err(GpuError::NotAvailable("Device not attached".into()));
         }
@@ -613,6 +631,7 @@ impl GpuPassthrough {
         {
             // Close VFIO device
             if let Some(fd) = self.vfio_device_fd.lock().await.take() {
+                // SAFETY: fd is a valid VFIO device fd from a successful ioctl call.
                 unsafe { libc::close(fd) };
             }
 
@@ -653,6 +672,7 @@ impl Drop for GpuPassthrough {
             // Synchronously close VFIO device fd if still open
             if let Ok(mut fd_guard) = self.vfio_device_fd.try_lock() {
                 if let Some(fd) = fd_guard.take() {
+                    // SAFETY: fd is a valid VFIO device fd, guarded by try_lock.
                     unsafe { libc::close(fd) };
                 }
             }

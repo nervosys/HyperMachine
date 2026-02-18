@@ -1,19 +1,17 @@
 //! Interrupt Controller Example
 //!
 //! This example demonstrates the Intel 8259 PIC (Programmable Interrupt Controller)
-//! and how hardware interrupts work in HV2.
+//! and how hardware interrupts work in HyperMachine.
 
 use hv2_core::{hypervisor::create_backend, Device, Pic8259, VCpu};
-use tokio;
 use tracing::{info, Level};
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
-    info!("=== HV2 Interrupt Controller Demo ===\n");
+    info!("=== HyperMachine Interrupt Controller Demo ===\n");
 
     // Create PIC
     let mut pic = Pic8259::new();

@@ -608,12 +608,15 @@ impl Container {
 
     /// Get current state
     pub fn state(&self) -> ContainerState {
-        *self.state.read().unwrap()
+        *self
+            .state
+            .read()
+            .expect("container state read lock poisoned")
     }
 
     /// Get host PID
     pub fn pid(&self) -> Option<u32> {
-        *self.pid.read().unwrap()
+        *self.pid.read().expect("container pid read lock poisoned")
     }
 
     /// Get creation time
@@ -623,7 +626,10 @@ impl Container {
 
     /// Mark as created
     pub fn mark_created(&self) -> RuntimeResult<()> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("container state write lock poisoned");
         if *state != ContainerState::Creating {
             return Err(RuntimeError::InvalidState(*state, "create"));
         }
@@ -633,30 +639,45 @@ impl Container {
 
     /// Start container
     pub fn start(&self, pid: u32) -> RuntimeResult<()> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("container state write lock poisoned");
         if !state.can_start() {
             return Err(RuntimeError::InvalidState(*state, "start"));
         }
-        *self.pid.write().unwrap() = Some(pid);
-        *self.started.write().unwrap() = Some(SystemTime::now());
+        *self.pid.write().expect("container pid write lock poisoned") = Some(pid);
+        *self
+            .started
+            .write()
+            .expect("container started write lock poisoned") = Some(SystemTime::now());
         *state = ContainerState::Running;
         Ok(())
     }
 
     /// Stop container
     pub fn stop(&self, exit_code: i32) -> RuntimeResult<()> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("container state write lock poisoned");
         if !state.can_stop() {
             return Err(RuntimeError::InvalidState(*state, "stop"));
         }
-        *self.exit_code.write().unwrap() = Some(exit_code);
+        *self
+            .exit_code
+            .write()
+            .expect("container exit_code write lock poisoned") = Some(exit_code);
         *state = ContainerState::Stopped;
         Ok(())
     }
 
     /// Pause container
     pub fn pause(&self) -> RuntimeResult<()> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("container state write lock poisoned");
         if !state.can_pause() {
             return Err(RuntimeError::InvalidState(*state, "pause"));
         }
@@ -666,7 +687,10 @@ impl Container {
 
     /// Resume container
     pub fn resume(&self) -> RuntimeResult<()> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self
+            .state
+            .write()
+            .expect("container state write lock poisoned");
         if !state.can_resume() {
             return Err(RuntimeError::InvalidState(*state, "resume"));
         }
@@ -676,12 +700,18 @@ impl Container {
 
     /// Get exit code
     pub fn exit_code(&self) -> Option<i32> {
-        *self.exit_code.read().unwrap()
+        *self
+            .exit_code
+            .read()
+            .expect("container exit_code read lock poisoned")
     }
 
     /// Get uptime
     pub fn uptime(&self) -> Option<Duration> {
-        let started = self.started.read().unwrap();
+        let started = self
+            .started
+            .read()
+            .expect("container started read lock poisoned");
         started.map(|s| SystemTime::now().duration_since(s).unwrap_or_default())
     }
 }
@@ -731,7 +761,10 @@ impl ContainerRuntime {
 
         // Check if container already exists
         {
-            let containers = self.containers.read().unwrap();
+            let containers = self
+                .containers
+                .read()
+                .expect("containers read lock poisoned");
             if containers.contains_key(&id) {
                 return Err(RuntimeError::AlreadyExists(id));
             }
@@ -746,7 +779,10 @@ impl ContainerRuntime {
 
         // Store container
         {
-            let mut containers = self.containers.write().unwrap();
+            let mut containers = self
+                .containers
+                .write()
+                .expect("containers write lock poisoned");
             containers.insert(id, container.clone());
         }
 
@@ -756,7 +792,10 @@ impl ContainerRuntime {
 
     /// Get container by ID
     pub fn get(&self, id: &str) -> RuntimeResult<Arc<Container>> {
-        let containers = self.containers.read().unwrap();
+        let containers = self
+            .containers
+            .read()
+            .expect("containers read lock poisoned");
         containers
             .get(id)
             .cloned()
@@ -798,7 +837,10 @@ impl ContainerRuntime {
             return Err(RuntimeError::InvalidState(state, "delete"));
         }
 
-        let mut containers = self.containers.write().unwrap();
+        let mut containers = self
+            .containers
+            .write()
+            .expect("containers write lock poisoned");
         containers.remove(id);
         Ok(())
     }
@@ -817,13 +859,19 @@ impl ContainerRuntime {
 
     /// List containers
     pub fn list(&self) -> Vec<Arc<Container>> {
-        let containers = self.containers.read().unwrap();
+        let containers = self
+            .containers
+            .read()
+            .expect("containers read lock poisoned");
         containers.values().cloned().collect()
     }
 
     /// Get container count
     pub fn count(&self) -> usize {
-        self.containers.read().unwrap().len()
+        self.containers
+            .read()
+            .expect("containers read lock poisoned")
+            .len()
     }
 
     /// Validate container spec
@@ -848,7 +896,10 @@ impl ContainerRuntime {
 
     /// Get runtime statistics
     pub fn stats(&self) -> RuntimeStats {
-        let containers = self.containers.read().unwrap();
+        let containers = self
+            .containers
+            .read()
+            .expect("containers read lock poisoned");
         let mut running = 0;
         let mut stopped = 0;
         let mut paused = 0;

@@ -111,10 +111,10 @@ impl Vm {
         }
 
         let id = VM_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
-        
+
         // Initialize empty vcpu array
         const NONE_VCPU: Option<Vcpu> = None;
-        
+
         Ok(Self {
             id,
             state: VmState::Uninitialized,
@@ -238,7 +238,7 @@ impl Vm {
     /// Map guest physical memory
     pub fn map_memory(&mut self, guest_phys: u64, host_phys: u64, size: u64) -> Result<()> {
         use crate::memory::GuestMemoryRegion;
-        
+
         self.memory_mapper.map_region(GuestMemoryRegion {
             guest_phys_addr: guest_phys,
             host_phys_addr: host_phys,
@@ -257,7 +257,12 @@ impl Vm {
 /// VM exit handler trait
 pub trait VmExitHandler {
     /// Handle a VM exit
-    fn handle_exit(&mut self, vm: &mut Vm, vcpu_index: usize, exit_info: &crate::vcpu::VmExitInfo) -> Result<VmExitAction>;
+    fn handle_exit(
+        &mut self,
+        vm: &mut Vm,
+        vcpu_index: usize,
+        exit_info: &crate::vcpu::VmExitInfo,
+    ) -> Result<VmExitAction>;
 }
 
 /// Action to take after handling a VM exit
@@ -277,7 +282,12 @@ pub enum VmExitAction {
 pub struct DefaultExitHandler;
 
 impl VmExitHandler for DefaultExitHandler {
-    fn handle_exit(&mut self, vm: &mut Vm, vcpu_index: usize, exit_info: &crate::vcpu::VmExitInfo) -> Result<VmExitAction> {
+    fn handle_exit(
+        &mut self,
+        vm: &mut Vm,
+        vcpu_index: usize,
+        exit_info: &crate::vcpu::VmExitInfo,
+    ) -> Result<VmExitAction> {
         // Handle common exits
         match exit_info.reason {
             // CPUID - emulate
@@ -286,26 +296,22 @@ impl VmExitHandler for DefaultExitHandler {
                     let regs = vcpu.registers_mut();
                     let leaf = regs.gp.rax as u32;
                     let subleaf = regs.gp.rcx as u32;
-                    
+
                     let result = crate::cpu::virtualize_cpuid(leaf, subleaf, false);
                     regs.gp.rax = result.eax as u64;
                     regs.gp.rbx = result.ebx as u64;
                     regs.gp.rcx = result.ecx as u64;
                     regs.gp.rdx = result.edx as u64;
-                    
+
                     // Advance RIP past CPUID instruction
                     regs.gp.rip += exit_info.instruction_length as u64;
                 }
                 Ok(VmExitAction::Continue)
             }
             // HLT
-            12 => {
-                Ok(VmExitAction::Halt)
-            }
+            12 => Ok(VmExitAction::Halt),
             // Triple fault
-            2 => {
-                Ok(VmExitAction::Shutdown)
-            }
+            2 => Ok(VmExitAction::Shutdown),
             _ => {
                 // Unhandled exit
                 Ok(VmExitAction::Error)

@@ -5,11 +5,16 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Mutex, RwLock};
 use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
+
+/// Default maximum event history entries.
+const DEFAULT_MAX_HISTORY: usize = 1000;
+/// Default channel capacity for the event bus.
+const DEFAULT_CHANNEL_CAPACITY: usize = 100;
 
 /// Event result type
 pub type EventResult<T> = Result<T, EventError>;
@@ -374,7 +379,7 @@ impl EventBus {
             subscriptions: RwLock::new(HashMap::new()),
             next_sub_id: AtomicU64::new(1),
             history: Mutex::new(Vec::new()),
-            max_history: 1000,
+            max_history: DEFAULT_MAX_HISTORY,
             total_events: AtomicU64::new(0),
         }
     }
@@ -391,7 +396,7 @@ impl EventBus {
 
         // Store in history
         {
-            let mut history = self.history.lock().unwrap();
+            let mut history = self.history.lock().expect("event history lock poisoned");
             if history.len() >= self.max_history {
                 history.remove(0);
             }
@@ -399,7 +404,10 @@ impl EventBus {
         }
 
         // Update subscription counts for matching events
-        let subs = self.subscriptions.read().unwrap();
+        let subs = self
+            .subscriptions
+            .read()
+            .expect("subscriptions read lock poisoned");
         for sub in subs.values() {
             if sub.filter.matches(&event) {
                 sub.event_count.fetch_add(1, Ordering::Relaxed);
@@ -422,7 +430,10 @@ impl EventBus {
             event_count: AtomicU64::new(0),
         };
 
-        self.subscriptions.write().unwrap().insert(id, subscription);
+        self.subscriptions
+            .write()
+            .expect("subscriptions write lock poisoned")
+            .insert(id, subscription);
 
         (
             id,
@@ -436,7 +447,13 @@ impl EventBus {
 
     /// Unsubscribe
     pub fn unsubscribe(&self, id: u64) -> EventResult<()> {
-        if self.subscriptions.write().unwrap().remove(&id).is_none() {
+        if self
+            .subscriptions
+            .write()
+            .expect("subscriptions write lock poisoned")
+            .remove(&id)
+            .is_none()
+        {
             return Err(EventError::SubscriberNotFound(id));
         }
         Ok(())
@@ -444,7 +461,10 @@ impl EventBus {
 
     /// Get subscription count
     pub fn subscription_count(&self) -> usize {
-        self.subscriptions.read().unwrap().len()
+        self.subscriptions
+            .read()
+            .expect("subscriptions read lock poisoned")
+            .len()
     }
 
     /// Get total event count
@@ -454,14 +474,17 @@ impl EventBus {
 
     /// Get event history
     pub fn history(&self) -> Vec<VmEvent> {
-        self.history.lock().unwrap().clone()
+        self.history
+            .lock()
+            .expect("event history lock poisoned")
+            .clone()
     }
 
     /// Get filtered history
     pub fn filtered_history(&self, filter: &EventFilter) -> Vec<VmEvent> {
         self.history
             .lock()
-            .unwrap()
+            .expect("event history lock poisoned")
             .iter()
             .filter(|e| filter.matches(e))
             .cloned()
@@ -470,12 +493,15 @@ impl EventBus {
 
     /// Clear history
     pub fn clear_history(&self) {
-        self.history.lock().unwrap().clear();
+        self.history
+            .lock()
+            .expect("event history lock poisoned")
+            .clear();
     }
 
     /// Get recent events
     pub fn recent(&self, count: usize) -> Vec<VmEvent> {
-        let history = self.history.lock().unwrap();
+        let history = self.history.lock().expect("event history lock poisoned");
         history.iter().rev().take(count).cloned().collect()
     }
 
@@ -483,7 +509,7 @@ impl EventBus {
     pub fn find_event(&self, id: u64) -> Option<VmEvent> {
         self.history
             .lock()
-            .unwrap()
+            .expect("event history lock poisoned")
             .iter()
             .find(|e| e.id == id)
             .cloned()
@@ -493,7 +519,7 @@ impl EventBus {
     pub fn correlated_events(&self, correlation_id: u64) -> Vec<VmEvent> {
         self.history
             .lock()
-            .unwrap()
+            .expect("event history lock poisoned")
             .iter()
             .filter(|e| e.correlation_id == Some(correlation_id))
             .cloned()
@@ -589,21 +615,21 @@ impl EventAggregator {
         *self
             .by_category
             .write()
-            .unwrap()
+            .expect("category stats write lock poisoned")
             .entry(event.category)
             .or_insert(0) += 1;
 
         *self
             .by_severity
             .write()
-            .unwrap()
+            .expect("severity stats write lock poisoned")
             .entry(event.severity)
             .or_insert(0) += 1;
 
         *self
             .by_source
             .write()
-            .unwrap()
+            .expect("source stats write lock poisoned")
             .entry(event.source.clone())
             .or_insert(0) += 1;
     }
@@ -613,7 +639,7 @@ impl EventAggregator {
         *self
             .by_category
             .read()
-            .unwrap()
+            .expect("category stats read lock poisoned")
             .get(&category)
             .unwrap_or(&0)
     }
@@ -623,14 +649,19 @@ impl EventAggregator {
         *self
             .by_severity
             .read()
-            .unwrap()
+            .expect("severity stats read lock poisoned")
             .get(&severity)
             .unwrap_or(&0)
     }
 
     /// Get count by source
     pub fn count_by_source(&self, source: &str) -> u64 {
-        *self.by_source.read().unwrap().get(source).unwrap_or(&0)
+        *self
+            .by_source
+            .read()
+            .expect("source stats read lock poisoned")
+            .get(source)
+            .unwrap_or(&0)
     }
 
     /// Get total count
@@ -640,24 +671,42 @@ impl EventAggregator {
 
     /// Get all category counts
     pub fn category_counts(&self) -> HashMap<EventCategory, u64> {
-        self.by_category.read().unwrap().clone()
+        self.by_category
+            .read()
+            .expect("category stats read lock poisoned")
+            .clone()
     }
 
     /// Get all severity counts
     pub fn severity_counts(&self) -> HashMap<EventSeverity, u64> {
-        self.by_severity.read().unwrap().clone()
+        self.by_severity
+            .read()
+            .expect("severity stats read lock poisoned")
+            .clone()
     }
 
     /// Get all source counts
     pub fn source_counts(&self) -> HashMap<String, u64> {
-        self.by_source.read().unwrap().clone()
+        self.by_source
+            .read()
+            .expect("source stats read lock poisoned")
+            .clone()
     }
 
     /// Reset all counts
     pub fn reset(&self) {
-        self.by_category.write().unwrap().clear();
-        self.by_severity.write().unwrap().clear();
-        self.by_source.write().unwrap().clear();
+        self.by_category
+            .write()
+            .expect("category stats write lock poisoned")
+            .clear();
+        self.by_severity
+            .write()
+            .expect("severity stats write lock poisoned")
+            .clear();
+        self.by_source
+            .write()
+            .expect("source stats write lock poisoned")
+            .clear();
         self.total.store(0, Ordering::Relaxed);
     }
 }
@@ -940,7 +989,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_publish() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
 
         let event = VmEvent::lifecycle("test", "start", "Started");
         bus.publish(event);
@@ -951,7 +1000,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_history() {
-        let bus = EventBus::new(100).with_history_size(5);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY).with_history_size(5);
 
         for i in 0..10 {
             bus.publish(VmEvent::lifecycle("test", &format!("event-{}", i), "test"));
@@ -963,7 +1012,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_filtered_history() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
 
         bus.publish(VmEvent::lifecycle("agent", "start", "Started"));
         bus.publish(VmEvent::security(
@@ -982,7 +1031,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_recent() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
 
         for i in 0..5 {
             bus.publish(VmEvent::lifecycle("test", &format!("event-{}", i), "test"));
@@ -995,7 +1044,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_find_event() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
 
         let event = VmEvent::lifecycle("test", "findme", "test");
         let id = event.id;
@@ -1011,7 +1060,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_correlated_events() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
 
         let corr_id = 12345u64;
         bus.publish(VmEvent::lifecycle("test", "event1", "test").with_correlation(corr_id));
@@ -1024,7 +1073,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_subscribe() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
         let filter = EventFilter::new();
 
         let (id, _receiver) = bus.subscribe(filter);
@@ -1034,7 +1083,7 @@ mod tests {
 
     #[test]
     fn test_event_bus_unsubscribe() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
         let (id, _) = bus.subscribe(EventFilter::new());
 
         assert!(bus.unsubscribe(id).is_ok());
@@ -1152,7 +1201,7 @@ mod tests {
 
     #[test]
     fn test_clear_history() {
-        let bus = EventBus::new(100);
+        let bus = EventBus::new(DEFAULT_CHANNEL_CAPACITY);
 
         bus.publish(VmEvent::lifecycle("test", "test", "test"));
         assert_eq!(bus.history().len(), 1);

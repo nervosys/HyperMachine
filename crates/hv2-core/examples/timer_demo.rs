@@ -9,7 +9,7 @@ use tokio::time::{sleep, Duration};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    println!("⏱️  HV2 Timer Device Example");
+    println!("⏱️  HyperMachine Timer Device Example");
     println!("{}", "=".repeat(50));
 
     // Create MMIO manager
@@ -17,10 +17,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✓ MMIO manager created");
 
     // Create PIT (Programmable Interval Timer) at standard address 0x40
-    let timer = Arc::new(RwLock::new(TimerDevice::new("PIT".to_string(), 0x40)));
+    let mut timer_dev = TimerDevice::new("PIT".to_string(), 0x40);
 
     // Initialize timer
-    timer.write().init().await?;
+    timer_dev.init().await?;
+    let timer = Arc::new(RwLock::new(timer_dev));
 
     // Map timer to MMIO
     mmio.map_device(0x40, 4, timer.clone())?;

@@ -1,13 +1,13 @@
 [package]
 name = "hv1-core"
-version = "0.1.0"
-edition = "2021"
-authors = ["Nervosys <info@nervosys.com>"]
-license = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 description = "HyperMachine Type-1 bare-metal hypervisor core"
-repository = "https://github.com/nervosys/HyperMachine"
-keywords = ["hypervisor", "virtualization", "vmx", "svm", "bare-metal"]
-categories = ["hardware-support", "no-std", "os"]
+keywords.workspace = true
+categories.workspace = true
 
 [features]
 default = ["intel", "amd"]

@@ -22,8 +22,8 @@ pub use interrupt_remap::{
 
 pub use types::{
     AddressWidth, DeviceId, DeviceScope, DeviceScopeType, DomainId, FaultReason, FaultRecord,
-    IommuStats, IommuStatsSnapshot, PageTableEntry, PageTableFlags, TranslationType,
-    PAGE_SIZE_1G, PAGE_SIZE_2M, PAGE_SIZE_4K,
+    IommuStats, IommuStatsSnapshot, PageTableEntry, PageTableFlags, TranslationType, PAGE_SIZE_1G,
+    PAGE_SIZE_2M, PAGE_SIZE_4K,
 };
 
 pub use vtd::{

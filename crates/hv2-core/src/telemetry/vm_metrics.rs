@@ -2,9 +2,7 @@
 //!
 //! Metrics and statistics specific to virtual machines and hypervisor operations.
 
-use super::collector::{Counter, Gauge, Histogram, MetricDescriptor, MetricRegistry, Timer};
-use super::types::{MetricLabels, MetricSample, MetricType, MovingAverage};
-use serde::{Deserialize, Serialize};
+use super::types::MovingAverage;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -109,9 +107,12 @@ impl VcpuMetrics {
 
     /// Update utilization
     fn update_utilization(&self) {
+        /// Minimum elapsed time between utilization recalculations.
+        const UTILIZATION_UPDATE_INTERVAL: Duration = Duration::from_millis(100);
+
         if let (Ok(mut last), Ok(mut util)) = (self.last_update.write(), self.utilization.write()) {
             let elapsed = last.elapsed();
-            if elapsed > Duration::from_millis(100) {
+            if elapsed > UTILIZATION_UPDATE_INTERVAL {
                 let run_time = self.run_time_ns.load(Ordering::Relaxed) as f64;
                 let halt_time = self.halt_time_ns.load(Ordering::Relaxed) as f64;
                 let total = run_time + halt_time;

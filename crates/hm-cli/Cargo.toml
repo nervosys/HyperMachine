@@ -4,6 +4,11 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
 description = "HyperMachine CLI - Unified hypervisor management for Type 1 and Type 2 modes"
 
 [lib]
@@ -27,15 +32,12 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
-chrono = { version = "0.4", features = ["serde"] }
+chrono = { workspace = true, features = ["serde"] }
 dirs = "5.0"
-reqwest = { version = "0.12", features = [
-    "json",
-    "rustls-tls",
-], default-features = false }
+reqwest = { workspace = true, features = ["rustls-tls"] }
 
 # MCP HTTP server
-axum = "0.7"
+axum = { workspace = true }
 tower-http = { version = "0.5", features = ["cors"] }
 
 # Shell completions
@@ -43,3 +45,6 @@ clap_complete = "4.5"
 
 [dev-dependencies]
 tempfile = "3.10"
+
+[lints]
+workspace = true

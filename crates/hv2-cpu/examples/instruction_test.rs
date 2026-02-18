@@ -3,7 +3,7 @@
 use hv2_cpu::x86_64::{flags, X86_64Cpu};
 
 fn main() {
-    println!("🖥️  HV2 CPU Instruction Test");
+    println!("🖥️  HyperMachine CPU Instruction Test");
     println!("{}", "=".repeat(50));
 
     let mut cpu = X86_64Cpu::new();

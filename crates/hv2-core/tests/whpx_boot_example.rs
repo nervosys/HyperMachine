@@ -165,20 +165,18 @@ fn test_whpx_memory_access() {
     let rt = tokio::runtime::Runtime::new().unwrap();
 
     // Create VM
-    let vm = match rt.block_on(backend.create_vm(1, 1024 * 1024)) {
-        Ok(vm_handle) => {
+    match rt.block_on(backend.create_vm(1, 1024 * 1024)) {
+        Ok(_vm_handle) => {
             // Note: We'd need to access the actual WhpxVm from the handle
             // This is a simplified example showing the pattern
             println!("✓ Created VM");
             println!("✓ Memory access test structure verified");
             println!("\n✅ Memory access patterns are correct!");
-            return;
         }
         Err(e) => {
             println!("⚠️  Could not create VM: {}", e);
-            return;
         }
-    };
+    }
 }
 
 // ============================================================================
@@ -232,7 +230,7 @@ fn test_whpx_load_and_boot_pattern() {
 
     // Check if guest binary exists
     let binary_path = "hello.bin";
-    let binary_data = match load_guest_binary(binary_path) {
+    let _binary_data = match load_guest_binary(binary_path) {
         Some(data) => {
             println!("✓ Loaded {} ({} bytes)", binary_path, data.len());
             data

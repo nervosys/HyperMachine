@@ -347,12 +347,12 @@ impl VirtualTpm {
 
     /// Get TPM state
     pub fn state(&self) -> TpmState {
-        *self.state.read().unwrap()
+        *self.state.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Startup TPM
     pub fn startup(&self, startup_type: StartupType) -> TpmResponseCode {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
 
         match startup_type {
             StartupType::Clear => {
@@ -369,24 +369,24 @@ impl VirtualTpm {
 
     /// Shutdown TPM
     pub fn shutdown(&self) -> TpmResponseCode {
-        *self.state.write().unwrap() = TpmState::Uninitialized;
+        *self.state.write().unwrap_or_else(|e| e.into_inner()) = TpmState::Uninitialized;
         TpmResponseCode::Success
     }
 
     /// Run self-test
     pub fn self_test(&self, full_test: bool) -> TpmResponseCode {
-        let state = *self.state.read().unwrap();
+        let state = *self.state.read().unwrap_or_else(|e| e.into_inner());
         if state != TpmState::Ready {
             return TpmResponseCode::Initialize;
         }
 
         // Simulate self-test
         if full_test {
-            *self.state.write().unwrap() = TpmState::SelfTesting;
+            *self.state.write().unwrap_or_else(|e| e.into_inner()) = TpmState::SelfTesting;
         }
 
         self.self_test_passed.store(true, Ordering::Release);
-        *self.state.write().unwrap() = TpmState::Ready;
+        *self.state.write().unwrap_or_else(|e| e.into_inner()) = TpmState::Ready;
 
         TpmResponseCode::Success
     }
@@ -398,7 +398,7 @@ impl VirtualTpm {
 
     /// Get random bytes
     pub fn get_random(&self, count: usize) -> Result<Vec<u8>, TpmResponseCode> {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
@@ -421,11 +421,11 @@ impl VirtualTpm {
         algorithm: HashAlgorithm,
         index: usize,
     ) -> Result<Vec<u8>, TpmResponseCode> {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
-        let banks = self.pcr_banks.read().unwrap();
+        let banks = self.pcr_banks.read().unwrap_or_else(|e| e.into_inner());
         let bank = banks.get(&algorithm).ok_or(TpmResponseCode::BadParam)?;
         let value = bank.read(index).ok_or(TpmResponseCode::BadPcr)?;
 
@@ -440,11 +440,11 @@ impl VirtualTpm {
         index: usize,
         data: &[u8],
     ) -> TpmResponseCode {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return TpmResponseCode::Initialize;
         }
 
-        let mut banks = self.pcr_banks.write().unwrap();
+        let mut banks = self.pcr_banks.write().unwrap_or_else(|e| e.into_inner());
         let bank = match banks.get_mut(&algorithm) {
             Some(b) => b,
             None => return TpmResponseCode::BadParam,
@@ -460,11 +460,11 @@ impl VirtualTpm {
 
     /// Reset PCR (only PCRs 16-23)
     pub fn pcr_reset(&self, algorithm: HashAlgorithm, index: usize) -> TpmResponseCode {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return TpmResponseCode::Initialize;
         }
 
-        let mut banks = self.pcr_banks.write().unwrap();
+        let mut banks = self.pcr_banks.write().unwrap_or_else(|e| e.into_inner());
         let bank = match banks.get_mut(&algorithm) {
             Some(b) => b,
             None => return TpmResponseCode::BadParam,
@@ -480,11 +480,11 @@ impl VirtualTpm {
 
     /// Define NV space
     pub fn nv_define_space(&self, index: NvIndex, size: u16, attributes: u32) -> TpmResponseCode {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return TpmResponseCode::Initialize;
         }
 
-        let mut storage = self.nv_storage.write().unwrap();
+        let mut storage = self.nv_storage.write().unwrap_or_else(|e| e.into_inner());
         if storage.contains_key(&index) {
             return TpmResponseCode::NvDefined;
         }
@@ -501,11 +501,11 @@ impl VirtualTpm {
         offset: u16,
         size: u16,
     ) -> Result<Vec<u8>, TpmResponseCode> {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
-        let storage = self.nv_storage.read().unwrap();
+        let storage = self.nv_storage.read().unwrap_or_else(|e| e.into_inner());
         let entry = storage.get(&index).ok_or(TpmResponseCode::NvNotFound)?;
 
         let start = offset as usize;
@@ -520,11 +520,11 @@ impl VirtualTpm {
 
     /// Write NV
     pub fn nv_write(&self, index: NvIndex, offset: u16, data: &[u8]) -> TpmResponseCode {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return TpmResponseCode::Initialize;
         }
 
-        let mut storage = self.nv_storage.write().unwrap();
+        let mut storage = self.nv_storage.write().unwrap_or_else(|e| e.into_inner());
         let entry = match storage.get_mut(&index) {
             Some(e) => e,
             None => return TpmResponseCode::NvNotFound,
@@ -550,7 +550,7 @@ impl VirtualTpm {
         bits: u16,
         parent: Option<KeyHandle>,
     ) -> Result<KeyHandle, TpmResponseCode> {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
@@ -565,18 +565,18 @@ impl VirtualTpm {
             parent,
         };
 
-        self.keys.write().unwrap().insert(handle, key);
+        self.keys.write().unwrap_or_else(|e| e.into_inner()).insert(handle, key);
         self.command_count.fetch_add(1, Ordering::Relaxed);
         Ok(handle)
     }
 
     /// Load a key
     pub fn load_key(&self, handle: KeyHandle) -> Result<&Self, TpmResponseCode> {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
-        if !self.keys.read().unwrap().contains_key(&handle) {
+        if !self.keys.read().unwrap_or_else(|e| e.into_inner()).contains_key(&handle) {
             return Err(TpmResponseCode::BadParam);
         }
 
@@ -586,7 +586,7 @@ impl VirtualTpm {
 
     /// Get key info
     pub fn get_key(&self, handle: KeyHandle) -> Option<TpmKey> {
-        self.keys.read().unwrap().get(&handle).cloned()
+        self.keys.read().unwrap_or_else(|e| e.into_inner()).get(&handle).cloned()
     }
 
     /// Get command count
@@ -596,17 +596,17 @@ impl VirtualTpm {
 
     /// Get NV entry count
     pub fn nv_count(&self) -> usize {
-        self.nv_storage.read().unwrap().len()
+        self.nv_storage.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Get key count
     pub fn key_count(&self) -> usize {
-        self.keys.read().unwrap().len()
+        self.keys.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Hash data
     pub fn hash(&self, algorithm: HashAlgorithm, data: &[u8]) -> Result<Vec<u8>, TpmResponseCode> {
-        if *self.state.read().unwrap() != TpmState::Ready {
+        if *self.state.read().unwrap_or_else(|e| e.into_inner()) != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
@@ -626,13 +626,13 @@ impl VirtualTpm {
     pub fn add_pcr_bank(&self, algorithm: HashAlgorithm) {
         self.pcr_banks
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(algorithm, PcrBank::new(algorithm));
     }
 
     /// Check if PCR bank exists
     pub fn has_pcr_bank(&self, algorithm: HashAlgorithm) -> bool {
-        self.pcr_banks.read().unwrap().contains_key(&algorithm)
+        self.pcr_banks.read().unwrap_or_else(|e| e.into_inner()).contains_key(&algorithm)
     }
 }
 

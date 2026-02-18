@@ -4,7 +4,6 @@
 //! restoring complete VM state including CPU registers, memory, and devices.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
 
 /// Serialization format version
 pub const FORMAT_VERSION: u32 = 1;
@@ -49,45 +48,30 @@ impl SectionType {
 }
 
 /// Error type for serialization operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum SerializeError {
     /// I/O error
+    #[error("I/O error: {0}")]
     Io(String),
     /// Invalid format
+    #[error("Invalid format: {0}")]
     InvalidFormat(String),
     /// Version mismatch
+    #[error("Version mismatch: expected {expected}, found {found}")]
     VersionMismatch { expected: u32, found: u32 },
     /// Missing required section
+    #[error("Missing section: {0:?}")]
     MissingSection(SectionType),
     /// Invalid section data
+    #[error("Invalid section: {0}")]
     InvalidSection(String),
     /// Checksum mismatch
+    #[error("Checksum mismatch")]
     ChecksumMismatch,
     /// State not found
+    #[error("State not found: {0}")]
     NotFound(String),
 }
-
-impl std::fmt::Display for SerializeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Io(msg) => write!(f, "I/O error: {}", msg),
-            Self::InvalidFormat(msg) => write!(f, "Invalid format: {}", msg),
-            Self::VersionMismatch { expected, found } => {
-                write!(
-                    f,
-                    "Version mismatch: expected {}, found {}",
-                    expected, found
-                )
-            }
-            Self::MissingSection(s) => write!(f, "Missing section: {:?}", s),
-            Self::InvalidSection(msg) => write!(f, "Invalid section: {}", msg),
-            Self::ChecksumMismatch => write!(f, "Checksum mismatch"),
-            Self::NotFound(name) => write!(f, "State not found: {}", name),
-        }
-    }
-}
-
-impl std::error::Error for SerializeError {}
 
 /// Result type for serialization operations
 pub type SerializeResult<T> = Result<T, SerializeError>;

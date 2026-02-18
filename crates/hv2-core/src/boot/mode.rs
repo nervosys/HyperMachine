@@ -420,7 +420,7 @@ impl GdtBuilder {
             | ((base & 0xFF0000) << 16)
             | (0x89 << 40)  // Type=9, P=1
             | ((limit as u64 & 0xF0000) << 32);
-        
+
         // Second 8 bytes: base[63:32]
         let high = base >> 32;
 
@@ -511,25 +511,25 @@ pub mod pte {
 pub fn create_identity_page_tables_64(base: u64, memory_size: u64) -> Vec<u8> {
     // Calculate how many 2MB pages we need
     let num_2mb_pages = memory_size.div_ceil(0x200000);
-    
+
     // Calculate table structure
     // - PML4: 1 page (512 entries, each covers 512GB)
-    // - PDPT: 1 page (512 entries, each covers 1GB)  
+    // - PDPT: 1 page (512 entries, each covers 1GB)
     // - PD: N pages (512 entries each, each entry covers 2MB)
     let num_pd_pages = num_2mb_pages.div_ceil(512);
     let total_pages = 2 + num_pd_pages; // PML4 + PDPT + PDs
-    
+
     let mut tables = vec![0u8; total_pages as usize * 4096];
-    
+
     // Page table addresses (PML4 at base)
     let _pml4_addr = base;
     let pdpt_addr = base + 0x1000;
     let pd_base = base + 0x2000;
-    
+
     // PML4[0] -> PDPT
     let pml4e = pdpt_addr | pte::PRESENT | pte::WRITABLE;
     tables[0..8].copy_from_slice(&pml4e.to_le_bytes());
-    
+
     // Fill PDPT entries pointing to PDs
     for i in 0..num_pd_pages.min(512) {
         let pd_addr = pd_base + i * 0x1000;
@@ -537,7 +537,7 @@ pub fn create_identity_page_tables_64(base: u64, memory_size: u64) -> Vec<u8> {
         let offset = 0x1000 + (i as usize * 8);
         tables[offset..offset + 8].copy_from_slice(&pdpte.to_le_bytes());
     }
-    
+
     // Fill PD entries with 2MB pages
     let mut page_idx = 0u64;
     for pd in 0..num_pd_pages {
@@ -552,7 +552,7 @@ pub fn create_identity_page_tables_64(base: u64, memory_size: u64) -> Vec<u8> {
             page_idx += 1;
         }
     }
-    
+
     tables
 }
 
@@ -613,10 +613,7 @@ mod tests {
     #[test]
     fn test_cpu_mode_from_registers() {
         // Real mode
-        assert_eq!(
-            CpuMode::from_control_registers(0, 0, 0),
-            CpuMode::RealMode
-        );
+        assert_eq!(CpuMode::from_control_registers(0, 0, 0), CpuMode::RealMode);
 
         // Protected mode (no paging)
         assert_eq!(
@@ -632,11 +629,7 @@ mod tests {
 
         // Long mode
         assert_eq!(
-            CpuMode::from_control_registers(
-                cr0::PE | cr0::PG,
-                cr4::PAE,
-                efer::LME | efer::LMA
-            ),
+            CpuMode::from_control_registers(cr0::PE | cr0::PG, cr4::PAE, efer::LME | efer::LMA),
             CpuMode::LongMode64
         );
     }
@@ -672,10 +665,7 @@ mod tests {
 
     #[test]
     fn test_gdt_builder_32() {
-        let gdt = GdtBuilder::new()
-            .code_32(0)
-            .data_32(0)
-            .build();
+        let gdt = GdtBuilder::new().code_32(0).data_32(0).build();
 
         assert_eq!(gdt.len(), 24); // 3 entries * 8 bytes
 
@@ -694,7 +684,7 @@ mod tests {
     #[test]
     fn test_gdt_builder_64() {
         let gdt = create_boot_gdt_64();
-        
+
         // Should have: null, code32, data32, code64, data64 = 5 entries
         assert_eq!(gdt.len(), 40);
     }
@@ -702,7 +692,7 @@ mod tests {
     #[test]
     fn test_create_identity_page_tables_small() {
         let tables = create_identity_page_tables_64(0x3000, 2 * 1024 * 1024);
-        
+
         // Should have PML4 + PDPT + 1 PD = 3 pages
         assert_eq!(tables.len(), 3 * 4096);
 
@@ -717,7 +707,7 @@ mod tests {
     fn test_create_identity_page_tables_large() {
         // 1GB = 512 * 2MB pages
         let tables = create_identity_page_tables_64(0x3000, 1024 * 1024 * 1024);
-        
+
         // Should have PML4 + PDPT + 1 PD = 3 pages (512 entries cover 1GB)
         assert_eq!(tables.len(), 3 * 4096);
 

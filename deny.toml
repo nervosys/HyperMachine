@@ -5,7 +5,6 @@
 # Advisories Configuration
 # ============================================================================
 [advisories]
-db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 vulnerability = "deny"
 unmaintained = "warn"
@@ -37,12 +36,16 @@ allow = [
     "ISC",
     "Zlib",
     "MPL-2.0",
+    "AGPL-3.0-only",
+    "LicenseRef-Commercial",
+    "GPL-3.0-only",
+    "LGPL-3.0-only",
     "Unicode-3.0",
     "Unicode-DFS-2016",
     "CC0-1.0",
     "BSL-1.0",
 ]
-copyleft = "warn"
+copyleft = "allow"
 confidence-threshold = 0.8
 
 # Exceptions for specific crates
@@ -91,7 +94,8 @@ unknown-git = "warn"
 
 # Allow crates.io
 [sources.allow-registry]
-# https://github.com/rust-lang/crates.io-index
+"https://github.com/rust-lang/crates.io-index" = true
+"https://index.crates.io/" = true
 
 # Allow specific git sources
 [sources.allow-git]

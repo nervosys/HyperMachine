@@ -86,6 +86,8 @@ pub struct WhpxBackend {
     capabilities: HypervisorCapabilities,
     /// Active VMs (for cleanup on drop)
     vms: Arc<RwLock<Vec<Arc<WhpxVm>>>>,
+    /// vCPU map: VCpu ID -> WhpxVcpu for trait method delegation
+    vcpu_map: Arc<RwLock<std::collections::HashMap<u32, Arc<WhpxVcpu>>>>,
 }
 
 impl WhpxBackend {
@@ -99,6 +101,8 @@ impl WhpxBackend {
     /// - Hardware virtualization is not supported
     #[cfg(target_os = "windows")]
     pub fn new() -> Result<Self> {
+        // SAFETY: WHvGetCapability is a well-defined Windows Hypervisor Platform FFI call.
+        // We pass a properly-sized zeroed buffer and check the HRESULT before using the result.
         unsafe {
             // Check if hypervisor is present
             let mut capability = std::mem::zeroed::<WHV_CAPABILITY>();
@@ -134,6 +138,7 @@ impl WhpxBackend {
             Ok(Self {
                 capabilities,
                 vms: Arc::new(RwLock::new(Vec::new())),
+                vcpu_map: Arc::new(RwLock::new(std::collections::HashMap::new())),
             })
         }
     }
@@ -149,26 +154,34 @@ impl WhpxBackend {
     /// Detect WHPX capabilities
     #[cfg(target_os = "windows")]
     fn detect_capabilities() -> Result<HypervisorCapabilities> {
+        // SAFETY: WHvGetCapability calls are well-defined WHP FFI. We pass properly-sized
+        // zeroed buffers and check HRESULTs before reading capability values.
         unsafe {
             // Query processor vendor
             let mut vendor_cap = std::mem::zeroed::<WHV_CAPABILITY>();
             let mut written_size: UINT32 = 0;
 
-            let _ = WHvGetCapability(
+            let hr = WHvGetCapability(
                 WHV_CAPABILITY_CODE::WHvCapabilityCodeProcessorVendor,
                 &mut vendor_cap as *mut _ as *mut VOID,
                 std::mem::size_of::<WHV_CAPABILITY>() as UINT32,
                 &mut written_size,
             );
+            if hr != 0 {
+                tracing::warn!(hresult = hr, "WHvGetCapability(ProcessorVendor) failed");
+            }
 
             // Query features
             let mut features_cap = std::mem::zeroed::<WHV_CAPABILITY>();
-            let _ = WHvGetCapability(
+            let hr = WHvGetCapability(
                 WHV_CAPABILITY_CODE::WHvCapabilityCodeFeatures,
                 &mut features_cap as *mut _ as *mut VOID,
                 std::mem::size_of::<WHV_CAPABILITY>() as UINT32,
                 &mut written_size,
             );
+            if hr != 0 {
+                tracing::warn!(hresult = hr, "WHvGetCapability(Features) failed");
+            }
 
             let features = features_cap.Features;
 
@@ -233,8 +246,20 @@ impl HypervisorBackend for WhpxBackend {
         // Create WHPX VM instance
         let whpx_vm = Arc::new(WhpxVm::new(vcpu_count, memory_size)?);
 
+        // Create vCPUs and populate the vcpu_map for trait method delegation
+        {
+            let mut vcpu_map = self.vcpu_map.write().expect("vCPU map lock poisoned");
+            for id in 0..vcpu_count {
+                let whpx_vcpu = whpx_vm.create_vcpu(id)?;
+                vcpu_map.insert(id, whpx_vcpu);
+            }
+        }
+
         // Track VM for cleanup
-        self.vms.write().unwrap().push(whpx_vm.clone());
+        self.vms
+            .write()
+            .expect("VM list lock poisoned")
+            .push(whpx_vm.clone());
 
         Ok(HypervisorVm::new(
             HypervisorPlatform::Whpx,
@@ -251,22 +276,64 @@ impl HypervisorBackend for WhpxBackend {
     }
 
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
-        tracing::debug!("WHPX: Running vCPU {}", vcpu.id());
-        Ok(VmExit::Hlt)
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
+            map.get(&vcpu_id).cloned().ok_or_else(|| {
+                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
+            })?
+        };
+        whpx_vcpu.run()
     }
 
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
-        tracing::debug!(
-            "WHPX: Injecting interrupt {} into vCPU {}",
-            vector,
-            vcpu.id()
-        );
-        Ok(())
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
+            map.get(&vcpu_id).cloned().ok_or_else(|| {
+                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
+            })?
+        };
+        whpx_vcpu.inject_interrupt(vector)
+    }
+
+    async fn inject_exception(
+        &self,
+        vcpu: &VCpu,
+        vector: u8,
+        error_code: Option<u32>,
+    ) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
+            map.get(&vcpu_id).cloned().ok_or_else(|| {
+                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
+            })?
+        };
+        whpx_vcpu.inject_exception(vector, error_code)
+    }
+
+    async fn set_io_result(&self, vcpu: &VCpu, data: u32, size: u8) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
+            map.get(&vcpu_id).cloned().ok_or_else(|| {
+                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
+            })?
+        };
+        // Mask data by access size and write into RAX
+        let masked = match size {
+            1 => u64::from(data & 0xFF),
+            2 => u64::from(data & 0xFFFF),
+            _ => u64::from(data),
+        };
+        whpx_vcpu.set_rax(masked)
     }
 
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down WHPX backend");
-        self.vms.write().unwrap().clear();
+        self.vcpu_map.write().expect("vCPU map lock poisoned").clear();
+        self.vms.write().expect("VM list lock poisoned").clear();
         Ok(())
     }
 
@@ -330,6 +397,9 @@ impl WhpxVm {
     /// Create a new WHPX VM
     #[cfg(target_os = "windows")]
     pub fn new(vcpu_count: u32, memory_size: u64) -> Result<Self> {
+        // SAFETY: WHP partition FFI calls (create, set property, setup, map memory).
+        // Each HRESULT is checked, and cleanup runs on failure. Memory is allocated
+        // via std::alloc::alloc with a valid layout and mapped into the partition.
         unsafe {
             // Create partition
             let mut partition: WHV_PARTITION_HANDLE = ptr::null_mut();
@@ -438,7 +508,10 @@ impl WhpxVm {
         }
 
         let vcpu = Arc::new(WhpxVcpu::new(self.partition, vcpu_id)?);
-        self.vcpus.write().unwrap().push(vcpu.clone());
+        self.vcpus
+            .write()
+            .expect("vCPU list lock poisoned")
+            .push(vcpu.clone());
         Ok(vcpu)
     }
 
@@ -505,6 +578,8 @@ impl WhpxVm {
             )));
         }
 
+        // SAFETY: Bounds were checked above ensuring addr + data.len() <= memory_size.
+        // guest_ptr is valid for the full memory region allocated in WhpxVm::new.
         unsafe {
             let dest = guest_ptr.add(addr as usize);
             std::ptr::copy_nonoverlapping(data.as_ptr(), dest, data.len());
@@ -571,6 +646,8 @@ impl WhpxVm {
         }
 
         let mut buffer = vec![0u8; len];
+        // SAFETY: Bounds were checked above ensuring addr + len <= memory_size.
+        // guest_ptr is valid for the full memory region allocated in WhpxVm::new.
         unsafe {
             let src = guest_ptr.add(addr as usize);
             std::ptr::copy_nonoverlapping(src, buffer.as_mut_ptr(), len);
@@ -627,7 +704,7 @@ impl WhpxVm {
         port: u16,
         handler: IoPortHandler,
     ) -> Option<Arc<IoPortHandler>> {
-        let mut handlers = self.io_handlers.write().unwrap();
+        let mut handlers = self.io_handlers.write().expect("I/O handler lock poisoned");
         handlers.insert(port, Arc::new(handler))
     }
 
@@ -673,7 +750,10 @@ impl WhpxVm {
         end: u64,
         handler: MmioHandler,
     ) -> Option<(u64, Arc<MmioHandler>)> {
-        let mut handlers = self.mmio_handlers.write().unwrap();
+        let mut handlers = self
+            .mmio_handlers
+            .write()
+            .expect("MMIO handler lock poisoned");
         handlers.insert(start, (end, Arc::new(handler)))
     }
 
@@ -699,7 +779,7 @@ impl WhpxVm {
         size: u8,
         data: &mut u32,
     ) -> Result<()> {
-        let handlers = self.io_handlers.read().unwrap();
+        let handlers = self.io_handlers.read().expect("I/O handler lock poisoned");
 
         if let Some(handler) = handlers.get(&port) {
             handler(port, is_write, size, data)
@@ -741,7 +821,10 @@ impl WhpxVm {
         size: u32,
         data: &mut [u8; 8],
     ) -> Result<()> {
-        let handlers = self.mmio_handlers.read().unwrap();
+        let handlers = self
+            .mmio_handlers
+            .read()
+            .expect("MMIO handler lock poisoned");
 
         // Find handler that covers this address
         for (start, (end, handler)) in handlers.iter().rev() {
@@ -768,15 +851,24 @@ impl WhpxVm {
 impl Drop for WhpxVm {
     #[cfg(target_os = "windows")]
     fn drop(&mut self) {
+        // SAFETY: Releases resources allocated in WhpxVm::new. vCPUs are cleared first
+        // (RAII order), then guest memory is unmapped and deallocated, and the partition
+        // handle is deleted. All handles/pointers originate from successful FFI calls.
         unsafe {
             // vCPUs will be dropped first (RAII order)
-            self.vcpus.write().unwrap().clear();
+            self.vcpus
+                .write()
+                .expect("vCPU list lock poisoned in Drop")
+                .clear();
 
             // Free guest memory
             if let Some(ptr) = self.guest_memory {
                 // Unmap from partition
                 if self.memory_size > 0 {
-                    let _ = WHvUnmapGpaRange(self.partition, 0, self.memory_size);
+                    let hr = WHvUnmapGpaRange(self.partition, 0, self.memory_size);
+                    if hr != 0 {
+                        tracing::warn!(hresult = hr, "WHvUnmapGpaRange failed during Drop");
+                    }
                 }
 
                 let layout =
@@ -793,7 +885,8 @@ impl Drop for WhpxVm {
     fn drop(&mut self) {}
 }
 
-// Safety: WhpxVm can be safely sent between threads
+// SAFETY: WhpxVm partition handles are thread-safe opaque pointers managed by WHP.
+// Internal state is protected by RwLock/Mutex, so Send and Sync are safe.
 unsafe impl Send for WhpxVm {}
 unsafe impl Sync for WhpxVm {}
 
@@ -850,6 +943,12 @@ fn exit_type_name(exit: &crate::exit::VmExit) -> String {
         crate::exit::VmExit::InterruptWindow => "InterruptWindow".to_string(),
         crate::exit::VmExit::Exception { vector, .. } => format!("Exception({})", vector),
         crate::exit::VmExit::Debug { .. } => "Debug".to_string(),
+        crate::exit::VmExit::Hypercall { .. } => "Hypercall".to_string(),
+        crate::exit::VmExit::SystemEvent { .. } => "SystemEvent".to_string(),
+        crate::exit::VmExit::Nmi => "Nmi".to_string(),
+        crate::exit::VmExit::Rdmsr { .. } => "Rdmsr".to_string(),
+        crate::exit::VmExit::Wrmsr { .. } => "Wrmsr".to_string(),
+        crate::exit::VmExit::IoapicEoi { .. } => "IoapicEoi".to_string(),
         crate::exit::VmExit::Unknown { .. } => "Unknown".to_string(),
     }
 }
@@ -934,6 +1033,8 @@ impl WhpxVcpu {
     /// Create a new WHPX vCPU
     #[cfg(target_os = "windows")]
     fn new(partition: WHV_PARTITION_HANDLE, vp_index: u32) -> Result<Self> {
+        // SAFETY: WHvCreateVirtualProcessor is a WHP FFI call. The partition handle
+        // is valid (from WhpxVm::new), and we check the HRESULT before proceeding.
         unsafe {
             let hr = WHvCreateVirtualProcessor(partition, vp_index, 0);
 
@@ -962,6 +1063,8 @@ impl WhpxVcpu {
     /// Run the vCPU until an exit occurs
     #[cfg(target_os = "windows")]
     pub fn run(&self) -> Result<VmExit> {
+        // SAFETY: WHvRunVirtualProcessor is a WHP FFI call. The partition handle and
+        // vp_index are valid. The exit context is zeroed and properly sized.
         unsafe {
             let mut exit_context = std::mem::zeroed::<WHV_RUN_VP_EXIT_CONTEXT>();
 
@@ -999,6 +1102,8 @@ impl WhpxVcpu {
         match ctx.ExitReason {
             WHvRunVpExitReasonX64Halt => Ok(VmExit::Hlt),
 
+            // SAFETY: Accessing the IoPortAccess union field is valid because
+            // ExitReason is WHvRunVpExitReasonX64IoPortAccess.
             WHvRunVpExitReasonX64IoPortAccess => unsafe {
                 let io = &ctx.ExitData.IoPortAccess;
                 let port = io.PortNumber;
@@ -1020,6 +1125,8 @@ impl WhpxVcpu {
                 }
             },
 
+            // SAFETY: Accessing the MemoryAccess union field is valid because
+            // ExitReason is WHvRunVpExitReasonMemoryAccess.
             WHvRunVpExitReasonMemoryAccess => unsafe {
                 let mem = &ctx.ExitData.MemoryAccess;
                 let addr = mem.Gpa;
@@ -1058,6 +1165,8 @@ impl WhpxVcpu {
                 Ok(VmExit::InterruptWindow)
             }
 
+            // SAFETY: Accessing the Exception union field is valid because
+            // ExitReason is WHvRunVpExitReasonException.
             WHvRunVpExitReasonException => unsafe {
                 let exception = &ctx.ExitData.Exception;
                 let vector = exception.ExceptionInfo.ExceptionType as u8;
@@ -1068,6 +1177,40 @@ impl WhpxVcpu {
                 };
 
                 Ok(VmExit::Exception { vector, error_code })
+            },
+
+            // SAFETY: Accessing the MsrAccess union field is valid because
+            // ExitReason is WHvRunVpExitReasonX64MsrAccess.
+            WHvRunVpExitReasonX64MsrAccess => unsafe {
+                let msr = &ctx.ExitData.MsrAccess;
+                if msr.IsWrite != 0 {
+                    let data = ((msr.Rdx & 0xFFFF_FFFF) << 32) | (msr.Rax & 0xFFFF_FFFF);
+                    Ok(VmExit::Wrmsr {
+                        index: msr.MsrNumber,
+                        data,
+                    })
+                } else {
+                    Ok(VmExit::Rdmsr {
+                        index: msr.MsrNumber,
+                    })
+                }
+            },
+
+            // SAFETY: Accessing the ApicEoi union field is valid because
+            // ExitReason is WHvRunVpExitReasonX64ApicEoi.
+            WHvRunVpExitReasonX64ApicEoi => unsafe {
+                let eoi = &ctx.ExitData.ApicEoi;
+                Ok(VmExit::IoapicEoi {
+                    vector: eoi.InterruptVector as u8,
+                })
+            },
+
+            WHvRunVpExitReasonHypercall => {
+                // WHPX does not provide hypercall parameters in exit data
+                Ok(VmExit::Hypercall {
+                    nr: 0,
+                    args: [0; 6],
+                })
             },
 
             _ => Err(Error::VM(format!(
@@ -1425,8 +1568,9 @@ impl WhpxVcpu {
                     }
                     Ok(false) => {
                         // Interrupts masked, request notification when window opens
-                        let _ = self.request_interrupt_window();
-
+                        if let Err(e) = self.request_interrupt_window() {
+                            tracing::warn!(error = %e, "Failed to request interrupt window");
+                        }
                         // Track deferred interrupt
                         if let Ok(mut stats) = self.stats.write() {
                             stats.interrupts_deferred += 1;
@@ -1605,6 +1749,8 @@ impl WhpxVcpu {
         &self,
         register_names: &[WHV_REGISTER_NAME],
     ) -> Result<Vec<WHV_REGISTER_VALUE>> {
+        // SAFETY: WHvGetVirtualProcessorRegisters is a WHP FFI call. The partition
+        // handle and vp_index are valid. Values buffer is zeroed and appropriately sized.
         unsafe {
             let mut values = vec![std::mem::zeroed(); register_names.len()];
 
@@ -1640,6 +1786,8 @@ impl WhpxVcpu {
             ));
         }
 
+        // SAFETY: WHvSetVirtualProcessorRegisters is a WHP FFI call. The partition
+        // handle and vp_index are valid. Name/value arrays have equal, verified lengths.
         unsafe {
             let hr = WHvSetVirtualProcessorRegisters(
                 self.partition,
@@ -1694,6 +1842,8 @@ impl WhpxVcpu {
 
         let values = self.get_registers(&register_names)?;
 
+        // SAFETY: Accessing .Reg64 and .Segment union fields is valid because
+        // the register names requested correspond to 64-bit GP regs and segment regs.
         unsafe {
             Ok(crate::vcpu::RegisterSet {
                 rax: values[0].Reg64,
@@ -1758,6 +1908,8 @@ impl WhpxVcpu {
 
         let mut values: Vec<WHV_REGISTER_VALUE> = Vec::with_capacity(register_names.len());
 
+        // SAFETY: Constructing WHV_REGISTER_VALUE unions via mem::zeroed and setting
+        // .Reg64/.Segment fields. The union layout matches the WHP API expectations.
         unsafe {
             // General purpose registers
             for &val in &[
@@ -1808,12 +1960,18 @@ impl WhpxVcpu {
     /// # }
     /// ```
     pub fn get_interrupt_stats(&self) -> InterruptStats {
-        self.stats.read().unwrap().clone()
+        self.stats
+            .read()
+            .expect("interrupt stats lock poisoned")
+            .clone()
     }
 
     /// Reset interrupt delivery statistics to zero.
     pub fn reset_interrupt_stats(&self) {
-        self.stats.write().unwrap().reset();
+        self.stats
+            .write()
+            .expect("interrupt stats lock poisoned")
+            .reset();
     }
 
     /// Read the current RFLAGS register value from the vCPU.
@@ -1840,6 +1998,8 @@ impl WhpxVcpu {
     pub fn get_rflags(&self) -> Result<u64> {
         use super::whpx_ffi::*;
 
+        // SAFETY: WHvGetVirtualProcessorRegisters FFI call with valid handles.
+        // Accessing .Reg64 is valid for the RFLAGS register.
         unsafe {
             let register_names = [WHV_REGISTER_NAME::WHvX64RegisterRflags];
             let mut register_values = [std::mem::zeroed::<WHV_REGISTER_VALUE>()];
@@ -1914,6 +2074,8 @@ impl WhpxVcpu {
     pub fn inject_interrupt(&self, vector: u8) -> Result<()> {
         use super::whpx_ffi::*;
 
+        // SAFETY: Building a zeroed pending interruption register and setting fields
+        // before passing to WHvSetVirtualProcessorRegisters. All handles are valid.
         unsafe {
             // Build pending interruption register
             let mut pending_int = std::mem::zeroed::<WHV_X64_PENDING_INTERRUPTION_REGISTER>();
@@ -1993,6 +2155,8 @@ impl WhpxVcpu {
     pub fn request_interrupt_window(&self) -> Result<()> {
         use super::whpx_ffi::*;
 
+        // SAFETY: Building a zeroed deliverability notifications register and
+        // passing to WHvSetVirtualProcessorRegisters with valid handles.
         unsafe {
             // Set the interrupt window request bit
             let mut deliverability =
@@ -2063,6 +2227,8 @@ impl WhpxVcpu {
     pub fn inject_nmi(&self) -> Result<()> {
         use super::whpx_ffi::*;
 
+        // SAFETY: Building a zeroed pending NMI register and passing to
+        // WHvSetVirtualProcessorRegisters with valid partition/vp_index handles.
         unsafe {
             let mut pending_int = std::mem::zeroed::<WHV_X64_PENDING_INTERRUPTION_REGISTER>();
             pending_int.InterruptionPending = 1;
@@ -2158,6 +2324,9 @@ impl WhpxVcpu {
             )));
         }
 
+        // SAFETY: Building a zeroed pending exception register. Vector was
+        // validated above (0-31). Passed to WHvSetVirtualProcessorRegisters
+        // with valid handles.
         unsafe {
             let mut pending_int = std::mem::zeroed::<WHV_X64_PENDING_INTERRUPTION_REGISTER>();
             pending_int.InterruptionPending = 1;
@@ -2477,6 +2646,8 @@ impl WhpxVcpu {
         // Note: CS base will be set to 0xFFFF0000 by set_register_set's segment handling
         // Actually, we need to handle CS specially for reset. Let me write registers manually.
 
+        // SAFETY: Building register name/value arrays for WHvSetVirtualProcessorRegisters
+        // to reset all vCPU state to initial power-on values. All handles are valid.
         unsafe {
             // Build array of register names (24 registers)
             let register_names = [
@@ -2711,6 +2882,8 @@ impl WhpxVcpu {
     pub fn get_control_registers(&self) -> Result<crate::ControlRegisters> {
         use super::whpx_ffi::WHV_REGISTER_NAME::*;
 
+        // SAFETY: WHvGetVirtualProcessorRegisters FFI call with valid handles.
+        // Accessing .Reg64 is valid for CR0/CR2/CR3/CR4/CR8/EFER registers.
         unsafe {
             let register_names = [
                 WHvX64RegisterCr0,
@@ -2814,6 +2987,8 @@ impl WhpxVcpu {
 
         use super::whpx_ffi::WHV_REGISTER_NAME::*;
 
+        // SAFETY: WHvSetVirtualProcessorRegisters FFI call with valid handles.
+        // Setting .Reg64 for control registers that were validated above.
         unsafe {
             let register_names = [
                 WHvX64RegisterCr0,
@@ -3407,6 +3582,7 @@ impl WhpxVcpu {
         if cr.is_long_mode_active() {
             // In long mode — check CS.L bit to distinguish 64-bit from compatibility
             let cs_values = self.get_registers(&[WHvX64RegisterCs])?;
+            // SAFETY: Accessing .Segment.Attributes is valid for a CS register value.
             let cs_attrs = unsafe { cs_values[0].Segment.Attributes };
             // CS.L is bit 9 (0x200) in the WHPX segment attribute format
             if cs_attrs & 0x200 != 0 {
@@ -3506,6 +3682,8 @@ impl WhpxVcpu {
         let gdtr =
             crate::descriptors::DescriptorTablePointer::new(gdt_base, (gdt_bytes.len() - 1) as u16);
 
+        // SAFETY: WHvSetVirtualProcessorRegisters FFI call to load GDTR.
+        // Table register fields are set from the validated descriptor table pointer.
         unsafe {
             let register_names = [WHvX64RegisterGdtr];
 
@@ -3621,6 +3799,8 @@ impl WhpxVcpu {
         let idtr =
             crate::descriptors::DescriptorTablePointer::new(idt_base, (idt_bytes.len() - 1) as u16);
 
+        // SAFETY: WHvSetVirtualProcessorRegisters FFI call to load IDTR.
+        // Table register fields are set from the validated descriptor table pointer.
         unsafe {
             let register_names = [WHvX64RegisterIdtr];
 
@@ -3723,8 +3903,10 @@ impl WhpxVcpu {
         limit: u32,
         access_rights: u16,
     ) -> Result<()> {
+        // SAFETY: Setting the CS segment register via WHvSetVirtualProcessorRegisters.
+        // The .Segment union field matches the register name WHvX64RegisterCs.
         unsafe {
-            let mut reg_names = [WHV_REGISTER_NAME::WHvX64RegisterCs];
+            let reg_names = [WHV_REGISTER_NAME::WHvX64RegisterCs];
             let mut reg_values = [std::mem::zeroed::<WHV_REGISTER_VALUE>()];
 
             reg_values[0].Segment = WHV_X64_SEGMENT_REGISTER {
@@ -3833,8 +4015,10 @@ impl WhpxVcpu {
             }
         };
 
+        // SAFETY: Setting a segment register via WHvSetVirtualProcessorRegisters.
+        // The .Segment union field matches the validated segment register name.
         unsafe {
-            let mut reg_names = [reg_name];
+            let reg_names = [reg_name];
             let mut reg_values = [std::mem::zeroed::<WHV_REGISTER_VALUE>()];
 
             reg_values[0].Segment = WHV_X64_SEGMENT_REGISTER {
@@ -3920,8 +4104,10 @@ impl WhpxVcpu {
     /// Returns an error if the instruction pointer cannot be set via WHPX.
     #[cfg(target_os = "windows")]
     pub fn set_instruction_pointer(&self, address: u64) -> Result<()> {
+        // SAFETY: WHvSetVirtualProcessorRegisters FFI call with valid handles.
+        // .Reg64 is the correct union field for the RIP register.
         unsafe {
-            let mut reg_names = [WHV_REGISTER_NAME::WHvX64RegisterRip];
+            let reg_names = [WHV_REGISTER_NAME::WHvX64RegisterRip];
             let mut reg_values = [std::mem::zeroed::<WHV_REGISTER_VALUE>()];
 
             reg_values[0].Reg64 = address;
@@ -4698,6 +4884,8 @@ pub enum CpuMode {
 impl Drop for WhpxVcpu {
     #[cfg(target_os = "windows")]
     fn drop(&mut self) {
+        // SAFETY: WHvDeleteVirtualProcessor releases the vCPU created in WhpxVcpu::new.
+        // The partition handle and vp_index are valid for the lifetime of this object.
         unsafe {
             let _ = WHvDeleteVirtualProcessor(self.partition, self.vp_index);
         }
@@ -4707,7 +4895,8 @@ impl Drop for WhpxVcpu {
     fn drop(&mut self) {}
 }
 
-// Safety: WhpxVcpu can be safely sent between threads
+// SAFETY: WhpxVcpu partition handles are thread-safe opaque pointers from WHP.
+// The vp_index is immutable and stats are behind Arc<RwLock>.
 unsafe impl Send for WhpxVcpu {}
 unsafe impl Sync for WhpxVcpu {}
 
@@ -5220,7 +5409,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_boot_linux_minimal() {
-        use crate::boot::linux::{LinuxBootParams, LinuxBootProtocol};
+        use crate::boot::linux::LinuxBootParams;
 
         // Create a minimal valid bzImage
         let mut kernel = vec![0u8; 4096];

@@ -39,19 +39,19 @@ pub const SECTOR_SIZE: u64 = 512;
 pub trait DiskImage: Send + Sync {
     /// Read data from the image at the given offset
     fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize>;
-    
+
     /// Write data to the image at the given offset
     fn write(&self, offset: u64, data: &[u8]) -> Result<usize>;
-    
+
     /// Flush pending writes
     fn flush(&self) -> Result<()>;
-    
+
     /// Get total size in bytes
     fn size(&self) -> u64;
-    
+
     /// Check if read-only
     fn is_read_only(&self) -> bool;
-    
+
     /// Get format name
     fn format_name(&self) -> &'static str;
 }
@@ -74,18 +74,19 @@ impl RawImage {
             .write(!read_only)
             .open(path.as_ref())
             .map_err(|e| Error::Device(format!("Failed to open image: {}", e)))?;
-        
-        let size = file.metadata()
+
+        let size = file
+            .metadata()
             .map_err(|e| Error::Device(format!("Failed to get metadata: {}", e)))?
             .len();
-        
+
         Ok(Self {
             file: RwLock::new(file),
             size,
             read_only,
         })
     }
-    
+
     /// Create a new raw image
     pub fn create<P: AsRef<Path>>(path: P, size: u64) -> Result<Self> {
         let file = OpenOptions::new()
@@ -95,17 +96,17 @@ impl RawImage {
             .truncate(true)
             .open(path.as_ref())
             .map_err(|e| Error::Device(format!("Failed to create image: {}", e)))?;
-        
+
         file.set_len(size)
             .map_err(|e| Error::Device(format!("Failed to set size: {}", e)))?;
-        
+
         Ok(Self {
             file: RwLock::new(file),
             size,
             read_only: false,
         })
     }
-    
+
     /// Create an in-memory raw image (for testing)
     pub fn in_memory(size: u64) -> InMemoryImage {
         InMemoryImage::new(size)
@@ -117,48 +118,48 @@ impl DiskImage for RawImage {
         if offset >= self.size {
             return Ok(0);
         }
-        
-        let mut file = self.file.write().unwrap();
+
+        let mut file = self.file.write().unwrap_or_else(|e| e.into_inner());
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| Error::Device(format!("Seek failed: {}", e)))?;
-        
+
         let to_read = std::cmp::min(buf.len() as u64, self.size - offset) as usize;
         file.read(&mut buf[..to_read])
             .map_err(|e| Error::Device(format!("Read failed: {}", e)))
     }
-    
+
     fn write(&self, offset: u64, data: &[u8]) -> Result<usize> {
         if self.read_only {
             return Err(Error::Device("Image is read-only".to_string()));
         }
-        
+
         if offset >= self.size {
             return Ok(0);
         }
-        
-        let mut file = self.file.write().unwrap();
+
+        let mut file = self.file.write().unwrap_or_else(|e| e.into_inner());
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| Error::Device(format!("Seek failed: {}", e)))?;
-        
+
         let to_write = std::cmp::min(data.len() as u64, self.size - offset) as usize;
         file.write(&data[..to_write])
             .map_err(|e| Error::Device(format!("Write failed: {}", e)))
     }
-    
+
     fn flush(&self) -> Result<()> {
-        let file = self.file.write().unwrap();
+        let file = self.file.write().unwrap_or_else(|e| e.into_inner());
         file.sync_all()
             .map_err(|e| Error::Device(format!("Flush failed: {}", e)))
     }
-    
+
     fn size(&self) -> u64 {
         self.size
     }
-    
+
     fn is_read_only(&self) -> bool {
         self.read_only
     }
-    
+
     fn format_name(&self) -> &'static str {
         "raw"
     }
@@ -180,7 +181,7 @@ impl InMemoryImage {
             read_only: false,
         }
     }
-    
+
     /// Create from existing data
     pub fn from_data(data: Vec<u8>) -> Self {
         Self {
@@ -188,7 +189,7 @@ impl InMemoryImage {
             read_only: false,
         }
     }
-    
+
     /// Set read-only
     pub fn set_read_only(&mut self, read_only: bool) {
         self.read_only = read_only;
@@ -197,45 +198,46 @@ impl InMemoryImage {
 
 impl DiskImage for InMemoryImage {
     fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
-        let data = self.data.read().unwrap();
-        
+        let data = self.data.read().unwrap_or_else(|e| e.into_inner());
+
         if offset >= data.len() as u64 {
             return Ok(0);
         }
-        
+
         let to_read = std::cmp::min(buf.len(), data.len() - offset as usize);
         buf[..to_read].copy_from_slice(&data[offset as usize..offset as usize + to_read]);
         Ok(to_read)
     }
-    
+
     fn write(&self, offset: u64, data_to_write: &[u8]) -> Result<usize> {
         if self.read_only {
             return Err(Error::Device("Image is read-only".to_string()));
         }
-        
-        let mut data = self.data.write().unwrap();
-        
+
+        let mut data = self.data.write().unwrap_or_else(|e| e.into_inner());
+
         if offset >= data.len() as u64 {
             return Ok(0);
         }
-        
+
         let to_write = std::cmp::min(data_to_write.len(), data.len() - offset as usize);
-        data[offset as usize..offset as usize + to_write].copy_from_slice(&data_to_write[..to_write]);
+        data[offset as usize..offset as usize + to_write]
+            .copy_from_slice(&data_to_write[..to_write]);
         Ok(to_write)
     }
-    
+
     fn flush(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn size(&self) -> u64 {
-        self.data.read().unwrap().len() as u64
+        self.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64
     }
-    
+
     fn is_read_only(&self) -> bool {
         self.read_only
     }
-    
+
     fn format_name(&self) -> &'static str {
         "memory"
     }
@@ -305,44 +307,46 @@ impl Qcow2Header {
         if bytes.len() < 104 {
             return None;
         }
-        
+
         Some(Self {
             magic: u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
             version: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
             backing_file_offset: u64::from_be_bytes([
-                bytes[8], bytes[9], bytes[10], bytes[11],
-                bytes[12], bytes[13], bytes[14], bytes[15],
+                bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14],
+                bytes[15],
             ]),
             backing_file_size: u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]),
             cluster_bits: u32::from_be_bytes([bytes[20], bytes[21], bytes[22], bytes[23]]),
             size: u64::from_be_bytes([
-                bytes[24], bytes[25], bytes[26], bytes[27],
-                bytes[28], bytes[29], bytes[30], bytes[31],
+                bytes[24], bytes[25], bytes[26], bytes[27], bytes[28], bytes[29], bytes[30],
+                bytes[31],
             ]),
             crypt_method: u32::from_be_bytes([bytes[32], bytes[33], bytes[34], bytes[35]]),
             l1_size: u32::from_be_bytes([bytes[36], bytes[37], bytes[38], bytes[39]]),
             l1_table_offset: u64::from_be_bytes([
-                bytes[40], bytes[41], bytes[42], bytes[43],
-                bytes[44], bytes[45], bytes[46], bytes[47],
+                bytes[40], bytes[41], bytes[42], bytes[43], bytes[44], bytes[45], bytes[46],
+                bytes[47],
             ]),
             refcount_table_offset: u64::from_be_bytes([
-                bytes[48], bytes[49], bytes[50], bytes[51],
-                bytes[52], bytes[53], bytes[54], bytes[55],
+                bytes[48], bytes[49], bytes[50], bytes[51], bytes[52], bytes[53], bytes[54],
+                bytes[55],
             ]),
-            refcount_table_clusters: u32::from_be_bytes([bytes[56], bytes[57], bytes[58], bytes[59]]),
+            refcount_table_clusters: u32::from_be_bytes([
+                bytes[56], bytes[57], bytes[58], bytes[59],
+            ]),
             nb_snapshots: u32::from_be_bytes([bytes[60], bytes[61], bytes[62], bytes[63]]),
             snapshots_offset: u64::from_be_bytes([
-                bytes[64], bytes[65], bytes[66], bytes[67],
-                bytes[68], bytes[69], bytes[70], bytes[71],
+                bytes[64], bytes[65], bytes[66], bytes[67], bytes[68], bytes[69], bytes[70],
+                bytes[71],
             ]),
         })
     }
-    
+
     /// Get cluster size
     pub fn cluster_size(&self) -> u64 {
         1 << self.cluster_bits
     }
-    
+
     /// Validate the header
     pub fn is_valid(&self) -> bool {
         self.magic == QCOW2_MAGIC && (self.version == 2 || self.version == 3)
@@ -371,18 +375,17 @@ impl VhdxFileHeader {
         if bytes.len() < 520 {
             return None;
         }
-        
+
         let signature = u64::from_le_bytes([
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
         ]);
-        
+
         let mut creator = [0u8; 512];
         creator.copy_from_slice(&bytes[8..520]);
-        
+
         Some(Self { signature, creator })
     }
-    
+
     /// Check if valid
     pub fn is_valid(&self) -> bool {
         self.signature == VHDX_SIGNATURE
@@ -421,14 +424,14 @@ impl ImageFormat {
         if header.len() >= 8 {
             // Check VHDX
             let sig = u64::from_le_bytes([
-                header[0], header[1], header[2], header[3],
-                header[4], header[5], header[6], header[7],
+                header[0], header[1], header[2], header[3], header[4], header[5], header[6],
+                header[7],
             ]);
             if sig == VHDX_SIGNATURE {
                 return Self::Vhdx;
             }
         }
-        
+
         if header.len() >= 4 {
             // Check QCOW2
             let magic = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
@@ -436,11 +439,11 @@ impl ImageFormat {
                 return Self::Qcow2;
             }
         }
-        
+
         // Assume raw if no magic detected
         Self::Raw
     }
-    
+
     /// Get format name
     pub fn name(&self) -> &'static str {
         match self {
@@ -461,13 +464,20 @@ pub fn open_image<P: AsRef<Path>>(path: P, read_only: bool) -> Result<Box<dyn Di
 }
 
 /// Create a new disk image
-pub fn create_image<P: AsRef<Path>>(path: P, size: u64, format: ImageFormat) -> Result<Box<dyn DiskImage>> {
+pub fn create_image<P: AsRef<Path>>(
+    path: P,
+    size: u64,
+    format: ImageFormat,
+) -> Result<Box<dyn DiskImage>> {
     match format {
         ImageFormat::Raw => {
             let image = RawImage::create(path, size)?;
             Ok(Box::new(image))
         }
-        _ => Err(Error::Device(format!("Unsupported format: {}", format.name()))),
+        _ => Err(Error::Device(format!(
+            "Unsupported format: {}",
+            format.name()
+        ))),
     }
 }
 
@@ -478,7 +488,7 @@ mod tests {
     #[test]
     fn test_in_memory_image() {
         let img = InMemoryImage::new(4096);
-        
+
         assert_eq!(img.size(), 4096);
         assert!(!img.is_read_only());
         assert_eq!(img.format_name(), "memory");
@@ -487,11 +497,11 @@ mod tests {
     #[test]
     fn test_in_memory_read_write() {
         let img = InMemoryImage::new(4096);
-        
+
         let data = [0x42u8; 512];
         let written = img.write(0, &data).unwrap();
         assert_eq!(written, 512);
-        
+
         let mut buf = [0u8; 512];
         let read = img.read(0, &mut buf).unwrap();
         assert_eq!(read, 512);
@@ -501,14 +511,14 @@ mod tests {
     #[test]
     fn test_in_memory_offset() {
         let img = InMemoryImage::new(4096);
-        
+
         let data = [0x42u8; 512];
         img.write(1024, &data).unwrap();
-        
+
         let mut buf = [0u8; 512];
         img.read(1024, &mut buf).unwrap();
         assert_eq!(buf, data);
-        
+
         // Verify other regions are zero
         let mut zero_buf = [0u8; 512];
         img.read(0, &mut zero_buf).unwrap();
@@ -518,12 +528,12 @@ mod tests {
     #[test]
     fn test_in_memory_bounds() {
         let img = InMemoryImage::new(512);
-        
+
         // Read past end returns 0 bytes
         let mut buf = [0u8; 512];
         let read = img.read(1024, &mut buf).unwrap();
         assert_eq!(read, 0);
-        
+
         // Partial read at boundary
         let read = img.read(256, &mut buf).unwrap();
         assert_eq!(read, 256);
@@ -533,7 +543,7 @@ mod tests {
     fn test_in_memory_read_only() {
         let mut img = InMemoryImage::new(4096);
         img.set_read_only(true);
-        
+
         let data = [0x42u8; 512];
         assert!(img.write(0, &data).is_err());
     }
@@ -542,7 +552,7 @@ mod tests {
     fn test_from_data() {
         let data = vec![0x42u8; 1024];
         let img = InMemoryImage::from_data(data.clone());
-        
+
         let mut buf = [0u8; 1024];
         img.read(0, &mut buf).unwrap();
         assert_eq!(&buf[..], &data[..]);
@@ -559,9 +569,9 @@ mod tests {
         bytes[20..24].copy_from_slice(&16u32.to_be_bytes());
         // Size
         bytes[24..32].copy_from_slice(&(1024u64 * 1024 * 1024).to_be_bytes());
-        
+
         let header = Qcow2Header::from_bytes(&bytes).unwrap();
-        
+
         assert!(header.is_valid());
         assert_eq!(header.version, 3);
         assert_eq!(header.cluster_size(), 65536);
@@ -572,7 +582,7 @@ mod tests {
     fn test_qcow2_header_invalid() {
         let bytes = vec![0u8; 104];
         let header = Qcow2Header::from_bytes(&bytes).unwrap();
-        
+
         assert!(!header.is_valid());
     }
 
@@ -580,9 +590,9 @@ mod tests {
     fn test_vhdx_header_parse() {
         let mut bytes = vec![0u8; 520];
         bytes[0..8].copy_from_slice(&VHDX_SIGNATURE.to_le_bytes());
-        
+
         let header = VhdxFileHeader::from_bytes(&bytes).unwrap();
-        
+
         assert!(header.is_valid());
     }
 
@@ -590,7 +600,7 @@ mod tests {
     fn test_format_detect_qcow2() {
         let mut header = vec![0u8; 8];
         header[0..4].copy_from_slice(&QCOW2_MAGIC.to_be_bytes());
-        
+
         assert_eq!(ImageFormat::detect(&header), ImageFormat::Qcow2);
     }
 
@@ -598,14 +608,14 @@ mod tests {
     fn test_format_detect_vhdx() {
         let mut header = vec![0u8; 8];
         header[0..8].copy_from_slice(&VHDX_SIGNATURE.to_le_bytes());
-        
+
         assert_eq!(ImageFormat::detect(&header), ImageFormat::Vhdx);
     }
 
     #[test]
     fn test_format_detect_raw() {
         let header = vec![0u8; 8];
-        
+
         assert_eq!(ImageFormat::detect(&header), ImageFormat::Raw);
     }
 

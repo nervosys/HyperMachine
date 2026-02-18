@@ -15,45 +15,30 @@ use std::time::{Duration, Instant, SystemTime};
 pub type StateResult<T> = Result<T, StateError>;
 
 /// State operation errors
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StateError {
     /// Key not found
+    #[error("Key not found: {0}")]
     KeyNotFound(String),
     /// Version conflict
+    #[error("Version conflict: expected {expected}, actual {actual}")]
     VersionConflict { expected: u64, actual: u64 },
     /// State is locked
+    #[error("State locked: {0}")]
     StateLocked(String),
     /// Serialization error
+    #[error("Serialization error: {0}")]
     SerializationError(String),
     /// Capacity exceeded
+    #[error("Capacity exceeded: {0}")]
     CapacityExceeded(String),
     /// Invalid operation
+    #[error("Invalid operation: {0}")]
     InvalidOperation(String),
     /// Checkpoint not found
+    #[error("Checkpoint not found: {0}")]
     CheckpointNotFound(String),
 }
-
-impl std::fmt::Display for StateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::KeyNotFound(key) => write!(f, "Key not found: {}", key),
-            Self::VersionConflict { expected, actual } => {
-                write!(
-                    f,
-                    "Version conflict: expected {}, actual {}",
-                    expected, actual
-                )
-            }
-            Self::StateLocked(msg) => write!(f, "State locked: {}", msg),
-            Self::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
-            Self::CapacityExceeded(msg) => write!(f, "Capacity exceeded: {}", msg),
-            Self::InvalidOperation(msg) => write!(f, "Invalid operation: {}", msg),
-            Self::CheckpointNotFound(id) => write!(f, "Checkpoint not found: {}", id),
-        }
-    }
-}
-
-impl std::error::Error for StateError {}
 
 /// State value with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]

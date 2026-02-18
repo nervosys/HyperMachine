@@ -18,15 +18,18 @@ resolver = "2"
 version = "0.1.0"
 edition = "2021"
 authors = ["HyperMachine Contributors"]
-license = "MIT OR Apache-2.0"
+license = "AGPL-3.0-only OR LicenseRef-Commercial"
 repository = "https://github.com/nervosys/HyperMachine"
-rust-version = "1.75"
+homepage = "https://github.com/nervosys/HyperMachine"
+rust-version = "1.87"
+description = "High-performance hypervisor framework with first-class AI agent support"
+keywords = ["hypervisor", "virtualization", "kvm", "ai-agent", "vm"]
+categories = ["virtualization", "os", "hardware-support"]
 
 [workspace.dependencies]
 # Core async runtime
-tokio = { version = "1.40", features = ["full"] }
+tokio = { version = "1.42", features = ["full"] }
 async-trait = "0.1"
-futures = "0.3"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -43,7 +46,6 @@ tower = "0.4"
 
 # GPU acceleration
 wgpu = "22.0"
-vulkan-rs = "0.2"
 ash = "0.38"
 
 # Memory management
@@ -53,17 +55,16 @@ crossbeam = "0.8"
 
 # Error handling
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = true, features = ["json"] }
 
 # Logging and tracing
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-tracing-opentelemetry = "0.25"
-opentelemetry = "0.24"
-opentelemetry-otlp = "0.17"
 
 # Configuration
-config = "0.14"
 toml = "0.8"
 
 # Time and date
@@ -86,18 +87,40 @@ rhai = { version = "1.19", features = ["sync"] }
 wasmtime = "24.0.5"
 wasmtime-wasi = "24.0.5"
 
-# Metrics
-prometheus = "0.13"
-metrics = "0.23"
-
 # Utilities
 uuid = { version = "1.10", features = ["v4", "serde"] }
+bitflags = "2.4"
+rand = "0.8"
+
+[workspace.lints.rust]
+# Note: unsafe_code intentionally not warned — unsafe is inherent to hypervisor code.
+# unreachable_pub and unused_qualifications omitted — too noisy for internal crate items.
+unused_import_braces = "warn"
+
+[workspace.lints.clippy]
+# Correctness
+manual_clamp = "warn"
+manual_range_contains = "warn"
+needless_range_loop = "warn"
+useless_format = "warn"
+# Style
+single_match = "warn"
+let_and_return = "warn"
+map_entry = "warn"
+collapsible_if = "warn"
+doc_markdown = "allow"
+semicolon_if_nothing_returned = "warn"
+inefficient_to_string = "warn"
+# Complexity thresholds (allow via #[allow] where justified)
+type_complexity = "warn"
+too_many_arguments = "warn"
 
 [profile.release]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = true
+overflow-checks = true
 
 [profile.dev]
 opt-level = 0
@@ -106,3 +129,5 @@ debug = true
 [profile.bench]
 inherits = "release"
 
+[profile.test]
+opt-level = 1

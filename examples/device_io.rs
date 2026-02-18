@@ -37,7 +37,7 @@ async fn main() -> hv2_core::Result<()> {
         Box::new(move |_port, is_write, _size, data| {
             if is_write {
                 let ch = (*data & 0xFF) as u8 as char;
-                debug_output_clone.write().unwrap().push(ch);
+                debug_output_clone.write().expect("lock poisoned").push(ch);
                 print!("{}", ch); // Echo to console
             }
             Ok(())
@@ -54,7 +54,7 @@ async fn main() -> hv2_core::Result<()> {
         Box::new(move |_port, is_write, _size, data| {
             if is_write {
                 let code = (*data & 0xFF) as u8;
-                post_codes_clone.write().unwrap().push(code);
+                post_codes_clone.write().expect("lock poisoned").push(code);
                 println!("  [POST] Code: 0x{:02X}", code);
             }
             Ok(())
@@ -74,10 +74,10 @@ async fn main() -> hv2_core::Result<()> {
             Box::new(move |_port, is_write, _size, data| {
                 if is_write {
                     let on = (*data & 0x01) != 0;
-                    led_state_clone.write().unwrap()[led_num] = on;
+                    led_state_clone.write().expect("lock poisoned")[led_num] = on;
                     println!("  [LED] LED {} {}", led_num, if on { "ON" } else { "OFF" });
                 } else {
-                    *data = if led_state_clone.read().unwrap()[led_num] { 1 } else { 0 };
+                    *data = if led_state_clone.read().expect("lock poisoned")[led_num] { 1 } else { 0 };
                 }
                 Ok(())
             }),
@@ -191,13 +191,13 @@ async fn main() -> hv2_core::Result<()> {
     // === Display Results ===
     println!("\n=== Execution Results ===\n");
 
-    let debug = debug_output.read().unwrap();
+    let debug = debug_output.read().expect("lock poisoned");
     println!("Debug output length: {} characters", debug.len());
 
-    let posts = post_codes.read().unwrap();
+    let posts = post_codes.read().expect("lock poisoned");
     println!("POST codes received: {:?}", posts);
 
-    let leds = led_state.read().unwrap();
+    let leds = led_state.read().expect("lock poisoned");
     println!("\nFinal LED states:");
     for (i, &on) in leds.iter().enumerate() {
         println!("  LED {}: {}", i, if on { "ON 💡" } else { "OFF ⚫" });

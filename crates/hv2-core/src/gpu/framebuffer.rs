@@ -158,7 +158,8 @@ impl Framebuffer {
                 self.data[dst_start..dst_start + row_bytes].copy_from_slice(&row_buffer);
             } else {
                 // Non-overlapping, copy directly
-                self.data.copy_within(src_start..src_start + row_bytes, dst_start);
+                self.data
+                    .copy_within(src_start..src_start + row_bytes, dst_start);
             }
         }
 
@@ -285,8 +286,7 @@ impl Framebuffer {
                         result[dst_offset + 2] = color.r;
                     }
                     PixelFormat::Gray8 => {
-                        let gray =
-                            ((color.r as u32 + color.g as u32 + color.b as u32) / 3) as u8;
+                        let gray = ((color.r as u32 + color.g as u32 + color.b as u32) / 3) as u8;
                         result[dst_offset] = gray;
                     }
                     _ => {}
@@ -732,7 +732,8 @@ mod tests {
         let mut db = DoubleBuffer::new(DisplayMode::new(100, 100, PixelFormat::Xrgb32));
 
         // Draw to back buffer
-        db.back_buffer().fill_rect(&Rect::new(0, 0, 50, 50), Color::RED);
+        db.back_buffer()
+            .fill_rect(&Rect::new(0, 0, 50, 50), Color::RED);
 
         // Front should still be uninitialized (zeroed)
         let front_pixel = db.front_buffer().get_pixel(25, 25);

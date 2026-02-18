@@ -18,20 +18,29 @@ home: https://github.com/nervosys/HyperMachine
 sources:
   - https://github.com/nervosys/HyperMachine
 
+icon: https://raw.githubusercontent.com/nervosys/HyperMachine/master/img/icon.png
+
 maintainers:
   - name: nervosys
     email: support@nervosys.com
+    url: https://github.com/nervosys
 
 dependencies:
   - name: redis
-    version: "18.x.x"
+    version: "~18.0.0"
     repository: https://charts.bitnami.com/bitnami
     condition: redis.enabled
   - name: postgresql
-    version: "13.x.x"
+    version: "~13.0.0"
     repository: https://charts.bitnami.com/bitnami
     condition: postgresql.enabled
 
 annotations:
-  artifacthub.io/license: Apache-2.0
+  artifacthub.io/license: AGPL-3.0-only OR LicenseRef-Commercial
   artifacthub.io/category: virtualization
+  artifacthub.io/operator: "false"
+  artifacthub.io/prerelease: "true"
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial Helm chart release

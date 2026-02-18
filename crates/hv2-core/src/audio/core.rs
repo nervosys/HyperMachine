@@ -3,7 +3,6 @@
 //! This module provides common types for audio device emulation,
 //! including sample formats, buffers, streams, and mixing.
 
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Audio sample format

@@ -288,8 +288,8 @@ async fn test_vm_mmio_exit() {
     // Handle MMIO exit
     if let VmExit::Mmio {
         phys_addr,
-        mut data,
-        len,
+        data,
+        len: _,
         is_write,
     } = exit
     {
@@ -458,7 +458,7 @@ async fn test_vm_timer_programming() {
     // Verify timer was configured (control word was written)
     // Timer device has received the writes successfully
     // Note: Timer may have auto-ticked, so we just verify it's configured
-    assert!(timer.read().await.total_ticks() >= 0); // Timer is functioning
+    let _ticks = timer.read().await.total_ticks(); // Timer is functioning
 }
 
 // ============================================================================
@@ -510,7 +510,7 @@ async fn test_vm_io_read_operations() {
 #[tokio::test]
 async fn test_vm_hlt_exit() {
     let config = VMConfig::default();
-    let vm = VM::new(config).unwrap();
+    let _vm = VM::new(config).unwrap();
 
     // Simulate HLT instruction
     let exit = VmExit::Hlt;
@@ -519,7 +519,6 @@ async fn test_vm_hlt_exit() {
     match exit {
         VmExit::Hlt => {
             // VM should pause or wait for interrupt
-            assert!(true);
         }
         _ => panic!("Expected HLT exit"),
     }
@@ -543,7 +542,6 @@ async fn test_vm_shutdown_exit() {
     match exit {
         VmExit::Shutdown => {
             // In real implementation, this would set state to Stopped
-            assert!(true);
         }
         _ => panic!("Expected Shutdown exit"),
     }
@@ -643,7 +641,7 @@ async fn test_complete_vm_execution_sequence() {
 
     // Verify timer was programmed (control word was written)
     // Timer device has received the writes successfully
-    assert!(timer.read().await.total_ticks() >= 0); // Timer is functioning
+    let _ticks = timer.read().await.total_ticks(); // Timer is functioning
 
     // Verify boot message was output
     assert_eq!(serial.read().await.output_string(), "Boot!");
@@ -671,7 +669,7 @@ async fn test_vm_memory_configuration() {
 
     // Verify memory was allocated
     assert_eq!(memory.total_size(), 128 * 1024 * 1024);
-    assert!(memory.regions().len() > 0);
+    assert!(!memory.regions().is_empty());
 }
 
 // ============================================================================

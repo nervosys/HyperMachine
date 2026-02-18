@@ -5,8 +5,6 @@
 //! and an agentic interface for LLM-based VM control.
 
 #![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
 
 pub mod agentic;
 pub mod mcp_server;

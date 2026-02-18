@@ -6,13 +6,12 @@
 
 use axum::{
     extract::Query,
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap},
     response::{IntoResponse, Response},
     routing::get,
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ============================================================================
 // Core Ontology Types
@@ -85,6 +84,7 @@ pub struct AuthenticationInfo {
     pub token_endpoint: Option<String>,
 }
 
+/// Authentication method for API access
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthMethod {
     pub method_type: String,
@@ -104,6 +104,7 @@ pub struct Capability {
     pub permissions_required: Vec<String>,
 }
 
+/// Category of hypervisor capability
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityCategory {
@@ -152,6 +153,7 @@ pub struct Operation {
     pub examples: Vec<OperationExample>,
 }
 
+/// API operation parameter definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Parameter {
     pub name: String,
@@ -162,6 +164,7 @@ pub struct Parameter {
     pub default: Option<serde_json::Value>,
 }
 
+/// Location of a parameter in the HTTP request
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ParameterLocation {
@@ -171,6 +174,7 @@ pub enum ParameterLocation {
     Body,
 }
 
+/// Request body schema definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestBody {
     pub content_type: String,
@@ -178,6 +182,7 @@ pub struct RequestBody {
     pub required: bool,
 }
 
+/// Expected response for an API operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationResponse {
     pub status_code: u16,
@@ -185,12 +190,14 @@ pub struct OperationResponse {
     pub schema: Option<serde_json::Value>,
 }
 
+/// Rate limiting configuration for an operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimit {
     pub requests_per_minute: u32,
     pub burst_size: u32,
 }
 
+/// Example request/response pair for an operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OperationExample {
     pub name: String,
@@ -209,6 +216,7 @@ pub struct StateMachine {
     pub terminal_states: Vec<String>,
 }
 
+/// A state within a resource state machine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct State {
     pub name: String,
@@ -216,6 +224,7 @@ pub struct State {
     pub allowed_operations: Vec<String>,
 }
 
+/// A transition between states in a resource state machine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transition {
     pub from_state: String,
@@ -1142,7 +1151,10 @@ impl HyperMachineOntology {
                 // Merge schema with description for tool formats
                 let mut param_schema = param.schema.clone();
                 if let Some(obj) = param_schema.as_object_mut() {
-                    obj.insert("description".to_string(), serde_json::Value::String(param.description.clone()));
+                    obj.insert(
+                        "description".to_string(),
+                        serde_json::Value::String(param.description.clone()),
+                    );
                 }
                 properties.insert(param.name.clone(), param_schema);
                 if param.required {
@@ -1218,6 +1230,7 @@ impl HyperMachineOntology {
 // HTTP Handlers
 // ============================================================================
 
+/// Query parameters for ontology endpoint requests
 #[derive(Debug, Deserialize)]
 pub struct OntologyQuery {
     /// Output format: json-ld, openapi, openai, anthropic, gemini
@@ -1257,7 +1270,10 @@ async fn get_ontology(Query(query): Query<OntologyQuery>) -> Response {
         _ => {
             // Default: full JSON-LD ontology
             let mut headers = HeaderMap::new();
-            headers.insert(header::CONTENT_TYPE, "application/ld+json".parse().unwrap());
+            headers.insert(
+                header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("application/ld+json"),
+            );
             (headers, Json(ontology)).into_response()
         }
     }

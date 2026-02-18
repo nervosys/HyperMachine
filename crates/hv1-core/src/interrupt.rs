@@ -63,7 +63,7 @@ pub mod vector {
     pub const SIMD_FP_EXCEPTION: u8 = 19;
     pub const VIRTUALIZATION: u8 = 20;
     pub const SECURITY_EXCEPTION: u8 = 30;
-    
+
     // PIC interrupts (remapped)
     pub const PIC_TIMER: u8 = 32;
     pub const PIC_KEYBOARD: u8 = 33;
@@ -81,12 +81,12 @@ pub mod vector {
     pub const PIC_FPU: u8 = 45;
     pub const PIC_ATA_PRIMARY: u8 = 46;
     pub const PIC_ATA_SECONDARY: u8 = 47;
-    
+
     // APIC interrupts
     pub const APIC_TIMER: u8 = 48;
     pub const APIC_ERROR: u8 = 49;
     pub const APIC_SPURIOUS: u8 = 255;
-    
+
     // IPI vectors
     pub const IPI_RESCHEDULE: u8 = 50;
     pub const IPI_TLB_SHOOTDOWN: u8 = 51;
@@ -138,7 +138,7 @@ impl LocalApic {
     }
 
     /// Read an APIC register
-    /// 
+    ///
     /// # Safety
     /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn read(&self, offset: u32) -> u32 {
@@ -147,7 +147,7 @@ impl LocalApic {
     }
 
     /// Write to an APIC register
-    /// 
+    ///
     /// # Safety
     /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn write(&self, offset: u32, value: u32) {
@@ -174,7 +174,10 @@ impl LocalApic {
     pub unsafe fn enable(&self) {
         let svr = self.read(apic_reg::SVR);
         // Set bit 8 (APIC enable) and set spurious vector
-        self.write(apic_reg::SVR, svr | (1 << 8) | (vector::APIC_SPURIOUS as u32));
+        self.write(
+            apic_reg::SVR,
+            svr | (1 << 8) | (vector::APIC_SPURIOUS as u32),
+        );
     }
 
     /// Disable the APIC
@@ -187,7 +190,7 @@ impl LocalApic {
     pub unsafe fn send_ipi(&self, target_apic_id: u8, vector: u8) {
         // Set target APIC ID in ICR high
         self.write(apic_reg::ICR_HIGH, (target_apic_id as u32) << 24);
-        
+
         // Send IPI: fixed delivery mode, physical destination
         self.write(apic_reg::ICR_LOW, vector as u32);
     }
@@ -221,7 +224,7 @@ impl LocalApic {
             _ => 0x0, // Default to divide by 2
         };
         self.write(apic_reg::TIMER_DCR, dcr);
-        
+
         // Set LVT timer
         let lvt = vector as u32 | if periodic { 1 << 17 } else { 0 };
         self.write(apic_reg::LVT_TIMER, lvt);
@@ -253,10 +256,11 @@ impl Default for LocalApic {
 pub fn initialize_apic() -> Result<()> {
     // Check if APIC is available
     let cpuid = raw_cpuid::CpuId::new();
-    let has_apic = cpuid.get_feature_info()
+    let has_apic = cpuid
+        .get_feature_info()
         .map(|f| f.has_apic())
         .unwrap_or(false);
-    
+
     if !has_apic {
         return Err(Error::NoHardwareSupport);
     }
@@ -266,7 +270,7 @@ pub fn initialize_apic() -> Result<()> {
         let apic_base = x86::msr::rdmsr(0x1B);
         // Set bit 11 (global enable)
         x86::msr::wrmsr(0x1B, apic_base | (1 << 11));
-        
+
         // Enable local APIC
         let apic = LocalApic::new();
         apic.enable();

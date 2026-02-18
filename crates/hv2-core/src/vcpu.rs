@@ -422,6 +422,7 @@ pub struct VCpu {
 
 impl VCpu {
     /// Create a new vCPU
+    #[must_use]
     pub fn new(id: u32) -> Self {
         Self {
             id,
@@ -456,22 +457,15 @@ impl VCpu {
     }
 
     /// Run the vCPU
+    ///
+    /// **Note:** Direct `VCpu::run()` is not supported. Use
+    /// [`HypervisorBackend::run_vcpu()`] which delegates to the platform-specific
+    /// backend (KVM, WHPX, HVF) for real guest execution.
     pub fn run(&self) -> Result<VCpuExit> {
-        let mut state = self.state.lock();
-
-        if *state != VCpuState::Stopped && *state != VCpuState::Paused {
-            return Err(Error::Cpu(format!(
-                "Cannot run vCPU {} in state {:?}",
-                self.id, *state
-            )));
-        }
-
-        *state = VCpuState::Running;
-        drop(state);
-
-        // This is where the actual CPU execution would happen
-        // For now, return a placeholder exit
-        Ok(VCpuExit::Hlt)
+        Err(Error::Cpu(format!(
+            "VCpu::run() is not directly executable — use HypervisorBackend::run_vcpu() for vCPU {}",
+            self.id
+        )))
     }
 
     /// Pause the vCPU

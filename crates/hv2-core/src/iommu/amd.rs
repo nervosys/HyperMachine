@@ -4,11 +4,13 @@
 //! I/O page tables, event logging, and command buffer.
 
 use super::types::{
-    AddressWidth, DeviceId, DomainId, FaultReason, FaultRecord, IommuStats, PageTableEntry,
-    PageTableFlags, TranslationType, PAGE_SIZE_4K,
+    AddressWidth, DeviceId, DomainId, FaultReason, FaultRecord, IommuStats,
+    PageTableFlags, TranslationType,
 };
+#[cfg(test)]
+use super::types::PAGE_SIZE_4K;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// AMD IOMMU MMIO register offsets
 pub mod registers {
@@ -883,8 +885,7 @@ mod tests {
 
     #[test]
     fn test_device_table_entry_translated() {
-        let dte =
-            DeviceTableEntry::translated(0x1000_0000, DomainId::new(5), AddressWidth::Bits48);
+        let dte = DeviceTableEntry::translated(0x1000_0000, DomainId::new(5), AddressWidth::Bits48);
         assert!(dte.is_valid());
         assert!(dte.is_translation_enabled());
         assert_eq!(dte.translation_type(), TranslationType::Translated);

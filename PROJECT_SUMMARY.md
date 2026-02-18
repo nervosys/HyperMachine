@@ -215,7 +215,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-HyperMachine is dual-licensed under MIT and Apache-2.0. You can choose either license.
+HyperMachine is dual-licensed under the GNU Affero General Public License v3 (AGPL-3.0) or a
+commercial license (proprietary use). See [LICENSE](LICENSE) and [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL).
 
 ## Future Vision
 

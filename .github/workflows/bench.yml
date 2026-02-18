@@ -15,6 +15,13 @@ on:
         required: false
         default: 'false'
 
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -34,7 +41,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           components: rustfmt, clippy
@@ -53,18 +60,18 @@ jobs:
 
       - name: Run crypto benchmarks
         run: |
-          cargo bench -p hv2-core --bench crypto_bench -- --noplot --output-format=bencher | tee crypto_bench.txt
+          cargo bench -p hv2-core --bench crypto_bench -- --noplot 2>&1 | Tee-Object -FilePath crypto_bench.txt
 
       - name: Run API benchmarks
         run: |
-          cargo bench -p hv2-api --bench api_bench -- --noplot --output-format=bencher | tee api_bench.txt
+          cargo bench -p hv2-api --bench api_bench -- --noplot 2>&1 | Tee-Object -FilePath api_bench.txt
         continue-on-error: true
 
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: HyperMachine Benchmarks
-          tool: 'cargo'
+          tool: 'customSmallerIsBetter'
           output-file-path: crypto_bench.txt
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
@@ -143,7 +150,7 @@ jobs:
           path: pr
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Run baseline benchmarks
         working-directory: baseline
@@ -151,10 +158,17 @@ jobs:
           cargo bench -p hv2-core --bench crypto_bench -- --noplot --save-baseline baseline
         continue-on-error: true
 
+      - name: Copy baseline results to PR directory
+        run: |
+          if (Test-Path baseline/target/criterion) {
+            Copy-Item -Recurse -Force baseline/target/criterion pr/target/criterion
+          }
+        continue-on-error: true
+
       - name: Run PR benchmarks and compare
         working-directory: pr
         run: |
-          cargo bench -p hv2-core --bench crypto_bench -- --noplot --baseline baseline | tee comparison.txt
+          cargo bench -p hv2-core --bench crypto_bench -- --noplot --baseline baseline | Tee-Object -FilePath comparison.txt
         continue-on-error: true
 
       - name: Check for regressions
@@ -164,4 +178,4 @@ jobs:
             Get-Content pr/comparison.txt | Select-String "regressed"
             exit 1
           }
-        continue-on-error: true
+

@@ -12,42 +12,33 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 /// Learning error types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum LearningError {
     /// Experience not found
+    #[error("Experience not found: {0}")]
     ExperienceNotFound(String),
     /// Skill not found
+    #[error("Skill not found: {0}")]
     SkillNotFound(String),
     /// Policy not found
+    #[error("Policy not found: {0}")]
     PolicyNotFound(String),
     /// Invalid reward
+    #[error("Invalid reward: {0}")]
     InvalidReward(String),
     /// Learning disabled
+    #[error("Learning is disabled")]
     LearningDisabled,
     /// Capacity exceeded
+    #[error("Capacity exceeded: {0}")]
     CapacityExceeded(usize),
     /// Convergence failure
+    #[error("Convergence failed: {0}")]
     ConvergenceFailed(String),
 }
-
-impl fmt::Display for LearningError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ExperienceNotFound(s) => write!(f, "Experience not found: {}", s),
-            Self::SkillNotFound(s) => write!(f, "Skill not found: {}", s),
-            Self::PolicyNotFound(s) => write!(f, "Policy not found: {}", s),
-            Self::InvalidReward(s) => write!(f, "Invalid reward: {}", s),
-            Self::LearningDisabled => write!(f, "Learning is disabled"),
-            Self::CapacityExceeded(n) => write!(f, "Capacity exceeded: {}", n),
-            Self::ConvergenceFailed(s) => write!(f, "Convergence failed: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for LearningError {}
 
 /// Result type for learning operations
 pub type LearningResult<T> = Result<T, LearningError>;
@@ -790,42 +781,42 @@ impl SharedLearning {
 
     /// Record an experience
     pub fn record_experience(&self, exp: Experience) -> LearningResult<()> {
-        self.inner.write().unwrap().record_experience(exp)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).record_experience(exp)
     }
 
     /// Start a new episode
     pub fn start_episode(&self) -> String {
-        self.inner.write().unwrap().start_episode()
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).start_episode()
     }
 
     /// End current episode
     pub fn end_episode(&self) {
-        self.inner.write().unwrap().end_episode();
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).end_episode();
     }
 
     /// Register a skill
     pub fn register_skill(&self, skill: Skill) {
-        self.inner.write().unwrap().register_skill(skill);
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).register_skill(skill);
     }
 
     /// Practice a skill
     pub fn practice_skill(&self, name: &str, success: bool) -> LearningResult<()> {
-        self.inner.write().unwrap().practice_skill(name, success)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).practice_skill(name, success)
     }
 
     /// Get statistics
     pub fn stats(&self) -> LearningStats {
-        self.inner.read().unwrap().stats().clone()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).stats().clone()
     }
 
     /// Check if learning is enabled
     pub fn is_enabled(&self) -> bool {
-        self.inner.read().unwrap().is_enabled()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).is_enabled()
     }
 
     /// Get current step
     pub fn current_step(&self) -> u64 {
-        self.inner.read().unwrap().current_step()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).current_step()
     }
 }
 

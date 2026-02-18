@@ -36,9 +36,6 @@
 //! ```
 
 #![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
-#![allow(mismatched_lifetime_syntaxes)]
 
 pub mod actions;
 pub mod agent_vm;

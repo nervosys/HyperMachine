@@ -4,7 +4,7 @@
 //! descriptors, endpoints, and device state management.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 /// USB device state
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

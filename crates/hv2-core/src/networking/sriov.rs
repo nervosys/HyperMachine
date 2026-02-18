@@ -285,7 +285,7 @@ impl PhysicalFunction {
         sriov.num_vfs = count;
 
         // Create VF entries
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         vfs.clear();
 
         for i in 0..count {
@@ -304,30 +304,30 @@ impl PhysicalFunction {
         let sriov = self.sriov.as_mut().ok_or(SriovError::NotSupported)?;
 
         // Check if any VFs are assigned
-        let vfs = self.vfs.read().unwrap();
+        let vfs = self.vfs.read().unwrap_or_else(|e| e.into_inner());
         if vfs.values().any(|vf| vf.is_assigned()) {
             return Err(SriovError::VfInUse);
         }
         drop(vfs);
 
-        self.vfs.write().unwrap().clear();
+        self.vfs.write().unwrap_or_else(|e| e.into_inner()).clear();
         sriov.num_vfs = 0;
         Ok(())
     }
 
     /// Get VF by index
     pub fn get_vf(&self, index: u16) -> Option<VirtualFunction> {
-        self.vfs.read().unwrap().get(&index).cloned()
+        self.vfs.read().unwrap_or_else(|e| e.into_inner()).get(&index).cloned()
     }
 
     /// Get all VFs
     pub fn list_vfs(&self) -> Vec<VirtualFunction> {
-        self.vfs.read().unwrap().values().cloned().collect()
+        self.vfs.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
     }
 
     /// Assign VF to VM
     pub fn assign_vf(&self, vf_index: u16, vm_id: u64) -> Result<PciAddress, SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -344,7 +344,7 @@ impl PhysicalFunction {
 
     /// Release VF from VM
     pub fn release_vf(&self, vf_index: u16) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -357,7 +357,7 @@ impl PhysicalFunction {
 
     /// Set VF MAC address
     pub fn set_vf_mac(&self, vf_index: u16, mac: [u8; 6]) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -367,7 +367,7 @@ impl PhysicalFunction {
 
     /// Set VF VLAN
     pub fn set_vf_vlan(&self, vf_index: u16, vlan: Option<u16>) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -382,7 +382,7 @@ impl PhysicalFunction {
         min_rate: u32,
         max_rate: u32,
     ) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -393,7 +393,7 @@ impl PhysicalFunction {
 
     /// Set VF spoofcheck
     pub fn set_vf_spoofcheck(&self, vf_index: u16, enabled: bool) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -403,7 +403,7 @@ impl PhysicalFunction {
 
     /// Set VF trust mode
     pub fn set_vf_trust(&self, vf_index: u16, trusted: bool) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -413,7 +413,7 @@ impl PhysicalFunction {
 
     /// Set VF link state
     pub fn set_vf_link_state(&self, vf_index: u16, state: VfLinkState) -> Result<(), SriovError> {
-        let mut vfs = self.vfs.write().unwrap();
+        let mut vfs = self.vfs.write().unwrap_or_else(|e| e.into_inner());
         let vf = vfs
             .get_mut(&vf_index)
             .ok_or(SriovError::VfNotFound(vf_index))?;
@@ -438,47 +438,36 @@ impl PhysicalFunction {
 }
 
 /// SR-IOV error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SriovError {
     /// Device doesn't support SR-IOV
+    #[error("Device does not support SR-IOV")]
     NotSupported,
     /// Too many VFs requested
+    #[error("Requested {0} VFs but maximum is {1}")]
     TooManyVfs(u16, u16),
     /// VF not found
+    #[error("VF {0} not found")]
     VfNotFound(u16),
     /// VF not available for assignment
+    #[error("VF {0} not available for assignment")]
     VfNotAvailable(u16),
     /// VF is in use
+    #[error("Cannot disable VFs while in use")]
     VfInUse,
     /// IOMMU not available
+    #[error("IOMMU not available")]
     NoIommu,
     /// Device busy
+    #[error("Device is busy")]
     DeviceBusy,
     /// Permission denied
+    #[error("Permission denied")]
     PermissionDenied,
     /// Driver error
+    #[error("Driver error: {0}")]
     DriverError(String),
 }
-
-impl std::fmt::Display for SriovError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NotSupported => write!(f, "Device does not support SR-IOV"),
-            Self::TooManyVfs(req, max) => {
-                write!(f, "Requested {} VFs but maximum is {}", req, max)
-            }
-            Self::VfNotFound(idx) => write!(f, "VF {} not found", idx),
-            Self::VfNotAvailable(idx) => write!(f, "VF {} not available for assignment", idx),
-            Self::VfInUse => write!(f, "Cannot disable VFs while in use"),
-            Self::NoIommu => write!(f, "IOMMU not available"),
-            Self::DeviceBusy => write!(f, "Device is busy"),
-            Self::PermissionDenied => write!(f, "Permission denied"),
-            Self::DriverError(msg) => write!(f, "Driver error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for SriovError {}
 
 /// Passthrough device assignment
 #[derive(Debug, Clone)]
@@ -537,14 +526,14 @@ impl SriovManager {
     pub fn register_pf(&self, pf: PhysicalFunction) -> PciAddress {
         let address = pf.address;
         let arc_pf = Arc::new(pf);
-        self.pfs.write().unwrap().insert(address, arc_pf);
+        self.pfs.write().unwrap_or_else(|e| e.into_inner()).insert(address, arc_pf);
         self.stats.total_pfs.fetch_add(1, Ordering::Relaxed);
         address
     }
 
     /// Unregister physical function
     pub fn unregister_pf(&self, address: PciAddress) -> Option<Arc<PhysicalFunction>> {
-        let pf = self.pfs.write().unwrap().remove(&address);
+        let pf = self.pfs.write().unwrap_or_else(|e| e.into_inner()).remove(&address);
         if pf.is_some() {
             self.stats.total_pfs.fetch_sub(1, Ordering::Relaxed);
         }
@@ -553,12 +542,12 @@ impl SriovManager {
 
     /// Get physical function
     pub fn get_pf(&self, address: PciAddress) -> Option<Arc<PhysicalFunction>> {
-        self.pfs.read().unwrap().get(&address).cloned()
+        self.pfs.read().unwrap_or_else(|e| e.into_inner()).get(&address).cloned()
     }
 
     /// List all PFs
     pub fn list_pfs(&self) -> Vec<PciAddress> {
-        self.pfs.read().unwrap().keys().cloned().collect()
+        self.pfs.read().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect()
     }
 
     /// Assign device to VM
@@ -569,7 +558,7 @@ impl SriovManager {
         guest_address: Option<PciAddress>,
     ) -> Result<DeviceAssignment, SriovError> {
         // Check if already assigned
-        if self.assignments.read().unwrap().contains_key(&device) {
+        if self.assignments.read().unwrap_or_else(|e| e.into_inner()).contains_key(&device) {
             return Err(SriovError::DeviceBusy);
         }
 
@@ -584,7 +573,7 @@ impl SriovManager {
 
         self.assignments
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(device, assignment.clone());
         self.stats.assignments.fetch_add(1, Ordering::Relaxed);
 
@@ -593,7 +582,7 @@ impl SriovManager {
 
     /// Release device from VM
     pub fn release_device(&self, device: PciAddress) -> Result<(), SriovError> {
-        if self.assignments.write().unwrap().remove(&device).is_some() {
+        if self.assignments.write().unwrap_or_else(|e| e.into_inner()).remove(&device).is_some() {
             self.stats.releases.fetch_add(1, Ordering::Relaxed);
             Ok(())
         } else {
@@ -603,14 +592,14 @@ impl SriovManager {
 
     /// Get device assignment
     pub fn get_assignment(&self, device: PciAddress) -> Option<DeviceAssignment> {
-        self.assignments.read().unwrap().get(&device).cloned()
+        self.assignments.read().unwrap_or_else(|e| e.into_inner()).get(&device).cloned()
     }
 
     /// List assignments for VM
     pub fn list_vm_assignments(&self, vm_id: u64) -> Vec<DeviceAssignment> {
         self.assignments
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .values()
             .filter(|a| a.vm_id == vm_id)
             .cloned()

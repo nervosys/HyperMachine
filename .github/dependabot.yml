@@ -1,0 +1,78 @@
+# Dependabot configuration for automated dependency updates
+# https://docs.github.com/en/code-security/dependabot
+
+version: 2
+updates:
+  # Rust / Cargo dependencies
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    reviewers:
+      - "nervosys/hypermachine-team"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    # Group minor/patch updates to reduce PR noise
+    groups:
+      rust-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+      tokio:
+        patterns:
+          - "tokio*"
+      serde:
+        patterns:
+          - "serde*"
+      tonic-grpc:
+        patterns:
+          - "tonic*"
+          - "prost*"
+      tracing:
+        patterns:
+          - "tracing*"
+          - "opentelemetry*"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "nervosys/hypermachine-team"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+
+  # Container base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"
+
+  # Terraform providers
+  - package-ecosystem: "terraform"
+    directory: "/deploy/terraform"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "dependencies"
+      - "terraform"
+    commit-message:
+      prefix: "deps"

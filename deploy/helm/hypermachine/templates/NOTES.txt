@@ -1,0 +1,40 @@
+HyperMachine has been deployed successfully!
+
+Release: {{ .Release.Name }}
+Chart:   {{ .Chart.Name }}-{{ .Chart.Version }}
+
+{{- if .Values.ingress.enabled }}
+
+Access the application via:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+
+{{- else if contains "NodePort" .Values.service.type }}
+
+Get the application URL by running:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ .Release.Name }}-{{ .Chart.Name }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+
+{{- else if contains "LoadBalancer" .Values.service.type }}
+
+Get the application URL by running:
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  kubectl get --namespace {{ .Release.Namespace }} svc {{ .Release.Name }}-{{ .Chart.Name }} -w
+
+{{- else if contains "ClusterIP" .Values.service.type }}
+
+Access the application by running:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ .Release.Name }}-{{ .Chart.Name }} {{ .Values.service.http.port }}:{{ .Values.service.http.port }}
+  echo "Visit http://127.0.0.1:{{ .Values.service.http.port }}"
+
+{{- end }}
+
+{{- if .Values.metrics.enabled }}
+
+Metrics are available on port {{ .Values.service.metrics.port }}.
+{{- if .Values.metrics.serviceMonitor.enabled }}
+A ServiceMonitor has been created for Prometheus scraping.
+{{- end }}
+{{- end }}

@@ -48,8 +48,10 @@
 //! - **IOREDTBL[0-23]** (0x10-0x3F): Redirection Table (64-bit each)
 
 use crate::{Error, Result};
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::RwLock;
+#[cfg(test)]
+use std::sync::Arc;
 
 /// IOAPIC base address (standard location)
 pub const IOAPIC_BASE: u64 = 0xFEC0_0000;
@@ -147,7 +149,7 @@ impl DeliveryMode {
             5 => Self::Init,
             6 => Self::Reserved6,
             7 => Self::ExtInt,
-            _ => unreachable!(),
+            _ => unreachable!("3-bit mask value exceeded 0..=7"),
         }
     }
 }

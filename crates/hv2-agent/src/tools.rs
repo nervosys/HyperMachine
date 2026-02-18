@@ -16,59 +16,40 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 /// Tool error types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ToolError {
     /// Tool not found
+    #[error("Tool not found: {0}")]
     NotFound(String),
     /// Tool already registered
+    #[error("Tool already registered: {0}")]
     AlreadyRegistered(String),
     /// Invalid parameters
+    #[error("Invalid parameters: {0}")]
     InvalidParameters(String),
     /// Missing required parameter
+    #[error("Missing required parameter: {0}")]
     MissingParameter(String),
     /// Parameter type mismatch
+    #[error("Type mismatch for '{param}': expected {expected}, got {got}")]
     TypeMismatch {
         param: String,
         expected: String,
         got: String,
     },
     /// Execution failed
+    #[error("Execution failed: {0}")]
     ExecutionFailed(String),
     /// Permission denied
+    #[error("Permission denied: {0}")]
     PermissionDenied(String),
     /// Tool disabled
+    #[error("Tool disabled: {0}")]
     ToolDisabled(String),
     /// Timeout
+    #[error("Timeout after {0:?}")]
     Timeout(Duration),
 }
-
-impl fmt::Display for ToolError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotFound(s) => write!(f, "Tool not found: {}", s),
-            Self::AlreadyRegistered(s) => write!(f, "Tool already registered: {}", s),
-            Self::InvalidParameters(s) => write!(f, "Invalid parameters: {}", s),
-            Self::MissingParameter(s) => write!(f, "Missing required parameter: {}", s),
-            Self::TypeMismatch {
-                param,
-                expected,
-                got,
-            } => {
-                write!(
-                    f,
-                    "Type mismatch for '{}': expected {}, got {}",
-                    param, expected, got
-                )
-            }
-            Self::ExecutionFailed(s) => write!(f, "Execution failed: {}", s),
-            Self::PermissionDenied(s) => write!(f, "Permission denied: {}", s),
-            Self::ToolDisabled(s) => write!(f, "Tool disabled: {}", s),
-            Self::Timeout(d) => write!(f, "Timeout after {:?}", d),
-        }
-    }
-}
-
-impl std::error::Error for ToolError {}
 
 /// Result type for tool operations
 pub type ToolResult<T> = Result<T, ToolError>;
@@ -789,19 +770,19 @@ impl SharedToolRegistry {
 
     /// Register a tool
     pub fn register(&self, tool: RegisteredTool) -> ToolResult<()> {
-        self.inner.write().unwrap().register(tool)
+        self.inner.write().expect("lock poisoned").register(tool)
     }
 
     /// Execute a tool call
     pub fn execute(&self, call: &ToolCall) -> ToolResult<ToolCallResult> {
-        self.inner.write().unwrap().execute(call)
+        self.inner.write().expect("lock poisoned").execute(call)
     }
 
     /// List all tools
     pub fn list(&self) -> Vec<ToolDefinition> {
         self.inner
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .list()
             .into_iter()
             .cloned()
@@ -810,22 +791,22 @@ impl SharedToolRegistry {
 
     /// Get tool count
     pub fn len(&self) -> usize {
-        self.inner.read().unwrap().len()
+        self.inner.read().expect("lock poisoned").len()
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        self.inner.read().unwrap().is_empty()
+        self.inner.read().expect("lock poisoned").is_empty()
     }
 
     /// Enable a tool
     pub fn enable(&self, name: &str) -> ToolResult<()> {
-        self.inner.write().unwrap().enable(name)
+        self.inner.write().expect("lock poisoned").enable(name)
     }
 
     /// Disable a tool
     pub fn disable(&self, name: &str) -> ToolResult<()> {
-        self.inner.write().unwrap().disable(name)
+        self.inner.write().expect("lock poisoned").disable(name)
     }
 }
 
@@ -840,7 +821,7 @@ mod tests {
 
         assert!(ParameterType::Integer.matches(&JsonValue::Number(42.into())));
         assert!(ParameterType::Float.matches(&JsonValue::Number(
-            serde_json::Number::from_f64(3.14).unwrap()
+            serde_json::Number::from_f64(std::f64::consts::PI).unwrap()
         )));
 
         assert!(ParameterType::Boolean.matches(&JsonValue::Bool(true)));

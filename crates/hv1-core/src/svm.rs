@@ -523,9 +523,10 @@ impl Default for HostSaveArea {
 /// Check if SVM is supported
 pub fn is_supported() -> bool {
     let cpuid = raw_cpuid::CpuId::new();
-    
+
     // Check CPUID.80000001H:ECX[SVM]
-    cpuid.get_extended_processor_and_feature_identifiers()
+    cpuid
+        .get_extended_processor_and_feature_identifiers()
         .map(|f| f.has_svm())
         .unwrap_or(false)
 }
@@ -568,20 +569,20 @@ pub unsafe fn set_host_save_area(host_save_area: &HostSaveArea) -> Result<()> {
 /// Execute VMRUN instruction
 pub unsafe fn vmrun(vmcb: &mut Vmcb) -> Result<()> {
     let vmcb_pa = vmcb as *mut _ as u64;
-    
+
     asm!(
         "vmrun",
         in("rax") vmcb_pa,
         options(nostack)
     );
-    
+
     Ok(())
 }
 
 /// Execute VMSAVE instruction
 pub unsafe fn vmsave(vmcb: &Vmcb) {
     let vmcb_pa = vmcb as *const _ as u64;
-    
+
     asm!(
         "vmsave",
         in("rax") vmcb_pa,
@@ -592,7 +593,7 @@ pub unsafe fn vmsave(vmcb: &Vmcb) {
 /// Execute VMLOAD instruction
 pub unsafe fn vmload(vmcb: &Vmcb) {
     let vmcb_pa = vmcb as *const _ as u64;
-    
+
     asm!(
         "vmload",
         in("rax") vmcb_pa,

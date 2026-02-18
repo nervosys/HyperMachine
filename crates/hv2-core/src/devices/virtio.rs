@@ -643,7 +643,7 @@ impl SharedVirtioNet {
 
     /// Get inner device
     pub fn lock(&self) -> std::sync::MutexGuard<'_, VirtioNet> {
-        self.inner.lock().unwrap()
+        self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 

@@ -282,7 +282,7 @@ impl VmcsField {
             1 => 64,
             2 => 32,
             3 => 64, // Natural width (64 on x86_64)
-            _ => unreachable!(),
+            _ => unreachable!("2-bit mask value exceeded 0..=3"),
         }
     }
 
@@ -298,7 +298,7 @@ impl VmcsField {
             1 => VmcsAccessType::ReadOnly,
             2 => VmcsAccessType::GuestState,
             3 => VmcsAccessType::HostState,
-            _ => unreachable!(),
+            _ => unreachable!("2-bit mask value exceeded 0..=3"),
         }
     }
 }

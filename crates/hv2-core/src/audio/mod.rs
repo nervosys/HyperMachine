@@ -6,16 +6,16 @@
 //! - Intel High Definition Audio (HDA)
 //! - VirtIO sound device
 
-pub mod core;
 pub mod ac97;
+pub mod core;
 pub mod hda;
 pub mod virtio_sound;
 
 // Re-export common types
 pub use core::{
     AudioBuffer, AudioMixer, AudioParams, AudioStats, AudioStatsSnapshot, AudioStream,
-    ChannelLayout, PcmStream, SampleFormat, SampleRate, StereoVolume, StreamDirection,
-    StreamState, Volume,
+    ChannelLayout, PcmStream, SampleFormat, SampleRate, StereoVolume, StreamDirection, StreamState,
+    Volume,
 };
 
 // Re-export AC97 types
@@ -25,9 +25,7 @@ pub use ac97::{
 };
 
 // Re-export HDA types
-pub use hda::{
-    HdaCodec, HdaController, PinConfig, StreamDescriptor, Widget, WidgetType,
-};
+pub use hda::{HdaCodec, HdaController, PinConfig, StreamDescriptor, Widget, WidgetType};
 
 // Re-export VirtIO sound types
 pub use virtio_sound::{

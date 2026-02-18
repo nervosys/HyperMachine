@@ -15,33 +15,24 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 /// Memory error types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum MemoryError {
     /// Memory item not found
+    #[error("Memory not found: {0}")]
     NotFound(String),
     /// Memory capacity exceeded
+    #[error("Memory capacity exceeded: {0}")]
     CapacityExceeded(usize),
     /// Invalid memory type
+    #[error("Invalid memory type: {0}")]
     InvalidType(String),
     /// Retrieval error
+    #[error("Retrieval error: {0}")]
     RetrievalError(String),
     /// Encoding error
+    #[error("Encoding error: {0}")]
     EncodingError(String),
 }
-
-impl fmt::Display for MemoryError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NotFound(s) => write!(f, "Memory not found: {}", s),
-            Self::CapacityExceeded(n) => write!(f, "Memory capacity exceeded: {}", n),
-            Self::InvalidType(s) => write!(f, "Invalid memory type: {}", s),
-            Self::RetrievalError(s) => write!(f, "Retrieval error: {}", s),
-            Self::EncodingError(s) => write!(f, "Encoding error: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for MemoryError {}
 
 /// Result type for memory operations
 pub type MemoryResult<T> = Result<T, MemoryError>;
@@ -365,7 +356,7 @@ impl EpisodicMemory {
             .values()
             .filter(|e| e.content.to_lowercase().contains(&query_lower))
             .collect();
-        results.sort_by(|a, b| b.strength().partial_cmp(&a.strength()).unwrap());
+        results.sort_by(|a, b| b.strength().partial_cmp(&a.strength()).unwrap_or(std::cmp::Ordering::Equal));
         results
     }
 
@@ -596,7 +587,7 @@ impl WorkingMemory {
         // Evict old items if needed (except pinned)
         while self.current_tokens + item.tokens > self.max_tokens {
             if let Some(pos) = self.items.iter().position(|i| !i.pinned) {
-                let removed = self.items.remove(pos).unwrap();
+                let removed = self.items.remove(pos).expect("position from iter was valid");
                 self.current_tokens -= removed.tokens;
             } else {
                 return Err(MemoryError::CapacityExceeded(self.max_tokens));
@@ -872,7 +863,7 @@ impl MemorySystem {
         }
 
         // Sort by score and limit
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
+        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(config.max_results);
 
         results
@@ -960,42 +951,42 @@ impl SharedMemory {
 
     /// Remember an episode
     pub fn remember_episode(&self, episode: Episode) -> MemoryResult<()> {
-        self.inner.write().unwrap().remember_episode(episode)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).remember_episode(episode)
     }
 
     /// Remember a fact
     pub fn remember_fact(&self, fact: SemanticFact) -> MemoryResult<()> {
-        self.inner.write().unwrap().remember_fact(fact)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).remember_fact(fact)
     }
 
     /// Add to context
     pub fn add_to_context(&self, item: WorkingItem) -> MemoryResult<()> {
-        self.inner.write().unwrap().add_to_context(item)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).add_to_context(item)
     }
 
     /// Retrieve memories
     pub fn retrieve(&self, query: &str, config: &RetrievalConfig) -> Vec<RetrievalResult> {
-        self.inner.write().unwrap().retrieve(query, config)
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).retrieve(query, config)
     }
 
     /// Consolidate
     pub fn consolidate(&self) {
-        self.inner.write().unwrap().consolidate();
+        self.inner.write().unwrap_or_else(|e| e.into_inner()).consolidate();
     }
 
     /// Get episode count
     pub fn episode_count(&self) -> usize {
-        self.inner.read().unwrap().episodic.len()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).episodic.len()
     }
 
     /// Get fact count
     pub fn fact_count(&self) -> usize {
-        self.inner.read().unwrap().semantic.len()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).semantic.len()
     }
 
     /// Get working memory count
     pub fn working_count(&self) -> usize {
-        self.inner.read().unwrap().working.len()
+        self.inner.read().unwrap_or_else(|e| e.into_inner()).working.len()
     }
 }
 

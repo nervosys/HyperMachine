@@ -9,6 +9,13 @@ on:
   pull_request:
     branches: [master, main]
 
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -21,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@nightly
+        uses: dtolnay/rust-toolchain@nightly
         with:
           components: llvm-tools-preview
 
@@ -36,14 +43,18 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-
 
       - name: Generate coverage report
         run: |
           cargo llvm-cov --workspace \
             --exclude hv1-boot \
-            --exclude hyperv-boot \
+            --exclude hv1-core \
             --codecov \
-            --output-path codecov.json
+            --output-path codecov.json \
+            --html
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -54,38 +65,9 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-      - name: Generate HTML coverage report
-        run: |
-          cargo llvm-cov --workspace \
-            --exclude hv1-boot \
-            --exclude hyperv-boot \
-            --html
-
       - name: Upload HTML report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: target/llvm-cov/html
-
-  coverage-summary:
-    name: Coverage Summary
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
-
-      - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
-
-      - name: Generate coverage summary
-        run: |
-          cargo tarpaulin --workspace \
-            --exclude hv1-boot \
-            --exclude hyperv-boot \
-            --out Stdout \
-            --skip-clean \
-            --timeout 300 \
-            || echo "Tarpaulin completed with partial coverage"
+          retention-days: 30

@@ -312,11 +312,15 @@ impl SegmentDescriptor {
 
     /// Convert descriptor to raw bytes
     pub fn to_bytes(&self) -> [u8; 8] {
+        // SAFETY: `SegmentDescriptor` is `#[repr(C, packed)]` with exactly 8 bytes
+        // of integer fields, making it layout-compatible with `[u8; 8]`.
         unsafe { std::mem::transmute(*self) }
     }
 
     /// Create descriptor from raw bytes
     pub fn from_bytes(bytes: [u8; 8]) -> Self {
+        // SAFETY: `[u8; 8]` is layout-compatible with `SegmentDescriptor`
+        // (`#[repr(C, packed)]`, 8 bytes total). Any bit pattern is valid.
         unsafe { std::mem::transmute(bytes) }
     }
 }
@@ -369,6 +373,8 @@ impl DescriptorTablePointer {
 
     /// Convert to raw bytes for loading with LGDT/LIDT
     pub fn to_bytes(&self) -> [u8; 10] {
+        // SAFETY: `DescriptorTablePointer` is `#[repr(C, packed)]` with a u16
+        // and a u64, totaling exactly 10 bytes. Layout is compatible with `[u8; 10]`.
         unsafe { std::mem::transmute(*self) }
     }
 }
@@ -664,11 +670,15 @@ impl InterruptDescriptor64 {
 
     /// Convert descriptor to raw bytes
     pub fn to_bytes(&self) -> [u8; 16] {
+        // SAFETY: `InterruptDescriptor64` is `#[repr(C, packed)]` with exactly
+        // 16 bytes of integer fields, making it layout-compatible with `[u8; 16]`.
         unsafe { std::mem::transmute(*self) }
     }
 
     /// Create descriptor from raw bytes
     pub fn from_bytes(bytes: [u8; 16]) -> Self {
+        // SAFETY: `[u8; 16]` is layout-compatible with `InterruptDescriptor64`
+        // (`#[repr(C, packed)]`, 16 bytes total). Any bit pattern is valid.
         unsafe { std::mem::transmute(bytes) }
     }
 }
@@ -847,6 +857,8 @@ impl IdtBuilder {
         } else {
             let mut bytes = Vec::with_capacity(self.entries_32.len() * 8);
             for entry in &self.entries_32 {
+                // SAFETY: InterruptDescriptor32 is repr(C, packed) with exactly 8
+                // bytes, making it layout-compatible with [u8; 8]. Read-only reinterpretation.
                 let entry_bytes: &[u8; 8] = unsafe { std::mem::transmute(entry) };
                 bytes.extend_from_slice(entry_bytes);
             }

@@ -98,7 +98,8 @@ impl MemoryMap {
 
     /// Find a region containing the given address
     pub fn find_region(&self, addr: u64) -> Option<&MemoryRegion> {
-        self.iter().find(|r| addr >= r.start && addr < r.start + r.size)
+        self.iter()
+            .find(|r| addr >= r.start && addr < r.start + r.size)
     }
 }
 
@@ -140,7 +141,7 @@ pub enum PixelFormat {
 pub fn early_init() -> Result<()> {
     // Disable interrupts during early init
     crate::arch::cli();
-    
+
     Ok(())
 }
 
@@ -149,25 +150,25 @@ pub fn late_init(_boot_info: &BootInfo) -> Result<()> {
     // Initialize ACPI if RSDP is available
     // Initialize interrupt handling
     // Set up paging
-    
+
     Ok(())
 }
 
 /// Kernel entry point (called from bootloader)
-/// 
+///
 /// # Safety
 /// This function must only be called once at boot time.
 #[cfg(feature = "bootloader_api")]
 pub unsafe fn kernel_main(boot_info: &'static bootloader_api::BootInfo) -> ! {
     // Convert bootloader_api boot info to our format
     let _info = convert_boot_info(boot_info);
-    
+
     // Early initialization
     early_init().expect("Early init failed");
-    
+
     // Initialize the hypervisor
     crate::initialize().expect("Hypervisor init failed");
-    
+
     // Enter hypervisor main loop
     loop {
         crate::arch::hlt();
@@ -178,38 +179,38 @@ pub unsafe fn kernel_main(boot_info: &'static bootloader_api::BootInfo) -> ! {
 #[cfg(feature = "bootloader_api")]
 fn convert_boot_info(boot_info: &bootloader_api::BootInfo) -> BootInfo {
     let mut memory_map = MemoryMap::new();
-    
+
     // Convert memory regions
     for region in boot_info.memory_regions.iter() {
         let kind = match region.kind {
             bootloader_api::info::MemoryRegionKind::Usable => MemoryRegionType::Usable,
-            bootloader_api::info::MemoryRegionKind::Bootloader => MemoryRegionType::BootloaderReclaimable,
+            bootloader_api::info::MemoryRegionKind::Bootloader => {
+                MemoryRegionType::BootloaderReclaimable
+            }
             _ => MemoryRegionType::Reserved,
         };
-        
+
         let _ = memory_map.add_region(MemoryRegion {
             start: region.start,
             size: region.end - region.start,
             kind,
         });
     }
-    
+
     // Convert framebuffer info
-    let framebuffer = boot_info.framebuffer.as_ref().map(|fb| {
-        FramebufferInfo {
-            address: fb.buffer().as_ptr() as u64,
-            width: fb.info().width as u32,
-            height: fb.info().height as u32,
-            pitch: fb.info().stride as u32 * fb.info().bytes_per_pixel as u32,
-            bpp: (fb.info().bytes_per_pixel * 8) as u8,
-            format: match fb.info().pixel_format {
-                bootloader_api::info::PixelFormat::Rgb => PixelFormat::Rgb,
-                bootloader_api::info::PixelFormat::Bgr => PixelFormat::Bgr,
-                _ => PixelFormat::Unknown,
-            },
-        }
+    let framebuffer = boot_info.framebuffer.as_ref().map(|fb| FramebufferInfo {
+        address: fb.buffer().as_ptr() as u64,
+        width: fb.info().width as u32,
+        height: fb.info().height as u32,
+        pitch: fb.info().stride as u32 * fb.info().bytes_per_pixel as u32,
+        bpp: (fb.info().bytes_per_pixel * 8) as u8,
+        format: match fb.info().pixel_format {
+            bootloader_api::info::PixelFormat::Rgb => PixelFormat::Rgb,
+            bootloader_api::info::PixelFormat::Bgr => PixelFormat::Bgr,
+            _ => PixelFormat::Unknown,
+        },
     });
-    
+
     BootInfo {
         memory_map,
         framebuffer,

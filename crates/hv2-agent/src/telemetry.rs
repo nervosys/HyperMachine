@@ -14,30 +14,21 @@ use serde::{Deserialize, Serialize};
 pub type TelemetryResult<T> = Result<T, TelemetryError>;
 
 /// Telemetry error types
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TelemetryError {
     /// Metric not found
+    #[error("Metric not found: {0}")]
     MetricNotFound(String),
     /// Invalid metric value
+    #[error("Invalid value: {0}")]
     InvalidValue(String),
     /// Buffer overflow
+    #[error("Telemetry buffer overflow")]
     BufferOverflow,
     /// Export failed
+    #[error("Export failed: {0}")]
     ExportFailed(String),
 }
-
-impl std::fmt::Display for TelemetryError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TelemetryError::MetricNotFound(name) => write!(f, "Metric not found: {}", name),
-            TelemetryError::InvalidValue(msg) => write!(f, "Invalid value: {}", msg),
-            TelemetryError::BufferOverflow => write!(f, "Telemetry buffer overflow"),
-            TelemetryError::ExportFailed(msg) => write!(f, "Export failed: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for TelemetryError {}
 
 /// Metric type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -233,7 +224,9 @@ impl Histogram {
         }
         if !found {
             // Goes in the overflow bucket
-            *self.counts.last_mut().unwrap() += 1;
+            if let Some(last) = self.counts.last_mut() {
+                *last += 1;
+            }
         }
     }
 
@@ -437,11 +430,10 @@ impl Span {
     /// End the span
     pub fn end(&mut self) {
         self.end_time = Some(SystemTime::now());
-        if let (Ok(start), Ok(end)) = (
+        if let (Ok(start), Some(Ok(end))) = (
             self.start_time.duration_since(SystemTime::UNIX_EPOCH),
             self.end_time
-                .unwrap()
-                .duration_since(SystemTime::UNIX_EPOCH),
+                .map(|t| t.duration_since(SystemTime::UNIX_EPOCH)),
         ) {
             self.duration_us = Some((end - start).as_micros() as u64);
         }
@@ -610,10 +602,10 @@ impl TelemetryCollector {
         let name = info.name.clone();
         let counter = Arc::new(Counter::new());
 
-        self.metric_info.write().unwrap().insert(name.clone(), info);
+        self.metric_info.write().expect("lock poisoned").insert(name.clone(), info);
         self.counters
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .insert(name, Arc::clone(&counter));
 
         counter
@@ -624,10 +616,10 @@ impl TelemetryCollector {
         let name = info.name.clone();
         let gauge = Arc::new(Gauge::new());
 
-        self.metric_info.write().unwrap().insert(name.clone(), info);
+        self.metric_info.write().expect("lock poisoned").insert(name.clone(), info);
         self.gauges
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .insert(name, Arc::clone(&gauge));
 
         gauge
@@ -636,13 +628,13 @@ impl TelemetryCollector {
     /// Register a histogram metric
     pub fn register_histogram(&self, info: MetricInfo, histogram: Histogram) {
         let name = info.name.clone();
-        self.metric_info.write().unwrap().insert(name.clone(), info);
-        self.histograms.write().unwrap().insert(name, histogram);
+        self.metric_info.write().expect("lock poisoned").insert(name.clone(), info);
+        self.histograms.write().expect("lock poisoned").insert(name, histogram);
     }
 
     /// Get or create a counter
     pub fn counter(&self, name: &str) -> Arc<Counter> {
-        if let Some(counter) = self.counters.read().unwrap().get(name) {
+        if let Some(counter) = self.counters.read().expect("lock poisoned").get(name) {
             return Arc::clone(counter);
         }
 
@@ -652,7 +644,7 @@ impl TelemetryCollector {
 
     /// Get or create a gauge
     pub fn gauge(&self, name: &str) -> Arc<Gauge> {
-        if let Some(gauge) = self.gauges.read().unwrap().get(name) {
+        if let Some(gauge) = self.gauges.read().expect("lock poisoned").get(name) {
             return Arc::clone(gauge);
         }
 
@@ -663,7 +655,7 @@ impl TelemetryCollector {
     /// Record a metric point
     pub fn record(&self, name: &str, value: f64) {
         let point = MetricPoint::new(value);
-        let mut points = self.metric_points.write().unwrap();
+        let mut points = self.metric_points.write().expect("lock poisoned");
         let series = points.entry(name.to_string()).or_default();
 
         // Enforce size limit
@@ -676,7 +668,7 @@ impl TelemetryCollector {
 
     /// Record a histogram observation
     pub fn observe(&self, name: &str, value: f64) {
-        if let Some(histogram) = self.histograms.write().unwrap().get_mut(name) {
+        if let Some(histogram) = self.histograms.write().expect("lock poisoned").get_mut(name) {
             histogram.observe(value);
         }
     }
@@ -687,7 +679,7 @@ impl TelemetryCollector {
             return;
         }
 
-        let mut events = self.events.write().unwrap();
+        let mut events = self.events.write().expect("lock poisoned");
 
         // Enforce size limit
         while events.len() >= self.config.max_events {
@@ -727,7 +719,7 @@ impl TelemetryCollector {
         let span = Span::new(name);
         self.active_spans
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .insert(span.id, span.clone());
         span
     }
@@ -737,10 +729,10 @@ impl TelemetryCollector {
         span.end();
 
         // Remove from active
-        self.active_spans.write().unwrap().remove(&span.id);
+        self.active_spans.write().expect("lock poisoned").remove(&span.id);
 
         // Add to completed spans
-        let mut spans = self.spans.write().unwrap();
+        let mut spans = self.spans.write().expect("lock poisoned");
         while spans.len() >= self.config.max_spans {
             spans.pop_front();
         }
@@ -749,13 +741,13 @@ impl TelemetryCollector {
 
     /// Get recent events
     pub fn recent_events(&self, limit: usize) -> Vec<AgentEvent> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read().expect("lock poisoned");
         events.iter().rev().take(limit).cloned().collect()
     }
 
     /// Get events by level
     pub fn events_by_level(&self, min_level: EventLevel) -> Vec<AgentEvent> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read().expect("lock poisoned");
         events
             .iter()
             .filter(|e| e.level >= min_level)
@@ -765,7 +757,7 @@ impl TelemetryCollector {
 
     /// Get recent spans
     pub fn recent_spans(&self, limit: usize) -> Vec<Span> {
-        let spans = self.spans.read().unwrap();
+        let spans = self.spans.read().expect("lock poisoned");
         spans.iter().rev().take(limit).cloned().collect()
     }
 
@@ -773,19 +765,19 @@ impl TelemetryCollector {
     pub fn get_metric_points(&self, name: &str) -> Option<Vec<MetricPoint>> {
         self.metric_points
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .get(name)
             .map(|v| v.iter().cloned().collect())
     }
 
     /// Get histogram
     pub fn get_histogram(&self, name: &str) -> Option<Histogram> {
-        self.histograms.read().unwrap().get(name).cloned()
+        self.histograms.read().expect("lock poisoned").get(name).cloned()
     }
 
     /// Get all metric names
     pub fn metric_names(&self) -> Vec<String> {
-        self.metric_info.read().unwrap().keys().cloned().collect()
+        self.metric_info.read().expect("lock poisoned").keys().cloned().collect()
     }
 
     /// Get uptime
@@ -798,7 +790,7 @@ impl TelemetryCollector {
         let counters: HashMap<String, u64> = self
             .counters
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .iter()
             .map(|(k, v)| (k.clone(), v.get()))
             .collect();
@@ -806,7 +798,7 @@ impl TelemetryCollector {
         let gauges: HashMap<String, f64> = self
             .gauges
             .read()
-            .unwrap()
+            .expect("lock poisoned")
             .iter()
             .map(|(k, v)| (k.clone(), v.get()))
             .collect();
@@ -815,26 +807,26 @@ impl TelemetryCollector {
             "uptime_seconds": self.uptime().as_secs(),
             "counters": counters,
             "gauges": gauges,
-            "event_count": self.events.read().unwrap().len(),
-            "span_count": self.spans.read().unwrap().len(),
-            "active_span_count": self.active_spans.read().unwrap().len(),
+            "event_count": self.events.read().expect("lock poisoned").len(),
+            "span_count": self.spans.read().expect("lock poisoned").len(),
+            "active_span_count": self.active_spans.read().expect("lock poisoned").len(),
         })
     }
 
     /// Clear all telemetry data
     pub fn clear(&self) {
-        for counter in self.counters.read().unwrap().values() {
+        for counter in self.counters.read().expect("lock poisoned").values() {
             counter.reset();
         }
         self.histograms
             .write()
-            .unwrap()
+            .expect("lock poisoned")
             .values_mut()
             .for_each(|h| h.reset());
-        self.metric_points.write().unwrap().clear();
-        self.events.write().unwrap().clear();
-        self.spans.write().unwrap().clear();
-        self.active_spans.write().unwrap().clear();
+        self.metric_points.write().expect("lock poisoned").clear();
+        self.events.write().expect("lock poisoned").clear();
+        self.spans.write().expect("lock poisoned").clear();
+        self.active_spans.write().expect("lock poisoned").clear();
     }
 }
 

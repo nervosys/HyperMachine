@@ -73,7 +73,7 @@ These are transitive dependencies with no security vulnerabilities, only mainten
 ```toml
 # Cargo.toml security requirements
 [workspace.metadata.security]
-minimum_rust_version = "1.75.0"
+minimum_rust_version = "1.87.0"
 deny_unknown_registry = true
 deny_git_dependencies = false  # Allow for cutting-edge security patches
 audit_frequency = "weekly"

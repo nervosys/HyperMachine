@@ -231,7 +231,7 @@ pub enum SerialPort {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::devices::vga::{VgaAttribute, VgaColor};
+    use crate::devices::vga::VgaColor;
 
     #[tokio::test]
     async fn test_device_manager_creation() {

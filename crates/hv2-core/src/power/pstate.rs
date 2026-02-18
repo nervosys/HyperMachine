@@ -12,49 +12,30 @@ use super::types::{PState, PowerEvent, PowerStats};
 pub type PStateResult<T> = Result<T, PStateError>;
 
 /// P-state management error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum PStateError {
     /// Invalid CPU ID
+    #[error("Invalid CPU ID: {0}")]
     InvalidCpu(u32),
     /// Invalid P-state index
+    #[error("Invalid P-state index: {0}")]
     InvalidPState(u32),
     /// P-state not supported
+    #[error("P-state not supported")]
     PStateNotSupported,
     /// Frequency out of range
+    #[error("Frequency {requested} MHz out of range [{min} - {max}]")]
     FrequencyOutOfRange { requested: u32, min: u32, max: u32 },
     /// Governor error
+    #[error("Governor error: {0}")]
     GovernorError(String),
     /// CPU offline
+    #[error("CPU {0} is offline")]
     CpuOffline(u32),
     /// Hardware error
+    #[error("Hardware error: {0}")]
     HardwareError(String),
 }
-
-impl std::fmt::Display for PStateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PStateError::InvalidCpu(id) => write!(f, "Invalid CPU ID: {}", id),
-            PStateError::InvalidPState(idx) => write!(f, "Invalid P-state index: {}", idx),
-            PStateError::PStateNotSupported => write!(f, "P-state not supported"),
-            PStateError::FrequencyOutOfRange {
-                requested,
-                min,
-                max,
-            } => {
-                write!(
-                    f,
-                    "Frequency {} MHz out of range [{} - {}]",
-                    requested, min, max
-                )
-            }
-            PStateError::GovernorError(msg) => write!(f, "Governor error: {}", msg),
-            PStateError::CpuOffline(id) => write!(f, "CPU {} is offline", id),
-            PStateError::HardwareError(msg) => write!(f, "Hardware error: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for PStateError {}
 
 /// P-state frequency scaling governor
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

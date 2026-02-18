@@ -27,9 +27,15 @@ pub struct VmConfig {
     pub metadata: std::collections::HashMap<String, String>,
 }
 
-fn default_cpus() -> u32 { 2 }
-fn default_memory() -> u32 { 2048 }
-fn default_true() -> bool { true }
+fn default_cpus() -> u32 {
+    2
+}
+fn default_memory() -> u32 {
+    2048
+}
+fn default_true() -> bool {
+    true
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VmInfo {
@@ -107,7 +113,12 @@ impl ApiClient {
 
     pub async fn health(&self) -> Result<HealthResponse> {
         let url = format!("{}/health", self.base_url);
-        let response = self.client.get(&url).send().await.context("Failed to connect")?;
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("Failed to connect")?;
         if response.status().is_success() {
             response.json().await.context("Failed to parse")
         } else {
@@ -192,11 +203,23 @@ impl ApiClient {
         let response = self.client.get(&url).send().await?;
         if response.status().is_success() {
             #[derive(Deserialize)]
-            struct FbResponse { width: u32, height: u32, format: String, data: String }
+            struct FbResponse {
+                width: u32,
+                height: u32,
+                format: String,
+                data: String,
+            }
             let fb: FbResponse = response.json().await?;
             use base64::Engine;
-            let data = base64::engine::general_purpose::STANDARD.decode(&fb.data).unwrap_or_default();
-            Ok(FramebufferData { width: fb.width, height: fb.height, format: fb.format, data })
+            let data = base64::engine::general_purpose::STANDARD
+                .decode(&fb.data)
+                .unwrap_or_default();
+            Ok(FramebufferData {
+                width: fb.width,
+                height: fb.height,
+                format: fb.format,
+                data,
+            })
         } else {
             anyhow::bail!("Failed to get framebuffer: {}", response.status())
         }
@@ -204,20 +227,39 @@ impl ApiClient {
 
     pub async fn send_key(&self, vm_name: &str, keycode: u32, pressed: bool) -> Result<()> {
         let url = format!("{}/vms/{}/input/keyboard", self.base_url, vm_name);
-        let response = self.client.post(&url)
+        let response = self
+            .client
+            .post(&url)
             .json(&serde_json::json!({"keycode": keycode, "pressed": pressed}))
-            .send().await?;
-        if response.status().is_success() { Ok(()) }
-        else { anyhow::bail!("Failed to send key: {}", response.status()) }
+            .send()
+            .await?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            anyhow::bail!("Failed to send key: {}", response.status())
+        }
     }
 
-    pub async fn send_mouse(&self, vm_name: &str, x: i32, y: i32, buttons: u8, scroll: i32) -> Result<()> {
+    pub async fn send_mouse(
+        &self,
+        vm_name: &str,
+        x: i32,
+        y: i32,
+        buttons: u8,
+        scroll: i32,
+    ) -> Result<()> {
         let url = format!("{}/vms/{}/input/mouse", self.base_url, vm_name);
-        let response = self.client.post(&url)
+        let response = self
+            .client
+            .post(&url)
             .json(&serde_json::json!({"x": x, "y": y, "buttons": buttons, "scroll": scroll}))
-            .send().await?;
-        if response.status().is_success() { Ok(()) }
-        else { anyhow::bail!("Failed to send mouse: {}", response.status()) }
+            .send()
+            .await?;
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            anyhow::bail!("Failed to send mouse: {}", response.status())
+        }
     }
 }
 

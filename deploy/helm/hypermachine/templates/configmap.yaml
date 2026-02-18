@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-{{ .Chart.Name }}
+  labels:
+    {{- include "hypermachine.labels" . | nindent 4 }}
+data:
+  API_HOST: {{ .Values.config.apiHost | quote }}
+  API_PORT: {{ .Values.config.apiPort | quote }}
+  GRPC_PORT: {{ .Values.config.grpcPort | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  LOG_FORMAT: {{ .Values.config.logFormat | quote }}
+  FIPS_MODE: {{ .Values.config.fipsMode | quote }}
+  TLS_ENABLED: {{ .Values.config.tlsEnabled | quote }}
+  RATE_LIMIT_REQUESTS: {{ .Values.config.rateLimitRequests | quote }}
+  RATE_LIMIT_WINDOW_SECS: {{ .Values.config.rateLimitWindowSecs | quote }}
+  {{- range $key, $value := .Values.config.extra }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

@@ -14,17 +14,18 @@
 terraform {
   required_version = ">= 1.5.0"
 
+  # Remote state storage — update bucket/region to match your environment
+  backend "s3" {
+    bucket         = "hypermachine-terraform-state"
+    key            = "infrastructure/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "hypermachine-terraform-locks"
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
-    }
-    google = {
-      source  = "hashicorp/google"
       version = "~> 5.0"
     }
     kubernetes = {
@@ -191,6 +192,88 @@ resource "aws_subnet" "public" {
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
     "kubernetes.io/role/elb"                      = "1"
   })
+}
+
+# Internet Gateway (required for public subnet internet access)
+resource "aws_internet_gateway" "main" {
+  count = var.cloud_provider == "aws" ? 1 : 0
+
+  vpc_id = aws_vpc.main[0].id
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-igw"
+  })
+}
+
+# Elastic IP for NAT Gateway
+resource "aws_eip" "nat" {
+  count = var.cloud_provider == "aws" ? 1 : 0
+
+  domain = "vpc"
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-nat-eip"
+  })
+}
+
+# NAT Gateway (required for private subnet outbound internet access)
+resource "aws_nat_gateway" "main" {
+  count = var.cloud_provider == "aws" ? 1 : 0
+
+  allocation_id = aws_eip.nat[0].id
+  subnet_id     = aws_subnet.public[0].id
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-nat"
+  })
+
+  depends_on = [aws_internet_gateway.main]
+}
+
+# Route table for public subnets
+resource "aws_route_table" "public" {
+  count = var.cloud_provider == "aws" ? 1 : 0
+
+  vpc_id = aws_vpc.main[0].id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main[0].id
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-public-rt"
+  })
+}
+
+resource "aws_route_table_association" "public" {
+  count = var.cloud_provider == "aws" ? 3 : 0
+
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public[0].id
+}
+
+# Route table for private subnets
+resource "aws_route_table" "private" {
+  count = var.cloud_provider == "aws" ? 1 : 0
+
+  vpc_id = aws_vpc.main[0].id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main[0].id
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.cluster_name}-private-rt"
+  })
+}
+
+resource "aws_route_table_association" "private" {
+  count = var.cloud_provider == "aws" ? 3 : 0
+
+  subnet_id      = aws_subnet.private[count.index].id
+  route_table_id = aws_route_table.private[0].id
 }
 
 # EKS Cluster

@@ -1,11 +1,10 @@
-//! Remote API for HV2
+//! Remote API for HyperMachine
 //!
 //! Provides gRPC and REST APIs for remote VM control
 
 #![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
 
+pub mod events;
 pub mod grpc;
 pub mod ontology;
 pub mod rest;

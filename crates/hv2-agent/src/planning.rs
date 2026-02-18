@@ -1,7 +1,7 @@
 //! Agent Planning System
 //!
 //! Provides hierarchical task planning, goal management, and plan execution
-//! for AI agents operating within HV2 virtual machines.
+//! for AI agents operating within HyperMachine virtual machines.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
@@ -9,51 +9,42 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 /// Planning-specific error types.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum PlanningError {
     /// Goal not found.
+    #[error("Goal not found: {0}")]
     GoalNotFound(String),
     /// Plan not found.
+    #[error("Plan not found: {0}")]
     PlanNotFound(String),
     /// Action not found.
+    #[error("Action not found: {0}")]
     ActionNotFound(String),
     /// Precondition not met.
+    #[error("Precondition not met: {0}")]
     PreconditionNotMet(String),
     /// Goal already exists.
+    #[error("Goal already exists: {0}")]
     GoalAlreadyExists(String),
     /// Planning timeout.
+    #[error("Planning timeout")]
     PlanningTimeout,
     /// No valid plan found.
+    #[error("No valid plan found")]
     NoPlanFound,
     /// Execution failed.
+    #[error("Execution failed: {0}")]
     ExecutionFailed(String),
     /// Invalid state.
+    #[error("Invalid state: {0}")]
     InvalidState(String),
     /// Resource unavailable.
+    #[error("Resource unavailable: {0}")]
     ResourceUnavailable(String),
     /// Cycle detected.
+    #[error("Cycle detected in plan")]
     CycleDetected,
 }
-
-impl std::fmt::Display for PlanningError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::GoalNotFound(id) => write!(f, "Goal not found: {}", id),
-            Self::PlanNotFound(id) => write!(f, "Plan not found: {}", id),
-            Self::ActionNotFound(id) => write!(f, "Action not found: {}", id),
-            Self::PreconditionNotMet(msg) => write!(f, "Precondition not met: {}", msg),
-            Self::GoalAlreadyExists(id) => write!(f, "Goal already exists: {}", id),
-            Self::PlanningTimeout => write!(f, "Planning timeout"),
-            Self::NoPlanFound => write!(f, "No valid plan found"),
-            Self::ExecutionFailed(msg) => write!(f, "Execution failed: {}", msg),
-            Self::InvalidState(msg) => write!(f, "Invalid state: {}", msg),
-            Self::ResourceUnavailable(res) => write!(f, "Resource unavailable: {}", res),
-            Self::CycleDetected => write!(f, "Cycle detected in plan"),
-        }
-    }
-}
-
-impl std::error::Error for PlanningError {}
 
 /// Result type for planning operations.
 pub type PlanningResult<T> = Result<T, PlanningError>;
@@ -866,8 +857,10 @@ impl Planner {
             }
 
             // Get node with lowest heuristic
-            open.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap().reverse());
-            let (state, action_sequence, _) = open.pop().unwrap();
+            open.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal).reverse());
+            let Some((state, action_sequence, _)) = open.pop() else {
+                return Err(PlanningError::NoPlanFound);
+            };
 
             if action_sequence.len() >= self.config.max_depth {
                 continue;
@@ -926,9 +919,11 @@ impl Planner {
             open.sort_by(|a, b| {
                 let f_a = a.2 + a.3;
                 let f_b = b.2 + b.3;
-                f_a.partial_cmp(&f_b).unwrap().reverse()
+                f_a.partial_cmp(&f_b).unwrap_or(std::cmp::Ordering::Equal).reverse()
             });
-            let (state, action_sequence, g, _) = open.pop().unwrap();
+            let Some((state, action_sequence, g, _)) = open.pop() else {
+                return Err(PlanningError::NoPlanFound);
+            };
 
             if action_sequence.len() >= self.config.max_depth {
                 continue;
@@ -1196,7 +1191,7 @@ impl PlanningSystem {
         if let Some(action) = action {
             // Check preconditions
             if !action.is_applicable(&self.world_state) {
-                let plan = self.plans.get_mut(plan_id).unwrap();
+                let plan = self.plans.get_mut(plan_id).ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
                 if let Some(step) = plan.current_mut() {
                     step.fail("Preconditions not met");
                 }
@@ -1207,7 +1202,7 @@ impl PlanningSystem {
             // Apply effects
             action.apply(&mut self.world_state);
 
-            let plan = self.plans.get_mut(plan_id).unwrap();
+            let plan = self.plans.get_mut(plan_id).ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
             if let Some(step) = plan.current_mut() {
                 step.complete();
             }
@@ -1215,7 +1210,7 @@ impl PlanningSystem {
 
             Ok(!plan.is_complete())
         } else {
-            let plan = self.plans.get_mut(plan_id).unwrap();
+            let plan = self.plans.get_mut(plan_id).ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
             if let Some(step) = plan.current_mut() {
                 step.fail("Action not found");
             }
@@ -1314,7 +1309,7 @@ mod tests {
         state.insert("key".into(), "value".into());
 
         effect.apply(&mut state);
-        assert!(state.get("key").is_none());
+        assert!(!state.contains_key("key"));
     }
 
     #[test]
@@ -1613,8 +1608,10 @@ mod tests {
 
     #[test]
     fn test_planner_greedy() {
-        let mut config = PlanningConfig::default();
-        config.algorithm = PlanningAlgorithm::GreedyBestFirst;
+        let config = PlanningConfig {
+            algorithm: PlanningAlgorithm::GreedyBestFirst,
+            ..PlanningConfig::default()
+        };
         let mut planner = Planner::new(config);
 
         planner.register_action(
@@ -1634,8 +1631,10 @@ mod tests {
 
     #[test]
     fn test_planner_astar() {
-        let mut config = PlanningConfig::default();
-        config.algorithm = PlanningAlgorithm::AStar;
+        let config = PlanningConfig {
+            algorithm: PlanningAlgorithm::AStar,
+            ..PlanningConfig::default()
+        };
         let mut planner = Planner::new(config);
 
         planner.register_action(

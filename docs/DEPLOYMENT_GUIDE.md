@@ -77,27 +77,6 @@ cargo build --release -p hv2-core -p hv2-api
 Copy-Item target\release\*.exe C:\HyperMachine\
 ```
 
-### Docker Deployment
-
-```yaml
-# docker-compose.yml
-version: '3.8'
-services:
-  hypermachine:
-    image: nervosys/hypermachine:latest
-    privileged: true
-    ports:
-      - "8080:8080"
-      - "50051:50051"  # gRPC
-    volumes:
-      - /dev/kvm:/dev/kvm  # Linux only
-      - ./config:/etc/hypermachine
-      - ./data:/var/lib/hypermachine
-    environment:
-      - HM_LOG_LEVEL=info
-      - HM_API_KEY=${API_KEY}
-```
-
 ---
 
 ## Configuration

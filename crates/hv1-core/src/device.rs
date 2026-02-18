@@ -25,7 +25,10 @@ impl PortRange {
 
     /// Create a single port
     pub const fn single(port: u16) -> Self {
-        Self { start: port, end: port }
+        Self {
+            start: port,
+            end: port,
+        }
     }
 
     /// Check if a port is in this range
@@ -326,9 +329,7 @@ impl CmosRtc {
     const DATA_PORT: u16 = 0x71;
 
     /// Port ranges
-    const PORT_RANGES: [PortRange; 1] = [
-        PortRange::new(Self::INDEX_PORT, Self::DATA_PORT),
-    ];
+    const PORT_RANGES: [PortRange; 1] = [PortRange::new(Self::INDEX_PORT, Self::DATA_PORT)];
 
     /// Create a new CMOS/RTC
     pub fn new() -> Self {
@@ -336,12 +337,12 @@ impl CmosRtc {
             index: 0,
             data: [0; 128],
         };
-        
+
         // Initialize with some default values
         cmos.data[0x0F] = 0x00; // Shutdown status
         cmos.data[0x10] = 0x00; // Floppy drive type
         cmos.data[0x14] = 0x00; // Equipment byte
-        
+
         cmos
     }
 }

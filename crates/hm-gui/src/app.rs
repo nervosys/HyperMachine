@@ -116,9 +116,7 @@ impl HyperMachineApp {
 
         self.runtime.spawn(async move {
             let result = api.create_vm(config).await;
-            let _ = tx.send(ApiResponse::VmCreated(
-                result.map_err(|e| e.to_string()),
-            ));
+            let _ = tx.send(ApiResponse::VmCreated(result.map_err(|e| e.to_string())));
         });
     }
 
@@ -172,10 +170,7 @@ impl HyperMachineApp {
 
         self.runtime.spawn(async move {
             let result = api.pause_vm(&id).await;
-            let _ = tx.send(ApiResponse::VmPaused(
-                id,
-                result.map_err(|e| e.to_string()),
-            ));
+            let _ = tx.send(ApiResponse::VmPaused(id, result.map_err(|e| e.to_string())));
         });
     }
 
@@ -488,7 +483,7 @@ fn convert_to_rgba(data: &[u8], format: &str) -> Vec<u8> {
                     rgba.push(chunk[2]); // R
                     rgba.push(chunk[1]); // G
                     rgba.push(chunk[0]); // B
-                    rgba.push(255);      // A (ignore alpha from XRGB)
+                    rgba.push(255); // A (ignore alpha from XRGB)
                 }
             }
             rgba
@@ -501,7 +496,7 @@ fn convert_to_rgba(data: &[u8], format: &str) -> Vec<u8> {
                     rgba.push(chunk[0]); // R
                     rgba.push(chunk[1]); // G
                     rgba.push(chunk[2]); // B
-                    rgba.push(255);      // A
+                    rgba.push(255); // A
                 }
             }
             rgba

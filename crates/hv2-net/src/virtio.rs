@@ -274,6 +274,7 @@ pub struct VirtioNet {
     /// Statistics
     stats: Arc<VirtioNetStats>,
     /// Interrupt callback
+    #[allow(clippy::type_complexity)]
     interrupt_cb: RwLock<Option<Arc<dyn Fn(u16) + Send + Sync>>>,
 }
 
@@ -361,11 +362,13 @@ impl VirtioNet {
     }
 
     /// Get device ID
+    #[inline]
     pub fn device_id(&self) -> u32 {
         VIRTIO_NET_DEVICE_ID
     }
 
     /// Get device features
+    #[inline]
     pub fn device_features(&self) -> u64 {
         self.device_features
     }
@@ -378,11 +381,13 @@ impl VirtioNet {
     }
 
     /// Get negotiated features
+    #[inline]
     pub fn negotiated_features(&self) -> u64 {
         self.driver_features.load(Ordering::SeqCst)
     }
 
     /// Check if a feature is negotiated
+    #[inline]
     pub fn has_feature(&self, feature: u64) -> bool {
         (self.negotiated_features() & feature) != 0
     }
@@ -393,6 +398,7 @@ impl VirtioNet {
     }
 
     /// Get device status
+    #[inline]
     pub fn status(&self) -> u32 {
         self.status.load(Ordering::SeqCst)
     }
@@ -433,6 +439,9 @@ impl VirtioNet {
 
         // Add header (zeroed for basic receive)
         let header = VirtioNetHeader::default();
+        // SAFETY: `VirtioNetHeader` is a plain-old-data struct (all fields are
+        // primitive integers), so viewing it as a byte slice is safe. The pointer
+        // is valid and the length matches `size_of::<VirtioNetHeader>()`.
         packet.extend_from_slice(unsafe {
             std::slice::from_raw_parts(
                 &header as *const VirtioNetHeader as *const u8,

@@ -3,18 +3,18 @@
 //! This module provides UEFI firmware interface emulation including
 //! system table, boot services, runtime services, and GOP.
 
-pub mod types;
-pub mod system_table;
 pub mod gop;
 pub mod runtime_services;
+pub mod system_table;
+pub mod types;
 
-pub use types::*;
-pub use system_table::{BootServices, SystemTable, BootServicesStats};
 pub use gop::{
-    GraphicsOutputProtocol, GopPixelFormat, GopPixelBitmask, GopModeInfo, 
-    GopMode, GopBltPixel, GopBltOperation, GopStats,
+    GopBltOperation, GopBltPixel, GopMode, GopModeInfo, GopPixelBitmask, GopPixelFormat, GopStats,
+    GraphicsOutputProtocol,
 };
 pub use runtime_services::{
-    RuntimeServices, ResetType, VariableAttributes, Variable, 
-    VariableInfo, CapsuleCapabilities, RuntimeServicesStats,
+    CapsuleCapabilities, ResetType, RuntimeServices, RuntimeServicesStats, Variable,
+    VariableAttributes, VariableInfo,
 };
+pub use system_table::{BootServices, BootServicesStats, SystemTable};
+pub use types::*;

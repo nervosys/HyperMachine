@@ -5,8 +5,10 @@
 
 use super::types::{
     AddressWidth, DeviceId, DeviceScope, DomainId, FaultReason, FaultRecord, IommuStats,
-    PageTableEntry, PageTableFlags, TranslationType, PAGE_SIZE_4K,
+    PageTableEntry, PageTableFlags, TranslationType,
 };
+#[cfg(test)]
+use super::types::PAGE_SIZE_4K;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -479,7 +481,9 @@ impl Iotlb {
     /// Lookup entry
     pub fn lookup(&self, device: &DeviceId, domain: DomainId, iova: u64) -> Option<&IotlbEntry> {
         let key = (device.source_id(), domain.0, iova >> 12);
-        self.entries.get(&key).filter(|e| e.matches(device, domain, iova))
+        self.entries
+            .get(&key)
+            .filter(|e| e.matches(device, domain, iova))
     }
 
     /// Insert entry
@@ -788,7 +792,12 @@ impl VtdUnit {
     }
 
     /// Translate DMA address
-    pub fn translate(&self, device: &DeviceId, iova: u64, is_write: bool) -> Result<u64, FaultRecord> {
+    pub fn translate(
+        &self,
+        device: &DeviceId,
+        iova: u64,
+        is_write: bool,
+    ) -> Result<u64, FaultRecord> {
         if !self.is_translation_enabled() {
             return Ok(iova); // Pass-through when disabled
         }

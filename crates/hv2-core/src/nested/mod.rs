@@ -56,9 +56,9 @@ mod types;
 
 // Re-export primary types
 pub use ept::{
-    ept_flags, EptEntry, EptMemoryType, EptPointer, EptTranslationResult, EptViolationQualification,
-    InvEptType, InvVpidType, NestedEptManager, NestedEptStats, Vpid, PAGE_SIZE_1G, PAGE_SIZE_2M,
-    PAGE_SIZE_4K,
+    ept_flags, EptEntry, EptMemoryType, EptPointer, EptTranslationResult,
+    EptViolationQualification, InvEptType, InvVpidType, NestedEptManager, NestedEptStats, Vpid,
+    PAGE_SIZE_1G, PAGE_SIZE_2M, PAGE_SIZE_4K,
 };
 pub use manager::{
     ExitDisposition, L2EntryInfo, L2ExitInfo, NestedConfig, NestedError, NestedManager,
@@ -66,8 +66,8 @@ pub use manager::{
 };
 pub use shadow_vmcs::{ShadowVmcs, ShadowVmcsCache, ShadowVmcsCacheStats, ShadowVmcsState};
 pub use types::{
-    interruptibility, GuestActivityState, NestedGuestState, NestedLevel, NestedStats,
-    SavedL1State, VmcsAccessType, VmcsField, VmExitReason, VmxCapabilities, VmxInstructionError,
+    interruptibility, GuestActivityState, NestedGuestState, NestedLevel, NestedStats, SavedL1State,
+    VmExitReason, VmcsAccessType, VmcsField, VmxCapabilities, VmxInstructionError,
 };
 
 #[cfg(test)]
@@ -103,8 +103,13 @@ mod tests {
         manager.handle_vmptrld(0, 0x2000).unwrap();
 
         // Read/Write VMCS
-        manager.handle_vmwrite(0, VmcsField::GUEST_RIP.0, 0x12345).unwrap();
-        assert_eq!(manager.handle_vmread(0, VmcsField::GUEST_RIP.0).unwrap(), 0x12345);
+        manager
+            .handle_vmwrite(0, VmcsField::GUEST_RIP.0, 0x12345)
+            .unwrap();
+        assert_eq!(
+            manager.handle_vmread(0, VmcsField::GUEST_RIP.0).unwrap(),
+            0x12345
+        );
 
         // Launch L2
         let l1_state = SavedL1State::default();
@@ -139,5 +144,3 @@ mod tests {
         assert_eq!(interruptibility::BLOCKING_BY_NMI, 1 << 3);
     }
 }
-
-

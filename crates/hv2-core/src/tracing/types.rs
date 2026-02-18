@@ -648,7 +648,7 @@ impl SpanEvent {
     }
 
     /// Add multiple attributes
-    pub fn with_attributes(mut self, attrs: Vec<Attribute>) -> Self {
+    pub fn with_attributes(mut self, attrs: impl IntoIterator<Item = Attribute>) -> Self {
         self.attributes.extend(attrs);
         self
     }

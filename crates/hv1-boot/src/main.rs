@@ -10,9 +10,9 @@
 
 extern crate alloc;
 
-use bootloader_api::{entry_point, BootInfo, BootloaderConfig};
+use bootloader_api::{BootInfo, BootloaderConfig, entry_point};
 use core::panic::PanicInfo;
-use hv1_core::{serial_println, CpuVendor, HypervisorCapabilities};
+use hv1_core::{CpuVendor, HypervisorCapabilities, serial_println};
 use linked_list_allocator::LockedHeap;
 
 /// Global allocator for heap allocations
@@ -39,16 +39,23 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     unsafe {
         hv1_core::serial::init_global_serial();
     }
-    
-    serial_println!("HyperMachine Type-1 Hypervisor v{}", env!("CARGO_PKG_VERSION"));
+
+    serial_println!(
+        "HyperMachine Type-1 Hypervisor v{}",
+        env!("CARGO_PKG_VERSION")
+    );
     serial_println!("===========================================");
-    
+
     // Initialize heap allocator
     unsafe {
         ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_SIZE);
     }
-    serial_println!("Heap initialized: {} MB at {:#x}", HEAP_SIZE / 1024 / 1024, HEAP_START);
-    
+    serial_println!(
+        "Heap initialized: {} MB at {:#x}",
+        HEAP_SIZE / 1024 / 1024,
+        HEAP_START
+    );
+
     // Print memory map
     serial_println!("\nMemory Map:");
     let memory_regions = &boot_info.memory_regions;
@@ -64,16 +71,15 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             bootloader_api::info::MemoryRegionKind::UnknownBios(_) => "BIOS Reserved",
             _ => "Other",
         };
-        serial_println!("  {:#016x} - {:#016x} ({})", 
-            region.start, region.end, kind);
+        serial_println!("  {:#016x} - {:#016x} ({})", region.start, region.end, kind);
     }
     serial_println!("Total usable memory: {} MB", total_usable / 1024 / 1024);
-    
+
     // Print RSDP address for ACPI
     if let Some(rsdp_addr) = boot_info.rsdp_addr.into_option() {
         serial_println!("\nRSDP Address: {:#x}", rsdp_addr);
     }
-    
+
     // Detect CPU capabilities
     serial_println!("\nDetecting CPU capabilities...");
     let caps = HypervisorCapabilities::detect();
@@ -82,14 +88,14 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     serial_println!("  SVM Support: {}", caps.svm_supported);
     serial_println!("  EPT Support: {}", caps.ept_supported);
     serial_println!("  NPT Support: {}", caps.npt_supported);
-    
+
     // Initialize the hypervisor
     serial_println!("\nInitializing hypervisor...");
-    
+
     match hv1_core::initialize() {
         Ok(()) => {
             serial_println!("Hypervisor initialized successfully!");
-            
+
             // Enter hypervisor mode
             enter_hypervisor_mode(caps.vendor);
         }
@@ -98,7 +104,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
             panic!("Hypervisor initialization failed");
         }
     }
-    
+
     // Should never reach here
     hlt_loop();
 }
@@ -106,7 +112,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 /// Enter hypervisor mode based on CPU vendor
 fn enter_hypervisor_mode(vendor: CpuVendor) {
     serial_println!("\nEntering hypervisor mode...");
-    
+
     match vendor {
         CpuVendor::Intel => {
             serial_println!("Using Intel VMX");
@@ -129,7 +135,7 @@ fn enter_hypervisor_mode(vendor: CpuVendor) {
             panic!("Unknown CPU vendor");
         }
     }
-    
+
     serial_println!("\n===========================================");
     serial_println!("HyperMachine Type-1 Hypervisor Active");
     serial_println!("Ready to create and manage virtual machines");

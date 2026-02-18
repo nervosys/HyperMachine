@@ -18,6 +18,13 @@ on:
         default: 'false'
         type: boolean
 
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -32,23 +39,23 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact: hm
+            extra_artifact: hv2
             archive: tar.gz
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             artifact: hm
+            extra_artifact: hv2
             archive: tar.gz
             cross: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: hm.exe
+            extra_artifact: hv2.exe
             archive: zip
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: hm
-            archive: tar.gz
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: hm
+            extra_artifact: hv2
             archive: tar.gz
 
     steps:
@@ -56,7 +63,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
@@ -72,33 +79,40 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-release-
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
 
       - name: Build (native)
         if: "!matrix.cross"
-        run: cargo build --release --target ${{ matrix.target }} --package hm-cli
+        run: |
+          cargo build --release --target ${{ matrix.target }} --package hm-cli
+          cargo build --release --target ${{ matrix.target }} --package hv2-cli
 
       - name: Build (cross)
         if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }} --package hm-cli
+        run: |
+          cross build --release --target ${{ matrix.target }} --package hm-cli
+          cross build --release --target ${{ matrix.target }} --package hv2-cli
 
       - name: Create archive (Unix)
         if: matrix.archive == 'tar.gz'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czvf ../../../hm-${{ matrix.target }}.tar.gz ${{ matrix.artifact }}
+          tar czvf ../../../hypermachine-${{ matrix.target }}.tar.gz ${{ matrix.artifact }} ${{ matrix.extra_artifact }}
 
       - name: Create archive (Windows)
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
           cd target/${{ matrix.target }}/release
-          Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ../../../hm-${{ matrix.target }}.zip
+          Compress-Archive -Path ${{ matrix.artifact }},${{ matrix.extra_artifact }} -DestinationPath ../../../hypermachine-${{ matrix.target }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hm-${{ matrix.target }}
-          path: hm-${{ matrix.target }}.${{ matrix.archive }}
+          name: hypermachine-${{ matrix.target }}
+          path: hypermachine-${{ matrix.target }}.${{ matrix.archive }}
 
   create-release:
     name: Create Release
@@ -125,13 +139,59 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           CURRENT_TAG=${GITHUB_REF#refs/tags/}
           
-          echo "## What's Changed" > CHANGELOG.md
+          echo "## What's Changed in $CURRENT_TAG" > CHANGELOG.md
           echo "" >> CHANGELOG.md
           
           if [ -n "$PREV_TAG" ]; then
-            echo "Changes since $PREV_TAG:" >> CHANGELOG.md
-            echo "" >> CHANGELOG.md
-            git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" >> CHANGELOG.md
+            # Categorize commits by conventional commit prefix
+            BREAKING=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --grep="^BREAKING\|^!" | head -20)
+            FEATURES=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --grep="^feat" | head -30)
+            FIXES=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --grep="^fix" | head -30)
+            PERF=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --grep="^perf" | head -20)
+            DOCS=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --grep="^docs" | head -20)
+            CHORE=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" --grep="^chore\|^ci\|^build\|^refactor" | head -20)
+            
+            if [ -n "$BREAKING" ]; then
+              echo "### Breaking Changes" >> CHANGELOG.md
+              echo "$BREAKING" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            if [ -n "$FEATURES" ]; then
+              echo "### Features" >> CHANGELOG.md
+              echo "$FEATURES" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "### Bug Fixes" >> CHANGELOG.md
+              echo "$FIXES" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            if [ -n "$PERF" ]; then
+              echo "### Performance" >> CHANGELOG.md
+              echo "$PERF" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            if [ -n "$DOCS" ]; then
+              echo "### Documentation" >> CHANGELOG.md
+              echo "$DOCS" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            if [ -n "$CHORE" ]; then
+              echo "### Maintenance" >> CHANGELOG.md
+              echo "$CHORE" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            
+            # Uncategorized commits
+            OTHER=$(git log $PREV_TAG..$CURRENT_TAG --pretty=format:"- %s (%h)" \
+              --invert-grep --grep="^feat\|^fix\|^perf\|^docs\|^chore\|^ci\|^build\|^refactor\|^BREAKING\|^!" | head -20)
+            if [ -n "$OTHER" ]; then
+              echo "### Other Changes" >> CHANGELOG.md
+              echo "$OTHER" >> CHANGELOG.md
+              echo "" >> CHANGELOG.md
+            fi
+            
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...$CURRENT_TAG" >> CHANGELOG.md
           else
             echo "Initial release" >> CHANGELOG.md
           fi
@@ -142,11 +202,12 @@ jobs:
           echo "Download the appropriate binary for your platform from the assets below." >> CHANGELOG.md
           echo "" >> CHANGELOG.md
           echo "### Platforms" >> CHANGELOG.md
-          echo "- **Linux (x86_64)**: \`hm-x86_64-unknown-linux-gnu.tar.gz\`" >> CHANGELOG.md
-          echo "- **Linux (ARM64)**: \`hm-aarch64-unknown-linux-gnu.tar.gz\`" >> CHANGELOG.md
-          echo "- **Windows (x86_64)**: \`hm-x86_64-pc-windows-msvc.zip\`" >> CHANGELOG.md
-          echo "- **macOS (x86_64)**: \`hm-x86_64-apple-darwin.tar.gz\`" >> CHANGELOG.md
-          echo "- **macOS (ARM64)**: \`hm-aarch64-apple-darwin.tar.gz\`" >> CHANGELOG.md
+          echo "- **Linux (x86_64)**: \`hypermachine-x86_64-unknown-linux-gnu.tar.gz\`" >> CHANGELOG.md
+          echo "- **Linux (ARM64)**: \`hypermachine-aarch64-unknown-linux-gnu.tar.gz\`" >> CHANGELOG.md
+          echo "- **Windows (x86_64)**: \`hypermachine-x86_64-pc-windows-msvc.zip\`" >> CHANGELOG.md
+          echo "- **macOS (ARM64)**: \`hypermachine-aarch64-apple-darwin.tar.gz\`" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          echo "Each archive contains both \`hm\` (management CLI) and \`hv2\` (hypervisor CLI)." >> CHANGELOG.md
 
       - name: Flatten artifacts
         run: |
@@ -159,12 +220,17 @@ jobs:
           cd release
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
+          echo "" >> ../CHANGELOG.md
+          echo "## Checksums (SHA-256)" >> ../CHANGELOG.md
+          echo "" >> ../CHANGELOG.md
+          echo '```' >> ../CHANGELOG.md
+          cat SHA256SUMS.txt >> ../CHANGELOG.md
+          echo '```' >> ../CHANGELOG.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           body_path: CHANGELOG.md
           files: |
             release/*
           prerelease: ${{ github.event.inputs.prerelease == 'true' }}
-          generate_release_notes: true

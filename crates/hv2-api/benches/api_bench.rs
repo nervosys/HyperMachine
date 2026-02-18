@@ -28,14 +28,12 @@ fn bench_ontology_serialization(c: &mut Criterion) {
     });
 
     group.bench_function("serialize_ontology", |b| {
-        b.iter(|| serde_json::to_string(black_box(&ontology)).unwrap())
+        b.iter(|| serde_json::to_string(black_box(&ontology)).unwrap());
     });
 
     let ontology_str = serde_json::to_string(&ontology).unwrap();
     group.bench_function("deserialize_ontology", |b| {
-        b.iter(|| {
-            serde_json::from_str::<serde_json::Value>(black_box(&ontology_str)).unwrap()
-        })
+        b.iter(|| serde_json::from_str::<serde_json::Value>(black_box(&ontology_str)).unwrap());
     });
 
     group.finish();
@@ -67,7 +65,7 @@ fn bench_tool_format_conversion(c: &mut Criterion) {
         .collect();
 
     group.bench_function("serialize_openai_tools", |b| {
-        b.iter(|| serde_json::to_string(black_box(&openai_tools)).unwrap())
+        b.iter(|| serde_json::to_string(black_box(&openai_tools)).unwrap());
     });
 
     // Anthropic format
@@ -89,7 +87,7 @@ fn bench_tool_format_conversion(c: &mut Criterion) {
         .collect();
 
     group.bench_function("serialize_anthropic_tools", |b| {
-        b.iter(|| serde_json::to_string(black_box(&anthropic_tools)).unwrap())
+        b.iter(|| serde_json::to_string(black_box(&anthropic_tools)).unwrap());
     });
 
     group.finish();
@@ -118,9 +116,7 @@ fn bench_request_parsing(c: &mut Criterion) {
     let request_str = serde_json::to_string(&create_vm_request).unwrap();
 
     group.bench_function("parse_create_vm_request", |b| {
-        b.iter(|| {
-            serde_json::from_str::<serde_json::Value>(black_box(&request_str)).unwrap()
-        })
+        b.iter(|| serde_json::from_str::<serde_json::Value>(black_box(&request_str)).unwrap());
     });
 
     let list_response = serde_json::json!({
@@ -137,7 +133,7 @@ fn bench_request_parsing(c: &mut Criterion) {
     });
 
     group.bench_function("serialize_list_response", |b| {
-        b.iter(|| serde_json::to_string(black_box(&list_response)).unwrap())
+        b.iter(|| serde_json::to_string(black_box(&list_response)).unwrap());
     });
 
     group.finish();

@@ -22,7 +22,9 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Instant;
+#[cfg(test)]
+use std::time::Duration;
 
 /// Default coalescing window in microseconds
 pub const DEFAULT_COALESCE_WINDOW_US: u64 = 100;

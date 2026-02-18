@@ -4,9 +4,9 @@
 //! keyboard, mouse, and tablet devices.
 
 use super::device::{
-    BaseUsbDevice, ConfigDescriptor, ControlResult, DeviceClass, DeviceDescriptor,
-    DescriptorType, Endpoint, EndpointDescriptor, EndpointDirection, InterfaceDescriptor,
-    SetupPacket, TransferResult, TransferType, UsbDevice,
+    BaseUsbDevice, ConfigDescriptor, ControlResult, DescriptorType, DeviceClass, DeviceDescriptor,
+    Endpoint, EndpointDescriptor, EndpointDirection, InterfaceDescriptor, SetupPacket,
+    TransferResult, TransferType, UsbDevice,
 };
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -120,14 +120,30 @@ impl KeyboardModifiers {
     /// Convert to byte
     pub fn to_byte(&self) -> u8 {
         let mut b = 0u8;
-        if self.left_ctrl { b |= 1 << 0; }
-        if self.left_shift { b |= 1 << 1; }
-        if self.left_alt { b |= 1 << 2; }
-        if self.left_gui { b |= 1 << 3; }
-        if self.right_ctrl { b |= 1 << 4; }
-        if self.right_shift { b |= 1 << 5; }
-        if self.right_alt { b |= 1 << 6; }
-        if self.right_gui { b |= 1 << 7; }
+        if self.left_ctrl {
+            b |= 1 << 0;
+        }
+        if self.left_shift {
+            b |= 1 << 1;
+        }
+        if self.left_alt {
+            b |= 1 << 2;
+        }
+        if self.left_gui {
+            b |= 1 << 3;
+        }
+        if self.right_ctrl {
+            b |= 1 << 4;
+        }
+        if self.right_shift {
+            b |= 1 << 5;
+        }
+        if self.right_alt {
+            b |= 1 << 6;
+        }
+        if self.right_gui {
+            b |= 1 << 7;
+        }
         b
     }
 
@@ -226,7 +242,7 @@ impl UsbKeyboard {
             0x19, 0x00, //   Usage Minimum (0)
             0x29, 0x65, //   Usage Maximum (101)
             0x81, 0x00, //   Input (Data, Array) - Key arrays (6 keys)
-            0xC0,       // End Collection
+            0xC0, // End Collection
         ];
 
         // Build configuration descriptor
@@ -366,16 +382,12 @@ impl UsbKeyboard {
                 }
                 ControlResult::Ok(Vec::new())
             }
-            hid_request::GET_IDLE => {
-                ControlResult::Ok(vec![self.idle_rate])
-            }
+            hid_request::GET_IDLE => ControlResult::Ok(vec![self.idle_rate]),
             hid_request::SET_IDLE => {
                 self.idle_rate = (setup.value >> 8) as u8;
                 ControlResult::Ok(Vec::new())
             }
-            hid_request::GET_PROTOCOL => {
-                ControlResult::Ok(vec![self.protocol])
-            }
+            hid_request::GET_PROTOCOL => ControlResult::Ok(vec![self.protocol]),
             hid_request::SET_PROTOCOL => {
                 self.protocol = (setup.value & 0xFF) as u8;
                 ControlResult::Ok(Vec::new())
@@ -401,7 +413,10 @@ impl UsbDevice for UsbKeyboard {
     }
 
     fn string_descriptor(&self, index: u8, _lang_id: u16) -> Option<Vec<u8>> {
-        self.base.string_descs.get(&index).map(|s| s.to_bytes().to_vec())
+        self.base
+            .string_descs
+            .get(&index)
+            .map(|s| s.to_bytes().to_vec())
     }
 
     fn control_transfer(&mut self, setup: &SetupPacket, data: &[u8]) -> ControlResult {
@@ -492,11 +507,21 @@ impl MouseButtons {
     /// Convert to byte
     pub fn to_byte(&self) -> u8 {
         let mut b = 0u8;
-        if self.left { b |= 1 << 0; }
-        if self.right { b |= 1 << 1; }
-        if self.middle { b |= 1 << 2; }
-        if self.button4 { b |= 1 << 3; }
-        if self.button5 { b |= 1 << 4; }
+        if self.left {
+            b |= 1 << 0;
+        }
+        if self.right {
+            b |= 1 << 1;
+        }
+        if self.middle {
+            b |= 1 << 2;
+        }
+        if self.button4 {
+            b |= 1 << 3;
+        }
+        if self.button5 {
+            b |= 1 << 4;
+        }
         b
     }
 }
@@ -556,8 +581,8 @@ impl UsbMouse {
             0x75, 0x08, //     Report Size (8)
             0x95, 0x03, //     Report Count (3)
             0x81, 0x06, //     Input (Data, Variable, Relative)
-            0xC0,       //   End Collection
-            0xC0,       // End Collection
+            0xC0, //   End Collection
+            0xC0, // End Collection
         ];
 
         // Build configuration descriptor
@@ -613,12 +638,7 @@ impl UsbMouse {
 
     /// Move mouse with wheel
     pub fn move_with_wheel(&mut self, dx: i8, dy: i8, wheel: i8) {
-        let report = [
-            self.buttons.to_byte(),
-            dx as u8,
-            dy as u8,
-            wheel as u8,
-        ];
+        let report = [self.buttons.to_byte(), dx as u8, dy as u8, wheel as u8];
         self.pending_reports.push_back(report);
     }
 
@@ -667,7 +687,10 @@ impl UsbDevice for UsbMouse {
     }
 
     fn string_descriptor(&self, index: u8, _lang_id: u16) -> Option<Vec<u8>> {
-        self.base.string_descs.get(&index).map(|s| s.to_bytes().to_vec())
+        self.base
+            .string_descs
+            .get(&index)
+            .map(|s| s.to_bytes().to_vec())
     }
 
     fn control_transfer(&mut self, setup: &SetupPacket, _data: &[u8]) -> ControlResult {
@@ -803,8 +826,8 @@ impl UsbTablet {
             0x75, 0x10, //     Report Size (16)
             0x95, 0x02, //     Report Count (2)
             0x81, 0x02, //     Input (Data, Variable, Absolute)
-            0xC0,       //   End Collection
-            0xC0,       // End Collection
+            0xC0, //   End Collection
+            0xC0, // End Collection
         ];
 
         let mut config = ConfigDescriptor::new(1, 1);
@@ -901,7 +924,10 @@ impl UsbDevice for UsbTablet {
     }
 
     fn string_descriptor(&self, index: u8, _lang_id: u16) -> Option<Vec<u8>> {
-        self.base.string_descs.get(&index).map(|s| s.to_bytes().to_vec())
+        self.base
+            .string_descs
+            .get(&index)
+            .map(|s| s.to_bytes().to_vec())
     }
 
     fn control_transfer(&mut self, setup: &SetupPacket, _data: &[u8]) -> ControlResult {
@@ -1085,7 +1111,7 @@ mod tests {
 
         match mouse.data_in(0x81, 4) {
             TransferResult::Ok(data) => {
-                assert_eq!(data[1], 10);  // X
+                assert_eq!(data[1], 10); // X
                 assert_eq!(data[2] as i8, -5); // Y
             }
             _ => panic!("Expected Ok"),

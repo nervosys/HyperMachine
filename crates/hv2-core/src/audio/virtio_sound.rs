@@ -4,11 +4,9 @@
 //! PCM streams, jacks, and channel mapping support.
 
 use super::core::{
-    AudioBuffer, AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
-    SampleRate, StreamDirection, StreamState, StereoVolume, Volume,
+    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
+    SampleRate, StreamDirection,
 };
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// VirtIO sound request types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -268,7 +266,14 @@ impl VirtioSndPcmRate {
     /// Get rate bit mask for capabilities
     pub fn rate_mask() -> u64 {
         // Support common rates: 8k, 11k, 16k, 22k, 32k, 44.1k, 48k, 96k, 192k
-        (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7) | (1 << 10)
+        (1 << 1)
+            | (1 << 2)
+            | (1 << 3)
+            | (1 << 4)
+            | (1 << 5)
+            | (1 << 6)
+            | (1 << 7)
+            | (1 << 10)
             | (1 << 12)
     }
 }
@@ -538,8 +543,7 @@ impl VirtioSndPcmStream {
 
         let direction = self.info.direction.into();
         let buffer_ms = (self.params.buffer_bytes as u64 * 1000)
-            / (audio_params.bytes_per_second() as u64)
-            .max(1);
+            / (audio_params.bytes_per_second() as u64).max(1);
 
         self.stream = Some(PcmStream::new(audio_params, direction, buffer_ms as u32));
         self.state = PcmState::Prepared;

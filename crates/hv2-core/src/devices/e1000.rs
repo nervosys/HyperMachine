@@ -576,20 +576,20 @@ impl E1000 {
         self.rctl.store(0, Ordering::SeqCst);
         self.tctl.store(0, Ordering::SeqCst);
 
-        *self.rx_ring_base.write().unwrap() = 0;
+        *self.rx_ring_base.write().unwrap_or_else(|e| e.into_inner()) = 0;
         self.rx_ring_len.store(0, Ordering::SeqCst);
         self.rx_head.store(0, Ordering::SeqCst);
         self.rx_tail.store(0, Ordering::SeqCst);
 
-        *self.tx_ring_base.write().unwrap() = 0;
+        *self.tx_ring_base.write().unwrap_or_else(|e| e.into_inner()) = 0;
         self.tx_ring_len.store(0, Ordering::SeqCst);
         self.tx_head.store(0, Ordering::SeqCst);
         self.tx_tail.store(0, Ordering::SeqCst);
 
         self.interrupt_pending.store(false, Ordering::SeqCst);
 
-        self.rx_queue.lock().unwrap().clear();
-        self.tx_queue.lock().unwrap().clear();
+        self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).clear();
+        self.tx_queue.lock().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Get MAC address
@@ -622,13 +622,13 @@ impl E1000 {
             Regs::IMS => self.ims.load(Ordering::SeqCst),
             Regs::RCTL => self.rctl.load(Ordering::SeqCst),
             Regs::TCTL => self.tctl.load(Ordering::SeqCst),
-            Regs::RDBAL => *self.rx_ring_base.read().unwrap() as u32,
-            Regs::RDBAH => (*self.rx_ring_base.read().unwrap() >> 32) as u32,
+            Regs::RDBAL => *self.rx_ring_base.read().unwrap_or_else(|e| e.into_inner()) as u32,
+            Regs::RDBAH => (*self.rx_ring_base.read().unwrap_or_else(|e| e.into_inner()) >> 32) as u32,
             Regs::RDLEN => self.rx_ring_len.load(Ordering::SeqCst),
             Regs::RDH => self.rx_head.load(Ordering::SeqCst),
             Regs::RDT => self.rx_tail.load(Ordering::SeqCst),
-            Regs::TDBAL => *self.tx_ring_base.read().unwrap() as u32,
-            Regs::TDBAH => (*self.tx_ring_base.read().unwrap() >> 32) as u32,
+            Regs::TDBAL => *self.tx_ring_base.read().unwrap_or_else(|e| e.into_inner()) as u32,
+            Regs::TDBAH => (*self.tx_ring_base.read().unwrap_or_else(|e| e.into_inner()) >> 32) as u32,
             Regs::TDLEN => self.tx_ring_len.load(Ordering::SeqCst),
             Regs::TDH => self.tx_head.load(Ordering::SeqCst),
             Regs::TDT => self.tx_tail.load(Ordering::SeqCst),
@@ -636,7 +636,7 @@ impl E1000 {
             Regs::RAH0 => self.rah.load(Ordering::SeqCst),
             o if o >= Regs::MTA && o < Regs::MTA + 512 => {
                 let idx = ((o - Regs::MTA) / 4) as usize;
-                self.mta.read().unwrap().get(idx).copied().unwrap_or(0)
+                self.mta.read().unwrap_or_else(|e| e.into_inner()).get(idx).copied().unwrap_or(0)
             }
             _ => 0,
         }
@@ -659,11 +659,11 @@ impl E1000 {
             Regs::RCTL => self.rctl.store(value, Ordering::SeqCst),
             Regs::TCTL => self.tctl.store(value, Ordering::SeqCst),
             Regs::RDBAL => {
-                let mut base = self.rx_ring_base.write().unwrap();
+                let mut base = self.rx_ring_base.write().unwrap_or_else(|e| e.into_inner());
                 *base = (*base & 0xFFFFFFFF00000000) | value as u64;
             }
             Regs::RDBAH => {
-                let mut base = self.rx_ring_base.write().unwrap();
+                let mut base = self.rx_ring_base.write().unwrap_or_else(|e| e.into_inner());
                 *base = (*base & 0xFFFFFFFF) | ((value as u64) << 32);
             }
             Regs::RDLEN => self.rx_ring_len.store(value, Ordering::SeqCst),
@@ -674,11 +674,11 @@ impl E1000 {
                 self.process_rx_queue();
             }
             Regs::TDBAL => {
-                let mut base = self.tx_ring_base.write().unwrap();
+                let mut base = self.tx_ring_base.write().unwrap_or_else(|e| e.into_inner());
                 *base = (*base & 0xFFFFFFFF00000000) | value as u64;
             }
             Regs::TDBAH => {
-                let mut base = self.tx_ring_base.write().unwrap();
+                let mut base = self.tx_ring_base.write().unwrap_or_else(|e| e.into_inner());
                 *base = (*base & 0xFFFFFFFF) | ((value as u64) << 32);
             }
             Regs::TDLEN => self.tx_ring_len.store(value, Ordering::SeqCst),
@@ -689,7 +689,7 @@ impl E1000 {
             o if o >= Regs::MTA && o < Regs::MTA + 512 => {
                 let idx = ((o - Regs::MTA) / 4) as usize;
                 if idx < 128 {
-                    self.mta.write().unwrap()[idx] = value;
+                    self.mta.write().unwrap_or_else(|e| e.into_inner())[idx] = value;
                 }
             }
             _ => {}
@@ -772,7 +772,7 @@ impl E1000 {
             return; // Receiver disabled
         }
 
-        self.rx_queue.lock().unwrap().push_back(packet);
+        self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet);
         self.process_rx_queue();
     }
 
@@ -790,7 +790,7 @@ impl E1000 {
         // 4. Advance head pointer
         // 5. Raise RXT0 interrupt
 
-        let mut queue = self.rx_queue.lock().unwrap();
+        let mut queue = self.rx_queue.lock().unwrap_or_else(|e| e.into_inner());
         if !queue.is_empty() {
             // Simulate packet reception
             queue.pop_front();
@@ -800,12 +800,12 @@ impl E1000 {
 
     /// Get transmitted packets (for backend/testing)
     pub fn get_tx_packet(&self) -> Option<Vec<u8>> {
-        self.tx_queue.lock().unwrap().pop_front()
+        self.tx_queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front()
     }
 
     /// Simulate transmit (add packet to TX queue for testing)
     pub fn queue_tx_packet(&self, packet: Vec<u8>) {
-        self.tx_queue.lock().unwrap().push_back(packet);
+        self.tx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet);
     }
 
     /// Check if receiver is enabled
@@ -820,12 +820,12 @@ impl E1000 {
 
     /// Get receive ring base address
     pub fn rx_ring_base(&self) -> u64 {
-        *self.rx_ring_base.read().unwrap()
+        *self.rx_ring_base.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get transmit ring base address
     pub fn tx_ring_base(&self) -> u64 {
-        *self.tx_ring_base.read().unwrap()
+        *self.tx_ring_base.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get RX descriptor count

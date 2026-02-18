@@ -564,7 +564,8 @@ mod tests {
 
     #[test]
     fn test_ept_entry_accessed_dirty() {
-        let mut entry = EptEntry::page_entry(0x1000, EptMemoryType::WriteBack, ept_flags::RWX, false);
+        let mut entry =
+            EptEntry::page_entry(0x1000, EptMemoryType::WriteBack, ept_flags::RWX, false);
 
         assert!(!entry.is_accessed());
         assert!(!entry.is_dirty());

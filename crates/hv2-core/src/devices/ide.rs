@@ -249,7 +249,7 @@ fn copy_string_to_id(dest: &mut [u16], src: &str) {
 
 /// IDE channel state
 #[derive(Debug)]
-struct IdeChannel {
+pub struct IdeChannel {
     /// Master drive
     master: IdeDrive,
     /// Slave drive
@@ -614,36 +614,36 @@ impl IdeController {
 
     /// Attach a disk to the primary master
     pub fn attach_primary_master(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.primary.lock().unwrap();
+        let mut channel = self.primary.lock().unwrap_or_else(|e| e.into_inner());
         channel.master = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Attach a disk to the primary slave
     pub fn attach_primary_slave(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.primary.lock().unwrap();
+        let mut channel = self.primary.lock().unwrap_or_else(|e| e.into_inner());
         channel.slave = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Attach a disk to the secondary master
     pub fn attach_secondary_master(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.secondary.lock().unwrap();
+        let mut channel = self.secondary.lock().unwrap_or_else(|e| e.into_inner());
         channel.master = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Attach a disk to the secondary slave
     pub fn attach_secondary_slave(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.secondary.lock().unwrap();
+        let mut channel = self.secondary.lock().unwrap_or_else(|e| e.into_inner());
         channel.slave = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Check if primary channel has pending interrupt (IRQ 14)
     pub fn primary_interrupt_pending(&self) -> bool {
-        self.primary.lock().unwrap().interrupt_pending
+        self.primary.lock().unwrap_or_else(|e| e.into_inner()).interrupt_pending
     }
 
     /// Check if secondary channel has pending interrupt (IRQ 15)
     pub fn secondary_interrupt_pending(&self) -> bool {
-        self.secondary.lock().unwrap().interrupt_pending
+        self.secondary.lock().unwrap_or_else(|e| e.into_inner()).interrupt_pending
     }
 
     /// Read a word (16-bit) from the data port
@@ -653,7 +653,7 @@ impl IdeController {
         } else {
             &self.secondary
         };
-        let mut ch = channel.lock().unwrap();
+        let mut ch = channel.lock().unwrap_or_else(|e| e.into_inner());
 
         let low = ch.read_command_reg(regs::DATA) as u16;
         let high = ch.read_command_reg(regs::DATA) as u16;
@@ -667,7 +667,7 @@ impl IdeController {
         } else {
             &self.secondary
         };
-        let mut ch = channel.lock().unwrap();
+        let mut ch = channel.lock().unwrap_or_else(|e| e.into_inner());
 
         ch.write_command_reg(regs::DATA, value as u8);
         ch.write_command_reg(regs::DATA, (value >> 8) as u8);
@@ -678,14 +678,14 @@ impl IdeController {
         match port {
             IDE_PRIMARY_BASE..=0x1F7 => {
                 let offset = port - IDE_PRIMARY_BASE;
-                self.primary.lock().unwrap().read_command_reg(offset)
+                self.primary.lock().unwrap_or_else(|e| e.into_inner()).read_command_reg(offset)
             }
-            IDE_PRIMARY_CTRL => self.primary.lock().unwrap().read_control_reg(),
+            IDE_PRIMARY_CTRL => self.primary.lock().unwrap_or_else(|e| e.into_inner()).read_control_reg(),
             IDE_SECONDARY_BASE..=0x177 => {
                 let offset = port - IDE_SECONDARY_BASE;
-                self.secondary.lock().unwrap().read_command_reg(offset)
+                self.secondary.lock().unwrap_or_else(|e| e.into_inner()).read_command_reg(offset)
             }
-            IDE_SECONDARY_CTRL => self.secondary.lock().unwrap().read_control_reg(),
+            IDE_SECONDARY_CTRL => self.secondary.lock().unwrap_or_else(|e| e.into_inner()).read_control_reg(),
             _ => 0xFF,
         }
     }
@@ -697,21 +697,21 @@ impl IdeController {
                 let offset = port - IDE_PRIMARY_BASE;
                 self.primary
                     .lock()
-                    .unwrap()
+                    .unwrap_or_else(|e| e.into_inner())
                     .write_command_reg(offset, value);
             }
             IDE_PRIMARY_CTRL => {
-                self.primary.lock().unwrap().write_control_reg(value);
+                self.primary.lock().unwrap_or_else(|e| e.into_inner()).write_control_reg(value);
             }
             IDE_SECONDARY_BASE..=0x177 => {
                 let offset = port - IDE_SECONDARY_BASE;
                 self.secondary
                     .lock()
-                    .unwrap()
+                    .unwrap_or_else(|e| e.into_inner())
                     .write_command_reg(offset, value);
             }
             IDE_SECONDARY_CTRL => {
-                self.secondary.lock().unwrap().write_control_reg(value);
+                self.secondary.lock().unwrap_or_else(|e| e.into_inner()).write_control_reg(value);
             }
             _ => {}
         }
@@ -769,8 +769,8 @@ impl Device for IdeController {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        self.primary.lock().unwrap().reset();
-        self.secondary.lock().unwrap().reset();
+        self.primary.lock().unwrap_or_else(|e| e.into_inner()).reset();
+        self.secondary.lock().unwrap_or_else(|e| e.into_inner()).reset();
         Ok(())
     }
 

@@ -15,7 +15,6 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// T1 VM configuration record
@@ -157,7 +156,6 @@ pub struct T1VmRegistry {
     /// Registry version
     pub version: u32,
 }
-
 
 /// Result of executing a script on a T1 VM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -434,15 +432,13 @@ impl T1Manager {
         let _config = self.get_vm(name).await?;
 
         let conn = self.connection.read().await;
-        if conn.is_none() {
+        let Some(conn) = conn.as_ref() else {
             bail!(
                 "No T1 hypervisor connection configured.\n\
                  T1 VMs run on bare-metal hypervisor, not on host OS.\n\
                  Configure connection with: hm t1 connect <endpoint>"
             );
-        }
-
-        let conn = conn.as_ref().unwrap();
+        };
         let client = Self::build_client(conn)?;
         let url = format!("{}/api/v1/vms/{}/start", Self::base_url(conn), name);
 
@@ -471,14 +467,12 @@ impl T1Manager {
         let _config = self.get_vm(name).await?;
 
         let conn = self.connection.read().await;
-        if conn.is_none() {
+        let Some(conn) = conn.as_ref() else {
             bail!(
                 "No T1 hypervisor connection configured.\n\
                  Configure connection with: hm t1 connect <endpoint>"
             );
-        }
-
-        let conn = conn.as_ref().unwrap();
+        };
         let client = Self::build_client(conn)?;
         let url = format!("{}/api/v1/vms/{}/stop", Self::base_url(conn), name);
 
@@ -573,14 +567,12 @@ impl T1Manager {
         let _config = self.get_vm(name).await?;
 
         let conn = self.connection.read().await;
-        if conn.is_none() {
+        let Some(conn) = conn.as_ref() else {
             bail!(
                 "No T1 hypervisor connection configured.\n\
                  Configure connection with: hm t1 connect <endpoint>"
             );
-        }
-
-        let conn = conn.as_ref().unwrap();
+        };
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(timeout_secs + 5))
             .build()

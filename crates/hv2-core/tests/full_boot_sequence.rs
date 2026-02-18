@@ -97,7 +97,7 @@ async fn test_long_mode_with_page_tables() -> Result<()> {
     let vcpu = vm.create_vcpu(0)?;
 
     // Allocate locations
-    let (gdt_base, idt_base, pt_base, _sp) = BootSetup::allocate_standard_tables();
+    let (gdt_base, _idt_base, pt_base, _sp) = BootSetup::allocate_standard_tables();
 
     // Create identity-mapped page tables
     let page_tables = BootSetup::create_identity_page_tables(pt_base);
@@ -166,8 +166,10 @@ async fn test_complete_boot_environment() -> Result<()> {
 
     // Allocate all tables
     let (gdt_base, idt_base, pt_base, sp) = BootSetup::allocate_standard_tables();
-    println!("✓ Allocated tables: GDT=0x{:X}, IDT=0x{:X}, PT=0x{:X}, SP=0x{:X}",
-             gdt_base, idt_base, pt_base, sp);
+    println!(
+        "✓ Allocated tables: GDT=0x{:X}, IDT=0x{:X}, PT=0x{:X}, SP=0x{:X}",
+        gdt_base, idt_base, pt_base, sp
+    );
 
     // Setup page tables
     let page_tables = BootSetup::create_identity_page_tables(pt_base);
@@ -249,9 +251,13 @@ async fn test_linux_boot_validation() -> Result<()> {
 
     // Parse header
     let header = LinuxBootProtocol::parse_header(&params.kernel_image)?;
-    println!("✓ Linux header parsed: version={}.{:02}, setup_size={}, kernel_size={}",
-             header.version >> 8, header.version & 0xFF,
-             header.setup_size, header.kernel_size);
+    println!(
+        "✓ Linux header parsed: version={}.{:02}, setup_size={}, kernel_size={}",
+        header.version >> 8,
+        header.version & 0xFF,
+        header.setup_size,
+        header.kernel_size
+    );
 
     // Create boot_params structure
     let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
@@ -298,8 +304,7 @@ async fn test_multiboot_validation() -> Result<()> {
 
     // Create multiboot_info structure
     let mb_info = MultibootProtocol::create_multiboot_info(
-        &info,
-        0x10000, // info_addr
+        &info, 0x10000, // info_addr
         0x11000, // cmdline_addr
         None,    // mods_addr
         0x12000, // mmap_addr
@@ -381,7 +386,11 @@ async fn test_descriptor_builders() -> Result<()> {
         .build();
 
     assert_eq!(gdt.len(), 5 * 8); // 5 entries * 8 bytes
-    println!("✓ GDT built: {} bytes ({} entries)", gdt.len(), gdt.len() / 8);
+    println!(
+        "✓ GDT built: {} bytes ({} entries)",
+        gdt.len(),
+        gdt.len() / 8
+    );
 
     // Build IDT
     let idt = IdtBuilder::new_64bit()
@@ -391,7 +400,11 @@ async fn test_descriptor_builders() -> Result<()> {
         .build();
 
     assert_eq!(idt.len(), 256 * 16); // 256 entries * 16 bytes
-    println!("✓ IDT built: {} bytes ({} entries)", idt.len(), idt.len() / 16);
+    println!(
+        "✓ IDT built: {} bytes ({} entries)",
+        idt.len(),
+        idt.len() / 16
+    );
 
     // Test pointer generation
     let gdt_ptr = GdtBuilder::new()

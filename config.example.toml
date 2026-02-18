@@ -10,6 +10,20 @@ port = 8080
 # Rate limit: requests per minute per IP
 rate_limit = 100
 
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+# Log format: json, pretty
+format = "json"
+
+[security]
+# FIPS 140-3 mode: enabled, disabled
+fips_mode = "disabled"
+# TLS for API endpoints
+tls_enabled = false
+# tls_cert = "/path/to/cert.pem"
+# tls_key = "/path/to/key.pem"
+
 [vm]
 name = "production-vm"
 vcpus = 8

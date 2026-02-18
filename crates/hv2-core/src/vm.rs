@@ -102,14 +102,17 @@ pub struct VCpuStats {
 }
 
 impl VCpuStats {
+    #[inline]
     pub fn exits(&self) -> u64 {
         self.exits.load(Ordering::Relaxed)
     }
 
+    #[inline]
     pub fn run_time_ns(&self) -> u64 {
         self.run_time_ns.load(Ordering::Relaxed)
     }
 
+    #[inline]
     pub fn interrupts(&self) -> u64 {
         self.interrupts.load(Ordering::Relaxed)
     }
@@ -712,6 +715,39 @@ impl VM {
                 tracing::warn!("Unknown VM exit reason: {}", reason);
                 Ok(true)
             }
+
+            VmExit::Hypercall { nr, .. } => {
+                tracing::debug!("Hypercall nr={:#x}", nr);
+                Ok(true)
+            }
+
+            VmExit::SystemEvent { type_, flags } => {
+                tracing::info!("System event: type={} flags={:#x}", type_, flags);
+                *state.write() = VMState::Stopped;
+                exit_notify.notify_waiters();
+                Ok(false)
+            }
+
+            VmExit::Nmi => {
+                tracing::debug!("NMI received");
+                Ok(true)
+            }
+
+            VmExit::Rdmsr { index } => {
+                tracing::debug!("RDMSR index={:#x}", index);
+                Ok(true)
+            }
+
+            VmExit::Wrmsr { index, data } => {
+                tracing::debug!("WRMSR index={:#x} data={:#x}", index, data);
+                Ok(true)
+            }
+
+            VmExit::IoapicEoi { vector } => {
+                tracing::debug!("IOAPIC EOI vector={}", vector);
+                Ok(true)
+            }
+
         }
     }
 
@@ -980,6 +1016,38 @@ impl VM {
                 tracing::warn!("Unknown VM exit reason: {}", reason);
                 Ok(true)
             }
+
+            VmExit::Hypercall { nr, .. } => {
+                tracing::debug!("Hypercall nr={:#x}", nr);
+                Ok(true)
+            }
+
+            VmExit::SystemEvent { type_, flags } => {
+                tracing::info!("System event: type={} flags={:#x}", type_, flags);
+                self.stop().await?;
+                Ok(false)
+            }
+
+            VmExit::Nmi => {
+                tracing::debug!("NMI received");
+                Ok(true)
+            }
+
+            VmExit::Rdmsr { index } => {
+                tracing::debug!("RDMSR index={:#x}", index);
+                Ok(true)
+            }
+
+            VmExit::Wrmsr { index, data } => {
+                tracing::debug!("WRMSR index={:#x} data={:#x}", index, data);
+                Ok(true)
+            }
+
+            VmExit::IoapicEoi { vector } => {
+                tracing::debug!("IOAPIC EOI vector={}", vector);
+                Ok(true)
+            }
+
         }
     }
 

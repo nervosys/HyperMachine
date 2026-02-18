@@ -117,10 +117,8 @@ impl ProfileData {
 
     /// Add a sample
     fn add_sample(&mut self, sample: &StackSample) {
-        let stack: Vec<String> = sample.frames.iter()
-            .map(|f| f.name.clone())
-            .collect();
-        
+        let stack: Vec<String> = sample.frames.iter().map(|f| f.name.clone()).collect();
+
         *self.stacks.entry(stack).or_insert(0) += sample.weight;
         self.total_samples += 1;
         self.total_weight += sample.weight;
@@ -129,7 +127,7 @@ impl ProfileData {
     /// Get top functions by sample count
     pub fn top_functions(&self, limit: usize) -> Vec<(String, u64, f64)> {
         let mut func_counts: HashMap<String, u64> = HashMap::new();
-        
+
         for (stack, count) in &self.stacks {
             for func in stack {
                 *func_counts.entry(func.clone()).or_insert(0) += count;
@@ -138,8 +136,9 @@ impl ProfileData {
 
         let mut sorted: Vec<_> = func_counts.into_iter().collect();
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
-        
-        sorted.into_iter()
+
+        sorted
+            .into_iter()
             .take(limit)
             .map(|(name, count)| {
                 let pct = if self.total_weight > 0 {
@@ -154,12 +153,11 @@ impl ProfileData {
 
     /// Get hot paths (most sampled complete stacks)
     pub fn hot_paths(&self, limit: usize) -> Vec<(Vec<String>, u64, f64)> {
-        let mut sorted: Vec<_> = self.stacks.iter()
-            .map(|(k, v)| (k.clone(), *v))
-            .collect();
+        let mut sorted: Vec<_> = self.stacks.iter().map(|(k, v)| (k.clone(), *v)).collect();
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
 
-        sorted.into_iter()
+        sorted
+            .into_iter()
             .take(limit)
             .map(|(stack, count)| {
                 let pct = if self.total_weight > 0 {
@@ -175,14 +173,14 @@ impl ProfileData {
     /// Generate flame graph data in folded format
     pub fn to_folded_format(&self) -> String {
         let mut lines: Vec<String> = Vec::new();
-        
+
         for (stack, count) in &self.stacks {
             if !stack.is_empty() {
                 let line = format!("{} {}", stack.join(";"), count);
                 lines.push(line);
             }
         }
-        
+
         lines.sort();
         lines.join("\n")
     }
@@ -204,30 +202,21 @@ impl ProfileData {
 }
 
 /// Profiler error types
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ProfilerError {
     /// Profiler not started
+    #[error("profiler not started")]
     NotStarted,
     /// Profiler already running
+    #[error("profiler already running")]
     AlreadyRunning,
     /// Lock acquisition failed
+    #[error("lock acquisition failed")]
     LockError,
     /// Invalid configuration
+    #[error("invalid config: {0}")]
     InvalidConfig(String),
 }
-
-impl std::fmt::Display for ProfilerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProfilerError::NotStarted => write!(f, "profiler not started"),
-            ProfilerError::AlreadyRunning => write!(f, "profiler already running"),
-            ProfilerError::LockError => write!(f, "lock acquisition failed"),
-            ProfilerError::InvalidConfig(msg) => write!(f, "invalid config: {}", msg),
-        }
-    }
-}
-
-impl std::error::Error for ProfilerError {}
 
 /// Profiler result type
 pub type ProfilerResult<T> = Result<T, ProfilerError>;
@@ -317,7 +306,7 @@ impl CpuProfiler {
 
     /// Get current state
     pub fn state(&self) -> ProfilerState {
-        *self.state.read().unwrap()
+        self.state.read().map(|s| *s).unwrap_or(ProfilerState::Idle)
     }
 
     /// Start profiling
@@ -330,7 +319,10 @@ impl CpuProfiler {
         let mut samples = self.samples.lock().map_err(|_| ProfilerError::LockError)?;
         samples.clear();
 
-        let mut start_time = self.start_time.lock().map_err(|_| ProfilerError::LockError)?;
+        let mut start_time = self
+            .start_time
+            .lock()
+            .map_err(|_| ProfilerError::LockError)?;
         *start_time = Some(Instant::now());
 
         *state = ProfilerState::Running;
@@ -347,7 +339,10 @@ impl CpuProfiler {
         *state = ProfilerState::Idle;
 
         let samples = self.samples.lock().map_err(|_| ProfilerError::LockError)?;
-        let start_time = self.start_time.lock().map_err(|_| ProfilerError::LockError)?;
+        let start_time = self
+            .start_time
+            .lock()
+            .map_err(|_| ProfilerError::LockError)?;
 
         let mut data = ProfileData::new();
         if let Some(start) = *start_time {
@@ -444,7 +439,7 @@ impl FlameGraphNode {
             &mut self.children[pos]
         } else {
             self.children.push(FlameGraphNode::new(name));
-            self.children.last_mut().unwrap()
+            self.children.last_mut().expect("just pushed a child node")
         }
     }
 }
@@ -474,7 +469,7 @@ impl FlameGraphBuilder {
         for (i, frame) in stack.iter().enumerate() {
             current = current.get_or_create_child(frame);
             current.total_value += value;
-            
+
             // Last frame gets self time
             if i == stack.len() - 1 {
                 current.self_value += value;
@@ -485,11 +480,11 @@ impl FlameGraphBuilder {
     /// Build from profile data
     pub fn from_profile(data: &ProfileData) -> Self {
         let mut builder = Self::new();
-        
+
         for (stack, count) in &data.stacks {
             builder.add_sample(stack, *count);
         }
-        
+
         builder
     }
 
@@ -506,26 +501,43 @@ impl FlameGraphBuilder {
     /// Generate SVG flame graph
     pub fn to_svg(&self, width: u32, height: u32) -> String {
         let mut svg = String::new();
-        
+
         svg.push_str(&format!(
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" viewBox="0 0 {} {}">"#,
             width, height, width, height
         ));
-        svg.push_str(r#"<style>
+        svg.push_str(
+            r#"<style>
             .frame:hover { stroke: black; stroke-width: 1px; cursor: pointer; }
             .frame text { font-family: monospace; font-size: 12px; fill: white; }
-        </style>"#);
+        </style>"#,
+        );
 
         // Render frames recursively
         if self.root.total_value > 0 {
-            self.render_node_svg(&mut svg, &self.root, 0.0, width as f64, height as f64 - 20.0, height as f64 / 20.0);
+            self.render_node_svg(
+                &mut svg,
+                &self.root,
+                0.0,
+                width as f64,
+                height as f64 - 20.0,
+                height as f64 / 20.0,
+            );
         }
 
         svg.push_str("</svg>");
         svg
     }
 
-    fn render_node_svg(&self, svg: &mut String, node: &FlameGraphNode, x: f64, width: f64, y: f64, height: f64) {
+    fn render_node_svg(
+        &self,
+        svg: &mut String,
+        node: &FlameGraphNode,
+        x: f64,
+        width: f64,
+        y: f64,
+        height: f64,
+    ) {
         if width < 1.0 || node.name == "root" {
             // Don't render root, just process children
             let mut child_x = x;
@@ -539,21 +551,23 @@ impl FlameGraphBuilder {
 
         // Generate color based on name hash
         let color = self.name_to_color(&node.name);
-        
+
         svg.push_str(&format!(
             r#"<g class="frame"><rect x="{:.1}" y="{:.1}" width="{:.1}" height="{:.1}" fill="{}"/>"#,
             x, y, width.max(1.0), height - 1.0, color
         ));
-        
+
         if width > 30.0 {
             let text_width = (width - 6.0) / 7.0; // Approximate char width
             let display_name: String = node.name.chars().take(text_width as usize).collect();
             svg.push_str(&format!(
                 r#"<text x="{:.1}" y="{:.1}">{}</text>"#,
-                x + 3.0, y + height - 5.0, display_name
+                x + 3.0,
+                y + height - 5.0,
+                display_name
             ));
         }
-        
+
         svg.push_str("</g>");
 
         // Render children
@@ -567,13 +581,15 @@ impl FlameGraphBuilder {
 
     fn name_to_color(&self, name: &str) -> String {
         // Simple hash-based coloring
-        let hash: u32 = name.bytes().fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
-        
+        let hash: u32 = name
+            .bytes()
+            .fold(0u32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u32));
+
         // Warm color palette (reds, oranges, yellows)
         let r = 200 + (hash % 55) as u8;
         let g = 50 + ((hash >> 8) % 150) as u8;
         let b = 20 + ((hash >> 16) % 60) as u8;
-        
+
         format!("rgb({},{},{})", r, g, b)
     }
 }
@@ -659,7 +675,8 @@ impl InstrumentedProfiler {
         let thread_hash = format!("{:?}", thread_id).len() as u64; // Simple thread identifier
 
         if let Ok(mut active) = self.active_spans.lock() {
-            active.entry(thread_hash)
+            active
+                .entry(thread_hash)
                 .or_insert_with(Vec::new)
                 .push((name.clone(), Instant::now()));
         }
@@ -674,7 +691,8 @@ impl InstrumentedProfiler {
 
     /// Get all function profiles
     pub fn get_profiles(&self) -> Vec<FunctionProfile> {
-        self.profiles.read()
+        self.profiles
+            .read()
             .map(|p| p.values().cloned().collect())
             .unwrap_or_default()
     }
@@ -713,7 +731,8 @@ impl InstrumentedProfiler {
 
         // Record the call
         if let Ok(mut profiles) = self.profiles.write() {
-            profiles.entry(name.to_string())
+            profiles
+                .entry(name.to_string())
                 .or_insert_with(|| FunctionProfile::new(name))
                 .record(duration_ns);
         }
@@ -737,7 +756,8 @@ pub struct ProfileGuard<'a> {
 impl<'a> Drop for ProfileGuard<'a> {
     fn drop(&mut self) {
         let duration = self.start.elapsed().as_nanos() as u64;
-        self.profiler.record_exit(&self.name, duration, self.thread_hash);
+        self.profiler
+            .record_exit(&self.name, duration, self.thread_hash);
     }
 }
 
@@ -826,9 +846,8 @@ mod tests {
 
     #[test]
     fn test_profile_frame() {
-        let frame = ProfileFrame::new("my_func", "my_module", 0x1234)
-            .with_line(42);
-        
+        let frame = ProfileFrame::new("my_func", "my_module", 0x1234).with_line(42);
+
         assert_eq!(frame.name, "my_func");
         assert_eq!(frame.module, "my_module");
         assert_eq!(frame.line, Some(42));
@@ -843,9 +862,7 @@ mod tests {
             ProfileFrame::new("bar", "app", 0x3000),
         ];
 
-        let sample = StackSample::new(frames, 1234)
-            .with_weight(100)
-            .with_cpu(0);
+        let sample = StackSample::new(frames, 1234).with_weight(100).with_cpu(0);
 
         assert_eq!(sample.leaf().unwrap().name, "bar");
         assert_eq!(sample.root().unwrap().name, "main");
@@ -855,7 +872,7 @@ mod tests {
     #[test]
     fn test_profile_data_aggregation() {
         let mut data = ProfileData::new();
-        
+
         let frames1 = vec![
             ProfileFrame::new("main", "app", 0),
             ProfileFrame::new("foo", "app", 0),
@@ -878,7 +895,7 @@ mod tests {
     #[test]
     fn test_folded_format() {
         let mut data = ProfileData::new();
-        
+
         let frames = vec![
             ProfileFrame::new("main", "app", 0),
             ProfileFrame::new("foo", "app", 0),
@@ -893,21 +910,21 @@ mod tests {
     #[test]
     fn test_cpu_profiler_lifecycle() {
         let profiler = CpuProfiler::new();
-        
+
         assert_eq!(profiler.state(), ProfilerState::Idle);
-        
+
         profiler.start().unwrap();
         assert_eq!(profiler.state(), ProfilerState::Running);
-        
+
         // Can't start again
         assert!(profiler.start().is_err());
-        
+
         profiler.pause().unwrap();
         assert_eq!(profiler.state(), ProfilerState::Paused);
-        
+
         profiler.resume().unwrap();
         assert_eq!(profiler.state(), ProfilerState::Running);
-        
+
         let data = profiler.stop().unwrap();
         assert_eq!(profiler.state(), ProfilerState::Idle);
         assert_eq!(data.total_samples(), 0);
@@ -933,14 +950,17 @@ mod tests {
     #[test]
     fn test_flame_graph_builder() {
         let mut builder = FlameGraphBuilder::new();
-        
+
         builder.add_sample(&["main".to_string(), "foo".to_string()], 10);
         builder.add_sample(&["main".to_string(), "bar".to_string()], 20);
-        builder.add_sample(&["main".to_string(), "foo".to_string(), "baz".to_string()], 5);
+        builder.add_sample(
+            &["main".to_string(), "foo".to_string(), "baz".to_string()],
+            5,
+        );
 
         let root = builder.build();
         assert_eq!(root.total_value, 35);
-        
+
         let main = &root.children[0];
         assert_eq!(main.name, "main");
         assert_eq!(main.total_value, 35);
@@ -963,7 +983,7 @@ mod tests {
     fn test_flame_graph_svg() {
         let mut builder = FlameGraphBuilder::new();
         builder.add_sample(&["main".to_string(), "foo".to_string()], 10);
-        
+
         let svg = builder.to_svg(800, 400);
         assert!(svg.starts_with("<svg"));
         assert!(svg.ends_with("</svg>"));
@@ -973,7 +993,7 @@ mod tests {
     #[test]
     fn test_instrumented_profiler() {
         let profiler = InstrumentedProfiler::new();
-        
+
         {
             let _guard = profiler.enter("test_function");
             std::thread::sleep(Duration::from_millis(1));
@@ -989,7 +1009,7 @@ mod tests {
     #[test]
     fn test_instrumented_profiler_nested() {
         let profiler = InstrumentedProfiler::new();
-        
+
         {
             let _outer = profiler.enter("outer");
             {
@@ -1005,11 +1025,11 @@ mod tests {
     #[test]
     fn test_instrumented_profiler_top_functions() {
         let profiler = InstrumentedProfiler::new();
-        
+
         for _ in 0..5 {
             let _guard = profiler.enter("frequent");
         }
-        
+
         for _ in 0..2 {
             let _guard = profiler.enter("rare");
         }
@@ -1036,7 +1056,7 @@ mod tests {
     #[test]
     fn test_allocation_profile() {
         let mut profile = AllocationProfile::new();
-        
+
         profile.record_alloc(1024, "malloc");
         profile.record_alloc(2048, "malloc");
         profile.record_alloc(512, "realloc");
@@ -1054,7 +1074,7 @@ mod tests {
     #[test]
     fn test_allocation_top_sites() {
         let mut profile = AllocationProfile::new();
-        
+
         profile.record_alloc(1000, "site_a");
         profile.record_alloc(5000, "site_b");
         profile.record_alloc(2000, "site_a");
@@ -1081,7 +1101,7 @@ mod tests {
     #[test]
     fn test_hot_paths() {
         let mut data = ProfileData::new();
-        
+
         // Add same stack multiple times
         let hot_stack = vec![
             ProfileFrame::new("main", "app", 0),
@@ -1105,22 +1125,34 @@ mod tests {
     #[test]
     fn test_profiler_reset() {
         let profiler = InstrumentedProfiler::new();
-        
+
         {
             let _guard = profiler.enter("test");
         }
-        
+
         assert_eq!(profiler.get_profiles().len(), 1);
-        
+
         profiler.reset();
         assert_eq!(profiler.get_profiles().len(), 0);
     }
 
     #[test]
     fn test_profiler_error_display() {
-        assert_eq!(format!("{}", ProfilerError::NotStarted), "profiler not started");
-        assert_eq!(format!("{}", ProfilerError::AlreadyRunning), "profiler already running");
-        assert_eq!(format!("{}", ProfilerError::LockError), "lock acquisition failed");
-        assert_eq!(format!("{}", ProfilerError::InvalidConfig("test".into())), "invalid config: test");
+        assert_eq!(
+            format!("{}", ProfilerError::NotStarted),
+            "profiler not started"
+        );
+        assert_eq!(
+            format!("{}", ProfilerError::AlreadyRunning),
+            "profiler already running"
+        );
+        assert_eq!(
+            format!("{}", ProfilerError::LockError),
+            "lock acquisition failed"
+        );
+        assert_eq!(
+            format!("{}", ProfilerError::InvalidConfig("test".into())),
+            "invalid config: test"
+        );
     }
 }

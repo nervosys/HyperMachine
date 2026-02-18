@@ -26,7 +26,6 @@
 use crate::{Error, Result};
 use parking_lot::RwLock;
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 /// Guest Physical Address
 pub type GuestPhysAddr = u64;
@@ -503,6 +502,9 @@ impl GuestAddressSpace {
             )));
         }
 
+        // SAFETY: `host_addr` was validated by `region.translate()` to point within
+        // a mapped memory region. Bounds check above ensures `buf.len()` bytes fit
+        // within the region. The destination buffer is a valid mutable slice.
         unsafe {
             std::ptr::copy_nonoverlapping(host_addr as *const u8, buf.as_mut_ptr(), buf.len());
         }
@@ -546,6 +548,9 @@ impl GuestAddressSpace {
             )));
         }
 
+        // SAFETY: `host_addr` was validated by `region.translate()` to point within
+        // a mapped, writable memory region. Bounds check above ensures `buf.len()`
+        // bytes fit within the region. The source buffer is a valid slice.
         unsafe {
             std::ptr::copy_nonoverlapping(buf.as_ptr(), host_addr as *mut u8, buf.len());
         }
@@ -607,13 +612,18 @@ impl GuestAddressSpace {
         Ok(std::slice::from_raw_parts(host_addr as *const u8, len))
     }
 
-    /// Get a mutable slice of guest memory (unsafe, returns raw pointer)
+    /// Get a mutable slice of guest memory.
     ///
-    /// # Safety  
-    /// Caller must ensure the address range is valid, writable, and not MMIO.
-    /// Takes `&self` because the underlying memory is raw-pointer-based guest RAM
-    /// shared across vCPUs — requiring `&mut self` would be overly restrictive.
-    #[allow(clippy::mut_from_ref)]
+    /// # Safety
+    ///
+    /// - `guest_addr .. guest_addr + len` must lie within a RAM region (not MMIO).
+    /// - The caller must ensure no other reference (mutable **or** shared) to the
+    ///   same byte range is live at the same time — the usual Rust aliasing rules
+    ///   apply even though the signature takes `&self`.
+    ///
+    /// `&self` is intentional: guest RAM is owned via a raw pointer, so requiring
+    /// `&mut self` would needlessly serialise all vCPU memory accesses.
+    #[allow(clippy::mut_from_ref)] // SAFETY: see doc above
     pub unsafe fn get_slice_mut(&self, guest_addr: GuestPhysAddr, len: usize) -> Result<&mut [u8]> {
         let host_addr = self.translate(guest_addr)?;
         Ok(std::slice::from_raw_parts_mut(host_addr as *mut u8, len))

@@ -148,6 +148,7 @@ pub struct WebhookDelivery {
     pub timestamp: String,
 }
 
+/// Status of event delivery to a subscriber
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryStatus {
@@ -186,7 +187,7 @@ impl EventBus {
     /// Publish an event
     pub fn publish(&self, event: VmEvent) {
         let _ = self.sender.send(event.clone());
-        
+
         // Trigger webhooks in background
         let webhooks = self.webhooks.read().clone();
         let event_clone = event.clone();
@@ -196,8 +197,14 @@ impl EventBus {
                     && (webhook.events.contains(&event_clone.event_type)
                         || webhook.events.contains(&EventType::All))
                 {
-                    // Deliver webhook (fire and forget for now)
-                    let _ = deliver_webhook(webhook, &event_clone).await;
+                    // Deliver webhook with error logging
+                    if let Err(e) = deliver_webhook(webhook, &event_clone).await {
+                        tracing::warn!(
+                            webhook_id = %webhook.id,
+                            error = %e,
+                            "Webhook delivery failed"
+                        );
+                    }
                 }
             }
         });
@@ -278,7 +285,7 @@ async fn deliver_webhook(
 fn compute_hmac_signature(secret: &str, payload: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     let mut hasher = DefaultHasher::new();
     secret.hash(&mut hasher);
     payload.hash(&mut hasher);
@@ -343,7 +350,14 @@ async fn get_webhook(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match event_bus.get_webhook(&id) {
-        Some(webhook) => (StatusCode::OK, Json(serde_json::to_value(webhook).unwrap())).into_response(),
+        Some(webhook) => match serde_json::to_value(webhook) {
+            Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response(),
+        },
         None => (
             StatusCode::NOT_FOUND,
             Json(serde_json::json!({"error": "Webhook not found"})),
@@ -373,7 +387,7 @@ async fn event_stream(
     Query(query): Query<SseQuery>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<SseEvent, std::convert::Infallible>>> {
     let receiver = event_bus.subscribe();
-    
+
     // Parse event filter
     let event_filter: Option<Vec<EventType>> = query.events.map(|s| {
         s.split(',')
@@ -385,30 +399,28 @@ async fn event_stream(
         let event_filter = event_filter.clone();
         let vm_filter = query.vm_id.clone();
 
-        async move {
-            match result {
-                Ok(event) => {
-                    // Apply filters
-                    if let Some(ref filter) = event_filter {
-                        if !filter.contains(&event.event_type) && !filter.contains(&EventType::All) {
-                            return None;
-                        }
+        match result {
+            Ok(event) => {
+                // Apply filters
+                if let Some(ref filter) = event_filter {
+                    if !filter.contains(&event.event_type) && !filter.contains(&EventType::All) {
+                        return None;
                     }
-
-                    if let Some(ref vm_id) = vm_filter {
-                        if event.vm_id.as_ref() != Some(vm_id) {
-                            return None;
-                        }
-                    }
-
-                    let data = serde_json::to_string(&event).unwrap_or_default();
-                    Some(Ok(SseEvent::default()
-                        .id(event.id)
-                        .event(event.event_type.to_string())
-                        .data(data)))
                 }
-                Err(_) => None,
+
+                if let Some(ref vm_id) = vm_filter {
+                    if event.vm_id.as_ref() != Some(vm_id) {
+                        return None;
+                    }
+                }
+
+                let data = serde_json::to_string(&event).unwrap_or_default();
+                Some(Ok(SseEvent::default()
+                    .id(event.id)
+                    .event(event.event_type.to_string())
+                    .data(data)))
             }
+            Err(_) => None,
         }
     });
 
@@ -471,8 +483,8 @@ mod tests {
         assert_eq!(event.vm_id, Some("vm-123".into()));
     }
 
-    #[test]
-    fn test_event_bus() {
+    #[tokio::test]
+    async fn test_event_bus() {
         let bus = EventBus::new();
         let mut rx = bus.subscribe();
 
@@ -482,7 +494,8 @@ mod tests {
             serde_json::json!({}),
         ));
 
-        // Note: In async context, we'd await the receiver
+        // Give the spawned task a moment to run
+        tokio::task::yield_now().await;
         assert!(rx.try_recv().is_ok());
     }
 

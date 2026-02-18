@@ -3,64 +3,36 @@
 //! This module provides a framework for serializing and deserializing
 //! device state for VM snapshots.
 
-use std::collections::HashMap;
-use std::io::{Read, Write};
-
 use super::types::DeviceSnapshot;
 
 /// Device state serialization result
 pub type DeviceResult<T> = Result<T, DeviceStateError>;
 
 /// Device state error
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DeviceStateError {
     /// Device not found
+    #[error("Device not found: {0}")]
     DeviceNotFound(String),
     /// Serialization error
+    #[error("Serialization error: {0}")]
     SerializationError(String),
     /// Deserialization error
+    #[error("Deserialization error: {0}")]
     DeserializationError(String),
     /// Version mismatch
+    #[error("Version mismatch: expected {expected}, found {found}")]
     VersionMismatch { expected: u32, found: u32 },
     /// Invalid state data
+    #[error("Invalid state: {0}")]
     InvalidState(String),
     /// Device not registered
+    #[error("Device not registered: {0}")]
     NotRegistered(String),
     /// Checksum error
+    #[error("Checksum verification failed")]
     ChecksumError,
 }
-
-impl std::fmt::Display for DeviceStateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DeviceStateError::DeviceNotFound(name) => {
-                write!(f, "Device not found: {}", name)
-            }
-            DeviceStateError::SerializationError(msg) => {
-                write!(f, "Serialization error: {}", msg)
-            }
-            DeviceStateError::DeserializationError(msg) => {
-                write!(f, "Deserialization error: {}", msg)
-            }
-            DeviceStateError::VersionMismatch { expected, found } => {
-                write!(
-                    f,
-                    "Version mismatch: expected {}, found {}",
-                    expected, found
-                )
-            }
-            DeviceStateError::InvalidState(msg) => {
-                write!(f, "Invalid state: {}", msg)
-            }
-            DeviceStateError::NotRegistered(name) => {
-                write!(f, "Device not registered: {}", name)
-            }
-            DeviceStateError::ChecksumError => write!(f, "Checksum verification failed"),
-        }
-    }
-}
-
-impl std::error::Error for DeviceStateError {}
 
 /// Trait for devices that can be snapshotted
 pub trait Snapshottable {

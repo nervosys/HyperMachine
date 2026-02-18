@@ -63,12 +63,10 @@ mod types;
 
 pub use cstate::{CStateError, CStateGovernor, CStateManager, CStateResult, CpuCState};
 pub use pstate::{CpuPState, PStateError, PStateGovernor, PStateManager, PStateResult};
-pub use sstate::{
-    SStateError, SStateManager, SStateResult, TransitionPhase, WakeSourceConfig,
-};
+pub use sstate::{SStateError, SStateManager, SStateResult, TransitionPhase, WakeSourceConfig};
 pub use types::{
-    BatteryEventType, CState, DState, PState, PowerEvent, PowerStats, SState,
-    ThermalEventType, ThermalTripType, WakeEvent, WakeSource,
+    BatteryEventType, CState, DState, PState, PowerEvent, PowerStats, SState, ThermalEventType,
+    ThermalTripType, WakeEvent, WakeSource,
 };
 
 #[cfg(test)]
@@ -241,7 +239,10 @@ mod tests {
         if let PowerEvent::ThermalEvent(event_type) = event {
             assert!(matches!(
                 event_type,
-                ThermalEventType::TripPoint { zone: 0, trip_type: ThermalTripType::Hot }
+                ThermalEventType::TripPoint {
+                    zone: 0,
+                    trip_type: ThermalTripType::Hot
+                }
             ));
         }
     }

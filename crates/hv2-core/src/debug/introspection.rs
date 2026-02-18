@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 /// Memory region type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -455,14 +455,14 @@ impl MemoryInspector {
 
     /// Add memory region
     pub fn add_region(&self, region: MemoryRegion) {
-        self.regions.write().unwrap().push(region);
+        self.regions.write().unwrap_or_else(|e| e.into_inner()).push(region);
     }
 
     /// Find region containing address
     pub fn find_region(&self, addr: u64) -> Option<MemoryRegion> {
         self.regions
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .find(|r| r.contains(addr))
             .cloned()
@@ -470,7 +470,7 @@ impl MemoryInspector {
 
     /// Get all regions
     pub fn regions(&self) -> Vec<MemoryRegion> {
-        self.regions.read().unwrap().clone()
+        self.regions.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Read memory
@@ -609,17 +609,17 @@ impl CpuInspector {
 
     /// Update CPU state
     pub fn update_state(&self, vcpu_id: u32, state: CpuState) {
-        self.states.write().unwrap().insert(vcpu_id, state);
+        self.states.write().unwrap_or_else(|e| e.into_inner()).insert(vcpu_id, state);
     }
 
     /// Get CPU state
     pub fn get_state(&self, vcpu_id: u32) -> Option<CpuState> {
-        self.states.read().unwrap().get(&vcpu_id).cloned()
+        self.states.read().unwrap_or_else(|e| e.into_inner()).get(&vcpu_id).cloned()
     }
 
     /// Get all CPU states
     pub fn all_states(&self) -> HashMap<u32, CpuState> {
-        self.states.read().unwrap().clone()
+        self.states.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Log event
@@ -629,7 +629,7 @@ impl CpuInspector {
         }
 
         let id = self.event_counter.fetch_add(1, Ordering::SeqCst);
-        let mut events = self.events.write().unwrap();
+        let mut events = self.events.write().unwrap_or_else(|e| e.into_inner());
 
         // Trim if over limit
         if events.len() >= self.max_events {
@@ -641,7 +641,7 @@ impl CpuInspector {
 
     /// Get events
     pub fn get_events(&self, start: u64, count: usize) -> Vec<(u64, IntrospectionEvent)> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read().unwrap_or_else(|e| e.into_inner());
         events
             .iter()
             .filter(|(id, _)| *id >= start)
@@ -652,7 +652,7 @@ impl CpuInspector {
 
     /// Clear events
     pub fn clear_events(&self) {
-        self.events.write().unwrap().clear();
+        self.events.write().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Enable/disable logging
