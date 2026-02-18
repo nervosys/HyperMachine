@@ -42,7 +42,7 @@ tracing-subscriber = { workspace = true }
 image = "0.25"
 
 # Cross-platform file dialogs
-rfd = "0.15"
+rfd = "0.17"
 
 # Platform icons
 include_dir = "0.7"
