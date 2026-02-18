@@ -15,7 +15,7 @@ categories.workspace = true
 # GUI framework
 eframe = { version = "0.31", features = ["persistence", "wgpu"] }
 egui = "0.31"
-egui_extras = { version = "0.31", features = ["image"] }
+egui_extras = { version = "0.33", features = ["image"] }
 
 # Async runtime
 tokio = { workspace = true }
