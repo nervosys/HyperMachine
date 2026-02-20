@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Virtual CPU state
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VCpuState {
     Uninitialized,
@@ -491,6 +492,7 @@ impl VCpu {
 }
 
 /// Reasons for vCPU exit
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum VCpuExit {
     /// Halted

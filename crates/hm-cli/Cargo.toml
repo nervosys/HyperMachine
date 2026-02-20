@@ -38,7 +38,7 @@ reqwest = { workspace = true, features = ["rustls-tls"] }
 
 # MCP HTTP server
 axum = { workspace = true }
-tower-http = { version = "0.5", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors"] }
 
 # Shell completions
 clap_complete = "4.5"

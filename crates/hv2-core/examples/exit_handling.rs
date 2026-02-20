@@ -133,6 +133,9 @@ async fn demonstrate_exit_loop(
                         );
                         // In real implementation: write to device
                     }
+                    _ => {
+                        info!("  Unknown I/O direction");
+                    }
                 }
             }
 
@@ -198,6 +201,10 @@ async fn demonstrate_exit_loop(
 
             VmExit::Unknown { reason } => {
                 info!("  Unknown exit reason: {}", reason);
+            }
+
+            _ => {
+                info!("  Unhandled exit: {:?}", exit);
             }
         }
 

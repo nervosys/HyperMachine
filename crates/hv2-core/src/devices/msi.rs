@@ -59,7 +59,8 @@
 //! | 7:0     | Vector             | Interrupt vector                   |
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 /// MSI address base (LAPIC range)
 pub const MSI_ADDR_BASE: u64 = 0xFEE0_0000;
@@ -572,7 +573,7 @@ impl MsixCapability {
             return 0;
         }
 
-        let table = self.table.read().unwrap_or_else(|e| e.into_inner());
+        let table = self.table.read();
         match offset {
             0 => table[index].addr_lo,
             4 => table[index].addr_hi,
@@ -588,7 +589,7 @@ impl MsixCapability {
             return;
         }
 
-        let mut table = self.table.write().unwrap_or_else(|e| e.into_inner());
+        let mut table = self.table.write();
         match offset {
             0 => table[index].addr_lo = value & 0xFFFF_FFFC,
             4 => table[index].addr_hi = value,
@@ -604,7 +605,7 @@ impl MsixCapability {
             return None;
         }
 
-        let table = self.table.read().unwrap_or_else(|e| e.into_inner());
+        let table = self.table.read();
         Some(table[vector].get_message())
     }
 
@@ -618,7 +619,7 @@ impl MsixCapability {
             return true;
         }
 
-        let table = self.table.read().unwrap_or_else(|e| e.into_inner());
+        let table = self.table.read();
         table[vector].is_masked()
     }
 
@@ -628,7 +629,7 @@ impl MsixCapability {
             return;
         }
 
-        let mut pending = self.pending.write().unwrap_or_else(|e| e.into_inner());
+        let mut pending = self.pending.write();
         let qword = vector / 64;
         let bit = vector % 64;
         pending[qword] |= 1 << bit;
@@ -640,7 +641,7 @@ impl MsixCapability {
             return;
         }
 
-        let mut pending = self.pending.write().unwrap_or_else(|e| e.into_inner());
+        let mut pending = self.pending.write();
         let qword = vector / 64;
         let bit = vector % 64;
         pending[qword] &= !(1 << bit);
@@ -652,7 +653,7 @@ impl MsixCapability {
             return false;
         }
 
-        let pending = self.pending.read().unwrap_or_else(|e| e.into_inner());
+        let pending = self.pending.read();
         let qword = vector / 64;
         let bit = vector % 64;
         pending[qword] & (1 << bit) != 0
@@ -660,7 +661,7 @@ impl MsixCapability {
 
     /// Read PBA
     pub fn read_pba(&self, qword_index: usize) -> u64 {
-        let pending = self.pending.read().unwrap_or_else(|e| e.into_inner());
+        let pending = self.pending.read();
         if qword_index < pending.len() {
             pending[qword_index]
         } else {
@@ -746,12 +747,12 @@ impl MsiController {
     where
         F: Fn(MsiMessage) + Send + Sync + 'static,
     {
-        *self.callback.write().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(callback));
+        *self.callback.write() = Some(Box::new(callback));
     }
 
     /// Deliver an MSI interrupt
     pub fn deliver(&self, message: MsiMessage) {
-        if let Some(ref cb) = *self.callback.read().unwrap_or_else(|e| e.into_inner()) {
+        if let Some(ref cb) = *self.callback.read() {
             cb(message);
         }
     }

@@ -2,9 +2,11 @@
 name = "hv1-boot"
 version.workspace = true
 edition = "2024"  # Requires nightly Rust
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "HyperMachine Type-1 Hypervisor Bootable Image"
@@ -27,3 +29,6 @@ bootloader = "0.11"
 default = ["intel", "amd"]
 intel = []
 amd = []
+
+[lints]
+workspace = true

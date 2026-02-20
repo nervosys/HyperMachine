@@ -21,13 +21,11 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = [
-    "fileapi",
-    "handleapi",
-    "winbase",
-    "winnt",
-    "minwindef",
-    "ioapiset",
+windows-sys = { version = "0.59", features = [
+    "Win32_Storage_FileSystem",
+    "Win32_Foundation",
+    "Win32_System_IO",
+    "Win32_Security",
 ] }
 
 [lints]

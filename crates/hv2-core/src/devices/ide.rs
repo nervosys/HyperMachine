@@ -16,7 +16,9 @@
 
 use crate::{Device, DeviceType, Error, Result};
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 /// IDE primary channel command port base
 pub const IDE_PRIMARY_BASE: u16 = 0x1F0;
@@ -614,36 +616,36 @@ impl IdeController {
 
     /// Attach a disk to the primary master
     pub fn attach_primary_master(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.primary.lock().unwrap_or_else(|e| e.into_inner());
+        let mut channel = self.primary.lock();
         channel.master = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Attach a disk to the primary slave
     pub fn attach_primary_slave(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.primary.lock().unwrap_or_else(|e| e.into_inner());
+        let mut channel = self.primary.lock();
         channel.slave = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Attach a disk to the secondary master
     pub fn attach_secondary_master(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.secondary.lock().unwrap_or_else(|e| e.into_inner());
+        let mut channel = self.secondary.lock();
         channel.master = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Attach a disk to the secondary slave
     pub fn attach_secondary_slave(&self, size_bytes: u64, model: &str) {
-        let mut channel = self.secondary.lock().unwrap_or_else(|e| e.into_inner());
+        let mut channel = self.secondary.lock();
         channel.slave = IdeDrive::new_disk(size_bytes, model);
     }
 
     /// Check if primary channel has pending interrupt (IRQ 14)
     pub fn primary_interrupt_pending(&self) -> bool {
-        self.primary.lock().unwrap_or_else(|e| e.into_inner()).interrupt_pending
+        self.primary.lock().interrupt_pending
     }
 
     /// Check if secondary channel has pending interrupt (IRQ 15)
     pub fn secondary_interrupt_pending(&self) -> bool {
-        self.secondary.lock().unwrap_or_else(|e| e.into_inner()).interrupt_pending
+        self.secondary.lock().interrupt_pending
     }
 
     /// Read a word (16-bit) from the data port
@@ -653,7 +655,7 @@ impl IdeController {
         } else {
             &self.secondary
         };
-        let mut ch = channel.lock().unwrap_or_else(|e| e.into_inner());
+        let mut ch = channel.lock();
 
         let low = ch.read_command_reg(regs::DATA) as u16;
         let high = ch.read_command_reg(regs::DATA) as u16;
@@ -667,7 +669,7 @@ impl IdeController {
         } else {
             &self.secondary
         };
-        let mut ch = channel.lock().unwrap_or_else(|e| e.into_inner());
+        let mut ch = channel.lock();
 
         ch.write_command_reg(regs::DATA, value as u8);
         ch.write_command_reg(regs::DATA, (value >> 8) as u8);
@@ -678,14 +680,14 @@ impl IdeController {
         match port {
             IDE_PRIMARY_BASE..=0x1F7 => {
                 let offset = port - IDE_PRIMARY_BASE;
-                self.primary.lock().unwrap_or_else(|e| e.into_inner()).read_command_reg(offset)
+                self.primary.lock().read_command_reg(offset)
             }
-            IDE_PRIMARY_CTRL => self.primary.lock().unwrap_or_else(|e| e.into_inner()).read_control_reg(),
+            IDE_PRIMARY_CTRL => self.primary.lock().read_control_reg(),
             IDE_SECONDARY_BASE..=0x177 => {
                 let offset = port - IDE_SECONDARY_BASE;
-                self.secondary.lock().unwrap_or_else(|e| e.into_inner()).read_command_reg(offset)
+                self.secondary.lock().read_command_reg(offset)
             }
-            IDE_SECONDARY_CTRL => self.secondary.lock().unwrap_or_else(|e| e.into_inner()).read_control_reg(),
+            IDE_SECONDARY_CTRL => self.secondary.lock().read_control_reg(),
             _ => 0xFF,
         }
     }
@@ -697,21 +699,19 @@ impl IdeController {
                 let offset = port - IDE_PRIMARY_BASE;
                 self.primary
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner())
                     .write_command_reg(offset, value);
             }
             IDE_PRIMARY_CTRL => {
-                self.primary.lock().unwrap_or_else(|e| e.into_inner()).write_control_reg(value);
+                self.primary.lock().write_control_reg(value);
             }
             IDE_SECONDARY_BASE..=0x177 => {
                 let offset = port - IDE_SECONDARY_BASE;
                 self.secondary
                     .lock()
-                    .unwrap_or_else(|e| e.into_inner())
                     .write_command_reg(offset, value);
             }
             IDE_SECONDARY_CTRL => {
-                self.secondary.lock().unwrap_or_else(|e| e.into_inner()).write_control_reg(value);
+                self.secondary.lock().write_control_reg(value);
             }
             _ => {}
         }
@@ -769,8 +769,8 @@ impl Device for IdeController {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        self.primary.lock().unwrap_or_else(|e| e.into_inner()).reset();
-        self.secondary.lock().unwrap_or_else(|e| e.into_inner()).reset();
+        self.primary.lock().reset();
+        self.secondary.lock().reset();
         Ok(())
     }
 
@@ -795,7 +795,7 @@ mod tests {
         let ide = IdeController::new();
         ide.attach_primary_master(1024 * 1024, "AetherVM Virtual Disk"); // 1MB
 
-        let channel = ide.primary.lock().unwrap();
+        let channel = ide.primary.lock();
         assert!(channel.master.present);
         assert_eq!(channel.master.total_sectors, 2048); // 1MB / 512
     }
@@ -809,7 +809,7 @@ mod tests {
         // Select slave (bit 4 = 1)
         ide.write_port(IDE_PRIMARY_BASE + regs::DRIVE_HEAD, 0xF0);
 
-        let channel = ide.primary.lock().unwrap();
+        let channel = ide.primary.lock();
         assert_eq!(channel.selected_drive, DriveSelect::Slave);
     }
 
@@ -838,7 +838,7 @@ mod tests {
 
         // Write some data directly
         {
-            let mut channel = ide.primary.lock().unwrap();
+            let mut channel = ide.primary.lock();
             channel.master.data[0..4].copy_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
         }
 
@@ -883,7 +883,7 @@ mod tests {
         }
 
         // Verify data was written
-        let channel = ide.primary.lock().unwrap();
+        let channel = ide.primary.lock();
         assert_eq!(channel.master.data[0], 0xFE);
         assert_eq!(channel.master.data[1], 0xCA);
     }

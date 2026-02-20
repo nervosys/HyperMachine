@@ -36,6 +36,8 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 /// Kernel entry point called by bootloader
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     // Initialize serial port for early debug output
+    // SAFETY: Called once at boot before any other code uses the serial port.
+    // No concurrent access is possible at this point.
     unsafe {
         hv1_core::serial::init_global_serial();
     }
@@ -47,6 +49,8 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     serial_println!("===========================================");
 
     // Initialize heap allocator
+    // SAFETY: Called once at boot with a valid heap region. HEAP_START points
+    // to an unused memory range and HEAP_SIZE does not overlap other mappings.
     unsafe {
         ALLOCATOR.lock().init(HEAP_START as *mut u8, HEAP_SIZE);
     }

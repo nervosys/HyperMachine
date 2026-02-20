@@ -57,11 +57,23 @@ pub struct GpuShader {
     pub shader_type: ShaderType,
 }
 
+impl std::fmt::Debug for GpuShader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GpuShader")
+            .field("id", &self.id)
+            .field("shader_type", &self.shader_type)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Shader types
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShaderType {
+    /// Vertex shader — processes per-vertex data
     Vertex,
+    /// Fragment shader — processes per-pixel data
     Fragment,
+    /// Compute shader — general-purpose GPU compute
     Compute,
 }
 
@@ -91,12 +103,19 @@ pub struct VirtualGpuCaps {
 /// GPU feature flags
 #[derive(Debug, Clone, Default)]
 pub struct GpuFeatures {
+    /// Compute shader support
     pub compute: bool,
+    /// Graphics pipeline support
     pub graphics: bool,
+    /// Ray tracing acceleration support
     pub ray_tracing: bool,
+    /// Bindless resource access
     pub bindless: bool,
+    /// Sparse (partially-resident) resources
     pub sparse_resources: bool,
+    /// Multi-draw indirect rendering
     pub multi_draw_indirect: bool,
+    /// GPU timestamp queries for profiling
     pub timestamp_query: bool,
 }
 
@@ -149,6 +168,7 @@ pub struct VirtualGpu {
 
 impl VirtualGpu {
     /// Create a new virtual GPU
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),

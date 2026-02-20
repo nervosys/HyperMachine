@@ -5,7 +5,8 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 /// Signature algorithm
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -367,17 +368,17 @@ impl SecureBootManager {
 
     /// Get policy
     pub fn policy(&self) -> SecureBootPolicy {
-        self.policy.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.policy.read().clone()
     }
 
     /// Set policy
     pub fn set_policy(&self, policy: SecureBootPolicy) {
-        *self.policy.write().unwrap_or_else(|e| e.into_inner()) = policy;
+        *self.policy.write() = policy;
     }
 
     /// Get current mode
     pub fn mode(&self) -> SecureBootMode {
-        self.policy.read().unwrap_or_else(|e| e.into_inner()).mode
+        self.policy.read().mode
     }
 
     /// Check if enabled
@@ -387,13 +388,13 @@ impl SecureBootManager {
 
     /// Enable secure boot
     pub fn enable(&self) -> SecureBootResult<()> {
-        let pk = self.platform_key.read().unwrap_or_else(|e| e.into_inner());
+        let pk = self.platform_key.read();
         if pk.is_none() {
             // No PK = setup mode
-            let mut policy = self.policy.write().unwrap_or_else(|e| e.into_inner());
+            let mut policy = self.policy.write();
             policy.mode = SecureBootMode::Setup;
         } else {
-            let mut policy = self.policy.write().unwrap_or_else(|e| e.into_inner());
+            let mut policy = self.policy.write();
             policy.mode = SecureBootMode::User;
         }
         self.enabled.store(true, Ordering::Release);
@@ -403,12 +404,12 @@ impl SecureBootManager {
     /// Disable secure boot
     pub fn disable(&self) {
         self.enabled.store(false, Ordering::Release);
-        self.policy.write().unwrap_or_else(|e| e.into_inner()).mode = SecureBootMode::Disabled;
+        self.policy.write().mode = SecureBootMode::Disabled;
     }
 
     /// Enroll platform key
     pub fn enroll_pk(&self, cert: Certificate) -> SecureBootResult<()> {
-        let mut pk = self.platform_key.write().unwrap_or_else(|e| e.into_inner());
+        let mut pk = self.platform_key.write();
         if pk.is_some() {
             return Err(SecureBootError::AlreadyEnrolled);
         }
@@ -423,7 +424,7 @@ impl SecureBootManager {
 
         // Transition from setup to user mode
         if self.is_enabled() {
-            self.policy.write().unwrap_or_else(|e| e.into_inner()).mode = SecureBootMode::User;
+            self.policy.write().mode = SecureBootMode::User;
         }
 
         Ok(())
@@ -431,7 +432,7 @@ impl SecureBootManager {
 
     /// Get platform key
     pub fn get_pk(&self) -> Option<Certificate> {
-        self.platform_key.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.platform_key.read().clone()
     }
 
     /// Add key exchange key
@@ -439,7 +440,7 @@ impl SecureBootManager {
         if cert.cert_type != CertificateType::KeyExchangeKey {
             return Err(SecureBootError::InvalidCertificate("Not a KEK".to_string()));
         }
-        self.keks.write().unwrap_or_else(|e| e.into_inner()).push(cert);
+        self.keks.write().push(cert);
         Ok(())
     }
 
@@ -450,7 +451,7 @@ impl SecureBootManager {
                 "Not a db certificate".to_string(),
             ));
         }
-        self.db.write().unwrap_or_else(|e| e.into_inner()).push(cert);
+        self.db.write().push(cert);
         Ok(())
     }
 
@@ -461,7 +462,7 @@ impl SecureBootManager {
                 "Not a dbx certificate".to_string(),
             ));
         }
-        self.dbx.write().unwrap_or_else(|e| e.into_inner()).push(cert);
+        self.dbx.write().push(cert);
         Ok(())
     }
 
@@ -469,7 +470,6 @@ impl SecureBootManager {
     pub fn allow_hash(&self, hash: Vec<u8>, description: impl Into<String>) {
         self.hash_allowlist
             .write()
-            .unwrap_or_else(|e| e.into_inner())
             .insert(hash, description.into());
     }
 
@@ -477,18 +477,17 @@ impl SecureBootManager {
     pub fn block_hash(&self, hash: Vec<u8>, description: impl Into<String>) {
         self.hash_blocklist
             .write()
-            .unwrap_or_else(|e| e.into_inner())
             .insert(hash, description.into());
     }
 
     /// Check if hash is allowed
     pub fn is_hash_allowed(&self, hash: &[u8]) -> bool {
-        self.hash_allowlist.read().unwrap_or_else(|e| e.into_inner()).contains_key(hash)
+        self.hash_allowlist.read().contains_key(hash)
     }
 
     /// Check if hash is blocked
     pub fn is_hash_blocked(&self, hash: &[u8]) -> bool {
-        self.hash_blocklist.read().unwrap_or_else(|e| e.into_inner()).contains_key(hash)
+        self.hash_blocklist.read().contains_key(hash)
     }
 
     /// Verify a boot component
@@ -507,7 +506,7 @@ impl SecureBootManager {
         }
 
         // If not enabled or in audit mode, pass through
-        let policy = self.policy.read().unwrap_or_else(|e| e.into_inner());
+        let policy = self.policy.read();
         if !self.is_enabled() || policy.mode == SecureBootMode::Disabled {
             return VerificationResult::Success;
         }
@@ -533,8 +532,8 @@ impl SecureBootManager {
         };
 
         // Verify signature against db
-        let db = self.db.read().unwrap_or_else(|e| e.into_inner());
-        let dbx = self.dbx.read().unwrap_or_else(|e| e.into_inner());
+        let db = self.db.read();
+        let dbx = self.dbx.read();
 
         // Check if signer is in dbx (revoked)
         if let Some(ref signer) = signature.signer {
@@ -568,28 +567,28 @@ impl SecureBootManager {
             enabled: self.is_enabled(),
             verification_count: self.verification_count.load(Ordering::Relaxed),
             verification_failures: self.verification_failures.load(Ordering::Relaxed),
-            pk_enrolled: self.platform_key.read().unwrap_or_else(|e| e.into_inner()).is_some(),
-            kek_count: self.keks.read().unwrap_or_else(|e| e.into_inner()).len(),
-            db_count: self.db.read().unwrap_or_else(|e| e.into_inner()).len(),
-            dbx_count: self.dbx.read().unwrap_or_else(|e| e.into_inner()).len(),
-            allowlist_count: self.hash_allowlist.read().unwrap_or_else(|e| e.into_inner()).len(),
-            blocklist_count: self.hash_blocklist.read().unwrap_or_else(|e| e.into_inner()).len(),
+            pk_enrolled: self.platform_key.read().is_some(),
+            kek_count: self.keks.read().len(),
+            db_count: self.db.read().len(),
+            dbx_count: self.dbx.read().len(),
+            allowlist_count: self.hash_allowlist.read().len(),
+            blocklist_count: self.hash_blocklist.read().len(),
         }
     }
 
     /// Get KEK count
     pub fn kek_count(&self) -> usize {
-        self.keks.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.keks.read().len()
     }
 
     /// Get db count
     pub fn db_count(&self) -> usize {
-        self.db.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.db.read().len()
     }
 
     /// Get dbx count
     pub fn dbx_count(&self) -> usize {
-        self.dbx.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.dbx.read().len()
     }
 }
 

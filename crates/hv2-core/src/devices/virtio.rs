@@ -15,7 +15,9 @@
 //! - Virtio Spec: https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html
 
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 /// Virtio vendor ID
 pub const VIRTIO_VENDOR_ID: u16 = 0x1AF4;
@@ -642,8 +644,8 @@ impl SharedVirtioNet {
     }
 
     /// Get inner device
-    pub fn lock(&self) -> std::sync::MutexGuard<'_, VirtioNet> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    pub fn lock(&self) -> parking_lot::MutexGuard<'_, VirtioNet> {
+        self.inner.lock()
     }
 }
 

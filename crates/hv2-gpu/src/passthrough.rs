@@ -25,6 +25,7 @@ pub struct PciAddress {
 
 impl PciAddress {
     /// Create a new PCI address
+    #[must_use]
     pub fn new(domain: u16, bus: u8, device: u8, function: u8) -> Self {
         Self {
             domain,
@@ -104,6 +105,7 @@ pub struct PassthroughConfig {
 
 impl PassthroughConfig {
     /// Create a new passthrough config
+    #[must_use]
     pub fn new(pci_address: PciAddress, vendor_id: u16, device_id: u16) -> Self {
         Self {
             pci_address,
@@ -337,6 +339,7 @@ pub struct GpuPassthrough {
 
 impl GpuPassthrough {
     /// Create a new GPU passthrough manager
+    #[must_use]
     pub fn new(config: PassthroughConfig) -> Self {
         Self {
             config,

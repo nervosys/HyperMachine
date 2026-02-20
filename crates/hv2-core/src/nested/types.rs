@@ -460,6 +460,41 @@ pub enum VmxInstructionError {
     InvalidOperandToInveptInvvpid = 28,
 }
 
+impl std::fmt::Display for VmxInstructionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Success => write!(f, "VMX success"),
+            Self::VmcallInRoot => write!(f, "VMCALL executed in VMX root operation"),
+            Self::VmclearInvalidAddr => write!(f, "VMCLEAR with invalid physical address"),
+            Self::VmclearWithVmxonPtr => write!(f, "VMCLEAR with VMXON pointer"),
+            Self::VmlaunchNonclearVmcs => write!(f, "VMLAUNCH with non-clear VMCS"),
+            Self::VmresumeNonlaunchedVmcs => write!(f, "VMRESUME with non-launched VMCS"),
+            Self::VmresumeAfterVmxoff => write!(f, "VMRESUME after VMXOFF"),
+            Self::VmEntryInvalidControlField => write!(f, "VM entry with invalid control field(s)"),
+            Self::VmEntryInvalidHostState => write!(f, "VM entry with invalid host-state field(s)"),
+            Self::VmptrldInvalidAddr => write!(f, "VMPTRLD with invalid physical address"),
+            Self::VmptrldWithVmxonPtr => write!(f, "VMPTRLD with VMXON pointer"),
+            Self::VmptrldIncorrectVmcsRevision => write!(f, "VMPTRLD with incorrect VMCS revision"),
+            Self::VmreadVmwriteUnsupportedField => write!(f, "VMREAD/VMWRITE from/to unsupported VMCS field"),
+            Self::VmwriteReadonlyField => write!(f, "VMWRITE to read-only VMCS field"),
+            Self::VmxonInRoot => write!(f, "VMXON executed in VMX root operation"),
+            Self::VmEntryInvalidExecVmcsPtr => write!(f, "VM entry with invalid executive-VMCS pointer"),
+            Self::VmEntryNonlaunchedExecVmcs => write!(f, "VM entry with non-launched executive VMCS"),
+            Self::VmEntryExecVmcsPtrNotVmxonPtr => write!(f, "VM entry with executive-VMCS pointer not VMXON pointer"),
+            Self::VmcallNonclearVmcs => write!(f, "VMCALL with non-clear VMCS"),
+            Self::VmcallInvalidVmExitCtl => write!(f, "VMCALL with invalid VM-exit control fields"),
+            Self::VmcallIncorrectMsegRevision => write!(f, "VMCALL with incorrect MSEG revision"),
+            Self::VmxoffUnderDualMonitor => write!(f, "VMXOFF under dual-monitor treatment"),
+            Self::VmcallInvalidSmmFeatures => write!(f, "VMCALL with invalid SMM-monitor features"),
+            Self::VmEntryInvalidVmExecCtl => write!(f, "VM entry with invalid VM-execution control fields"),
+            Self::VmEntryEventsBlockedMovSs => write!(f, "VM entry with events blocked by MOV SS"),
+            Self::InvalidOperandToInveptInvvpid => write!(f, "invalid operand to INVEPT/INVVPID"),
+        }
+    }
+}
+
+impl std::error::Error for VmxInstructionError {}
+
 /// Guest activity state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u32)]

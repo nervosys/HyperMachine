@@ -9,8 +9,8 @@ use super::types::{
     StatusCode, TraceFlags, TraceId,
 };
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use parking_lot::{Mutex, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Span processor trait for handling completed spans
@@ -29,9 +29,14 @@ pub trait SpanProcessor: Send + Sync {
 }
 
 /// Simple span processor that immediately exports spans
-#[derive(Debug)]
 pub struct SimpleSpanProcessor {
     exporter: Arc<dyn SpanExporter>,
+}
+
+impl std::fmt::Debug for SimpleSpanProcessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SimpleSpanProcessor").finish()
+    }
 }
 
 impl SimpleSpanProcessor {
@@ -48,7 +53,7 @@ impl SpanProcessor for SimpleSpanProcessor {
 
     fn on_end(&self, span: SpanData) {
         if let Err(e) = self.exporter.export(vec![span]) {
-            tracing::warn!(error = %e, "SimpleSpanProcessor: span export failed");
+            ::tracing::warn!(error = %e, "SimpleSpanProcessor: span export failed");
         }
     }
 
@@ -94,7 +99,7 @@ impl BatchSpanProcessor {
 
     fn flush_batch(&self) -> Result<(), TracerError> {
         let batch: Vec<SpanData> = {
-            let mut buffer = self.buffer.lock().map_err(|_| TracerError::LockError)?;
+            let mut buffer = self.buffer.lock();
             if buffer.is_empty() {
                 return Ok(());
             }
@@ -115,21 +120,20 @@ impl SpanProcessor for BatchSpanProcessor {
     }
 
     fn on_end(&self, span: SpanData) {
-        if let Ok(mut buffer) = self.buffer.lock() {
-            if buffer.len() < self.max_queue_size {
-                buffer.push(span);
-            }
-            // Auto-flush if batch size reached
-            if buffer.len() >= self.max_batch_size {
-                drop(buffer);
-                let _ = self.flush_batch();
-            }
+        let mut buffer = self.buffer.lock();
+        if buffer.len() < self.max_queue_size {
+            buffer.push(span);
+        }
+        // Auto-flush if batch size reached
+        if buffer.len() >= self.max_batch_size {
+            drop(buffer);
+            let _ = self.flush_batch();
         }
     }
 
     fn force_flush(&self) -> Result<(), TracerError> {
         while {
-            let buffer = self.buffer.lock().map_err(|_| TracerError::LockError)?;
+            let buffer = self.buffer.lock();
             !buffer.is_empty()
         } {
             self.flush_batch()?;
@@ -166,22 +170,18 @@ impl InMemorySpanExporter {
 
     /// Get exported spans
     pub fn get_spans(&self) -> Vec<SpanData> {
-        self.spans.lock().map(|s| s.clone()).unwrap_or_default()
+        self.spans.lock().clone()
     }
 
     /// Clear exported spans
     pub fn clear(&self) {
-        if let Ok(mut spans) = self.spans.lock() {
-            spans.clear();
-        }
+        self.spans.lock().clear();
     }
 }
 
 impl SpanExporter for InMemorySpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
-        if let Ok(mut buffer) = self.spans.lock() {
-            buffer.extend(spans);
-        }
+        self.spans.lock().extend(spans);
         Ok(())
     }
 
@@ -391,7 +391,7 @@ impl Span {
     }
 
     /// End the span
-    pub fn end(mut self) {
+    pub fn end(self) {
         self.end_with_timestamp(current_timestamp_nanos());
     }
 
@@ -400,7 +400,7 @@ impl Span {
         if !self.ended {
             self.ended = true;
             self.data.end_time = timestamp;
-            self.tracer.end_span(self.data);
+            self.tracer.end_span(self.data.clone());
         }
     }
 
@@ -452,10 +452,9 @@ struct TracerInner {
 
 impl TracerInner {
     fn end_span(&self, span: SpanData) {
-        if let Ok(processors) = self.processors.read() {
-            for processor in processors.iter() {
-                processor.on_end(span.clone());
-            }
+        let processors = self.processors.read();
+        for processor in processors.iter() {
+            processor.on_end(span.clone());
         }
     }
 }
@@ -561,11 +560,11 @@ impl Tracer {
         };
 
         // Notify processors
-        if let Ok(processors) = self.inner.processors.read() {
-            for processor in processors.iter() {
-                processor.on_start(&data, builder.parent.as_ref());
-            }
+        let processors = self.inner.processors.read();
+        for processor in processors.iter() {
+            processor.on_start(&data, builder.parent.as_ref());
         }
+        drop(processors);
 
         Span {
             data,
@@ -577,10 +576,9 @@ impl Tracer {
 
     /// Force flush all span processors
     pub fn force_flush(&self) -> TracerResult<()> {
-        if let Ok(processors) = self.inner.processors.read() {
-            for processor in processors.iter() {
-                processor.force_flush()?;
-            }
+        let processors = self.inner.processors.read();
+        for processor in processors.iter() {
+            processor.force_flush()?;
         }
         Ok(())
     }
@@ -718,7 +716,7 @@ fn current_timestamp_nanos() -> u64 {
 
 // Thread-local context storage
 thread_local! {
-    static CURRENT_CONTEXT: RefCell<Vec<SpanContext>> = RefCell::new(Vec::new());
+    static CURRENT_CONTEXT: RefCell<Vec<SpanContext>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Context management
@@ -794,9 +792,8 @@ mod tests {
         span.set_attribute("http.method", "GET");
         span.add_event_with_name("processing");
         span.set_ok();
+        // end() consumes the span, ensuring it is finalized
         span.end();
-
-        assert!(!span.is_recording());
     }
 
     #[test]

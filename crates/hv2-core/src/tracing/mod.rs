@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use hv2_core::tracing::{
+//! use hv2_core::hv_tracing::{
 //!     TracerProvider, InMemorySpanExporter, Context,
 //!     CpuProfiler, FlameGraphBuilder,
 //! };
@@ -346,13 +346,13 @@ mod tests {
         state.set("vendor1", "value1");
         state.set("vendor2", "value2");
 
-        assert_eq!(state.get("vendor1"), Some(&"value1".to_string()));
-        assert_eq!(state.get("vendor2"), Some(&"value2".to_string()));
+        assert_eq!(state.get("vendor1"), Some("value1"));
+        assert_eq!(state.get("vendor2"), Some("value2"));
         assert_eq!(state.get("vendor3"), None);
 
         // Parse from header
-        let parsed = TraceState::from_header("vendor1=value1,vendor2=value2").unwrap();
-        assert_eq!(parsed.get("vendor1"), Some(&"value1".to_string()));
+        let parsed = TraceState::from_header("vendor1=value1,vendor2=value2");
+        assert_eq!(parsed.get("vendor1"), Some("value1"));
 
         // Convert back to header
         let header = state.to_header();
@@ -363,11 +363,9 @@ mod tests {
     #[test]
     fn test_resource() {
         let resource = Resource::default_service("my-service", "1.0.0");
-        
-        let service_name = resource.attributes.iter()
-            .find(|a| a.key == "service.name")
-            .map(|a| &a.value);
-        
+
+        let service_name = resource.get("service.name");
+
         assert!(matches!(service_name, Some(AttributeValue::String(s)) if s == "my-service"));
     }
 }

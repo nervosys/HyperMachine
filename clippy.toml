@@ -9,3 +9,6 @@ type-complexity-threshold = 300
 
 # Cognitive complexity threshold
 cognitive-complexity-threshold = 30
+
+# Minimum supported Rust version (must match workspace Cargo.toml)
+msrv = "1.87"

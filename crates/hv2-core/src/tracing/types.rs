@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Trace ID - 128-bit unique identifier for a trace
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -64,6 +64,11 @@ impl TraceId {
     /// Get low 64 bits
     pub fn low(&self) -> u64 {
         self.low
+    }
+
+    /// Get as u128
+    pub fn as_u128(&self) -> u128 {
+        ((self.high as u128) << 64) | (self.low as u128)
     }
 
     /// Check if trace ID is valid (non-zero)
@@ -393,9 +398,10 @@ impl TraceState {
 }
 
 /// Span kind - describes the relationship of the span
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum SpanKind {
     /// Internal operation (default)
+    #[default]
     Internal,
     /// Server handling a request
     Server,
@@ -405,12 +411,6 @@ pub enum SpanKind {
     Producer,
     /// Consumer receiving a message
     Consumer,
-}
-
-impl Default for SpanKind {
-    fn default() -> Self {
-        SpanKind::Internal
-    }
 }
 
 impl fmt::Display for SpanKind {
@@ -426,20 +426,15 @@ impl fmt::Display for SpanKind {
 }
 
 /// Span status code
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum StatusCode {
     /// Unset (default)
+    #[default]
     Unset,
     /// Operation completed successfully
     Ok,
     /// Operation failed with an error
     Error,
-}
-
-impl Default for StatusCode {
-    fn default() -> Self {
-        StatusCode::Unset
-    }
 }
 
 /// Span status
@@ -890,7 +885,6 @@ impl Sampler for TraceIdRatioSampler {
 }
 
 /// Parent-based sampler
-#[derive(Debug)]
 pub struct ParentBasedSampler {
     /// Root sampler (when no parent)
     root: Box<dyn Sampler>,
@@ -902,6 +896,14 @@ pub struct ParentBasedSampler {
     local_parent_sampled: Box<dyn Sampler>,
     /// Local parent not sampled
     local_parent_not_sampled: Box<dyn Sampler>,
+}
+
+impl fmt::Debug for ParentBasedSampler {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ParentBasedSampler")
+            .field("root", &self.root.description())
+            .finish()
+    }
 }
 
 impl ParentBasedSampler {
@@ -1208,7 +1210,7 @@ mod tests {
         let i: AttributeValue = 42i64.into();
         assert!(matches!(i, AttributeValue::Int(42)));
 
-        let f: AttributeValue = 3.14f64.into();
+        let f: AttributeValue = 2.78f64.into();
         assert!(matches!(f, AttributeValue::Float(_)));
     }
 

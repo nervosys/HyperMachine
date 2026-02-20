@@ -6,6 +6,7 @@
 
 
 /// Direction of I/O operation
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IoDirection {
     /// I/O read (IN instruction)
@@ -18,6 +19,7 @@ pub enum IoDirection {
 ///
 /// This enum represents all the reasons why a VM might exit from
 /// hardware virtualization mode and return control to the hypervisor.
+#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub enum VmExit {
     /// Memory-mapped I/O access

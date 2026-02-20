@@ -27,7 +27,7 @@ parking_lot = { workspace = true }
 
 # gRPC
 tonic = { workspace = true }
-tonic-build = { workspace = true }
+tonic-prost = { workspace = true }
 prost = { workspace = true }
 
 # REST API
@@ -39,7 +39,7 @@ chrono = { workspace = true }
 reqwest = { workspace = true }
 
 [build-dependencies]
-tonic-build = { workspace = true }
+tonic-prost-build = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

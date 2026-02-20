@@ -67,7 +67,8 @@
 
 use crate::Result;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -419,7 +420,7 @@ impl LocalApic {
     where
         F: Fn(u8, u8, IcrDeliveryMode) + Send + Sync + 'static,
     {
-        *self.ipi_callback.write().unwrap() = Some(Box::new(callback));
+        *self.ipi_callback.write() = Some(Box::new(callback));
     }
 
     /// Set EOI callback
@@ -427,7 +428,7 @@ impl LocalApic {
     where
         F: Fn(u8) + Send + Sync + 'static,
     {
-        *self.eoi_callback.write().unwrap() = Some(Box::new(callback));
+        *self.eoi_callback.write() = Some(Box::new(callback));
     }
 
     /// Get the APIC ID
@@ -480,21 +481,21 @@ impl LocalApic {
                 if offset >= regs::ISR_BASE && offset < regs::ISR_BASE + 0x80 {
                     let idx = ((offset - regs::ISR_BASE) / 0x10) as usize;
                     if idx < 8 {
-                        let isr = self.isr.read().unwrap();
+                        let isr = self.isr.read();
                         return Ok(isr[idx]);
                     }
                 }
                 if offset >= regs::TMR_BASE && offset < regs::TMR_BASE + 0x80 {
                     let idx = ((offset - regs::TMR_BASE) / 0x10) as usize;
                     if idx < 8 {
-                        let tmr = self.tmr.read().unwrap();
+                        let tmr = self.tmr.read();
                         return Ok(tmr[idx]);
                     }
                 }
                 if offset >= regs::IRR_BASE && offset < regs::IRR_BASE + 0x80 {
                     let idx = ((offset - regs::IRR_BASE) / 0x10) as usize;
                     if idx < 8 {
-                        let irr = self.irr.read().unwrap();
+                        let irr = self.irr.read();
                         return Ok(irr[idx]);
                     }
                 }
@@ -586,14 +587,14 @@ impl LocalApic {
     fn handle_eoi(&self) {
         // Find highest priority in-service interrupt
         let vector = {
-            let isr = self.isr.read().unwrap();
+            let isr = self.isr.read();
             self.find_highest_set_bit(&isr)
         };
 
         if let Some(vec) = vector {
             // Clear ISR bit
             {
-                let mut isr = self.isr.write().unwrap();
+                let mut isr = self.isr.write();
                 let idx = (vec / 32) as usize;
                 let bit = vec % 32;
                 isr[idx] &= !(1 << bit);
@@ -601,7 +602,7 @@ impl LocalApic {
 
             // Check TMR for level-triggered
             let is_level = {
-                let tmr = self.tmr.read().unwrap();
+                let tmr = self.tmr.read();
                 let idx = (vec / 32) as usize;
                 let bit = vec % 32;
                 tmr[idx] & (1 << bit) != 0
@@ -609,7 +610,7 @@ impl LocalApic {
 
             if is_level {
                 // Notify IOAPIC
-                if let Some(ref cb) = *self.eoi_callback.read().unwrap() {
+                if let Some(ref cb) = *self.eoi_callback.read() {
                     cb(vec);
                 }
             }
@@ -635,7 +636,7 @@ impl LocalApic {
         };
 
         // Deliver via callback
-        if let Some(ref cb) = *self.ipi_callback.read().unwrap() {
+        if let Some(ref cb) = *self.ipi_callback.read() {
             for &target in &targets {
                 cb(target, vector, delmode);
             }
@@ -653,13 +654,13 @@ impl LocalApic {
 
         // Set IRR
         {
-            let mut irr = self.irr.write().unwrap();
+            let mut irr = self.irr.write();
             irr[idx] |= 1 << bit;
         }
 
         // Set TMR if level-triggered
         if level_triggered {
-            let mut tmr = self.tmr.write().unwrap();
+            let mut tmr = self.tmr.write();
             tmr[idx] |= 1 << bit;
         }
     }
@@ -672,7 +673,7 @@ impl LocalApic {
             std::cmp::max(tpr & 0xF0, isr_prio << 4) as u8
         };
 
-        let irr = self.irr.read().unwrap();
+        let irr = self.irr.read();
         let vector = self.find_highest_set_bit(&irr)?;
 
         // Check if vector priority beats PPR
@@ -690,20 +691,20 @@ impl LocalApic {
 
         // Clear IRR
         {
-            let mut irr = self.irr.write().unwrap();
+            let mut irr = self.irr.write();
             irr[idx] &= !(1 << bit);
         }
 
         // Set ISR
         {
-            let mut isr = self.isr.write().unwrap();
+            let mut isr = self.isr.write();
             isr[idx] |= 1 << bit;
         }
     }
 
     /// Get highest priority in ISR
     fn get_highest_isr_priority(&self) -> u8 {
-        let isr = self.isr.read().unwrap();
+        let isr = self.isr.read();
         self.find_highest_set_bit(&isr).map(|v| v >> 4).unwrap_or(0)
     }
 
@@ -785,9 +786,9 @@ impl LocalApic {
         self.timer_ccr.store(0, Ordering::Relaxed);
         self.timer_dcr.store(0, Ordering::Relaxed);
 
-        *self.isr.write().unwrap() = [0; 8];
-        *self.tmr.write().unwrap() = [0; 8];
-        *self.irr.write().unwrap() = [0; 8];
+        *self.isr.write() = [0; 8];
+        *self.tmr.write() = [0; 8];
+        *self.irr.write() = [0; 8];
     }
 }
 

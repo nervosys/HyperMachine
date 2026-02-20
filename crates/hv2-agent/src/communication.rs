@@ -8,8 +8,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
+
+use parking_lot::Mutex;
 
 /// Result type for communication operations
 pub type CommResult<T> = Result<T, CommError>;
@@ -775,42 +777,42 @@ impl SharedRouter {
 
     /// Register an agent
     pub fn register_agent(&self, agent: AgentInfo) {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).register_agent(agent);
+        self.inner.lock().register_agent(agent);
     }
 
     /// Unregister an agent
     pub fn unregister_agent(&self, agent_id: &str) -> Option<AgentInfo> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).unregister_agent(agent_id)
+        self.inner.lock().unregister_agent(agent_id)
     }
 
     /// Send a message
     pub fn send(&self, message: Message) -> CommResult<()> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).send(message)
+        self.inner.lock().send(message)
     }
 
     /// Receive a message
     pub fn receive(&self, agent_id: &str) -> CommResult<Option<Message>> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).receive(agent_id)
+        self.inner.lock().receive(agent_id)
     }
 
     /// Create a channel
     pub fn create_channel(&self, channel: Channel) {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).create_channel(channel);
+        self.inner.lock().create_channel(channel);
     }
 
     /// Subscribe to a channel
     pub fn subscribe(&self, agent_id: &str, channel_name: &str) -> CommResult<()> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).subscribe(agent_id, channel_name)
+        self.inner.lock().subscribe(agent_id, channel_name)
     }
 
     /// Get agent count
     pub fn agent_count(&self) -> usize {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).agent_count()
+        self.inner.lock().agent_count()
     }
 
     /// Get channel count
     pub fn channel_count(&self) -> usize {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).channel_count()
+        self.inner.lock().channel_count()
     }
 }
 

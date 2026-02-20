@@ -107,7 +107,7 @@ pub struct VirtqUsed {
 }
 
 /// A single virtqueue for the device
-#[derive(Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct Virtqueue {
     /// Queue size (number of descriptors)
     size: u16,
@@ -127,6 +127,7 @@ pub struct Virtqueue {
 
 impl Virtqueue {
     /// Create a new virtqueue
+    #[must_use]
     pub fn new(size: u16) -> Self {
         Self {
             size,
@@ -280,6 +281,7 @@ pub struct VirtioNet {
 
 impl VirtioNet {
     /// Create a new VirtIO network device
+    #[must_use]
     pub fn new(queue_pairs: usize) -> Self {
         let queue_pairs = queue_pairs.max(1);
         let queue_size = 256u16; // Standard queue size

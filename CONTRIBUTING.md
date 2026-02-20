@@ -15,7 +15,7 @@ Thank you for your interest in contributing to HyperMachine! This document provi
 
 ### Prerequisites
 
-- Rust 1.75 or later
+- Rust 1.87 or later (see `rust-toolchain.toml`)
 - Linux, macOS, or Windows with WSL2
 - Optional: KVM/QEMU for testing
 

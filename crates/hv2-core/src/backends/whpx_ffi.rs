@@ -35,6 +35,7 @@
 
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
+// FFI bindings — not all constants/types are used yet
 #![allow(dead_code)]
 
 use std::os::raw::{c_uint, c_void};

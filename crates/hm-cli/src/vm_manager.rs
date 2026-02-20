@@ -54,6 +54,7 @@ impl From<VMState> for VmState {
             VMState::Paused => VmState::Paused,
             VMState::Stopped => VmState::Stopped,
             VMState::Error => VmState::Error,
+            _ => VmState::Error,
         }
     }
 }

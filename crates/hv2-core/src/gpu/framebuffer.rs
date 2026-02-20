@@ -351,17 +351,17 @@ impl DisplaySurface for Framebuffer {
             match self.mode.format {
                 PixelFormat::Argb32 => {
                     let value =
-                        u32::from_le_bytes(self.data[offset..offset + 4].try_into().unwrap());
+                        u32::from_le_bytes(self.data[offset..offset + 4].try_into().expect("slice is exactly 4 bytes"));
                     Color::from_argb32(value)
                 }
                 PixelFormat::Xrgb32 => {
                     let value =
-                        u32::from_le_bytes(self.data[offset..offset + 4].try_into().unwrap());
+                        u32::from_le_bytes(self.data[offset..offset + 4].try_into().expect("slice is exactly 4 bytes"));
                     Color::from_xrgb32(value)
                 }
                 PixelFormat::Rgb565 => {
                     let value =
-                        u16::from_le_bytes(self.data[offset..offset + 2].try_into().unwrap());
+                        u16::from_le_bytes(self.data[offset..offset + 2].try_into().expect("slice is exactly 2 bytes"));
                     Color::from_rgb565(value)
                 }
                 PixelFormat::Rgb24 => Color::rgb(

@@ -262,6 +262,7 @@ pub struct AArch64Cpu {
 
 impl AArch64Cpu {
     /// Create a new AArch64 CPU
+    #[must_use]
     pub fn new() -> Self {
         let mut cpu = Self {
             regs: AArch64Registers::default(),

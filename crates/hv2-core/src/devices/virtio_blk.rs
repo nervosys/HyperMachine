@@ -36,7 +36,8 @@
 
 use crate::Result;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 /// VirtIO block sector size
 pub const VIRTIO_BLK_SECTOR_SIZE: u32 = 512;
@@ -337,7 +338,7 @@ impl VirtioBlock {
 
     /// Read configuration
     pub fn read_config(&self, offset: u64, size: u8) -> u64 {
-        let config = self.config.read().unwrap_or_else(|e| e.into_inner());
+        let config = self.config.read();
         // SAFETY: BlockConfig is #[repr(C)] with no padding holes that could
         // cause UB when read as bytes. The pointer is valid for the lifetime
         // of the RwLockReadGuard `config`, and the size is exactly
@@ -392,7 +393,7 @@ impl VirtioBlock {
     /// Handle read request
     fn handle_read(&self, sector: u64, data: &mut [u8]) -> Status {
         let offset = sector * VIRTIO_BLK_SECTOR_SIZE as u64;
-        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
+        let storage = self.storage.read();
 
         if offset as usize + data.len() > storage.len() {
             return Status::IoErr;
@@ -409,7 +410,7 @@ impl VirtioBlock {
         }
 
         let offset = sector * VIRTIO_BLK_SECTOR_SIZE as u64;
-        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
+        let mut storage = self.storage.write();
 
         if offset as usize + data.len() > storage.len() {
             return Status::IoErr;
@@ -441,7 +442,7 @@ impl VirtioBlock {
         // For in-memory storage, just zero the region
         let offset = sector * VIRTIO_BLK_SECTOR_SIZE as u64;
         let length = num_sectors * VIRTIO_BLK_SECTOR_SIZE as u64;
-        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
+        let mut storage = self.storage.write();
 
         if offset as usize + length as usize > storage.len() {
             return Status::IoErr;
@@ -458,12 +459,12 @@ impl VirtioBlock {
 
     /// Get capacity in sectors
     pub fn capacity(&self) -> u64 {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).capacity
+        self.config.read().capacity
     }
 
     /// Get capacity in bytes
     pub fn capacity_bytes(&self) -> u64 {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).size_bytes()
+        self.config.read().size_bytes()
     }
 
     /// Check if read-only
@@ -483,7 +484,7 @@ impl VirtioBlock {
 
     /// Read from storage directly (for testing)
     pub fn read_storage(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
-        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
+        let storage = self.storage.read();
         if offset as usize + buf.len() > storage.len() {
             return Err(crate::Error::Memory(format!("Read past end of storage")));
         }
@@ -493,7 +494,7 @@ impl VirtioBlock {
 
     /// Write to storage directly (for testing)
     pub fn write_storage(&self, offset: u64, data: &[u8]) -> Result<()> {
-        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
+        let mut storage = self.storage.write();
         if offset as usize + data.len() > storage.len() {
             return Err(crate::Error::Memory(format!("Write past end of storage")));
         }

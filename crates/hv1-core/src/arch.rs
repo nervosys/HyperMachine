@@ -134,6 +134,8 @@ impl CpuFeatures {
 #[inline]
 pub fn read_rip() -> u64 {
     let rip: u64;
+    // SAFETY: `lea rip` reads the current instruction pointer into a register.
+    // This is a read-only operation with no side effects.
     unsafe {
         core::arch::asm!(
             "lea {}, [rip]",
@@ -148,6 +150,8 @@ pub fn read_rip() -> u64 {
 #[inline]
 pub fn read_rsp() -> u64 {
     let rsp: u64;
+    // SAFETY: Reads the current stack pointer into a register.
+    // Read-only operation with no side effects.
     unsafe {
         core::arch::asm!(
             "mov {}, rsp",
@@ -162,6 +166,8 @@ pub fn read_rsp() -> u64 {
 #[inline]
 pub fn read_rflags() -> u64 {
     let rflags: u64;
+    // SAFETY: `pushfq; pop` reads the RFLAGS register. The stack is
+    // temporarily used but restored, so this is safe.
     unsafe {
         core::arch::asm!(
             "pushfq",
@@ -176,6 +182,8 @@ pub fn read_rflags() -> u64 {
 /// Halt the CPU until the next interrupt
 #[inline]
 pub fn hlt() {
+    // SAFETY: `hlt` halts the CPU until the next interrupt. Caller
+    // must ensure interrupts are enabled, otherwise this hangs.
     unsafe {
         core::arch::asm!("hlt", options(nomem, nostack));
     }
@@ -184,6 +192,8 @@ pub fn hlt() {
 /// Disable interrupts
 #[inline]
 pub fn cli() {
+    // SAFETY: `cli` disables maskable interrupts. Safe to execute;
+    // caller must ensure interrupts are re-enabled later.
     unsafe {
         core::arch::asm!("cli", options(nomem, nostack));
     }
@@ -192,6 +202,8 @@ pub fn cli() {
 /// Enable interrupts
 #[inline]
 pub fn sti() {
+    // SAFETY: `sti` enables maskable interrupts. Safe to execute
+    // in any context where the interrupt handler is properly set up.
     unsafe {
         core::arch::asm!("sti", options(nomem, nostack));
     }
@@ -200,6 +212,8 @@ pub fn sti() {
 /// Pause instruction for spin loops
 #[inline]
 pub fn pause() {
+    // SAFETY: `pause` is a hint to the CPU for spin-wait loops.
+    // No side effects; safe in all contexts.
     unsafe {
         core::arch::asm!("pause", options(nomem, nostack));
     }
