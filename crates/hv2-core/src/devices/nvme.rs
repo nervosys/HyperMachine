@@ -45,7 +45,8 @@
 use crate::Result;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 /// NVMe sector size (512 bytes standard, 4096 for 4Kn)
 pub const NVME_SECTOR_SIZE: usize = 512;
@@ -677,8 +678,8 @@ impl NvmeController {
         let asq_addr = self.asq.load(Ordering::Relaxed);
         let acq_addr = self.acq.load(Ordering::Relaxed);
 
-        *self.admin_sq.write().unwrap_or_else(|e| e.into_inner()) = Some(NvmeQueue::new(0, asqsize, asq_addr));
-        *self.admin_cq.write().unwrap_or_else(|e| e.into_inner()) = Some(NvmeQueue::new(0, acqsize, acq_addr));
+        *self.admin_sq.write() = Some(NvmeQueue::new(0, asqsize, asq_addr));
+        *self.admin_cq.write() = Some(NvmeQueue::new(0, acqsize, acq_addr));
 
         self.enabled.store(true, Ordering::Relaxed);
         self.ready.store(true, Ordering::Relaxed);
@@ -691,11 +692,11 @@ impl NvmeController {
         self.ready.store(false, Ordering::Relaxed);
         self.csts.fetch_and(!csts::RDY, Ordering::Relaxed);
 
-        *self.admin_sq.write().unwrap_or_else(|e| e.into_inner()) = None;
-        *self.admin_cq.write().unwrap_or_else(|e| e.into_inner()) = None;
+        *self.admin_sq.write() = None;
+        *self.admin_cq.write() = None;
 
-        let mut io_sq = self.io_sq.write().unwrap_or_else(|e| e.into_inner());
-        let mut io_cq = self.io_cq.write().unwrap_or_else(|e| e.into_inner());
+        let mut io_sq = self.io_sq.write();
+        let mut io_cq = self.io_cq.write();
         for i in 0..NVME_MAX_IO_QUEUES as usize {
             io_sq[i] = None;
             io_cq[i] = None;
@@ -721,11 +722,11 @@ impl NvmeController {
     /// Update submission queue tail
     fn update_sq_tail(&self, qid: u16, tail: u16) {
         if qid == 0 {
-            if let Some(ref mut sq) = *self.admin_sq.write().unwrap_or_else(|e| e.into_inner()) {
+            if let Some(ref mut sq) = *self.admin_sq.write() {
                 sq.tail = tail;
             }
         } else if (qid as usize) <= NVME_MAX_IO_QUEUES as usize {
-            let mut io_sq = self.io_sq.write().unwrap_or_else(|e| e.into_inner());
+            let mut io_sq = self.io_sq.write();
             if let Some(ref mut sq) = io_sq[(qid - 1) as usize] {
                 sq.tail = tail;
             }
@@ -735,11 +736,11 @@ impl NvmeController {
     /// Update completion queue head
     fn update_cq_head(&self, qid: u16, head: u16) {
         if qid == 0 {
-            if let Some(ref mut cq) = *self.admin_cq.write().unwrap_or_else(|e| e.into_inner()) {
+            if let Some(ref mut cq) = *self.admin_cq.write() {
                 cq.head = head;
             }
         } else if (qid as usize) <= NVME_MAX_IO_QUEUES as usize {
-            let mut io_cq = self.io_cq.write().unwrap_or_else(|e| e.into_inner());
+            let mut io_cq = self.io_cq.write();
             if let Some(ref mut cq) = io_cq[(qid - 1) as usize] {
                 cq.head = head;
             }
@@ -818,7 +819,7 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueSize, true);
         }
 
-        let mut io_cq = self.io_cq.write().unwrap_or_else(|e| e.into_inner());
+        let mut io_cq = self.io_cq.write();
         let mut cq = NvmeQueue::new(qid, qsize, sqe.dptr_prp1);
         cq.iv = iv;
         cq.ien = ien;
@@ -843,7 +844,7 @@ impl NvmeController {
 
         // Verify CQ exists
         {
-            let io_cq = self.io_cq.read().unwrap_or_else(|e| e.into_inner());
+            let io_cq = self.io_cq.read();
             if cqid == 0
                 || cqid as usize > NVME_MAX_IO_QUEUES as usize
                 || io_cq[(cqid - 1) as usize].is_none()
@@ -852,7 +853,7 @@ impl NvmeController {
             }
         }
 
-        let mut io_sq = self.io_sq.write().unwrap_or_else(|e| e.into_inner());
+        let mut io_sq = self.io_sq.write();
         let mut sq = NvmeQueue::new(qid, qsize, sqe.dptr_prp1);
         sq.cq_id = cqid;
         io_sq[(qid - 1) as usize] = Some(sq);
@@ -868,7 +869,7 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueId, true);
         }
 
-        let mut io_cq = self.io_cq.write().unwrap_or_else(|e| e.into_inner());
+        let mut io_cq = self.io_cq.write();
         io_cq[(qid - 1) as usize] = None;
 
         CompletionQueueEntry::new(cid, 0, 0, StatusCode::Success, true)
@@ -882,7 +883,7 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueId, true);
         }
 
-        let mut io_sq = self.io_sq.write().unwrap_or_else(|e| e.into_inner());
+        let mut io_sq = self.io_sq.write();
         io_sq[(qid - 1) as usize] = None;
 
         CompletionQueueEntry::new(cid, 0, 0, StatusCode::Success, true)
@@ -919,7 +920,7 @@ impl NvmeController {
         let offset = slba * NVME_BLOCK_SIZE as u64;
         let length = nlb * NVME_BLOCK_SIZE as u64;
 
-        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
+        let storage = self.storage.read();
         if offset + length > storage.len() as u64 {
             return CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::InvalidField, true);
         }
@@ -936,7 +937,7 @@ impl NvmeController {
         let offset = slba * NVME_BLOCK_SIZE as u64;
         let length = nlb * NVME_BLOCK_SIZE as u64;
 
-        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
+        let storage = self.storage.read();
         if offset + length > storage.len() as u64 {
             return CompletionQueueEntry::new(cid, sq_id, 0, StatusCode::InvalidField, true);
         }
@@ -967,12 +968,12 @@ impl NvmeController {
 
     /// Get storage size
     pub fn storage_size(&self) -> u64 {
-        self.storage.read().unwrap_or_else(|e| e.into_inner()).len() as u64
+        self.storage.read().len() as u64
     }
 
     /// Read from storage (for testing)
     pub fn read_storage(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
-        let storage = self.storage.read().unwrap_or_else(|e| e.into_inner());
+        let storage = self.storage.read();
         let end = offset as usize + buf.len();
         if end > storage.len() {
             return Err(crate::Error::Memory(format!("Read past end of storage")));
@@ -983,7 +984,7 @@ impl NvmeController {
 
     /// Write to storage (for testing)
     pub fn write_storage(&self, offset: u64, data: &[u8]) -> Result<()> {
-        let mut storage = self.storage.write().unwrap_or_else(|e| e.into_inner());
+        let mut storage = self.storage.write();
         let end = offset as usize + data.len();
         if end > storage.len() {
             return Err(crate::Error::Memory(format!("Write past end of storage")));
@@ -998,7 +999,7 @@ impl std::fmt::Debug for NvmeController {
         f.debug_struct("NvmeController")
             .field("enabled", &self.enabled.load(Ordering::Relaxed))
             .field("ready", &self.ready.load(Ordering::Relaxed))
-            .field("storage_size", &self.storage.read().unwrap_or_else(|e| e.into_inner()).len())
+            .field("storage_size", &self.storage.read().len())
             .finish()
     }
 }
@@ -1220,7 +1221,7 @@ mod tests {
         // Update admin SQ tail via doorbell
         nvme.write_reg(regs::SQ_TDBL_BASE, 5, 4);
 
-        let admin_sq = nvme.admin_sq.read().unwrap();
+        let admin_sq = nvme.admin_sq.read();
         assert_eq!(admin_sq.as_ref().unwrap().tail, 5);
     }
 }

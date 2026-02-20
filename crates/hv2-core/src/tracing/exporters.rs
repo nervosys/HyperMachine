@@ -6,7 +6,8 @@
 use super::tracer::{SpanExporter, TracerError};
 use super::types::{SpanData, SpanKind, StatusCode};
 use std::io::Write;
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 
 /// Console span exporter for debugging
 pub struct ConsoleSpanExporter {
@@ -104,7 +105,7 @@ impl Default for ConsoleSpanExporter {
 
 impl SpanExporter for ConsoleSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
-        let mut writer = self.writer.lock().map_err(|_| TracerError::LockError)?;
+        let mut writer = self.writer.lock();
         for span in spans {
             let output = self.format_span(&span);
             writer.write_all(output.as_bytes())
@@ -220,7 +221,7 @@ impl JaegerSpanExporter {
     }
 
     fn convert_span(&self, span: &SpanData) -> JaegerSpan {
-        let trace_bytes = span.context.trace_id.as_bytes();
+        let trace_bytes = span.context.trace_id.to_bytes();
         let trace_id_high = u64::from_be_bytes(trace_bytes[0..8].try_into().expect("TraceId is always 16 bytes"));
         let trace_id_low = u64::from_be_bytes(trace_bytes[8..16].try_into().expect("TraceId is always 16 bytes"));
 
@@ -290,11 +291,12 @@ impl JaegerSpanExporter {
             logs,
         }
     }
+}
 
 impl SpanExporter for JaegerSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
         let jaeger_spans: Vec<_> = spans.iter().map(|s| self.convert_span(s)).collect();
-        let mut buffer = self.buffer.lock().map_err(|_| TracerError::LockError)?;
+        let mut buffer = self.buffer.lock();
         buffer.extend(jaeger_spans);
         // In production, would send to UDP agent
         Ok(())
@@ -477,7 +479,7 @@ impl ZipkinSpanExporter {
 impl SpanExporter for ZipkinSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
         let zipkin_spans: Vec<_> = spans.iter().map(|s| self.convert_span(s)).collect();
-        let mut buffer = self.buffer.lock().map_err(|_| TracerError::LockError)?;
+        let mut buffer = self.buffer.lock();
         buffer.extend(zipkin_spans);
         // In production, would POST to endpoint
         Ok(())
@@ -578,11 +580,11 @@ impl OtlpSpanExporter {
             }
             json.push_str(&format!(
                 r#"{{"traceId":"{}","spanId":"{}""#,
-                hex::encode(span.context.trace_id.as_bytes()),
-                hex::encode(span.context.span_id.as_bytes())
+                hex::encode(&span.context.trace_id.to_bytes()),
+                hex::encode(&span.context.span_id.to_bytes())
             ));
             if let Some(parent) = span.parent_span_id {
-                json.push_str(&format!(r#","parentSpanId":"{}""#, hex::encode(parent.as_bytes())));
+                json.push_str(&format!(r#","parentSpanId":"{}""#, hex::encode(&parent.to_bytes())));
             }
             json.push_str(&format!(r#","name":"{}""#, span.name));
             json.push_str(&format!(r#","kind":{}"#, span.kind as u8 + 1));
@@ -620,7 +622,7 @@ impl OtlpSpanExporter {
 
 impl SpanExporter for OtlpSpanExporter {
     fn export(&self, spans: Vec<SpanData>) -> Result<(), TracerError> {
-        let mut buffer = self.buffer.lock().map_err(|_| TracerError::LockError)?;
+        let mut buffer = self.buffer.lock();
         buffer.extend(spans);
         // In production, would send to OTLP endpoint
         Ok(())
@@ -735,7 +737,8 @@ impl SpanExporter for FilteredSpanExporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::types::{SpanContext, SpanStatus, TraceFlags, TraceState};
+    use super::super::types::{SpanContext, SpanStatus};
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     fn create_test_span() -> SpanData {
@@ -750,18 +753,17 @@ mod tests {
             events: vec![],
             links: vec![],
             status: SpanStatus::ok(),
-            resource: vec![],
+            resource: HashMap::new(),
             instrumentation_name: "test".to_string(),
-            instrumentation_version: Some("1.0".to_string()),
+            instrumentation_version: "1.0".to_string(),
         }
     }
 
     #[test]
     fn test_console_exporter() {
-        let mut output = Vec::new();
-        let exporter = ConsoleSpanExporter::with_writer(std::io::Cursor::new(&mut output))
+        let exporter = ConsoleSpanExporter::default()
             .with_pretty(false);
-        
+
         let span = create_test_span();
         exporter.export(vec![span]).unwrap();
     }
@@ -775,7 +777,7 @@ mod tests {
         let span = create_test_span();
         exporter.export(vec![span]).unwrap();
 
-        let output = output.lock().unwrap();
+        let output = output.lock();
         let text = String::from_utf8_lossy(&output);
         assert!(text.contains("SPAN: test-span"));
     }
@@ -784,7 +786,7 @@ mod tests {
     
     impl Write for TestWriter {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
+            self.0.lock().extend_from_slice(buf);
             Ok(buf.len())
         }
         fn flush(&mut self) -> std::io::Result<()> { Ok(()) }

@@ -886,6 +886,7 @@ pub struct XhciController {
 
 impl XhciController {
     /// Create new xHCI controller
+    #[must_use]
     pub fn new(name: &str, usb2_ports: u8, usb3_ports: u8) -> Self {
         let mut ports = Vec::new();
 

@@ -5,7 +5,8 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 /// GDB packet state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -601,28 +602,28 @@ impl GdbStub {
     pub fn add_breakpoint(&self, bp_type: BreakpointType, addr: u64, size: u64) -> u64 {
         let id = self.next_bp_id.fetch_add(1, Ordering::SeqCst);
         let bp = Breakpoint::new(id, bp_type, addr, size);
-        self.breakpoints.write().unwrap_or_else(|e| e.into_inner()).insert(addr, bp);
+        self.breakpoints.write().insert(addr, bp);
         id
     }
 
     /// Remove breakpoint
     pub fn remove_breakpoint(&self, addr: u64) -> Option<Breakpoint> {
-        self.breakpoints.write().unwrap_or_else(|e| e.into_inner()).remove(&addr)
+        self.breakpoints.write().remove(&addr)
     }
 
     /// Check if address has breakpoint
     pub fn has_breakpoint(&self, addr: u64) -> bool {
-        self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).contains_key(&addr)
+        self.breakpoints.read().contains_key(&addr)
     }
 
     /// Get breakpoint at address
     pub fn get_breakpoint(&self, addr: u64) -> Option<Breakpoint> {
-        self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).get(&addr).cloned()
+        self.breakpoints.read().get(&addr).cloned()
     }
 
     /// Check watchpoint hit
     pub fn check_watchpoint(&self, addr: u64, is_write: bool) -> Option<Breakpoint> {
-        let bps = self.breakpoints.read().unwrap_or_else(|e| e.into_inner());
+        let bps = self.breakpoints.read();
         for bp in bps.values() {
             if !bp.enabled {
                 continue;
@@ -642,12 +643,12 @@ impl GdbStub {
 
     /// List all breakpoints
     pub fn list_breakpoints(&self) -> Vec<Breakpoint> {
-        self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+        self.breakpoints.read().values().cloned().collect()
     }
 
     /// Clear all breakpoints
     pub fn clear_breakpoints(&self) {
-        self.breakpoints.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.breakpoints.write().clear();
     }
 
     /// Format packet for sending
@@ -673,7 +674,7 @@ impl GdbStub {
 
     /// Process incoming data
     pub fn process_data(&self, data: &[u8]) -> Vec<GdbResult<Vec<u8>>> {
-        let mut parser = self.parser.write().unwrap_or_else(|e| e.into_inner());
+        let mut parser = self.parser.write();
         let mut results = Vec::new();
 
         for &byte in data {
@@ -743,9 +744,9 @@ impl GdbStub {
                         if let Some(reg) = GdbRegister::from_index(reg_num as usize) {
                             let mut regs = target.get_registers();
                             let value = if value_bytes.len() >= 8 {
-                                u64::from_le_bytes(value_bytes[..8].try_into().unwrap())
+                                u64::from_le_bytes(value_bytes[..8].try_into().expect("slice is exactly 8 bytes"))
                             } else if value_bytes.len() >= 4 {
-                                u32::from_le_bytes(value_bytes[..4].try_into().unwrap()) as u64
+                                u32::from_le_bytes(value_bytes[..4].try_into().expect("slice is exactly 4 bytes")) as u64
                             } else {
                                 0
                             };
@@ -928,7 +929,7 @@ impl GdbStub {
         GdbStats {
             connected: self.is_connected(),
             single_step: self.is_single_step(),
-            breakpoint_count: self.breakpoints.read().unwrap_or_else(|e| e.into_inner()).len(),
+            breakpoint_count: self.breakpoints.read().len(),
             no_ack_mode: self.no_ack_mode.load(Ordering::Acquire),
         }
     }

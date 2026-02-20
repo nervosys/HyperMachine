@@ -166,7 +166,7 @@ impl GpuResource {
             return Color::BLACK;
         }
 
-        let bytes: [u8; 4] = self.data[offset..offset + 4].try_into().unwrap();
+        let bytes: [u8; 4] = self.data[offset..offset + 4].try_into().expect("slice is exactly 4 bytes");
         match self.format {
             VirtioGpuFormat::B8G8R8A8Unorm | VirtioGpuFormat::B8G8R8X8Unorm => {
                 Color::new(bytes[2], bytes[1], bytes[0], bytes[3])

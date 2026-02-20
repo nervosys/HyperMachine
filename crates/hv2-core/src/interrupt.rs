@@ -6,7 +6,9 @@
 
 use crate::{Device, DeviceType, Error, Result};
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 /// PIC initialization command word 1 flags
 const ICW1_ICW4: u8 = 0x01; // ICW4 needed
@@ -155,12 +157,12 @@ impl Pic8259 {
     pub fn raise_irq(&self, irq: u8) -> Result<()> {
         if irq < 8 {
             // Master PIC
-            self.master.lock().unwrap_or_else(|e| e.into_inner()).raise_irq(irq);
+            self.master.lock().raise_irq(irq);
         } else if irq < 16 {
             // Slave PIC
-            self.slave.lock().unwrap_or_else(|e| e.into_inner()).raise_irq(irq - 8);
+            self.slave.lock().raise_irq(irq - 8);
             // Cascade to master IRQ 2
-            self.master.lock().unwrap_or_else(|e| e.into_inner()).raise_irq(2);
+            self.master.lock().raise_irq(2);
         } else {
             return Err(Error::Device(format!("Invalid IRQ number: {}", irq)));
         }
@@ -170,14 +172,14 @@ impl Pic8259 {
     /// Lower an interrupt request
     pub fn lower_irq(&self, irq: u8) -> Result<()> {
         if irq < 8 {
-            self.master.lock().unwrap_or_else(|e| e.into_inner()).lower_irq(irq);
+            self.master.lock().lower_irq(irq);
         } else if irq < 16 {
-            self.slave.lock().unwrap_or_else(|e| e.into_inner()).lower_irq(irq - 8);
+            self.slave.lock().lower_irq(irq - 8);
             // Check if slave has any pending interrupts
-            let slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+            let slave = self.slave.lock();
             if slave.get_pending().is_none() {
                 drop(slave);
-                self.master.lock().unwrap_or_else(|e| e.into_inner()).lower_irq(2);
+                self.master.lock().lower_irq(2);
             }
         } else {
             return Err(Error::Device(format!("Invalid IRQ number: {}", irq)));
@@ -187,13 +189,13 @@ impl Pic8259 {
 
     /// Set interrupt mask for the master PIC (0x00 = all unmasked, 0xFF = all masked)
     pub fn set_master_mask(&self, mask: u8) {
-        let mut master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let mut master = self.master.lock();
         master.imr = mask;
     }
 
     /// Set interrupt mask for the slave PIC (0x00 = all unmasked, 0xFF = all masked)
     pub fn set_slave_mask(&self, mask: u8) {
-        let mut slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+        let mut slave = self.slave.lock();
         slave.imr = mask;
     }
 
@@ -202,22 +204,22 @@ impl Pic8259 {
     /// This clears the ISR bit so the same IRQ can fire again.
     /// Should be called after handling an interrupt.
     pub fn send_eoi(&self, vector: u8) -> Result<()> {
-        let master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let master = self.master.lock();
 
         if vector >= master.base_vector && vector < master.base_vector + 8 {
             // Master interrupt
             let irq = vector - master.base_vector;
             drop(master);
-            self.master.lock().unwrap_or_else(|e| e.into_inner()).eoi(Some(irq));
+            self.master.lock().eoi(Some(irq));
         } else {
             // Slave interrupt
-            let slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+            let slave = self.slave.lock();
             if vector >= slave.base_vector && vector < slave.base_vector + 8 {
                 let irq = vector - slave.base_vector;
                 drop(slave);
-                self.slave.lock().unwrap_or_else(|e| e.into_inner()).eoi(Some(irq));
+                self.slave.lock().eoi(Some(irq));
                 // Also send EOI to master for cascade
-                self.master.lock().unwrap_or_else(|e| e.into_inner()).eoi(Some(2));
+                self.master.lock().eoi(Some(2));
             } else {
                 drop(master);
                 return Err(Error::Device(format!(
@@ -232,13 +234,13 @@ impl Pic8259 {
 
     /// Get the highest priority pending interrupt and its vector
     pub fn get_pending_interrupt(&self) -> Option<u8> {
-        let master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let master = self.master.lock();
 
         if let Some(irq) = master.get_pending() {
             if irq == 2 {
                 // Check slave cascade
                 drop(master);
-                let slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+                let slave = self.slave.lock();
                 if let Some(slave_irq) = slave.get_pending() {
                     return Some(slave.base_vector + slave_irq);
                 }
@@ -252,22 +254,22 @@ impl Pic8259 {
 
     /// Acknowledge an interrupt
     pub fn acknowledge_interrupt(&self, vector: u8) -> Result<()> {
-        let master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let master = self.master.lock();
 
         if vector >= master.base_vector && vector < master.base_vector + 8 {
             // Master interrupt
             let irq = vector - master.base_vector;
             drop(master);
-            self.master.lock().unwrap_or_else(|e| e.into_inner()).acknowledge(irq);
+            self.master.lock().acknowledge(irq);
         } else {
             // Slave interrupt
-            let slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+            let slave = self.slave.lock();
             if vector >= slave.base_vector && vector < slave.base_vector + 8 {
                 let irq = vector - slave.base_vector;
                 drop(slave);
-                self.slave.lock().unwrap_or_else(|e| e.into_inner()).acknowledge(irq);
+                self.slave.lock().acknowledge(irq);
                 // Also acknowledge cascade on master
-                self.master.lock().unwrap_or_else(|e| e.into_inner()).acknowledge(2);
+                self.master.lock().acknowledge(2);
             } else {
                 drop(master);
                 return Err(Error::Device(format!(
@@ -282,7 +284,7 @@ impl Pic8259 {
 
     /// Write to master command port (0x20)
     fn write_master_command(&self, value: u8) {
-        let mut master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let mut master = self.master.lock();
 
         if value & ICW1_INIT != 0 {
             // ICW1 - Initialization
@@ -311,7 +313,7 @@ impl Pic8259 {
 
     /// Write to master data port (0x21)
     fn write_master_data(&self, value: u8) {
-        let mut master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let mut master = self.master.lock();
 
         match master.init_state {
             InitState::ExpectingIcw2 => {
@@ -337,7 +339,7 @@ impl Pic8259 {
 
     /// Write to slave command port (0xA0)
     fn write_slave_command(&self, value: u8) {
-        let mut slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+        let mut slave = self.slave.lock();
 
         if value & ICW1_INIT != 0 {
             // ICW1 - Initialization
@@ -356,7 +358,7 @@ impl Pic8259 {
             }
             // Also send EOI to master for cascade
             drop(slave);
-            self.master.lock().unwrap_or_else(|e| e.into_inner()).eoi(Some(2));
+            self.master.lock().eoi(Some(2));
         } else if value & 0x08 != 0 {
             // OCW3
             if value & 0x02 != 0 {
@@ -367,7 +369,7 @@ impl Pic8259 {
 
     /// Write to slave data port (0xA1)
     fn write_slave_data(&self, value: u8) {
-        let mut slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+        let mut slave = self.slave.lock();
 
         match slave.init_state {
             InitState::ExpectingIcw2 => {
@@ -391,22 +393,22 @@ impl Pic8259 {
 
     /// Read from master command port (0x20)
     fn read_master_command(&self) -> u8 {
-        self.master.lock().unwrap_or_else(|e| e.into_inner()).read_status()
+        self.master.lock().read_status()
     }
 
     /// Read from master data port (0x21)
     fn read_master_data(&self) -> u8 {
-        self.master.lock().unwrap_or_else(|e| e.into_inner()).imr
+        self.master.lock().imr
     }
 
     /// Read from slave command port (0xA0)
     fn read_slave_command(&self) -> u8 {
-        self.slave.lock().unwrap_or_else(|e| e.into_inner()).read_status()
+        self.slave.lock().read_status()
     }
 
     /// Read from slave data port (0xA1)
     fn read_slave_data(&self) -> u8 {
-        self.slave.lock().unwrap_or_else(|e| e.into_inner()).imr
+        self.slave.lock().imr
     }
 
     /// Check if the PIC handles the given I/O port
@@ -583,8 +585,8 @@ impl Device for Pic8259 {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        let mut master = self.master.lock().unwrap_or_else(|e| e.into_inner());
-        let mut slave = self.slave.lock().unwrap_or_else(|e| e.into_inner());
+        let mut master = self.master.lock();
+        let mut slave = self.slave.lock();
 
         *master = PicChip::new(0x20);
         *slave = PicChip::new(0x28);

@@ -49,7 +49,8 @@
 
 use crate::{Error, Result};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -377,7 +378,7 @@ impl IoApic {
     where
         F: Fn(u8, u8) + Send + Sync + 'static,
     {
-        *self.interrupt_callback.write().unwrap() = Some(Box::new(callback));
+        *self.interrupt_callback.write() = Some(Box::new(callback));
     }
 
     /// Get the IOAPIC ID
@@ -438,7 +439,7 @@ impl IoApic {
                     let is_high = (regsel - indirect::IOREDTBL_BASE) % 2 == 1;
 
                     if entry_idx < IOAPIC_NUM_PINS {
-                        let table = self.redirection_table.read().unwrap();
+                        let table = self.redirection_table.read();
                         let entry = &table[entry_idx];
 
                         if is_high {
@@ -475,7 +476,7 @@ impl IoApic {
                     let is_high = (regsel - indirect::IOREDTBL_BASE) % 2 == 1;
 
                     if entry_idx < IOAPIC_NUM_PINS {
-                        let mut table = self.redirection_table.write().unwrap();
+                        let mut table = self.redirection_table.write();
                         let entry = &mut table[entry_idx];
 
                         if is_high {
@@ -502,7 +503,7 @@ impl IoApic {
             return;
         }
 
-        let table = self.redirection_table.read().unwrap();
+        let table = self.redirection_table.read();
         let entry = table[irq as usize];
 
         // Check if masked
@@ -519,7 +520,7 @@ impl IoApic {
 
             // Set remote IRR
             drop(table);
-            let mut table = self.redirection_table.write().unwrap();
+            let mut table = self.redirection_table.write();
             table[irq as usize].set_remote_irr();
         }
 
@@ -540,7 +541,7 @@ impl IoApic {
     /// Handle EOI from LAPIC
     pub fn eoi(&self, vector: u8) {
         // Find entry with matching vector and clear remote IRR
-        let mut table = self.redirection_table.write().unwrap();
+        let mut table = self.redirection_table.write();
 
         for entry in table.iter_mut() {
             if entry.vector() == vector && entry.trigger_mode() == TriggerMode::Level {
@@ -555,7 +556,7 @@ impl IoApic {
 
     /// Deliver interrupt to LAPIC
     fn deliver_interrupt(&self, entry: &RedirectionEntry) {
-        let callback = self.interrupt_callback.read().unwrap();
+        let callback = self.interrupt_callback.read();
         if let Some(ref cb) = *callback {
             cb(entry.destination(), entry.vector());
         }
@@ -567,7 +568,7 @@ impl IoApic {
             return None;
         }
 
-        let table = self.redirection_table.read().unwrap();
+        let table = self.redirection_table.read();
         Some(table[irq as usize])
     }
 
@@ -577,7 +578,7 @@ impl IoApic {
             return Err(Error::VM(format!("Invalid IOAPIC IRQ: {}", irq)));
         }
 
-        let mut table = self.redirection_table.write().unwrap();
+        let mut table = self.redirection_table.write();
         table[irq as usize] = entry;
         Ok(())
     }

@@ -1984,6 +1984,96 @@ Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu im
 
 **whpx.rs** (6,302 -> 6,353 lines)
 
+### Phase 57: Dependency Modernization & Tooling Fixes
+
+**Status:** Complete
+
+**Dependency upgrades (Rust 1.93 compatibility):**
+- `tonic` 0.12 → 0.14, `tonic-build` 0.12 → 0.14
+- Added `tonic-prost` 0.14 and `tonic-prost-build` 0.14 (tonic 0.14 split prost codegen)
+- `prost` 0.13 → 0.14
+- `tower` 0.4 → 0.5 (0.4.13 `ready-cache` broke with Rust 1.93 type inference changes)
+- `tower-http` 0.5 → 0.6 (hm-cli)
+- `winapi` 0.3 → `windows-sys` 0.59 (hv2-net TAP device code)
+
+**Tooling & CI fixes:**
+- `clippy.toml`: Added `msrv = "1.87"` to prevent suggesting post-MSRV APIs
+- `deny.toml`: Migrated to cargo-deny 0.19 format (removed deprecated `vulnerability`, `unmaintained`, `unlicensed`, `copyleft` fields; fixed `sources.allow-registry`/`allow-git` to array format; added `OFL-1.1`, `Ubuntu-font-1.0`, `NCSA`, `CDLA-Permissive-2.0` licenses; updated advisory ignores)
+- `bench.yml`: Fixed `tool: 'customSmallerIsBetter'` → `tool: 'cargo'` for Criterion output parsing
+- `coverage.yml`: Updated `codecov/codecov-action@v4` → `@v5`
+- `ci.yml`: Added `test-core-windows` job for WHPX backend tests on Windows
+- `hv1-core/Cargo.toml`: Added missing `homepage.workspace`, `rust-version.workspace`, `[lints] workspace = true`
+- `hv1-boot/Cargo.toml`: Added missing `homepage.workspace`, `[lints] workspace = true`
+- `CONTRIBUTING.md`: Updated MSRV from 1.75 to 1.87
+- `LICENSE-COMMERCIAL`: Fixed stale "OCL v1" reference → "AGPL-3.0"
+
+---
+
+### Phase 58: Security Hardening & Code Quality
+
+**Status:** Complete
+
+**Security:**
+- **Deleted `_run_b64.py` backdoor** — suspicious Python script in `hv2-core/src/` that decoded and exec'd base64 content
+- Removed unused `crossbeam` dependency from `hv2-core`
+
+**Tracing module (feature-gated):**
+- Wired orphaned `tracing/` directory (~2,400 lines) into `hv2-core` as `hv_tracing` module (via `#[path]` to avoid name collision with `tracing` crate)
+- Fixed unclosed delimiter in `exporters.rs`
+- Feature-gated behind `hv-tracing` — module has 24 pre-existing compilation errors to fix in Phase 59
+
+**SAFETY comments (11 sites):**
+- `acpi.rs`: 2 `slice::from_raw_parts` calls in `calculate_checksum`/`calculate_extended_checksum`
+- `arch.rs` (hv1-core): 7 inline asm blocks (`read_rip`, `read_rsp`, `read_rflags`, `hlt`, `cli`, `sti`, `pause`)
+- `main.rs` (hv1-boot): 2 unsafe blocks (`init_global_serial`, `ALLOCATOR.lock().init`)
+
+**Tests (12 new):**
+- `config.rs`: 4 tests — default values, TOML roundtrip, invalid TOML, nonexistent file
+- `hypervisor.rs`: 8 tests — Display variants, detect(), TCG backend defaults, VM creation, capabilities, equality
+
+**Project config:**
+- Added `.github/FUNDING.yml` (GitHub Sponsors)
+- `.editorconfig`: Added `*.proto` (indent_size = 2) and `Containerfile` (indent_size = 4) entries
+
+---
+
+### Phase 59: Tracing Module Compilation Fixes
+
+**Status:** Complete
+
+**Fixed 14 compilation errors + warnings in the orphaned `hv_tracing` module (~2,400 lines, 5 files):**
+
+- **Unused imports** (3): removed `Instant` from types.rs, `HashMap` from tracer.rs, `Arc` from profiler.rs
+- **Missing `TraceId::as_u128()`** (3 call sites): added method composing high/low u64 → u128
+- **`as_bytes()` → `to_bytes()`** (4 call sites): renamed to match actual method signatures on `TraceId`/`SpanId`
+- **Debug impls** (2): replaced `#[derive(Debug)]` with manual impls for `ParentBasedSampler` and `SimpleSpanProcessor` (fields contain `Box<dyn Sampler>` / `Arc<dyn SpanExporter>`)
+- **`Span::end()` move-after-drop** (1): changed `self.data` → `self.data.clone()` in `end_with_timestamp()`, removed `mut` from `end(self)`
+- **Unclosed delimiter** (1, from Phase 58): missing `}` closing `impl JaegerSpanExporter`
+- **Clippy issues** (3): `#[derive(Default)]` + `#[default]` for `SpanKind`/`StatusCode`, `const {}` for `thread_local!` initializer
+- **Test fixes** (5): `resource` type mismatch (`vec![]` → `HashMap::new()`), `instrumentation_version` (`Option<String>` → `String`), `TraceState::get` return type (`&String` → `&str`), `from_header` return type (not `Result`), `ConsoleSpanExporter` lifetime issue, approx PI constant
+
+**Result:** Removed `hv-tracing` feature gate — module now compiles unconditionally.
+
+### Phase 60: Safety, Hardening & CI Improvements
+
+**Status:** Complete
+
+**Safety documentation:**
+- Added `// SAFETY:` comments to 4 KVM backend `unsafe` blocks: `KvmVm::new()`, `KvmVcpu::new()`, `KvmVcpu::run()`, `KvmVcpu::inject_interrupt()`
+
+**Code hardening:**
+- Replaced 6 production `try_into().unwrap()` calls with `.expect()` in `framebuffer.rs` (3), `virtio_gpu.rs` (1), `gdb.rs` (2)
+- Added `panic = "abort"` to `[profile.release]` — eliminates unwinding tables, appropriate for hypervisor code
+
+**Metadata & config fixes:**
+- Added `documentation = "https://docs.rs/hypermachine"` to `[workspace.package]`
+- Added missing `rust-version.workspace = true` to `hv1-boot/Cargo.toml`
+- Relaxed `wasmtime`/`wasmtime-wasi` from exact `"24.0.5"` pin to semver `"24.0"`
+- Removed stale `{ name = "quote" }` and `{ name = "proc-macro2" }` skips from `deny.toml`
+
+**CI improvements:**
+- Added `test-core-macos` job to `ci.yml` — runs `hv2-core` tests on `macos-latest` (HVF backend)
+
 ---
 
 ## Test Summary

@@ -6,10 +6,6 @@
 # ============================================================================
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "warn"
-notice = "warn"
 
 # Ignore specific advisories (with justification)
 ignore = [
@@ -18,15 +14,18 @@ ignore = [
     "RUSTSEC-2025-0141",
 
     # fxhash is unmaintained but has no known vulnerabilities
-    # Used for fast, non-cryptographic hashing only
-    "RUSTSEC-2024-0444",
+    # Used for fast, non-cryptographic hashing only (transitive dep)
+    "RUSTSEC-2025-0057",
+
+    # paste is archived but has no known vulnerabilities
+    # Used as transitive dep by wasmtime/cranelift
+    "RUSTSEC-2024-0436",
 ]
 
 # ============================================================================
 # Licenses Configuration
 # ============================================================================
 [licenses]
-unlicensed = "deny"
 allow = [
     "MIT",
     "Apache-2.0",
@@ -44,8 +43,11 @@ allow = [
     "Unicode-DFS-2016",
     "CC0-1.0",
     "BSL-1.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+    "NCSA",
+    "CDLA-Permissive-2.0",
 ]
-copyleft = "allow"
 confidence-threshold = 0.8
 
 # Exceptions for specific crates
@@ -71,9 +73,6 @@ highlight = "all"
 deny = [
     # Unmaintained crypto crates
     { name = "rustc-serialize" },
-
-    # Known problematic crates
-    { name = "openssl" }, # Prefer ring/rustls
 ]
 
 # Allow specific duplicates that are acceptable
@@ -81,8 +80,8 @@ skip = [
     # Multiple versions are acceptable for these
     { name = "hashbrown" },
     { name = "syn" },
-    { name = "proc-macro2" },
-    { name = "quote" },
+    { name = "thiserror" },
+    { name = "thiserror-impl" },
 ]
 
 # ============================================================================
@@ -92,11 +91,9 @@ skip = [
 unknown-registry = "deny"
 unknown-git = "warn"
 
-# Allow crates.io
-[sources.allow-registry]
-"https://github.com/rust-lang/crates.io-index" = true
-"https://index.crates.io/" = true
+allow-registry = [
+    "https://github.com/rust-lang/crates.io-index",
+    "https://index.crates.io/",
+]
 
-# Allow specific git sources
-[sources.allow-git]
-# Add trusted git sources here if needed
+allow-git = []

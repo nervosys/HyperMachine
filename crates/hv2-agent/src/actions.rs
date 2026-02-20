@@ -656,9 +656,9 @@ impl ActionExecutor for MockExecutor {
 #[derive(Debug)]
 pub struct ActionQueue {
     /// Pending actions
-    pending: std::sync::Mutex<Vec<ActionRequest>>,
+    pending: parking_lot::Mutex<Vec<ActionRequest>>,
     /// In-progress actions
-    in_progress: std::sync::Mutex<Vec<u64>>,
+    in_progress: parking_lot::Mutex<Vec<u64>>,
     /// Maximum queue size
     max_size: usize,
 }
@@ -667,15 +667,15 @@ impl ActionQueue {
     /// Create a new action queue
     pub fn new(max_size: usize) -> Self {
         Self {
-            pending: std::sync::Mutex::new(Vec::new()),
-            in_progress: std::sync::Mutex::new(Vec::new()),
+            pending: parking_lot::Mutex::new(Vec::new()),
+            in_progress: parking_lot::Mutex::new(Vec::new()),
             max_size,
         }
     }
 
     /// Enqueue an action
     pub fn enqueue(&self, request: ActionRequest) -> ActionResult<()> {
-        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let mut pending = self.pending.lock();
         if pending.len() >= self.max_size {
             return Err(ActionError::ResourceUnavailable(
                 "Action queue full".to_string(),
@@ -687,12 +687,12 @@ impl ActionQueue {
 
     /// Dequeue the next action
     pub fn dequeue(&self) -> Option<ActionRequest> {
-        let mut pending = self.pending.lock().unwrap_or_else(|e| e.into_inner());
+        let mut pending = self.pending.lock();
         if pending.is_empty() {
             return None;
         }
         let request = pending.remove(0);
-        self.in_progress.lock().unwrap_or_else(|e| e.into_inner()).push(request.id);
+        self.in_progress.lock().push(request.id);
         Some(request)
     }
 
@@ -700,23 +700,22 @@ impl ActionQueue {
     pub fn complete(&self, request_id: u64) {
         self.in_progress
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
             .retain(|id| *id != request_id);
     }
 
     /// Get pending count
     pub fn pending_count(&self) -> usize {
-        self.pending.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.pending.lock().len()
     }
 
     /// Get in-progress count
     pub fn in_progress_count(&self) -> usize {
-        self.in_progress.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.in_progress.lock().len()
     }
 
     /// Check if action is in progress
     pub fn is_in_progress(&self, request_id: u64) -> bool {
-        self.in_progress.lock().unwrap_or_else(|e| e.into_inner()).contains(&request_id)
+        self.in_progress.lock().contains(&request_id)
     }
 }
 

@@ -177,6 +177,7 @@ impl VmService for VMServiceImpl {
             hv2_core::VMState::Paused => VmState::Paused as i32,
             hv2_core::VMState::Stopped => VmState::Stopped as i32,
             hv2_core::VMState::Error => VmState::Error as i32,
+            _ => VmState::Error as i32,
         };
 
         Ok(Response::new(GetVmStatusResponse {
@@ -202,6 +203,7 @@ impl VmService for VMServiceImpl {
                     hv2_core::VMState::Paused => VmState::Paused as i32,
                     hv2_core::VMState::Stopped => VmState::Stopped as i32,
                     hv2_core::VMState::Error => VmState::Error as i32,
+                    _ => VmState::Error as i32,
                 };
 
                 VmInfo {

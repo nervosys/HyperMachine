@@ -30,7 +30,8 @@ use crate::{Error, Result};
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use std::sync::RwLock;
+
+use parking_lot::RwLock;
 
 /// Sector size constant
 pub const SECTOR_SIZE: u64 = 512;
@@ -119,7 +120,7 @@ impl DiskImage for RawImage {
             return Ok(0);
         }
 
-        let mut file = self.file.write().unwrap_or_else(|e| e.into_inner());
+        let mut file = self.file.write();
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| Error::Device(format!("Seek failed: {}", e)))?;
 
@@ -137,7 +138,7 @@ impl DiskImage for RawImage {
             return Ok(0);
         }
 
-        let mut file = self.file.write().unwrap_or_else(|e| e.into_inner());
+        let mut file = self.file.write();
         file.seek(SeekFrom::Start(offset))
             .map_err(|e| Error::Device(format!("Seek failed: {}", e)))?;
 
@@ -147,7 +148,7 @@ impl DiskImage for RawImage {
     }
 
     fn flush(&self) -> Result<()> {
-        let file = self.file.write().unwrap_or_else(|e| e.into_inner());
+        let file = self.file.write();
         file.sync_all()
             .map_err(|e| Error::Device(format!("Flush failed: {}", e)))
     }
@@ -198,7 +199,7 @@ impl InMemoryImage {
 
 impl DiskImage for InMemoryImage {
     fn read(&self, offset: u64, buf: &mut [u8]) -> Result<usize> {
-        let data = self.data.read().unwrap_or_else(|e| e.into_inner());
+        let data = self.data.read();
 
         if offset >= data.len() as u64 {
             return Ok(0);
@@ -214,7 +215,7 @@ impl DiskImage for InMemoryImage {
             return Err(Error::Device("Image is read-only".to_string()));
         }
 
-        let mut data = self.data.write().unwrap_or_else(|e| e.into_inner());
+        let mut data = self.data.write();
 
         if offset >= data.len() as u64 {
             return Ok(0);
@@ -231,7 +232,7 @@ impl DiskImage for InMemoryImage {
     }
 
     fn size(&self) -> u64 {
-        self.data.read().unwrap_or_else(|e| e.into_inner()).len() as u64
+        self.data.read().len() as u64
     }
 
     fn is_read_only(&self) -> bool {

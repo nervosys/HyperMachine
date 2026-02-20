@@ -6,6 +6,7 @@
 [![codecov](https://codecov.io/gh/nervosys/HyperMachine/branch/master/graph/badge.svg)](https://codecov.io/gh/nervosys/HyperMachine)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only%20OR%20Commercial-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.87%2B-orange.svg)](https://www.rust-lang.org)
+[![docs.rs](https://docs.rs/hypermachine/badge.svg)](https://docs.rs/hypermachine)
 
 A high-performance hypervisor framework in Rust with first-class AI agent support. Type-1 bare-metal and Type-2 hosted modes.
 

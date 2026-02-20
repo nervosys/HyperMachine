@@ -91,6 +91,83 @@ jobs:
             - name: Run core tests
               run: cargo test -p hv2-core
 
+            - name: Run doc tests
+              run: cargo test --doc --workspace --exclude hv1-core --exclude hv1-boot
+
+    test-core-windows:
+        name: Test Core (Windows)
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-core-
+                      ${{ runner.os }}-cargo-
+
+            - name: Run core tests (Windows/WHPX)
+              run: cargo test -p hv2-core
+
+    test-core-macos:
+        name: Test Core (macOS)
+        runs-on: macos-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-core-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-core-
+                      ${{ runner.os }}-cargo-
+
+            - name: Run core tests (macOS/HVF)
+              run: cargo test -p hv2-core
+
+    msrv:
+        name: MSRV Check
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install MSRV toolchain
+              uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: "1.87"
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-msrv-
+                      ${{ runner.os }}-cargo-
+
+            - name: Check MSRV compatibility
+              run: cargo check --workspace --all-targets --exclude hv1-core --exclude hv1-boot
+
     fmt:
         name: Rustfmt
         runs-on: ubuntu-latest

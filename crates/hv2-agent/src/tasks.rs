@@ -9,8 +9,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
+
+use parking_lot::Mutex;
 
 /// Result type for task operations
 pub type TaskResult<T> = Result<T, TaskError>;
@@ -805,8 +807,8 @@ impl WorkflowExecutor {
         workflow.validate()?;
 
         // Add all tasks to queue
-        for task in workflow.tasks.clone() {
-            self.queue.add(task)?;
+        for task in &workflow.tasks {
+            self.queue.add(task.clone())?;
         }
 
         self.workflow = Some(workflow);
@@ -895,18 +897,18 @@ impl TaskScheduler {
     /// Submit a task
     pub fn submit(&self, task: Task) -> TaskResult<String> {
         let id = task.id.clone();
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).add(task)?;
+        self.inner.lock().add(task)?;
         Ok(id)
     }
 
     /// Get task status
     pub fn status(&self, id: &str) -> Option<TaskStatus> {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).get(id).map(|t| t.status)
+        self.inner.lock().get(id).map(|t| t.status)
     }
 
     /// Cancel a task
     pub fn cancel(&self, id: &str) -> TaskResult<()> {
-        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = self.inner.lock();
         let task = guard
             .get_mut(id)
             .ok_or_else(|| TaskError::TaskNotFound(id.to_string()))?;
@@ -915,12 +917,12 @@ impl TaskScheduler {
 
     /// Get pending count
     pub fn pending_count(&self) -> usize {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).pending_count()
+        self.inner.lock().pending_count()
     }
 
     /// Get total count
     pub fn total_count(&self) -> usize {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.inner.lock().len()
     }
 }
 

@@ -92,6 +92,9 @@ impl Rsdp {
 
     /// Calculate checksum for first 20 bytes (ACPI 1.0 portion)
     fn calculate_checksum(&self, len: usize) -> u8 {
+        // SAFETY: `Rsdp` is `#[repr(C, packed)]` with only integer fields.
+        // `self` is a valid reference, so reading `len` bytes (≤ size_of::<Rsdp>())
+        // from it as a byte slice is safe.
         let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, len) };
         let sum: u8 = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
         (!sum).wrapping_add(1)
@@ -100,6 +103,8 @@ impl Rsdp {
     /// Calculate extended checksum for full table
     fn calculate_extended_checksum(&self) -> u8 {
         let len = mem::size_of::<Rsdp>();
+        // SAFETY: `Rsdp` is `#[repr(C, packed)]` with only integer fields.
+        // `self` is a valid reference and `len` equals `size_of::<Rsdp>()`.
         let bytes = unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, len) };
         let sum: u8 = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
         (!sum).wrapping_add(1)
@@ -144,6 +149,20 @@ pub struct AcpiTableHeader {
 }
 
 impl AcpiTableHeader {
+    /// Serialize header to a byte slice.
+    ///
+    /// # Safety guarantee
+    ///
+    /// `AcpiTableHeader` is `#[repr(C, packed)]` with only integer and byte-array
+    /// fields, so viewing it as a contiguous byte slice is well-defined.
+    fn as_bytes(&self) -> &[u8] {
+        // SAFETY: `AcpiTableHeader` is `#[repr(C, packed)]` with only integer/byte-array
+        // fields and no padding, so viewing it as a byte slice is well-defined.
+        unsafe {
+            std::slice::from_raw_parts(self as *const _ as *const u8, mem::size_of::<Self>())
+        }
+    }
+
     /// Create a new ACPI table header
     pub fn new(signature: &[u8; 4], length: u32) -> Self {
         Self {
@@ -184,14 +203,7 @@ impl Rsdt {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.header.length as usize);
 
-        // Write header
-        let header_bytes = unsafe {
-            std::slice::from_raw_parts(
-                &self.header as *const _ as *const u8,
-                mem::size_of::<AcpiTableHeader>(),
-            )
-        };
-        bytes.extend_from_slice(header_bytes);
+        bytes.extend_from_slice(self.header.as_bytes());
 
         // Write entries
         for addr in &self.entries {
@@ -231,14 +243,7 @@ impl Xsdt {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.header.length as usize);
 
-        // Write header
-        let header_bytes = unsafe {
-            std::slice::from_raw_parts(
-                &self.header as *const _ as *const u8,
-                mem::size_of::<AcpiTableHeader>(),
-            )
-        };
-        bytes.extend_from_slice(header_bytes);
+        bytes.extend_from_slice(self.header.as_bytes());
 
         // Write entries
         for addr in &self.entries {
@@ -502,14 +507,7 @@ impl Madt {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.header.length as usize);
 
-        // Write header
-        let header_bytes = unsafe {
-            std::slice::from_raw_parts(
-                &self.header as *const _ as *const u8,
-                mem::size_of::<AcpiTableHeader>(),
-            )
-        };
-        bytes.extend_from_slice(header_bytes);
+        bytes.extend_from_slice(self.header.as_bytes());
 
         // Write Local APIC address and flags
         bytes.extend_from_slice(&self.local_apic_address.to_le_bytes());
@@ -717,14 +715,7 @@ impl Dsdt {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.header.length as usize);
 
-        // Write header
-        let header_bytes = unsafe {
-            std::slice::from_raw_parts(
-                &self.header as *const _ as *const u8,
-                mem::size_of::<AcpiTableHeader>(),
-            )
-        };
-        bytes.extend_from_slice(header_bytes);
+        bytes.extend_from_slice(self.header.as_bytes());
 
         // Write AML
         bytes.extend_from_slice(&self.aml);

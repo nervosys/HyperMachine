@@ -312,6 +312,11 @@ pub struct KvmVm {
 impl KvmVm {
     /// Create a new KVM VM
     fn new(kvm_fd: RawFd, vcpu_count: u32, memory_size: u64, run_mmap_size: usize) -> Result<Self> {
+        // SAFETY: `kvm_fd` is a valid KVM fd obtained from `KvmBackend::new()`.
+        // We create a VM via ioctl, allocate page-aligned memory via the global
+        // allocator, and register it with KVM. All resources are cleaned up on
+        // error paths (close fd, dealloc memory). The resulting `KvmVm` takes
+        // exclusive ownership of the VM fd and guest memory pointer.
         unsafe {
             // Create VM
             let vm_fd = kvm_create_vm(kvm_fd, 0)
@@ -617,6 +622,11 @@ pub struct KvmVcpu {
 impl KvmVcpu {
     /// Create a new vCPU
     fn new(vm_fd: RawFd, vcpu_id: u32, mmap_size: usize) -> Result<Self> {
+        // SAFETY: `vm_fd` is a valid KVM VM fd. We create a vCPU via ioctl,
+        // then mmap the `kvm_run` structure (shared with the kernel). The
+        // mmap region is `MAP_SHARED` so the kernel can update exit info.
+        // On failure, the vCPU fd is closed before returning. The resulting
+        // `KvmVcpu` takes exclusive ownership of the vCPU fd and mmap pointer.
         unsafe {
             // Create vCPU
             let vcpu_fd = kvm_create_vcpu(vm_fd, vcpu_id).map_err(|e| {
@@ -726,6 +736,9 @@ impl KvmVcpu {
     /// Automatically retries on EINTR (signal interruption), which is
     /// normal during KVM execution and not an actual error.
     pub fn run(&self) -> Result<VmExit> {
+        // SAFETY: `self.vcpu_fd` is a valid vCPU fd created in `new()`. The
+        // `kvm_run` mmap region is valid for the lifetime of this `KvmVcpu`.
+        // EINTR is retried per KVM convention (signals during guest execution).
         unsafe {
             loop {
                 match kvm_run(self.vcpu_fd) {
@@ -857,6 +870,8 @@ impl KvmVcpu {
 
     /// Inject an interrupt
     pub fn inject_interrupt(&self, vector: u8) -> Result<()> {
+        // SAFETY: `self.vcpu_fd` is a valid vCPU fd. The `kvm_interrupt`
+        // struct is stack-allocated and properly initialized with the vector.
         unsafe {
             let irq = kvm_interrupt { irq: vector as u32 };
             kvm_interrupt(self.vcpu_fd, &irq).map_err(|e| {

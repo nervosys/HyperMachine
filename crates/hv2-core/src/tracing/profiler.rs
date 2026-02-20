@@ -4,7 +4,7 @@
 //! for performance analysis of the hypervisor.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use parking_lot::{Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// Profile entry representing a sampled stack frame
@@ -306,23 +306,20 @@ impl CpuProfiler {
 
     /// Get current state
     pub fn state(&self) -> ProfilerState {
-        self.state.read().map(|s| *s).unwrap_or(ProfilerState::Idle)
+        *self.state.read()
     }
 
     /// Start profiling
     pub fn start(&self) -> ProfilerResult<()> {
-        let mut state = self.state.write().map_err(|_| ProfilerError::LockError)?;
+        let mut state = self.state.write();
         if *state == ProfilerState::Running {
             return Err(ProfilerError::AlreadyRunning);
         }
 
-        let mut samples = self.samples.lock().map_err(|_| ProfilerError::LockError)?;
+        let mut samples = self.samples.lock();
         samples.clear();
 
-        let mut start_time = self
-            .start_time
-            .lock()
-            .map_err(|_| ProfilerError::LockError)?;
+        let mut start_time = self.start_time.lock();
         *start_time = Some(Instant::now());
 
         *state = ProfilerState::Running;
@@ -331,18 +328,15 @@ impl CpuProfiler {
 
     /// Stop profiling and return data
     pub fn stop(&self) -> ProfilerResult<ProfileData> {
-        let mut state = self.state.write().map_err(|_| ProfilerError::LockError)?;
+        let mut state = self.state.write();
         if *state == ProfilerState::Idle {
             return Err(ProfilerError::NotStarted);
         }
 
         *state = ProfilerState::Idle;
 
-        let samples = self.samples.lock().map_err(|_| ProfilerError::LockError)?;
-        let start_time = self
-            .start_time
-            .lock()
-            .map_err(|_| ProfilerError::LockError)?;
+        let samples = self.samples.lock();
+        let start_time = self.start_time.lock();
 
         let mut data = ProfileData::new();
         if let Some(start) = *start_time {
@@ -359,7 +353,7 @@ impl CpuProfiler {
 
     /// Pause profiling
     pub fn pause(&self) -> ProfilerResult<()> {
-        let mut state = self.state.write().map_err(|_| ProfilerError::LockError)?;
+        let mut state = self.state.write();
         if *state != ProfilerState::Running {
             return Err(ProfilerError::NotStarted);
         }
@@ -369,7 +363,7 @@ impl CpuProfiler {
 
     /// Resume profiling
     pub fn resume(&self) -> ProfilerResult<()> {
-        let mut state = self.state.write().map_err(|_| ProfilerError::LockError)?;
+        let mut state = self.state.write();
         if *state != ProfilerState::Paused {
             return Err(ProfilerError::NotStarted);
         }
@@ -379,13 +373,13 @@ impl CpuProfiler {
 
     /// Add a sample (called by sampling mechanism)
     pub fn add_sample(&self, sample: StackSample) -> ProfilerResult<()> {
-        let state = self.state.read().map_err(|_| ProfilerError::LockError)?;
+        let state = self.state.read();
         if *state != ProfilerState::Running {
             return Ok(()); // Silently ignore if not running
         }
         drop(state);
 
-        let mut samples = self.samples.lock().map_err(|_| ProfilerError::LockError)?;
+        let mut samples = self.samples.lock();
         if samples.len() < self.config.max_samples {
             samples.push(sample);
         }
@@ -394,7 +388,7 @@ impl CpuProfiler {
 
     /// Get sample count
     pub fn sample_count(&self) -> usize {
-        self.samples.lock().map(|s| s.len()).unwrap_or(0)
+        self.samples.lock().len()
     }
 
     /// Get configuration
@@ -669,17 +663,16 @@ impl InstrumentedProfiler {
     }
 
     /// Enter a function
-    pub fn enter(&self, name: impl Into<String>) -> ProfileGuard {
+    pub fn enter(&self, name: impl Into<String>) -> ProfileGuard<'_> {
         let name = name.into();
         let thread_id = std::thread::current().id();
         let thread_hash = format!("{:?}", thread_id).len() as u64; // Simple thread identifier
 
-        if let Ok(mut active) = self.active_spans.lock() {
-            active
-                .entry(thread_hash)
-                .or_insert_with(Vec::new)
-                .push((name.clone(), Instant::now()));
-        }
+        self.active_spans
+            .lock()
+            .entry(thread_hash)
+            .or_default()
+            .push((name.clone(), Instant::now()));
 
         ProfileGuard {
             profiler: self,
@@ -691,10 +684,7 @@ impl InstrumentedProfiler {
 
     /// Get all function profiles
     pub fn get_profiles(&self) -> Vec<FunctionProfile> {
-        self.profiles
-            .read()
-            .map(|p| p.values().cloned().collect())
-            .unwrap_or_default()
+        self.profiles.read().values().cloned().collect()
     }
 
     /// Get top functions by total time
@@ -713,29 +703,22 @@ impl InstrumentedProfiler {
 
     /// Reset all profiles
     pub fn reset(&self) {
-        if let Ok(mut profiles) = self.profiles.write() {
-            profiles.clear();
-        }
-        if let Ok(mut active) = self.active_spans.lock() {
-            active.clear();
-        }
+        self.profiles.write().clear();
+        self.active_spans.lock().clear();
     }
 
     fn record_exit(&self, name: &str, duration_ns: u64, thread_hash: u64) {
         // Remove from active spans
-        if let Ok(mut active) = self.active_spans.lock() {
-            if let Some(stack) = active.get_mut(&thread_hash) {
-                stack.pop();
-            }
+        if let Some(stack) = self.active_spans.lock().get_mut(&thread_hash) {
+            stack.pop();
         }
 
         // Record the call
-        if let Ok(mut profiles) = self.profiles.write() {
-            profiles
-                .entry(name.to_string())
-                .or_insert_with(|| FunctionProfile::new(name))
-                .record(duration_ns);
-        }
+        self.profiles
+            .write()
+            .entry(name.to_string())
+            .or_insert_with(|| FunctionProfile::new(name))
+            .record(duration_ns);
     }
 }
 

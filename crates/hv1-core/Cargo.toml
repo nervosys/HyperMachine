@@ -5,6 +5,8 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
 description = "HyperMachine Type-1 bare-metal hypervisor core"
 keywords.workspace = true
 categories.workspace = true
@@ -42,6 +44,9 @@ bootloader_api = { version = "0.11", optional = true }
 [lib]
 # Can be built as no_std for bare-metal
 # crate-type = ["staticlib", "rlib"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "hv1-kernel"

@@ -64,7 +64,9 @@ use crate::{Error, Result, VCpu, VmExit};
 use async_trait::async_trait;
 use std::path::Path;
 use std::ptr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 /// WHPX hypervisor backend
 ///
@@ -248,7 +250,7 @@ impl HypervisorBackend for WhpxBackend {
 
         // Create vCPUs and populate the vcpu_map for trait method delegation
         {
-            let mut vcpu_map = self.vcpu_map.write().expect("vCPU map lock poisoned");
+            let mut vcpu_map = self.vcpu_map.write();
             for id in 0..vcpu_count {
                 let whpx_vcpu = whpx_vm.create_vcpu(id)?;
                 vcpu_map.insert(id, whpx_vcpu);
@@ -258,7 +260,6 @@ impl HypervisorBackend for WhpxBackend {
         // Track VM for cleanup
         self.vms
             .write()
-            .expect("VM list lock poisoned")
             .push(whpx_vm.clone());
 
         Ok(HypervisorVm::new(
@@ -278,10 +279,10 @@ impl HypervisorBackend for WhpxBackend {
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
-            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
-            map.get(&vcpu_id).cloned().ok_or_else(|| {
-                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
-            })?
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
         whpx_vcpu.run()
     }
@@ -289,10 +290,10 @@ impl HypervisorBackend for WhpxBackend {
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
-            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
-            map.get(&vcpu_id).cloned().ok_or_else(|| {
-                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
-            })?
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
         whpx_vcpu.inject_interrupt(vector)
     }
@@ -305,10 +306,10 @@ impl HypervisorBackend for WhpxBackend {
     ) -> Result<()> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
-            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
-            map.get(&vcpu_id).cloned().ok_or_else(|| {
-                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
-            })?
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
         whpx_vcpu.inject_exception(vector, error_code)
     }
@@ -316,10 +317,10 @@ impl HypervisorBackend for WhpxBackend {
     async fn set_io_result(&self, vcpu: &VCpu, data: u32, size: u8) -> Result<()> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
-            let map = self.vcpu_map.read().expect("vCPU map lock poisoned");
-            map.get(&vcpu_id).cloned().ok_or_else(|| {
-                Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id))
-            })?
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
         // Mask data by access size and write into RAX
         let masked = match size {
@@ -332,8 +333,10 @@ impl HypervisorBackend for WhpxBackend {
 
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down WHPX backend");
-        self.vcpu_map.write().expect("vCPU map lock poisoned").clear();
-        self.vms.write().expect("VM list lock poisoned").clear();
+        self.vcpu_map
+            .write()
+            .clear();
+        self.vms.write().clear();
         Ok(())
     }
 
@@ -510,7 +513,6 @@ impl WhpxVm {
         let vcpu = Arc::new(WhpxVcpu::new(self.partition, vcpu_id)?);
         self.vcpus
             .write()
-            .expect("vCPU list lock poisoned")
             .push(vcpu.clone());
         Ok(vcpu)
     }
@@ -704,7 +706,7 @@ impl WhpxVm {
         port: u16,
         handler: IoPortHandler,
     ) -> Option<Arc<IoPortHandler>> {
-        let mut handlers = self.io_handlers.write().expect("I/O handler lock poisoned");
+        let mut handlers = self.io_handlers.write();
         handlers.insert(port, Arc::new(handler))
     }
 
@@ -752,8 +754,7 @@ impl WhpxVm {
     ) -> Option<(u64, Arc<MmioHandler>)> {
         let mut handlers = self
             .mmio_handlers
-            .write()
-            .expect("MMIO handler lock poisoned");
+            .write();
         handlers.insert(start, (end, Arc::new(handler)))
     }
 
@@ -779,7 +780,7 @@ impl WhpxVm {
         size: u8,
         data: &mut u32,
     ) -> Result<()> {
-        let handlers = self.io_handlers.read().expect("I/O handler lock poisoned");
+        let handlers = self.io_handlers.read();
 
         if let Some(handler) = handlers.get(&port) {
             handler(port, is_write, size, data)
@@ -823,8 +824,7 @@ impl WhpxVm {
     ) -> Result<()> {
         let handlers = self
             .mmio_handlers
-            .read()
-            .expect("MMIO handler lock poisoned");
+            .read();
 
         // Find handler that covers this address
         for (start, (end, handler)) in handlers.iter().rev() {
@@ -858,7 +858,6 @@ impl Drop for WhpxVm {
             // vCPUs will be dropped first (RAII order)
             self.vcpus
                 .write()
-                .expect("vCPU list lock poisoned in Drop")
                 .clear();
 
             // Free guest memory
@@ -1026,7 +1025,7 @@ pub struct WhpxVcpu {
     /// Virtual processor index
     vp_index: u32,
     /// Interrupt delivery statistics
-    stats: std::sync::Arc<std::sync::RwLock<InterruptStats>>,
+    stats: Arc<RwLock<InterruptStats>>,
 }
 
 impl WhpxVcpu {
@@ -1048,7 +1047,7 @@ impl WhpxVcpu {
             Ok(Self {
                 partition,
                 vp_index,
-                stats: std::sync::Arc::new(std::sync::RwLock::new(InterruptStats::new())),
+                stats: Arc::new(RwLock::new(InterruptStats::new())),
             })
         }
     }
@@ -1211,7 +1210,7 @@ impl WhpxVcpu {
                     nr: 0,
                     args: [0; 6],
                 })
-            },
+            }
 
             _ => Err(Error::VM(format!(
                 "Unhandled exit reason: {:?}",
@@ -1572,7 +1571,8 @@ impl WhpxVcpu {
                             tracing::warn!(error = %e, "Failed to request interrupt window");
                         }
                         // Track deferred interrupt
-                        if let Ok(mut stats) = self.stats.write() {
+                        {
+                            let mut stats = self.stats.write();
                             stats.interrupts_deferred += 1;
                         }
                     }
@@ -1622,7 +1622,8 @@ impl WhpxVcpu {
                 crate::exit::VmExit::InterruptWindow => {
                     // Interrupt window opened - guest can now receive interrupts
                     // Track window exit
-                    if let Ok(mut stats) = self.stats.write() {
+                    {
+                        let mut stats = self.stats.write();
                         stats.window_exits += 1;
                     }
 
@@ -1962,7 +1963,6 @@ impl WhpxVcpu {
     pub fn get_interrupt_stats(&self) -> InterruptStats {
         self.stats
             .read()
-            .expect("interrupt stats lock poisoned")
             .clone()
     }
 
@@ -1970,7 +1970,6 @@ impl WhpxVcpu {
     pub fn reset_interrupt_stats(&self) {
         self.stats
             .write()
-            .expect("interrupt stats lock poisoned")
             .reset();
     }
 
@@ -2055,7 +2054,8 @@ impl WhpxVcpu {
         let enabled = (self.get_rflags()? & RFLAGS_IF) != 0;
 
         // Track statistics
-        if let Ok(mut stats) = self.stats.write() {
+        {
+            let mut stats = self.stats.write();
             if enabled {
                 stats.if_enabled_count += 1;
             } else {
@@ -2111,7 +2111,8 @@ impl WhpxVcpu {
             }
 
             // Track successful injection
-            if let Ok(mut stats) = self.stats.write() {
+            {
+                let mut stats = self.stats.write();
                 stats.interrupts_injected += 1;
             }
 
@@ -2185,7 +2186,8 @@ impl WhpxVcpu {
             }
 
             // Track window request
-            if let Ok(mut stats) = self.stats.write() {
+            {
+                let mut stats = self.stats.write();
                 stats.window_requests += 1;
             }
 
@@ -2260,7 +2262,8 @@ impl WhpxVcpu {
             }
 
             // Track NMI injection
-            if let Ok(mut stats) = self.stats.write() {
+            {
+                let mut stats = self.stats.write();
                 stats.nmis_injected += 1;
             }
 
@@ -6336,7 +6339,7 @@ mod tests {
                 vm.register_io_handler(
                     0x3F8,
                     Box::new(move |_port, _is_write, _size, _data| {
-                        *handler_called_clone.write().unwrap() = true;
+                        *handler_called_clone.write() = true;
                         Ok(())
                     }),
                 );
@@ -6347,7 +6350,7 @@ mod tests {
                     Ok(()) => {
                         println!("✓ I/O handler invoked successfully");
                         assert!(
-                            *handler_called.read().unwrap(),
+                            *handler_called.read(),
                             "Handler should have been called"
                         );
                     }
@@ -6384,7 +6387,7 @@ mod tests {
                     0xFED00000,
                     0xFED01000,
                     Box::new(move |_addr, _is_write, _size, _data| {
-                        *handler_called_clone.write().unwrap() = true;
+                        *handler_called_clone.write() = true;
                         Ok(())
                     }),
                 );
@@ -6395,7 +6398,7 @@ mod tests {
                     Ok(()) => {
                         println!("✓ MMIO handler invoked successfully");
                         assert!(
-                            *handler_called.read().unwrap(),
+                            *handler_called.read(),
                             "Handler should have been called"
                         );
                     }
@@ -6434,7 +6437,7 @@ mod tests {
                         if is_write {
                             // OUT: Write character to buffer
                             let ch = (*data & 0xFF) as u8;
-                            serial_buffer_clone.write().unwrap().push(ch);
+                            serial_buffer_clone.write().push(ch);
                         } else {
                             // IN: Read status (always ready)
                             *data = 0x60; // THR empty | RX ready
@@ -6450,7 +6453,7 @@ mod tests {
                 }
 
                 // Check buffer contents
-                let buffer = serial_buffer.read().unwrap();
+                let buffer = serial_buffer.read();
                 if buffer.len() == 5 {
                     let message = String::from_utf8_lossy(&buffer);
                     println!("✓ Serial port handler captured: '{}'", message);
@@ -6476,7 +6479,7 @@ mod tests {
                         0xE9,
                         Box::new(move |_port, is_write, _size, data| {
                             if is_write {
-                                output_clone.write().unwrap().push((*data & 0xFF) as u8);
+                                output_clone.write().push((*data & 0xFF) as u8);
                             }
                             Ok(())
                         }),
@@ -6506,7 +6509,7 @@ mod tests {
                                 );
 
                                 // Check output was captured
-                                let buffer = output.read().unwrap();
+                                let buffer = output.read();
                                 let message = String::from_utf8_lossy(&buffer);
                                 println!("✓ run_with_handlers captured: '{}'", message);
 

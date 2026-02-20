@@ -308,7 +308,10 @@ impl NestedManager {
             return Err(NestedError::VmxNotEnabled);
         }
 
-        Ok(state.vmcs_cache.vmptrst().unwrap())
+        state
+            .vmcs_cache
+            .vmptrst()
+            .map_err(|_| NestedError::VmxNotEnabled)
     }
 
     /// Handle VMCLEAR instruction

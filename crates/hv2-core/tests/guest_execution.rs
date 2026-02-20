@@ -198,6 +198,9 @@ impl HypervisorBackend for MockHypervisorBackend {
                                 size
                             );
                         }
+                        _ => {
+                            tracing::debug!("VM Exit #{}: Unknown I/O direction", count);
+                        }
                     }
                 }
                 VmExit::Mmio {
@@ -267,6 +270,9 @@ impl HypervisorBackend for MockHypervisorBackend {
                 }
                 VmExit::Unknown { reason } => {
                     tracing::warn!("VM Exit #{}: Unknown exit reason: 0x{:X}", count, reason);
+                }
+                _ => {
+                    tracing::debug!("VM Exit #{}: Unhandled exit: {:?}", count, exit);
                 }
             }
 

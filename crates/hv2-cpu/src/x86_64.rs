@@ -6,6 +6,21 @@
 
 use crate::{CpuError, Result};
 
+// ============================================================================
+// x86 architecture constants (Intel SDM Vol 3, §9.1.4)
+// ============================================================================
+
+/// Reset vector: IP value after processor RESET (real mode entry point).
+const X86_RESET_VECTOR: u64 = 0xFFF0;
+/// RFLAGS reserved bit 1 — always set per Intel specification.
+const RFLAGS_RESERVED_BIT1: u64 = 0x2;
+/// CS selector after processor RESET.
+const RESET_CS_SELECTOR: u16 = 0xF000;
+/// CS base address after processor RESET.
+const RESET_CS_BASE: u64 = 0xFFFF_0000;
+/// Real-mode IDT limit (256 vectors × 4 bytes − 1).
+const REAL_MODE_IDT_LIMIT: u16 = 0x3FF;
+
 /// x86-64 general-purpose registers
 #[derive(Debug, Clone, Copy, Default)]
 pub struct X86Registers {
@@ -82,7 +97,7 @@ pub struct IdtEntry {
 impl IdtEntry {
     /// Get the full handler address
     #[inline]
-    pub fn handler_address(&self) -> u64 {
+    pub const fn handler_address(&self) -> u64 {
         (self.offset_low as u64)
             | ((self.offset_mid as u64) << 16)
             | ((self.offset_high as u64) << 32)
@@ -90,25 +105,25 @@ impl IdtEntry {
 
     /// Check if entry is present
     #[inline]
-    pub fn is_present(&self) -> bool {
+    pub const fn is_present(&self) -> bool {
         (self.type_attr & 0x80) != 0
     }
 
     /// Get the gate type
     #[inline]
-    pub fn gate_type(&self) -> u8 {
+    pub const fn gate_type(&self) -> u8 {
         self.type_attr & 0x0F
     }
 
     /// Check if it's a trap gate (doesn't clear IF)
     #[inline]
-    pub fn is_trap_gate(&self) -> bool {
+    pub const fn is_trap_gate(&self) -> bool {
         self.gate_type() == 0x0F
     }
 
     /// Get the DPL (Descriptor Privilege Level)
     #[inline]
-    pub fn dpl(&self) -> u8 {
+    pub const fn dpl(&self) -> u8 {
         (self.type_attr >> 5) & 0x03
     }
 }
@@ -301,6 +316,7 @@ pub struct X86_64Cpu {
 }
 
 impl X86_64Cpu {
+    #[must_use]
     pub fn new() -> Self {
         let mut cpu = Self {
             regs: X86Registers::default(),
@@ -349,20 +365,20 @@ impl X86_64Cpu {
     /// Reset the CPU to initial state
     pub fn reset(&mut self) {
         self.regs = X86Registers::default();
-        self.regs.rip = 0xFFF0; // x86 reset vector
-        self.regs.rflags = 0x2; // Reserved bit 1 is always set
+        self.regs.rip = X86_RESET_VECTOR;
+        self.regs.rflags = RFLAGS_RESERVED_BIT1;
 
         // Initialize segment registers (real mode defaults)
         self.segments = X86Segments::default();
-        self.segments.cs.selector = 0xF000;
-        self.segments.cs.base = 0xFFFF0000;
+        self.segments.cs.selector = RESET_CS_SELECTOR;
+        self.segments.cs.base = RESET_CS_BASE;
 
         // Control registers
         self.control = X86ControlRegs::default();
 
         // IDT at 0
         self.idtr = IdtRegister {
-            limit: 0x3FF,
+            limit: REAL_MODE_IDT_LIMIT,
             base: 0,
         };
 

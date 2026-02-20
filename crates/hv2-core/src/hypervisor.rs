@@ -357,3 +357,76 @@ pub fn create_backend() -> Result<Box<dyn HypervisorBackend>> {
         HypervisorPlatform::Tcg | _ => Ok(Box::new(TcgBackend::new())),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_platform_display() {
+        assert_eq!(HypervisorPlatform::Kvm.to_string(), "Kvm");
+        assert_eq!(HypervisorPlatform::Whpx.to_string(), "Whpx");
+        assert_eq!(HypervisorPlatform::Hvf.to_string(), "Hvf");
+        assert_eq!(HypervisorPlatform::Tcg.to_string(), "Tcg");
+    }
+
+    #[test]
+    fn test_platform_detect_returns_value() {
+        // detect() should always return a valid platform (at minimum Tcg fallback)
+        let platform = HypervisorPlatform::detect();
+        let valid = matches!(
+            platform,
+            HypervisorPlatform::Kvm
+                | HypervisorPlatform::Whpx
+                | HypervisorPlatform::Hvf
+                | HypervisorPlatform::Tcg
+        );
+        assert!(valid, "detect() returned unexpected platform: {:?}", platform);
+    }
+
+    #[test]
+    fn test_tcg_backend_defaults() {
+        let backend = TcgBackend::new();
+        assert_eq!(backend.platform(), HypervisorPlatform::Tcg);
+        let caps = backend.capabilities();
+        assert!(caps.max_vcpus > 0);
+        assert!(caps.max_memory > 0);
+        assert!(caps.supports_apic);
+        assert!(!caps.supports_nested_virt);
+    }
+
+    #[test]
+    fn test_hypervisor_vm_new() {
+        let vm = HypervisorVm::new(HypervisorPlatform::Tcg, 4, 8192);
+        assert_eq!(vm.platform(), HypervisorPlatform::Tcg);
+        assert_eq!(vm.vcpu_count, 4);
+        assert_eq!(vm.memory_size, 8192);
+    }
+
+    #[tokio::test]
+    async fn test_tcg_create_vm() {
+        let backend = TcgBackend::new();
+        let vm = backend.create_vm(2, 1024).await.expect("create_vm should succeed");
+        assert_eq!(vm.platform(), HypervisorPlatform::Tcg);
+    }
+
+    #[tokio::test]
+    async fn test_tcg_create_vm_too_many_vcpus() {
+        let backend = TcgBackend::new();
+        let result = backend.create_vm(999_999, 1024).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_capabilities_default() {
+        let caps = HypervisorCapabilities::default();
+        assert_eq!(caps.max_vcpus, 0);
+        assert_eq!(caps.max_memory, 0);
+    }
+
+    #[test]
+    fn test_platform_equality() {
+        assert_eq!(HypervisorPlatform::Kvm, HypervisorPlatform::Kvm);
+        assert_ne!(HypervisorPlatform::Kvm, HypervisorPlatform::Whpx);
+    }
+}

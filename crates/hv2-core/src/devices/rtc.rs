@@ -12,8 +12,10 @@
 
 use crate::{Device, DeviceType, Error, Result};
 use async_trait::async_trait;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use parking_lot::Mutex;
 
 /// RTC register indices
 const RTC_SECONDS: u8 = 0x00;
@@ -211,7 +213,7 @@ impl RtcDevice {
 
     /// Read from index port (0x70) - returns NMI status
     pub fn read_index(&self) -> u8 {
-        let state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let state = self.state.lock();
         if state.nmi_disabled {
             0x80
         } else {
@@ -221,31 +223,31 @@ impl RtcDevice {
 
     /// Write to index port (0x70)
     pub fn write_index(&self, value: u8) {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock();
         state.nmi_disabled = (value & 0x80) != 0;
         state.index = value & 0x7F;
     }
 
     /// Read from data port (0x71)
     pub fn read_data(&self) -> u8 {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock();
         state.read_data()
     }
 
     /// Write to data port (0x71)
     pub fn write_data(&self, value: u8) {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock();
         state.write_data(value);
     }
 
     /// Check if the RTC has a pending interrupt (IRQ 8)
     pub fn has_pending_interrupt(&self) -> bool {
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).has_pending_interrupt()
+        self.state.lock().has_pending_interrupt()
     }
 
     /// Trigger a periodic interrupt (called by timer subsystem)
     pub fn trigger_periodic(&self) -> bool {
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).trigger_periodic_interrupt()
+        self.state.lock().trigger_periodic_interrupt()
     }
 }
 
@@ -267,7 +269,7 @@ impl Device for RtcDevice {
 
     async fn init(&mut self) -> Result<()> {
         // Initialize time on first boot
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).update_time();
+        self.state.lock().update_time();
         Ok(())
     }
 
@@ -301,7 +303,7 @@ impl Device for RtcDevice {
     }
 
     async fn reset(&mut self) -> Result<()> {
-        let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = self.state.lock();
         *state = RtcState::new();
         state.update_time();
         Ok(())

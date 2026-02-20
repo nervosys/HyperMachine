@@ -20,14 +20,6 @@
 #![allow(clippy::missing_transmute_annotations)]
 #![allow(clippy::identity_op)]
 #![allow(clippy::field_reassign_with_default)]
-#![allow(clippy::needless_range_loop)]
-#![allow(clippy::single_match)]
-#![allow(clippy::let_and_return)]
-#![allow(clippy::collapsible_if)]
-#![allow(clippy::manual_range_contains)]
-#![allow(clippy::useless_format)]
-#![allow(clippy::map_entry)]
-#![allow(clippy::manual_clamp)]
 #![allow(clippy::large_enum_variant)]
 #![allow(clippy::vec_init_then_push)]
 #![allow(clippy::wildcard_in_or_patterns)]
@@ -41,6 +33,15 @@
 #![allow(clippy::manual_map)]
 #![allow(clippy::unnecessary_min_or_max)]
 #![allow(clippy::manual_is_multiple_of)]
+// TODO: remove these allows and fix ~30 violations at source
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::single_match)]
+#![allow(clippy::let_and_return)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::useless_format)]
+#![allow(clippy::map_entry)]
+#![allow(clippy::manual_clamp)]
 
 pub mod acpi;
 pub mod address_space;
@@ -78,6 +79,8 @@ pub mod power;
 pub mod security;
 pub mod snapshot;
 pub mod telemetry;
+#[path = "tracing/mod.rs"]
+pub mod hv_tracing;
 pub mod uefi;
 pub mod usb;
 pub mod vcpu;
@@ -115,6 +118,10 @@ pub use container::{
     UserNamespace, UtsNamespace,
 };
 pub use cpuid::{CpuidConfig, CpuidEmulator, CpuidResult};
+pub use crypto::{
+    AesGcmCiphertext, AesKeySize, CryptoError, CryptoResult, FipsCrypto, FipsMode, FipsStatus,
+    KeyPair, SymmetricKey,
+};
 pub use debug::{
     Breakpoint, BreakpointType, CpuInspector, CpuMode, CpuState as DebugCpuState, DebugManager,
     DebugStats, GateType, GdbError, GdbRegister, GdbRegisters, GdbResult, GdbStats, GdbStub,
@@ -173,6 +180,16 @@ pub use migration::{
     VmState as MigrationVmState, FORMAT_VERSION, PAGE_SIZE as MIGRATION_PAGE_SIZE, STATE_MAGIC,
 };
 pub use mmio::{MmioManager, MmioRegion};
+pub use nested::{
+    ept_flags, EptEntry, EptMemoryType, EptPointer, EptTranslationResult,
+    EptViolationQualification, ExitDisposition, GuestActivityState, InvEptType, InvVpidType,
+    L2EntryInfo, L2ExitInfo, NestedConfig, NestedEptManager, NestedEptStats, NestedError,
+    NestedGuestState, NestedLevel, NestedManager, NestedResult, NestedStats, SavedL1State,
+    ShadowVmcs, ShadowVmcsCache, ShadowVmcsCacheStats, ShadowVmcsState, VmExitReason,
+    VmcsAccessType, VmcsField, VmxCapabilities, VmxInstructionError, Vpid,
+    PAGE_SIZE_1G as NESTED_PAGE_SIZE_1G, PAGE_SIZE_2M as NESTED_PAGE_SIZE_2M,
+    PAGE_SIZE_4K as NESTED_PAGE_SIZE_4K,
+};
 pub use networking::{
     ConnState, ConnTrackEntry, ConnTracker, DeviceAssignment, EthernetFrame, FilterAction,
     FilterChain, FilterRule, IommuGroup, IpMatch, IpProtocol, MacAddress, MacEntry, MacTable,
@@ -300,6 +317,20 @@ pub use usb::{
     TransferResult, TransferType, Trb, TrbCompletionCode, TrbType, UsbDevice, UsbKeyboard,
     UsbMouse, UsbSpeed, UsbTablet, XhciController, XhciPort,
 };
+pub use hv_tracing::{
+    AlwaysOffSampler, AlwaysOnSampler, Attribute, AttributeValue, BatchSpanProcessor,
+    CompositeSpanExporter, ConsoleSpanExporter, Context, ContextGuard, CpuProfiler,
+    DefaultIdGenerator, FilteredSpanExporter, FlameGraphBuilder, FlameGraphNode, IdGenerator,
+    InMemorySpanExporter, InstrumentedProfiler, JaegerConfig, JaegerSpanExporter, OtlpConfig,
+    OtlpProtocol, OtlpSpanExporter, ParentBasedSampler, ProfileData, ProfileFrame, ProfileGuard,
+    ProfilerConfig, ProfilerError, ProfilerResult, ProfilerState, Sampler, SamplingDecision,
+    SamplingResult, SimpleSpanProcessor, Span, SpanBuilder, SpanContext, SpanData, SpanEvent,
+    SpanExporter, SpanId, SpanKind, SpanLink, SpanProcessor, SpanStatus, StackSample, StatusCode,
+    TraceFlags, TraceId, TraceIdRatioSampler, TraceState, Tracer, TracerError, TracerProvider,
+    TracerProviderBuilder, TracerResult, ZipkinConfig, ZipkinSpanExporter,
+    // Profiler types
+    AllocationProfile, AllocationSite, FunctionProfile, InstrumentationScope, Resource,
+};
 pub use vcpu::{ControlRegisters, RegisterSet, VCpu, VCpuState};
 pub use vm::{VMConfig, VMState, VM};
 
@@ -307,16 +338,18 @@ pub use vm::{VMConfig, VMState, VM};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const COMMIT_HASH: Option<&str> = option_env!("GIT_COMMIT_HASH");
 
-/// Architecture support
+/// Supported CPU architectures for virtualization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use]
 pub enum Architecture {
     X86_64,
     AArch64,
     RiscV64,
 }
 
-/// VM capabilities
+/// Runtime capabilities and resource limits for a VM instance.
 #[derive(Debug, Clone)]
+#[must_use]
 pub struct Capabilities {
     pub max_vcpus: usize,
     pub max_memory: u64,

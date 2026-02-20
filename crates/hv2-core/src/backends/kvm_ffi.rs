@@ -25,6 +25,7 @@
 //! - Proper synchronization for concurrent access
 
 #![allow(non_camel_case_types)]
+// FFI bindings — not all constants/types are used yet
 #![allow(dead_code)]
 
 use std::os::unix::io::RawFd;

@@ -45,6 +45,7 @@ impl Default for TapConfig {
 
 impl TapConfig {
     /// Create a new TAP config with the given name
+    #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -53,18 +54,21 @@ impl TapConfig {
     }
 
     /// Set the MAC address
+    #[must_use]
     pub fn with_mac(mut self, mac: [u8; 6]) -> Self {
         self.mac_address = Some(mac);
         self
     }
 
     /// Set MTU
+    #[must_use]
     pub fn with_mtu(mut self, mtu: u32) -> Self {
         self.mtu = mtu;
         self
     }
 
     /// Enable multi-queue
+    #[must_use]
     pub fn with_multi_queue(mut self, num_queues: u32) -> Self {
         self.multi_queue = true;
         self.num_queues = num_queues;
@@ -72,6 +76,7 @@ impl TapConfig {
     }
 
     /// Enable vnet header
+    #[must_use]
     pub fn with_vnet_hdr(mut self, enabled: bool) -> Self {
         self.vnet_hdr = enabled;
         self
@@ -203,6 +208,7 @@ mod platform {
         }
 
         pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+            // SAFETY: self.fd is a valid open TAP fd; F_GETFL is a standard POSIX query.
             let flags = unsafe { libc::fcntl(self.fd, libc::F_GETFL) };
             if flags < 0 {
                 return Err(io::Error::last_os_error());
@@ -242,13 +248,15 @@ mod platform {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::{AsRawHandle, RawHandle};
-    use winapi::shared::minwindef::{DWORD, FALSE};
-    use winapi::um::fileapi::{CreateFileW, ReadFile, WriteFile, OPEN_EXISTING};
-    use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-    use winapi::um::winbase::FILE_FLAG_OVERLAPPED;
-    use winapi::um::winnt::{
-        FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
+    use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, ReadFile, WriteFile, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ,
+        FILE_SHARE_WRITE, OPEN_EXISTING,
     };
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    const GENERIC_READ: u32 = 0x80000000;
+    const GENERIC_WRITE: u32 = 0x40000000;
 
     const TAP_WINDOWS_COMPONENT_ID: &str = "tap0901";
 
@@ -308,18 +316,18 @@ mod platform {
         }
 
         fn set_media_status(handle: HANDLE, connected: bool) -> Result<()> {
-            const TAP_WIN_IOCTL_SET_MEDIA_STATUS: DWORD = 0x00220030;
-            let status: DWORD = if connected { 1 } else { 0 };
-            let mut bytes_returned: DWORD = 0;
+            const TAP_WIN_IOCTL_SET_MEDIA_STATUS: u32 = 0x00220030;
+            let status: u32 = if connected { 1 } else { 0 };
+            let mut bytes_returned: u32 = 0;
 
             // SAFETY: handle is a valid open TAP device handle. DeviceIoControl with
             // TAP_WIN_IOCTL_SET_MEDIA_STATUS is a well-defined TAP-Windows ioctl.
             let ret = unsafe {
-                winapi::um::ioapiset::DeviceIoControl(
+                DeviceIoControl(
                     handle,
                     TAP_WIN_IOCTL_SET_MEDIA_STATUS,
-                    &status as *const _ as *mut _,
-                    std::mem::size_of::<DWORD>() as DWORD,
+                    &status as *const _ as *const std::ffi::c_void,
+                    std::mem::size_of::<u32>() as u32,
                     std::ptr::null_mut(),
                     0,
                     &mut bytes_returned,
@@ -338,13 +346,13 @@ mod platform {
         }
 
         pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-            let mut bytes_read: DWORD = 0;
+            let mut bytes_read: u32 = 0;
             // SAFETY: self.handle is a valid open TAP device handle; buf is a valid mutable slice.
             let ret = unsafe {
                 ReadFile(
                     self.handle,
                     buf.as_mut_ptr() as *mut _,
-                    buf.len() as DWORD,
+                    buf.len() as u32,
                     &mut bytes_read,
                     std::ptr::null_mut(),
                 )
@@ -357,13 +365,13 @@ mod platform {
         }
 
         pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
-            let mut bytes_written: DWORD = 0;
+            let mut bytes_written: u32 = 0;
             // SAFETY: self.handle is a valid open TAP device handle; buf is a valid byte slice.
             let ret = unsafe {
                 WriteFile(
                     self.handle,
                     buf.as_ptr() as *const _,
-                    buf.len() as DWORD,
+                    buf.len() as u32,
                     &mut bytes_written,
                     std::ptr::null_mut(),
                 )

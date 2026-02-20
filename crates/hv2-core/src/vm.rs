@@ -16,6 +16,7 @@ use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinHandle;
 
 /// VM state
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum VMState {
     Created,
@@ -40,11 +41,17 @@ impl std::fmt::Display for VMState {
 /// VM configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VMConfig {
+    /// Human-readable name for this VM instance.
     pub name: String,
+    /// Number of virtual CPUs to allocate.
     pub vcpu_count: u32,
+    /// Total guest memory in bytes.
     pub memory_size: u64,
+    /// Enable GPU virtualization for this VM.
     pub enable_gpu: bool,
+    /// Enable network virtualization for this VM.
     pub enable_networking: bool,
+    /// Enable tracing instrumentation for this VM.
     pub enable_tracing: bool,
     /// Enable parallel vCPU execution using multiple tokio tasks
     #[serde(default = "default_parallel_vcpu")]
