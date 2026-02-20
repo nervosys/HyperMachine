@@ -90,8 +90,8 @@ wasmtime = "24.0"
 wasmtime-wasi = "24.0"
 
 # Utilities
-uuid = { version = "1.10", features = ["v4", "serde"] }
-bitflags = "2.4"
+uuid = { version = "1.21", features = ["v4", "serde"] }
+bitflags = "2.11"
 rand = "0.8"
 
 [workspace.lints.rust]
