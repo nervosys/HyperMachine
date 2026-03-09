@@ -29,7 +29,7 @@ categories = ["virtualization", "os", "hardware-support"]
 
 [workspace.dependencies]
 # Core async runtime
-tokio = { version = "1.42", features = ["full"] }
+tokio = { version = "1.50", features = ["full"] }
 async-trait = "0.1"
 
 # Serialization
@@ -90,8 +90,8 @@ wasmtime = "24.0"
 wasmtime-wasi = "24.0"
 
 # Utilities
-uuid = { version = "1.10", features = ["v4", "serde"] }
-bitflags = "2.4"
+uuid = { version = "1.22", features = ["v4", "serde"] }
+bitflags = "2.11"
 rand = "0.8"
 
 [workspace.lints.rust]

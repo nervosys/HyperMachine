@@ -36,7 +36,7 @@ ring = ["fips"]
 proptest = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
-tempfile = "3.10"
+tempfile = "3.26"
 
 [lints]
 workspace = true
