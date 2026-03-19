@@ -79,7 +79,7 @@ colored = "2.1"
 
 # Testing
 proptest = "1.5"
-criterion = "0.5"
+criterion = "0.8"
 
 # Security (Linux only - commented out for Windows compatibility)
 # seccompiler = "0.4"
