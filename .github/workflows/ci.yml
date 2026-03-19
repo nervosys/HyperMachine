@@ -22,7 +22,7 @@ jobs:
         name: Check
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -48,7 +48,7 @@ jobs:
             matrix:
                 os: [ubuntu-latest, windows-latest, macos-latest]
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -71,7 +71,7 @@ jobs:
         name: Test Core (Linux only)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -98,7 +98,7 @@ jobs:
         name: Test Core (Windows)
         runs-on: windows-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -122,7 +122,7 @@ jobs:
         name: Test Core (macOS)
         runs-on: macos-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -146,7 +146,7 @@ jobs:
         name: MSRV Check
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install MSRV toolchain
               uses: dtolnay/rust-toolchain@master
@@ -172,7 +172,7 @@ jobs:
         name: Rustfmt
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -186,7 +186,7 @@ jobs:
         name: Clippy
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -212,7 +212,7 @@ jobs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -241,7 +241,7 @@ jobs:
                       artifact: hm
                       extra_artifact: hv2
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -283,7 +283,7 @@ jobs:
         name: HV1 Check (nightly, bare-metal)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@nightly
@@ -320,7 +320,7 @@ jobs:
         name: HV1 Test (nightly, host)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@nightly
@@ -344,7 +344,7 @@ jobs:
         name: HV1 Clippy (nightly)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@nightly
