@@ -225,36 +225,71 @@ async fn test_vm_with_backend_integration() {
     vm.stop().await.expect("Failed to stop VM");
 }
 
-// Slave PIC cascade test - Currently has issues in integration test environment
-// The unit test for slave cascade in interrupt.rs passes successfully
-// TODO: Investigate why this hangs in integration tests but works in unit tests
+// Slave PIC cascade test - uses VM's PIC directly to test cascade interrupt flow
 #[tokio::test]
-#[ignore = "Hangs in integration test environment - unit test passes successfully"]
 async fn test_slave_pic_cascade() {
     let vm = create_test_vm("test-slave-cascade").await;
     let pic = vm.pic();
 
-    // Raise IRQ 8 (RTC on slave PIC)
+    // Raise IRQ 8 (RTC on slave PIC) - this triggers cascade via master IRQ 2
     pic.raise_irq(8).expect("Failed to raise IRQ 8");
 
-    // Verify interrupt is pending
+    // Verify interrupt is pending via cascade
     let vector = pic.get_pending_interrupt();
     assert!(vector.is_some(), "No interrupt pending after raising IRQ 8");
 
-    // IRQ 8 maps to vector 0x28 (slave base 0x28 + IRQ 0)
+    // IRQ 8 maps to vector 0x28 (slave base 0x28 + offset 0)
     assert_eq!(
         vector.unwrap(),
         0x28,
         "Wrong interrupt vector for IRQ 8 (expected 0x28)"
     );
 
-    // Acknowledge interrupt
+    // Acknowledge the interrupt
     pic.acknowledge_interrupt(0x28)
         .expect("Failed to acknowledge interrupt");
+
+    // Send EOI for the slave and master cascade
+    pic.send_eoi(0x28).expect("Failed to send EOI");
 
     // Verify no more interrupts pending
     assert!(
         pic.get_pending_interrupt().is_none(),
         "Interrupt still pending after acknowledgment"
+    );
+}
+
+/// Test multiple slave PIC IRQs through cascade
+#[tokio::test]
+async fn test_slave_pic_multiple_irqs() {
+    let vm = create_test_vm("test-slave-multi").await;
+    let pic = vm.pic();
+
+    // Test slave IRQs 8-15 (skip testing all, pick representative ones)
+    for slave_irq in [8u8, 10, 12, 15] {
+        pic.raise_irq(slave_irq)
+            .unwrap_or_else(|_| panic!("Failed to raise IRQ {}", slave_irq));
+
+        let vector = pic
+            .get_pending_interrupt()
+            .unwrap_or_else(|| panic!("No interrupt pending for IRQ {}", slave_irq));
+
+        let expected = 0x28 + (slave_irq - 8);
+        assert_eq!(
+            vector, expected,
+            "Wrong vector for IRQ {} (expected {:#x}, got {:#x})",
+            slave_irq, expected, vector
+        );
+
+        pic.acknowledge_interrupt(vector)
+            .unwrap_or_else(|_| panic!("Failed to acknowledge IRQ {}", slave_irq));
+
+        pic.send_eoi(vector)
+            .unwrap_or_else(|_| panic!("Failed to send EOI for IRQ {}", slave_irq));
+    }
+
+    assert!(
+        pic.get_pending_interrupt().is_none(),
+        "Unexpected interrupt pending"
     );
 }

@@ -144,6 +144,26 @@ struct VgaState {
     /// CRTC registers
     crtc_index: u8,
     crtc_regs: [u8; 256],
+    /// Sequencer registers (0x3C4/0x3C5)
+    seq_index: u8,
+    seq_regs: [u8; 5],
+    /// Graphics controller registers (0x3CE/0x3CF)
+    gc_index: u8,
+    gc_regs: [u8; 9],
+    /// Attribute controller registers (0x3C0/0x3C1)
+    ac_index: u8,
+    ac_regs: [u8; 21],
+    /// Attribute controller flip-flop (false=index, true=data)
+    ac_flip_flop: bool,
+    /// Miscellaneous output register (0x3C2 write / 0x3CC read)
+    misc_output: u8,
+    /// DAC palette state
+    dac_read_index: u8,
+    dac_write_index: u8,
+    dac_component: u8,
+    palette: [[u8; 3]; 256],
+    /// DAC mask register (0x3C6)
+    dac_mask: u8,
 }
 
 impl VgaState {
@@ -153,6 +173,19 @@ impl VgaState {
             cursor_pos: 0,
             crtc_index: 0,
             crtc_regs: [0; 256],
+            seq_index: 0,
+            seq_regs: [0x03, 0x00, 0x03, 0x00, 0x02], // Typical text-mode defaults
+            gc_index: 0,
+            gc_regs: [0; 9],
+            ac_index: 0,
+            ac_regs: [0; 21],
+            ac_flip_flop: false,
+            misc_output: 0x67, // Color mode, RAM enabled, clock select
+            dac_read_index: 0,
+            dac_write_index: 0,
+            dac_component: 0,
+            palette: [[0; 3]; 256],
+            dac_mask: 0xFF,
         }
     }
 
@@ -174,7 +207,7 @@ impl VgaState {
     fn read_buffer(&self, offset: usize) -> u8 {
         let index = offset / 2;
         if index < self.buffer.len() {
-            if offset % 2 == 0 {
+            if offset.is_multiple_of(2) {
                 self.buffer[index].character
             } else {
                 self.buffer[index].attribute.to_byte()
@@ -188,7 +221,7 @@ impl VgaState {
     fn write_buffer(&mut self, offset: usize, value: u8) {
         let index = offset / 2;
         if index < self.buffer.len() {
-            if offset % 2 == 0 {
+            if offset.is_multiple_of(2) {
                 self.buffer[index].character = value;
             } else {
                 self.buffer[index].attribute = VgaAttribute::from_byte(value);
@@ -371,6 +404,164 @@ impl VgaDevice {
         }
     }
 
+    // --- Sequencer (0x3C4/0x3C5) ---
+
+    /// Read sequencer index register
+    pub fn read_seq_index(&self) -> u8 {
+        self.state.lock().seq_index
+    }
+
+    /// Write sequencer index register
+    pub fn write_seq_index(&self, value: u8) {
+        self.state.lock().seq_index = value & 0x07;
+    }
+
+    /// Read sequencer data register
+    pub fn read_seq_data(&self) -> u8 {
+        let state = self.state.lock();
+        let idx = state.seq_index as usize;
+        if idx < state.seq_regs.len() {
+            state.seq_regs[idx]
+        } else {
+            0
+        }
+    }
+
+    /// Write sequencer data register
+    pub fn write_seq_data(&self, value: u8) {
+        let mut state = self.state.lock();
+        let idx = state.seq_index as usize;
+        if idx < state.seq_regs.len() {
+            state.seq_regs[idx] = value;
+        }
+    }
+
+    // --- Graphics Controller (0x3CE/0x3CF) ---
+
+    /// Read graphics controller index register
+    pub fn read_gc_index(&self) -> u8 {
+        self.state.lock().gc_index
+    }
+
+    /// Write graphics controller index register
+    pub fn write_gc_index(&self, value: u8) {
+        self.state.lock().gc_index = value & 0x0F;
+    }
+
+    /// Read graphics controller data register
+    pub fn read_gc_data(&self) -> u8 {
+        let state = self.state.lock();
+        let idx = state.gc_index as usize;
+        if idx < state.gc_regs.len() {
+            state.gc_regs[idx]
+        } else {
+            0
+        }
+    }
+
+    /// Write graphics controller data register
+    pub fn write_gc_data(&self, value: u8) {
+        let mut state = self.state.lock();
+        let idx = state.gc_index as usize;
+        if idx < state.gc_regs.len() {
+            state.gc_regs[idx] = value;
+        }
+    }
+
+    // --- Attribute Controller (0x3C0/0x3C1) ---
+
+    /// Read attribute controller (0x3C1)
+    pub fn read_ac(&self) -> u8 {
+        let state = self.state.lock();
+        let idx = state.ac_index as usize;
+        if idx < state.ac_regs.len() {
+            state.ac_regs[idx]
+        } else {
+            0
+        }
+    }
+
+    /// Write attribute controller (0x3C0) — alternates index/data via flip-flop
+    pub fn write_ac(&self, value: u8) {
+        let mut state = self.state.lock();
+        if !state.ac_flip_flop {
+            // Index write
+            state.ac_index = value & 0x1F;
+        } else {
+            // Data write
+            let idx = state.ac_index as usize;
+            if idx < state.ac_regs.len() {
+                state.ac_regs[idx] = value;
+            }
+        }
+        state.ac_flip_flop = !state.ac_flip_flop;
+    }
+
+    // --- Miscellaneous Output (0x3C2 write / 0x3CC read) ---
+
+    /// Read miscellaneous output register
+    pub fn read_misc_output(&self) -> u8 {
+        self.state.lock().misc_output
+    }
+
+    /// Write miscellaneous output register
+    pub fn write_misc_output(&self, value: u8) {
+        self.state.lock().misc_output = value;
+    }
+
+    // --- DAC / Palette (0x3C6–0x3C9) ---
+
+    /// Read DAC mask register (0x3C6)
+    pub fn read_dac_mask(&self) -> u8 {
+        self.state.lock().dac_mask
+    }
+
+    /// Write DAC mask register (0x3C6)
+    pub fn write_dac_mask(&self, value: u8) {
+        self.state.lock().dac_mask = value;
+    }
+
+    /// Write DAC read index (0x3C7)
+    pub fn write_dac_read_index(&self, value: u8) {
+        let mut state = self.state.lock();
+        state.dac_read_index = value;
+        state.dac_component = 0;
+    }
+
+    /// Write DAC write index (0x3C8)
+    pub fn write_dac_write_index(&self, value: u8) {
+        let mut state = self.state.lock();
+        state.dac_write_index = value;
+        state.dac_component = 0;
+    }
+
+    /// Read DAC data (0x3C9) — returns R/G/B components sequentially
+    pub fn read_dac_data(&self) -> u8 {
+        let mut state = self.state.lock();
+        let idx = state.dac_read_index as usize;
+        let comp = state.dac_component as usize;
+        let value = state.palette[idx][comp];
+        state.dac_component += 1;
+        if state.dac_component >= 3 {
+            state.dac_component = 0;
+            state.dac_read_index = state.dac_read_index.wrapping_add(1);
+        }
+        value
+    }
+
+    /// Write DAC data (0x3C9) — sets R/G/B components sequentially
+    pub fn write_dac_data(&self, value: u8) {
+        let mut state = self.state.lock();
+        let idx = state.dac_write_index as usize;
+        let comp = state.dac_component as usize;
+        state.palette[idx][comp] = value;
+        state.dac_component += 1;
+        if state.dac_component >= 3 {
+            state.dac_component = 0;
+            state.dac_write_index = state.dac_write_index.wrapping_add(1);
+        }
+    }
+
     /// Read from text buffer (MMIO)
     pub fn read_buffer(&self, offset: u64) -> Result<u8> {
         if offset >= VGA_SIZE as u64 {
@@ -390,9 +581,7 @@ impl VgaDevice {
                 offset
             )));
         }
-        self.state
-            .lock()
-            .write_buffer(offset as usize, value);
+        self.state.lock().write_buffer(offset as usize, value);
         Ok(())
     }
 
@@ -512,6 +701,17 @@ impl Device for VgaDevice {
         }
 
         let value = match offset {
+            0x3C0 => self.state.lock().ac_index,
+            0x3C1 => self.read_ac(),
+            0x3C4 => self.read_seq_index(),
+            0x3C5 => self.read_seq_data(),
+            0x3C6 => self.read_dac_mask(),
+            0x3C7 => 0, // DAC state: write mode indicator
+            0x3C8 => self.state.lock().dac_write_index,
+            0x3C9 => self.read_dac_data(),
+            0x3CC => self.read_misc_output(),
+            0x3CE => self.read_gc_index(),
+            0x3CF => self.read_gc_data(),
             0x3D4 => self.read_crtc_index(),
             0x3D5 => self.read_crtc_data(),
             _ => return Err(Error::Device(format!("Invalid VGA port: {:#x}", offset))),
@@ -527,6 +727,16 @@ impl Device for VgaDevice {
         }
 
         match offset {
+            0x3C0 => self.write_ac(data[0]),
+            0x3C2 => self.write_misc_output(data[0]),
+            0x3C4 => self.write_seq_index(data[0]),
+            0x3C5 => self.write_seq_data(data[0]),
+            0x3C6 => self.write_dac_mask(data[0]),
+            0x3C7 => self.write_dac_read_index(data[0]),
+            0x3C8 => self.write_dac_write_index(data[0]),
+            0x3C9 => self.write_dac_data(data[0]),
+            0x3CE => self.write_gc_index(data[0]),
+            0x3CF => self.write_gc_data(data[0]),
             0x3D4 => self.write_crtc_index(data[0]),
             0x3D5 => self.write_crtc_data(data[0]),
             _ => return Err(Error::Device(format!("Invalid VGA port: {:#x}", offset))),
@@ -878,5 +1088,92 @@ mod tests {
 
         let (ch, _) = vga.get_char(1, 0).unwrap();
         assert_eq!(ch, b'B');
+    }
+
+    #[tokio::test]
+    async fn test_vga_sequencer_registers() {
+        let vga = VgaDevice::new();
+
+        // Write sequencer index and data via Device trait
+        vga.write_seq_index(0x02); // Map Mask register
+        assert_eq!(vga.read_seq_index(), 0x02);
+
+        vga.write_seq_data(0x0F); // Enable all planes
+        assert_eq!(vga.read_seq_data(), 0x0F);
+
+        // Also test via Device trait I/O
+        let mut buf = [0u8; 1];
+        vga.read(0x3C4, &mut buf).await.unwrap();
+        assert_eq!(buf[0], 0x02);
+    }
+
+    #[tokio::test]
+    async fn test_vga_graphics_controller() {
+        let vga = VgaDevice::new();
+
+        vga.write_gc_index(0x05); // Mode register
+        assert_eq!(vga.read_gc_index(), 0x05);
+
+        vga.write_gc_data(0x10);
+        assert_eq!(vga.read_gc_data(), 0x10);
+    }
+
+    #[tokio::test]
+    async fn test_vga_attribute_controller() {
+        let vga = VgaDevice::new();
+
+        // Reset flip-flop by reading Input Status (not emulated, but we can
+        // exercise the AC directly)
+        // First write sets index
+        vga.write_ac(0x10); // Mode Control register index
+                            // Second write sets data
+        vga.write_ac(0x01);
+
+        assert_eq!(vga.read_ac(), 0x01);
+    }
+
+    #[tokio::test]
+    async fn test_vga_misc_output() {
+        let vga = VgaDevice::new();
+
+        // Default should be 0x67
+        assert_eq!(vga.read_misc_output(), 0x67);
+
+        vga.write_misc_output(0x23);
+        assert_eq!(vga.read_misc_output(), 0x23);
+
+        // Via Device trait
+        let mut buf = [0u8; 1];
+        vga.read(0x3CC, &mut buf).await.unwrap();
+        assert_eq!(buf[0], 0x23);
+    }
+
+    #[tokio::test]
+    async fn test_vga_dac_palette() {
+        let mut vga = VgaDevice::new();
+
+        // Set write index to color 5
+        vga.write_dac_write_index(5);
+        // Write R, G, B
+        vga.write_dac_data(0x3F);
+        vga.write_dac_data(0x00);
+        vga.write_dac_data(0x15);
+
+        // Read back: set read index to 5
+        vga.write_dac_read_index(5);
+        assert_eq!(vga.read_dac_data(), 0x3F); // R
+        assert_eq!(vga.read_dac_data(), 0x00); // G
+        assert_eq!(vga.read_dac_data(), 0x15); // B
+
+        // Verify via Device trait
+        vga.write(0x3C8, &[10]).await.unwrap();
+        vga.write(0x3C9, &[0x01]).await.unwrap();
+        vga.write(0x3C9, &[0x02]).await.unwrap();
+        vga.write(0x3C9, &[0x03]).await.unwrap();
+
+        vga.write(0x3C7, &[10]).await.unwrap();
+        let mut buf = [0u8; 1];
+        vga.read(0x3C9, &mut buf).await.unwrap();
+        assert_eq!(buf[0], 0x01);
     }
 }

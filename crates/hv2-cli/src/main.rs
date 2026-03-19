@@ -2,10 +2,13 @@
 
 #![allow(dead_code)]
 
+mod runtime_commands;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::*;
 use hv2_agent::AgentVM;
+use std::path::PathBuf;
 use std::time::Duration;
 
 #[derive(Parser)]
@@ -80,17 +83,69 @@ enum Commands {
 
     /// Start API server
     Serve {
-        /// gRPC port
-        #[arg(long, default_value = "50051")]
-        grpc_port: u16,
+        /// Path to TOML configuration file
+        #[arg(long, value_name = "PATH")]
+        config: Option<PathBuf>,
 
-        /// REST API port
-        #[arg(long, default_value = "8080")]
-        rest_port: u16,
+        /// gRPC port (overrides config file)
+        #[arg(long)]
+        grpc_port: Option<u16>,
+
+        /// REST API port (overrides config file)
+        #[arg(long)]
+        rest_port: Option<u16>,
+
+        /// Disable runtime fleet management endpoints
+        #[arg(long)]
+        no_runtime: bool,
+
+        /// Disable events/SSE/webhook endpoints
+        #[arg(long)]
+        no_events: bool,
+
+        /// Number of VMs to pre-warm in the pool (overrides config file)
+        #[arg(long)]
+        pre_warm: Option<usize>,
+
+        /// Graceful shutdown timeout in seconds (overrides config file)
+        #[arg(long)]
+        shutdown_timeout: Option<u64>,
     },
+
+    /// Configuration file management
+    #[command(subcommand)]
+    Config(ConfigCommands),
+
+    /// Runtime fleet management
+    #[command(subcommand)]
+    Runtime(runtime_commands::RuntimeCommands),
 
     /// Show version information
     Version,
+}
+
+#[derive(Subcommand)]
+enum ConfigCommands {
+    /// Generate a default configuration file
+    Init {
+        /// Output path (default: hv2.toml)
+        #[arg(short, long, default_value = "hv2.toml")]
+        output: PathBuf,
+    },
+
+    /// Validate a configuration file
+    Check {
+        /// Path to configuration file (default: hv2.toml)
+        #[arg(default_value = "hv2.toml")]
+        path: PathBuf,
+    },
+
+    /// Display the resolved configuration (file + env overrides)
+    Show {
+        /// Path to configuration file (default: hv2.toml)
+        #[arg(long, default_value = "hv2.toml")]
+        config: PathBuf,
+    },
 }
 
 #[tokio::main]
@@ -196,41 +251,171 @@ async fn main() -> Result<()> {
         }
 
         Commands::Serve {
+            config: config_path,
             grpc_port,
             rest_port,
+            no_runtime,
+            no_events,
+            pre_warm,
+            shutdown_timeout,
         } => {
-            println!("{}", "Starting HyperMachine API servers...".cyan().bold());
-            println!("  gRPC: {}", format!("0.0.0.0:{}", grpc_port).green());
+            println!("{}", "Starting HyperMachine API server...".cyan().bold());
+
+            // Load config: file → env vars → CLI overrides
+            let mut cfg = match &config_path {
+                Some(path) => {
+                    println!(
+                        "  Loading config from {}",
+                        path.display().to_string().cyan()
+                    );
+                    match hv2_api::config::ConfigFile::load(path)? {
+                        Some(c) => c,
+                        None => {
+                            anyhow::bail!("Config file not found: {}", path.display());
+                        }
+                    }
+                }
+                None => {
+                    // Try default hv2.toml; use defaults if missing
+                    let default_path = PathBuf::from("hv2.toml");
+                    match hv2_api::config::ConfigFile::load(&default_path)? {
+                        Some(c) => {
+                            println!("  Loaded config from {}", "hv2.toml".cyan());
+                            c
+                        }
+                        None => hv2_api::config::ConfigFile::default(),
+                    }
+                }
+            };
+
+            // Apply environment variable overrides
+            cfg.apply_env();
+
+            // Validate before applying CLI overrides (catches file/env issues early)
+            cfg.validate()?;
+
+            // CLI flags override config file + env
+            if let Some(port) = rest_port {
+                cfg.server.rest_port = port;
+            }
+            if let Some(port) = grpc_port {
+                cfg.server.grpc_port = port;
+            }
+            if no_runtime {
+                cfg.server.enable_runtime = false;
+            }
+            if no_events {
+                cfg.server.enable_events = false;
+            }
+            if let Some(pw) = pre_warm {
+                cfg.server.pre_warm_count = pw;
+            }
+            if let Some(secs) = shutdown_timeout {
+                cfg.server.shutdown_timeout_secs = secs;
+            }
+
+            let config = cfg.into_server_config();
+
+            let server = hv2_api::server::Server::new(config);
+
+            // Print feature summary
+            for (feature, enabled) in server.feature_summary() {
+                let status = if enabled {
+                    "enabled".green()
+                } else {
+                    "disabled".yellow()
+                };
+                println!("  {:<16} {}", feature, status);
+            }
+
+            println!();
             println!(
                 "  REST: {}",
-                format!("http://0.0.0.0:{}", rest_port).green()
+                format!("http://{}", server.config().rest_addr()).green()
+            );
+            println!(
+                "  gRPC: {}",
+                format!("{}", server.config().grpc_addr()).green()
+            );
+            println!();
+
+            // Print route table
+            let routes = server.route_table();
+            println!(
+                "  {} routes registered",
+                routes.len().to_string().cyan().bold()
             );
 
-            // Start both servers
-            let grpc_addr: std::net::SocketAddr = format!("0.0.0.0:{}", grpc_port).parse()?;
-            let rest_addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
-
-            let grpc_task = tokio::spawn(async move {
-                if let Err(e) = hv2_api::grpc::serve(grpc_addr).await {
-                    eprintln!("gRPC server error: {}", e);
+            if cli.verbose {
+                println!();
+                for (method, path, desc) in &routes {
+                    println!("    {:<7} {:<35} {}", method.cyan(), path, desc.dimmed());
                 }
-            });
-
-            let rest_task = tokio::spawn(async move {
-                if let Err(e) = hv2_api::rest::serve(rest_addr).await {
-                    eprintln!("REST server error: {}", e);
-                }
-            });
+                println!();
+            }
 
             println!("{}", "✓ Servers running (Ctrl+C to stop)".green());
 
-            tokio::select! {
-                _ = grpc_task => {},
-                _ = rest_task => {},
-                _ = tokio::signal::ctrl_c() => {
-                    println!("\n{}", "Shutting down...".yellow());
-                }
+            if let Err(e) = server.serve_all().await {
+                eprintln!("{}", format!("Server error: {}", e).red());
+                std::process::exit(1);
             }
+        }
+
+        Commands::Config(sub) => match sub {
+            ConfigCommands::Init { output } => {
+                if output.exists() {
+                    anyhow::bail!(
+                        "File already exists: {} (use a different path)",
+                        output.display()
+                    );
+                }
+                let toml = hv2_api::config::ConfigFile::default_toml()?;
+                std::fs::write(&output, toml)?;
+                println!(
+                    "{}",
+                    format!("✓ Default config written to {}", output.display()).green()
+                );
+            }
+            ConfigCommands::Check { path } => match hv2_api::config::ConfigFile::load(&path)? {
+                Some(mut cfg) => {
+                    cfg.apply_env();
+                    match cfg.validate() {
+                        Ok(()) => {
+                            println!(
+                                "{}",
+                                format!("✓ Configuration is valid: {}", path.display()).green()
+                            );
+                        }
+                        Err(e) => {
+                            eprintln!("{}", format!("✗ Validation errors: {}", e).red());
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                None => {
+                    anyhow::bail!("Config file not found: {}", path.display());
+                }
+            },
+            ConfigCommands::Show { config: path } => {
+                let cfg = match hv2_api::config::ConfigFile::load(&path)? {
+                    Some(mut c) => {
+                        c.apply_env();
+                        c
+                    }
+                    None => {
+                        anyhow::bail!("Config file not found: {}", path.display());
+                    }
+                };
+                let toml = cfg.to_toml()?;
+                println!("{}", toml);
+            }
+        },
+
+        Commands::Runtime(sub) => {
+            let config = hv2_runtime::RuntimeConfig::default();
+            let runtime = hv2_runtime::Runtime::new(config);
+            runtime_commands::execute(&runtime, &sub)?;
         }
 
         Commands::Version => {

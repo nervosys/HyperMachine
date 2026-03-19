@@ -2,7 +2,7 @@
 
 use crate::Result;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -12,6 +12,7 @@ use hv2_agent::AgentVM;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 
 /// Shared application state
@@ -19,13 +20,34 @@ use tokio::sync::RwLock;
 pub struct AppState {
     /// Active VMs managed by the API
     vms: Arc<RwLock<HashMap<String, Arc<AgentVM>>>>,
+    /// Server start time for uptime calculation
+    start_time: Instant,
+    /// Whether the runtime subsystem is enabled
+    pub runtime_enabled: bool,
+    /// Whether the events subsystem is enabled
+    pub events_enabled: bool,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
             vms: Arc::new(RwLock::new(HashMap::new())),
+            start_time: Instant::now(),
+            runtime_enabled: false,
+            events_enabled: false,
         }
+    }
+
+    /// Builder-style: set runtime enabled flag
+    pub fn with_runtime_enabled(mut self, enabled: bool) -> Self {
+        self.runtime_enabled = enabled;
+        self
+    }
+
+    /// Builder-style: set events enabled flag
+    pub fn with_events_enabled(mut self, enabled: bool) -> Self {
+        self.events_enabled = enabled;
+        self
     }
 }
 
@@ -35,11 +57,20 @@ impl Default for AppState {
     }
 }
 
-/// REST API error response
-#[derive(Serialize)]
-struct ErrorResponse {
-    error: String,
-    code: String,
+/// Unified API error response body.
+///
+/// Used across all API handlers and middleware layers for a consistent
+/// JSON error format.  The optional `request_id` field is populated
+/// from the `X-Request-Id` header when available.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorResponse {
+    /// Human-readable error message.
+    pub error: String,
+    /// Machine-readable error code (e.g. `VM_NOT_FOUND`).
+    pub code: String,
+    /// Request ID from the `X-Request-Id` header, if available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 impl IntoResponse for crate::ApiError {
@@ -66,17 +97,28 @@ impl IntoResponse for crate::ApiError {
         let body = Json(ErrorResponse {
             error,
             code: code.to_string(),
+            request_id: None,
         });
         (status, body).into_response()
     }
 }
 
-/// Create REST API router
+/// Create REST API router with default state
 pub fn create_router() -> Router {
-    let state = AppState::new();
+    create_router_with_state(AppState::new())
+}
 
+/// Create REST API router with the given application state
+///
+/// The `state` argument lets callers inject component-awareness (e.g.
+/// runtime/events flags) for richer health-check responses.  The
+/// convenience [`create_router`] function delegates here with a
+/// default `AppState`.
+pub fn create_router_with_state(state: AppState) -> Router {
     Router::new()
         .route("/health", get(health_check))
+        .route("/health/live", get(liveness_check))
+        .route("/health/ready", get(readiness_check))
         .route("/api/v1/vms", get(list_vms).post(create_vm))
         .route("/api/v1/vms/{id}", get(get_vm).delete(delete_vm))
         .route("/api/v1/vms/{id}/start", post(start_vm))
@@ -90,52 +132,265 @@ pub fn create_router() -> Router {
         .with_state(Arc::new(state))
 }
 
+// ============================================================================
+// Health Check Types & Handlers
+// ============================================================================
+
 /// Health check response
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct HealthResponse {
     status: String,
     version: String,
     uptime_seconds: u64,
+    vm_count: usize,
+    components: ComponentStatus,
 }
 
-async fn health_check() -> impl IntoResponse {
+/// Status of server subsystem components
+#[derive(Debug, Serialize, Deserialize)]
+struct ComponentStatus {
+    runtime: String,
+    events: String,
+}
+
+/// Liveness probe response
+#[derive(Debug, Serialize, Deserialize)]
+struct LivenessResponse {
+    status: String,
+}
+
+/// Readiness probe response
+#[derive(Debug, Serialize, Deserialize)]
+struct ReadinessResponse {
+    status: String,
+    checks: Vec<ReadinessCheck>,
+}
+
+/// Individual readiness check result
+#[derive(Debug, Serialize, Deserialize)]
+struct ReadinessCheck {
+    name: String,
+    status: String,
+}
+
+/// Full health check — reports uptime, VM count, and component status.
+async fn health_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let uptime = state.start_time.elapsed().as_secs();
+    let vm_count = state.vms.read().await.len();
+
     Json(HealthResponse {
         status: "healthy".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: 0, // Would track actual server uptime
+        uptime_seconds: uptime,
+        vm_count,
+        components: ComponentStatus {
+            runtime: if state.runtime_enabled {
+                "enabled".to_string()
+            } else {
+                "disabled".to_string()
+            },
+            events: if state.events_enabled {
+                "enabled".to_string()
+            } else {
+                "disabled".to_string()
+            },
+        },
     })
 }
 
+/// Liveness probe — returns 200 if the process is alive.
+///
+/// Used by orchestrators (e.g. Kubernetes) to detect unresponsive servers.
+async fn liveness_check() -> impl IntoResponse {
+    Json(LivenessResponse {
+        status: "alive".to_string(),
+    })
+}
+
+/// Readiness probe — returns 200 when the server can accept traffic.
+///
+/// Reports per-component readiness. Disabled subsystems are marked
+/// `"disabled"` rather than `"down"` so operators can distinguish
+/// intentional configuration from failures.
+async fn readiness_check(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    let checks = vec![
+        ReadinessCheck {
+            name: "http_server".to_string(),
+            status: "up".to_string(),
+        },
+        ReadinessCheck {
+            name: "runtime".to_string(),
+            status: if state.runtime_enabled {
+                "up".to_string()
+            } else {
+                "disabled".to_string()
+            },
+        },
+        ReadinessCheck {
+            name: "events".to_string(),
+            status: if state.events_enabled {
+                "up".to_string()
+            } else {
+                "disabled".to_string()
+            },
+        },
+    ];
+
+    // Server is ready if the HTTP server is up (always true if we're responding)
+    let ready = checks.iter().all(|c| c.status != "down");
+    let status_code = if ready {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    (
+        status_code,
+        Json(ReadinessResponse {
+            status: if ready {
+                "ready".to_string()
+            } else {
+                "not_ready".to_string()
+            },
+            checks,
+        }),
+    )
+}
+
+// ============================================================================
+// Pagination
+// ============================================================================
+
+/// Default pagination page size.
+const DEFAULT_PAGE_SIZE: usize = 20;
+/// Maximum allowed page size.
+const MAX_PAGE_SIZE: usize = 100;
+
+/// Query parameters for paginated list endpoints.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PaginationParams {
+    /// Page offset (0-based, default 0).
+    #[serde(default)]
+    pub offset: usize,
+    /// Maximum items to return (default 20, max 100).
+    pub limit: Option<usize>,
+}
+
+impl PaginationParams {
+    /// Clamp `limit` between 1 and `MAX_PAGE_SIZE`.
+    pub fn effective_limit(&self) -> usize {
+        self.limit
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .clamp(1, MAX_PAGE_SIZE)
+    }
+}
+
+/// Envelope returned by all paginated list endpoints.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginatedResponse<T: Serialize> {
+    /// Page of results.
+    pub items: Vec<T>,
+    /// Total number of matching items (before pagination).
+    pub total: usize,
+    /// Offset used for this page.
+    pub offset: usize,
+    /// Limit used for this page.
+    pub limit: usize,
+    /// Whether more items exist after this page.
+    pub has_more: bool,
+}
+
+impl<T: Serialize> PaginatedResponse<T> {
+    /// Build a paginated response from a full collection.
+    pub fn from_vec(items: Vec<T>, total: usize, offset: usize, limit: usize) -> Self {
+        let has_more = offset + items.len() < total;
+        Self {
+            items,
+            total,
+            offset,
+            limit,
+            has_more,
+        }
+    }
+}
+
+/// Query parameters for the VM list endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct VmListParams {
+    /// Page offset (0-based, default 0).
+    #[serde(default)]
+    pub offset: usize,
+    /// Maximum items to return (default 20, max 100).
+    pub limit: Option<usize>,
+    /// Optional state filter (e.g. `Running`, `Paused`).
+    pub state: Option<String>,
+}
+
+impl VmListParams {
+    /// Pagination limit clamped to valid range.
+    pub fn effective_limit(&self) -> usize {
+        self.limit
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .clamp(1, MAX_PAGE_SIZE)
+    }
+}
+
 /// VM list response
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct VmListResponse {
     vms: Vec<VmSummary>,
     total: usize,
+    offset: usize,
+    limit: usize,
+    has_more: bool,
 }
 
 /// VM summary for list view
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct VmSummary {
     id: String,
     name: String,
     state: String,
 }
 
-async fn list_vms(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+async fn list_vms(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<VmListParams>,
+) -> impl IntoResponse {
     let vms = state.vms.read().await;
-    let summaries: Vec<VmSummary> = vms
+
+    // Collect and optionally filter by state
+    let mut summaries: Vec<VmSummary> = vms
         .iter()
         .map(|(id, vm)| VmSummary {
             id: id.clone(),
             name: id.clone(),
             state: format!("{:?}", vm.state()),
         })
+        .filter(|s| {
+            if let Some(ref filter) = params.state {
+                s.state.eq_ignore_ascii_case(filter)
+            } else {
+                true
+            }
+        })
         .collect();
 
+    // Sort for deterministic pagination
+    summaries.sort_by(|a, b| a.id.cmp(&b.id));
+
     let total = summaries.len();
+    let limit = params.effective_limit();
+    let offset = params.offset.min(total);
+    let page: Vec<VmSummary> = summaries.into_iter().skip(offset).take(limit).collect();
+    let has_more = offset + page.len() < total;
+
     Json(VmListResponse {
-        vms: summaries,
+        vms: page,
         total,
+        offset,
+        limit,
+        has_more,
     })
 }
 
@@ -190,6 +445,7 @@ async fn create_vm(
                 Json(ErrorResponse {
                     error: e.to_string(),
                     code: "VM_CREATE_FAILED".to_string(),
+                    request_id: None,
                 }),
             )
         })?;
@@ -230,6 +486,7 @@ async fn get_vm(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -240,6 +497,7 @@ async fn get_vm(
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "METRICS_ERROR".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -274,6 +532,7 @@ async fn delete_vm(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         ))
     }
@@ -299,6 +558,7 @@ async fn start_vm(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -309,6 +569,7 @@ async fn start_vm(
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "START_FAILED".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -332,6 +593,7 @@ async fn stop_vm(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -342,6 +604,7 @@ async fn stop_vm(
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "STOP_FAILED".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -365,6 +628,7 @@ async fn pause_vm(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -375,6 +639,7 @@ async fn pause_vm(
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "PAUSE_FAILED".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -398,6 +663,7 @@ async fn resume_vm(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -408,6 +674,7 @@ async fn resume_vm(
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "RESUME_FAILED".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -441,6 +708,7 @@ async fn get_metrics(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -451,6 +719,7 @@ async fn get_metrics(
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "METRICS_ERROR".to_string(),
+                request_id: None,
             }),
         )
     })?;
@@ -496,6 +765,7 @@ async fn execute_script(
             Json(ErrorResponse {
                 error: format!("VM not found: {}", id),
                 code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
             }),
         )
     })?;

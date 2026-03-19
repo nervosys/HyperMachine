@@ -373,3 +373,412 @@ impl Default for GuestMemoryMapper {
         Self::new()
     }
 }
+
+// ---------------------------------------------------------------------------
+// EPT / NPT page-table construction
+// ---------------------------------------------------------------------------
+
+/// Result of building an EPT hierarchy: the physical address of the PML4
+/// encoded as an EPTP value ready to be loaded into VMCS.
+///
+/// EPTP format (Intel SDM Vol 3, 24.6.11):
+///   bits 2:0  — memory type for EPT paging structures (6 = WB)
+///   bits 5:3  — EPT page-walk length minus 1 (3 = 4-level)
+///   bit  6    — enable accessed/dirty flags
+///   bits N:12 — physical address of PML4
+#[cfg(feature = "intel")]
+pub fn build_ept(allocator: &mut FrameAllocator, mapper: &GuestMemoryMapper) -> Result<u64> {
+    // Allocate PML4
+    let pml4_pa = allocator.allocate_frame()?;
+    let pml4 = unsafe { &mut *(pml4_pa.as_u64() as *mut EptPageTable) };
+    *pml4 = PageTable::new();
+
+    for region in mapper.regions() {
+        let mut gpa = region.guest_phys_addr & !(PAGE_SIZE as u64 - 1);
+        let end = region.guest_phys_addr + region.size;
+        let mut hpa = region.host_phys_addr & !(PAGE_SIZE as u64 - 1);
+
+        while gpa < end {
+            // Check whether we can use a 2 MB large page.
+            let remaining = end - gpa;
+            let use_2m = gpa & (LARGE_PAGE_SIZE as u64 - 1) == 0
+                && hpa & (LARGE_PAGE_SIZE as u64 - 1) == 0
+                && remaining >= LARGE_PAGE_SIZE as u64;
+
+            let pml4_idx = ((gpa >> 39) & 0x1FF) as usize;
+            let pdpt_idx = ((gpa >> 30) & 0x1FF) as usize;
+            let pd_idx = ((gpa >> 21) & 0x1FF) as usize;
+
+            // --- PDPT ---
+            if !pml4.entries[pml4_idx].is_present() {
+                let pa = allocator.allocate_frame()?;
+                let tbl = unsafe { &mut *(pa.as_u64() as *mut EptPageTable) };
+                *tbl = PageTable::new();
+                pml4.entries[pml4_idx] = EptEntry::table(pa.as_u64());
+            }
+            let pdpt = unsafe { &mut *(pml4.entries[pml4_idx].addr() as *mut EptPageTable) };
+
+            // --- PD ---
+            if !pdpt.entries[pdpt_idx].is_present() {
+                let pa = allocator.allocate_frame()?;
+                let tbl = unsafe { &mut *(pa.as_u64() as *mut EptPageTable) };
+                *tbl = PageTable::new();
+                pdpt.entries[pdpt_idx] = EptEntry::table(pa.as_u64());
+            }
+            let pd = unsafe { &mut *(pdpt.entries[pdpt_idx].addr() as *mut EptPageTable) };
+
+            if use_2m {
+                let mut flags = EptEntry::READ | EptEntry::WRITE | EptEntry::MT_WB;
+                if region.executable {
+                    flags |= EptEntry::EXECUTE;
+                }
+                pd.entries[pd_idx] = EptEntry::page_2m(hpa, flags);
+                gpa += LARGE_PAGE_SIZE as u64;
+                hpa += LARGE_PAGE_SIZE as u64;
+            } else {
+                // --- PT (4 KB) ---
+                let pt_idx = ((gpa >> 12) & 0x1FF) as usize;
+
+                if !pd.entries[pd_idx].is_present() {
+                    let pa = allocator.allocate_frame()?;
+                    let tbl = unsafe { &mut *(pa.as_u64() as *mut EptPageTable) };
+                    *tbl = PageTable::new();
+                    pd.entries[pd_idx] = EptEntry::table(pa.as_u64());
+                }
+                let pt = unsafe { &mut *(pd.entries[pd_idx].addr() as *mut EptPageTable) };
+
+                let mut flags = EptEntry::READ | EptEntry::MT_WB;
+                if region.writable {
+                    flags |= EptEntry::WRITE;
+                }
+                if region.executable {
+                    flags |= EptEntry::EXECUTE;
+                }
+                pt.entries[pt_idx] = EptEntry::page_4k(hpa, flags);
+                gpa += PAGE_SIZE as u64;
+                hpa += PAGE_SIZE as u64;
+            }
+        }
+    }
+
+    // Compose EPTP: WB memory type (6), page-walk length 3, AD enabled
+    let eptp = pml4_pa.as_u64() | (6) | (3 << 3) | (1 << 6);
+    Ok(eptp)
+}
+
+/// Build an AMD Nested Page Table hierarchy and return the physical address
+/// of the top-level page table (NCR3 value for VMCB).
+#[cfg(feature = "amd")]
+pub fn build_npt(allocator: &mut FrameAllocator, mapper: &GuestMemoryMapper) -> Result<u64> {
+    // Allocate PML4
+    let pml4_pa = allocator.allocate_frame()?;
+    let pml4 = unsafe { &mut *(pml4_pa.as_u64() as *mut NptPageTable) };
+    *pml4 = PageTable::new();
+
+    for region in mapper.regions() {
+        let mut gpa = region.guest_phys_addr & !(PAGE_SIZE as u64 - 1);
+        let end = region.guest_phys_addr + region.size;
+        let mut hpa = region.host_phys_addr & !(PAGE_SIZE as u64 - 1);
+
+        while gpa < end {
+            let remaining = end - gpa;
+            let use_2m = gpa & (LARGE_PAGE_SIZE as u64 - 1) == 0
+                && hpa & (LARGE_PAGE_SIZE as u64 - 1) == 0
+                && remaining >= LARGE_PAGE_SIZE as u64;
+
+            let pml4_idx = ((gpa >> 39) & 0x1FF) as usize;
+            let pdpt_idx = ((gpa >> 30) & 0x1FF) as usize;
+            let pd_idx = ((gpa >> 21) & 0x1FF) as usize;
+
+            // --- PDPT ---
+            if !pml4.entries[pml4_idx].is_present() {
+                let pa = allocator.allocate_frame()?;
+                let tbl = unsafe { &mut *(pa.as_u64() as *mut NptPageTable) };
+                *tbl = PageTable::new();
+                pml4.entries[pml4_idx] = NptEntry::table(pa.as_u64());
+            }
+            let pdpt = unsafe { &mut *(pml4.entries[pml4_idx].addr() as *mut NptPageTable) };
+
+            // --- PD ---
+            if !pdpt.entries[pdpt_idx].is_present() {
+                let pa = allocator.allocate_frame()?;
+                let tbl = unsafe { &mut *(pa.as_u64() as *mut NptPageTable) };
+                *tbl = PageTable::new();
+                pdpt.entries[pdpt_idx] = NptEntry::table(pa.as_u64());
+            }
+            let pd = unsafe { &mut *(pdpt.entries[pdpt_idx].addr() as *mut NptPageTable) };
+
+            if use_2m {
+                pd.entries[pd_idx] = NptEntry::page_2m(hpa, region.writable);
+                gpa += LARGE_PAGE_SIZE as u64;
+                hpa += LARGE_PAGE_SIZE as u64;
+            } else {
+                let pt_idx = ((gpa >> 12) & 0x1FF) as usize;
+
+                if !pd.entries[pd_idx].is_present() {
+                    let pa = allocator.allocate_frame()?;
+                    let tbl = unsafe { &mut *(pa.as_u64() as *mut NptPageTable) };
+                    *tbl = PageTable::new();
+                    pd.entries[pd_idx] = NptEntry::table(pa.as_u64());
+                }
+                let pt = unsafe { &mut *(pd.entries[pd_idx].addr() as *mut NptPageTable) };
+
+                pt.entries[pt_idx] = NptEntry::page_4k(hpa, region.writable);
+                gpa += PAGE_SIZE as u64;
+                hpa += PAGE_SIZE as u64;
+            }
+        }
+    }
+
+    Ok(pml4_pa.as_u64())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Constants ---
+
+    #[test]
+    fn page_size_constants() {
+        assert_eq!(PAGE_SIZE, 4096);
+        assert_eq!(LARGE_PAGE_SIZE, 2 * 1024 * 1024);
+        assert_eq!(HUGE_PAGE_SIZE, 1024 * 1024 * 1024);
+    }
+
+    // --- PhysicalRegion ---
+
+    #[test]
+    fn physical_region_new_and_contains() {
+        let region = PhysicalRegion::new(0x1000, 0x3000); // start=0x1000, size=0x3000, end=0x4000
+        assert!(region.contains(PhysAddr::new(0x1000)));
+        assert!(region.contains(PhysAddr::new(0x3FFF)));
+        assert!(!region.contains(PhysAddr::new(0x0FFF)));
+        assert!(!region.contains(PhysAddr::new(0x4000)));
+    }
+
+    #[test]
+    fn physical_region_end() {
+        let region = PhysicalRegion::new(0x1000, 0x3000);
+        assert_eq!(region.end(), PhysAddr::new(0x4000));
+    }
+
+    // --- FrameAllocator ---
+
+    #[test]
+    fn frame_allocator_default_is_uninit() {
+        let fa = FrameAllocator::new();
+        assert_eq!(fa.allocated_count(), 0);
+        assert_eq!(fa.free_count(), 0);
+    }
+
+    #[test]
+    fn frame_allocator_init_and_counts() {
+        let mut fa = FrameAllocator::new();
+        fa.init(0x10_0000, 0x20_0000); // 1 MiB region = 256 frames
+        assert_eq!(fa.allocated_count(), 0);
+        assert_eq!(fa.free_count(), 256);
+    }
+
+    #[test]
+    fn frame_allocator_allocate_one() {
+        let mut fa = FrameAllocator::new();
+        fa.init(0x10_0000, 0x20_0000);
+        let frame = fa.allocate_frame().unwrap();
+        assert_eq!(frame.as_u64(), 0x10_0000);
+        assert_eq!(fa.allocated_count(), 1);
+        assert_eq!(fa.free_count(), 255);
+    }
+
+    #[test]
+    fn frame_allocator_allocate_many() {
+        let mut fa = FrameAllocator::new();
+        fa.init(0x10_0000, 0x20_0000);
+        let f1 = fa.allocate_frame().unwrap();
+        let f2 = fa.allocate_frame().unwrap();
+        assert_eq!(f1.as_u64(), 0x10_0000);
+        assert_eq!(f2.as_u64(), 0x10_1000);
+    }
+
+    #[test]
+    fn frame_allocator_allocate_frames() {
+        let mut fa = FrameAllocator::new();
+        fa.init(0x10_0000, 0x20_0000);
+        let base = fa.allocate_frames(4).unwrap();
+        assert_eq!(base.as_u64(), 0x10_0000);
+        assert_eq!(fa.allocated_count(), 4);
+    }
+
+    #[test]
+    fn frame_allocator_oom() {
+        let mut fa = FrameAllocator::new();
+        fa.init(0x10_0000, 0x10_1000); // exactly 1 frame
+        fa.allocate_frame().unwrap();
+        assert!(fa.allocate_frame().is_err());
+    }
+
+    // --- EptEntry ---
+
+    #[test]
+    fn ept_entry_empty() {
+        let e = EptEntry::EMPTY;
+        assert!(!e.is_present());
+        assert_eq!(e.raw(), 0);
+        assert_eq!(e.addr(), 0);
+    }
+
+    #[test]
+    fn ept_entry_page_4k() {
+        let e = EptEntry::page_4k(0x200_000, 0);
+        assert!(e.is_present());
+        assert_eq!(e.addr(), 0x200_000);
+        assert_ne!(e.raw() & EptEntry::READ, 0);
+        assert_ne!(e.raw() & EptEntry::WRITE, 0);
+        assert_ne!(e.raw() & EptEntry::EXECUTE, 0);
+    }
+
+    #[test]
+    fn ept_entry_page_2m() {
+        let e = EptEntry::page_2m(0x20_0000, EptEntry::MT_WB);
+        assert!(e.is_present());
+        assert_ne!(e.raw() & EptEntry::LARGE_PAGE, 0);
+    }
+
+    #[test]
+    fn ept_entry_table() {
+        let e = EptEntry::table(0x300_000);
+        assert!(e.is_present());
+        assert_eq!(e.addr(), 0x300_000);
+    }
+
+    #[test]
+    fn ept_entry_addr_masks_low_bits() {
+        let e = EptEntry::new(0xDEAD_BEEF_1234_5FFF, 0);
+        // Only bits 51:12 survive
+        assert_eq!(
+            e.addr(),
+            0x000D_EADB_EEF1_2345_000u64 & 0x000F_FFFF_FFFF_F000
+        );
+    }
+
+    // --- NptEntry ---
+
+    #[test]
+    fn npt_entry_empty() {
+        let e = NptEntry::EMPTY;
+        assert!(!e.is_present());
+        assert_eq!(e.raw(), 0);
+    }
+
+    #[test]
+    fn npt_entry_page_4k_writable() {
+        let e = NptEntry::page_4k(0x1000, true);
+        assert!(e.is_present());
+        assert_ne!(e.raw() & NptEntry::WRITABLE, 0);
+    }
+
+    #[test]
+    fn npt_entry_page_4k_readonly() {
+        let e = NptEntry::page_4k(0x1000, false);
+        assert!(e.is_present());
+        assert_eq!(e.raw() & NptEntry::WRITABLE, 0);
+    }
+
+    #[test]
+    fn npt_entry_page_2m() {
+        let e = NptEntry::page_2m(0x20_0000, true);
+        assert!(e.is_present());
+        assert_ne!(e.raw() & NptEntry::LARGE_PAGE, 0);
+        assert_ne!(e.raw() & NptEntry::WRITABLE, 0);
+    }
+
+    #[test]
+    fn npt_entry_table() {
+        let e = NptEntry::table(0x400_000);
+        assert!(e.is_present());
+        assert_ne!(e.raw() & NptEntry::USER, 0);
+        assert_eq!(e.addr(), 0x400_000);
+    }
+
+    // --- GuestMemoryMapper ---
+
+    #[test]
+    fn mapper_empty() {
+        let mapper = GuestMemoryMapper::new();
+        assert_eq!(mapper.regions().count(), 0);
+        assert_eq!(mapper.translate(0x1000), None);
+    }
+
+    #[test]
+    fn mapper_map_and_translate() {
+        let mut mapper = GuestMemoryMapper::new();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x0,
+                host_phys_addr: 0x100_0000,
+                size: 0x10_0000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+
+        assert_eq!(mapper.translate(0x0), Some(0x100_0000));
+        assert_eq!(mapper.translate(0x500), Some(0x100_0500));
+        assert_eq!(mapper.translate(0xF_FFFF), Some(0x10F_FFFF));
+        assert_eq!(mapper.translate(0x10_0000), None); // past end
+    }
+
+    #[test]
+    fn mapper_multiple_regions() {
+        let mut mapper = GuestMemoryMapper::new();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x0,
+                host_phys_addr: 0x100_0000,
+                size: 0x1000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x10_0000,
+                host_phys_addr: 0x200_0000,
+                size: 0x1000,
+                writable: false,
+                executable: false,
+            })
+            .unwrap();
+
+        assert_eq!(mapper.translate(0x0), Some(0x100_0000));
+        assert_eq!(mapper.translate(0x10_0000), Some(0x200_0000));
+        assert_eq!(mapper.translate(0x5000), None); // gap
+        assert_eq!(mapper.regions().count(), 2);
+    }
+
+    #[test]
+    fn mapper_overflow() {
+        let mut mapper = GuestMemoryMapper::new();
+        for i in 0..32 {
+            mapper
+                .map_region(GuestMemoryRegion {
+                    guest_phys_addr: i * 0x1000,
+                    host_phys_addr: i * 0x1000,
+                    size: 0x1000,
+                    writable: true,
+                    executable: true,
+                })
+                .unwrap();
+        }
+        // 33rd should fail
+        assert!(mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0xFF_0000,
+                host_phys_addr: 0xFF_0000,
+                size: 0x1000,
+                writable: true,
+                executable: true,
+            })
+            .is_err());
+    }
+}

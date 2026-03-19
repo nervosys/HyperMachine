@@ -188,7 +188,7 @@ impl HistogramData {
 
     /// Estimate a quantile from bucket data
     pub fn estimate_quantile(&self, q: f64) -> Option<f64> {
-        if self.count == 0 || q < 0.0 || q > 1.0 {
+        if self.count == 0 || !(0.0..=1.0).contains(&q) {
             return None;
         }
 

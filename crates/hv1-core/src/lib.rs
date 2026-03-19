@@ -213,9 +213,38 @@ mod tests {
     }
 
     #[test]
+    fn test_cpu_vendor_equality() {
+        assert_eq!(CpuVendor::Intel, CpuVendor::Intel);
+        assert_ne!(CpuVendor::Intel, CpuVendor::Amd);
+        assert_ne!(CpuVendor::Amd, CpuVendor::Unknown);
+    }
+
+    #[test]
     fn test_capabilities_detect() {
         let caps = HypervisorCapabilities::detect();
-        // Most modern CPUs support virtualization
-        // This test may fail on older hardware
+        // Vendor should match CpuVendor::detect
+        assert_eq!(caps.vendor, CpuVendor::detect());
+    }
+
+    #[test]
+    fn test_capabilities_virt_supported() {
+        let caps = HypervisorCapabilities::detect();
+        // If VMX or SVM is supported, is_virtualization_supported should be true
+        if caps.vmx_supported || caps.svm_supported {
+            assert!(caps.is_virtualization_supported());
+        }
+    }
+
+    #[test]
+    fn test_version() {
+        let ver = version();
+        assert!(!ver.is_empty());
+    }
+
+    #[test]
+    fn test_is_initialized_default() {
+        // Note: global state, may be affected by other tests.
+        // Just test that the function is callable.
+        let _ = is_initialized();
     }
 }

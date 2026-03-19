@@ -486,7 +486,7 @@ impl VirtioBlock {
     pub fn read_storage(&self, offset: u64, buf: &mut [u8]) -> Result<()> {
         let storage = self.storage.read();
         if offset as usize + buf.len() > storage.len() {
-            return Err(crate::Error::Memory(format!("Read past end of storage")));
+            return Err(crate::Error::Memory("Read past end of storage".to_string()));
         }
         buf.copy_from_slice(&storage[offset as usize..offset as usize + buf.len()]);
         Ok(())
@@ -496,7 +496,7 @@ impl VirtioBlock {
     pub fn write_storage(&self, offset: u64, data: &[u8]) -> Result<()> {
         let mut storage = self.storage.write();
         if offset as usize + data.len() > storage.len() {
-            return Err(crate::Error::Memory(format!("Write past end of storage")));
+            return Err(crate::Error::Memory("Write past end of storage".to_string()));
         }
         storage[offset as usize..offset as usize + data.len()].copy_from_slice(data);
         Ok(())

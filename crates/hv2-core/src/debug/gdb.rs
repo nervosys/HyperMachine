@@ -508,7 +508,7 @@ fn hex_digit(c: u8) -> Option<u8> {
 
 /// Parse hex string to bytes
 fn parse_hex(s: &[u8]) -> Option<Vec<u8>> {
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         return None;
     }
 
@@ -744,9 +744,17 @@ impl GdbStub {
                         if let Some(reg) = GdbRegister::from_index(reg_num as usize) {
                             let mut regs = target.get_registers();
                             let value = if value_bytes.len() >= 8 {
-                                u64::from_le_bytes(value_bytes[..8].try_into().expect("slice is exactly 8 bytes"))
+                                u64::from_le_bytes(
+                                    value_bytes[..8]
+                                        .try_into()
+                                        .expect("slice is exactly 8 bytes"),
+                                )
                             } else if value_bytes.len() >= 4 {
-                                u32::from_le_bytes(value_bytes[..4].try_into().expect("slice is exactly 4 bytes")) as u64
+                                u32::from_le_bytes(
+                                    value_bytes[..4]
+                                        .try_into()
+                                        .expect("slice is exactly 4 bytes"),
+                                ) as u64
                             } else {
                                 0
                             };

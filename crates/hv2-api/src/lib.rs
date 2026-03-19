@@ -4,10 +4,14 @@
 
 #![allow(dead_code)]
 
+pub mod config;
 pub mod events;
 pub mod grpc;
+pub mod middleware;
 pub mod ontology;
 pub mod rest;
+pub mod runtime_routes;
+pub mod server;
 
 use thiserror::Error;
 
@@ -24,6 +28,9 @@ pub enum ApiError {
 
     #[error("Core error: {0}")]
     Core(#[from] hv2_core::Error),
+
+    #[error("Runtime error: {0}")]
+    Runtime(#[from] hv2_runtime::RuntimeError),
 
     #[error("Transport error: {0}")]
     Transport(String),

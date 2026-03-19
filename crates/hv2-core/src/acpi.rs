@@ -158,9 +158,7 @@ impl AcpiTableHeader {
     fn as_bytes(&self) -> &[u8] {
         // SAFETY: `AcpiTableHeader` is `#[repr(C, packed)]` with only integer/byte-array
         // fields and no padding, so viewing it as a byte slice is well-defined.
-        unsafe {
-            std::slice::from_raw_parts(self as *const _ as *const u8, mem::size_of::<Self>())
-        }
+        unsafe { std::slice::from_raw_parts(self as *const _ as *const u8, mem::size_of::<Self>()) }
     }
 
     /// Create a new ACPI table header
@@ -705,10 +703,210 @@ impl Dsdt {
     }
 
     /// Generate minimal AML bytecode
+    ///
+    /// Produces a valid AML stream containing:
+    /// - `\_SB_` scope with PCI host bridge (`PCI0`, _HID PNP0A03), power
+    ///   button (`PWRB`, _HID PNP0C0C), COM1 serial port (`UAR1`, _HID
+    ///   PNP0501 with _CRS I/O 0x3F8-0x3FF IRQ 4), real-time clock (`RTC0`,
+    ///   _HID PNP0B00 with _CRS I/O 0x70-0x71 IRQ 8), and high precision
+    ///   event timer (`HPET`, _HID PNP0103)
+    /// - `\_SB_.CPU0` processor device
+    /// - `\_PIC` method (interrupt model selector, 1 argument)
+    /// - `\_S5_` sleep package for power-off
     fn generate_minimal_aml() -> Vec<u8> {
-        // This is a minimal valid AML that defines nothing
-        // Real implementations would generate actual device definitions
-        vec![]
+        // AML opcode constants
+        const SCOPE_OP: u8 = 0x10;
+        const NAME_OP: u8 = 0x08;
+        const METHOD_OP: u8 = 0x14;
+        const RETURN_OP: u8 = 0xA4;
+        const STRING_PREFIX: u8 = 0x0D;
+        const ARG0_OP: u8 = 0x68;
+        const EXT_OP_PREFIX: u8 = 0x5B;
+        const DEVICE_OP: u8 = 0x82;
+        const ZERO_OP: u8 = 0x00;
+        const PACKAGE_OP: u8 = 0x12;
+        const BYTE_PREFIX: u8 = 0x0A;
+        const WORD_PREFIX: u8 = 0x0B;
+        const BUFFER_OP: u8 = 0x11;
+
+        /// Build a _CRS resource template for I/O port range + IRQ
+        fn build_io_irq_crs(io_base: u16, io_len: u8, irq: u8, out: &mut Vec<u8>) {
+            // Build the resource descriptor bytes first
+            let mut res = Vec::new();
+
+            // I/O port descriptor (small resource type 0x47)
+            res.push(0x47); // I/O port descriptor tag
+            res.push(0x01); // decode 16-bit
+            res.extend_from_slice(&io_base.to_le_bytes()); // min base
+            res.extend_from_slice(&io_base.to_le_bytes()); // max base
+            res.push(0x01); // alignment
+            res.push(io_len); // range length
+
+            // IRQ descriptor (small resource type 0x22)
+            res.push(0x22); // IRQ descriptor tag
+            let irq_mask: u16 = 1 << irq;
+            res.extend_from_slice(&irq_mask.to_le_bytes());
+
+            // End tag
+            res.push(0x79); // end tag
+            res.push(0x00); // checksum
+
+            // Name(_CRS, Buffer() { ... })
+            out.push(NAME_OP);
+            out.extend_from_slice(b"_CRS");
+            out.push(BUFFER_OP);
+            let buf_len = res.len() + 1; // +1 for the byte-count byte
+            Dsdt::encode_pkg_length(out, buf_len);
+            out.push(res.len() as u8); // buffer size as byte
+            out.extend_from_slice(&res);
+        }
+
+        /// Build a Device(name) { Name(_HID, pnp_id) } AML block
+        fn build_device(name: &[u8; 4], pnp_id: &[u8], out: &mut Vec<u8>) {
+            let mut body = Vec::new();
+            body.push(NAME_OP);
+            body.extend_from_slice(b"_HID");
+            body.push(STRING_PREFIX);
+            body.extend_from_slice(pnp_id);
+            body.push(0x00); // null terminator
+
+            out.push(EXT_OP_PREFIX);
+            out.push(DEVICE_OP);
+            let dev_len = 4 + body.len();
+            Dsdt::encode_pkg_length(out, dev_len);
+            out.extend_from_slice(name);
+            out.extend_from_slice(&body);
+        }
+
+        /// Build a Device with _HID and _CRS (I/O + IRQ)
+        fn build_device_with_crs(
+            name: &[u8; 4],
+            pnp_id: &[u8],
+            io_base: u16,
+            io_len: u8,
+            irq: u8,
+            out: &mut Vec<u8>,
+        ) {
+            let mut body = Vec::new();
+            body.push(NAME_OP);
+            body.extend_from_slice(b"_HID");
+            body.push(STRING_PREFIX);
+            body.extend_from_slice(pnp_id);
+            body.push(0x00);
+
+            build_io_irq_crs(io_base, io_len, irq, &mut body);
+
+            out.push(EXT_OP_PREFIX);
+            out.push(DEVICE_OP);
+            let dev_len = 4 + body.len();
+            Dsdt::encode_pkg_length(out, dev_len);
+            out.extend_from_slice(name);
+            out.extend_from_slice(&body);
+        }
+
+        let mut aml = Vec::with_capacity(512);
+
+        // --- Scope(\_SB_) ---
+        let sb_body = {
+            let mut body = Vec::new();
+
+            // PCI host bridge
+            build_device(b"PCI0", b"PNP0A03", &mut body);
+            // Power button
+            build_device(b"PWRB", b"PNP0C0C", &mut body);
+            // COM1 serial port with _CRS: I/O 0x3F8-0x3FF, IRQ 4
+            build_device_with_crs(b"UAR1", b"PNP0501", 0x3F8, 8, 4, &mut body);
+            // Real-time clock with _CRS: I/O 0x70-0x71, IRQ 8
+            build_device_with_crs(b"RTC0", b"PNP0B00", 0x70, 2, 8, &mut body);
+            // High precision event timer
+            build_device(b"HPET", b"PNP0103", &mut body);
+
+            // CPU0 processor device
+            {
+                let mut cpu_body = Vec::new();
+                cpu_body.push(NAME_OP);
+                cpu_body.extend_from_slice(b"_HID");
+                cpu_body.push(STRING_PREFIX);
+                cpu_body.extend_from_slice(b"ACPI0007");
+                cpu_body.push(0x00);
+                // _UID = 0
+                cpu_body.push(NAME_OP);
+                cpu_body.extend_from_slice(b"_UID");
+                cpu_body.push(ZERO_OP);
+
+                body.push(EXT_OP_PREFIX);
+                body.push(DEVICE_OP);
+                let dev_len = 4 + cpu_body.len();
+                Dsdt::encode_pkg_length(&mut body, dev_len);
+                body.extend_from_slice(b"CPU0");
+                body.extend_from_slice(&cpu_body);
+            }
+
+            body
+        };
+
+        // Scope(\_SB_)
+        aml.push(SCOPE_OP);
+        let scope_len = 4 + sb_body.len(); // nameseg `_SB_` + body
+        Self::encode_pkg_length(&mut aml, scope_len);
+        aml.extend_from_slice(b"_SB_");
+        aml.extend_from_slice(&sb_body);
+
+        // --- Method(\_PIC, 1) { Return(Arg0) } ---
+        let pic_body = [RETURN_OP, ARG0_OP]; // Return(Arg0)
+        aml.push(METHOD_OP);
+        let method_len = 4 + 1 + pic_body.len(); // nameseg + flags + body
+        Self::encode_pkg_length(&mut aml, method_len);
+        aml.extend_from_slice(b"_PIC");
+        aml.push(0x01); // flags: ArgCount=1, NotSerialized
+        aml.extend_from_slice(&pic_body);
+
+        // --- Name(\_S5_, Package(4) { 0x05, 0x00, 0x00, 0x00 }) ---
+        // Sleep state S5 (soft off): PM1a_CNT.SLP_TYP = 5
+        aml.push(NAME_OP);
+        aml.extend_from_slice(b"_S5_");
+        aml.push(PACKAGE_OP);
+        let pkg_body_len = 1 + 4 * 2; // element count + 4 × (BYTE_PREFIX + value)
+        Self::encode_pkg_length(&mut aml, pkg_body_len);
+        aml.push(0x04); // 4 elements
+        aml.push(BYTE_PREFIX);
+        aml.push(0x05); // SLP_TYP for PM1a
+        aml.push(BYTE_PREFIX);
+        aml.push(0x05); // SLP_TYP for PM1b
+        aml.push(ZERO_OP); // reserved
+        aml.push(ZERO_OP); // reserved
+
+        // --- Name(\_OS_, "Microsoft Windows NT") ---
+        aml.push(NAME_OP);
+        aml.extend_from_slice(b"_OS_");
+        aml.push(STRING_PREFIX);
+        aml.extend_from_slice(b"Microsoft Windows NT\0");
+
+        aml
+    }
+
+    /// Encode AML PkgLength into `out`.
+    /// Handles lengths up to 0x0FFF_FFFF (4-byte encoding).
+    fn encode_pkg_length(out: &mut Vec<u8>, raw_len: usize) {
+        // PkgLength includes the length-field bytes themselves.
+        if raw_len < 0x3F {
+            out.push((raw_len + 1) as u8);
+        } else if raw_len + 2 <= 0x0FFF {
+            let total = raw_len + 2;
+            out.push(0x40 | (total & 0x0F) as u8);
+            out.push((total >> 4) as u8);
+        } else if raw_len + 3 <= 0x0F_FFFF {
+            let total = raw_len + 3;
+            out.push(0x80 | (total & 0x0F) as u8);
+            out.push((total >> 4) as u8);
+            out.push((total >> 12) as u8);
+        } else {
+            let total = raw_len + 4;
+            out.push(0xC0 | (total & 0x0F) as u8);
+            out.push((total >> 4) as u8);
+            out.push((total >> 12) as u8);
+            out.push((total >> 20) as u8);
+        }
     }
 
     /// Convert to bytes with calculated checksum
@@ -1004,6 +1202,88 @@ mod tests {
         // Verify checksum
         let sum: u8 = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
         assert_eq!(sum, 0, "DSDT checksum failed");
+    }
+
+    #[test]
+    fn test_dsdt_aml_not_empty() {
+        let aml = Dsdt::generate_minimal_aml();
+        assert!(
+            !aml.is_empty(),
+            "DSDT AML should contain device definitions"
+        );
+        // Should contain _SB_ scope name
+        assert!(
+            aml.windows(4).any(|w| w == b"_SB_"),
+            "AML should contain _SB_ scope"
+        );
+        // Should contain PCI0 device
+        assert!(
+            aml.windows(4).any(|w| w == b"PCI0"),
+            "AML should contain PCI0 device"
+        );
+        // Should contain PWRB power button
+        assert!(
+            aml.windows(4).any(|w| w == b"PWRB"),
+            "AML should contain PWRB device"
+        );
+        // Should contain _PIC method
+        assert!(
+            aml.windows(4).any(|w| w == b"_PIC"),
+            "AML should contain _PIC method"
+        );
+        // Should contain PNP IDs
+        assert!(
+            aml.windows(7).any(|w| w == b"PNP0A03"),
+            "AML should contain PCI host bridge PNP ID"
+        );
+        assert!(
+            aml.windows(7).any(|w| w == b"PNP0C0C"),
+            "AML should contain power button PNP ID"
+        );
+        // COM1 serial port
+        assert!(
+            aml.windows(4).any(|w| w == b"UAR1"),
+            "AML should contain UAR1 serial port device"
+        );
+        assert!(
+            aml.windows(7).any(|w| w == b"PNP0501"),
+            "AML should contain COM1 PNP ID"
+        );
+        // Real-time clock
+        assert!(
+            aml.windows(4).any(|w| w == b"RTC0"),
+            "AML should contain RTC0 device"
+        );
+        assert!(
+            aml.windows(7).any(|w| w == b"PNP0B00"),
+            "AML should contain RTC PNP ID"
+        );
+        // HPET
+        assert!(
+            aml.windows(4).any(|w| w == b"HPET"),
+            "AML should contain HPET device"
+        );
+        assert!(
+            aml.windows(7).any(|w| w == b"PNP0103"),
+            "AML should contain HPET PNP ID"
+        );
+        // OS name should not be empty
+        assert!(
+            aml.windows(20).any(|w| w == b"Microsoft Windows NT"),
+            "AML should contain OS name string"
+        );
+    }
+
+    #[test]
+    fn test_dsdt_aml_checksum_with_content() {
+        // Ensure the DSDT with real AML still passes checksum
+        let dsdt = Dsdt::new();
+        let bytes = dsdt.to_bytes();
+        let sum: u8 = bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b));
+        assert_eq!(sum, 0, "DSDT with AML content checksum failed");
+        // Length field should account for header + AML
+        let length = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
+        assert!(length > mem::size_of::<AcpiTableHeader>() as u32);
     }
 
     #[test]

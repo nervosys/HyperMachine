@@ -3,12 +3,12 @@
 //! This module provides AMD IOMMU support including device table,
 //! I/O page tables, event logging, and command buffer.
 
-use super::types::{
-    AddressWidth, DeviceId, DomainId, FaultReason, FaultRecord, IommuStats,
-    PageTableFlags, TranslationType,
-};
 #[cfg(test)]
 use super::types::PAGE_SIZE_4K;
+use super::types::{
+    AddressWidth, DeviceId, DomainId, FaultReason, FaultRecord, IommuStats, PageTableFlags,
+    TranslationType,
+};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -534,6 +534,30 @@ impl CommandEntry {
     pub const fn raw(&self) -> &[u64; 2] {
         &self.data
     }
+
+    /// CompletionWait: return `true` if the S (store) bit is set.
+    pub const fn cw_store(&self) -> bool {
+        (self.data[0] & 1) != 0
+    }
+
+    /// CompletionWait: return the store address (48-bit physical).
+    pub const fn cw_address(&self) -> u64 {
+        (self.data[0] & 0x000F_FFFF_FFFF_FFF8) << 0
+        // The address was stored as (address >> 3) in bits [3..51];
+        // recover by shifting the field back: (value & mask) is already
+        // (addr >> 3) << 3 = addr (low 3 bits zeroed), so the result
+        // is the original 8-byte-aligned address.
+    }
+
+    /// CompletionWait: return the 64-bit data value to write.
+    pub const fn cw_data(&self) -> u64 {
+        self.data[1]
+    }
+
+    /// InvalidatePages: extract the domain ID.
+    pub const fn inv_domain_id(&self) -> u16 {
+        (self.data[0] & 0xFFFF) as u16
+    }
 }
 
 /// IOTLB entry for AMD IOMMU
@@ -617,6 +641,8 @@ pub struct AmdIommu {
     stats: IommuStats,
     /// Address width
     address_width: AddressWidth,
+    /// Completion writes (address, data) recorded by CompletionWait commands
+    completion_writes: Vec<(u64, u64)>,
 }
 
 impl Default for AmdIommu {
@@ -643,6 +669,7 @@ impl AmdIommu {
             iotlb: HashMap::new(),
             stats: IommuStats::default(),
             address_width: AddressWidth::Bits48,
+            completion_writes: Vec::new(),
         }
     }
 
@@ -659,6 +686,11 @@ impl AmdIommu {
     /// Get statistics
     pub fn stats(&self) -> &IommuStats {
         &self.stats
+    }
+
+    /// Get completion writes recorded by CompletionWait commands
+    pub fn completion_writes(&self) -> &[(u64, u64)] {
+        &self.completion_writes
     }
 
     /// Read register
@@ -751,16 +783,42 @@ impl AmdIommu {
     fn process_commands(&mut self) {
         while self.cmd_head != self.cmd_tail {
             if let Some(cmd) = self.command_buffer.get(self.cmd_head as usize) {
+                let cmd = *cmd; // Copy so we don't hold a borrow
                 match cmd.command_type() {
+                    Some(CommandType::CompletionWait) => {
+                        // If the S (store) bit is set, record a write of
+                        // `data` to `address`.  In a real implementation this
+                        // would DMA-write to guest memory; here we log it.
+                        if cmd.cw_store() {
+                            self.completion_writes
+                                .push((cmd.cw_address(), cmd.cw_data()));
+                        }
+                        // A CompletionWait also sets the completion status bit
+                        self.status |= 1 << 3; // ComWaitInt
+                    }
                     Some(CommandType::InvalidateAll) => {
                         self.iotlb.clear();
                         self.stats.record_iotlb_invalidation();
                     }
                     Some(CommandType::InvalidateIotlb) => {
-                        // Invalidate specific entries
+                        // Invalidate specific entries by domain
+                        let domain = cmd.inv_domain_id();
+                        self.iotlb.retain(|k, _| k.1 != domain);
                         self.stats.record_iotlb_invalidation();
                     }
                     Some(CommandType::InvalidateDevTab) => {
+                        self.stats.record_context_invalidation();
+                    }
+                    Some(CommandType::InvalidatePages) => {
+                        // Invalidate by domain
+                        let domain = cmd.inv_domain_id();
+                        self.iotlb.retain(|k, _| k.1 != domain);
+                        self.stats.record_iotlb_invalidation();
+                    }
+                    Some(CommandType::InvalidateIntTab) => {
+                        // Interrupt remapping table invalidation — no local
+                        // cache for interrupt entries, so this is a no-op
+                        // beyond recording the stat.
                         self.stats.record_context_invalidation();
                     }
                     _ => {}
@@ -1018,5 +1076,45 @@ mod tests {
 
         let stats = iommu.stats().snapshot();
         assert!(stats.translations > 0);
+    }
+
+    #[test]
+    fn test_amd_iommu_completion_wait_store() {
+        let mut iommu = AmdIommu::default();
+        iommu.enable();
+
+        // Manually push a CompletionWait command with store bit
+        let cmd = CommandEntry::completion_wait(0x1000, 0xCAFE_BABE);
+        iommu.command_buffer.push(cmd);
+        // Advance the tail via write_register to trigger processing
+        iommu.write_register(registers::CMD_BUF_TAIL, 1);
+
+        let writes = iommu.completion_writes();
+        assert_eq!(writes.len(), 1);
+        assert_eq!(writes[0].1, 0xCAFE_BABE); // data preserved
+                                              // Status bit 3 (ComWaitInt) should be set
+        assert_ne!(iommu.read_register(registers::STATUS) & (1 << 3), 0);
+    }
+
+    #[test]
+    fn test_amd_iommu_invalidate_pages_clears_iotlb() {
+        let mut iommu = AmdIommu::default();
+        let device = DeviceId::new(0, 2, 0, 0);
+        let domain = DomainId::new(42);
+
+        iommu.configure_passthrough(&device, domain);
+        iommu.enable();
+
+        // Populate the IOTLB with a translation
+        let _ = iommu.translate(&device, 0x2000, false);
+        assert!(iommu.stats().snapshot().translations > 0);
+
+        // Push InvalidatePages for domain 42
+        let cmd = CommandEntry::invalidate_pages(domain, 0x2000, false);
+        iommu.command_buffer.push(cmd);
+        iommu.write_register(registers::CMD_BUF_TAIL, 1);
+
+        // Verify the invalidation stat was recorded
+        assert!(iommu.stats().snapshot().iotlb_invalidations > 0);
     }
 }

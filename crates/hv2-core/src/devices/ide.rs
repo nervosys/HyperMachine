@@ -351,7 +351,7 @@ impl IdeChannel {
                     self.data_position += 1;
 
                     // Check if we've read a complete sector
-                    if self.data_position % SECTOR_SIZE == 0 && !self.write_mode {
+                    if self.data_position.is_multiple_of(SECTOR_SIZE) && !self.write_mode {
                         self.sectors_remaining = self.sectors_remaining.saturating_sub(1);
                         if self.sectors_remaining == 0 {
                             self.status &= !status::DRQ;
@@ -410,7 +410,7 @@ impl IdeChannel {
                     self.data_position += 1;
 
                     // Check if we've written a complete sector
-                    if self.data_position % SECTOR_SIZE == 0 {
+                    if self.data_position.is_multiple_of(SECTOR_SIZE) {
                         // Write the sector to disk
                         let sector_start = self.data_position - SECTOR_SIZE;
                         // Copy sector data to avoid borrow conflict

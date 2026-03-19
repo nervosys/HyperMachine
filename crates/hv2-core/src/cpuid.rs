@@ -472,11 +472,7 @@ impl CpuidEmulator {
         // Bits 27:20 - Extended Family
         let extended_model = (self.config.model >> 4) & 0xF;
         let base_model = self.config.model & 0xF;
-        let extended_family = if self.config.family >= 0x0F {
-            self.config.family - 0x0F
-        } else {
-            0
-        };
+        let extended_family = self.config.family.saturating_sub(0x0F);
         let base_family = if self.config.family >= 0x0F {
             0x0F
         } else {
@@ -547,10 +543,17 @@ impl CpuidEmulator {
     fn leaf_7(&self, subleaf: u32) -> CpuidResult {
         if subleaf == 0 {
             // Subleaf 0: Feature flags
-            // We report minimal extended features
+            // Report features consistent with a modern virtual CPU
+            let ebx = (1 << 0)  // FSGSBASE — {RD,WR}{FS,GS}BASE instructions
+                    | (1 << 7)  // SMEP — Supervisor Mode Execution Prevention
+                    | (1 << 8)  // BMI2 — Bit Manipulation Instruction Set 2
+                    | (1 << 9)  // ERMS — Enhanced REP MOVSB/STOSB
+                    | (1 << 18) // RDSEED — RDSEED instruction
+                    | (1 << 20) // SMAP — Supervisor Mode Access Prevention
+                    ;
             CpuidResult::new(
-                0, // Max subleaf
-                0, // EBX features (FSGSBASE, etc.)
+                0, // Max subleaf = 0
+                ebx,
                 0, // ECX features
                 0, // EDX features
             )
@@ -853,5 +856,29 @@ mod tests {
         // No L3 cache (subleaf 3)
         let result = cpuid.execute(4, 3);
         assert_eq!(result.eax, 0);
+    }
+
+    #[test]
+    fn test_cpuid_leaf_7_features() {
+        let cpuid = CpuidEmulator::new();
+        let result = cpuid.execute(7, 0);
+
+        // FSGSBASE (bit 0)
+        assert_ne!(result.ebx & (1 << 0), 0, "FSGSBASE should be set");
+        // SMEP (bit 7)
+        assert_ne!(result.ebx & (1 << 7), 0, "SMEP should be set");
+        // BMI2 (bit 8)
+        assert_ne!(result.ebx & (1 << 8), 0, "BMI2 should be set");
+        // ERMS (bit 9)
+        assert_ne!(result.ebx & (1 << 9), 0, "ERMS should be set");
+        // RDSEED (bit 18)
+        assert_ne!(result.ebx & (1 << 18), 0, "RDSEED should be set");
+        // SMAP (bit 20)
+        assert_ne!(result.ebx & (1 << 20), 0, "SMAP should be set");
+
+        // Non-existent subleaf should return zeros
+        let result = cpuid.execute(7, 1);
+        assert_eq!(result.eax, 0);
+        assert_eq!(result.ebx, 0);
     }
 }

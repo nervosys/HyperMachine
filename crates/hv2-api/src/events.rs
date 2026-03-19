@@ -335,12 +335,26 @@ async fn create_webhook(
     (StatusCode::CREATED, Json(subscription))
 }
 
-/// List webhooks handler
-async fn list_webhooks(State(event_bus): State<Arc<EventBus>>) -> impl IntoResponse {
-    let webhooks = event_bus.list_webhooks();
+/// List webhooks handler (paginated)
+async fn list_webhooks(
+    State(event_bus): State<Arc<EventBus>>,
+    Query(params): Query<crate::rest::PaginationParams>,
+) -> impl IntoResponse {
+    let mut webhooks = event_bus.list_webhooks();
+    // Sort by id for deterministic pagination
+    webhooks.sort_by(|a, b| a.id.cmp(&b.id));
+    let total = webhooks.len();
+    let limit = params.effective_limit();
+    let offset = params.offset.min(total);
+    let page: Vec<WebhookSubscription> = webhooks.into_iter().skip(offset).take(limit).collect();
+    let has_more = offset + page.len() < total;
+
     Json(serde_json::json!({
-        "webhooks": webhooks,
-        "total": webhooks.len()
+        "webhooks": page,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": has_more
     }))
 }
 

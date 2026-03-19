@@ -697,16 +697,14 @@ impl MsixCapability {
 
     /// Write PCI config space
     pub fn write_config(&self, offset: u8, value: u32) {
-        match offset {
-            0x00 => {
-                // Message Control (only bits 14-15 writable)
-                self.function_masked
-                    .store(value & (1 << 14) != 0, Ordering::Relaxed);
-                self.enabled
-                    .store(value & (1 << 15) != 0, Ordering::Relaxed);
-            }
-            _ => {} // BIR/offset are read-only
+        if offset == 0x00 {
+            // Message Control (only bits 14-15 writable)
+            self.function_masked
+                .store(value & (1 << 14) != 0, Ordering::Relaxed);
+            self.enabled
+                .store(value & (1 << 15) != 0, Ordering::Relaxed);
         }
+        // BIR/offset are read-only
     }
 }
 

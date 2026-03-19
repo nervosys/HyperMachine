@@ -492,7 +492,7 @@ impl GdtBuilder {
 
     /// Build the GDT as a byte vector
     ///
-    /// Returns a Vec<u8> containing all descriptors in sequential order.
+    /// Returns a `Vec<u8>` containing all descriptors in sequential order.
     pub fn build(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.entries.len() * 8);
         for entry in &self.entries {

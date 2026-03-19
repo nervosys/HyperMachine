@@ -24,19 +24,19 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 ## Architecture
 
 ```
-+---------------------------------------------------------+
++----------------------------------------------------------+
 |                   AI Agent Interface                     |
-|            (MCP Server - OpenAI/Claude/Gemini)          |
-+---------------------------------------------------------+
+|            (MCP Server - OpenAI/Claude/Gemini)           |
++----------------------------------------------------------+
 |                    Remote API Layer                      |
-|                  (gRPC - REST - WebSocket)              |
+|                  (gRPC - REST - WebSocket)               |
 +-------------+-------------+-------------+----------------+
 |     CPU     |     GPU     |   Network   |     Memory     |
 |  Emulation  |   Vulkan    |   TAP/TUN   |   Management   |
 +-------------+-------------+-------------+----------------+
-|                     HyperMachine Core                    |
-|         HV2 (KVM/WHPX/HVF) - HV1 (VMX/SVM bare-metal)  |
-+---------------------------------------------------------+
+|                   HyperMachine Core                      |
+|       HV2 (KVM/WHPX/HVF) - HV1 (VMX/SVM bare-metal)      |
++----------------------------------------------------------+
 ```
 
 ## Requirements

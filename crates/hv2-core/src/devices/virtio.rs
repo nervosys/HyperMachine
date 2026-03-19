@@ -12,7 +12,7 @@
 //! - VirtioNet: Network interface implementation
 //!
 //! References:
-//! - Virtio Spec: https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html
+//! - Virtio Spec: <https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.html>
 
 use std::collections::VecDeque;
 use std::sync::Arc;

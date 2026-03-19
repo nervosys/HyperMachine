@@ -178,10 +178,9 @@ impl CpuState {
     /// Get current CPU mode
     pub fn mode(&self) -> CpuMode {
         // Check for long mode
-        if self.efer & 0x400 != 0 && self.cr0 & 0x80000000 != 0 {
-            if self.cs.attributes & 0x2000 != 0 {
-                return CpuMode::Long;
-            }
+        if self.efer & 0x400 != 0 && self.cr0 & 0x80000000 != 0 && self.cs.attributes & 0x2000 != 0
+        {
+            return CpuMode::Long;
         }
 
         // Check for protected mode

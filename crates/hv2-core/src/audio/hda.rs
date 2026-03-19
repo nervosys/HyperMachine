@@ -7,7 +7,7 @@ use super::core::{
     AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
     SampleRate, StreamDirection,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// HDA register offsets
@@ -830,6 +830,8 @@ pub struct HdaController {
     codecs: Vec<HdaCodec>,
     /// Pending RIRB responses
     rirb_responses: Vec<(u32, u32)>,
+    /// Pending CORB commands (queued via enqueue_corb_command)
+    corb_commands: VecDeque<u32>,
     /// Statistics
     stats: AudioStats,
     /// Pending interrupt
@@ -877,6 +879,7 @@ impl HdaController {
             output_streams,
             codecs: Vec::new(),
             rirb_responses: Vec::new(),
+            corb_commands: VecDeque::new(),
             stats: AudioStats::new(),
             pending_interrupt: false,
         };
@@ -903,6 +906,7 @@ impl HdaController {
         }
 
         self.rirb_responses.clear();
+        self.corb_commands.clear();
         self.pending_interrupt = false;
     }
 
@@ -1071,17 +1075,45 @@ impl HdaController {
         }
     }
 
+    /// Enqueue a CORB command for processing
+    ///
+    /// CORB entry format (32 bits):
+    ///   `[31:28]` Codec Address
+    ///   `[27:20]` Node ID (NID)
+    ///   `[19:0]`  Verb payload
+    pub fn enqueue_corb_command(&mut self, entry: u32) {
+        self.corb_commands.push_back(entry);
+        self.corb_wp = (self.corb_wp + 1) % 256;
+    }
+
     /// Process CORB commands
+    ///
+    /// Parses each CORB entry to extract the codec address and verb,
+    /// then dispatches to the appropriate codec for processing.
     fn process_corb(&mut self) {
         while self.corb_rp != self.corb_wp {
             self.corb_rp = (self.corb_rp + 1) % 256;
 
-            // In a real implementation, we'd read the command from memory
-            // For now, simulate a command response
-            let codec_addr = 0; // First codec
+            // Try to get the command from the pending queue
+            let entry = self.corb_commands.pop_front();
+
+            // Parse CORB entry format:
+            //   [31:28] = codec address
+            //   [27:20] = NID (node ID)
+            //   [19:0]  = verb payload
+            let (codec_addr, verb) = if let Some(cmd) = entry {
+                let cad = ((cmd >> 28) & 0x0F) as usize;
+                // The verb includes NID and payload: bits [27:0]
+                let verb = cmd & 0x0FFF_FFFF;
+                (cad, verb)
+            } else {
+                // No command queued — use codec 0 with a NOP
+                (0, 0)
+            };
+
             if let Some(codec) = self.codecs.get_mut(codec_addr) {
-                // Dummy command processing
-                let response = codec.process_verb(0);
+                let response = codec.process_verb(verb);
+                // RIRB response format: (response, solicited response + codec_addr)
                 self.rirb_responses.push((response, codec_addr as u32));
                 self.rirb_wp = (self.rirb_wp + 1) % 256;
 

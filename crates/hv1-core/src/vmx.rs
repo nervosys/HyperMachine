@@ -9,8 +9,10 @@
 //! - VPID (Virtual Processor IDs) for TLB management
 //! - Posted interrupts and interrupt virtualization
 
+use crate::vcpu::{GeneralRegisters, VcpuRegisters, VmExitInfo};
 use crate::{Error, Result};
 use core::arch::asm;
+use core::arch::naked_asm;
 use core::sync::atomic::{AtomicBool, Ordering};
 use x86_64::registers::control::{Cr0, Cr4, Cr4Flags};
 use x86_64::registers::model_specific::Msr;
@@ -589,6 +591,727 @@ pub unsafe fn vmresume() -> Result<()> {
 /// Check if VMX is enabled
 pub fn is_enabled() -> bool {
     VMX_ENABLED.load(Ordering::SeqCst)
+}
+
+// ─── VMX Control Constants ──────────────────────────────────────────
+
+/// Pin-based VM-execution controls
+pub mod pin_based {
+    pub const EXTERNAL_INTERRUPT_EXITING: u32 = 1 << 0;
+    pub const NMI_EXITING: u32 = 1 << 3;
+    pub const VIRTUAL_NMIS: u32 = 1 << 5;
+    pub const VMX_PREEMPTION_TIMER: u32 = 1 << 6;
+    pub const POSTED_INTERRUPTS: u32 = 1 << 7;
+}
+
+/// Primary processor-based VM-execution controls
+pub mod proc_based {
+    pub const INTERRUPT_WINDOW_EXITING: u32 = 1 << 2;
+    pub const USE_TSC_OFFSETTING: u32 = 1 << 3;
+    pub const HLT_EXITING: u32 = 1 << 7;
+    pub const INVLPG_EXITING: u32 = 1 << 9;
+    pub const MWAIT_EXITING: u32 = 1 << 10;
+    pub const RDPMC_EXITING: u32 = 1 << 11;
+    pub const RDTSC_EXITING: u32 = 1 << 12;
+    pub const CR3_LOAD_EXITING: u32 = 1 << 15;
+    pub const CR3_STORE_EXITING: u32 = 1 << 16;
+    pub const CR8_LOAD_EXITING: u32 = 1 << 19;
+    pub const CR8_STORE_EXITING: u32 = 1 << 20;
+    pub const TPR_SHADOW: u32 = 1 << 21;
+    pub const NMI_WINDOW_EXITING: u32 = 1 << 22;
+    pub const MOV_DR_EXITING: u32 = 1 << 23;
+    pub const UNCONDITIONAL_IO_EXITING: u32 = 1 << 24;
+    pub const USE_IO_BITMAPS: u32 = 1 << 25;
+    pub const MONITOR_TRAP_FLAG: u32 = 1 << 27;
+    pub const USE_MSR_BITMAPS: u32 = 1 << 28;
+    pub const MONITOR_EXITING: u32 = 1 << 29;
+    pub const PAUSE_EXITING: u32 = 1 << 30;
+    pub const ACTIVATE_SECONDARY: u32 = 1u32 << 31;
+}
+
+/// Secondary processor-based VM-execution controls
+pub mod proc_based2 {
+    pub const VIRTUALIZE_APIC_ACCESSES: u32 = 1 << 0;
+    pub const ENABLE_EPT: u32 = 1 << 1;
+    pub const DESCRIPTOR_TABLE_EXITING: u32 = 1 << 2;
+    pub const ENABLE_RDTSCP: u32 = 1 << 3;
+    pub const VIRTUALIZE_X2APIC: u32 = 1 << 4;
+    pub const ENABLE_VPID: u32 = 1 << 5;
+    pub const WBINVD_EXITING: u32 = 1 << 6;
+    pub const UNRESTRICTED_GUEST: u32 = 1 << 7;
+    pub const APIC_REGISTER_VIRTUALIZATION: u32 = 1 << 8;
+    pub const VIRTUAL_INTERRUPT_DELIVERY: u32 = 1 << 9;
+    pub const PAUSE_LOOP_EXITING: u32 = 1 << 10;
+    pub const ENABLE_INVPCID: u32 = 1 << 12;
+    pub const ENABLE_XSAVES: u32 = 1 << 20;
+}
+
+/// VM-exit controls
+pub mod exit_controls {
+    pub const SAVE_DEBUG_CONTROLS: u32 = 1 << 2;
+    pub const HOST_ADDRESS_SPACE_SIZE: u32 = 1 << 9;
+    pub const ACKNOWLEDGE_INTERRUPT_ON_EXIT: u32 = 1 << 15;
+    pub const SAVE_IA32_PAT: u32 = 1 << 18;
+    pub const LOAD_IA32_PAT: u32 = 1 << 19;
+    pub const SAVE_IA32_EFER: u32 = 1 << 20;
+    pub const LOAD_IA32_EFER: u32 = 1 << 21;
+    pub const SAVE_VMX_PREEMPTION_TIMER: u32 = 1 << 22;
+}
+
+/// VM-entry controls
+pub mod entry_controls {
+    pub const LOAD_DEBUG_CONTROLS: u32 = 1 << 2;
+    pub const IA32E_MODE_GUEST: u32 = 1 << 9;
+    pub const LOAD_IA32_PAT: u32 = 1 << 14;
+    pub const LOAD_IA32_EFER: u32 = 1 << 15;
+}
+
+// ─── VM-entry interruption-info field encoding ──────────────────────
+
+/// VM-entry interruption-info field: vector (bits 7:0), type (bits 10:8),
+/// error code valid (bit 11), valid (bit 31).
+pub mod interrupt_info {
+    /// External interrupt
+    pub const TYPE_EXTERNAL: u32 = 0 << 8;
+    /// NMI
+    pub const TYPE_NMI: u32 = 2 << 8;
+    /// Hardware exception
+    pub const TYPE_HARDWARE_EXCEPTION: u32 = 3 << 8;
+    /// Software interrupt (INT n)
+    pub const TYPE_SOFTWARE: u32 = 4 << 8;
+    /// Privileged software exception
+    pub const TYPE_PRIV_SOFTWARE_EXCEPTION: u32 = 5 << 8;
+    /// Software exception (INT3, INTO)
+    pub const TYPE_SOFTWARE_EXCEPTION: u32 = 6 << 8;
+    /// Error code is valid
+    pub const ERROR_CODE_VALID: u32 = 1 << 11;
+    /// Entry is valid
+    pub const VALID: u32 = 1u32 << 31;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────
+
+/// Adjust VMX controls by applying the mandatory 0 and 1 bits from capability MSR.
+///
+/// # Safety
+/// Reads a VMX capability MSR.
+unsafe fn adjust_controls(desired: u32, capability_msr: u32) -> u32 {
+    let caps = x86::msr::rdmsr(capability_msr);
+    let allowed_0 = caps as u32; // bits that must be 1
+    let allowed_1 = (caps >> 32) as u32; // bits that may be 1
+    (desired | allowed_0) & allowed_1
+}
+
+/// Read a segment selector register.
+macro_rules! read_seg_selector {
+    ($seg:literal) => {{
+        let sel: u16;
+        asm!(concat!("mov {:x}, ", $seg), out(reg) sel, options(nomem, nostack));
+        sel
+    }};
+}
+
+/// Read GDTR base and limit.
+#[repr(C, packed)]
+struct DescriptorTablePointer {
+    limit: u16,
+    base: u64,
+}
+
+unsafe fn read_gdtr() -> DescriptorTablePointer {
+    let mut gdtr = DescriptorTablePointer { limit: 0, base: 0 };
+    asm!("sgdt [{}]", in(reg) &mut gdtr, options(nostack));
+    gdtr
+}
+
+unsafe fn read_idtr() -> DescriptorTablePointer {
+    let mut idtr = DescriptorTablePointer { limit: 0, base: 0 };
+    asm!("sidt [{}]", in(reg) &mut idtr, options(nostack));
+    idtr
+}
+
+/// Read TR base from GDT.
+unsafe fn read_tr_base() -> u64 {
+    let tr: u16;
+    asm!("str {:x}", out(reg) tr, options(nomem, nostack));
+    let gdtr = read_gdtr();
+    // TR is a system segment descriptor (16 bytes in 64-bit mode)
+    let desc_addr = gdtr.base + (tr & !0x7) as u64;
+    let desc = desc_addr as *const u64;
+    let low = core::ptr::read_volatile(desc);
+    let high = core::ptr::read_volatile(desc.add(1));
+    // Base from TSS descriptor: bits 63:56, 39:16 of low qword + bits 31:0 of high qword
+    let base_low =
+        ((low >> 16) & 0xFFFF) | (((low >> 32) & 0xFF) << 16) | (((low >> 56) & 0xFF) << 24);
+    let base_high = high & 0xFFFF_FFFF;
+    base_low | (base_high << 32)
+}
+
+// ─── VMCS setup ─────────────────────────────────────────────────────
+
+/// Set up VMCS execution controls.
+///
+/// # Safety
+/// A VMCS must be current (via VMPTRLD).
+pub unsafe fn setup_vmcs_controls(ept_pointer: u64) -> Result<()> {
+    // Pin-based controls: intercept external interrupts and NMIs
+    let pin = adjust_controls(
+        pin_based::EXTERNAL_INTERRUPT_EXITING | pin_based::NMI_EXITING,
+        msr::IA32_VMX_TRUE_PINBASED_CTLS,
+    );
+    vmwrite(VmcsField::PinBasedVmExecControls, pin as u64)?;
+
+    // Primary processor-based controls
+    let proc = adjust_controls(
+        proc_based::HLT_EXITING
+            | proc_based::UNCONDITIONAL_IO_EXITING
+            | proc_based::ACTIVATE_SECONDARY,
+        msr::IA32_VMX_TRUE_PROCBASED_CTLS,
+    );
+    vmwrite(VmcsField::CpuBasedVmExecControls, proc as u64)?;
+
+    // Secondary processor-based controls: EPT, RDTSCP, unrestricted guest
+    let proc2 = adjust_controls(
+        proc_based2::ENABLE_EPT | proc_based2::ENABLE_RDTSCP | proc_based2::UNRESTRICTED_GUEST,
+        msr::IA32_VMX_PROCBASED_CTLS2,
+    );
+    vmwrite(VmcsField::SecondaryVmExecControls, proc2 as u64)?;
+
+    // VM-exit controls: 64-bit host, save/load EFER, ack interrupt on exit
+    let exit = adjust_controls(
+        exit_controls::HOST_ADDRESS_SPACE_SIZE
+            | exit_controls::SAVE_IA32_EFER
+            | exit_controls::LOAD_IA32_EFER
+            | exit_controls::ACKNOWLEDGE_INTERRUPT_ON_EXIT,
+        msr::IA32_VMX_TRUE_EXIT_CTLS,
+    );
+    vmwrite(VmcsField::VmExitControls, exit as u64)?;
+
+    // VM-entry controls
+    let entry = adjust_controls(
+        entry_controls::LOAD_DEBUG_CONTROLS,
+        msr::IA32_VMX_TRUE_ENTRY_CTLS,
+    );
+    vmwrite(VmcsField::VmEntryControls, entry as u64)?;
+
+    // EPT pointer (WB memory type = 6, page-walk length 4-1 = 3)
+    vmwrite(VmcsField::EptPointer, ept_pointer)?;
+
+    // VMCS link pointer (required; -1 = no shadow VMCS)
+    vmwrite(VmcsField::VmcsLinkPointer, u64::MAX)?;
+
+    // Exception bitmap: don't intercept any exceptions
+    vmwrite(VmcsField::ExceptionBitmap, 0)?;
+
+    // CR guest/host masks: don't trap CR accesses
+    vmwrite(VmcsField::Cr0GuestHostMask, 0)?;
+    vmwrite(VmcsField::Cr4GuestHostMask, 0)?;
+    vmwrite(VmcsField::Cr0ReadShadow, 0)?;
+    vmwrite(VmcsField::Cr4ReadShadow, 0)?;
+
+    // MSR store/load counts (none)
+    vmwrite(VmcsField::VmExitMsrStoreCount, 0)?;
+    vmwrite(VmcsField::VmExitMsrLoadCount, 0)?;
+    vmwrite(VmcsField::VmEntryMsrLoadCount, 0)?;
+
+    Ok(())
+}
+
+/// Write VMCS host-state fields from current CPU state.
+///
+/// # Safety
+/// A VMCS must be current. `host_rsp` and `host_rip` must be valid addresses
+/// for the VM-exit handler.
+pub unsafe fn setup_vmcs_host_state(host_rsp: u64, host_rip: u64) -> Result<()> {
+    // Control registers
+    vmwrite(VmcsField::HostCr0, Cr0::read_raw())?;
+    vmwrite(
+        VmcsField::HostCr3,
+        x86_64::registers::control::Cr3::read()
+            .0
+            .start_address()
+            .as_u64(),
+    )?;
+    vmwrite(VmcsField::HostCr4, Cr4::read().bits())?;
+
+    // Segment selectors
+    vmwrite(VmcsField::HostCsSelector, read_seg_selector!("cs") as u64)?;
+    vmwrite(VmcsField::HostSsSelector, read_seg_selector!("ss") as u64)?;
+    vmwrite(VmcsField::HostDsSelector, read_seg_selector!("ds") as u64)?;
+    vmwrite(VmcsField::HostEsSelector, read_seg_selector!("es") as u64)?;
+    vmwrite(VmcsField::HostFsSelector, read_seg_selector!("fs") as u64)?;
+    vmwrite(VmcsField::HostGsSelector, read_seg_selector!("gs") as u64)?;
+    let tr: u16;
+    asm!("str {:x}", out(reg) tr, options(nomem, nostack));
+    vmwrite(VmcsField::HostTrSelector, tr as u64)?;
+
+    // Segment bases
+    vmwrite(VmcsField::HostFsBase, x86::msr::rdmsr(0xC000_0100))?; // IA32_FS_BASE
+    vmwrite(VmcsField::HostGsBase, x86::msr::rdmsr(0xC000_0101))?; // IA32_GS_BASE
+    vmwrite(VmcsField::HostTrBase, read_tr_base())?;
+
+    // GDT/IDT bases
+    let gdtr = read_gdtr();
+    let idtr = read_idtr();
+    vmwrite(VmcsField::HostGdtrBase, gdtr.base)?;
+    vmwrite(VmcsField::HostIdtrBase, idtr.base)?;
+
+    // SYSENTER fields
+    vmwrite(VmcsField::HostIa32SysenterCs, x86::msr::rdmsr(0x174) as u64)?;
+    vmwrite(VmcsField::HostIa32SysenterEsp, x86::msr::rdmsr(0x175))?;
+    vmwrite(VmcsField::HostIa32SysenterEip, x86::msr::rdmsr(0x176))?;
+
+    // EFER
+    vmwrite(VmcsField::HostIa32Efer, x86::msr::rdmsr(0xC000_0080))?;
+
+    // RSP and RIP where execution resumes on VM exit
+    vmwrite(VmcsField::HostRsp, host_rsp)?;
+    vmwrite(VmcsField::HostRip, host_rip)?;
+
+    Ok(())
+}
+
+/// Write VMCS guest-state fields from `VcpuRegisters`.
+///
+/// # Safety
+/// A VMCS must be current.
+pub unsafe fn setup_vmcs_guest_state(regs: &VcpuRegisters) -> Result<()> {
+    // Control registers
+    vmwrite(VmcsField::GuestCr0, regs.cr.cr0)?;
+    vmwrite(VmcsField::GuestCr3, regs.cr.cr3)?;
+    vmwrite(VmcsField::GuestCr4, regs.cr.cr4)?;
+    vmwrite(VmcsField::GuestDr7, regs.dr.dr7)?;
+
+    // CS
+    vmwrite(VmcsField::GuestCsSelector, regs.seg.cs.selector as u64)?;
+    vmwrite(VmcsField::GuestCsBase, regs.seg.cs.base)?;
+    vmwrite(VmcsField::GuestCsLimit, regs.seg.cs.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestCsAccessRights,
+        regs.seg.cs.attributes as u64,
+    )?;
+
+    // SS
+    vmwrite(VmcsField::GuestSsSelector, regs.seg.ss.selector as u64)?;
+    vmwrite(VmcsField::GuestSsBase, regs.seg.ss.base)?;
+    vmwrite(VmcsField::GuestSsLimit, regs.seg.ss.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestSsAccessRights,
+        regs.seg.ss.attributes as u64,
+    )?;
+
+    // DS
+    vmwrite(VmcsField::GuestDsSelector, regs.seg.ds.selector as u64)?;
+    vmwrite(VmcsField::GuestDsBase, regs.seg.ds.base)?;
+    vmwrite(VmcsField::GuestDsLimit, regs.seg.ds.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestDsAccessRights,
+        regs.seg.ds.attributes as u64,
+    )?;
+
+    // ES
+    vmwrite(VmcsField::GuestEsSelector, regs.seg.es.selector as u64)?;
+    vmwrite(VmcsField::GuestEsBase, regs.seg.es.base)?;
+    vmwrite(VmcsField::GuestEsLimit, regs.seg.es.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestEsAccessRights,
+        regs.seg.es.attributes as u64,
+    )?;
+
+    // FS
+    vmwrite(VmcsField::GuestFsSelector, regs.seg.fs.selector as u64)?;
+    vmwrite(VmcsField::GuestFsBase, regs.seg.fs.base)?;
+    vmwrite(VmcsField::GuestFsLimit, regs.seg.fs.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestFsAccessRights,
+        regs.seg.fs.attributes as u64,
+    )?;
+
+    // GS
+    vmwrite(VmcsField::GuestGsSelector, regs.seg.gs.selector as u64)?;
+    vmwrite(VmcsField::GuestGsBase, regs.seg.gs.base)?;
+    vmwrite(VmcsField::GuestGsLimit, regs.seg.gs.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestGsAccessRights,
+        regs.seg.gs.attributes as u64,
+    )?;
+
+    // LDTR
+    vmwrite(VmcsField::GuestLdtrSelector, regs.seg.ldtr.selector as u64)?;
+    vmwrite(VmcsField::GuestLdtrBase, regs.seg.ldtr.base)?;
+    vmwrite(VmcsField::GuestLdtrLimit, regs.seg.ldtr.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestLdtrAccessRights,
+        regs.seg.ldtr.attributes as u64,
+    )?;
+
+    // TR
+    vmwrite(VmcsField::GuestTrSelector, regs.seg.tr.selector as u64)?;
+    vmwrite(VmcsField::GuestTrBase, regs.seg.tr.base)?;
+    vmwrite(VmcsField::GuestTrLimit, regs.seg.tr.limit as u64)?;
+    vmwrite(
+        VmcsField::GuestTrAccessRights,
+        regs.seg.tr.attributes as u64,
+    )?;
+
+    // GDTR / IDTR
+    vmwrite(VmcsField::GuestGdtrBase, regs.dt.gdtr_base)?;
+    vmwrite(VmcsField::GuestGdtrLimit, regs.dt.gdtr_limit as u64)?;
+    vmwrite(VmcsField::GuestIdtrBase, regs.dt.idtr_base)?;
+    vmwrite(VmcsField::GuestIdtrLimit, regs.dt.idtr_limit as u64)?;
+
+    // RIP, RSP, RFLAGS
+    vmwrite(VmcsField::GuestRip, regs.gp.rip)?;
+    vmwrite(VmcsField::GuestRsp, regs.gp.rsp)?;
+    vmwrite(VmcsField::GuestRflags, regs.gp.rflags)?;
+
+    // EFER
+    vmwrite(VmcsField::GuestIa32Efer, regs.cr.efer)?;
+
+    // Guest interruptibility and activity state
+    vmwrite(VmcsField::GuestInterruptibilityState, 0)?;
+    vmwrite(VmcsField::GuestActivityState, 0)?;
+
+    // Guest IA32_DEBUGCTL
+    vmwrite(VmcsField::GuestIa32Debugctl, 0)?;
+
+    // Guest SYSENTER fields
+    vmwrite(VmcsField::GuestIa32SysenterCs, 0)?;
+    vmwrite(VmcsField::GuestIa32SysenterEsp, 0)?;
+    vmwrite(VmcsField::GuestIa32SysenterEip, 0)?;
+
+    // Pending debug exceptions
+    vmwrite(VmcsField::GuestPendingDebugExceptions, 0)?;
+
+    Ok(())
+}
+
+/// Sync guest GP registers to VMCS (RIP, RSP, RFLAGS only — others saved via asm).
+///
+/// # Safety
+/// A VMCS must be current.
+pub unsafe fn sync_guest_state_to_vmcs(regs: &VcpuRegisters) -> Result<()> {
+    vmwrite(VmcsField::GuestRip, regs.gp.rip)?;
+    vmwrite(VmcsField::GuestRsp, regs.gp.rsp)?;
+    vmwrite(VmcsField::GuestRflags, regs.gp.rflags)?;
+    vmwrite(VmcsField::GuestCr0, regs.cr.cr0)?;
+    vmwrite(VmcsField::GuestCr3, regs.cr.cr3)?;
+    vmwrite(VmcsField::GuestCr4, regs.cr.cr4)?;
+    Ok(())
+}
+
+/// Read guest state back from VMCS after a VM exit.
+///
+/// # Safety
+/// A VMCS must be current and a VM exit must have occurred.
+pub unsafe fn sync_guest_state_from_vmcs(regs: &mut VcpuRegisters) -> Result<()> {
+    regs.gp.rip = vmread(VmcsField::GuestRip)?;
+    regs.gp.rsp = vmread(VmcsField::GuestRsp)?;
+    regs.gp.rflags = vmread(VmcsField::GuestRflags)?;
+    regs.cr.cr0 = vmread(VmcsField::GuestCr0)?;
+    regs.cr.cr3 = vmread(VmcsField::GuestCr3)?;
+    regs.cr.cr4 = vmread(VmcsField::GuestCr4)?;
+    Ok(())
+}
+
+/// Read VM-exit information from the VMCS.
+///
+/// # Safety
+/// A VMCS must be current and a VM exit must have occurred.
+pub unsafe fn read_exit_info() -> Result<VmExitInfo> {
+    let reason = vmread(VmcsField::VmExitReason)? as u32;
+    let qualification = vmread(VmcsField::ExitQualification)?;
+    let instruction_length = vmread(VmcsField::VmExitInstructionLen)? as u32;
+    let instruction_info = vmread(VmcsField::VmExitInstructionInfo)? as u32;
+
+    let guest_physical_addr = if (reason & 0xFFFF) == VmExitReason::EptViolation as u32
+        || (reason & 0xFFFF) == VmExitReason::EptMisconfiguration as u32
+    {
+        Some(vmread(VmcsField::GuestPhysicalAddress)?)
+    } else {
+        None
+    };
+
+    let guest_linear_addr = Some(vmread(VmcsField::GuestLinearAddress)?);
+
+    Ok(VmExitInfo {
+        reason: reason & 0xFFFF,
+        qualification,
+        guest_physical_addr,
+        guest_linear_addr,
+        instruction_length,
+        instruction_info,
+    })
+}
+
+/// Execute a VMX VM-entry (VMLAUNCH or VMRESUME), saving and restoring GP registers.
+///
+/// On success the guest runs until a VM exit, then this function returns `Ok(())`.
+/// On failure (e.g. invalid guest state) it returns an error.
+///
+/// # Safety
+/// VMCS must be properly configured and current. `regs` must point to a valid
+/// `GeneralRegisters` struct. The caller must handle the VM exit afterwards.
+pub unsafe fn vmx_run(regs: &mut GeneralRegisters, launched: bool) -> Result<()> {
+    let error: u64;
+    let launched_flag: u64 = if launched { 1 } else { 0 };
+
+    asm!(
+        // Save host callee-saved registers
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "push rdi",
+
+        // Load guest GP registers from GeneralRegisters struct
+        // rdi = pointer to GeneralRegisters
+        "mov rax, [rdi + 0x00]",
+        "mov rbx, [rdi + 0x08]",
+        "mov rcx, [rdi + 0x10]",
+        "mov rdx, [rdi + 0x18]",
+        "mov rsi, [rdi + 0x20]",
+        // rdi loaded last (we're using it as base pointer)
+        "mov rbp, [rdi + 0x30]",
+        // rsp is managed by VMCS (GuestRsp)
+        "mov r8,  [rdi + 0x40]",
+        "mov r9,  [rdi + 0x48]",
+        "mov r10, [rdi + 0x50]",
+        "mov r11, [rdi + 0x58]",
+        "mov r12, [rdi + 0x60]",
+        "mov r13, [rdi + 0x68]",
+        "mov r14, [rdi + 0x70]",
+        "mov r15, [rdi + 0x78]",
+        "mov rdi, [rdi + 0x28]", // load guest rdi last
+
+        // VM entry: vmlaunch or vmresume
+        "test {launched}, {launched}",
+        "jnz 20f",
+        "vmlaunch",
+        "jmp 30f",        // entry failure
+        "20:",
+        "vmresume",
+        "30:",
+        // If we reach here, VM entry failed (CF or ZF set).
+        // On a *successful* VM entry the guest runs; on VM exit the
+        // CPU loads HostRip/HostRsp from VMCS and jumps there, so
+        // successful entry+exit does NOT return here.
+        // We still need to restore host state.
+        "setc {error:l}",
+
+        // Restore host callee-saved (guest rdi is lost on entry failure,
+        // but that's acceptable — the guest didn't run)
+        "pop rdi",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+        launched = in(reg) launched_flag,
+        error = out(reg) error,
+        // All GP registers are clobbered by guest execution
+        out("rax") _,
+        out("rcx") _,
+        out("rdx") _,
+        out("rsi") _,
+        out("r8") _,
+        out("r9") _,
+        out("r10") _,
+        out("r11") _,
+        options(nostack),
+    );
+
+    if error != 0 {
+        return Err(Error::VmlaunchFailed);
+    }
+
+    Ok(())
+}
+
+/// VM-exit handler function to be used as HostRip.
+///
+/// When a VM exit occurs, the CPU loads HostRsp and HostRip from the VMCS
+/// and jumps here. This function saves guest GP registers, restores the
+/// host callee-saved registers (which were pushed before VM entry), and
+/// returns to the caller of `vmx_run_with_exit`.
+///
+/// The protocol is:
+///   HostRsp points to the stack frame created by `vmx_run_with_exit`,
+///   with the GeneralRegisters pointer at `[rsp]` (top of the saved frame).
+///
+/// # Safety
+/// Only called as a VM-exit entry point with the correct HostRsp layout.
+#[unsafe(naked)]
+unsafe extern "C" fn vmx_exit_handler() {
+    naked_asm!(
+        // On entry: guest GP regs are in CPU registers.
+        // HostRsp was set so [rsp] = saved rdi (GeneralRegisters pointer),
+        // followed by saved r15..rbx.
+
+        // Temporarily save guest rax on stack
+        "push rax",
+        // Load the GeneralRegisters pointer (saved rdi is at rsp+8 after our push)
+        "mov rax, [rsp + 8]",
+        // Save guest GP registers to the struct
+        "pop QWORD PTR [rax + 0x00]", // guest rax (from our push)
+        "mov [rax + 0x08], rbx",
+        "mov [rax + 0x10], rcx",
+        "mov [rax + 0x18], rdx",
+        "mov [rax + 0x20], rsi",
+        "mov [rax + 0x28], rdi",
+        "mov [rax + 0x30], rbp",
+        // rsp is in VMCS (GuestRsp) — not changed
+        "mov [rax + 0x40], r8",
+        "mov [rax + 0x48], r9",
+        "mov [rax + 0x50], r10",
+        "mov [rax + 0x58], r11",
+        "mov [rax + 0x60], r12",
+        "mov [rax + 0x68], r13",
+        "mov [rax + 0x70], r14",
+        "mov [rax + 0x78], r15",
+        // Restore host callee-saved registers (match vmx_run_with_exit push order)
+        "pop rdi",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+        // Return to the caller of vmx_run_with_exit.
+        // xor error flag to indicate success.
+        "xor eax, eax",
+        "ret",
+    );
+}
+
+/// Combined VMX run: sets up HostRip/HostRsp, executes VM entry, handles exit.
+///
+/// Returns `Ok(())` on a successful VM-entry → exit cycle. The guest GP
+/// registers in `regs` are updated with the state at the time of the VM exit.
+///
+/// # Safety
+/// VMCS must be fully configured (controls, guest state, EPT, etc.).
+/// `regs` must be valid. Only the first call should pass `launched = false`.
+pub unsafe fn vmx_run_with_exit(
+    vmcs: &VmcsRegion,
+    regs: &mut GeneralRegisters,
+    launched: bool,
+) -> Result<()> {
+    // Make this VMCS current
+    vmptrld(vmcs)?;
+
+    // Write HostRip to our exit handler
+    vmwrite(VmcsField::HostRip, vmx_exit_handler as *const () as u64)?;
+
+    let result: u64;
+    let launched_flag: u64 = if launched { 1 } else { 0 };
+
+    asm!(
+        // Save host callee-saved registers
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "push rdi",  // GeneralRegisters pointer — exit handler reads this
+
+        // Set HostRsp to current rsp so exit handler sees our frame
+        "mov rax, rsp",
+        // vmwrite HostRsp (field 0x6C14), rax
+        "mov rdx, 0x6C14",
+        "vmwrite rdx, rax",
+
+        // Load guest GP registers
+        "mov rax, [rdi + 0x00]",
+        "mov rbx, [rdi + 0x08]",
+        "mov rcx, [rdi + 0x10]",
+        "mov rdx, [rdi + 0x18]",
+        "mov rsi, [rdi + 0x20]",
+        "mov rbp, [rdi + 0x30]",
+        "mov r8,  [rdi + 0x40]",
+        "mov r9,  [rdi + 0x48]",
+        "mov r10, [rdi + 0x50]",
+        "mov r11, [rdi + 0x58]",
+        "mov r12, [rdi + 0x60]",
+        "mov r13, [rdi + 0x68]",
+        "mov r14, [rdi + 0x70]",
+        "mov r15, [rdi + 0x78]",
+        "mov rdi, [rdi + 0x28]",
+
+        // VM entry
+        "test {launched}, {launched}",
+        "jnz 200f",
+        "vmlaunch",
+        "jmp 300f",
+        "200:",
+        "vmresume",
+        "300:",
+        // VM entry failed — restore host frame
+        "pop rdi",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+        "mov {result}, 1",
+        "jmp 400f",
+
+        // (on successful entry+exit the naked exit handler returns here
+        //  via `ret` with rax=0, host callee-saved already restored)
+        "400:",
+        launched = in(reg) launched_flag,
+        result = out(reg) result,
+        out("rax") _,
+        out("rcx") _,
+        out("rdx") _,
+        out("rsi") _,
+        out("r8") _,
+        out("r9") _,
+        out("r10") _,
+        out("r11") _,
+        options(nostack),
+    );
+
+    if result != 0 {
+        return Err(Error::VmlaunchFailed);
+    }
+
+    Ok(())
+}
+
+/// Inject an interrupt into the guest via the VMCS VM-entry interruption-info field.
+///
+/// # Safety
+/// A VMCS must be current.
+pub unsafe fn inject_interrupt(vector: u8, is_nmi: bool) -> Result<()> {
+    let int_type = if is_nmi {
+        interrupt_info::TYPE_NMI
+    } else {
+        interrupt_info::TYPE_EXTERNAL
+    };
+    let info = (vector as u32) | int_type | interrupt_info::VALID;
+    vmwrite(VmcsField::VmEntryInterruptionInfo, info as u64)?;
+    Ok(())
+}
+
+/// Inject a hardware exception into the guest.
+///
+/// # Safety
+/// A VMCS must be current.
+pub unsafe fn inject_exception(vector: u8, error_code: Option<u32>) -> Result<()> {
+    let mut info =
+        (vector as u32) | interrupt_info::TYPE_HARDWARE_EXCEPTION | interrupt_info::VALID;
+    if let Some(code) = error_code {
+        info |= interrupt_info::ERROR_CODE_VALID;
+        vmwrite(VmcsField::VmEntryExceptionErrorCode, code as u64)?;
+    }
+    vmwrite(VmcsField::VmEntryInterruptionInfo, info as u64)?;
+    Ok(())
 }
 
 #[cfg(test)]

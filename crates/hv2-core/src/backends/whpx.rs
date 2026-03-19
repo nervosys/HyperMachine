@@ -2683,8 +2683,8 @@ impl WhpxVcpu {
             let mut reg_values: [WHV_REGISTER_VALUE; 24] = [std::mem::zeroed(); 24];
 
             // Set GPRs (all 0)
-            for i in 0..16 {
-                reg_values[i].Reg64 = 0;
+            for reg_value in reg_values.iter_mut().take(16) {
+                reg_value.Reg64 = 0;
             }
 
             // Set RIP and RFLAGS
@@ -2700,8 +2700,8 @@ impl WhpxVcpu {
             };
 
             // Set other segments (DS, ES, FS, GS, SS) with normal real-mode attributes
-            for i in 19..24 {
-                reg_values[i].Segment = WHV_X64_SEGMENT_REGISTER {
+            for reg_value in reg_values.iter_mut().skip(19) {
+                reg_value.Segment = WHV_X64_SEGMENT_REGISTER {
                     Selector: 0,
                     Base: 0,
                     Limit: 0xFFFF,

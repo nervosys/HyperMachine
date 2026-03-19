@@ -9,6 +9,17 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
+/// Trait for accessing guest physical memory from VirtIO descriptors.
+///
+/// Implementors map guest-physical addresses to host buffers so that
+/// VirtIO descriptor chains can read/write packet data into the guest.
+pub trait GuestMemory: Send + Sync {
+    /// Read `buf.len()` bytes from guest physical address `addr`.
+    fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()>;
+    /// Write `data` to guest physical address `addr`.
+    fn write(&self, addr: u64, data: &[u8]) -> Result<()>;
+}
+
 // VirtIO device type for network
 const VIRTIO_NET_DEVICE_ID: u32 = 1;
 
@@ -277,6 +288,8 @@ pub struct VirtioNet {
     /// Interrupt callback
     #[allow(clippy::type_complexity)]
     interrupt_cb: RwLock<Option<Arc<dyn Fn(u16) + Send + Sync>>>,
+    /// Guest memory accessor (set after VM memory is mapped)
+    guest_memory: RwLock<Option<Arc<dyn GuestMemory>>>,
 }
 
 impl VirtioNet {
@@ -337,6 +350,7 @@ impl VirtioNet {
             tx_pending: Mutex::new(VecDeque::new()),
             stats: Arc::new(VirtioNetStats::default()),
             interrupt_cb: RwLock::new(None),
+            guest_memory: RwLock::new(None),
         }
     }
 
@@ -423,11 +437,70 @@ impl VirtioNet {
         *self.interrupt_cb.write().await = Some(Arc::new(cb));
     }
 
+    /// Attach guest physical memory so descriptor chains can access it.
+    pub async fn attach_guest_memory(&self, mem: Arc<dyn GuestMemory>) {
+        *self.guest_memory.write().await = Some(mem);
+    }
+
     /// Trigger interrupt for a queue
     async fn trigger_interrupt(&self, queue_idx: u16) {
         if let Some(cb) = self.interrupt_cb.read().await.as_ref() {
             cb(queue_idx);
         }
+    }
+
+    /// Walk a descriptor chain starting at `head`, collecting all
+    /// write-only (device-writable) buffer regions as `(addr, len)`.
+    fn collect_write_descs(queue: &Virtqueue, head: u16) -> Vec<(u64, u32)> {
+        let mut result = Vec::new();
+        let mut idx = head;
+        let mut iters = 0u16;
+        loop {
+            if iters >= queue.size {
+                break; // guard against loops
+            }
+            iters += 1;
+            if let Some(desc) = queue.get_desc(idx) {
+                if desc.flags & VirtqDesc::F_WRITE != 0 {
+                    result.push((desc.addr, desc.len));
+                }
+                if desc.flags & VirtqDesc::F_NEXT != 0 {
+                    idx = desc.next;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        result
+    }
+
+    /// Walk a descriptor chain starting at `head`, collecting all
+    /// read-only (device-readable) buffer regions as `(addr, len)`.
+    fn collect_read_descs(queue: &Virtqueue, head: u16) -> Vec<(u64, u32)> {
+        let mut result = Vec::new();
+        let mut idx = head;
+        let mut iters = 0u16;
+        loop {
+            if iters >= queue.size {
+                break;
+            }
+            iters += 1;
+            if let Some(desc) = queue.get_desc(idx) {
+                if desc.flags & VirtqDesc::F_WRITE == 0 {
+                    result.push((desc.addr, desc.len));
+                }
+                if desc.flags & VirtqDesc::F_NEXT != 0 {
+                    idx = desc.next;
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        result
     }
 
     /// Receive a packet from the backend (to be delivered to guest)
@@ -472,16 +545,36 @@ impl VirtioNet {
 
         let mut queue = self.rx_queues[queue_idx].lock().await;
         let mut pending = self.rx_pending.lock().await;
+        let guest_mem = self.guest_memory.read().await;
 
         while let Some(packet) = pending.pop_front() {
             if let Some(desc_idx) = queue.pop_available() {
-                // In a real implementation, we would copy data to guest memory
-                // using the descriptor chain. Here we simulate success.
-                let len = packet.data.len() as u32;
-                queue.push_used(desc_idx, len);
+                let written = if let Some(mem) = guest_mem.as_ref() {
+                    // Real path: walk descriptor chain and write packet data to
+                    // guest-physical addresses.
+                    let descs = Self::collect_write_descs(&queue, desc_idx);
+                    let mut remaining = &packet.data[..];
+                    let mut total = 0u32;
+                    for (addr, len) in &descs {
+                        if remaining.is_empty() {
+                            break;
+                        }
+                        let chunk = remaining.len().min(*len as usize);
+                        mem.write(*addr, &remaining[..chunk])?;
+                        remaining = &remaining[chunk..];
+                        total += chunk as u32;
+                    }
+                    total
+                } else {
+                    // Simulated path (no guest memory attached)
+                    packet.data.len() as u32
+                };
 
+                queue.push_used(desc_idx, written);
                 self.stats.rx_packets.fetch_add(1, Ordering::Relaxed);
-                self.stats.rx_bytes.fetch_add(len as u64, Ordering::Relaxed);
+                self.stats
+                    .rx_bytes
+                    .fetch_add(written as u64, Ordering::Relaxed);
             } else {
                 // No available buffers, put packet back
                 pending.push_front(packet);
@@ -490,6 +583,7 @@ impl VirtioNet {
             }
         }
 
+        drop(guest_mem);
         drop(queue);
         drop(pending);
 
@@ -506,25 +600,37 @@ impl VirtioNet {
         }
 
         let mut queue = self.tx_queues[queue_idx].lock().await;
+        let guest_mem = self.guest_memory.read().await;
         let mut packets = Vec::new();
 
         while let Some(desc_idx) = queue.pop_available() {
-            // In a real implementation, we would read data from guest memory
-            // using the descriptor chain. Here we simulate with empty packets.
-            if let Some(desc) = queue.get_desc(desc_idx) {
-                let len = desc.len;
+            let packet_data = if let Some(mem) = guest_mem.as_ref() {
+                // Real path: read data from guest memory via descriptor chain
+                let descs = Self::collect_read_descs(&queue, desc_idx);
+                let total_len: usize = descs.iter().map(|(_, l)| *l as usize).sum();
+                let mut buf = Vec::with_capacity(total_len);
+                for (addr, len) in &descs {
+                    let mut chunk = vec![0u8; *len as usize];
+                    mem.read(*addr, &mut chunk)?;
+                    buf.extend_from_slice(&chunk);
+                }
+                buf
+            } else if let Some(desc) = queue.get_desc(desc_idx) {
+                // Simulated path: fill with zeros
+                vec![0u8; desc.len as usize]
+            } else {
+                continue;
+            };
 
-                // Simulate reading packet data (would come from guest memory)
-                let packet_data = vec![0u8; len as usize];
-                packets.push(packet_data);
+            let len = packet_data.len() as u32;
+            packets.push(packet_data);
+            queue.push_used(desc_idx, len);
 
-                queue.push_used(desc_idx, len);
-
-                self.stats.tx_packets.fetch_add(1, Ordering::Relaxed);
-                self.stats.tx_bytes.fetch_add(len as u64, Ordering::Relaxed);
-            }
+            self.stats.tx_packets.fetch_add(1, Ordering::Relaxed);
+            self.stats.tx_bytes.fetch_add(len as u64, Ordering::Relaxed);
         }
 
+        drop(guest_mem);
         drop(queue);
 
         // Trigger interrupt
@@ -592,6 +698,43 @@ impl VirtioNet {
 mod tests {
     use super::*;
 
+    /// Simple flat guest memory for tests.
+    struct TestGuestMemory {
+        mem: std::sync::Mutex<Vec<u8>>,
+    }
+
+    impl TestGuestMemory {
+        fn new(size: usize) -> Self {
+            Self {
+                mem: std::sync::Mutex::new(vec![0u8; size]),
+            }
+        }
+    }
+
+    impl GuestMemory for TestGuestMemory {
+        fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
+            let m = self.mem.lock().unwrap();
+            let start = addr as usize;
+            let end = start + buf.len();
+            if end > m.len() {
+                return Err(NetError::Network("read out of bounds".into()));
+            }
+            buf.copy_from_slice(&m[start..end]);
+            Ok(())
+        }
+
+        fn write(&self, addr: u64, data: &[u8]) -> Result<()> {
+            let mut m = self.mem.lock().unwrap();
+            let start = addr as usize;
+            let end = start + data.len();
+            if end > m.len() {
+                return Err(NetError::Network("write out of bounds".into()));
+            }
+            m[start..end].copy_from_slice(data);
+            Ok(())
+        }
+    }
+
     #[tokio::test]
     async fn test_virtio_net_creation() {
         let net = VirtioNet::new(2);
@@ -641,5 +784,183 @@ mod tests {
         assert_eq!(queue.used.idx, 1);
         assert_eq!(queue.used.ring[0].id, 5);
         assert_eq!(queue.used.ring[0].len, 100);
+    }
+
+    #[tokio::test]
+    async fn test_rx_with_guest_memory() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+
+        // Set up 4 KB of guest memory
+        let gmem = Arc::new(TestGuestMemory::new(4096));
+        net.attach_guest_memory(gmem.clone()).await;
+
+        // Set up an RX descriptor chain:
+        // desc[0] → writable, addr=0x100, len=256
+        {
+            let mut q = net.rx_queues[0].lock().await;
+            q.set_desc(
+                0,
+                VirtqDesc {
+                    addr: 0x100,
+                    len: 256,
+                    flags: VirtqDesc::F_WRITE,
+                    next: 0,
+                },
+            );
+            q.available.ring[0] = 0;
+            q.available.idx = 1;
+        }
+
+        // Deliver a small packet
+        let payload = b"Hello, guest!";
+        net.receive_packet(payload).await.unwrap();
+
+        // Verify data was written to guest memory at addr 0x100
+        let header_len = std::mem::size_of::<VirtioNetHeader>();
+        let expected_len = header_len + payload.len();
+        let mut buf = vec![0u8; expected_len];
+        gmem.read(0x100, &mut buf).unwrap();
+
+        // After the VirtIO header, the payload should appear
+        assert_eq!(&buf[header_len..], payload);
+
+        // Stats should reflect one received packet
+        assert_eq!(net.stats().rx_packets.load(Ordering::Relaxed), 1);
+        assert_eq!(
+            net.stats().rx_bytes.load(Ordering::Relaxed),
+            expected_len as u64
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tx_with_guest_memory() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+
+        let gmem = Arc::new(TestGuestMemory::new(4096));
+        // Pre-fill some data in guest memory at addr 0x200
+        let tx_data = b"Outbound packet data";
+        gmem.write(0x200, tx_data).unwrap();
+        net.attach_guest_memory(gmem).await;
+
+        // Set up a TX descriptor chain: desc[0] → readable, addr=0x200, len=tx_data.len()
+        {
+            let mut q = net.tx_queues[0].lock().await;
+            q.set_desc(
+                0,
+                VirtqDesc {
+                    addr: 0x200,
+                    len: tx_data.len() as u32,
+                    flags: 0, // readable by device
+                    next: 0,
+                },
+            );
+            q.available.ring[0] = 0;
+            q.available.idx = 1;
+        }
+
+        let packets = net.process_tx_queue(0).await.unwrap();
+        assert_eq!(packets.len(), 1);
+        assert_eq!(packets[0], tx_data);
+
+        assert_eq!(net.stats().tx_packets.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn test_rx_descriptor_chain() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+
+        let gmem = Arc::new(TestGuestMemory::new(4096));
+        net.attach_guest_memory(gmem.clone()).await;
+
+        // Two-descriptor chain: desc[0] → desc[1]
+        {
+            let mut q = net.rx_queues[0].lock().await;
+            q.set_desc(
+                0,
+                VirtqDesc {
+                    addr: 0x100,
+                    len: 16,
+                    flags: VirtqDesc::F_WRITE | VirtqDesc::F_NEXT,
+                    next: 1,
+                },
+            );
+            q.set_desc(
+                1,
+                VirtqDesc {
+                    addr: 0x200,
+                    len: 64,
+                    flags: VirtqDesc::F_WRITE,
+                    next: 0,
+                },
+            );
+            q.available.ring[0] = 0;
+            q.available.idx = 1;
+        }
+
+        let header_len = std::mem::size_of::<VirtioNetHeader>();
+        // Payload larger than first descriptor's 16 bytes (header=10, so
+        // payload will spill after 6 bytes of the first desc into the second)
+        let payload = vec![0xABu8; 30];
+        net.receive_packet(&payload).await.unwrap();
+
+        // Read from second descriptor to verify chain was followed
+        let mut buf2 = vec![0u8; 30];
+        gmem.read(0x200, &mut buf2).unwrap();
+        // The total packet (header_len + 30) should have spilled into desc[1]
+        let spill = (header_len + 30) - 16; // bytes written into second desc
+        assert!(buf2[..spill].iter().any(|b| *b != 0)); // non-zero data present
+    }
+
+    #[tokio::test]
+    async fn test_tx_descriptor_chain() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+
+        let gmem = Arc::new(TestGuestMemory::new(4096));
+        gmem.write(0x300, b"AAAA").unwrap();
+        gmem.write(0x400, b"BBBB").unwrap();
+        net.attach_guest_memory(gmem).await;
+
+        {
+            let mut q = net.tx_queues[0].lock().await;
+            q.set_desc(
+                0,
+                VirtqDesc {
+                    addr: 0x300,
+                    len: 4,
+                    flags: VirtqDesc::F_NEXT,
+                    next: 1,
+                },
+            );
+            q.set_desc(
+                1,
+                VirtqDesc {
+                    addr: 0x400,
+                    len: 4,
+                    flags: 0,
+                    next: 0,
+                },
+            );
+            q.available.ring[0] = 0;
+            q.available.idx = 1;
+        }
+
+        let packets = net.process_tx_queue(0).await.unwrap();
+        assert_eq!(packets.len(), 1);
+        assert_eq!(packets[0], b"AAAABBBB");
+    }
+
+    #[tokio::test]
+    async fn test_rx_no_available_buffer_drops() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+
+        // Don't make any descriptors available — packet should be dropped
+        net.receive_packet(b"dropped").await.unwrap();
+        assert_eq!(net.stats().rx_dropped.load(Ordering::Relaxed), 1);
+        assert_eq!(net.stats().rx_packets.load(Ordering::Relaxed), 0);
     }
 }

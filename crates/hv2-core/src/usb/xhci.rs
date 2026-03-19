@@ -3,7 +3,7 @@
 //! This module implements the eXtensible Host Controller Interface (xHCI)
 //! for USB 3.0/3.1/3.2 host controller emulation.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// xHCI capability registers offset
@@ -880,6 +880,10 @@ pub struct XhciController {
     interrupters: Vec<Interrupter>,
     /// Next available slot ID
     next_slot: u8,
+    /// Pending command TRBs (enqueued by software, processed on doorbell ring)
+    pending_commands: VecDeque<Trb>,
+    /// Pending transfer TRBs per (slot_id, endpoint_id)
+    pending_transfers: HashMap<(u8, u8), VecDeque<Trb>>,
     /// Statistics
     stats: XhciStats,
 }
@@ -923,6 +927,8 @@ impl XhciController {
             slots,
             interrupters,
             next_slot: 1,
+            pending_commands: VecDeque::new(),
+            pending_transfers: HashMap::new(),
             stats: XhciStats::default(),
         }
     }
@@ -1179,21 +1185,59 @@ impl XhciController {
         Some(event)
     }
 
+    /// Enqueue a command TRB for processing on the next doorbell ring.
+    ///
+    /// In a real xHCI the guest writes TRBs to the command ring in memory;
+    /// this method provides the same mechanism without guest memory access.
+    pub fn enqueue_command(&mut self, trb: Trb) {
+        self.pending_commands.push_back(trb);
+    }
+
     /// Ring doorbell
     pub fn ring_doorbell(&mut self, slot_id: u8, target: u8) {
         if slot_id == 0 {
             // Host controller doorbell - process command ring
             if self.command_ring.running {
-                // In a real implementation, we'd read TRBs from memory
-                // For now, just advance the ring
-                self.command_ring.segment.advance();
+                // Drain pending command TRBs
+                while let Some(trb) = self.pending_commands.pop_front() {
+                    if let Some(event) = self.process_command(trb) {
+                        self.interrupters[0].event_ring.queue_event(event);
+                        self.interrupters[0].set_pending();
+                    }
+                    self.command_ring.segment.advance();
+                }
+                // If no pending commands, just advance (legacy behaviour)
+                if self.command_ring.segment.index == 0 {
+                    // Already advanced inside the loop
+                } else if self.pending_commands.is_empty() {
+                    // No commands were queued — nothing extra to do
+                }
             }
         } else {
             // Device slot doorbell - process transfer ring
             // target is the endpoint ID (1-31)
-            if let Some(slot) = self.slots.get((slot_id - 1) as usize) {
+            let slot_idx = (slot_id - 1) as usize;
+            if let Some(slot) = self.slots.get(slot_idx) {
                 if slot.is_enabled() && (slot.enabled_endpoints & (1 << target)) != 0 {
                     self.stats.transfers.fetch_add(1, Ordering::Relaxed);
+
+                    // Drain pending transfer TRBs for this slot
+                    let key = (slot_id, target);
+                    if let Some(transfers) = self.pending_transfers.get_mut(&key) {
+                        while let Some(trb) = transfers.pop_front() {
+                            // Generate transfer completion event
+                            let event = Trb::transfer_event(
+                                0, // transfer TRB pointer (would be ring address)
+                                TrbCompletionCode::Success,
+                                trb.status, // transfer length
+                                slot_id,
+                                target,
+                            );
+                            self.interrupters[0].event_ring.queue_event(event);
+                            self.interrupters[0].set_pending();
+                            self.stats.events.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
                 }
             }
         }
@@ -1581,5 +1625,94 @@ mod tests {
         assert_eq!(event.parameter, 0x1000);
         let length = event.status & 0xFFFFFF;
         assert_eq!(length, 512);
+    }
+
+    #[test]
+    fn test_xhci_doorbell_noop() {
+        let mut xhci = XhciController::new("xhci0", 2, 2);
+        xhci.start();
+
+        // Enqueue a NoOp command and ring the host controller doorbell
+        xhci.enqueue_command(Trb::new(TrbType::NoOpCommand));
+        xhci.ring_doorbell(0, 0);
+
+        // Verify a completion event was queued
+        let event = xhci.interrupters[0].event_ring.pop_event().unwrap();
+        assert_eq!(event.trb_type(), Some(TrbType::CommandCompletion));
+        let code = ((event.status >> 24) & 0xFF) as u8;
+        assert_eq!(code, TrbCompletionCode::Success as u8);
+
+        // Interrupter should have been set pending
+        assert!(xhci.interrupters[0].pending);
+
+        // Stats should reflect one command and one event
+        let (cmds, _, events, _, _) = xhci.stats();
+        assert_eq!(cmds, 1);
+        assert_eq!(events, 1);
+    }
+
+    #[test]
+    fn test_xhci_doorbell_enable_slot() {
+        let mut xhci = XhciController::new("xhci0", 2, 2);
+        xhci.start();
+
+        xhci.enqueue_command(Trb::new(TrbType::EnableSlot));
+        xhci.ring_doorbell(0, 0);
+
+        // Verify slot 1 is now enabled
+        assert!(xhci.slots[0].is_enabled());
+
+        // Verify completion event carries slot_id = 1
+        let event = xhci.interrupters[0].event_ring.pop_event().unwrap();
+        let slot_id = ((event.control >> 24) & 0xFF) as u8;
+        assert_eq!(slot_id, 1);
+        let code = ((event.status >> 24) & 0xFF) as u8;
+        assert_eq!(code, TrbCompletionCode::Success as u8);
+    }
+
+    #[test]
+    fn test_xhci_doorbell_multiple_commands() {
+        let mut xhci = XhciController::new("xhci0", 2, 2);
+        xhci.start();
+
+        // Enqueue three commands, ring doorbell once
+        xhci.enqueue_command(Trb::new(TrbType::NoOpCommand));
+        xhci.enqueue_command(Trb::new(TrbType::EnableSlot));
+        let mut disable = Trb::new(TrbType::DisableSlot);
+        disable.control |= 1 << 24; // slot 1
+        xhci.enqueue_command(disable);
+        xhci.ring_doorbell(0, 0);
+
+        // All three should produce completion events
+        let ev1 = xhci.interrupters[0].event_ring.pop_event().unwrap();
+        let ev2 = xhci.interrupters[0].event_ring.pop_event().unwrap();
+        let ev3 = xhci.interrupters[0].event_ring.pop_event().unwrap();
+        assert!(xhci.interrupters[0].event_ring.pop_event().is_none());
+
+        // NoOp => Success
+        assert_eq!((ev1.status >> 24) & 0xFF, TrbCompletionCode::Success as u32);
+        // EnableSlot => Success, slot 1
+        assert_eq!((ev2.status >> 24) & 0xFF, TrbCompletionCode::Success as u32);
+        assert_eq!((ev2.control >> 24) & 0xFF, 1);
+        // DisableSlot => Success (slot was just enabled)
+        assert_eq!((ev3.status >> 24) & 0xFF, TrbCompletionCode::Success as u32);
+
+        let (cmds, _, events, _, _) = xhci.stats();
+        assert_eq!(cmds, 3);
+        assert_eq!(events, 3);
+    }
+
+    #[test]
+    fn test_xhci_doorbell_no_commands_when_stopped() {
+        let mut xhci = XhciController::new("xhci0", 2, 2);
+        // Controller is NOT started — command ring not running
+
+        xhci.enqueue_command(Trb::new(TrbType::NoOpCommand));
+        xhci.ring_doorbell(0, 0);
+
+        // No events should be produced
+        assert!(xhci.interrupters[0].event_ring.pop_event().is_none());
+        let (cmds, _, _, _, _) = xhci.stats();
+        assert_eq!(cmds, 0);
     }
 }

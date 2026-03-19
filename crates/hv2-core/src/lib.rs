@@ -16,8 +16,6 @@
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::type_complexity)]
 #![allow(clippy::unnecessary_cast)]
-#![allow(clippy::transmute_undefined_repr)]
-#![allow(clippy::missing_transmute_annotations)]
 #![allow(clippy::identity_op)]
 #![allow(clippy::field_reassign_with_default)]
 #![allow(clippy::large_enum_variant)]
@@ -25,23 +23,9 @@
 #![allow(clippy::wildcard_in_or_patterns)]
 #![allow(clippy::nonminimal_bool)]
 #![allow(clippy::ptr_arg)]
-#![allow(clippy::readonly_write_lock)]
 #![allow(clippy::should_implement_trait)]
 #![allow(clippy::inherent_to_string)]
 #![allow(clippy::await_holding_lock)]
-#![allow(clippy::implicit_saturating_sub)]
-#![allow(clippy::manual_map)]
-#![allow(clippy::unnecessary_min_or_max)]
-#![allow(clippy::manual_is_multiple_of)]
-// TODO: remove these allows and fix ~30 violations at source
-#![allow(clippy::needless_range_loop)]
-#![allow(clippy::single_match)]
-#![allow(clippy::let_and_return)]
-#![allow(clippy::collapsible_if)]
-#![allow(clippy::manual_range_contains)]
-#![allow(clippy::useless_format)]
-#![allow(clippy::map_entry)]
-#![allow(clippy::manual_clamp)]
 
 pub mod acpi;
 pub mod address_space;
@@ -62,6 +46,8 @@ pub mod events;
 pub mod exit;
 pub mod exit_handler;
 pub mod gpu;
+#[path = "tracing/mod.rs"]
+pub mod hv_tracing;
 pub mod hypervisor;
 pub mod input;
 pub mod interrupt;
@@ -79,8 +65,6 @@ pub mod power;
 pub mod security;
 pub mod snapshot;
 pub mod telemetry;
-#[path = "tracing/mod.rs"]
-pub mod hv_tracing;
 pub mod uefi;
 pub mod usb;
 pub mod vcpu;
@@ -148,6 +132,72 @@ pub use gpu::{
     Color, CursorShape, CursorState, DisplayInfo, DisplayMode, DisplaySurface, DoubleBuffer,
     Framebuffer, GpuResource, GpuStats, PixelFormat, Rect, Scanout, ScanoutState, VirtioGpu,
     VirtioGpuCtrlType, VirtioGpuError, VirtioGpuFormat, VirtioGpuStats,
+};
+pub use hv_tracing::{
+    // Profiler types
+    AllocationProfile,
+    AllocationSite,
+    AlwaysOffSampler,
+    AlwaysOnSampler,
+    Attribute,
+    AttributeValue,
+    BatchSpanProcessor,
+    CompositeSpanExporter,
+    ConsoleSpanExporter,
+    Context,
+    ContextGuard,
+    CpuProfiler,
+    DefaultIdGenerator,
+    FilteredSpanExporter,
+    FlameGraphBuilder,
+    FlameGraphNode,
+    FunctionProfile,
+    IdGenerator,
+    InMemorySpanExporter,
+    InstrumentationScope,
+    InstrumentedProfiler,
+    JaegerConfig,
+    JaegerSpanExporter,
+    OtlpConfig,
+    OtlpProtocol,
+    OtlpSpanExporter,
+    ParentBasedSampler,
+    ProfileData,
+    ProfileFrame,
+    ProfileGuard,
+    ProfilerConfig,
+    ProfilerError,
+    ProfilerResult,
+    ProfilerState,
+    Resource,
+    Sampler,
+    SamplingDecision,
+    SamplingResult,
+    SimpleSpanProcessor,
+    Span,
+    SpanBuilder,
+    SpanContext,
+    SpanData,
+    SpanEvent,
+    SpanExporter,
+    SpanId,
+    SpanKind,
+    SpanLink,
+    SpanProcessor,
+    SpanStatus,
+    StackSample,
+    StatusCode,
+    TraceFlags,
+    TraceId,
+    TraceIdRatioSampler,
+    TraceState,
+    Tracer,
+    TracerError,
+    TracerProvider,
+    TracerProviderBuilder,
+    TracerResult,
+    ZipkinConfig,
+    ZipkinSpanExporter,
 };
 pub use hypervisor::{HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm};
 pub use input::{
@@ -316,20 +366,6 @@ pub use usb::{
     PortState as UsbPortState, ReportType, RingSegment, SetupPacket, SlotState, StringDescriptor,
     TransferResult, TransferType, Trb, TrbCompletionCode, TrbType, UsbDevice, UsbKeyboard,
     UsbMouse, UsbSpeed, UsbTablet, XhciController, XhciPort,
-};
-pub use hv_tracing::{
-    AlwaysOffSampler, AlwaysOnSampler, Attribute, AttributeValue, BatchSpanProcessor,
-    CompositeSpanExporter, ConsoleSpanExporter, Context, ContextGuard, CpuProfiler,
-    DefaultIdGenerator, FilteredSpanExporter, FlameGraphBuilder, FlameGraphNode, IdGenerator,
-    InMemorySpanExporter, InstrumentedProfiler, JaegerConfig, JaegerSpanExporter, OtlpConfig,
-    OtlpProtocol, OtlpSpanExporter, ParentBasedSampler, ProfileData, ProfileFrame, ProfileGuard,
-    ProfilerConfig, ProfilerError, ProfilerResult, ProfilerState, Sampler, SamplingDecision,
-    SamplingResult, SimpleSpanProcessor, Span, SpanBuilder, SpanContext, SpanData, SpanEvent,
-    SpanExporter, SpanId, SpanKind, SpanLink, SpanProcessor, SpanStatus, StackSample, StatusCode,
-    TraceFlags, TraceId, TraceIdRatioSampler, TraceState, Tracer, TracerError, TracerProvider,
-    TracerProviderBuilder, TracerResult, ZipkinConfig, ZipkinSpanExporter,
-    // Profiler types
-    AllocationProfile, AllocationSite, FunctionProfile, InstrumentationScope, Resource,
 };
 pub use vcpu::{ControlRegisters, RegisterSet, VCpu, VCpuState};
 pub use vm::{VMConfig, VMState, VM};

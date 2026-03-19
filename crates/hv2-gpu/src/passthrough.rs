@@ -5,9 +5,13 @@
 //! on Linux and similar mechanisms on other platforms.
 
 use crate::{GpuError, Result};
+#[cfg(target_os = "linux")]
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+#[cfg(target_os = "linux")]
+use tokio::sync::Mutex;
 use tokio::sync::RwLock;
 
 /// PCI device address
@@ -314,6 +318,16 @@ impl Drop for VfioContainer {
     }
 }
 
+/// VFIO BAR region mapping info (cached from VFIO_DEVICE_GET_REGION_INFO)
+#[cfg(target_os = "linux")]
+#[derive(Debug, Clone, Copy)]
+struct VfioBarRegion {
+    /// Offset within the VFIO device fd for this BAR region
+    offset: u64,
+    /// Size of this BAR region in bytes
+    size: u64,
+}
+
 /// GPU passthrough manager
 pub struct GpuPassthrough {
     /// Configuration
@@ -328,6 +342,9 @@ pub struct GpuPassthrough {
     /// VFIO device fd (Linux only)
     #[cfg(target_os = "linux")]
     vfio_device_fd: Mutex<Option<i32>>,
+    /// Cached BAR region mappings from VFIO (Linux only)
+    #[cfg(target_os = "linux")]
+    bar_regions: RwLock<[Option<VfioBarRegion>; 6]>,
     /// Is attached
     attached: AtomicBool,
     /// Statistics
@@ -349,6 +366,8 @@ impl GpuPassthrough {
             vfio_container: Mutex::new(None),
             #[cfg(target_os = "linux")]
             vfio_device_fd: Mutex::new(None),
+            #[cfg(target_os = "linux")]
+            bar_regions: RwLock::new([None; 6]),
             attached: AtomicBool::new(false),
             stats: Arc::new(PassthroughStats::default()),
             interrupt_handler: RwLock::new(None),
@@ -490,7 +509,8 @@ impl GpuPassthrough {
         tracing::info!("Attaching GPU passthrough: {}", self.config.pci_address);
 
         // Discover device first
-        let _device_info = self.discover().await?;
+        #[allow(unused_variables)]
+        let device_info = self.discover().await?;
 
         #[cfg(target_os = "linux")]
         {
@@ -514,6 +534,9 @@ impl GpuPassthrough {
 
             *self.vfio_container.lock().await = Some(container);
             *self.vfio_device_fd.lock().await = Some(device_fd);
+
+            // Query VFIO region info for each BAR (indices 0-5)
+            self.discover_bar_regions(device_fd).await;
 
             *self.state.write().await = PassthroughState::PassedThrough;
         }
@@ -569,8 +592,66 @@ impl GpuPassthrough {
         Ok(())
     }
 
+    /// Discover BAR region offsets/sizes via VFIO_DEVICE_GET_REGION_INFO
+    #[cfg(target_os = "linux")]
+    async fn discover_bar_regions(&self, device_fd: i32) {
+        // VFIO region info ioctl and struct layout (from linux/vfio.h)
+        //   struct vfio_region_info {
+        //       __u32 argsz;   // offset 0
+        //       __u32 flags;   // offset 4
+        //       __u32 index;   // offset 8
+        //       __u32 cap_offset; // offset 12
+        //       __u64 size;    // offset 16
+        //       __u64 offset;  // offset 24
+        //   }
+        // Total size = 32 bytes
+        const VFIO_DEVICE_GET_REGION_INFO: u64 = 0x3B68;
+
+        let mut regions = [None; 6];
+
+        for bar_index in 0u32..6 {
+            #[repr(C)]
+            struct VfioRegionInfo {
+                argsz: u32,
+                flags: u32,
+                index: u32,
+                cap_offset: u32,
+                size: u64,
+                offset: u64,
+            }
+
+            let mut info = VfioRegionInfo {
+                argsz: std::mem::size_of::<VfioRegionInfo>() as u32,
+                flags: 0,
+                index: bar_index,
+                cap_offset: 0,
+                size: 0,
+                offset: 0,
+            };
+
+            // SAFETY: device_fd is a valid VFIO device fd; info is a properly sized buffer.
+            let ret = unsafe { libc::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &mut info) };
+
+            if ret == 0 && info.size > 0 {
+                tracing::debug!(
+                    "BAR{}: offset=0x{:x} size=0x{:x} flags=0x{:x}",
+                    bar_index,
+                    info.offset,
+                    info.size,
+                    info.flags,
+                );
+                regions[bar_index as usize] = Some(VfioBarRegion {
+                    offset: info.offset,
+                    size: info.size,
+                });
+            }
+        }
+
+        *self.bar_regions.write().await = regions;
+    }
+
     /// Read from a MMIO region
-    pub async fn mmio_read(&self, _bar: u8, _offset: u64, _size: u8) -> Result<u64> {
+    pub async fn mmio_read(&self, bar: u8, offset: u64, size: u8) -> Result<u64> {
         if !self.is_attached() {
             return Err(GpuError::NotAvailable("Device not attached".into()));
         }
@@ -579,22 +660,107 @@ impl GpuPassthrough {
 
         #[cfg(target_os = "linux")]
         {
-            // In a real implementation, we would:
-            // 1. Get the mapped region for the BAR
-            // 2. Read the value at the offset
-            // For now, return 0
-            tracing::trace!("MMIO read: BAR{} offset=0x{:x} size={}", bar, offset, size);
-            Ok(0)
+            let bar_idx = bar as usize;
+            if bar_idx >= 6 {
+                return Err(GpuError::InvalidOperation(format!(
+                    "Invalid BAR index: {}",
+                    bar
+                )));
+            }
+
+            let regions = self.bar_regions.read().await;
+            let region = regions[bar_idx]
+                .ok_or_else(|| GpuError::NotAvailable(format!("BAR{} region not mapped", bar)))?;
+
+            // Validate the read is within the BAR region bounds
+            let read_size = size as u64;
+            if offset
+                .checked_add(read_size)
+                .map_or(true, |end| end > region.size)
+            {
+                return Err(GpuError::InvalidOperation(format!(
+                    "MMIO read out of bounds: BAR{} offset=0x{:x} size={} region_size=0x{:x}",
+                    bar, offset, size, region.size
+                )));
+            }
+
+            // Only allow 1/2/4/8-byte reads
+            if !matches!(size, 1 | 2 | 4 | 8) {
+                return Err(GpuError::InvalidOperation(format!(
+                    "Invalid MMIO read size: {} (must be 1, 2, 4, or 8)",
+                    size
+                )));
+            }
+
+            let fd_guard = self.vfio_device_fd.lock().await;
+            let device_fd = fd_guard
+                .as_ref()
+                .ok_or_else(|| GpuError::NotAvailable("VFIO device fd not available".into()))?;
+
+            let mut buf = [0u8; 8];
+            let file_offset = region.offset + offset;
+
+            // SAFETY: device_fd is a valid VFIO device fd. buf is a properly aligned buffer.
+            // pread64 reads from the fd at the given offset without changing the file position.
+            let bytes_read = unsafe {
+                libc::pread64(
+                    *device_fd,
+                    buf.as_mut_ptr().cast(),
+                    read_size as usize,
+                    file_offset as i64,
+                )
+            };
+
+            if bytes_read < 0 {
+                return Err(GpuError::IoError(format!(
+                    "MMIO read failed: BAR{} offset=0x{:x}: {}",
+                    bar,
+                    offset,
+                    std::io::Error::last_os_error()
+                )));
+            }
+
+            // Convert bytes to value (little-endian, as PCI MMIO is LE)
+            let value = match size {
+                1 => buf[0] as u64,
+                2 => u16::from_le_bytes([buf[0], buf[1]]) as u64,
+                4 => u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) as u64,
+                8 => u64::from_le_bytes(buf),
+                _ => unreachable!(),
+            };
+
+            tracing::trace!(
+                "MMIO read: BAR{} offset=0x{:x} size={} -> 0x{:x}",
+                bar,
+                offset,
+                size,
+                value
+            );
+            Ok(value)
         }
 
         #[cfg(not(target_os = "linux"))]
         {
-            Ok(0)
+            tracing::trace!(
+                "MMIO read (simulated): BAR{} offset=0x{:x} size={}",
+                bar,
+                offset,
+                size
+            );
+            // Return 0xFFFFFFFF for 4-byte reads (common PCI "not present" response)
+            // and size-appropriate equivalents for other sizes
+            Ok(match size {
+                1 => 0xFF,
+                2 => 0xFFFF,
+                4 => 0xFFFF_FFFF,
+                8 => 0xFFFF_FFFF_FFFF_FFFF,
+                _ => 0,
+            })
         }
     }
 
     /// Write to a MMIO region
-    pub async fn mmio_write(&self, _bar: u8, _offset: u64, _size: u8, _value: u64) -> Result<()> {
+    pub async fn mmio_write(&self, bar: u8, offset: u64, size: u8, value: u64) -> Result<()> {
         if !self.is_attached() {
             return Err(GpuError::NotAvailable("Device not attached".into()));
         }
@@ -603,9 +769,67 @@ impl GpuPassthrough {
 
         #[cfg(target_os = "linux")]
         {
-            // In a real implementation, we would:
-            // 1. Get the mapped region for the BAR
-            // 2. Write the value at the offset
+            let bar_idx = bar as usize;
+            if bar_idx >= 6 {
+                return Err(GpuError::InvalidOperation(format!(
+                    "Invalid BAR index: {}",
+                    bar
+                )));
+            }
+
+            let regions = self.bar_regions.read().await;
+            let region = regions[bar_idx]
+                .ok_or_else(|| GpuError::NotAvailable(format!("BAR{} region not mapped", bar)))?;
+
+            // Validate the write is within the BAR region bounds
+            let write_size = size as u64;
+            if offset
+                .checked_add(write_size)
+                .map_or(true, |end| end > region.size)
+            {
+                return Err(GpuError::InvalidOperation(format!(
+                    "MMIO write out of bounds: BAR{} offset=0x{:x} size={} region_size=0x{:x}",
+                    bar, offset, size, region.size
+                )));
+            }
+
+            // Only allow 1/2/4/8-byte writes
+            if !matches!(size, 1 | 2 | 4 | 8) {
+                return Err(GpuError::InvalidOperation(format!(
+                    "Invalid MMIO write size: {} (must be 1, 2, 4, or 8)",
+                    size
+                )));
+            }
+
+            let fd_guard = self.vfio_device_fd.lock().await;
+            let device_fd = fd_guard
+                .as_ref()
+                .ok_or_else(|| GpuError::NotAvailable("VFIO device fd not available".into()))?;
+
+            // Convert value to bytes (little-endian)
+            let buf: [u8; 8] = value.to_le_bytes();
+            let file_offset = region.offset + offset;
+
+            // SAFETY: device_fd is a valid VFIO device fd. buf is a properly aligned buffer.
+            // pwrite64 writes to the fd at the given offset without changing the file position.
+            let bytes_written = unsafe {
+                libc::pwrite64(
+                    *device_fd,
+                    buf.as_ptr().cast(),
+                    write_size as usize,
+                    file_offset as i64,
+                )
+            };
+
+            if bytes_written < 0 {
+                return Err(GpuError::IoError(format!(
+                    "MMIO write failed: BAR{} offset=0x{:x}: {}",
+                    bar,
+                    offset,
+                    std::io::Error::last_os_error()
+                )));
+            }
+
             tracing::trace!(
                 "MMIO write: BAR{} offset=0x{:x} size={} value=0x{:x}",
                 bar,
@@ -618,6 +842,13 @@ impl GpuPassthrough {
 
         #[cfg(not(target_os = "linux"))]
         {
+            tracing::trace!(
+                "MMIO write (simulated): BAR{} offset=0x{:x} size={} value=0x{:x}",
+                bar,
+                offset,
+                size,
+                value
+            );
             Ok(())
         }
     }
@@ -771,5 +1002,57 @@ mod tests {
 
         assert!(!pt.is_attached());
         assert_eq!(pt.state().await, PassthroughState::Detached);
+    }
+
+    #[tokio::test]
+    async fn test_mmio_read_not_attached() {
+        let addr = PciAddress::new(0, 1, 0, 0);
+        let config = PassthroughConfig::new(addr, 0x10de, 0x2204);
+        let pt = GpuPassthrough::new(config);
+
+        // Should fail because device is not attached
+        let result = pt.mmio_read(0, 0, 4).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mmio_write_not_attached() {
+        let addr = PciAddress::new(0, 1, 0, 0);
+        let config = PassthroughConfig::new(addr, 0x10de, 0x2204);
+        let pt = GpuPassthrough::new(config);
+
+        // Should fail because device is not attached
+        let result = pt.mmio_write(0, 0, 4, 0xDEADBEEF).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_passthrough_stats_default() {
+        let stats = PassthroughStats::default();
+        assert_eq!(stats.interrupts.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.mmio_reads.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.mmio_writes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.dma_transfers.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.dma_bytes.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_pci_address_display() {
+        let addr = PciAddress::new(0, 0x3e, 0x1f, 3);
+        assert_eq!(format!("{}", addr), "0000:3e:1f.3");
+    }
+
+    #[test]
+    fn test_pci_address_invalid_bdf() {
+        assert!(PciAddress::from_bdf("invalid").is_none());
+        assert!(PciAddress::from_bdf("").is_none());
+        assert!(PciAddress::from_bdf("0000:zz:00.0").is_none());
+    }
+
+    #[test]
+    fn test_passthrough_state_variants() {
+        assert_ne!(PassthroughState::Detached, PassthroughState::HostAttached);
+        assert_ne!(PassthroughState::VfioBound, PassthroughState::PassedThrough);
+        assert_ne!(PassthroughState::Error, PassthroughState::Detached);
     }
 }

@@ -449,8 +449,16 @@ impl VirtualGpu {
         Ok(id)
     }
 
-    /// Submit a command buffer
-    pub async fn submit_commands(&self, _commands: &[u8]) -> Result<()> {
+    /// Submit a command buffer encoded with the vGPU command protocol.
+    ///
+    /// Each command is encoded as a 1-byte type tag followed by little-endian
+    /// payload fields:
+    ///   - `0x00` NOP: no payload
+    ///   - `0x01` CopyBufferToBuffer: src_id(u32) + dst_id(u32) + size(u64)
+    ///   - `0x02` ClearBuffer (zero-fill): buffer_id(u32) + offset(u64) + size(u64)
+    ///   - `0x03` DispatchCompute: shader_id(u32) + x(u32) + y(u32) + z(u32) +
+    ///     binding_count(u32) + \[buffer_id(u32); binding_count\]
+    pub async fn submit_commands(&self, commands: &[u8]) -> Result<()> {
         let device = self
             .device
             .as_ref()
@@ -460,23 +468,141 @@ impl VirtualGpu {
             .as_ref()
             .ok_or_else(|| GpuError::NotAvailable("Queue not initialized".into()))?;
 
-        // In a real implementation, we would decode the command buffer
-        // and execute the GPU commands. For now, we create a simple encoder.
-        let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vgpu_command_encoder"),
         });
 
-        // Submit the command buffer
-        queue.submit(std::iter::once(encoder.finish()));
+        let mut pos = 0usize;
+        while pos < commands.len() {
+            let cmd_type = commands[pos];
+            pos += 1;
 
+            match cmd_type {
+                // NOP
+                0x00 => {}
+                // CopyBufferToBuffer: src_id(u32) + dst_id(u32) + size(u64)
+                0x01 => {
+                    let src_id = Self::read_u32_le(commands, &mut pos)?;
+                    let dst_id = Self::read_u32_le(commands, &mut pos)?;
+                    let size = Self::read_u64_le(commands, &mut pos)?;
+
+                    let regions = self.memory_regions.lock().await;
+                    let src = regions.get(&src_id).ok_or_else(|| {
+                        GpuError::NotAvailable(format!("Source buffer {} not found", src_id))
+                    })?;
+                    let dst = regions.get(&dst_id).ok_or_else(|| {
+                        GpuError::NotAvailable(format!("Dest buffer {} not found", dst_id))
+                    })?;
+
+                    if size > src.size || size > dst.size {
+                        return Err(GpuError::Unsupported(
+                            "Copy size exceeds buffer bounds".into(),
+                        ));
+                    }
+
+                    encoder.copy_buffer_to_buffer(&src.buffer, 0, &dst.buffer, 0, size);
+                    tracing::debug!("CMD copy_buffer {} -> {}, {} bytes", src_id, dst_id, size);
+                }
+                // ClearBuffer: buffer_id(u32) + offset(u64) + size(u64)
+                0x02 => {
+                    let buffer_id = Self::read_u32_le(commands, &mut pos)?;
+                    let offset = Self::read_u64_le(commands, &mut pos)?;
+                    let size = Self::read_u64_le(commands, &mut pos)?;
+
+                    let regions = self.memory_regions.lock().await;
+                    let region = regions.get(&buffer_id).ok_or_else(|| {
+                        GpuError::NotAvailable(format!("Buffer {} not found", buffer_id))
+                    })?;
+
+                    if offset + size > region.size {
+                        return Err(GpuError::Unsupported(
+                            "Clear range exceeds buffer bounds".into(),
+                        ));
+                    }
+
+                    encoder.clear_buffer(&region.buffer, offset, Some(size));
+                    tracing::debug!(
+                        "CMD clear_buffer {}, offset={}, size={}",
+                        buffer_id,
+                        offset,
+                        size
+                    );
+                }
+                // DispatchCompute: shader_id(u32) + x(u32) + y(u32) + z(u32) +
+                //                  binding_count(u32) + [buffer_id(u32); binding_count]
+                0x03 => {
+                    let shader_id = Self::read_u32_le(commands, &mut pos)?;
+                    let wg_x = Self::read_u32_le(commands, &mut pos)?;
+                    let wg_y = Self::read_u32_le(commands, &mut pos)?;
+                    let wg_z = Self::read_u32_le(commands, &mut pos)?;
+                    let binding_count = Self::read_u32_le(commands, &mut pos)?;
+
+                    let mut buffer_ids = Vec::with_capacity(binding_count as usize);
+                    for _ in 0..binding_count {
+                        buffer_ids.push(Self::read_u32_le(commands, &mut pos)?);
+                    }
+
+                    self.dispatch_compute_with_bindings(shader_id, [wg_x, wg_y, wg_z], &buffer_ids)
+                        .await?;
+                }
+                _ => {
+                    return Err(GpuError::Unsupported(format!(
+                        "Unknown GPU command type: 0x{:02x}",
+                        cmd_type
+                    )));
+                }
+            }
+        }
+
+        queue.submit(std::iter::once(encoder.finish()));
         self.stats
             .commands_submitted
             .fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
-    /// Execute a compute dispatch
+    /// Read a little-endian u32 from bytes, advancing the position.
+    fn read_u32_le(data: &[u8], pos: &mut usize) -> Result<u32> {
+        let end = *pos + 4;
+        if end > data.len() {
+            return Err(GpuError::Unsupported(
+                "Truncated command buffer payload".into(),
+            ));
+        }
+        let val = u32::from_le_bytes(data[*pos..end].try_into().unwrap());
+        *pos = end;
+        Ok(val)
+    }
+
+    /// Read a little-endian u64 from bytes, advancing the position.
+    fn read_u64_le(data: &[u8], pos: &mut usize) -> Result<u64> {
+        let end = *pos + 8;
+        if end > data.len() {
+            return Err(GpuError::Unsupported(
+                "Truncated command buffer payload".into(),
+            ));
+        }
+        let val = u64::from_le_bytes(data[*pos..end].try_into().unwrap());
+        *pos = end;
+        Ok(val)
+    }
+
+    /// Execute a compute dispatch (no buffer bindings).
     pub async fn dispatch_compute(&self, shader_id: u32, workgroups: [u32; 3]) -> Result<()> {
+        self.dispatch_compute_with_bindings(shader_id, workgroups, &[])
+            .await
+    }
+
+    /// Execute a compute dispatch with buffer bindings.
+    ///
+    /// Each buffer ID in `buffer_ids` is bound at the corresponding binding
+    /// index (0, 1, 2, ...) in bind group 0.
+    pub async fn dispatch_compute_with_bindings(
+        &self,
+        shader_id: u32,
+        workgroups: [u32; 3],
+        buffer_ids: &[u32],
+    ) -> Result<()> {
         let device = self
             .device
             .as_ref()
@@ -497,40 +623,89 @@ impl VirtualGpu {
             ));
         }
 
-        // Create compute pipeline
+        // Build bind group layout entries and bind group entries from buffer IDs
+        let regions = self.memory_regions.lock().await;
+        let mut layout_entries = Vec::new();
+        let mut bg_entries = Vec::new();
+
+        for (i, &buf_id) in buffer_ids.iter().enumerate() {
+            let region = regions.get(&buf_id).ok_or_else(|| {
+                GpuError::NotAvailable(format!("Buffer {} not found for binding {}", buf_id, i))
+            })?;
+
+            layout_entries.push(wgpu::BindGroupLayoutEntry {
+                binding: i as u32,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: false },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            });
+
+            bg_entries.push(wgpu::BindGroupEntry {
+                binding: i as u32,
+                resource: region.buffer.as_entire_binding(),
+            });
+        }
+
+        // Create pipeline layout and bind group if we have bindings
+        let (pipeline_layout, bind_group) = if buffer_ids.is_empty() {
+            (None, None)
+        } else {
+            let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("vgpu_compute_bgl"),
+                entries: &layout_entries,
+            });
+            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vgpu_compute_bg"),
+                layout: &bgl,
+                entries: &bg_entries,
+            });
+            let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("vgpu_compute_pl"),
+                bind_group_layouts: &[&bgl],
+                push_constant_ranges: &[],
+            });
+            (Some(pl), Some(bg))
+        };
+
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some("vgpu_compute_pipeline"),
-            layout: None,
+            layout: pipeline_layout.as_ref(),
             module: &shader.module,
             entry_point: "main",
             compilation_options: Default::default(),
             cache: None,
         });
 
-        // Create command encoder and dispatch
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vgpu_compute_encoder"),
         });
 
         {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("vgpu_compute_pass"),
                 timestamp_writes: None,
             });
-            compute_pass.set_pipeline(&pipeline);
-            compute_pass.dispatch_workgroups(workgroups[0], workgroups[1], workgroups[2]);
+            pass.set_pipeline(&pipeline);
+            if let Some(bg) = &bind_group {
+                pass.set_bind_group(0, bg, &[]);
+            }
+            pass.dispatch_workgroups(workgroups[0], workgroups[1], workgroups[2]);
         }
 
         queue.submit(std::iter::once(encoder.finish()));
-
         self.stats
             .compute_dispatches
             .fetch_add(1, Ordering::Relaxed);
         tracing::debug!(
-            "Dispatched compute: workgroups [{}, {}, {}]",
+            "Dispatched compute: workgroups [{}, {}, {}], {} bindings",
             workgroups[0],
             workgroups[1],
-            workgroups[2]
+            workgroups[2],
+            buffer_ids.len()
         );
         Ok(())
     }
@@ -598,5 +773,88 @@ mod tests {
         };
         assert!(features.compute);
         assert!(!features.ray_tracing);
+    }
+
+    #[test]
+    fn test_read_u32_le() {
+        let data = [0x01, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0x00];
+        let mut pos = 0;
+        assert_eq!(VirtualGpu::read_u32_le(&data, &mut pos).unwrap(), 1);
+        assert_eq!(pos, 4);
+        assert_eq!(VirtualGpu::read_u32_le(&data, &mut pos).unwrap(), 255);
+        assert_eq!(pos, 8);
+    }
+
+    #[test]
+    fn test_read_u64_le() {
+        let data = 0x0000_0001_0000_0000u64.to_le_bytes();
+        let mut pos = 0;
+        assert_eq!(
+            VirtualGpu::read_u64_le(&data, &mut pos).unwrap(),
+            0x0000_0001_0000_0000
+        );
+        assert_eq!(pos, 8);
+    }
+
+    #[test]
+    fn test_read_truncated() {
+        let data = [0x01, 0x02];
+        let mut pos = 0;
+        assert!(VirtualGpu::read_u32_le(&data, &mut pos).is_err());
+        assert!(VirtualGpu::read_u64_le(&data, &mut pos).is_err());
+    }
+
+    #[tokio::test]
+    async fn test_submit_empty_commands() {
+        let mut vgpu = VirtualGpu::new("test");
+        match vgpu.init().await {
+            Ok(()) => {
+                // Empty command buffer should succeed
+                vgpu.submit_commands(&[]).await.unwrap();
+                assert_eq!(vgpu.stats().commands_submitted.load(Ordering::Relaxed), 1);
+            }
+            Err(GpuError::NotAvailable(_)) => {}
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submit_nop_commands() {
+        let mut vgpu = VirtualGpu::new("test");
+        match vgpu.init().await {
+            Ok(()) => {
+                // Three NOPs
+                vgpu.submit_commands(&[0x00, 0x00, 0x00]).await.unwrap();
+            }
+            Err(GpuError::NotAvailable(_)) => {}
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submit_unknown_command() {
+        let mut vgpu = VirtualGpu::new("test");
+        match vgpu.init().await {
+            Ok(()) => {
+                let result = vgpu.submit_commands(&[0xFF]).await;
+                assert!(result.is_err());
+            }
+            Err(GpuError::NotAvailable(_)) => {}
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_submit_truncated_command() {
+        let mut vgpu = VirtualGpu::new("test");
+        match vgpu.init().await {
+            Ok(()) => {
+                // CopyBufferToBuffer but only 2 payload bytes
+                let result = vgpu.submit_commands(&[0x01, 0x00, 0x00]).await;
+                assert!(result.is_err());
+            }
+            Err(GpuError::NotAvailable(_)) => {}
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
     }
 }

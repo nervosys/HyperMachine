@@ -128,6 +128,35 @@ impl RtcState {
             self.cmos_ram[RTC_MONTH as usize] = month;
             self.cmos_ram[RTC_YEAR as usize] = (year_offset % 100) as u8;
         }
+
+        // Check alarm after updating time
+        self.check_alarm();
+    }
+
+    /// Check whether the current time matches the alarm registers.
+    ///
+    /// An alarm register value >= 0xC0 acts as a "don't care" wildcard.
+    /// If all three components match (or are wildcards) and AIE is enabled
+    /// in Status B, the alarm flag and IRQF are set in Status C.
+    fn check_alarm(&mut self) {
+        if self.status_b & STATUS_B_AIE == 0 {
+            return;
+        }
+
+        let sec_match = self.alarm_matches(RTC_SECONDS as usize, RTC_SECONDS_ALARM as usize);
+        let min_match = self.alarm_matches(RTC_MINUTES as usize, RTC_MINUTES_ALARM as usize);
+        let hr_match = self.alarm_matches(RTC_HOURS as usize, RTC_HOURS_ALARM as usize);
+
+        if sec_match && min_match && hr_match {
+            self.status_c |= STATUS_C_AF | STATUS_C_IRQF;
+        }
+    }
+
+    /// Returns true if the alarm register matches the current time register
+    /// or is a wildcard (>= 0xC0).
+    fn alarm_matches(&self, time_reg: usize, alarm_reg: usize) -> bool {
+        let alarm_val = self.cmos_ram[alarm_reg];
+        alarm_val >= 0xC0 || alarm_val == self.cmos_ram[time_reg]
     }
 
     /// Read from the currently indexed register
@@ -248,6 +277,15 @@ impl RtcDevice {
     /// Trigger a periodic interrupt (called by timer subsystem)
     pub fn trigger_periodic(&self) -> bool {
         self.state.lock().trigger_periodic_interrupt()
+    }
+
+    /// Manually trigger alarm check against current time registers.
+    /// Returns true if the alarm fired.
+    pub fn check_alarm(&self) -> bool {
+        let mut state = self.state.lock();
+        let before = state.status_c & STATUS_C_AF;
+        state.check_alarm();
+        before == 0 && (state.status_c & STATUS_C_AF) != 0
     }
 }
 
@@ -425,5 +463,103 @@ mod tests {
         assert_eq!(to_bcd(10), 0x10);
         assert_eq!(to_bcd(59), 0x59);
         assert_eq!(to_bcd(99), 0x99);
+    }
+
+    #[tokio::test]
+    async fn test_rtc_alarm_match() {
+        let mut rtc = RtcDevice::new();
+        rtc.init().await.unwrap();
+
+        // Enable alarm interrupt
+        rtc.write_index(RTC_STATUS_B);
+        rtc.write_data(STATUS_B_AIE | STATUS_B_24H);
+
+        // Read current time to know what to set the alarm to
+        rtc.write_index(RTC_SECONDS);
+        let current_seconds = rtc.read_data();
+        rtc.write_index(RTC_MINUTES);
+        let current_minutes = rtc.read_data();
+        rtc.write_index(RTC_HOURS);
+        let current_hours = rtc.read_data();
+
+        // Set alarm to match current time
+        rtc.write_index(RTC_SECONDS_ALARM);
+        rtc.write_data(current_seconds);
+        rtc.write_index(RTC_MINUTES_ALARM);
+        rtc.write_data(current_minutes);
+        rtc.write_index(RTC_HOURS_ALARM);
+        rtc.write_data(current_hours);
+
+        // Trigger alarm check
+        let fired = rtc.check_alarm();
+        assert!(fired, "alarm should fire when time matches");
+        assert!(rtc.has_pending_interrupt());
+
+        // Read status C to clear
+        rtc.write_index(RTC_STATUS_C);
+        let status_c = rtc.read_data();
+        assert_ne!(status_c & STATUS_C_AF, 0);
+    }
+
+    #[test]
+    fn test_rtc_alarm_wildcard() {
+        let rtc = RtcDevice::new();
+
+        // Enable alarm interrupt
+        rtc.write_index(RTC_STATUS_B);
+        rtc.write_data(STATUS_B_AIE | STATUS_B_24H);
+
+        // Set all alarm registers to wildcard (0xC0+)
+        rtc.write_index(RTC_SECONDS_ALARM);
+        rtc.write_data(0xC0);
+        rtc.write_index(RTC_MINUTES_ALARM);
+        rtc.write_data(0xFF);
+        rtc.write_index(RTC_HOURS_ALARM);
+        rtc.write_data(0xC0);
+
+        // Force a time update so check_alarm runs
+        let fired = rtc.check_alarm();
+        assert!(fired, "wildcard alarm should always fire");
+    }
+
+    #[test]
+    fn test_rtc_alarm_no_match() {
+        let rtc = RtcDevice::new();
+
+        // Enable alarm interrupt
+        rtc.write_index(RTC_STATUS_B);
+        rtc.write_data(STATUS_B_AIE | STATUS_B_24H);
+
+        // Set alarm to an impossible time (seconds=99)
+        rtc.write_index(RTC_SECONDS_ALARM);
+        rtc.write_data(99);
+        rtc.write_index(RTC_MINUTES_ALARM);
+        rtc.write_data(99);
+        rtc.write_index(RTC_HOURS_ALARM);
+        rtc.write_data(99);
+
+        let fired = rtc.check_alarm();
+        assert!(!fired, "alarm should not fire with impossible time");
+        assert!(!rtc.has_pending_interrupt());
+    }
+
+    #[test]
+    fn test_rtc_alarm_disabled() {
+        let rtc = RtcDevice::new();
+
+        // AIE not set — alarm should never fire
+        rtc.write_index(RTC_STATUS_B);
+        rtc.write_data(STATUS_B_24H); // No AIE
+
+        // Set alarm to wildcard (should always match if enabled)
+        rtc.write_index(RTC_SECONDS_ALARM);
+        rtc.write_data(0xC0);
+        rtc.write_index(RTC_MINUTES_ALARM);
+        rtc.write_data(0xC0);
+        rtc.write_index(RTC_HOURS_ALARM);
+        rtc.write_data(0xC0);
+
+        let fired = rtc.check_alarm();
+        assert!(!fired, "alarm should not fire when AIE is disabled");
     }
 }

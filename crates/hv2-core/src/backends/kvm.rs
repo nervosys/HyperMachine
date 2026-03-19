@@ -164,7 +164,7 @@ impl KvmBackend {
                 supports_nested_virt: check_cap(KVM_CAP_NESTED_STATE),
                 supports_apic: check_cap(KVM_CAP_IRQCHIP),
                 supports_x2apic: check_cap(KVM_CAP_X2APIC_API),
-                supports_iommu: check_cap(196), // KVM_CAP_IOMMU (not yet defined in constants)
+                supports_iommu: check_cap(KVM_CAP_IOMMU),
                 supports_gpu_passthrough: false, // Requires VFIO setup
             })
         }
