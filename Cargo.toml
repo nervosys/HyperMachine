@@ -88,7 +88,7 @@ criterion = "0.5"
 # Scripting for AI agents
 rhai = { version = "1.19", features = ["sync"] }
 wasmtime = "24.0"
-wasmtime-wasi = "24.0"
+wasmtime-wasi = "42.0"
 
 # Compression
 flate2 = "1.0"
