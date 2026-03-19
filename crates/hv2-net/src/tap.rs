@@ -309,10 +309,180 @@ mod platform {
         }
 
         fn find_tap_adapter(_name: &str) -> Result<String> {
-            // In a full implementation, this would enumerate network adapters
-            // from the registry and find the TAP adapter by component ID.
-            // For now, return a placeholder path.
-            Ok("\\\\.\\Global\\{00000000-0000-0000-0000-000000000000}.tap".to_string())
+            use windows_sys::Win32::System::Registry::{
+                RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY_LOCAL_MACHINE,
+                KEY_READ, REG_SZ,
+            };
+
+            // Network adapter class GUID in the Windows registry
+            const NETWORK_CLASS_KEY: &str =
+                r"SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}";
+
+            // Known TAP component IDs
+            const TAP_COMPONENT_IDS: &[&str] = &["tap0901", "root\\tap0901", "wintun"];
+
+            let key_path: Vec<u16> = OsStr::new(NETWORK_CLASS_KEY)
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let mut class_key: windows_sys::Win32::System::Registry::HKEY = std::ptr::null_mut();
+            // SAFETY: key_path is a valid NUL-terminated wide string, class_key
+            // is a valid output pointer. Standard Win32 registry API.
+            let ret = unsafe {
+                RegOpenKeyExW(
+                    HKEY_LOCAL_MACHINE,
+                    key_path.as_ptr(),
+                    0,
+                    KEY_READ,
+                    &mut class_key,
+                )
+            };
+            if ret != 0 {
+                return Err(NetError::Config(
+                    "Failed to open network adapter registry key".into(),
+                ));
+            }
+
+            let mut index: u32 = 0;
+            let mut found_guid = None;
+
+            loop {
+                let mut subkey_name = [0u16; 256];
+                let mut subkey_len = subkey_name.len() as u32;
+
+                // SAFETY: class_key is a valid open registry key; subkey_name/subkey_len
+                // are valid buffers for receiving the subkey name.
+                let ret = unsafe {
+                    RegEnumKeyExW(
+                        class_key,
+                        index,
+                        subkey_name.as_mut_ptr(),
+                        &mut subkey_len,
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                        std::ptr::null_mut(),
+                    )
+                };
+                if ret != 0 {
+                    break; // No more subkeys
+                }
+                index += 1;
+
+                // Open the subkey and read ComponentId
+                let mut adapter_key: windows_sys::Win32::System::Registry::HKEY = std::ptr::null_mut();
+                // SAFETY: class_key is valid; subkey_name is from a successful RegEnumKeyExW.
+                let ret = unsafe {
+                    RegOpenKeyExW(
+                        class_key,
+                        subkey_name.as_ptr(),
+                        0,
+                        KEY_READ,
+                        &mut adapter_key,
+                    )
+                };
+                if ret != 0 {
+                    continue;
+                }
+
+                // Read ComponentId value
+                let value_name: Vec<u16> = OsStr::new("ComponentId")
+                    .encode_wide()
+                    .chain(std::iter::once(0))
+                    .collect();
+                let mut data = [0u8; 512];
+                let mut data_len = data.len() as u32;
+                let mut value_type: u32 = 0;
+
+                // SAFETY: adapter_key is a valid key; value_name is NUL-terminated;
+                // data/data_len are valid output buffers.
+                let ret = unsafe {
+                    RegQueryValueExW(
+                        adapter_key,
+                        value_name.as_ptr(),
+                        std::ptr::null_mut(),
+                        &mut value_type,
+                        data.as_mut_ptr(),
+                        &mut data_len,
+                    )
+                };
+
+                if ret == 0 && value_type == REG_SZ && data_len > 2 {
+                    // Convert wide string to Rust string (data is UTF-16LE)
+                    let wide_len = (data_len as usize) / 2;
+                    let wide_slice = unsafe {
+                        std::slice::from_raw_parts(data.as_ptr() as *const u16, wide_len)
+                    };
+                    let component_id = String::from_utf16_lossy(wide_slice)
+                        .trim_end_matches('\0')
+                        .to_lowercase();
+
+                    let is_tap = TAP_COMPONENT_IDS
+                        .iter()
+                        .any(|id| component_id == *id);
+
+                    if is_tap {
+                        // Read NetCfgInstanceId (the adapter GUID)
+                        let guid_name: Vec<u16> = OsStr::new("NetCfgInstanceId")
+                            .encode_wide()
+                            .chain(std::iter::once(0))
+                            .collect();
+                        let mut guid_data = [0u8; 512];
+                        let mut guid_len = guid_data.len() as u32;
+                        let mut guid_type: u32 = 0;
+
+                        // SAFETY: adapter_key valid; guid_name NUL-terminated; output buffers valid.
+                        let ret = unsafe {
+                            RegQueryValueExW(
+                                adapter_key,
+                                guid_name.as_ptr(),
+                                std::ptr::null_mut(),
+                                &mut guid_type,
+                                guid_data.as_mut_ptr(),
+                                &mut guid_len,
+                            )
+                        };
+
+                        if ret == 0 && guid_type == REG_SZ && guid_len > 2 {
+                            let guid_wide_len = (guid_len as usize) / 2;
+                            let guid_wide = unsafe {
+                                std::slice::from_raw_parts(
+                                    guid_data.as_ptr() as *const u16,
+                                    guid_wide_len,
+                                )
+                            };
+                            let guid = String::from_utf16_lossy(guid_wide)
+                                .trim_end_matches('\0')
+                                .to_string();
+
+                            // SAFETY: adapter_key is valid.
+                            unsafe { RegCloseKey(adapter_key) };
+
+                            found_guid = Some(guid);
+                            break;
+                        }
+                    }
+                }
+
+                // SAFETY: adapter_key is a valid open registry key.
+                unsafe { RegCloseKey(adapter_key) };
+            }
+
+            // SAFETY: class_key is a valid open registry key.
+            unsafe { RegCloseKey(class_key) };
+
+            match found_guid {
+                Some(guid) => {
+                    let path = format!("\\\\.\\Global\\{}.tap", guid);
+                    tracing::info!("Found TAP adapter: {}", path);
+                    Ok(path)
+                }
+                None => Err(NetError::Config(
+                    "No TAP-Windows or Wintun adapter found. Install OpenVPN TAP driver or Wintun."
+                        .into(),
+                )),
+            }
         }
 
         fn set_media_status(handle: HANDLE, connected: bool) -> Result<()> {
@@ -506,21 +676,29 @@ mod platform {
 }
 
 /// Stub implementation for unsupported platforms
+///
+/// Provides a loopback/memory buffer mode for testing, where writes
+/// are stored in a buffer and reads return previously written data.
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 mod platform {
     use super::*;
 
     pub struct TapHandle {
         name: String,
-        buffer: Vec<u8>,
+        /// Loopback buffer: data written via write() can be read back via read()
+        loopback: std::sync::Mutex<std::collections::VecDeque<Vec<u8>>>,
+        nonblocking: std::sync::atomic::AtomicBool,
     }
 
     impl TapHandle {
         pub fn create(config: &TapConfig) -> Result<Self> {
-            tracing::warn!("TAP devices not supported on this platform, using stub implementation");
+            tracing::warn!(
+                "TAP devices not supported on this platform, using loopback/memory buffer mode"
+            );
             Ok(Self {
                 name: config.name.clone(),
-                buffer: Vec::new(),
+                loopback: std::sync::Mutex::new(std::collections::VecDeque::new()),
+                nonblocking: std::sync::atomic::AtomicBool::new(false),
             })
         }
 
@@ -528,21 +706,36 @@ mod platform {
             &self.name
         }
 
-        pub fn read(&self, _buf: &mut [u8]) -> io::Result<usize> {
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "TAP not supported on this platform",
-            ))
+        pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+            let mut queue = self.loopback.lock().unwrap();
+            if let Some(packet) = queue.pop_front() {
+                let len = packet.len().min(buf.len());
+                buf[..len].copy_from_slice(&packet[..len]);
+                Ok(len)
+            } else if self.nonblocking.load(std::sync::atomic::Ordering::Relaxed) {
+                Err(io::Error::new(
+                    io::ErrorKind::WouldBlock,
+                    "No data available",
+                ))
+            } else {
+                // Blocking mode with no data - return 0
+                Ok(0)
+            }
         }
 
-        pub fn write(&self, _buf: &[u8]) -> io::Result<usize> {
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "TAP not supported on this platform",
-            ))
+        pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
+            let mut queue = self.loopback.lock().unwrap();
+            // Cap queue at 256 packets to prevent unbounded growth
+            if queue.len() >= 256 {
+                queue.pop_front();
+            }
+            queue.push_back(buf.to_vec());
+            Ok(buf.len())
         }
 
-        pub fn set_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+        pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+            self.nonblocking
+                .store(nonblocking, std::sync::atomic::Ordering::Relaxed);
             Ok(())
         }
     }

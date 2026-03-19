@@ -10,12 +10,17 @@ use std::sync::Arc;
 const THR_OFFSET: u64 = 0; // Transmitter Holding Register
 const RBR_OFFSET: u64 = 0; // Receiver Buffer Register
 const IER_OFFSET: u64 = 1; // Interrupt Enable Register
-const IIR_OFFSET: u64 = 2; // Interrupt Identification Register
+const IIR_OFFSET: u64 = 2; // Interrupt Identification Register (read)
+const FCR_OFFSET: u64 = 2; // FIFO Control Register (write)
 const LCR_OFFSET: u64 = 3; // Line Control Register
 const MCR_OFFSET: u64 = 4; // Modem Control Register
 const LSR_OFFSET: u64 = 5; // Line Status Register
 const MSR_OFFSET: u64 = 6; // Modem Status Register
 const SCR_OFFSET: u64 = 7; // Scratch Register
+
+/// Divisor Latch registers (accessible when DLAB=1)
+const DLL_OFFSET: u64 = 0; // Divisor Latch Low byte
+const DLM_OFFSET: u64 = 1; // Divisor Latch High byte
 
 /// Line Status Register bits
 const LSR_DATA_READY: u8 = 1 << 0;
@@ -25,6 +30,20 @@ const LSR_TRANSMITTER_EMPTY: u8 = 1 << 6;
 /// Interrupt Enable Register bits
 const IER_RDA: u8 = 1 << 0; // Received Data Available
 const IER_THRE: u8 = 1 << 1; // Transmitter Holding Register Empty
+
+/// Line Control Register bits
+const LCR_DLAB: u8 = 1 << 7; // Divisor Latch Access Bit
+
+/// IIR (Interrupt Identification Register) constants
+const IIR_NO_INTERRUPT: u8 = 0x01;
+const IIR_RDA: u8 = 0x04; // Received Data Available (priority 2)
+const IIR_THRE: u8 = 0x02; // THR Empty (priority 3)
+const IIR_FIFO_ENABLED: u8 = 0xC0; // Bits 6-7 set when FIFOs are enabled
+
+/// FCR (FIFO Control Register) bits
+const FCR_FIFO_ENABLE: u8 = 1 << 0;
+const FCR_RX_FIFO_RESET: u8 = 1 << 1;
+const FCR_TX_FIFO_RESET: u8 = 1 << 2;
 
 /// Serial console device (16550 UART emulation)
 pub struct SerialDevice {
@@ -44,6 +63,14 @@ pub struct SerialDevice {
     mcr: Mutex<u8>,
     /// Scratch Register
     scr: Mutex<u8>,
+    /// FIFO Control Register (write-only, shadows for IIR FIFO bits)
+    fcr: Mutex<u8>,
+    /// Divisor Latch Low byte
+    dll: Mutex<u8>,
+    /// Divisor Latch High byte
+    dlm: Mutex<u8>,
+    /// THR empty flag (cleared on write to THR, set when output drained)
+    thr_empty: Mutex<bool>,
     /// PIC for raising interrupts
     pic: Option<Arc<Pic8259>>,
 }
@@ -71,6 +98,10 @@ impl SerialDevice {
             lcr: Mutex::new(0),
             mcr: Mutex::new(0),
             scr: Mutex::new(0),
+            fcr: Mutex::new(0),
+            dll: Mutex::new(0x0C), // Default divisor = 12 → 9600 baud
+            dlm: Mutex::new(0x00),
+            thr_empty: Mutex::new(true),
             pic: None,
         }
     }
@@ -127,8 +158,10 @@ impl SerialDevice {
         let mut tx = self.tx_buffer.lock();
         let data: Vec<u8> = tx.drain(..).collect();
 
-        // Raise THR Empty interrupt if enabled and buffer is now empty
         if !data.is_empty() {
+            *self.thr_empty.lock() = true;
+
+            // Raise THR Empty interrupt if enabled and buffer is now empty
             let ier = *self.ier.lock();
             if (ier & IER_THRE) != 0 {
                 if let Some(ref pic) = self.pic {
@@ -173,23 +206,51 @@ impl Device for SerialDevice {
             ));
         }
 
+        let dlab = (*self.lcr.lock() & LCR_DLAB) != 0;
+
         let value = match offset {
+            RBR_OFFSET if dlab => {
+                // DLAB=1: Divisor Latch Low byte
+                *self.dll.lock()
+            }
             RBR_OFFSET => {
-                // Read from receive buffer
+                // DLAB=0: Read from receive buffer
                 let mut rx = self.rx_buffer.lock();
                 rx.pop_front().unwrap_or(0)
             }
+            IER_OFFSET if dlab => {
+                // DLAB=1: Divisor Latch High byte
+                *self.dlm.lock()
+            }
             IER_OFFSET => *self.ier.lock(),
             IIR_OFFSET => {
-                // For now, no interrupts pending
-                0x01 // No interrupt pending
+                // Dynamic IIR: reflect actual pending interrupt sources
+                let ier = *self.ier.lock();
+                let fcr = *self.fcr.lock();
+                let rx_has_data = !self.rx_buffer.lock().is_empty();
+                let thr_empty = *self.thr_empty.lock();
+
+                let mut iir = IIR_NO_INTERRUPT;
+
+                // RDA has higher priority than THRE
+                if (ier & IER_RDA) != 0 && rx_has_data {
+                    iir = IIR_RDA;
+                } else if (ier & IER_THRE) != 0 && thr_empty {
+                    iir = IIR_THRE;
+                }
+
+                // Reflect FIFO state in bits 6-7
+                if (fcr & FCR_FIFO_ENABLE) != 0 {
+                    iir |= IIR_FIFO_ENABLED;
+                }
+
+                iir
             }
             LCR_OFFSET => *self.lcr.lock(),
             MCR_OFFSET => *self.mcr.lock(),
             LSR_OFFSET => {
                 // Line status register
                 let rx = self.rx_buffer.lock();
-                let tx = self.tx_buffer.lock();
 
                 let mut lsr = LSR_THR_EMPTY | LSR_TRANSMITTER_EMPTY;
                 if !rx.is_empty() {
@@ -214,14 +275,38 @@ impl Device for SerialDevice {
             return Ok(());
         }
 
+        let dlab = (*self.lcr.lock() & LCR_DLAB) != 0;
+
         match offset {
+            THR_OFFSET if dlab => {
+                // DLAB=1: Divisor Latch Low byte
+                *self.dll.lock() = data[0];
+            }
             THR_OFFSET => {
-                // Write to transmit buffer
+                // DLAB=0: Write to transmit buffer
                 let mut tx = self.tx_buffer.lock();
                 tx.push_back(data[0]);
+                *self.thr_empty.lock() = false;
+            }
+            IER_OFFSET if dlab => {
+                // DLAB=1: Divisor Latch High byte
+                *self.dlm.lock() = data[0];
             }
             IER_OFFSET => {
                 *self.ier.lock() = data[0];
+            }
+            FCR_OFFSET => {
+                // FIFO Control Register (write-only)
+                let byte = data[0];
+                *self.fcr.lock() = byte & FCR_FIFO_ENABLE; // Only persist the enable bit
+
+                if (byte & FCR_RX_FIFO_RESET) != 0 {
+                    self.rx_buffer.lock().clear();
+                }
+                if (byte & FCR_TX_FIFO_RESET) != 0 {
+                    self.tx_buffer.lock().clear();
+                    *self.thr_empty.lock() = true;
+                }
             }
             LCR_OFFSET => {
                 *self.lcr.lock() = data[0];
@@ -245,6 +330,10 @@ impl Device for SerialDevice {
         *self.lcr.lock() = 0;
         *self.mcr.lock() = 0;
         *self.scr.lock() = 0;
+        *self.fcr.lock() = 0;
+        *self.dll.lock() = 0x0C;
+        *self.dlm.lock() = 0x00;
+        *self.thr_empty.lock() = true;
         Ok(())
     }
 
@@ -406,5 +495,110 @@ mod tests {
         // Buffer should be empty now
         device.read(RBR_OFFSET, &mut buf).await.unwrap();
         assert_eq!(buf[0], 0); // Should return 0 when buffer empty
+    }
+
+    #[tokio::test]
+    async fn test_serial_dlab_divisor_latch() {
+        let mut device = SerialDevice::new("COM1".to_string(), 0x3F8);
+
+        // Set DLAB=1 in LCR
+        device.write(LCR_OFFSET, &[LCR_DLAB]).await.unwrap();
+
+        // Write divisor latch: 1 → 115200 baud
+        device.write(DLL_OFFSET, &[0x01]).await.unwrap();
+        device.write(DLM_OFFSET, &[0x00]).await.unwrap();
+
+        // Read divisor back
+        let mut buf = [0u8; 1];
+        device.read(DLL_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0], 0x01);
+        device.read(DLM_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0], 0x00);
+
+        // Clear DLAB
+        device.write(LCR_OFFSET, &[0x00]).await.unwrap();
+
+        // Now offset 0 should be THR/RBR again
+        device.input(b"X").unwrap();
+        device.read(RBR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0], b'X');
+    }
+
+    #[tokio::test]
+    async fn test_serial_fcr_fifo_control() {
+        let mut device = SerialDevice::new("COM1".to_string(), 0x3F8);
+
+        // Put data in buffers
+        device.input(b"ABC").unwrap();
+        device.write(THR_OFFSET, b"D").await.unwrap();
+
+        // Enable FIFO and clear both FIFOs
+        device
+            .write(FCR_OFFSET, &[FCR_FIFO_ENABLE | FCR_RX_FIFO_RESET | FCR_TX_FIFO_RESET])
+            .await
+            .unwrap();
+
+        // RX buffer should be cleared
+        let mut buf = [0u8; 1];
+        device.read(RBR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0], 0);
+
+        // TX buffer should be cleared
+        let output = device.output();
+        assert!(output.is_empty());
+
+        // IIR should show FIFOs enabled (bits 6-7)
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_ne!(buf[0] & IIR_FIFO_ENABLED, 0, "FIFO bits should be set in IIR");
+    }
+
+    #[tokio::test]
+    async fn test_serial_dynamic_iir() {
+        let mut device = SerialDevice::new("COM1".to_string(), 0x3F8);
+
+        // No interrupts enabled: IIR should show no interrupt pending
+        let mut buf = [0u8; 1];
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_NO_INTERRUPT);
+
+        // Enable RDA interrupt
+        device.write(IER_OFFSET, &[IER_RDA]).await.unwrap();
+
+        // No data → still no interrupt
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_NO_INTERRUPT);
+
+        // Input data → RDA interrupt pending
+        device.input(b"Z").unwrap();
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_RDA);
+
+        // Drain RX → back to no interrupt
+        device.read(RBR_OFFSET, &mut buf).await.unwrap();
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_NO_INTERRUPT);
+    }
+
+    #[tokio::test]
+    async fn test_serial_iir_thre() {
+        let mut device = SerialDevice::new("COM1".to_string(), 0x3F8);
+
+        // Enable THRE interrupt only
+        device.write(IER_OFFSET, &[IER_THRE]).await.unwrap();
+
+        // THR starts empty → THRE interrupt pending
+        let mut buf = [0u8; 1];
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_THRE);
+
+        // Write to THR → THRE clears
+        device.write(THR_OFFSET, b"A").await.unwrap();
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_NO_INTERRUPT);
+
+        // Drain TX → THRE again
+        let _ = device.output();
+        device.read(IIR_OFFSET, &mut buf).await.unwrap();
+        assert_eq!(buf[0] & 0x0F, IIR_THRE);
     }
 }

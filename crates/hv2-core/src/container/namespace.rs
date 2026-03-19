@@ -398,11 +398,7 @@ impl NetNamespace {
     /// Remove interface
     pub fn remove_interface(&self, name: &str) -> Option<NetInterface> {
         let mut interfaces = self.interfaces.write().unwrap_or_else(|e| e.into_inner());
-        if let Some(pos) = interfaces.iter().position(|i| i.name == name) {
-            Some(interfaces.remove(pos))
-        } else {
-            None
-        }
+        interfaces.iter().position(|i| i.name == name).map(|pos| interfaces.remove(pos))
     }
 
     /// Get interface by name
@@ -536,11 +532,7 @@ impl MntNamespace {
     /// Remove mount
     pub fn umount(&self, target: &PathBuf) -> Option<MountPoint> {
         let mut mounts = self.mounts.write().unwrap_or_else(|e| e.into_inner());
-        if let Some(pos) = mounts.iter().position(|m| &m.target == target) {
-            Some(mounts.remove(pos))
-        } else {
-            None
-        }
+        mounts.iter().position(|m| &m.target == target).map(|pos| mounts.remove(pos))
     }
 
     /// List mounts

@@ -447,9 +447,9 @@ impl ConfigSpace {
         let offset = offset as usize & !1;
         if offset + 1 < PCIE_CONFIG_SIZE {
             let bytes = value.to_le_bytes();
-            for i in 0..2 {
+            for (i, &byte) in bytes.iter().enumerate().take(2) {
                 let mask = self.write_mask[offset + i];
-                self.data[offset + i] = (self.data[offset + i] & !mask) | (bytes[i] & mask);
+                self.data[offset + i] = (self.data[offset + i] & !mask) | (byte & mask);
             }
         }
     }
@@ -491,9 +491,9 @@ impl ConfigSpace {
 
         if offset + 3 < PCIE_CONFIG_SIZE {
             let bytes = value.to_le_bytes();
-            for i in 0..4 {
+            for (i, &byte) in bytes.iter().enumerate().take(4) {
                 let mask = self.write_mask[offset + i];
-                self.data[offset + i] = (self.data[offset + i] & !mask) | (bytes[i] & mask);
+                self.data[offset + i] = (self.data[offset + i] & !mask) | (byte & mask);
             }
         }
     }

@@ -9,6 +9,7 @@
 //! - ASID (Address Space Identifiers) for TLB management
 //! - Intercept configuration
 
+use crate::vcpu::{GeneralRegisters, VcpuRegisters, VmExitInfo};
 use crate::{Error, Result};
 use core::arch::asm;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -614,6 +615,352 @@ pub unsafe fn clgi() {
 /// Check if SVM is enabled
 pub fn is_enabled() -> bool {
     SVM_ENABLED.load(Ordering::SeqCst)
+}
+
+// ─── SVM Intercept bit constants ────────────────────────────────────
+
+/// Instruction intercept word 1 bits
+pub mod intercept1 {
+    pub const INTR: u32 = 1 << 0;
+    pub const NMI: u32 = 1 << 1;
+    pub const SMI: u32 = 1 << 2;
+    pub const INIT: u32 = 1 << 3;
+    pub const VINTR: u32 = 1 << 4;
+    pub const CR0_SEL_WRITE: u32 = 1 << 5;
+    pub const IDTR_READ: u32 = 1 << 6;
+    pub const GDTR_READ: u32 = 1 << 7;
+    pub const LDTR_READ: u32 = 1 << 8;
+    pub const TR_READ: u32 = 1 << 9;
+    pub const IDTR_WRITE: u32 = 1 << 10;
+    pub const GDTR_WRITE: u32 = 1 << 11;
+    pub const LDTR_WRITE: u32 = 1 << 12;
+    pub const TR_WRITE: u32 = 1 << 13;
+    pub const RDTSC: u32 = 1 << 14;
+    pub const RDPMC: u32 = 1 << 15;
+    pub const PUSHF: u32 = 1 << 16;
+    pub const POPF: u32 = 1 << 17;
+    pub const CPUID: u32 = 1 << 18;
+    pub const RSM: u32 = 1 << 19;
+    pub const IRET: u32 = 1 << 20;
+    pub const SWINT: u32 = 1 << 21;
+    pub const INVD: u32 = 1 << 22;
+    pub const PAUSE: u32 = 1 << 23;
+    pub const HLT: u32 = 1 << 24;
+    pub const INVLPG: u32 = 1 << 25;
+    pub const INVLPGA: u32 = 1 << 26;
+    pub const IOIO: u32 = 1 << 27;
+    pub const MSR: u32 = 1 << 28;
+    pub const TASK_SWITCH: u32 = 1 << 29;
+    pub const FERR_FREEZE: u32 = 1 << 30;
+    pub const SHUTDOWN: u32 = 1u32 << 31;
+}
+
+/// Instruction intercept word 2 bits
+pub mod intercept2 {
+    pub const VMRUN: u32 = 1 << 0;
+    pub const VMMCALL: u32 = 1 << 1;
+    pub const VMLOAD: u32 = 1 << 2;
+    pub const VMSAVE: u32 = 1 << 3;
+    pub const STGI: u32 = 1 << 4;
+    pub const CLGI: u32 = 1 << 5;
+    pub const SKINIT: u32 = 1 << 6;
+    pub const RDTSCP: u32 = 1 << 7;
+    pub const ICEBP: u32 = 1 << 8;
+    pub const WBINVD: u32 = 1 << 9;
+    pub const MONITOR: u32 = 1 << 10;
+    pub const MWAIT: u32 = 1 << 11;
+    pub const MWAIT_CONDITIONAL: u32 = 1 << 12;
+    pub const XSETBV: u32 = 1 << 13;
+}
+
+/// Nested paging enable bit (in np_enable field)
+pub const NP_ENABLE: u64 = 1 << 0;
+
+/// Event injection encoding bits
+pub mod event_inject {
+    /// External interrupt
+    pub const TYPE_INTR: u64 = 0 << 8;
+    /// NMI
+    pub const TYPE_NMI: u64 = 2 << 8;
+    /// Exception
+    pub const TYPE_EXCEPTION: u64 = 3 << 8;
+    /// Software interrupt
+    pub const TYPE_SOFT: u64 = 4 << 8;
+    /// Error code valid
+    pub const ERROR_CODE_VALID: u64 = 1 << 11;
+    /// Valid
+    pub const VALID: u64 = 1u64 << 31;
+}
+
+// ─── VMCB setup ─────────────────────────────────────────────────────
+
+/// Configure VMCB intercepts and control fields for a standard guest.
+///
+/// Sets up intercepts for CPUID, HLT, I/O, VMRUN, VMMCALL, MSR,
+/// shutdown, and NPT faults. Enables nested paging.
+pub fn setup_vmcb_controls(vmcb: &mut Vmcb, ncr3: u64, asid: u32) {
+    let ctrl = &mut vmcb.control;
+
+    // Intercept CPUID, HLT, I/O, MSR, SHUTDOWN
+    ctrl.intercept_instr1 = intercept1::CPUID
+        | intercept1::HLT
+        | intercept1::IOIO
+        | intercept1::MSR
+        | intercept1::SHUTDOWN;
+
+    // Intercept VMRUN (mandatory) and VMMCALL
+    ctrl.intercept_instr2 = intercept2::VMRUN | intercept2::VMMCALL;
+
+    // Guest ASID (must be non-zero)
+    ctrl.guest_asid = if asid == 0 { 1 } else { asid };
+
+    // Enable nested paging
+    ctrl.np_enable = NP_ENABLE;
+    ctrl.n_cr3 = ncr3;
+
+    // Mark all VMCB fields as dirty (not clean)
+    ctrl.vmcb_clean = 0;
+}
+
+/// Populate VMCB guest save-area from `VcpuRegisters`.
+pub fn setup_vmcb_guest_state(vmcb: &mut Vmcb, regs: &VcpuRegisters) {
+    let save = &mut vmcb.save;
+
+    // Segment registers
+    save.cs = SegmentRegister {
+        selector: regs.seg.cs.selector,
+        attrib: regs.seg.cs.attributes,
+        limit: regs.seg.cs.limit,
+        base: regs.seg.cs.base,
+    };
+    save.ss = SegmentRegister {
+        selector: regs.seg.ss.selector,
+        attrib: regs.seg.ss.attributes,
+        limit: regs.seg.ss.limit,
+        base: regs.seg.ss.base,
+    };
+    save.ds = SegmentRegister {
+        selector: regs.seg.ds.selector,
+        attrib: regs.seg.ds.attributes,
+        limit: regs.seg.ds.limit,
+        base: regs.seg.ds.base,
+    };
+    save.es = SegmentRegister {
+        selector: regs.seg.es.selector,
+        attrib: regs.seg.es.attributes,
+        limit: regs.seg.es.limit,
+        base: regs.seg.es.base,
+    };
+    save.fs = SegmentRegister {
+        selector: regs.seg.fs.selector,
+        attrib: regs.seg.fs.attributes,
+        limit: regs.seg.fs.limit,
+        base: regs.seg.fs.base,
+    };
+    save.gs = SegmentRegister {
+        selector: regs.seg.gs.selector,
+        attrib: regs.seg.gs.attributes,
+        limit: regs.seg.gs.limit,
+        base: regs.seg.gs.base,
+    };
+    save.gdtr = SegmentRegister {
+        selector: 0,
+        attrib: 0,
+        limit: regs.dt.gdtr_limit as u32,
+        base: regs.dt.gdtr_base,
+    };
+    save.idtr = SegmentRegister {
+        selector: 0,
+        attrib: 0,
+        limit: regs.dt.idtr_limit as u32,
+        base: regs.dt.idtr_base,
+    };
+    save.ldtr = SegmentRegister {
+        selector: regs.seg.ldtr.selector,
+        attrib: regs.seg.ldtr.attributes,
+        limit: regs.seg.ldtr.limit,
+        base: regs.seg.ldtr.base,
+    };
+    save.tr = SegmentRegister {
+        selector: regs.seg.tr.selector,
+        attrib: regs.seg.tr.attributes,
+        limit: regs.seg.tr.limit,
+        base: regs.seg.tr.base,
+    };
+
+    // Control registers
+    save.cr0 = regs.cr.cr0;
+    save.cr2 = regs.cr.cr2;
+    save.cr3 = regs.cr.cr3;
+    save.cr4 = regs.cr.cr4;
+    save.efer = regs.cr.efer;
+
+    // Debug registers
+    save.dr6 = regs.dr.dr6;
+    save.dr7 = regs.dr.dr7;
+
+    // GPRs stored in VMCB save area
+    save.rax = regs.gp.rax;
+    save.rip = regs.gp.rip;
+    save.rsp = regs.gp.rsp;
+    save.rflags = regs.gp.rflags;
+
+    // PAT (default value)
+    save.g_pat = 0x0007_0406_0007_0406;
+}
+
+/// Sync guest state from VMCB save-area back into `VcpuRegisters` after a VM exit.
+pub fn sync_vmcb_to_registers(vmcb: &Vmcb, regs: &mut VcpuRegisters) {
+    let save = &vmcb.save;
+
+    regs.gp.rax = save.rax;
+    regs.gp.rip = save.rip;
+    regs.gp.rsp = save.rsp;
+    regs.gp.rflags = save.rflags;
+
+    regs.cr.cr0 = save.cr0;
+    regs.cr.cr2 = save.cr2;
+    regs.cr.cr3 = save.cr3;
+    regs.cr.cr4 = save.cr4;
+    regs.cr.efer = save.efer;
+}
+
+/// Read VM-exit information from the VMCB control area.
+pub fn read_exit_info(vmcb: &Vmcb) -> VmExitInfo {
+    let ctrl = &vmcb.control;
+    let exit_code = ctrl.exit_code;
+
+    // Map SVM exit codes to a generic reason u32
+    let reason = exit_code as u32;
+
+    let guest_physical_addr = if exit_code == VmExitCode::NptFault as u64 {
+        Some(ctrl.exit_info2)
+    } else {
+        None
+    };
+
+    VmExitInfo {
+        reason,
+        qualification: ctrl.exit_info1,
+        guest_physical_addr,
+        guest_linear_addr: Some(ctrl.exit_info2),
+        instruction_length: ctrl.next_rip.wrapping_sub(vmcb.save.rip) as u32,
+        instruction_info: 0,
+    }
+}
+
+/// Execute VMRUN with full GP register save/restore.
+///
+/// Saves host callee-saved registers, loads guest GP registers into CPU,
+/// executes VMRUN, then saves guest GP registers and restores host.
+/// RAX is saved/restored via the VMCB save area.
+///
+/// # Safety
+/// VMCB must be fully configured. `regs` must be valid.
+pub unsafe fn svm_run(vmcb: &mut Vmcb, regs: &mut GeneralRegisters) -> Result<()> {
+    // RAX goes via VMCB save area (VMRUN uses RAX for VMCB physical address)
+    vmcb.save.rax = regs.rax;
+
+    let vmcb_pa = vmcb as *mut Vmcb as u64;
+
+    asm!(
+        // Save host callee-saved
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "push rdi",   // GeneralRegisters pointer
+        "push rsi",   // VMCB PA
+
+        // Load guest GP registers from struct (rdi = regs pointer)
+        "mov rbx, [rdi + 0x08]",
+        "mov rcx, [rdi + 0x10]",
+        "mov rdx, [rdi + 0x18]",
+        "mov rsi, [rdi + 0x20]",
+        "mov rbp, [rdi + 0x30]",
+        "mov r8,  [rdi + 0x40]",
+        "mov r9,  [rdi + 0x48]",
+        "mov r10, [rdi + 0x50]",
+        "mov r11, [rdi + 0x58]",
+        "mov r12, [rdi + 0x60]",
+        "mov r13, [rdi + 0x68]",
+        "mov r14, [rdi + 0x70]",
+        "mov r15, [rdi + 0x78]",
+        "mov rdi, [rdi + 0x28]",   // guest rdi last
+
+        // rax = VMCB PA (from stack)
+        "mov rax, [rsp]",
+
+        // Enter guest
+        "vmrun",
+
+        // VM exit: save guest registers
+        // Recover regs pointer from stack (rsp+8 since rsp+0 = VMCB PA, rsp+8 = rdi=regs)
+        "push rdi",            // save guest rdi temporarily
+        "mov rdi, [rsp + 16]", // regs pointer (pushed as third from top)
+
+        "mov [rdi + 0x08], rbx",
+        "mov [rdi + 0x10], rcx",
+        "mov [rdi + 0x18], rdx",
+        "mov [rdi + 0x20], rsi",
+        "pop QWORD PTR [rdi + 0x28]", // guest rdi
+        "mov [rdi + 0x30], rbp",
+        "mov [rdi + 0x40], r8",
+        "mov [rdi + 0x48], r9",
+        "mov [rdi + 0x50], r10",
+        "mov [rdi + 0x58], r11",
+        "mov [rdi + 0x60], r12",
+        "mov [rdi + 0x68], r13",
+        "mov [rdi + 0x70], r14",
+        "mov [rdi + 0x78], r15",
+
+        // Restore host callee-saved
+        "pop rsi",
+        "pop rdi",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+
+        out("rax") _,
+        out("rcx") _,
+        out("rdx") _,
+        out("rsi") _,
+        out("r8") _,
+        out("r9") _,
+        out("r10") _,
+        out("r11") _,
+        options(nostack),
+    );
+
+    // RAX comes back via VMCB save area
+    regs.rax = vmcb.save.rax;
+
+    Ok(())
+}
+
+/// Inject an interrupt into the guest via the VMCB event_inject field.
+pub fn inject_interrupt(vmcb: &mut Vmcb, vector: u8, is_nmi: bool) {
+    let int_type = if is_nmi {
+        event_inject::TYPE_NMI
+    } else {
+        event_inject::TYPE_INTR
+    };
+    vmcb.control.event_inject = (vector as u64) | int_type | event_inject::VALID;
+}
+
+/// Inject a hardware exception into the guest via the VMCB event_inject field.
+pub fn inject_exception(vmcb: &mut Vmcb, vector: u8, error_code: Option<u32>) {
+    let mut val = (vector as u64) | event_inject::TYPE_EXCEPTION | event_inject::VALID;
+    if let Some(code) = error_code {
+        val |= event_inject::ERROR_CODE_VALID;
+        val |= (code as u64) << 32;
+    }
+    vmcb.control.event_inject = val;
 }
 
 #[cfg(test)]

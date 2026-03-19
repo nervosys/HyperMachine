@@ -696,10 +696,10 @@ impl Ps2Mouse {
         if dy < 0 {
             byte1 |= 0x20;
         }
-        if dx < -256 || dx > 255 {
+        if !(-256..=255).contains(&dx) {
             byte1 |= 0x40;
         }
-        if dy < -256 || dy > 255 {
+        if !(-256..=255).contains(&dy) {
             byte1 |= 0x80;
         }
 

@@ -7,6 +7,7 @@ members = [
     "crates/hv2-gpu",
     "crates/hv2-net",
     "crates/hv2-agent",
+    "crates/hv2-runtime",
     "crates/hv2-api",
     "crates/hv2-cli",
     "crates/hm-cli",
@@ -88,6 +89,9 @@ criterion = "0.5"
 rhai = { version = "1.19", features = ["sync"] }
 wasmtime = "24.0"
 wasmtime-wasi = "24.0"
+
+# Compression
+flate2 = "1.0"
 
 # Utilities
 uuid = { version = "1.10", features = ["v4", "serde"] }

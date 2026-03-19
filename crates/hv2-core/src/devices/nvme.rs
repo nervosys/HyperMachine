@@ -815,7 +815,7 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueId, true);
         }
 
-        if qsize < 2 || qsize > NVME_MAX_QUEUE_ENTRIES {
+        if !(2..=NVME_MAX_QUEUE_ENTRIES).contains(&qsize) {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueSize, true);
         }
 
@@ -838,7 +838,7 @@ impl NvmeController {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueId, true);
         }
 
-        if qsize < 2 || qsize > NVME_MAX_QUEUE_ENTRIES {
+        if !(2..=NVME_MAX_QUEUE_ENTRIES).contains(&qsize) {
             return CompletionQueueEntry::new(cid, 0, 0, StatusCode::InvalidQueueSize, true);
         }
 
@@ -896,9 +896,8 @@ impl NvmeController {
         // Return default/dummy values
         let mut cqe = CompletionQueueEntry::new(cid, 0, 0, StatusCode::Success, true);
 
-        match fid {
-            0x07 => cqe.dw0 = NVME_MAX_IO_QUEUES as u32, // Number of Queues
-            _ => {}
+        if fid == 0x07 {
+            cqe.dw0 = NVME_MAX_IO_QUEUES as u32; // Number of Queues
         }
 
         cqe
@@ -976,7 +975,7 @@ impl NvmeController {
         let storage = self.storage.read();
         let end = offset as usize + buf.len();
         if end > storage.len() {
-            return Err(crate::Error::Memory(format!("Read past end of storage")));
+            return Err(crate::Error::Memory("Read past end of storage".to_string()));
         }
         buf.copy_from_slice(&storage[offset as usize..end]);
         Ok(())
@@ -987,7 +986,7 @@ impl NvmeController {
         let mut storage = self.storage.write();
         let end = offset as usize + data.len();
         if end > storage.len() {
-            return Err(crate::Error::Memory(format!("Write past end of storage")));
+            return Err(crate::Error::Memory("Write past end of storage".to_string()));
         }
         storage[offset as usize..end].copy_from_slice(data);
         Ok(())

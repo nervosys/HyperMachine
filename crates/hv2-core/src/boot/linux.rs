@@ -185,21 +185,67 @@ impl LinuxBootProtocol {
 
     /// Boot a Linux kernel
     ///
-    /// This is a placeholder that will be implemented once we have
-    /// backend-specific implementations. The actual boot process involves:
+    /// Prepare guest memory layout for Linux boot.
     ///
-    /// 1. Parse and validate kernel image
-    /// 2. Write kernel to guest memory at kernel_addr
-    /// 3. Write initrd (if present) to high memory
-    /// 4. Create and write boot_params structure
-    /// 5. Write command line string
-    /// 6. Setup CPU state (GDT, IDT, page tables)
-    /// 7. Configure registers and jump to kernel entry
+    /// Returns a list of `(guest_physical_address, data)` pairs that the
+    /// caller must write into guest memory (via `HypervisorVm::map_memory`,
+    /// `KvmVm::map_memory`, etc.). This keeps the function backend-agnostic.
     ///
-    /// # Note
+    /// # Memory Layout
     ///
-    /// This requires backend-specific vcpu and vm types. We'll add concrete
-    /// implementations for WHPX and KVM backends.
+    /// ```text
+    /// setup_addr          → boot_params (4 KB)
+    /// setup_addr + 0x1000 → command line (null-terminated)
+    /// kernel_addr         → kernel (bzImage protected-mode code)
+    /// initrd_addr         → initrd (optional, placed at 32 MB)
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the kernel image is invalid or parameters fail
+    /// validation.
+    pub fn prepare_guest_memory(params: &LinuxBootParams) -> Result<Vec<(u64, Vec<u8>)>> {
+        // 1. Validate everything first
+        Self::validate_params(params)?;
+
+        // 2. Parse header to determine setup vs kernel split
+        let header = Self::parse_header(&params.kernel_image)?;
+
+        let mut regions: Vec<(u64, Vec<u8>)> = Vec::new();
+
+        // 3. Initrd (optional) — place at 32 MB (above kernel)
+        let (initrd_addr, initrd_size) = if let Some(ref initrd) = params.initrd {
+            let addr: u64 = 0x200_0000; // 32 MB
+            regions.push((addr, initrd.clone()));
+            (Some(addr), Some(initrd.len()))
+        } else {
+            (None, None)
+        };
+
+        // 4. Boot parameters structure at setup_addr
+        let boot_params = Self::create_boot_params(params, initrd_addr, initrd_size);
+        regions.push((params.setup_addr, boot_params));
+
+        // 5. Command line at setup_addr + 0x1000
+        let cmdline_addr = params.setup_addr + 0x1000;
+        let mut cmdline_bytes = params.cmdline.as_bytes().to_vec();
+        cmdline_bytes.push(0); // null-terminate
+        regions.push((cmdline_addr, cmdline_bytes));
+
+        // 6. Protected-mode kernel at kernel_addr (skip setup sectors)
+        let kernel_offset = header.setup_size;
+        if kernel_offset < params.kernel_image.len() {
+            let kernel_data = params.kernel_image[kernel_offset..].to_vec();
+            regions.push((params.kernel_addr, kernel_data));
+        }
+
+        Ok(regions)
+    }
+
+    /// Validate boot parameters.
+    ///
+    /// Checks that the kernel image is valid, addresses are sensible,
+    /// and the command line is within limits.
     pub fn validate_params(params: &LinuxBootParams) -> Result<()> {
         // Validate kernel image
         if params.kernel_image.is_empty() {
@@ -221,6 +267,29 @@ impl LinuxBootProtocol {
             return Err(Error::VM(
                 "Command line exceeds maximum length of 4KB".into(),
             ));
+        }
+
+        Ok(())
+    }
+
+    /// Boot a Linux kernel using a memory mapper.
+    ///
+    /// Combines `prepare_guest_memory()` with a `MemoryMapper` to write all
+    /// prepared regions directly into guest memory. This is a convenience
+    /// method that avoids the caller needing to iterate over regions manually.
+    ///
+    /// # Arguments
+    ///
+    /// * `params` - Linux boot parameters (kernel image, cmdline, etc.)
+    /// * `mapper` - Backend-specific memory mapper for writing to guest RAM
+    pub fn boot_with_mapper(
+        params: &LinuxBootParams,
+        mapper: &dyn crate::hypervisor::MemoryMapper,
+    ) -> Result<()> {
+        let regions = Self::prepare_guest_memory(params)?;
+
+        for (addr, data) in &regions {
+            mapper.map_region(*addr, data)?;
         }
 
         Ok(())
@@ -391,5 +460,73 @@ mod tests {
         };
 
         assert!(LinuxBootProtocol::validate_params(&params).is_err());
+    }
+
+    #[test]
+    fn test_prepare_guest_memory_basic() {
+        let params = LinuxBootParams {
+            kernel_image: create_minimal_bzimage(),
+            initrd: None,
+            cmdline: "console=ttyS0".to_string(),
+            setup_addr: 0x90000,
+            kernel_addr: 0x100000,
+        };
+
+        let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
+
+        // Should have: boot_params, cmdline, kernel
+        assert!(regions.len() >= 2);
+
+        // Boot params at setup_addr
+        let (addr, data) = &regions[0];
+        assert_eq!(*addr, 0x90000);
+        assert_eq!(data.len(), 4096);
+
+        // Command line at setup_addr + 0x1000
+        let (addr, data) = &regions[1];
+        assert_eq!(*addr, 0x91000);
+        assert!(data.ends_with(&[0])); // null-terminated
+        assert!(data.starts_with(b"console=ttyS0"));
+    }
+
+    #[test]
+    fn test_prepare_guest_memory_with_initrd() {
+        let initrd_data = vec![0xDE, 0xAD, 0xBE, 0xEF];
+        let params = LinuxBootParams {
+            kernel_image: create_minimal_bzimage(),
+            initrd: Some(initrd_data.clone()),
+            cmdline: String::new(),
+            setup_addr: 0x90000,
+            kernel_addr: 0x100000,
+        };
+
+        let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
+
+        // Should have: initrd, boot_params, cmdline, kernel
+        assert!(regions.len() >= 3);
+
+        // Initrd at 32 MB
+        let (addr, data) = &regions[0];
+        assert_eq!(*addr, 0x200_0000);
+        assert_eq!(data, &initrd_data);
+
+        // Boot params should reference the initrd
+        let (_, boot_params) = &regions[1];
+        let initrd_addr = u32::from_le_bytes([
+            boot_params[0x218],
+            boot_params[0x219],
+            boot_params[0x21A],
+            boot_params[0x21B],
+        ]);
+        assert_eq!(initrd_addr, 0x200_0000);
+    }
+
+    #[test]
+    fn test_prepare_guest_memory_invalid_kernel() {
+        let params = LinuxBootParams {
+            kernel_image: Vec::new(),
+            ..Default::default()
+        };
+        assert!(LinuxBootProtocol::prepare_guest_memory(&params).is_err());
     }
 }

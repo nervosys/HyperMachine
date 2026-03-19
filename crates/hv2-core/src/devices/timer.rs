@@ -57,6 +57,10 @@ struct PitChannel {
     last_update: Instant,
     /// Gate signal
     gate: bool,
+    /// Output pin state
+    output: bool,
+    /// Counting has started (reload value loaded)
+    active: bool,
 }
 
 impl PitChannel {
@@ -71,11 +75,15 @@ impl PitChannel {
             write_latch: None,
             last_update: Instant::now(),
             gate: true,
+            output: false,
+            active: true, // PIT counts immediately after power-on reset
         }
     }
 
+    /// Update the counter based on elapsed time.  Returns `true` when the
+    /// channel fires (output transitions that should trigger an IRQ on ch0).
     fn update_count(&mut self) -> bool {
-        if !self.gate {
+        if !self.gate || !self.active {
             return false;
         }
 
@@ -85,16 +93,92 @@ impl PitChannel {
 
         // PIT frequency is 1.193182 MHz
         let ticks = (elapsed.as_micros() as u64 * 1193182) / 1_000_000;
+        if ticks == 0 {
+            return false;
+        }
 
-        let reached_zero = if self.count >= ticks as u16 {
-            self.count -= ticks as u16;
-            false
-        } else {
-            self.count = self.reload_value;
-            true
-        };
-
-        reached_zero
+        match self.mode {
+            PitMode::InterruptOnTerminalCount => {
+                // Mode 0: count down once; output goes high at terminal count
+                if self.output {
+                    return false; // Already fired
+                }
+                if self.count as u64 <= ticks {
+                    self.count = 0;
+                    self.output = true;
+                    true
+                } else {
+                    self.count -= ticks as u16;
+                    false
+                }
+            }
+            PitMode::HardwareRetriggerableOneShot => {
+                // Mode 1: similar to mode 0; gate rising edge restarts
+                if self.output {
+                    return false;
+                }
+                if self.count as u64 <= ticks {
+                    self.count = 0;
+                    self.output = true;
+                    true
+                } else {
+                    self.count -= ticks as u16;
+                    false
+                }
+            }
+            PitMode::RateGenerator => {
+                // Mode 2: periodic; output goes low for one tick at terminal count,
+                // then reloads
+                if self.count as u64 <= ticks {
+                    self.count = self.reload_value;
+                    true
+                } else {
+                    self.count -= ticks as u16;
+                    false
+                }
+            }
+            PitMode::SquareWaveGenerator => {
+                // Mode 3: square wave — toggle output at half the period.
+                // Each full period of reload_value ticks produces one toggle pair.
+                if self.count as u64 <= ticks {
+                    self.output = !self.output;
+                    self.count = self.reload_value;
+                    // Fire on the falling edge (output going low)
+                    !self.output
+                } else {
+                    self.count -= ticks as u16;
+                    false
+                }
+            }
+            PitMode::SoftwareTriggeredStrobe => {
+                // Mode 4: output goes low for one tick at terminal count (one-shot)
+                if self.output {
+                    return false;
+                }
+                if self.count as u64 <= ticks {
+                    self.count = 0;
+                    self.output = true;
+                    true
+                } else {
+                    self.count -= ticks as u16;
+                    false
+                }
+            }
+            PitMode::HardwareTriggeredStrobe => {
+                // Mode 5: like mode 4 but triggered by gate
+                if self.output {
+                    return false;
+                }
+                if self.count as u64 <= ticks {
+                    self.count = 0;
+                    self.output = true;
+                    true
+                } else {
+                    self.count -= ticks as u16;
+                    false
+                }
+            }
+        }
     }
 
     fn read_count(&mut self) -> u16 {
@@ -305,11 +389,15 @@ impl Device for TimerDevice {
                         // LSB only
                         channel.reload_value = byte as u16;
                         channel.count = channel.reload_value;
+                        channel.active = true;
+                        channel.output = false;
                     }
                     2 => {
                         // MSB only
                         channel.reload_value = (byte as u16) << 8;
                         channel.count = channel.reload_value;
+                        channel.active = true;
+                        channel.output = false;
                     }
                     3 => {
                         // LSB then MSB
@@ -317,6 +405,8 @@ impl Device for TimerDevice {
                             channel.reload_value = lsb as u16 | ((byte as u16) << 8);
                             channel.count = channel.reload_value;
                             channel.write_latch = None;
+                            channel.active = true;
+                            channel.output = false;
                         } else {
                             channel.write_latch = Some(byte);
                         }
@@ -331,7 +421,33 @@ impl Device for TimerDevice {
                 let channel_select = (byte >> 6) & 0x03;
 
                 if channel_select == 3 {
-                    // Read-back command (not implemented)
+                    // Read-back command (8254 only)
+                    // Bits: 11 | !COUNT | !STATUS | CH2 | CH1 | CH0 | 0 | 0
+                    let latch_count = (byte & 0x20) == 0;
+                    let latch_status = (byte & 0x10) == 0;
+
+                    for ch in 0..3u8 {
+                        if (byte >> (ch + 1)) & 1 == 0 {
+                            continue; // Channel not selected
+                        }
+                        let channel = &mut channels[ch as usize];
+
+                        if latch_count && channel.latch.is_none() {
+                            channel.update_count();
+                            channel.latch = Some(channel.count);
+                        }
+
+                        if latch_status {
+                            // Status byte: OUTPUT | NULL_COUNT | RW1 | RW0 | M2 | M1 | M0 | BCD
+                            let status = (channel.rw_mode << 4)
+                                | (((channel.mode as u8) & 0x07) << 1)
+                                | (channel.bcd_mode as u8);
+                            // Latch the status as a fake count so the next read returns it
+                            if channel.latch.is_none() {
+                                channel.latch = Some(status as u16);
+                            }
+                        }
+                    }
                     return Ok(());
                 }
 
@@ -504,5 +620,89 @@ mod tests {
         );
 
         timer.stop_timer_task();
+    }
+
+    #[test]
+    fn test_pit_mode0_interrupt_on_terminal_count() {
+        // Mode 0: count down once, output goes high at terminal count and stays
+        let mut ch = PitChannel::new();
+        ch.mode = PitMode::InterruptOnTerminalCount;
+        ch.reload_value = 10;
+        ch.count = 10;
+        ch.active = true;
+        ch.output = false;
+
+        // Simulate enough elapsed time for the count to expire
+        ch.last_update = Instant::now() - Duration::from_micros(20);
+        let fired = ch.update_count();
+        assert!(fired, "Mode 0 should fire when count reaches 0");
+        assert!(ch.output, "Output should be high after terminal count");
+
+        // Subsequent calls should NOT fire again (one-shot)
+        ch.last_update = Instant::now() - Duration::from_micros(20);
+        let fired = ch.update_count();
+        assert!(!fired, "Mode 0 should not fire again once output is high");
+    }
+
+    #[test]
+    fn test_pit_mode2_rate_generator() {
+        // Mode 2: periodic, auto-reloads
+        let mut ch = PitChannel::new();
+        ch.mode = PitMode::RateGenerator;
+        ch.reload_value = 10;
+        ch.count = 10;
+        ch.active = true;
+
+        // Fire once
+        ch.last_update = Instant::now() - Duration::from_micros(20);
+        let fired = ch.update_count();
+        assert!(fired, "Mode 2 should fire at terminal count");
+        assert_eq!(
+            ch.count, ch.reload_value,
+            "Mode 2 should reload after firing"
+        );
+
+        // Should fire again on next expiry (periodic)
+        ch.last_update = Instant::now() - Duration::from_micros(20);
+        let fired = ch.update_count();
+        assert!(fired, "Mode 2 should fire repeatedly");
+    }
+
+    #[test]
+    fn test_pit_mode3_square_wave() {
+        // Mode 3: square wave — fires on falling edge only
+        let mut ch = PitChannel::new();
+        ch.mode = PitMode::SquareWaveGenerator;
+        ch.reload_value = 10;
+        ch.count = 10;
+        ch.active = true;
+        ch.output = false;
+
+        // First expiry: output toggles to true (rising edge) — should NOT fire
+        ch.last_update = Instant::now() - Duration::from_micros(20);
+        let fired = ch.update_count();
+        assert!(!fired, "Mode 3 should not fire on rising edge");
+        assert!(ch.output, "Output should be high after first toggle");
+
+        // Second expiry: output toggles to false (falling edge) — should fire
+        ch.last_update = Instant::now() - Duration::from_micros(20);
+        let fired = ch.update_count();
+        assert!(fired, "Mode 3 should fire on falling edge");
+        assert!(!ch.output, "Output should be low after second toggle");
+    }
+
+    #[test]
+    fn test_pit_channel_gate_inhibits_counting() {
+        let mut ch = PitChannel::new();
+        ch.mode = PitMode::RateGenerator;
+        ch.reload_value = 10;
+        ch.count = 10;
+        ch.active = true;
+        ch.gate = false;
+
+        ch.last_update = Instant::now() - Duration::from_micros(100);
+        let fired = ch.update_count();
+        assert!(!fired, "Should not fire when gate is low");
+        assert_eq!(ch.count, 10, "Count should not change when gate is low");
     }
 }

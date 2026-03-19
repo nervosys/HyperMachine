@@ -12,11 +12,11 @@
 //!
 //! # Components
 //!
-//! - [`types`]: Core types for nested VMX operations including VMCS fields,
+//! - `types`: Core types for nested VMX operations including VMCS fields,
 //!   exit reasons, and guest state tracking.
-//! - [`shadow_vmcs`]: Shadow VMCS management for tracking L1's VMCS state.
-//! - [`ept`]: Nested EPT (Extended Page Tables) support for L2 address translation.
-//! - [`manager`]: The main nested manager handling L1/L2 transitions.
+//! - `shadow_vmcs`: Shadow VMCS management for tracking L1's VMCS state.
+//! - `ept`: Nested EPT (Extended Page Tables) support for L2 address translation.
+//! - `manager`: The main nested manager handling L1/L2 transitions.
 //!
 //! # VMX Instruction Emulation
 //!

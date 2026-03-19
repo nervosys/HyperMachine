@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **PIC 8259 cascade deadlock**: `acknowledge_interrupt()` and `send_eoi()` held master
+  lock while re-acquiring it in slave path, deadlocking on `parking_lot::Mutex`. Added
+  `drop(master)` before slave branch in both methods.
+- **E1000 DMA undefined behavior**: `process_rx_ring_dma()` and `process_tx_ring_dma()`
+  took `&[u8]` but wrote through immutable references via raw pointer casts (UB at
+  opt-level=1). Changed to `&mut [u8]` with safe `copy_from_slice`.
+- **E1000 RX queue drain**: `process_rx_queue()` consumed packets without DMA writeback
+  when ring was configured, starving `process_rx_ring_dma()`.
+- **IOAPIC EOI re-delivery**: `end_of_interrupt()` now checks `irq_state` bitmap after
+  clearing `remote_irr` to re-assert level-triggered interrupts still active.
+
+### Added
+- **MCP guest agent operations**: `execute_command`, `read_file`, `write_file`,
+  `list_processes` on the MCP guest agent interface.
+- **E1000 DMA**: Full RX/TX DMA with guest memory read/write for the Intel 82540EM NIC.
+- **VirtIO GPU**: Capset dispatch (Virgl, Virgl2, Venus, Cross-Domain) and
+  `transfer_to_host_2d` with guest memory DMA.
+- **xHCI USB**: Transfer ring processing (Normal, Setup, Data, Status TRBs).
+- **Intel HDA**: CORB verb dispatch (get/set parameters, power, pin config, stream format,
+  AMP gain, connections).
+- **RSA crypto**: Software modular exponentiation for encrypt/decrypt.
+- **Post-quantum crypto**: ML-DSA (Dilithium) and SLH-DSA (SPHINCS+) signature
+  verification with hash-based schemes.
+- **FIPS AES-GCM fallback**: Hand-rolled GHASH + CTR mode when hardware AES-NI unavailable.
+- **TAP loopback mode**: Memory buffer mode for testing without OS TAP devices.
+- **DurableStore External backend**: HTTP-based storage with retry and circuit breaker.
+- **Linux boot helper**: `boot_with_mapper()` loads kernel, initrd, and cmdline via
+  address-space mapper.
+- **ACPI DSDT enhancements**: `_CRS` resource blocks, `CPU0` device scope, `\_S5_` sleep
+  state object in AML bytecode.
+- **PIC cascade tests**: `test_slave_pic_cascade` (fixed, formerly ignored) and
+  `test_slave_pic_multiple_irqs` for IRQs 8/10/12/15 through cascade.
+
 ## [0.1.0] - 2025-01-01
 
 ### Added

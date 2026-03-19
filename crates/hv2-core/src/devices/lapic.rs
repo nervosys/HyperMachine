@@ -478,21 +478,21 @@ impl LocalApic {
             regs::TIMER_DCR => Ok(self.timer_dcr.load(Ordering::Relaxed)),
             _ => {
                 // ISR, TMR, IRR banks
-                if offset >= regs::ISR_BASE && offset < regs::ISR_BASE + 0x80 {
+                if (regs::ISR_BASE..regs::ISR_BASE + 0x80).contains(&offset) {
                     let idx = ((offset - regs::ISR_BASE) / 0x10) as usize;
                     if idx < 8 {
                         let isr = self.isr.read();
                         return Ok(isr[idx]);
                     }
                 }
-                if offset >= regs::TMR_BASE && offset < regs::TMR_BASE + 0x80 {
+                if (regs::TMR_BASE..regs::TMR_BASE + 0x80).contains(&offset) {
                     let idx = ((offset - regs::TMR_BASE) / 0x10) as usize;
                     if idx < 8 {
                         let tmr = self.tmr.read();
                         return Ok(tmr[idx]);
                     }
                 }
-                if offset >= regs::IRR_BASE && offset < regs::IRR_BASE + 0x80 {
+                if (regs::IRR_BASE..regs::IRR_BASE + 0x80).contains(&offset) {
                     let idx = ((offset - regs::IRR_BASE) / 0x10) as usize;
                     if idx < 8 {
                         let irr = self.irr.read();

@@ -26,11 +26,11 @@ toml = { workspace = true }
 chrono = { workspace = true }
 bitflags = { workspace = true }
 rand = { workspace = true }
+ring = { version = "0.17", optional = true }
 
 [features]
 default = []
 fips = []
-ring = ["fips"]
 
 [dev-dependencies]
 proptest = { workspace = true }

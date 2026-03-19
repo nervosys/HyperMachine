@@ -115,6 +115,7 @@ pub const KVM_CAP_X2APIC_API: u32 = 129;
 pub const KVM_CAP_MSI_DEVID: u32 = 131;
 pub const KVM_CAP_IMMEDIATE_EXIT: u32 = 136;
 pub const KVM_CAP_NESTED_STATE: u32 = 157;
+pub const KVM_CAP_IOMMU: u32 = 196;
 
 // KVM exit reasons (from kvm_run.exit_reason)
 pub const KVM_EXIT_UNKNOWN: u32 = 0;

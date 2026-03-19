@@ -69,6 +69,69 @@ impl VirtioGpuCtrlType {
     }
 }
 
+/// GPU command with payload data for dispatch
+#[derive(Debug, Clone)]
+pub enum GpuCommand {
+    /// Get display info for all scanouts
+    GetDisplayInfo,
+    /// Create a 2D resource
+    ResourceCreate2d {
+        resource_id: u32,
+        format: VirtioGpuFormat,
+        width: u32,
+        height: u32,
+    },
+    /// Destroy a resource
+    ResourceUnref { resource_id: u32 },
+    /// Bind a resource to a scanout
+    SetScanout {
+        scanout_id: u32,
+        resource_id: u32,
+        rect: Rect,
+    },
+    /// Flush a resource to the display
+    ResourceFlush { resource_id: u32, rect: Rect },
+    /// Transfer pixel data from guest to host resource
+    TransferToHost2d {
+        resource_id: u32,
+        rect: Rect,
+        data: Vec<u8>,
+        offset: usize,
+    },
+    /// Attach backing pages to a resource
+    ResourceAttachBacking { resource_id: u32 },
+    /// Detach backing pages from a resource
+    ResourceDetachBacking { resource_id: u32 },
+    /// Update cursor image and position
+    UpdateCursor {
+        scanout_id: u32,
+        x: u32,
+        y: u32,
+        resource_id: u32,
+        hot_x: u32,
+        hot_y: u32,
+    },
+    /// Move cursor position (image unchanged)
+    MoveCursor { scanout_id: u32, x: u32, y: u32 },
+    /// Query capability set info (capset index → id + max version + max size)
+    GetCapsetInfo { capset_index: u32 },
+    /// Retrieve a capability set blob
+    GetCapset { capset_id: u32, capset_version: u32 },
+    /// Get EDID data for a scanout
+    GetEdid { scanout_id: u32 },
+}
+
+/// Capability set information returned by `CmdGetCapsetInfo`.
+#[derive(Debug, Clone)]
+pub struct CapsetInfo {
+    /// Capability set ID (e.g., VIRTIO_GPU_CAPSET_VIRGL = 1)
+    pub capset_id: u32,
+    /// Maximum version supported
+    pub max_version: u32,
+    /// Maximum size of the capability blob in bytes
+    pub max_size: u32,
+}
+
 /// VirtIO GPU formats
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -166,7 +229,9 @@ impl GpuResource {
             return Color::BLACK;
         }
 
-        let bytes: [u8; 4] = self.data[offset..offset + 4].try_into().expect("slice is exactly 4 bytes");
+        let bytes: [u8; 4] = self.data[offset..offset + 4]
+            .try_into()
+            .expect("slice is exactly 4 bytes");
         match self.format {
             VirtioGpuFormat::B8G8R8A8Unorm | VirtioGpuFormat::B8G8R8X8Unorm => {
                 Color::new(bytes[2], bytes[1], bytes[0], bytes[3])
@@ -249,6 +314,25 @@ impl ScanoutState {
     }
 }
 
+/// Cursor state for a VirtIO GPU device
+#[derive(Debug, Clone, Default)]
+pub struct CursorState {
+    /// Scanout the cursor belongs to
+    pub scanout_id: u32,
+    /// Cursor X position
+    pub x: u32,
+    /// Cursor Y position
+    pub y: u32,
+    /// Resource ID providing the cursor image (0 = hidden)
+    pub resource_id: u32,
+    /// Hot-spot X offset within the cursor image
+    pub hot_x: u32,
+    /// Hot-spot Y offset within the cursor image
+    pub hot_y: u32,
+    /// Whether the cursor is visible
+    pub visible: bool,
+}
+
 /// VirtIO GPU device
 #[derive(Debug)]
 pub struct VirtioGpu {
@@ -266,6 +350,10 @@ pub struct VirtioGpu {
     enabled: bool,
     /// Statistics
     stats: VirtioGpuStats,
+    /// Supported capability sets (index → info)
+    capsets: Vec<CapsetInfo>,
+    /// Hardware cursor state
+    cursor: CursorState,
 }
 
 /// VirtIO GPU statistics
@@ -303,6 +391,21 @@ impl VirtioGpu {
             next_resource_id: AtomicU32::new(1),
             enabled: true,
             stats: VirtioGpuStats::default(),
+            capsets: vec![
+                // VIRTIO_GPU_CAPSET_VIRGL (basic 3D)
+                CapsetInfo {
+                    capset_id: 1,
+                    max_version: 1,
+                    max_size: 0,
+                },
+                // VIRTIO_GPU_CAPSET_VIRGL2 (extended 3D)
+                CapsetInfo {
+                    capset_id: 2,
+                    max_version: 1,
+                    max_size: 0,
+                },
+            ],
+            cursor: CursorState::default(),
         }
     }
 
@@ -324,6 +427,102 @@ impl VirtioGpu {
     /// Get statistics
     pub fn stats(&self) -> &VirtioGpuStats {
         &self.stats
+    }
+
+    /// Get number of supported capability sets
+    pub fn num_capsets(&self) -> u32 {
+        self.capsets.len() as u32
+    }
+
+    /// Get capability set info by index
+    pub fn get_capset_info(&self, index: u32) -> Option<&CapsetInfo> {
+        self.capsets.get(index as usize)
+    }
+
+    /// Get capability set blob (returns empty blob for now)
+    pub fn get_capset(&self, capset_id: u32, _version: u32) -> Option<Vec<u8>> {
+        if self.capsets.iter().any(|c| c.capset_id == capset_id) {
+            // Capability set data would be populated by the 3D renderer backend
+            Some(Vec::new())
+        } else {
+            None
+        }
+    }
+
+    /// Get current cursor state
+    pub fn cursor(&self) -> &CursorState {
+        &self.cursor
+    }
+
+    /// Update cursor image and position
+    pub fn update_cursor(
+        &mut self,
+        scanout_id: u32,
+        x: u32,
+        y: u32,
+        resource_id: u32,
+        hot_x: u32,
+        hot_y: u32,
+    ) -> Result<(), VirtioGpuError> {
+        if scanout_id as usize >= self.scanouts.len() {
+            return Err(VirtioGpuError::InvalidScanoutId);
+        }
+        if resource_id != 0 && !self.resources.contains_key(&resource_id) {
+            return Err(VirtioGpuError::InvalidResourceId);
+        }
+        self.cursor = CursorState {
+            scanout_id,
+            x,
+            y,
+            resource_id,
+            hot_x,
+            hot_y,
+            visible: resource_id != 0,
+        };
+        Ok(())
+    }
+
+    /// Move cursor position without changing image
+    pub fn move_cursor(&mut self, scanout_id: u32, x: u32, y: u32) -> Result<(), VirtioGpuError> {
+        if scanout_id as usize >= self.scanouts.len() {
+            return Err(VirtioGpuError::InvalidScanoutId);
+        }
+        self.cursor.scanout_id = scanout_id;
+        self.cursor.x = x;
+        self.cursor.y = y;
+        Ok(())
+    }
+
+    /// Get EDID data for a scanout (128-byte base EDID block)
+    pub fn get_edid(&self, scanout_id: u32) -> Option<Vec<u8>> {
+        let scanout = self.scanouts.get(scanout_id as usize)?;
+        let w = scanout.config.mode.width;
+        let h = scanout.config.mode.height;
+
+        // Build a minimal 128-byte EDID 1.4 block
+        let mut edid = vec![0u8; 128];
+        // Header
+        edid[0..8].copy_from_slice(&[0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00]);
+        // Manufacturer ID "HVM" (H=8,V=22,M=13) packed into 2 bytes
+        edid[8] = 0x22; // (H-1)<<2 | (V-1)>>3
+        edid[9] = 0xCD; // ((V-1)&7)<<5 | (M-1)
+                        // EDID version 1.4
+        edid[18] = 1;
+        edid[19] = 4;
+        // Preferred timing: encode active pixels
+        // Detailed timing descriptor at offset 54
+        let pixel_clock: u16 = ((w as u32 * h as u32 * 60) / 10000) as u16;
+        edid[54] = pixel_clock as u8;
+        edid[55] = (pixel_clock >> 8) as u8;
+        edid[56] = w as u8;
+        edid[58] = ((w >> 8) as u8 & 0x0F) << 4;
+        edid[59] = h as u8;
+        edid[61] = ((h >> 8) as u8 & 0x0F) << 4;
+        // Checksum: make byte 127 such that all bytes sum to 0 mod 256
+        let sum: u8 = edid[..127].iter().fold(0u8, |a, b| a.wrapping_add(*b));
+        edid[127] = 0u8.wrapping_sub(sum);
+
+        Some(edid)
     }
 
     /// Add scanout
@@ -504,9 +703,108 @@ impl VirtioGpu {
             VirtioGpuCtrlType::CmdTransferToHost2d => Ok(VirtioGpuCtrlType::RespOkNodata),
             VirtioGpuCtrlType::CmdResourceAttachBacking => Ok(VirtioGpuCtrlType::RespOkNodata),
             VirtioGpuCtrlType::CmdResourceDetachBacking => Ok(VirtioGpuCtrlType::RespOkNodata),
+            VirtioGpuCtrlType::CmdGetCapsetInfo => Ok(VirtioGpuCtrlType::RespOkCapsetInfo),
+            VirtioGpuCtrlType::CmdGetCapset => Ok(VirtioGpuCtrlType::RespOkCapset),
+            VirtioGpuCtrlType::CmdGetEdid => Ok(VirtioGpuCtrlType::RespOkEdid),
             VirtioGpuCtrlType::CmdUpdateCursor => Ok(VirtioGpuCtrlType::RespOkNodata),
             VirtioGpuCtrlType::CmdMoveCursor => Ok(VirtioGpuCtrlType::RespOkNodata),
             _ => Err(VirtioGpuError::InvalidCommand),
+        }
+    }
+
+    /// Dispatch a command with full payload, calling the appropriate backend method.
+    ///
+    /// Unlike [`Self::process_command`] (which only validates the command type), this
+    /// method performs the actual GPU operation.
+    pub fn dispatch_command(
+        &mut self,
+        cmd: GpuCommand,
+    ) -> Result<VirtioGpuCtrlType, VirtioGpuError> {
+        self.stats.commands.fetch_add(1, Ordering::Relaxed);
+
+        match cmd {
+            GpuCommand::GetDisplayInfo => Ok(VirtioGpuCtrlType::RespOkDisplayInfo),
+            GpuCommand::ResourceCreate2d {
+                resource_id,
+                format,
+                width,
+                height,
+            } => {
+                self.create_resource_2d(resource_id, format, width, height)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::ResourceUnref { resource_id } => {
+                self.unref_resource(resource_id)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::SetScanout {
+                scanout_id,
+                resource_id,
+                rect,
+            } => {
+                self.set_scanout(scanout_id, resource_id, &rect)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::ResourceFlush { resource_id, rect } => {
+                self.resource_flush(resource_id, &rect)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::TransferToHost2d {
+                resource_id,
+                rect,
+                data,
+                offset,
+            } => {
+                self.transfer_to_host_2d(resource_id, &rect, &data, offset)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::ResourceAttachBacking { resource_id } => {
+                self.attach_backing(resource_id)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::ResourceDetachBacking { resource_id } => {
+                self.detach_backing(resource_id)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::UpdateCursor {
+                scanout_id,
+                x,
+                y,
+                resource_id,
+                hot_x,
+                hot_y,
+            } => {
+                self.update_cursor(scanout_id, x, y, resource_id, hot_x, hot_y)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::MoveCursor { scanout_id, x, y } => {
+                self.move_cursor(scanout_id, x, y)?;
+                Ok(VirtioGpuCtrlType::RespOkNodata)
+            }
+            GpuCommand::GetCapsetInfo { capset_index } => {
+                if self.get_capset_info(capset_index).is_some() {
+                    Ok(VirtioGpuCtrlType::RespOkCapsetInfo)
+                } else {
+                    Err(VirtioGpuError::InvalidParameter)
+                }
+            }
+            GpuCommand::GetCapset {
+                capset_id,
+                capset_version,
+            } => {
+                if self.get_capset(capset_id, capset_version).is_some() {
+                    Ok(VirtioGpuCtrlType::RespOkCapset)
+                } else {
+                    Err(VirtioGpuError::InvalidParameter)
+                }
+            }
+            GpuCommand::GetEdid { scanout_id } => {
+                if self.get_edid(scanout_id).is_some() {
+                    Ok(VirtioGpuCtrlType::RespOkEdid)
+                } else {
+                    Err(VirtioGpuError::InvalidScanoutId)
+                }
+            }
         }
     }
 
@@ -860,5 +1158,200 @@ mod tests {
             gpu.set_scanout(99, 1, &Rect::default()),
             Err(VirtioGpuError::InvalidScanoutId)
         );
+    }
+
+    #[test]
+    fn test_dispatch_create_resource() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.dispatch_command(GpuCommand::ResourceCreate2d {
+            resource_id: 1,
+            format: VirtioGpuFormat::R8G8B8A8Unorm,
+            width: 320,
+            height: 240,
+        });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkNodata);
+        assert_eq!(gpu.resource_count(), 1);
+        let res = gpu.get_resource(1).unwrap();
+        assert_eq!(res.width, 320);
+        assert_eq!(res.height, 240);
+    }
+
+    #[test]
+    fn test_dispatch_unref_resource() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        gpu.dispatch_command(GpuCommand::ResourceCreate2d {
+            resource_id: 5,
+            format: VirtioGpuFormat::B8G8R8A8Unorm,
+            width: 64,
+            height: 64,
+        })
+        .unwrap();
+        assert_eq!(gpu.resource_count(), 1);
+
+        let result = gpu.dispatch_command(GpuCommand::ResourceUnref { resource_id: 5 });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkNodata);
+        assert_eq!(gpu.resource_count(), 0);
+    }
+
+    #[test]
+    fn test_dispatch_attach_detach_backing() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        gpu.dispatch_command(GpuCommand::ResourceCreate2d {
+            resource_id: 1,
+            format: VirtioGpuFormat::X8R8G8B8Unorm,
+            width: 32,
+            height: 32,
+        })
+        .unwrap();
+
+        let result = gpu.dispatch_command(GpuCommand::ResourceAttachBacking { resource_id: 1 });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkNodata);
+        assert!(gpu.get_resource(1).unwrap().backing_attached);
+
+        let result = gpu.dispatch_command(GpuCommand::ResourceDetachBacking { resource_id: 1 });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkNodata);
+        assert!(!gpu.get_resource(1).unwrap().backing_attached);
+    }
+
+    #[test]
+    fn test_dispatch_get_display_info() {
+        let mut gpu = VirtioGpu::new("gpu0", 1920, 1080);
+        let result = gpu.dispatch_command(GpuCommand::GetDisplayInfo);
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkDisplayInfo);
+    }
+
+    #[test]
+    fn test_dispatch_invalid_resource() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.dispatch_command(GpuCommand::ResourceUnref { resource_id: 999 });
+        assert_eq!(result, Err(VirtioGpuError::InvalidResourceId));
+    }
+
+    #[test]
+    fn test_dispatch_get_capset_info() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        assert_eq!(gpu.num_capsets(), 2);
+        let result = gpu.dispatch_command(GpuCommand::GetCapsetInfo { capset_index: 0 });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkCapsetInfo);
+        let result = gpu.dispatch_command(GpuCommand::GetCapsetInfo { capset_index: 99 });
+        assert_eq!(result, Err(VirtioGpuError::InvalidParameter));
+    }
+
+    #[test]
+    fn test_dispatch_get_capset() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.dispatch_command(GpuCommand::GetCapset {
+            capset_id: 1,
+            capset_version: 1,
+        });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkCapset);
+        let result = gpu.dispatch_command(GpuCommand::GetCapset {
+            capset_id: 999,
+            capset_version: 1,
+        });
+        assert_eq!(result, Err(VirtioGpuError::InvalidParameter));
+    }
+
+    #[test]
+    fn test_dispatch_get_edid() {
+        let mut gpu = VirtioGpu::new("gpu0", 1920, 1080);
+        let result = gpu.dispatch_command(GpuCommand::GetEdid { scanout_id: 0 });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkEdid);
+        // EDID checksum should be valid
+        let edid = gpu.get_edid(0).unwrap();
+        assert_eq!(edid.len(), 128);
+        let checksum: u8 = edid.iter().fold(0u8, |a, b| a.wrapping_add(*b));
+        assert_eq!(checksum, 0);
+    }
+
+    #[test]
+    fn test_dispatch_get_edid_invalid_scanout() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.dispatch_command(GpuCommand::GetEdid { scanout_id: 99 });
+        assert_eq!(result, Err(VirtioGpuError::InvalidScanoutId));
+    }
+
+    #[test]
+    fn test_process_command_capset() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.process_command(VirtioGpuCtrlType::CmdGetCapsetInfo);
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkCapsetInfo);
+        let result = gpu.process_command(VirtioGpuCtrlType::CmdGetCapset);
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkCapset);
+        let result = gpu.process_command(VirtioGpuCtrlType::CmdGetEdid);
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkEdid);
+    }
+
+    #[test]
+    fn test_dispatch_update_cursor() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        gpu.create_resource_2d(1, VirtioGpuFormat::X8R8G8B8Unorm, 32, 32)
+            .unwrap();
+
+        let result = gpu.dispatch_command(GpuCommand::UpdateCursor {
+            scanout_id: 0,
+            x: 100,
+            y: 200,
+            resource_id: 1,
+            hot_x: 16,
+            hot_y: 16,
+        });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkNodata);
+
+        let cursor = gpu.cursor();
+        assert!(cursor.visible);
+        assert_eq!(cursor.x, 100);
+        assert_eq!(cursor.y, 200);
+        assert_eq!(cursor.resource_id, 1);
+        assert_eq!(cursor.hot_x, 16);
+    }
+
+    #[test]
+    fn test_dispatch_move_cursor() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        gpu.create_resource_2d(1, VirtioGpuFormat::X8R8G8B8Unorm, 32, 32)
+            .unwrap();
+        gpu.update_cursor(0, 0, 0, 1, 0, 0).unwrap();
+
+        let result = gpu.dispatch_command(GpuCommand::MoveCursor {
+            scanout_id: 0,
+            x: 50,
+            y: 75,
+        });
+        assert_eq!(result.unwrap(), VirtioGpuCtrlType::RespOkNodata);
+
+        let cursor = gpu.cursor();
+        assert_eq!(cursor.x, 50);
+        assert_eq!(cursor.y, 75);
+    }
+
+    #[test]
+    fn test_cursor_hide_with_zero_resource() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        gpu.create_resource_2d(1, VirtioGpuFormat::X8R8G8B8Unorm, 32, 32)
+            .unwrap();
+        gpu.update_cursor(0, 10, 20, 1, 0, 0).unwrap();
+        assert!(gpu.cursor().visible);
+
+        // Resource 0 hides cursor
+        gpu.update_cursor(0, 0, 0, 0, 0, 0).unwrap();
+        assert!(!gpu.cursor().visible);
+    }
+
+    #[test]
+    fn test_cursor_invalid_scanout() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.update_cursor(99, 0, 0, 0, 0, 0);
+        assert_eq!(result, Err(VirtioGpuError::InvalidScanoutId));
+
+        let result = gpu.move_cursor(99, 0, 0);
+        assert_eq!(result, Err(VirtioGpuError::InvalidScanoutId));
+    }
+
+    #[test]
+    fn test_cursor_invalid_resource() {
+        let mut gpu = VirtioGpu::new("gpu0", 640, 480);
+        let result = gpu.update_cursor(0, 0, 0, 999, 0, 0);
+        assert_eq!(result, Err(VirtioGpuError::InvalidResourceId));
     }
 }

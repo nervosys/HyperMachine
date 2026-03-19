@@ -116,6 +116,7 @@ impl fmt::Display for Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn test_error_display() {
@@ -124,5 +125,67 @@ mod tests {
             "No hardware virtualization support"
         );
         assert_eq!(format!("{}", Error::VmxonFailed), "VMXON failed");
+    }
+
+    #[test]
+    fn test_all_error_variants_display() {
+        // Ensure every variant produces a non-empty Display string
+        let variants: &[Error] = &[
+            Error::AlreadyInitialized,
+            Error::NoHardwareSupport,
+            Error::UnsupportedCpu,
+            Error::VmxInitFailed,
+            Error::SvmInitFailed,
+            Error::VmxonFailed,
+            Error::VmclearFailed,
+            Error::VmptrldFailed,
+            Error::VmwriteFailed,
+            Error::VmreadFailed,
+            Error::VmlaunchFailed,
+            Error::VmresumeFailed,
+            Error::InvalidVmcsField,
+            Error::InvalidVmcbField,
+            Error::AllocationFailed,
+            Error::PageTableError,
+            Error::EptViolation,
+            Error::NptViolation,
+            Error::InvalidGuestState,
+            Error::VmExitError,
+            Error::InterruptInjectionFailed,
+            Error::DeviceNotFound,
+            Error::DeviceError,
+            Error::IoError,
+            Error::OutOfMemory,
+            Error::InvalidParameter,
+            Error::NotSupported,
+            Error::Internal,
+            Error::VmrunFailed,
+            Error::InvalidState,
+            Error::InvalidConfiguration,
+            Error::UnsupportedOperation,
+        ];
+        for err in variants {
+            let s = format!("{}", err);
+            assert!(!s.is_empty(), "{:?} has empty Display", err);
+        }
+    }
+
+    #[test]
+    fn test_error_equality() {
+        assert_eq!(Error::OutOfMemory, Error::OutOfMemory);
+        assert_ne!(Error::OutOfMemory, Error::IoError);
+    }
+
+    #[test]
+    fn test_error_debug() {
+        let dbg = format!("{:?}", Error::VmxonFailed);
+        assert!(dbg.contains("VmxonFailed"));
+    }
+
+    #[test]
+    fn test_error_clone() {
+        let e = Error::PageTableError;
+        let e2 = e;
+        assert_eq!(e, e2);
     }
 }

@@ -705,14 +705,65 @@ impl LearningSystem {
         self.config.enabled && self.step.is_multiple_of(self.config.update_frequency)
     }
 
-    /// Perform update (placeholder for actual learning)
+    /// Perform a policy-gradient-style update using sampled experience batch.
+    ///
+    /// Computes discounted returns for each experience, adjusts skill
+    /// proficiencies for named actions proportionally to the advantage
+    /// (return - baseline), and updates running statistics.
     pub fn update(&mut self) -> LearningResult<()> {
         if !self.config.enabled {
             return Err(LearningError::LearningDisabled);
         }
 
+        let lr = self.current_learning_rate();
+        let gamma = self.config.discount;
+
+        // Sample a batch of experiences
+        let batch: Vec<Experience> = self
+            .buffer
+            .sample(self.config.batch_size)
+            .into_iter()
+            .cloned()
+            .collect();
+
+        if batch.is_empty() {
+            self.stats.total_updates += 1;
+            self.stats.current_lr = lr;
+            return Ok(());
+        }
+
+        // Compute discounted returns and baseline
+        let returns: Vec<f64> = batch
+            .iter()
+            .map(|exp| {
+                if exp.is_terminal() {
+                    exp.reward.value
+                } else {
+                    exp.reward.value * gamma
+                }
+            })
+            .collect();
+
+        let baseline = returns.iter().sum::<f64>() / returns.len() as f64;
+
+        // Update skill proficiencies based on advantage
+        for (exp, ret) in batch.iter().zip(returns.iter()) {
+            let advantage = ret - baseline;
+            let action_name = exp.action.name();
+
+            if let Some(skill) = self.skills.get_mut(&action_name) {
+                // Gradient-proportional update clamped to [0, 1]
+                skill.proficiency = (skill.proficiency + lr * advantage).clamp(0.0, 1.0);
+                skill.practice_count += 1;
+                if advantage > 0.0 {
+                    skill.success_count += 1;
+                }
+                skill.last_practiced = Some(SystemTime::now());
+            }
+        }
+
         self.stats.total_updates += 1;
-        self.stats.current_lr = self.current_learning_rate();
+        self.stats.current_lr = lr;
 
         Ok(())
     }
@@ -781,42 +832,67 @@ impl SharedLearning {
 
     /// Record an experience
     pub fn record_experience(&self, exp: Experience) -> LearningResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).record_experience(exp)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .record_experience(exp)
     }
 
     /// Start a new episode
     pub fn start_episode(&self) -> String {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).start_episode()
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .start_episode()
     }
 
     /// End current episode
     pub fn end_episode(&self) {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).end_episode();
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .end_episode();
     }
 
     /// Register a skill
     pub fn register_skill(&self, skill: Skill) {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).register_skill(skill);
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .register_skill(skill);
     }
 
     /// Practice a skill
     pub fn practice_skill(&self, name: &str, success: bool) -> LearningResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).practice_skill(name, success)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .practice_skill(name, success)
     }
 
     /// Get statistics
     pub fn stats(&self) -> LearningStats {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).stats().clone()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .stats()
+            .clone()
     }
 
     /// Check if learning is enabled
     pub fn is_enabled(&self) -> bool {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).is_enabled()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_enabled()
     }
 
     /// Get current step
     pub fn current_step(&self) -> u64 {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).current_step()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .current_step()
     }
 }
 

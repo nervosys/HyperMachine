@@ -398,11 +398,13 @@ impl ControlRegisters {
 
         // If LME is set and paging is enabled with PAE, LMA should be active
         // (Note: This is enforced by hardware, but we validate for consistency)
-        if self.is_long_mode_enabled() && self.is_paging_enabled() && self.is_pae_enabled() {
-            if !self.is_long_mode_active() {
-                // This is actually just a warning - hardware will set LMA
-                // We don't error here because this could be a transitional state
-            }
+        if self.is_long_mode_enabled()
+            && self.is_paging_enabled()
+            && self.is_pae_enabled()
+            && !self.is_long_mode_active()
+        {
+            // This is actually just a warning - hardware will set LMA
+            // We don't error here because this could be a transitional state
         }
 
         // Additional validations can be added here:
@@ -460,7 +462,7 @@ impl VCpu {
     /// Run the vCPU
     ///
     /// **Note:** Direct `VCpu::run()` is not supported. Use
-    /// [`HypervisorBackend::run_vcpu()`] which delegates to the platform-specific
+    /// `HypervisorBackend::run_vcpu()` which delegates to the platform-specific
     /// backend (KVM, WHPX, HVF) for real guest execution.
     pub fn run(&self) -> Result<VCpuExit> {
         Err(Error::Cpu(format!(

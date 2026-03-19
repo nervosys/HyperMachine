@@ -14,6 +14,7 @@ description = "HyperMachine REST and gRPC API server"
 [dependencies]
 hv2-core = { path = "../hv2-core" }
 hv2-agent = { path = "../hv2-agent" }
+hv2-runtime = { path = "../hv2-runtime" }
 
 tokio = { workspace = true }
 tokio-stream = { version = "0.1", features = ["sync"] }
@@ -37,6 +38,8 @@ hyper = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
+toml = { workspace = true }
+flate2 = { workspace = true }
 
 [build-dependencies]
 tonic-prost-build = { workspace = true }

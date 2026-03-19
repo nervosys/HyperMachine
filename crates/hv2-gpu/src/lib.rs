@@ -17,6 +17,12 @@ pub enum GpuError {
 
     #[error("Unsupported operation: {0}")]
     Unsupported(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+
+    #[error("I/O error: {0}")]
+    IoError(String),
 }
 
 pub type Result<T> = std::result::Result<T, GpuError>;

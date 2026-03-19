@@ -96,7 +96,7 @@ pub struct ProcessorLocalApicAffinity {
     pub structure_type: u8,
     /// Structure length (16)
     pub length: u8,
-    /// Proximity domain bits [7:0]
+    /// Proximity domain bits `[7:0]`
     pub proximity_domain_lo: u8,
     /// Local APIC ID
     pub apic_id: u8,
@@ -104,7 +104,7 @@ pub struct ProcessorLocalApicAffinity {
     pub flags: u32,
     /// Local SAPIC EID
     pub sapic_eid: u8,
-    /// Proximity domain bits [31:8]
+    /// Proximity domain bits `[31:8]`
     pub proximity_domain_hi: [u8; 3],
     /// Clock domain
     pub clock_domain: u32,

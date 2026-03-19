@@ -5,10 +5,8 @@
 
 use super::types::{
     AddressWidth, DeviceId, DeviceScope, DomainId, FaultReason, FaultRecord, IommuStats,
-    PageTableEntry, PageTableFlags, TranslationType,
+    PageTableEntry, PageTableFlags, TranslationType, PAGE_SIZE_4K,
 };
-#[cfg(test)]
-use super::types::PAGE_SIZE_4K;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -766,7 +764,9 @@ impl VtdUnit {
     pub fn configure_passthrough(&mut self, device: &DeviceId, domain: DomainId) {
         // Set up root entry if needed
         if !self.root_table[device.bus as usize].is_present() {
-            self.root_table[device.bus as usize] = RootEntry::new(0); // Placeholder address
+            // Generate a unique context table address per bus: page-aligned, non-zero
+            let ctx_addr = Self::context_table_addr_for_bus(device.bus);
+            self.root_table[device.bus as usize] = RootEntry::new(ctx_addr);
         }
 
         // Set up context entry for identity mapping
@@ -783,7 +783,8 @@ impl VtdUnit {
     ) {
         // Set up root entry if needed
         if !self.root_table[device.bus as usize].is_present() {
-            self.root_table[device.bus as usize] = RootEntry::new(0);
+            let ctx_addr = Self::context_table_addr_for_bus(device.bus);
+            self.root_table[device.bus as usize] = RootEntry::new(ctx_addr);
         }
 
         // Set up context entry
@@ -791,9 +792,58 @@ impl VtdUnit {
         self.set_context_entry(device.bus, device.devfn, ctx);
     }
 
+    /// Map an IOVA page to a host physical address within a domain.
+    ///
+    /// Uses a flat page table indexed by page number (iova >> 12).
+    /// The Vec is grown as needed so sparse mappings only cost one entry
+    /// per mapped page.
+    pub fn map_iova(&mut self, domain: DomainId, iova: u64, hpa: u64, flags: PageTableFlags) {
+        let page_num = (iova >> 12) as usize;
+        let table = self.page_tables.entry(domain).or_default();
+        if page_num >= table.len() {
+            table.resize(page_num + 1, PageTableEntry::empty());
+        }
+        table[page_num] = PageTableEntry::page(hpa, flags);
+
+        // Invalidate any stale IOTLB entry for this page + domain
+        self.iotlb.invalidate_domain(domain);
+    }
+
+    /// Unmap an IOVA page within a domain.
+    pub fn unmap_iova(&mut self, domain: DomainId, iova: u64) {
+        let page_num = (iova >> 12) as usize;
+        if let Some(table) = self.page_tables.get_mut(&domain) {
+            if page_num < table.len() {
+                table[page_num] = PageTableEntry::empty();
+            }
+        }
+        self.iotlb.invalidate_domain(domain);
+    }
+
+    /// Walk the flat page table for a domain, returning the translated HPA
+    /// and the entry's flags, or `None` if the page is not present.
+    fn walk_page_table(&self, domain: DomainId, iova: u64) -> Option<(u64, PageTableFlags)> {
+        let page_num = (iova >> 12) as usize;
+        let table = self.page_tables.get(&domain)?;
+        let entry = table.get(page_num)?;
+        if !entry.is_present() {
+            return None;
+        }
+        let offset = iova & 0xFFF;
+        Some((entry.phys_addr() | offset, entry.flags()))
+    }
+
+    /// Compute a synthetic page-aligned context table base address for a given
+    /// PCI bus number.  Each bus gets a unique 4 KiB-aligned address in a
+    /// reserved region starting at 0xFEE0_0000 (above the local APIC).
+    fn context_table_addr_for_bus(bus: u8) -> u64 {
+        // Base chosen above the local APIC MMIO range
+        0xFEE0_0000u64 + (bus as u64 + 1) * 0x1000
+    }
+
     /// Translate DMA address
     pub fn translate(
-        &self,
+        &mut self,
         device: &DeviceId,
         iova: u64,
         is_write: bool,
@@ -814,9 +864,9 @@ impl VtdUnit {
             ));
         }
 
-        // Check context entry
-        let ctx = match self.context_entry(device.bus, device.devfn) {
-            Some(ctx) if ctx.is_present() => ctx,
+        // Check context entry — extract values before mutable borrows below
+        let (translation_type, domain) = match self.context_entry(device.bus, device.devfn) {
+            Some(ctx) if ctx.is_present() => (ctx.translation_type(), ctx.domain_id()),
             _ => {
                 self.stats.record_fault();
                 return Err(FaultRecord::new(
@@ -829,14 +879,13 @@ impl VtdUnit {
         };
 
         // Check translation type
-        match ctx.translation_type() {
+        match translation_type {
             TranslationType::Identity => {
                 self.stats.record_translation(false);
                 Ok(iova) // Pass-through
             }
             TranslationType::Translated => {
                 // Check IOTLB first
-                let domain = ctx.domain_id();
                 if let Some(entry) = self.iotlb.lookup(device, domain, iova) {
                     // Check permissions
                     if is_write && !entry.flags.is_writable() {
@@ -848,21 +897,52 @@ impl VtdUnit {
                             is_write,
                         ));
                     }
+                    let hpa = entry.translate(iova);
                     self.stats.record_translation(true);
-                    return Ok(entry.translate(iova));
+                    return Ok(hpa);
                 }
 
-                // Would need to walk page tables here
-                self.stats.record_translation(false);
+                // Walk the page table
                 self.stats.record_page_walk();
 
-                // For now, return fault (real impl would walk tables)
-                Err(FaultRecord::new(
-                    *device,
-                    iova,
-                    FaultReason::PageNotPresent,
-                    is_write,
-                ))
+                match self.walk_page_table(domain, iova) {
+                    Some((hpa, flags)) => {
+                        // Check write permission
+                        if is_write && !flags.is_writable() {
+                            self.stats.record_fault();
+                            return Err(FaultRecord::new(
+                                *device,
+                                iova,
+                                FaultReason::WriteBlocked,
+                                is_write,
+                            ));
+                        }
+
+                        // Cache in IOTLB
+                        let page_iova = iova & !0xFFF;
+                        let page_hpa = hpa & !0xFFF;
+                        self.iotlb.insert(IotlbEntry::new(
+                            *device,
+                            domain,
+                            page_iova,
+                            page_hpa,
+                            PAGE_SIZE_4K,
+                            flags,
+                        ));
+
+                        self.stats.record_translation(false);
+                        Ok(hpa)
+                    }
+                    None => {
+                        self.stats.record_fault();
+                        Err(FaultRecord::new(
+                            *device,
+                            iova,
+                            FaultReason::PageNotPresent,
+                            is_write,
+                        ))
+                    }
+                }
             }
             TranslationType::Reserved => {
                 self.stats.record_fault();
@@ -1025,10 +1105,39 @@ mod tests {
 
         unit.configure_passthrough(&device, domain);
 
-        assert!(unit.root_entry(1).is_present());
+        let root = unit.root_entry(1);
+        assert!(root.is_present());
+        // Root entry should have a non-zero, page-aligned context table address
+        let addr = root.context_table_addr();
+        assert_ne!(addr, 0, "context table address must not be zero");
+        assert_eq!(
+            addr & 0xFFF,
+            0,
+            "context table address must be page-aligned"
+        );
         let ctx = unit.context_entry(1, device.devfn).unwrap();
         assert!(ctx.is_present());
         assert_eq!(ctx.translation_type(), TranslationType::Identity);
+    }
+
+    #[test]
+    fn test_vtd_context_table_addrs_unique_per_bus() {
+        let mut unit = VtdUnit::default();
+        let dev_bus0 = DeviceId::new(0, 0, 1, 0);
+        let dev_bus5 = DeviceId::new(0, 5, 1, 0);
+        let domain = DomainId::new(1);
+
+        unit.configure_passthrough(&dev_bus0, domain);
+        unit.configure_passthrough(&dev_bus5, domain);
+
+        let addr0 = unit.root_entry(0).context_table_addr();
+        let addr5 = unit.root_entry(5).context_table_addr();
+        assert_ne!(
+            addr0, addr5,
+            "different buses must have different ctx addrs"
+        );
+        assert_ne!(addr0, 0);
+        assert_ne!(addr5, 0);
     }
 
     #[test]
@@ -1047,7 +1156,7 @@ mod tests {
 
     #[test]
     fn test_vtd_translate_disabled() {
-        let unit = VtdUnit::default();
+        let mut unit = VtdUnit::default();
         let device = DeviceId::new(0, 1, 2, 0);
 
         // Translation disabled = pass-through
@@ -1092,5 +1201,103 @@ mod tests {
 
         let stats = unit.stats().snapshot();
         assert!(stats.translations > 0);
+    }
+
+    #[test]
+    fn test_vtd_translate_mapped_page() {
+        let mut unit = VtdUnit::default();
+        let device = DeviceId::new(0, 2, 3, 0);
+        let domain = DomainId::new(7);
+
+        // Set up translated context
+        unit.configure_translation(&device, domain, 0x100_0000);
+        // Map IOVA 0x5000 → HPA 0xA000
+        unit.map_iova(domain, 0x5000, 0xA000, PageTableFlags::read_write());
+        unit.enable_translation();
+
+        // Should translate with page-offset preserved
+        let result = unit.translate(&device, 0x5100, false);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0xA100);
+    }
+
+    #[test]
+    fn test_vtd_translate_unmapped_fault() {
+        let mut unit = VtdUnit::default();
+        let device = DeviceId::new(0, 2, 3, 0);
+        let domain = DomainId::new(7);
+
+        unit.configure_translation(&device, domain, 0x100_0000);
+        // Map one page but translate a different one
+        unit.map_iova(domain, 0x5000, 0xA000, PageTableFlags::read_write());
+        unit.enable_translation();
+
+        let result = unit.translate(&device, 0x9000, false);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().reason, FaultReason::PageNotPresent);
+    }
+
+    #[test]
+    fn test_vtd_translate_write_blocked() {
+        let mut unit = VtdUnit::default();
+        let device = DeviceId::new(0, 2, 3, 0);
+        let domain = DomainId::new(7);
+
+        unit.configure_translation(&device, domain, 0x100_0000);
+        // Map with read-only permissions
+        unit.map_iova(domain, 0x5000, 0xA000, PageTableFlags::read_only());
+        unit.enable_translation();
+
+        // Read should succeed
+        let result = unit.translate(&device, 0x5000, false);
+        assert!(result.is_ok());
+
+        // Write should be blocked
+        let result = unit.translate(&device, 0x5000, true);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().reason, FaultReason::WriteBlocked);
+    }
+
+    #[test]
+    fn test_vtd_iotlb_caching() {
+        let mut unit = VtdUnit::default();
+        let device = DeviceId::new(0, 2, 3, 0);
+        let domain = DomainId::new(7);
+
+        unit.configure_translation(&device, domain, 0x100_0000);
+        unit.map_iova(domain, 0x5000, 0xA000, PageTableFlags::read_write());
+        unit.enable_translation();
+
+        // First translation populates IOTLB
+        let result = unit.translate(&device, 0x5000, false);
+        assert!(result.is_ok());
+
+        // Second translation should hit IOTLB cache
+        let result = unit.translate(&device, 0x5080, false);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 0xA080);
+
+        let stats = unit.stats().snapshot();
+        assert!(stats.iotlb_hits > 0, "second lookup should be an IOTLB hit");
+    }
+
+    #[test]
+    fn test_vtd_unmap_iova() {
+        let mut unit = VtdUnit::default();
+        let device = DeviceId::new(0, 2, 3, 0);
+        let domain = DomainId::new(7);
+
+        unit.configure_translation(&device, domain, 0x100_0000);
+        unit.map_iova(domain, 0x5000, 0xA000, PageTableFlags::read_write());
+        unit.enable_translation();
+
+        // Should translate successfully
+        assert!(unit.translate(&device, 0x5000, false).is_ok());
+
+        // Unmap and retry
+        unit.unmap_iova(domain, 0x5000);
+        let result = unit.translate(&device, 0x5000, false);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().reason, FaultReason::PageNotPresent);
     }
 }

@@ -434,7 +434,7 @@ impl IoApic {
             }
             _ => {
                 // Redirection table entries
-                if regsel >= indirect::IOREDTBL_BASE && regsel < indirect::IOREDTBL_BASE + 48 {
+                if (indirect::IOREDTBL_BASE..indirect::IOREDTBL_BASE + 48).contains(&regsel) {
                     let entry_idx = ((regsel - indirect::IOREDTBL_BASE) / 2) as usize;
                     let is_high = (regsel - indirect::IOREDTBL_BASE) % 2 == 1;
 
@@ -471,7 +471,7 @@ impl IoApic {
             }
             _ => {
                 // Redirection table entries
-                if regsel >= indirect::IOREDTBL_BASE && regsel < indirect::IOREDTBL_BASE + 48 {
+                if (indirect::IOREDTBL_BASE..indirect::IOREDTBL_BASE + 48).contains(&regsel) {
                     let entry_idx = ((regsel - indirect::IOREDTBL_BASE) / 2) as usize;
                     let is_high = (regsel - indirect::IOREDTBL_BASE) % 2 == 1;
 
@@ -502,6 +502,9 @@ impl IoApic {
         if irq as usize >= IOAPIC_NUM_PINS {
             return;
         }
+
+        // Track IRQ line state in bitmap
+        self.irq_state[0].fetch_or(1 << irq, Ordering::Relaxed);
 
         let table = self.redirection_table.read();
         let entry = table[irq as usize];
@@ -543,12 +546,19 @@ impl IoApic {
         // Find entry with matching vector and clear remote IRR
         let mut table = self.redirection_table.write();
 
-        for entry in table.iter_mut() {
+        for (irq, entry) in table.iter_mut().enumerate() {
             if entry.vector() == vector && entry.trigger_mode() == TriggerMode::Level {
                 entry.clear_remote_irr();
 
-                // If IRQ is still asserted, re-raise
-                // (would need to track IRQ line state)
+                // If the IRQ line is still asserted, re-deliver the interrupt.
+                // This handles level-triggered devices that hold the line high
+                // until the guest acknowledges them at the device level.
+                let state = self.irq_state[0].load(Ordering::Relaxed);
+                if state & (1 << irq) != 0 {
+                    entry.set_remote_irr();
+                    self.deliver_interrupt(entry);
+                }
+
                 break;
             }
         }

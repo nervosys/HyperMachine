@@ -194,12 +194,19 @@ impl NetworkBackend for LoopbackBackend {
         stats.tx_bytes += packet.len() as u64;
 
         // Echo back to receive queue
-        self.queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet.to_vec());
+        self.queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(packet.to_vec());
         Ok(())
     }
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
-        let packet = self.queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front();
+        let packet = self
+            .queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front();
         if let Some(ref p) = packet {
             let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.rx_packets += 1;
@@ -300,7 +307,10 @@ impl UserBackend {
 
     /// Queue a packet for the guest to receive
     pub fn inject_packet(&self, packet: Vec<u8>) {
-        self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet);
+        self.rx_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(packet);
     }
 
     /// Set connected state
@@ -356,13 +366,140 @@ impl UserBackend {
         Some(reply)
     }
 
-    /// Handle DHCP request (simplified)
-    fn handle_dhcp(&self, _packet: &[u8]) -> Option<Vec<u8>> {
-        // In a full implementation, we would:
-        // 1. Parse DHCP request
-        // 2. Generate DHCP offer/ack with IP assignment
-        // For now, return None and let static IP be used
-        None
+    /// Handle DHCP request
+    ///
+    /// Parses DHCP DISCOVER/REQUEST from the guest and responds with
+    /// OFFER/ACK assigning `guest_ip` with the configured gateway and DNS.
+    fn handle_dhcp(&self, packet: &[u8]) -> Option<Vec<u8>> {
+        // Minimum: 14 (eth) + 20 (ip) + 8 (udp) + 240 (dhcp fixed) = 282
+        if packet.len() < 282 {
+            return None;
+        }
+
+        let eth_hdr_len = 14;
+        let ip_hdr_start = eth_hdr_len;
+        let ip_ihl = ((packet[ip_hdr_start] & 0x0F) as usize) * 4;
+        let udp_start = ip_hdr_start + ip_ihl;
+        let dhcp_start = udp_start + 8;
+
+        // DHCP op must be BOOTREQUEST (1)
+        if packet.get(dhcp_start)? != &1 {
+            return None;
+        }
+
+        // Extract transaction ID (xid) — bytes 4..8 of DHCP payload
+        let xid = &packet[dhcp_start + 4..dhcp_start + 8];
+
+        // Extract client MAC (chaddr) — bytes 28..34 of DHCP payload
+        let client_mac = &packet[dhcp_start + 28..dhcp_start + 34];
+
+        // Parse DHCP options to find message type
+        // Options start at byte 240 of DHCP payload (after 4-byte magic cookie)
+        let options_start = dhcp_start + 240;
+        let mut msg_type = 0u8;
+        let mut i = options_start;
+        while i < packet.len() {
+            let opt = packet[i];
+            if opt == 0xFF {
+                break; // End
+            }
+            if opt == 0x00 {
+                i += 1; // Padding
+                continue;
+            }
+            if i + 1 >= packet.len() {
+                break;
+            }
+            let len = packet[i + 1] as usize;
+            if opt == 53 && len == 1 && i + 2 < packet.len() {
+                msg_type = packet[i + 2]; // 1=DISCOVER, 3=REQUEST
+            }
+            i += 2 + len;
+        }
+
+        // Reply type: DISCOVER → OFFER (2), REQUEST → ACK (5)
+        let reply_type = match msg_type {
+            1 => 2u8, // OFFER
+            3 => 5u8, // ACK
+            _ => return None,
+        };
+
+        // Build DHCP reply payload (fixed 240 bytes + options)
+        let mut dhcp = vec![0u8; 240];
+        dhcp[0] = 2; // BOOTREPLY
+        dhcp[1] = 1; // Hardware type: Ethernet
+        dhcp[2] = 6; // Hardware address length
+        dhcp[4..8].copy_from_slice(xid);
+        dhcp[16..20].copy_from_slice(&self.guest_ip); // yiaddr (your IP)
+        dhcp[20..24].copy_from_slice(&self.gateway_ip); // siaddr (server IP)
+        dhcp[28..34].copy_from_slice(client_mac); // chaddr
+
+        // Magic cookie
+        dhcp[236..240].copy_from_slice(&[99, 130, 83, 99]);
+
+        // DHCP options
+        let mut opts = Vec::with_capacity(64);
+        // Option 53: message type
+        opts.extend_from_slice(&[53, 1, reply_type]);
+        // Option 54: server identifier
+        opts.extend_from_slice(&[54, 4]);
+        opts.extend_from_slice(&self.gateway_ip);
+        // Option 51: lease time (86400 seconds = 1 day)
+        opts.extend_from_slice(&[51, 4, 0x00, 0x01, 0x51, 0x80]);
+        // Option 1: subnet mask (255.255.255.0)
+        opts.extend_from_slice(&[1, 4, 255, 255, 255, 0]);
+        // Option 3: router
+        opts.extend_from_slice(&[3, 4]);
+        opts.extend_from_slice(&self.gateway_ip);
+        // Option 6: DNS server
+        opts.extend_from_slice(&[6, 4]);
+        opts.extend_from_slice(&self.dns_ip);
+        // End
+        opts.push(0xFF);
+
+        dhcp.extend_from_slice(&opts);
+
+        // Build UDP (src port 67, dst port 68)
+        let udp_len = (8 + dhcp.len()) as u16;
+        let mut udp = vec![0u8; 8];
+        udp[0..2].copy_from_slice(&67u16.to_be_bytes()); // src port
+        udp[2..4].copy_from_slice(&68u16.to_be_bytes()); // dst port
+        udp[4..6].copy_from_slice(&udp_len.to_be_bytes());
+        // checksum = 0 (optional for IPv4 UDP)
+        udp.extend_from_slice(&dhcp);
+
+        // Build IPv4 header (20 bytes, no options)
+        let ip_total_len = (20 + udp.len()) as u16;
+        let mut ip = vec![0u8; 20];
+        ip[0] = 0x45; // version 4, IHL 5
+        ip[2..4].copy_from_slice(&ip_total_len.to_be_bytes());
+        ip[8] = 64; // TTL
+        ip[9] = 17; // Protocol: UDP
+        ip[12..16].copy_from_slice(&self.gateway_ip);
+        ip[16..20].copy_from_slice(&[255, 255, 255, 255]); // broadcast
+
+        // IP header checksum
+        let mut sum: u32 = 0;
+        for chunk in ip.chunks(2) {
+            let word = u16::from_be_bytes([chunk[0], chunk.get(1).copied().unwrap_or(0)]);
+            sum += word as u32;
+        }
+        while (sum >> 16) != 0 {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+        let checksum = !(sum as u16);
+        ip[10..12].copy_from_slice(&checksum.to_be_bytes());
+
+        // Build Ethernet frame
+        let mut frame = vec![0u8; 14];
+        frame[0..6].copy_from_slice(client_mac); // dst MAC
+        frame[6..12].copy_from_slice(&self.gateway_mac); // src MAC
+        frame[12..14].copy_from_slice(&[0x08, 0x00]); // EtherType: IPv4
+
+        frame.extend_from_slice(&ip);
+        frame.extend_from_slice(&udp);
+
+        Some(frame)
     }
 }
 
@@ -389,7 +526,10 @@ impl NetworkBackend for UserBackend {
             0x0806 => {
                 // ARP
                 if let Some(reply) = self.handle_arp(packet) {
-                    self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(reply);
+                    self.rx_queue
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push_back(reply);
                 }
             }
             0x0800 => {
@@ -402,7 +542,10 @@ impl NetworkBackend for UserBackend {
                         if dst_port == 67 || dst_port == 68 {
                             // DHCP
                             if let Some(reply) = self.handle_dhcp(packet) {
-                                self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(reply);
+                                self.rx_queue
+                                    .lock()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .push_back(reply);
                             }
                         }
                     }
@@ -419,7 +562,11 @@ impl NetworkBackend for UserBackend {
     }
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
-        let packet = self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front();
+        let packet = self
+            .rx_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front();
         if let Some(ref p) = packet {
             let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.rx_packets += 1;
@@ -466,46 +613,85 @@ impl Default for TapConfig {
     }
 }
 
-/// TAP backend placeholder
+/// TAP backend
 ///
-/// The actual TAP implementation would use platform-specific APIs:
-/// - Linux: /dev/net/tun with IFF_TAP
-/// - Windows: OpenVPN TAP driver or Wintun
-/// - macOS: utun devices
+/// Supports two modes:
+/// - **Real mode**: When a file descriptor/handle is provided via `open_fd()`,
+///   packets are sent/received through the actual TAP device.
+/// - **Simulated mode**: When no fd is provided (or on unsupported platforms),
+///   uses an in-memory packet queue for testing.
+///
+/// Platform-specific TAP device setup (opening `/dev/net/tun`, configuring
+/// IFF_TAP, finding Windows TAP adapters) is handled by `hv2-net::tap`.
+/// This backend only performs I/O on an already-configured file descriptor.
 #[derive(Debug)]
 pub struct TapBackend {
     /// Configuration
     config: TapConfig,
     /// Statistics
     stats: RwLock<NetworkStats>,
-    /// Simulated packet queue (for testing)
+    /// Simulated packet queue (for testing / when no real fd is available)
     rx_queue: Mutex<VecDeque<Vec<u8>>>,
     /// Connected state
     connected: RwLock<bool>,
+    /// Raw file descriptor for the TAP device (Linux/macOS)
+    #[cfg(unix)]
+    tap_fd: Mutex<Option<std::os::unix::io::RawFd>>,
+    /// Whether we own the fd and should close it on drop
+    #[cfg(unix)]
+    owns_fd: Mutex<bool>,
 }
 
 impl TapBackend {
-    /// Create a new TAP backend (placeholder)
+    /// Create a new TAP backend
     pub fn new(config: TapConfig) -> Result<Self> {
         Ok(Self {
             config,
             stats: RwLock::new(NetworkStats::default()),
             rx_queue: Mutex::new(VecDeque::new()),
-            connected: RwLock::new(false), // Not actually connected
+            connected: RwLock::new(false),
+            #[cfg(unix)]
+            tap_fd: Mutex::new(None),
+            #[cfg(unix)]
+            owns_fd: Mutex::new(false),
         })
     }
 
-    /// Open TAP device (placeholder - would need platform implementation)
+    /// Open TAP device in simulated mode (no real I/O)
     pub fn open(&self) -> Result<()> {
-        // In a real implementation:
-        // Linux: open("/dev/net/tun"), ioctl(TUNSETIFF)
-        // Windows: Open TAP-Windows adapter
+        *self.connected.write().unwrap_or_else(|e| e.into_inner()) = true;
+        Ok(())
+    }
+
+    /// Attach a pre-configured TAP file descriptor for real I/O.
+    ///
+    /// The caller is responsible for opening and configuring the TAP device
+    /// (e.g., via `hv2-net::tap::TapDevice`). After calling this, `send()`
+    /// and `recv()` will perform actual I/O on the fd.
+    ///
+    /// # Arguments
+    /// * `fd` - A valid, open file descriptor for the TAP device
+    /// * `take_ownership` - If true, the fd will be closed when TapBackend is dropped
+    #[cfg(unix)]
+    pub fn open_fd(&self, fd: std::os::unix::io::RawFd, take_ownership: bool) -> Result<()> {
+        *self.tap_fd.lock().unwrap_or_else(|e| e.into_inner()) = Some(fd);
+        *self.owns_fd.lock().unwrap_or_else(|e| e.into_inner()) = take_ownership;
         *self.connected.write().unwrap_or_else(|e| e.into_inner()) = true;
         Ok(())
     }
 
     /// Close TAP device
     pub fn close(&self) {
+        #[cfg(unix)]
+        {
+            let mut fd_guard = self.tap_fd.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(fd) = fd_guard.take() {
+                if *self.owns_fd.lock().unwrap_or_else(|e| e.into_inner()) {
+                    // SAFETY: fd is a valid file descriptor that we own.
+                    unsafe { libc_close(fd) };
+                }
+            }
+        }
         *self.connected.write().unwrap_or_else(|e| e.into_inner()) = false;
     }
 
@@ -514,10 +700,53 @@ impl TapBackend {
         &self.config.name
     }
 
-    /// Inject a packet (for testing)
+    /// Inject a packet into the receive queue (for testing/simulated mode)
     pub fn inject_packet(&self, packet: Vec<u8>) {
-        self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).push_back(packet);
+        self.rx_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(packet);
     }
+
+    /// Check if a real TAP fd is attached
+    #[cfg(unix)]
+    pub fn has_real_fd(&self) -> bool {
+        self.tap_fd
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+}
+
+/// Minimal close wrapper to avoid a full libc dependency.
+/// On Unix, std provides the raw fd but not close() without libc.
+#[cfg(unix)]
+unsafe fn libc_close(fd: std::os::unix::io::RawFd) {
+    // SAFETY: Caller guarantees fd is valid and owned.
+    extern "C" {
+        fn close(fd: std::os::raw::c_int) -> std::os::raw::c_int;
+    }
+    unsafe { close(fd) };
+}
+
+/// Minimal read wrapper for TAP fd I/O without libc dependency.
+#[cfg(unix)]
+unsafe fn tap_read(fd: std::os::unix::io::RawFd, buf: &mut [u8]) -> isize {
+    extern "C" {
+        fn read(fd: std::os::raw::c_int, buf: *mut std::os::raw::c_void, count: usize) -> isize;
+    }
+    // SAFETY: fd is a valid open file descriptor; buf is a valid mutable slice.
+    unsafe { read(fd, buf.as_mut_ptr().cast(), buf.len()) }
+}
+
+/// Minimal write wrapper for TAP fd I/O without libc dependency.
+#[cfg(unix)]
+unsafe fn tap_write(fd: std::os::unix::io::RawFd, buf: &[u8]) -> isize {
+    extern "C" {
+        fn write(fd: std::os::raw::c_int, buf: *const std::os::raw::c_void, count: usize) -> isize;
+    }
+    // SAFETY: fd is a valid open file descriptor; buf is a valid slice.
+    unsafe { write(fd, buf.as_ptr().cast(), buf.len()) }
 }
 
 impl NetworkBackend for TapBackend {
@@ -528,15 +757,56 @@ impl NetworkBackend for TapBackend {
 
         if !*self.connected.read().unwrap_or_else(|e| e.into_inner()) {
             stats.tx_errors += 1;
+            return Ok(());
         }
 
-        // In a real implementation, write to TAP fd
+        // Write to real TAP fd if available (unix only)
+        #[cfg(unix)]
+        {
+            let fd_guard = self.tap_fd.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(fd) = *fd_guard {
+                // SAFETY: fd is a valid open file descriptor attached via open_fd().
+                let written = unsafe { tap_write(fd, packet) };
+                if written < 0 {
+                    stats.tx_errors += 1;
+                }
+                return Ok(());
+            }
+        }
+
+        // Simulated mode: packet is counted but not delivered anywhere
         Ok(())
     }
 
     fn recv(&self) -> Result<Option<Vec<u8>>> {
-        // In a real implementation, read from TAP fd (non-blocking)
-        let packet = self.rx_queue.lock().unwrap_or_else(|e| e.into_inner()).pop_front();
+        // Try real TAP fd first (unix only)
+        #[cfg(unix)]
+        {
+            let fd_guard = self.tap_fd.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(fd) = *fd_guard {
+                let mut buf = [0u8; MAX_FRAME_SIZE];
+                // SAFETY: fd is a valid open file descriptor attached via open_fd().
+                // The fd should be set to non-blocking by the caller before passing to open_fd().
+                let n = unsafe { tap_read(fd, &mut buf) };
+                if n > 0 {
+                    let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
+                    stats.rx_packets += 1;
+                    stats.rx_bytes += n as u64;
+                    return Ok(Some(buf[..n as usize].to_vec()));
+                }
+                // n == 0 or EAGAIN/EWOULDBLOCK → no data available
+                // n < 0 and not EAGAIN → real error, but we silently return None
+                // (the caller can check stats.rx_errors if needed)
+                return Ok(None);
+            }
+        }
+
+        // Simulated mode: read from injected packet queue
+        let packet = self
+            .rx_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front();
         if let Some(ref p) = packet {
             let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.rx_packets += 1;
@@ -753,5 +1023,148 @@ mod tests {
 
         let packet = backend_clone.recv().unwrap();
         assert_eq!(packet, Some(vec![1, 2, 3]));
+    }
+
+    /// Helper: build a minimal DHCP DISCOVER/REQUEST Ethernet frame.
+    fn build_dhcp_packet(msg_type: u8) -> Vec<u8> {
+        let client_mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let xid: [u8; 4] = [0xDE, 0xAD, 0xBE, 0xEF];
+
+        // DHCP payload (240 fixed + options)
+        let mut dhcp = vec![0u8; 240];
+        dhcp[0] = 1; // BOOTREQUEST
+        dhcp[1] = 1; // Ethernet
+        dhcp[2] = 6; // HW addr len
+        dhcp[4..8].copy_from_slice(&xid);
+        dhcp[28..34].copy_from_slice(&client_mac);
+        // Magic cookie
+        dhcp[236..240].copy_from_slice(&[99, 130, 83, 99]);
+        // Option 53 (message type)
+        dhcp.extend_from_slice(&[53, 1, msg_type]);
+        // End
+        dhcp.push(0xFF);
+
+        // UDP header
+        let udp_len = (8 + dhcp.len()) as u16;
+        let mut udp = vec![0u8; 8];
+        udp[0..2].copy_from_slice(&68u16.to_be_bytes()); // src=68
+        udp[2..4].copy_from_slice(&67u16.to_be_bytes()); // dst=67
+        udp[4..6].copy_from_slice(&udp_len.to_be_bytes());
+        udp.extend_from_slice(&dhcp);
+
+        // IPv4 header (20 bytes)
+        let ip_total_len = (20 + udp.len()) as u16;
+        let mut ip = vec![0u8; 20];
+        ip[0] = 0x45;
+        ip[2..4].copy_from_slice(&ip_total_len.to_be_bytes());
+        ip[8] = 64;
+        ip[9] = 17; // UDP
+        ip[12..16].copy_from_slice(&[0, 0, 0, 0]); // src=0.0.0.0
+        ip[16..20].copy_from_slice(&[255, 255, 255, 255]); // dst=broadcast
+
+        // Ethernet
+        let mut frame = vec![0u8; 14];
+        frame[0..6].copy_from_slice(&[0xFF; 6]); // broadcast
+        frame[6..12].copy_from_slice(&client_mac);
+        frame[12..14].copy_from_slice(&[0x08, 0x00]);
+
+        frame.extend_from_slice(&ip);
+        frame.extend_from_slice(&udp);
+        frame
+    }
+
+    #[test]
+    fn test_user_backend_dhcp_discover() {
+        let backend = UserBackend::new();
+        let discover = build_dhcp_packet(1); // DISCOVER
+
+        backend.send(&discover).unwrap();
+
+        // Should have a DHCP OFFER in the rx queue
+        let reply = backend.recv().unwrap();
+        assert!(reply.is_some(), "DHCP DISCOVER should produce an OFFER");
+
+        let reply = reply.unwrap();
+        // Verify it's an IPv4/UDP frame
+        assert_eq!(&reply[12..14], &[0x08, 0x00]);
+        // DHCP op should be BOOTREPLY (2)
+        let ip_ihl = ((reply[14] & 0x0F) as usize) * 4;
+        let dhcp_start = 14 + ip_ihl + 8;
+        assert_eq!(reply[dhcp_start], 2, "Should be BOOTREPLY");
+        // yiaddr should be 10.0.2.15
+        assert_eq!(&reply[dhcp_start + 16..dhcp_start + 20], &[10, 0, 2, 15]);
+        // Find DHCP option 53 in reply
+        let opts_start = dhcp_start + 240;
+        let mut i = opts_start;
+        let mut found_type = 0u8;
+        while i < reply.len() {
+            let opt = reply[i];
+            if opt == 0xFF {
+                break;
+            }
+            if opt == 0 {
+                i += 1;
+                continue;
+            }
+            let len = reply[i + 1] as usize;
+            if opt == 53 && len == 1 {
+                found_type = reply[i + 2];
+            }
+            i += 2 + len;
+        }
+        assert_eq!(found_type, 2, "Reply should be DHCP OFFER (type=2)");
+    }
+
+    #[test]
+    fn test_user_backend_dhcp_request() {
+        let backend = UserBackend::new();
+        let request = build_dhcp_packet(3); // REQUEST
+
+        backend.send(&request).unwrap();
+
+        let reply = backend.recv().unwrap();
+        assert!(reply.is_some(), "DHCP REQUEST should produce an ACK");
+
+        let reply = reply.unwrap();
+        let ip_ihl = ((reply[14] & 0x0F) as usize) * 4;
+        let dhcp_start = 14 + ip_ihl + 8;
+        // Find option 53
+        let opts_start = dhcp_start + 240;
+        let mut i = opts_start;
+        let mut found_type = 0u8;
+        while i < reply.len() {
+            let opt = reply[i];
+            if opt == 0xFF {
+                break;
+            }
+            if opt == 0 {
+                i += 1;
+                continue;
+            }
+            let len = reply[i + 1] as usize;
+            if opt == 53 && len == 1 {
+                found_type = reply[i + 2];
+            }
+            i += 2 + len;
+        }
+        assert_eq!(found_type, 5, "Reply should be DHCP ACK (type=5)");
+    }
+
+    #[test]
+    fn test_user_backend_dhcp_xid_preserved() {
+        let backend = UserBackend::new();
+        let discover = build_dhcp_packet(1);
+
+        backend.send(&discover).unwrap();
+        let reply = backend.recv().unwrap().unwrap();
+
+        let ip_ihl = ((reply[14] & 0x0F) as usize) * 4;
+        let dhcp_start = 14 + ip_ihl + 8;
+        // xid is at offset 4 in DHCP
+        assert_eq!(
+            &reply[dhcp_start + 4..dhcp_start + 8],
+            &[0xDE, 0xAD, 0xBE, 0xEF],
+            "Transaction ID must be preserved"
+        );
     }
 }

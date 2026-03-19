@@ -212,7 +212,8 @@ impl Pic8259 {
             drop(master);
             self.master.lock().eoi(Some(irq));
         } else {
-            // Slave interrupt
+            // Slave interrupt — drop master before re-acquiring locks
+            drop(master);
             let slave = self.slave.lock();
             if vector >= slave.base_vector && vector < slave.base_vector + 8 {
                 let irq = vector - slave.base_vector;
@@ -221,7 +222,6 @@ impl Pic8259 {
                 // Also send EOI to master for cascade
                 self.master.lock().eoi(Some(2));
             } else {
-                drop(master);
                 return Err(Error::Device(format!(
                     "Invalid interrupt vector for EOI: {:#x}",
                     vector
@@ -262,7 +262,8 @@ impl Pic8259 {
             drop(master);
             self.master.lock().acknowledge(irq);
         } else {
-            // Slave interrupt
+            // Slave interrupt — drop master before re-acquiring locks
+            drop(master);
             let slave = self.slave.lock();
             if vector >= slave.base_vector && vector < slave.base_vector + 8 {
                 let irq = vector - slave.base_vector;
@@ -271,7 +272,6 @@ impl Pic8259 {
                 // Also acknowledge cascade on master
                 self.master.lock().acknowledge(2);
             } else {
-                drop(master);
                 return Err(Error::Device(format!(
                     "Invalid interrupt vector: {:#x}",
                     vector

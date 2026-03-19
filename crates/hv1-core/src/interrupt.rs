@@ -372,3 +372,172 @@ impl VirtualApic {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- Constants ---
+
+    #[test]
+    fn apic_base_address() {
+        assert_eq!(APIC_BASE, 0xFEE0_0000);
+    }
+
+    #[test]
+    fn apic_register_offsets() {
+        assert_eq!(apic_reg::ID, 0x020);
+        assert_eq!(apic_reg::VERSION, 0x030);
+        assert_eq!(apic_reg::TPR, 0x080);
+        assert_eq!(apic_reg::EOI, 0x0B0);
+        assert_eq!(apic_reg::SVR, 0x0F0);
+        assert_eq!(apic_reg::ICR_LOW, 0x300);
+        assert_eq!(apic_reg::ICR_HIGH, 0x310);
+        assert_eq!(apic_reg::LVT_TIMER, 0x320);
+        assert_eq!(apic_reg::TIMER_ICR, 0x380);
+        assert_eq!(apic_reg::TIMER_DCR, 0x3E0);
+    }
+
+    #[test]
+    fn exception_vectors() {
+        assert_eq!(vector::DIVIDE_ERROR, 0);
+        assert_eq!(vector::DEBUG, 1);
+        assert_eq!(vector::NMI, 2);
+        assert_eq!(vector::BREAKPOINT, 3);
+        assert_eq!(vector::DOUBLE_FAULT, 8);
+        assert_eq!(vector::GENERAL_PROTECTION, 13);
+        assert_eq!(vector::PAGE_FAULT, 14);
+        assert_eq!(vector::SECURITY_EXCEPTION, 30);
+    }
+
+    #[test]
+    fn pic_vectors() {
+        assert_eq!(vector::PIC_TIMER, 32);
+        assert_eq!(vector::PIC_KEYBOARD, 33);
+        assert_eq!(vector::PIC_ATA_SECONDARY, 47);
+    }
+
+    #[test]
+    fn ipi_vectors() {
+        assert_eq!(vector::IPI_RESCHEDULE, 50);
+        assert_eq!(vector::IPI_TLB_SHOOTDOWN, 51);
+        assert_eq!(vector::IPI_CALL_FUNCTION, 52);
+    }
+
+    #[test]
+    fn apic_spurious_vector() {
+        assert_eq!(vector::APIC_SPURIOUS, 255);
+    }
+
+    // --- VirtualApic ---
+
+    #[test]
+    fn vapic_new() {
+        let vapic = VirtualApic::new(7);
+        assert_eq!(vapic.id, 7);
+        assert_eq!(vapic.tpr, 0);
+        assert!(!vapic.has_pending_interrupt());
+        assert_eq!(vapic.get_pending_interrupt(), None);
+    }
+
+    #[test]
+    fn vapic_set_and_get_irr() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(33);
+        assert!(vapic.has_pending_interrupt());
+        assert_eq!(vapic.get_pending_interrupt(), Some(33));
+    }
+
+    #[test]
+    fn vapic_clear_irr() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(33);
+        vapic.clear_irr(33);
+        assert!(!vapic.has_pending_interrupt());
+        assert_eq!(vapic.get_pending_interrupt(), None);
+    }
+
+    #[test]
+    fn vapic_highest_priority_wins() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(32);
+        vapic.set_irr(64);
+        vapic.set_irr(128);
+        // Highest vector in the highest word wins
+        assert_eq!(vapic.get_pending_interrupt(), Some(128));
+    }
+
+    #[test]
+    fn vapic_multiple_in_same_word() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(33); // word 1 bit 1
+        vapic.set_irr(35); // word 1 bit 3
+                           // Highest bit in the highest populated word
+        assert_eq!(vapic.get_pending_interrupt(), Some(35));
+    }
+
+    #[test]
+    fn vapic_set_isr_clears_irr() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(50);
+        assert!(vapic.has_pending_interrupt());
+
+        vapic.set_isr(50);
+        // IRR should be cleared, ISR should be set
+        assert!(!vapic.has_pending_interrupt());
+        assert_ne!(vapic.isr[1], 0); // vector 50 is in word 1
+    }
+
+    #[test]
+    fn vapic_eoi_clears_highest_isr() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_isr(50);
+        vapic.set_isr(60);
+
+        vapic.eoi(); // clears 60 (highest in word 1)
+        assert_ne!(vapic.isr[1], 0); // 50 still in-service
+
+        vapic.eoi(); // clears 50
+        assert_eq!(vapic.isr[1], 0);
+    }
+
+    #[test]
+    fn vapic_eoi_noop_when_empty() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.eoi(); // should not panic
+        assert!(!vapic.has_pending_interrupt());
+    }
+
+    #[test]
+    fn vapic_vector_zero() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(0);
+        assert!(vapic.has_pending_interrupt());
+        assert_eq!(vapic.get_pending_interrupt(), Some(0));
+    }
+
+    #[test]
+    fn vapic_vector_255() {
+        let mut vapic = VirtualApic::new(0);
+        vapic.set_irr(255);
+        assert!(vapic.has_pending_interrupt());
+        assert_eq!(vapic.get_pending_interrupt(), Some(255));
+    }
+
+    #[test]
+    fn vapic_full_lifecycle() {
+        let mut vapic = VirtualApic::new(1);
+
+        // Inject interrupt
+        vapic.set_irr(48);
+        assert_eq!(vapic.get_pending_interrupt(), Some(48));
+
+        // Move to in-service
+        vapic.set_isr(48);
+        assert!(!vapic.has_pending_interrupt());
+
+        // EOI
+        vapic.eoi();
+        assert_eq!(vapic.isr[1], 0);
+    }
+}

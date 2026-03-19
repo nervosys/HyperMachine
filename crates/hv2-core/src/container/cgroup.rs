@@ -154,9 +154,8 @@ impl CpuController {
     pub fn weight(&self) -> u64 {
         // Convert shares (2-262144) to weight (1-10000)
         // Default 1024 shares = 100 weight
-        ((self.shares.max(2).min(262144) - 2) * 9999 / 262142 + 1)
-            .max(1)
-            .min(10000)
+        ((self.shares.clamp(2, 262144) - 2) * 9999 / 262142 + 1)
+            .clamp(1, 10000)
     }
 
     /// Calculate max (quota/period) string for v2

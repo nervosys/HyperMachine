@@ -26,7 +26,7 @@
 //!
 //! # References
 //!
-//! - Multiboot Specification 1.0: https://www.gnu.org/software/grub/manual/multiboot/multiboot.html
+//! - Multiboot Specification 1.0: <https://www.gnu.org/software/grub/manual/multiboot/multiboot.html>
 
 use crate::{Error, Result};
 

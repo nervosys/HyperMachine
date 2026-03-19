@@ -522,12 +522,12 @@ impl Ac97Mixer {
         let left_vol = if left_attn >= 63 {
             0
         } else {
-            255 - (left_attn * 4).min(255)
+            255 - (left_attn * 4)
         };
         let right_vol = if right_attn >= 63 {
             0
         } else {
-            255 - (right_attn * 4).min(255)
+            255 - (right_attn * 4)
         };
 
         self.master_volume = StereoVolume {
@@ -544,8 +544,8 @@ impl Ac97Mixer {
         let right_attn = (value & 0x1F) as u8;
 
         // PCM attenuation is 1.5dB steps, 0-31
-        let left_vol = 255 - (left_attn * 8).min(255);
-        let right_vol = 255 - (right_attn * 8).min(255);
+        let left_vol = 255 - (left_attn * 8);
+        let right_vol = 255 - (right_attn * 8);
 
         self.pcm_volume = StereoVolume {
             left: Volume(left_vol),
