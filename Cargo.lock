@@ -2993,6 +2993,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "rand 0.8.5",
+ "reqwest",
  "ring",
  "serde",
  "serde_json",

@@ -27,10 +27,12 @@ chrono = { workspace = true }
 bitflags = { workspace = true }
 rand = { workspace = true }
 ring = { version = "0.17", optional = true }
+reqwest = { workspace = true, optional = true }
 
 [features]
 default = []
 fips = []
+remote-telemetry = ["dep:reqwest"]
 
 [dev-dependencies]
 proptest = { workspace = true }

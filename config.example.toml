@@ -48,3 +48,21 @@ max_memory_mb = 512
 tracing = true
 metrics = true
 otlp_endpoint = "http://localhost:4317"
+
+[observability.remote]
+# Enable remote OTLP export (requires `remote-telemetry` feature)
+enabled = false
+# OTLP endpoint — set via config or OTEL_EXPORTER_OTLP_ENDPOINT env var
+endpoint = "https://nervosys.ai/otlp"
+# Service name — set via config or OTEL_SERVICE_NAME env var
+service_name = "hypermachine"
+# Request timeout in seconds
+timeout_seconds = 10
+# Background flush interval in seconds
+flush_interval_seconds = 15
+# Max retry attempts for transient failures
+max_retries = 3
+# Max buffered metric batches before oldest are dropped
+max_queue_size = 4096
+# Headers — prefer OTEL_EXPORTER_OTLP_HEADERS env var for secrets
+# headers = "Authorization=Bearer <token>"

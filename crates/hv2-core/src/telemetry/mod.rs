@@ -86,6 +86,8 @@
 
 pub mod collector;
 pub mod exporters;
+#[cfg(feature = "remote-telemetry")]
+pub mod remote;
 pub mod types;
 pub mod vm_metrics;
 
@@ -109,6 +111,9 @@ pub use exporters::{
 pub use vm_metrics::{
     DiskMetrics, HypervisorMetrics, MemoryMetrics, NetworkMetrics, VcpuMetrics, VmMetrics,
 };
+
+#[cfg(feature = "remote-telemetry")]
+pub use remote::{RemoteExporterConfig, RemoteMetricExporter};
 
 #[cfg(test)]
 mod tests {

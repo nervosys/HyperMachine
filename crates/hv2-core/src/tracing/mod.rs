@@ -48,6 +48,8 @@ pub mod types;
 pub mod tracer;
 pub mod exporters;
 pub mod profiler;
+#[cfg(feature = "remote-telemetry")]
+pub mod remote;
 
 // Re-export core types
 pub use types::{
@@ -73,6 +75,9 @@ pub use exporters::{
     ZipkinConfig, ZipkinSpanExporter, OtlpConfig, OtlpProtocol,
     OtlpSpanExporter, CompositeSpanExporter, FilteredSpanExporter,
 };
+
+#[cfg(feature = "remote-telemetry")]
+pub use remote::{RemoteSpanExporter, RemoteSpanExporterConfig};
 
 // Re-export profiler types
 pub use profiler::{
