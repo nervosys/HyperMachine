@@ -64,12 +64,15 @@
 
 pub mod autoscale;
 pub mod billing;
+pub mod capacity;
+pub mod fleet;
 pub mod gateway;
 pub mod health;
 pub mod metrics;
 pub mod pool;
 pub mod scheduler;
 pub mod store;
+pub mod topology;
 pub mod workflow;
 
 pub use autoscale::{
@@ -79,6 +82,11 @@ pub use autoscale::{
 pub use billing::{
     BillingConfig, BillingError, BillingEvent, BillingResult, BillingTier, Invoice, LineItem,
     MeterReading, MeteringEngine, ResourceMeter, UsageSummary,
+};
+pub use capacity::{CapacityManager, Reservation, ReservationState, SlaTier, VmClass};
+pub use fleet::{
+    ArtifactKind, ArtifactVersion, FleetHost, FleetManager, HostUpdatePhase, RolloutConfig,
+    RolloutPhase, RolloutStrategy,
 };
 pub use gateway::{
     Gateway, GatewayConfig, GatewayError, GatewayResult, Route, RoutePolicy, RoutingDecision,
@@ -99,6 +107,9 @@ pub use scheduler::{
 pub use store::{
     DurableStore, StoreBackend, StoreConfig, StoreEntry, StoreError, StoreResult, WatchEvent,
     WatchEventType,
+};
+pub use topology::{
+    GpuDevice, GpuInterconnect, GpuPlacement, GpuRequirements, GpuTopologyMap, TopologyLink,
 };
 pub use workflow::{
     StepContext, StepError, StepOutcome, StepResult, StepSpec, WorkflowBuilder, WorkflowConfig,
@@ -175,6 +186,12 @@ pub struct RuntimeConfig {
     pub health: HealthCheckConfig,
     /// Billing configuration
     pub billing: BillingConfig,
+    /// Enable GPU topology-aware scheduling
+    pub gpu_topology_enabled: bool,
+    /// Enable fleet lifecycle management
+    pub fleet_management_enabled: bool,
+    /// Enable capacity reservations
+    pub capacity_reservations_enabled: bool,
     /// Runtime instance ID
     pub instance_id: String,
 }
@@ -190,6 +207,9 @@ impl Default for RuntimeConfig {
             autoscale: AutoscaleConfig::default(),
             health: HealthCheckConfig::default(),
             billing: BillingConfig::default(),
+            gpu_topology_enabled: false,
+            fleet_management_enabled: false,
+            capacity_reservations_enabled: false,
             instance_id: uuid::Uuid::new_v4().to_string(),
         }
     }
@@ -257,6 +277,24 @@ impl RuntimeConfigBuilder {
         self
     }
 
+    /// Enable GPU topology-aware scheduling
+    pub fn gpu_topology(mut self, enabled: bool) -> Self {
+        self.config.gpu_topology_enabled = enabled;
+        self
+    }
+
+    /// Enable fleet lifecycle management
+    pub fn fleet_management(mut self, enabled: bool) -> Self {
+        self.config.fleet_management_enabled = enabled;
+        self
+    }
+
+    /// Enable capacity reservations
+    pub fn capacity_reservations(mut self, enabled: bool) -> Self {
+        self.config.capacity_reservations_enabled = enabled;
+        self
+    }
+
     /// Set instance ID
     pub fn instance_id(mut self, id: impl Into<String>) -> Self {
         self.config.instance_id = id.into();
@@ -297,6 +335,12 @@ pub struct Runtime {
     billing_engine: MeteringEngine,
     /// Metrics collector
     metrics: MetricsCollector,
+    /// GPU topology map (active when gpu_topology_enabled)
+    gpu_topology: Option<GpuTopologyMap>,
+    /// Fleet lifecycle manager (active when fleet_management_enabled)
+    fleet_manager: Option<FleetManager>,
+    /// Capacity reservation manager (active when capacity_reservations_enabled)
+    capacity_manager: Option<CapacityManager>,
 }
 
 /// Status snapshot of the runtime for dashboards and monitoring
@@ -382,6 +426,22 @@ impl Runtime {
         let billing_engine = MeteringEngine::new(config.billing.clone());
         let metrics = MetricsCollector::new(config.instance_id.clone());
 
+        let gpu_topology = if config.gpu_topology_enabled {
+            Some(GpuTopologyMap::new())
+        } else {
+            None
+        };
+        let fleet_manager = if config.fleet_management_enabled {
+            Some(FleetManager::new())
+        } else {
+            None
+        };
+        let capacity_manager = if config.capacity_reservations_enabled {
+            Some(CapacityManager::new())
+        } else {
+            None
+        };
+
         Self {
             config,
             pool,
@@ -393,6 +453,9 @@ impl Runtime {
             health_monitor,
             billing_engine,
             metrics,
+            gpu_topology,
+            fleet_manager,
+            capacity_manager,
         }
     }
 
@@ -453,6 +516,21 @@ impl Runtime {
     /// Collect a full metrics snapshot
     pub fn collect_metrics(&self) -> RuntimeMetrics {
         self.metrics.collect(self)
+    }
+
+    /// Get a reference to the GPU topology map (if enabled)
+    pub fn gpu_topology(&self) -> Option<&GpuTopologyMap> {
+        self.gpu_topology.as_ref()
+    }
+
+    /// Get a reference to the fleet manager (if enabled)
+    pub fn fleet_manager(&self) -> Option<&FleetManager> {
+        self.fleet_manager.as_ref()
+    }
+
+    /// Get a reference to the capacity manager (if enabled)
+    pub fn capacity_manager(&self) -> Option<&CapacityManager> {
+        self.capacity_manager.as_ref()
     }
 
     // ── Session Lifecycle ─────────────────────────────────────────────
