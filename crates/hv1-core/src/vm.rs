@@ -159,8 +159,8 @@ impl Vm {
     }
 
     /// Initialize the frame allocator with a memory region for page-table pages.
-    pub fn init_frame_allocator(&mut self, start: u64, end: u64) {
-        self.frame_allocator.init(start, end);
+    pub fn init_frame_allocator(&mut self, start: u64, end: u64) -> Result<()> {
+        self.frame_allocator.init(start, end)
     }
 
     /// Initialize the VM
@@ -360,7 +360,12 @@ impl Vm {
     }
 }
 
-/// VM exit handler trait
+/// VM exit handler trait.
+///
+/// Implementors receive VM exits and decide how to proceed.  The
+/// handler is called inside the vCPU run loop ([`Vm::run_vcpu`]) and
+/// must return a [`VmExitAction`] that determines whether the loop
+/// continues, halts, or shuts down.
 pub trait VmExitHandler {
     /// Handle a VM exit
     fn handle_exit(

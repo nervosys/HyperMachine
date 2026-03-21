@@ -18,21 +18,21 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 | Metric        | Value                                    |
 | ------------- | ---------------------------------------- |
 | Build         | ✅ Clean (0 errors, 0 warnings)           |
-| Tests         | ✅ **4,077 passed**, 0 failed, 28 ignored |
+| Tests         | ✅ **4,284 passed**, 0 failed, 28 ignored |
 | Clippy        | ✅ 0 warnings (`-D warnings`)             |
-| Crates        | 12 (10 stable, 2 nightly)                |
-| Source files  | 263 `.rs` files                          |
-| Lines of Rust | ~188,300                                 |
+| Crates        | 13 (10 stable, 2 nightly, 1 cross-platform)                |
+| Source files  | 280 `.rs` files                          |
+| Lines of Rust | ~224,000                                 |
 
 ### Security Audit
 
-| Check         | Status                                   |
-| ------------- | ---------------------------------------- |
-| Advisories    | ✅ 0 known vulnerabilities                |
-| Bans          | ✅ No banned crates                        |
-| Licenses      | ✅ All OSI-approved                        |
-| Sources       | ✅ All from crates.io                      |
-| Rustdoc       | ✅ 0 warnings                              |
+| Check      | Status                    |
+| ---------- | ------------------------- |
+| Advisories | ✅ 0 known vulnerabilities |
+| Bans       | ✅ No banned crates        |
+| Licenses   | ✅ All OSI-approved        |
+| Sources    | ✅ All from crates.io      |
+| Rustdoc    | ✅ 0 warnings              |
 
 ### Core Capabilities
 
@@ -53,10 +53,12 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 ✅ Dual gRPC/REST API with WebSocket streaming
 ✅ Desktop GUI with AI automation API
 ✅ Fleet runtime with VM pooling, scheduling, and DAG workflows
+✅ GPU VM Fabric: topology-aware placement, fleet management, capacity reservations, image registry
 ✅ Platform backends: KVM (Linux), WHPX (Windows), HVF (macOS), TCG (software)
 ✅ Containerization: cgroups v1/v2, namespaces, seccomp
 ✅ Live migration with dirty page tracking
 ✅ Nested virtualization (shadow VMCS, EPT)
+✅ ARM64/EL2 Type-1 hypervisor support (Stage-2 MMU, vGIC, vCPU, system register emulation)
 ✅ NUMA-aware memory allocation
 
 ---
@@ -70,7 +72,7 @@ HyperMachine/
 ├── hv2-core/      # Core hypervisor engine           ✅ 107,748 lines  2,040 tests
 ├── hv2-api/       # REST/gRPC API server             ✅  29,190 lines    956 tests
 ├── hv2-agent/     # AI agent framework               ✅  19,423 lines    396 tests
-├── hv2-runtime/   # Fleet runtime & scheduling       ✅   6,592 lines    145 tests
+├── hv2-runtime/   # Fleet runtime & scheduling       ✅   8,200 lines    230 tests
 ├── hm-cli/        # CLI + MCP server                 ✅   5,341 lines     55 tests
 ├── hv2-cpu/       # CPU emulation (x86_64, AArch64)  ✅   4,340 lines     66 tests
 ├── hv1-core/      # Type-1 bare-metal core           ✅   7,681 lines    154 tests (nightly)
@@ -78,12 +80,13 @@ HyperMachine/
 ├── hv2-gpu/       # GPU virtualization               ✅   1,716 lines     20 tests
 ├── hv2-net/       # Networking (TAP/TUN, VirtIO)     ✅   1,696 lines     13 tests
 ├── hv2-cli/       # Standalone hypervisor CLI        ✅   1,026 lines     22 tests
+├── hv1-arm/       # ARM64 EL2 hypervisor backend   ✅   3,094 lines    105 tests
 └── hv1-boot/      # Type-1 UEFI bootloader           ✅     253 lines  (nightly)
 ```
 
 ### Key Modules
 
-#### hv2-core — Hypervisor Engine (107K lines, 2,040 unit + 167 integration tests)
+#### hv2-core — Hypervisor Engine (107K lines, 2,057 unit + 176 integration tests)
 
 **VM Infrastructure:**
 - `vm.rs` — VM lifecycle and state machine
@@ -173,12 +176,16 @@ HyperMachine/
 - Machine-readable API discovery (OpenAPI, JSON-LD, tool schemas)
 - Runtime subsystem routes
 
-#### hv2-runtime — Fleet Runtime (6.5K lines, 145 tests)
+#### hv2-runtime — Fleet Runtime (8.2K lines, 230 tests)
 - VM pool with warm/cold standby lifecycle
 - Workload scheduler (bin-pack, spread, best-fit, random) with affinity constraints
 - DAG workflow engine with checkpoint/resume and retry
 - Auto-scaling, health checks, usage metering/billing
 - Durable state backend (in-memory, file, external)
+- GPU topology-aware placement (NVLink/NVSwitch/PCIe scoring)
+- Fleet lifecycle management with rolling/canary rollouts
+- Reservation-based capacity management with SLA tiers
+- Image allowlist with admission control
 
 #### hm-cli — CLI + MCP Server (5.3K lines, 55 tests)
 - Clap-based CLI: `hm t1`, `hm t2`, `hm mcp serve`, `hm completions`
@@ -213,6 +220,15 @@ HyperMachine/
 - `cpu.rs` — CPUID emulation, MSR read/write wrappers
 - `arch.rs` — GDT/TSS setup, CPU feature detection, `cli`/`sti`/`hlt` primitives
 
+
+#### hv1-arm — ARM64 EL2 Hypervisor Backend (3.1K lines, 105 tests)
+- `el2.rs` — EL2 initialization, HCR_EL2 flags, VTTBR config, exception class decoding, trap dispatch
+- `vcpu.rs` — AArch64 vCPU with general/system/SIMD registers, lifecycle FSM, vIRQ/vFIQ injection
+- `vgic.rs` — Virtual GIC (GICv2/v3): distributor, redistributor, interrupt priority/acknowledge/EOI
+- `stage2.rs` — Stage-2 page tables (IPA→HPA): 4KB/2MB/1GB mapping, overlap detection, translation
+- `sysreg.rs` — System register trapping/emulation (SCTLR, TTBR, TCR, MAIR, VBAR, timers, MIDR, MPIDR)
+- `vm.rs` — VM management tying vCPUs + stage-2 + vGIC with exit handling
+- `error.rs` — 25 ARM64-specific error variants
 #### hv1-boot — Type-1 Bootloader Entry (253 lines, nightly)
 - UEFI bootloader integration via `bootloader_api`
 - Heap allocator initialization, memory map processing
@@ -224,10 +240,10 @@ HyperMachine/
 
 | Crate       | Unit      | Integration | Total     |
 | ----------- | --------- | ----------- | --------- |
-| hv2-core    | 2,040     | 167         | 2,207     |
+| hv2-core    | 2,057     | 176         | 2,233     |
 | hv2-api     | 944       | 12          | 956       |
 | hv2-agent   | 396       | —           | 396       |
-| hv2-runtime | 145       | —           | 145       |
+| hv2-runtime | 186       | 44          | 230       |
 | hv2-cpu     | 66        | —           | 66        |
 | hm-cli      | 43        | 12          | 55        |
 | hm-gui      | 8         | 26          | 34        |
@@ -235,8 +251,8 @@ HyperMachine/
 | hv2-gpu     | 20        | —           | 20        |
 | hv2-net     | 13        | —           | 13        |
 | hv1-core    | 124       | 30          | 154       |
-| Doc tests   | 49        | —           | 49        |
-| **Total**   | **3,870** | **247**     | **4,077** |
+| hv1-arm     | 105       | —           | 105       |
+| **Total**   | **3,984** | **300**     | **4,284** |
 
 28 tests ignored (platform-specific: WHPX hardware, KVM-only, etc.)
 
@@ -255,6 +271,6 @@ AMD Ryzen 9 7950X:
 
 ---
 
-*Last Updated: March 19, 2026*
+*Last Updated: March 20, 2026*
 *Project: HyperMachine*
 *Status: Production-Ready Core*

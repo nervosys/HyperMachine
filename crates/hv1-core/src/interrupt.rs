@@ -119,13 +119,22 @@ pub struct InterruptFrameWithError {
 /// APIC state
 static APIC_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
-/// Local APIC interface
+/// Local APIC interface.
+///
+/// Provides read/write access to the memory-mapped xAPIC registers at
+/// the standard base address (`0xFEE0_0000`).  All register access
+/// methods are `unsafe` because they require the APIC page to be
+/// identity-mapped in the current address space.
 pub struct LocalApic {
     base_addr: u64,
 }
 
 impl LocalApic {
-    /// Create a new Local APIC interface
+    /// Create a new Local APIC interface at the default base (`0xFEE0_0000`).
+    ///
+    /// Does **not** check whether the APIC page is mapped; callers must
+    /// ensure the page is identity-mapped before calling any register
+    /// access method.
     pub fn new() -> Self {
         Self {
             base_addr: APIC_BASE,
