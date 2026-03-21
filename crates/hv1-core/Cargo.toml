@@ -15,6 +15,7 @@ categories.workspace = true
 default = ["intel", "amd"]
 intel = []                 # Intel VT-x (VMX) support
 amd = []                   # AMD-V (SVM) support
+arm64 = ["dep:hv1-arm"]    # ARM64 EL2 support
 serial = []                # Serial console support
 acpi = []                  # ACPI support
 
@@ -38,6 +39,9 @@ bootloader_api = { version = "0.11", optional = true }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 # Additional x86_64 dependencies
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+hv1-arm = { path = "../hv1-arm", optional = true }
 
 [dev-dependencies]
 
