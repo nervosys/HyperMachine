@@ -19,8 +19,8 @@ use hv2_core::boot::multiboot::{MultibootInfo, MultibootModule, MultibootProtoco
 
 // Image registry
 use hv2_core::security::{
-    AdmissionDecision, EnforcementMode, ImageEntry, ImageKind, ImageRegistry,
-    ImageSignature, RegistryConfig,
+    AdmissionDecision, EnforcementMode, ImageEntry, ImageKind, ImageRegistry, ImageSignature,
+    RegistryConfig,
 };
 
 // Runtime GPU fabric
@@ -122,7 +122,10 @@ fn gpu_passthrough_concepts() {
 
     // All 4 should parse as valid BDF
     for bdf in &gpu_bdf_addresses {
-        assert!(bdf.split(':').count() >= 2, "BDF should have domain:bus:dev.fn");
+        assert!(
+            bdf.split(':').count() >= 2,
+            "BDF should have domain:bus:dev.fn"
+        );
     }
 
     // NVIDIA vendor ID
@@ -175,7 +178,10 @@ fn unikernel_minimal_memory_map() {
     assert_eq!(info.memory_map[0], (0, 640 * 1024));
     // Upper memory: 1MB to 128MB (plenty for a unikernel AI service)
     let upper = info.memory_map[1];
-    assert!(upper.1 >= 64 * 1024 * 1024, "Should have at least 64MB upper memory");
+    assert!(
+        upper.1 >= 64 * 1024 * 1024,
+        "Should have at least 64MB upper memory"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -217,8 +223,7 @@ fn admit_signed_ai_kernel() {
         )
         .unwrap();
 
-    let decision = registry
-        .check_admission("registry.internal/kernels/ai-inference:2.1.0");
+    let decision = registry.check_admission("registry.internal/kernels/ai-inference:2.1.0");
     assert_eq!(decision, AdmissionDecision::Allowed);
 }
 
@@ -238,14 +243,10 @@ fn reject_untrusted_signer_ai_kernel() {
     // approve() succeeds (signature is valid), but check_admission rejects
     // because the signer is not in trusted_signers
     registry
-        .approve(
-            "registry.internal/kernels/ai-inference:2.1.0",
-            "admin",
-        )
+        .approve("registry.internal/kernels/ai-inference:2.1.0", "admin")
         .unwrap();
 
-    let decision = registry
-        .check_admission("registry.internal/kernels/ai-inference:2.1.0");
+    let decision = registry.check_admission("registry.internal/kernels/ai-inference:2.1.0");
     assert!(matches!(decision, AdmissionDecision::Denied(_)));
 }
 
@@ -259,8 +260,7 @@ fn audit_mode_allows_all() {
     let registry = ImageRegistry::new(config);
 
     // In audit mode, unknown images should still be admitted
-    let decision = registry
-        .check_admission("registry.internal/unknown:latest");
+    let decision = registry.check_admission("registry.internal/unknown:latest");
     // Audit mode logs but allows
     assert!(matches!(
         decision,
@@ -394,14 +394,10 @@ fn unikernel_ai_service_e2e() {
 
     registry.register(kernel_entry).unwrap();
     registry
-        .approve(
-            "registry.internal/unikernel/gpu-inference:1.0.0",
-            "admin",
-        )
+        .approve("registry.internal/unikernel/gpu-inference:1.0.0", "admin")
         .unwrap();
 
-    let decision = registry
-        .check_admission("registry.internal/unikernel/gpu-inference:1.0.0");
+    let decision = registry.check_admission("registry.internal/unikernel/gpu-inference:1.0.0");
     assert_eq!(decision, AdmissionDecision::Allowed);
 
     // 2. Capacity reservation for GPU inference tier
@@ -417,7 +413,12 @@ fn unikernel_ai_service_e2e() {
     .unwrap();
 
     let rsv_id = cm
-        .create_reservation("ai-service-tenant", "gpu-inference-t4", 10, Duration::from_secs(86400))
+        .create_reservation(
+            "ai-service-tenant",
+            "gpu-inference-t4",
+            10,
+            Duration::from_secs(86400),
+        )
         .unwrap();
     cm.consume_reservation(&rsv_id).unwrap();
 
@@ -526,7 +527,7 @@ fn create_stub_bzimage() -> Vec<u8> {
     let mut kernel = vec![0u8; 16384];
     // Setup sectors byte at offset 0x01F1
     kernel[0x01F1] = 4; // 4 setup sectors
-    // Boot flag at 0x01FE
+                        // Boot flag at 0x01FE
     kernel[0x01FE] = 0x55;
     kernel[0x01FF] = 0xAA;
     // "HdrS" magic at 0x0202

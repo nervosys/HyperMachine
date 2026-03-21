@@ -8,8 +8,8 @@
 use std::time::Duration;
 
 use hv2_core::security::{
-    AdmissionDecision, EnforcementMode, ImageEntry, ImageKind, ImageRegistry,
-    ImageSignature, RegistryConfig,
+    AdmissionDecision, EnforcementMode, ImageEntry, ImageKind, ImageRegistry, ImageSignature,
+    RegistryConfig,
 };
 use hv2_runtime::{
     // Fleet
