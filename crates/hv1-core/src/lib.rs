@@ -28,6 +28,7 @@
 //!
 //! - **Intel VT-x**: Full VMX support with VMCS management
 //! - **AMD-V**: Full SVM support with VMCB management  
+//! - **ARM64/EL2**: AArch64 hypervisor mode via `hv1-arm` crate (feature-gated)
 //! - **EPT/NPT**: Hardware-assisted nested page tables
 //! - **Interrupt Virtualization**: APIC virtualization, posted interrupts
 //! - **Device Passthrough**: IOMMU/VT-d support for PCIe devices
@@ -60,6 +61,10 @@ pub mod svm;
 pub mod vcpu;
 pub mod vm;
 pub mod vmx;
+
+/// ARM64/EL2 backend (available when compiled with `arm64` feature on AArch64)
+#[cfg(all(target_arch = "aarch64", feature = "arm64"))]
+pub use hv1_arm as arm;
 
 pub use error::{Error, Result};
 

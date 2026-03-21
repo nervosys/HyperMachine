@@ -2921,6 +2921,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags 2.10.0",
  "bootloader_api",
+ "hv1-arm",
  "linked_list_allocator",
  "log",
  "raw-cpuid 11.6.0",
