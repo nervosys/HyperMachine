@@ -70,7 +70,11 @@ use spin::Mutex;
 static HYPERVISOR_INITIALIZED: AtomicBool = AtomicBool::new(false);
 static HYPERVISOR_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// CPU vendor detection
+/// CPU vendor identification.
+///
+/// Determined at runtime via CPUID leaf 0.  Only Intel ("GenuineIntel")
+/// and AMD ("AuthenticAMD") are recognised; all other vendors map to
+/// [`Unknown`](Self::Unknown).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpuVendor {
     Intel,
@@ -79,7 +83,10 @@ pub enum CpuVendor {
 }
 
 impl CpuVendor {
-    /// Detect CPU vendor from CPUID
+    /// Detect CPU vendor from CPUID leaf 0.
+    ///
+    /// Returns [`Unknown`](Self::Unknown) if the vendor string is not
+    /// recognised or CPUID is unavailable.
     pub fn detect() -> Self {
         let cpuid = raw_cpuid::CpuId::new();
         if let Some(vendor) = cpuid.get_vendor_info() {
@@ -120,7 +127,11 @@ pub struct HypervisorCapabilities {
 }
 
 impl HypervisorCapabilities {
-    /// Detect hypervisor capabilities from hardware
+    /// Detect hypervisor capabilities from the current hardware.
+    ///
+    /// Queries CPUID for VMX (Intel) / SVM (AMD) support and additional
+    /// features.  `cpu_count` and `total_memory` remain 0 — they are
+    /// filled in later by the boot module after memory-map processing.
     pub fn detect() -> Self {
         let vendor = CpuVendor::detect();
         let cpuid = raw_cpuid::CpuId::new();

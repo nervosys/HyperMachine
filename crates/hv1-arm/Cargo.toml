@@ -1,0 +1,35 @@
+[package]
+name = "hv1-arm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "HyperMachine Type-1 ARM64 EL2 hypervisor backend"
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["gicv3"]
+gicv2 = []          # GICv2 virtual interrupt controller
+gicv3 = []          # GICv3 virtual interrupt controller (default)
+
+[dependencies]
+# No-std compatible crates
+spin = "0.9"
+bitflags = "2.4"
+log = "0.4"
+static_assertions = "1.1"
+
+# ARM64 specific
+aarch64-cpu = "9.4"
+tock-registers = "0.9"
+
+[dev-dependencies]
+
+[lib]
+
+[lints]
+workspace = true

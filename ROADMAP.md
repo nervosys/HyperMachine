@@ -3529,17 +3529,18 @@ Enhanced the agentic ontology module (`ontology.rs`) to make the programmatic co
 
 | Crate       | Test Count | Status        |
 | ----------- | ---------- | ------------- |
-| hv2-core    | 396        | ✅ All passing |
-| hv2-agent   | 43         | ✅ All passing |
-| hv2-cpu     | 8          | ✅ All passing |
-| hv2-gpu     | 7          | ✅ All passing |
-| hv2-net     | 8          | ✅ All passing |
-| hv2-runtime | 145        | ✅ All passing |
-| hv2-api     | 909        | ✅ All passing |
+| hv2-core    | 2,233      | ✅ All passing |
+| hv2-api     | 956        | ✅ All passing |
+| hv2-agent   | 396        | ✅ All passing |
+| hv2-runtime | 230        | ✅ All passing |
+| hv2-cpu     | 66         | ✅ All passing |
+| hm-cli      | 55         | ✅ All passing |
+| hm-gui      | 34         | ✅ All passing |
 | hv2-cli     | 22         | ✅ All passing |
-| hm-cli      | 1967       | ✅ All passing |
-| other       | 418        | ✅ All passing |
-| **Total**   | **3,923**  | ✅ All passing |
+| hv2-gpu     | 20         | ✅ All passing |
+| hv2-net     | 13         | ✅ All passing |
+| hv1-core    | 154        | ✅ All passing |
+| **Total**   | **4,179**  | ✅ All passing |
 
 ---
 
@@ -3742,6 +3743,14 @@ HV1 will run directly on bare metal without a host OS, implementing its own VMX/
 - ✅ Runtime services (serial, device manager)
 - ✅ Management interface (serial console)
 
+
+#### Phase HV1-6: ARM64/EL2 Support ✅
+- ✅ EL2 initialization (HCR_EL2, VTTBR, exception vector table)
+- ✅ AArch64 vCPU with full register contexts (general, system, SIMD/FP)
+- ✅ Virtual GIC (GICv2/GICv3 with distributor and redistributor)
+- ✅ Stage-2 address translation (IPA→HPA, 4KB/2MB/1GB pages)
+- ✅ System register trapping and emulation
+- ✅ VM management with exit handling (hv1-arm crate, 3,094 lines, 105 tests)
 ### Code Sharing Strategy
 
 The codebase is structured to maximize code sharing between HV1 and HV2:
@@ -3766,7 +3775,7 @@ crates/
 ├── hv1-boot/           # Type 1 bootable UEFI image (implemented)
 ├── hv1-vmx/            # Intel VMX backend (integrated in hv1-core)
 ├── hv1-svm/            # AMD SVM backend (integrated in hv1-core)
-├── hv1-arm/            # ARM EL2 backend (planned)
+├── hv1-arm/            # ARM EL2 backend (implemented, 105 tests)
 ├── hv2-gpu/            # GPU virtualization
 ├── hv2-net/            # Network virtualization
 ├── hv2-agent/          # AI agent interface
@@ -3787,11 +3796,11 @@ crates/
 
 ### Timeline
 
-| Phase             | Target     | Status     |
-| ----------------- | ---------- | ---------- |
-| HV2 Core          | Q1-Q2 2024 | ✅ Complete |
-| HV2 Full Features | Q3-Q4 2024 | ✅ Complete |
-| HV1 Research      | Q1 2025    | ✅ Complete |
+| Phase             | Target     | Status                        |
+| ----------------- | ---------- | ----------------------------- |
+| HV2 Core          | Q1-Q2 2024 | ✅ Complete                    |
+| HV2 Full Features | Q3-Q4 2024 | ✅ Complete                    |
+| HV1 Research      | Q1 2025    | ✅ Complete                    |
 | HV1 Alpha         | Q2-Q3 2025 | ✅ Complete (124 tests, CI/CD) |
-| HV1 Beta          | Q4 2025    | 🔄 In Progress |
-| HV1 Production    | 2026       | 📋 Planned  |
+| HV1 Beta          | Q4 2025    | 🔄 In Progress                 |
+| HV1 Production    | 2026       | 📋 Planned                     |

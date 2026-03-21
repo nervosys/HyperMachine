@@ -363,7 +363,10 @@ fn memory_mapper_with_ept_entries() {
     assert_eq!(mapper.translate(0x10_2000), Some(0x2_0000_2000));
 
     let host_addr = mapper.translate(0x0).unwrap();
-    let ept = EptEntry::page_4k(host_addr, EptEntry::READ | EptEntry::WRITE | EptEntry::EXECUTE);
+    let ept = EptEntry::page_4k(
+        host_addr,
+        EptEntry::READ | EptEntry::WRITE | EptEntry::EXECUTE,
+    );
     assert!(ept.is_present());
     assert_eq!(ept.addr(), host_addr);
 }
@@ -395,7 +398,7 @@ fn memory_mapper_with_npt_entries() {
 #[test]
 fn frame_allocator_and_mapper_integration() {
     let mut alloc = FrameAllocator::new();
-    alloc.init(0x10_0000, 0x20_0000);
+    alloc.init(0x10_0000, 0x20_0000).unwrap();
 
     let frame1 = alloc.allocate_frame().unwrap();
     let frame2 = alloc.allocate_frame().unwrap();
@@ -426,16 +429,15 @@ fn frame_allocator_and_mapper_integration() {
         .unwrap();
 
     assert_eq!(mapper.translate(0x0), Some(frame1.as_u64()));
-    assert_eq!(
-        mapper.translate(PAGE_SIZE as u64),
-        Some(frame2.as_u64())
-    );
+    assert_eq!(mapper.translate(PAGE_SIZE as u64), Some(frame2.as_u64()));
 }
 
 #[test]
 fn frame_allocator_exhaustion() {
     let mut alloc = FrameAllocator::new();
-    alloc.init(0x10_0000, 0x10_0000 + 2 * PAGE_SIZE as u64);
+    alloc
+        .init(0x10_0000, 0x10_0000 + 2 * PAGE_SIZE as u64)
+        .unwrap();
 
     assert!(alloc.allocate_frame().is_ok());
     assert!(alloc.allocate_frame().is_ok());
@@ -607,8 +609,7 @@ fn full_vm_amd_variant() {
     with_big_stack(|| {
         use hv1_core::vm::Vm;
 
-        let config = VmConfig::new(1, 256 * 1024 * 1024)
-            .with_name("amd-test-vm");
+        let config = VmConfig::new(1, 256 * 1024 * 1024).with_name("amd-test-vm");
 
         let mut vm = Vm::new(CpuVendor::Amd, config).unwrap();
         assert_eq!(vm.state(), VmState::Uninitialized);

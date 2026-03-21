@@ -7,6 +7,7 @@
 //! - CPU initialization
 
 use crate::{Error, Result};
+use core::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 /// Boot information passed from bootloader
 #[derive(Debug)]
@@ -167,12 +168,9 @@ pub fn late_init(boot_info: &BootInfo) -> Result<()> {
         return Err(Error::OutOfMemory);
     }
 
-    // Store it in a static so higher layers can access it.
-    // SAFETY: called once from BSP, no concurrent access yet.
-    unsafe {
-        BOOT_FRAME_ALLOCATOR_START = best_start;
-        BOOT_FRAME_ALLOCATOR_END = best_start + best_size;
-    }
+    // Store it in atomics so higher layers (including APs) can read safely.
+    BOOT_FRAME_ALLOCATOR_START.store(best_start, Ordering::Release);
+    BOOT_FRAME_ALLOCATOR_END.store(best_start + best_size, Ordering::Release);
 
     // --- 2. Local APIC ---
     crate::interrupt::initialize_apic()?;
@@ -189,15 +187,22 @@ pub fn late_init(boot_info: &BootInfo) -> Result<()> {
 }
 
 /// Frame allocator region discovered during boot (BSP only).
-static mut BOOT_FRAME_ALLOCATOR_START: u64 = 0;
-static mut BOOT_FRAME_ALLOCATOR_END: u64 = 0;
+///
+/// These use atomics so that concurrent reads from APs are safe without
+/// requiring `unsafe` access.  The BSP writes them exactly once in
+/// `late_init`; all subsequent reads use `Acquire` ordering.
+static BOOT_FRAME_ALLOCATOR_START: AtomicU64 = AtomicU64::new(0);
+static BOOT_FRAME_ALLOCATOR_END: AtomicU64 = AtomicU64::new(0);
 
 /// Get the boot-time frame-allocator region.
 ///
-/// # Safety
-/// Only valid after `late_init` has been called on the BSP.
-pub unsafe fn boot_frame_allocator_region() -> (u64, u64) {
-    (BOOT_FRAME_ALLOCATOR_START, BOOT_FRAME_ALLOCATOR_END)
+/// Returns `(start, end)` as set by [`late_init`].  Returns `(0, 0)` if
+/// `late_init` has not been called yet.
+pub fn boot_frame_allocator_region() -> (u64, u64) {
+    (
+        BOOT_FRAME_ALLOCATOR_START.load(Ordering::Acquire),
+        BOOT_FRAME_ALLOCATOR_END.load(Ordering::Acquire),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -208,24 +213,30 @@ pub unsafe fn boot_frame_allocator_region() -> (u64, u64) {
 pub const MAX_CPUS: usize = 256;
 
 /// Detected Application Processor APIC IDs.
+///
+/// Written once by the BSP during `late_init`; read-only afterwards.
+/// Access is guarded by `AP_COUNT` (atomic) so readers only see
+/// fully-initialised entries.
 static mut AP_APIC_IDS: [u8; MAX_CPUS] = [0; MAX_CPUS];
-static mut AP_COUNT: usize = 0;
+static AP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Get the number of detected APs (not including BSP).
 ///
-/// # Safety
-/// Only valid after `late_init`.
-pub unsafe fn ap_count() -> usize {
-    AP_COUNT
+/// Safe to call from any core after `late_init` has returned on the BSP.
+pub fn ap_count() -> usize {
+    AP_COUNT.load(Ordering::Acquire)
 }
 
 /// Get the APIC ID of an AP by index.
 ///
-/// # Safety
-/// Only valid after `late_init`.
-pub unsafe fn ap_apic_id(index: usize) -> Option<u8> {
-    if index < AP_COUNT {
-        Some(AP_APIC_IDS[index])
+/// Safe to call from any core after `late_init` has returned on the BSP.
+pub fn ap_apic_id(index: usize) -> Option<u8> {
+    let count = AP_COUNT.load(Ordering::Acquire);
+    if index < count {
+        // SAFETY: `AP_APIC_IDS[index]` was written before the BSP
+        // performed the `Release` store to `AP_COUNT`, so the
+        // `Acquire` load above synchronises the read.
+        Some(unsafe { AP_APIC_IDS[index] })
     } else {
         None
     }
@@ -247,8 +258,28 @@ fn detect_smp_from_rsdp(rsdp_addr: u64) {
             return;
         }
 
+        // Validate RSDP checksum (bytes 0..20 must sum to 0 mod 256)
+        let mut checksum: u8 = 0;
+        for i in 0..20 {
+            checksum = checksum.wrapping_add(core::ptr::read_volatile(rsdp.add(i)));
+        }
+        if checksum != 0 {
+            return; // Corrupt RSDP — skip SMP detection
+        }
+
         // Revision byte at offset 15: 0 = ACPI 1.0 (RSDT), >=2 = ACPI 2.0+ (XSDT)
         let revision = core::ptr::read_volatile(rsdp.add(15));
+
+        // For ACPI 2.0+, validate extended checksum (bytes 0..36)
+        if revision >= 2 {
+            let mut ext_checksum: u8 = 0;
+            for i in 0..36 {
+                ext_checksum = ext_checksum.wrapping_add(core::ptr::read_volatile(rsdp.add(i)));
+            }
+            if ext_checksum != 0 {
+                return; // Corrupt extended RSDP
+            }
+        }
 
         let sdt_addr: u64 = if revision >= 2 {
             // XSDT address at offset 24 (8 bytes)
@@ -265,6 +296,18 @@ fn detect_smp_from_rsdp(rsdp_addr: u64) {
         // Read SDT header: signature (4), length (4 @ offset 4)
         let sdt = sdt_addr as *const u8;
         let sdt_len = core::ptr::read_volatile(sdt.add(4) as *const u32) as usize;
+
+        // Validate SDT header checksum
+        if sdt_len < 36 || sdt_len > 0x10_0000 {
+            return; // Implausible length — reject
+        }
+        let mut sdt_checksum: u8 = 0;
+        for i in 0..sdt_len {
+            sdt_checksum = sdt_checksum.wrapping_add(core::ptr::read_volatile(sdt.add(i)));
+        }
+        if sdt_checksum != 0 {
+            return; // Corrupt SDT
+        }
 
         let entry_size: usize = if revision >= 2 { 8 } else { 4 };
         let header_size = 36usize; // Standard ACPI SDT header
@@ -301,11 +344,26 @@ unsafe fn parse_madt(madt_addr: u64) {
     let madt = madt_addr as *const u8;
     let madt_len = core::ptr::read_volatile(madt.add(4) as *const u32) as usize;
 
+    // Validate MADT checksum
+    if madt_len < 44 || madt_len > 0x10_0000 {
+        return; // Implausible length
+    }
+    let mut checksum: u8 = 0;
+    for i in 0..madt_len {
+        checksum = checksum.wrapping_add(core::ptr::read_volatile(madt.add(i)));
+    }
+    if checksum != 0 {
+        return; // Corrupt MADT
+    }
+
     // The BSP APIC ID (current CPU)
     let bsp_apic_id = {
         let apic = crate::interrupt::LocalApic::new();
         apic.id()
     };
+
+    // Track count locally, then publish atomically at the end.
+    let mut local_count: usize = 0;
 
     // MADT entries start at offset 44
     let mut offset = 44usize;
@@ -313,6 +371,10 @@ unsafe fn parse_madt(madt_addr: u64) {
         let entry_type = core::ptr::read_volatile(madt.add(offset));
         let entry_len = core::ptr::read_volatile(madt.add(offset + 1)) as usize;
         if entry_len < 2 {
+            break;
+        }
+        // Guard against walking past the table
+        if offset + entry_len > madt_len {
             break;
         }
 
@@ -324,14 +386,17 @@ unsafe fn parse_madt(madt_addr: u64) {
             // Bit 0 = enabled, bit 1 = online-capable
             let usable = flags & 0x3 != 0;
 
-            if usable && apic_id != bsp_apic_id && AP_COUNT < MAX_CPUS {
-                AP_APIC_IDS[AP_COUNT] = apic_id;
-                AP_COUNT += 1;
+            if usable && apic_id != bsp_apic_id && local_count < MAX_CPUS {
+                AP_APIC_IDS[local_count] = apic_id;
+                local_count += 1;
             }
         }
 
         offset += entry_len;
     }
+
+    // Publish the count with Release so AP readers synchronise.
+    AP_COUNT.store(local_count, Ordering::Release);
 }
 
 // ---------------------------------------------------------------------------

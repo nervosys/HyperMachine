@@ -69,11 +69,24 @@ impl FrameAllocator {
         }
     }
 
-    /// Initialize the allocator with a memory region
-    pub fn init(&mut self, start: u64, end: u64) {
-        // Align to page boundary
-        self.next_frame = (start + PAGE_SIZE as u64 - 1) & !(PAGE_SIZE as u64 - 1);
-        self.end_frame = end & !(PAGE_SIZE as u64 - 1);
+    /// Initialize the allocator with a memory region.
+    ///
+    /// `start` and `end` are automatically page-aligned (start rounds up,
+    /// end rounds down).  Returns `Err(InvalidParameter)` if the resulting
+    /// region is empty or if `start >= end`.
+    pub fn init(&mut self, start: u64, end: u64) -> Result<()> {
+        if start >= end {
+            return Err(Error::InvalidParameter);
+        }
+        // Align to page boundary (start up, end down)
+        let aligned_start = (start + PAGE_SIZE as u64 - 1) & !(PAGE_SIZE as u64 - 1);
+        let aligned_end = end & !(PAGE_SIZE as u64 - 1);
+        if aligned_start >= aligned_end {
+            return Err(Error::InvalidParameter);
+        }
+        self.next_frame = aligned_start;
+        self.end_frame = aligned_end;
+        Ok(())
     }
 
     /// Allocate a single frame
@@ -339,10 +352,24 @@ impl GuestMemoryMapper {
         }
     }
 
-    /// Map a guest physical region to host physical memory
+    /// Map a guest physical region to host physical memory.
+    ///
+    /// Returns `Err(InvalidParameter)` if the new region overlaps with an
+    /// already-mapped region, and `Err(OutOfMemory)` if the region table
+    /// is full.
     pub fn map_region(&mut self, region: GuestMemoryRegion) -> Result<()> {
         if self.count >= 32 {
             return Err(Error::OutOfMemory);
+        }
+        // Check for overlapping guest physical address ranges
+        let new_start = region.guest_phys_addr;
+        let new_end = region.guest_phys_addr.saturating_add(region.size);
+        for existing in self.regions[..self.count].iter().filter_map(|r| r.as_ref()) {
+            let ex_start = existing.guest_phys_addr;
+            let ex_end = existing.guest_phys_addr.saturating_add(existing.size);
+            if new_start < ex_end && new_end > ex_start {
+                return Err(Error::InvalidParameter);
+            }
         }
         self.regions[self.count] = Some(region);
         self.count += 1;
@@ -575,7 +602,7 @@ mod tests {
     #[test]
     fn frame_allocator_init_and_counts() {
         let mut fa = FrameAllocator::new();
-        fa.init(0x10_0000, 0x20_0000); // 1 MiB region = 256 frames
+        fa.init(0x10_0000, 0x20_0000).unwrap(); // 1 MiB region = 256 frames
         assert_eq!(fa.allocated_count(), 0);
         assert_eq!(fa.free_count(), 256);
     }
@@ -583,7 +610,7 @@ mod tests {
     #[test]
     fn frame_allocator_allocate_one() {
         let mut fa = FrameAllocator::new();
-        fa.init(0x10_0000, 0x20_0000);
+        fa.init(0x10_0000, 0x20_0000).unwrap();
         let frame = fa.allocate_frame().unwrap();
         assert_eq!(frame.as_u64(), 0x10_0000);
         assert_eq!(fa.allocated_count(), 1);
@@ -593,7 +620,7 @@ mod tests {
     #[test]
     fn frame_allocator_allocate_many() {
         let mut fa = FrameAllocator::new();
-        fa.init(0x10_0000, 0x20_0000);
+        fa.init(0x10_0000, 0x20_0000).unwrap();
         let f1 = fa.allocate_frame().unwrap();
         let f2 = fa.allocate_frame().unwrap();
         assert_eq!(f1.as_u64(), 0x10_0000);
@@ -603,7 +630,7 @@ mod tests {
     #[test]
     fn frame_allocator_allocate_frames() {
         let mut fa = FrameAllocator::new();
-        fa.init(0x10_0000, 0x20_0000);
+        fa.init(0x10_0000, 0x20_0000).unwrap();
         let base = fa.allocate_frames(4).unwrap();
         assert_eq!(base.as_u64(), 0x10_0000);
         assert_eq!(fa.allocated_count(), 4);
@@ -612,7 +639,7 @@ mod tests {
     #[test]
     fn frame_allocator_oom() {
         let mut fa = FrameAllocator::new();
-        fa.init(0x10_0000, 0x10_1000); // exactly 1 frame
+        fa.init(0x10_0000, 0x10_1000).unwrap(); // exactly 1 frame
         fa.allocate_frame().unwrap();
         assert!(fa.allocate_frame().is_err());
     }
@@ -780,5 +807,128 @@ mod tests {
                 executable: true,
             })
             .is_err());
+    }
+
+    // --- Hardening: FrameAllocator input validation ---
+
+    #[test]
+    fn frame_allocator_init_start_ge_end() {
+        let mut fa = FrameAllocator::new();
+        assert!(fa.init(0x20_0000, 0x10_0000).is_err()); // start > end
+        assert!(fa.init(0x10_0000, 0x10_0000).is_err()); // start == end
+    }
+
+    #[test]
+    fn frame_allocator_init_too_small_for_page() {
+        let mut fa = FrameAllocator::new();
+        // Region smaller than one page after alignment
+        assert!(fa.init(0x10_0001, 0x10_0FFF).is_err());
+    }
+
+    #[test]
+    fn frame_allocator_init_aligns_boundaries() {
+        let mut fa = FrameAllocator::new();
+        // start=0x10_0001 rounds up to 0x10_1000, end=0x10_3FFF rounds down to 0x10_3000
+        fa.init(0x10_0001, 0x10_3FFF).unwrap();
+        assert_eq!(fa.free_count(), 2); // 0x10_1000 and 0x10_2000
+    }
+
+    // --- Hardening: GuestMemoryMapper overlap detection ---
+
+    #[test]
+    fn mapper_rejects_full_overlap() {
+        let mut mapper = GuestMemoryMapper::new();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x1000,
+                host_phys_addr: 0x100_0000,
+                size: 0x3000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+        // Exact same range overlaps
+        assert!(mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x1000,
+                host_phys_addr: 0x200_0000,
+                size: 0x3000,
+                writable: true,
+                executable: true,
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn mapper_rejects_partial_overlap_start() {
+        let mut mapper = GuestMemoryMapper::new();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x2000,
+                host_phys_addr: 0x100_0000,
+                size: 0x2000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+        // New region overlaps at the start of existing
+        assert!(mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x1000,
+                host_phys_addr: 0x200_0000,
+                size: 0x2000, // 0x1000..0x3000 overlaps 0x2000..0x4000
+                writable: true,
+                executable: true,
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn mapper_rejects_partial_overlap_end() {
+        let mut mapper = GuestMemoryMapper::new();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x1000,
+                host_phys_addr: 0x100_0000,
+                size: 0x2000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+        // New region overlaps at the end of existing
+        assert!(mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x2000,
+                host_phys_addr: 0x200_0000,
+                size: 0x2000, // 0x2000..0x4000 overlaps 0x1000..0x3000
+                writable: true,
+                executable: true,
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn mapper_allows_adjacent_non_overlapping() {
+        let mut mapper = GuestMemoryMapper::new();
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x0,
+                host_phys_addr: 0x100_0000,
+                size: 0x1000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+        // Adjacent but not overlapping
+        mapper
+            .map_region(GuestMemoryRegion {
+                guest_phys_addr: 0x1000,
+                host_phys_addr: 0x200_0000,
+                size: 0x1000,
+                writable: true,
+                executable: true,
+            })
+            .unwrap();
+        assert_eq!(mapper.regions().count(), 2);
     }
 }

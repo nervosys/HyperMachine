@@ -117,7 +117,7 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     }
 
     // Report detected APs
-    let ap_count = unsafe { boot::ap_count() };
+    let ap_count = boot::ap_count();
     serial_println!("Detected {} application processor(s)", ap_count);
 
     // Enter hypervisor mode — create and run the first guest VM
@@ -204,9 +204,12 @@ fn enter_hypervisor_mode(vendor: CpuVendor, boot_info: &hv1_core::boot::BootInfo
     };
 
     // Initialise the VM's frame allocator from boot-time region
-    let (fa_start, fa_end) = unsafe { boot::boot_frame_allocator_region() };
+    let (fa_start, fa_end) = boot::boot_frame_allocator_region();
     if fa_start != 0 && fa_end > fa_start {
-        vm.init_frame_allocator(fa_start, fa_end);
+        if let Err(e) = vm.init_frame_allocator(fa_start, fa_end) {
+            serial_println!("Frame allocator init failed: {}", e);
+            return;
+        }
         serial_println!(
             "Frame allocator: {:#x} - {:#x} ({} MB)",
             fa_start,
