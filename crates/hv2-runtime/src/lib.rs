@@ -67,6 +67,7 @@ pub mod billing;
 pub mod capacity;
 pub mod fleet;
 pub mod gateway;
+pub mod gpu_metrics;
 pub mod health;
 pub mod metrics;
 pub mod pool;
@@ -91,6 +92,9 @@ pub use fleet::{
 pub use gateway::{
     Gateway, GatewayConfig, GatewayError, GatewayResult, Route, RoutePolicy, RoutingDecision,
     SessionAffinity,
+};
+pub use gpu_metrics::{
+    GpuDeviceMetrics, GpuDeviceSnapshot, GpuFleetSnapshot, GpuHealthState, GpuMetricsCollector,
 };
 pub use health::{
     HealthCheck, HealthCheckConfig, HealthCheckResult, HealthMonitor, HealthStatus, ProbeResult,
