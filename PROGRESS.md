@@ -2,7 +2,7 @@
 
 ## Current State: Production-Ready Core
 
-**4,179 tests passing** | **0 failures** | **0 clippy warnings** | **~192,000 lines of Rust**
+**4,328 tests passing** | **0 failures** | **0 clippy warnings** | **~197,500 lines of Rust** | **283 `.rs` files**
 
 All stub implementations have been completed. Zero remaining `todo!()`, `unimplemented!()`, or
 placeholder stubs in production code paths.
@@ -119,11 +119,11 @@ Completed the Type-1 bare-metal hypervisor across all modules (~2,000 lines adde
 
 | Category                       | Count                      |
 | ------------------------------ | -------------------------- |
-| hv2-core unit tests            | 2,057                      |
+| hv2-core unit tests            | 2,233                      |
 | hv2-core integration/doc tests | 176                        |
-| hv2-api unit + integration     | 956                        |
+| hv2-api unit + integration     | 962                        |
 | hv2-agent unit tests           | 396                        |
-| hv2-runtime unit tests         | 186                        |
+| hv2-runtime unit tests         | 195                        |
 | hv2-runtime integration tests  | 44                         |
 | hv2-cpu unit tests             | 66                         |
 | hm-cli unit + integration      | 55                         |
@@ -131,9 +131,9 @@ Completed the Type-1 bare-metal hypervisor across all modules (~2,000 lines adde
 | hv2-cli unit tests             | 22                         |
 | hv2-gpu unit tests             | 20                         |
 | hv2-net unit tests             | 13                         |
-| hv1-core unit + integration    | 154                        |
-| hv1-arm unit tests             | 105                        |
-| **Total**                      | **4,284 passed, 0 failed** |
+| hv1-core unit + integration    | 161                        |
+| hv1-arm unit + integration     | 127                        |
+| **Total**                      | **4,328 passed, 0 failed** |
 
 28 tests ignored (platform-specific: WHPX hardware, KVM-only features).
 
@@ -173,6 +173,15 @@ level-triggered interrupts still active. Fixed to check the bitmap and re-delive
 
 ---
 
+### Phase 119: CI/CD, GPU Fabric API, GPU Observability ✅
+
+1. ✅ CI/CD ARM64 cross-compilation pipeline: `hv1-arm-check` (nightly, `aarch64-unknown-none`) and `hv1-arm-test` (stable, host-side) jobs in `.github/workflows/ci.yml`
+2. ✅ hv1-arm integration tests: 22 cross-module tests covering VM lifecycle, stage-2 mapping, sysreg exit handling, WFI/WFE, HVC/SMC traps, SError/unknown-EC fatal exits, vGIC injection, multi-vCPU independence, EL2 config, page table isolation
+3. ✅ GPU Fabric REST API: 9 endpoints under `/api/v1/gpu-fabric/` — topology CRUD, fleet list/detail, capacity check/reserve/release — wired into `build_router()` in hv2-api
+4. ✅ GPU observability module: `GpuMetricsCollector` with per-device atomic counters, fleet-level aggregation (`GpuFleetSnapshot`), Prometheus-format export, health state tracking (Healthy/Degraded/Offline/Unknown)
+
+---
+
 *Last Updated: March 20, 2026*
 *Version: 0.1.0*
-*Status: All Stubs Complete — Production-Ready Core — HV1 Fully Implemented — GPU VM Fabric Complete — ARM64/EL2 Support*
+*Status: All Stubs Complete — Production-Ready Core — HV1 Fully Implemented — GPU VM Fabric Complete — ARM64/EL2 Support — GPU Fabric API & Observability*

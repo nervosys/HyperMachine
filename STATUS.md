@@ -15,14 +15,14 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 
 ### Build Status
 
-| Metric        | Value                                    |
-| ------------- | ---------------------------------------- |
-| Build         | ✅ Clean (0 errors, 0 warnings)           |
-| Tests         | ✅ **4,284 passed**, 0 failed, 28 ignored |
-| Clippy        | ✅ 0 warnings (`-D warnings`)             |
-| Crates        | 13 (10 stable, 2 nightly, 1 cross-platform)                |
-| Source files  | 280 `.rs` files                          |
-| Lines of Rust | ~224,000                                 |
+| Metric        | Value                                       |
+| ------------- | ------------------------------------------- |
+| Build         | ✅ Clean (0 errors, 0 warnings)              |
+| Tests         | ✅ **4,328 passed**, 0 failed, 28 ignored    |
+| Clippy        | ✅ 0 warnings (`-D warnings`)                |
+| Crates        | 13 (10 stable, 2 nightly, 1 cross-platform) |
+| Source files  | 283 `.rs` files                             |
+| Lines of Rust | ~197,500                                    |
 
 ### Security Audit
 
@@ -54,11 +54,14 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 ✅ Desktop GUI with AI automation API
 ✅ Fleet runtime with VM pooling, scheduling, and DAG workflows
 ✅ GPU VM Fabric: topology-aware placement, fleet management, capacity reservations, image registry
+✅ GPU Fabric REST API: 9 endpoints for topology, fleet, and capacity management
+✅ GPU observability: per-device metrics, fleet aggregation, Prometheus export
 ✅ Platform backends: KVM (Linux), WHPX (Windows), HVF (macOS), TCG (software)
 ✅ Containerization: cgroups v1/v2, namespaces, seccomp
 ✅ Live migration with dirty page tracking
 ✅ Nested virtualization (shadow VMCS, EPT)
 ✅ ARM64/EL2 Type-1 hypervisor support (Stage-2 MMU, vGIC, vCPU, system register emulation)
+✅ ARM64 CI/CD cross-compilation pipeline (aarch64-unknown-none)
 ✅ NUMA-aware memory allocation
 
 ---
@@ -69,19 +72,19 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 
 ```shell
 HyperMachine/
-├── hv2-core/      # Core hypervisor engine           ✅ 107,748 lines  2,040 tests
-├── hv2-api/       # REST/gRPC API server             ✅  29,190 lines    956 tests
+├── hv2-core/      # Core hypervisor engine           ✅ 109,196 lines  2,233 tests
+├── hv2-api/       # REST/gRPC API server             ✅  29,743 lines    962 tests
 ├── hv2-agent/     # AI agent framework               ✅  19,423 lines    396 tests
-├── hv2-runtime/   # Fleet runtime & scheduling       ✅   8,200 lines    230 tests
+├── hv2-runtime/   # Fleet runtime & scheduling       ✅  10,486 lines    239 tests
 ├── hm-cli/        # CLI + MCP server                 ✅   5,341 lines     55 tests
 ├── hv2-cpu/       # CPU emulation (x86_64, AArch64)  ✅   4,340 lines     66 tests
-├── hv1-core/      # Type-1 bare-metal core           ✅   7,681 lines    154 tests (nightly)
+├── hv1-core/      # Type-1 bare-metal core           ✅   7,911 lines    161 tests (nightly)
 ├── hm-gui/        # Desktop GUI + AI automation      ✅   3,227 lines     34 tests
 ├── hv2-gpu/       # GPU virtualization               ✅   1,716 lines     20 tests
 ├── hv2-net/       # Networking (TAP/TUN, VirtIO)     ✅   1,696 lines     13 tests
 ├── hv2-cli/       # Standalone hypervisor CLI        ✅   1,026 lines     22 tests
-├── hv1-arm/       # ARM64 EL2 hypervisor backend   ✅   3,094 lines    105 tests
-└── hv1-boot/      # Type-1 UEFI bootloader           ✅     253 lines  (nightly)
+├── hv1-arm/       # ARM64 EL2 hypervisor backend     ✅   3,100 lines    127 tests
+└── hv1-boot/      # Type-1 UEFI bootloader           ✅     295 lines  (nightly)
 ```
 
 ### Key Modules
@@ -169,14 +172,15 @@ HyperMachine/
 - Agent memory (working/episodic/semantic)
 - Policy engine for governance
 
-#### hv2-api — REST/gRPC API (29K lines, 956 tests)
+#### hv2-api — REST/gRPC API (30K lines, 962 tests)
 - Axum REST API with CRUD VM operations
 - Tonic gRPC service with event streaming
 - Auth, rate limiting, logging middleware
 - Machine-readable API discovery (OpenAPI, JSON-LD, tool schemas)
 - Runtime subsystem routes
+- GPU Fabric REST endpoints (topology, fleet, capacity management)
 
-#### hv2-runtime — Fleet Runtime (8.2K lines, 230 tests)
+#### hv2-runtime — Fleet Runtime (10.5K lines, 239 tests)
 - VM pool with warm/cold standby lifecycle
 - Workload scheduler (bin-pack, spread, best-fit, random) with affinity constraints
 - DAG workflow engine with checkpoint/resume and retry
@@ -186,6 +190,7 @@ HyperMachine/
 - Fleet lifecycle management with rolling/canary rollouts
 - Reservation-based capacity management with SLA tiers
 - Image allowlist with admission control
+- GPU observability: per-device metrics, fleet aggregation, Prometheus export
 
 #### hm-cli — CLI + MCP Server (5.3K lines, 55 tests)
 - Clap-based CLI: `hm t1`, `hm t2`, `hm mcp serve`, `hm completions`

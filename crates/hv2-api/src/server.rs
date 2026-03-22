@@ -5,15 +5,17 @@
 //!
 //! ## Architecture
 //!
-//! The server merges five independent routers into one:
+//! The server merges eight independent routers into one:
 //!
-//! | Router           | Prefix               | State               |
-//! |------------------|-----------------------|---------------------|
-//! | VM CRUD          | `/api/v1/vms`         | `AppState`          |
-//! | Ontology         | `/agentic`            | (stateless)         |
-//! | Events/SSE       | `/api/v1/events`      | `EventBus`          |
-//! | Runtime fleet    | `/api/v1/runtime`     | `RuntimeAppState`   |
-//! | GPU Fabric       | `/api/v1/gpu-fabric`  | `GpuFabricAppState` |
+//! | Router           | Prefix               | State                  |
+//! |------------------|-----------------------|------------------------|
+//! | VM CRUD          | `/api/v1/vms`         | `AppState`             |
+//! | Ontology         | `/agentic`            | (stateless)            |
+//! | Events/SSE       | `/api/v1/events`      | `EventBus`             |
+//! | Runtime fleet    | `/api/v1/runtime`     | `RuntimeAppState`      |
+//! | GPU Fabric       | `/api/v1/gpu-fabric`  | `GpuFabricAppState`    |
+//! | Image Registry   | `/api/v1/images`      | `ImageRegistryAppState`|
+//! | Unified Health   | `/api/v1/health/full` | `UnifiedHealthState`   |
 //!
 //! Each router keeps its own state via axum state extractors while
 //! sharing a single TCP listener and connection pool.
@@ -32,6 +34,8 @@
 
 use crate::events::{self, EventBus};
 use crate::gpu_fabric_routes::{self, GpuFabricAppState};
+use crate::health_routes::{self, UnifiedHealthState};
+use crate::image_registry_routes::{self, ImageRegistryAppState};
 use crate::middleware::MiddlewareConfig;
 use crate::rest;
 use crate::runtime_routes::{self, RuntimeAppState};
@@ -250,6 +254,11 @@ impl Server {
         // Start with the VM CRUD + ontology + health router
         let mut app = rest::create_router_with_state(app_state);
 
+        // Build unified health state
+        let mut health_state = UnifiedHealthState::new()
+            .with_runtime(self.config.enable_runtime)
+            .with_events(self.config.enable_events);
+
         // Merge runtime routes if enabled
         if let Some(ref rt) = self.runtime {
             let state = Arc::new(RuntimeAppState::from_runtime_arc(rt.clone()));
@@ -258,9 +267,23 @@ impl Server {
 
             // Merge GPU fabric routes (backed by runtime topology/fleet/capacity)
             let gpu_state = Arc::new(GpuFabricAppState::new());
-            let gpu_router = gpu_fabric_routes::create_gpu_fabric_router(gpu_state);
+            let gpu_router = gpu_fabric_routes::create_gpu_fabric_router(gpu_state.clone());
             app = app.merge(gpu_router);
+
+            // Merge image registry routes
+            let image_state = Arc::new(ImageRegistryAppState::new());
+            let image_router =
+                image_registry_routes::create_image_registry_router(image_state.clone());
+            app = app.merge(image_router);
+
+            health_state = health_state
+                .with_gpu_fabric(gpu_state)
+                .with_image_registry(image_state);
         }
+
+        // Merge unified health endpoint
+        let health_router = health_routes::create_health_router(Arc::new(health_state));
+        app = app.merge(health_router);
 
         // Nest events routes if enabled
         if let Some(ref bus) = self.event_bus {
@@ -364,6 +387,7 @@ impl Server {
             ("GET", "/health", "Health check"),
             ("GET", "/health/live", "Liveness probe"),
             ("GET", "/health/ready", "Readiness probe"),
+            ("GET", "/api/v1/health/full", "Unified health"),
             ("GET", "/api/v1/vms", "List VMs"),
             ("POST", "/api/v1/vms", "Create VM"),
             ("GET", "/api/v1/vms/:id", "Get VM"),
@@ -623,8 +647,8 @@ mod tests {
     fn test_route_table_all_enabled() {
         let server = test_server();
         let routes = server.route_table();
-        // 18 base + 5 events + 12 runtime = 35
-        assert_eq!(routes.len(), 35);
+        // 19 base + 5 events + 12 runtime = 36
+        assert_eq!(routes.len(), 36);
     }
 
     #[test]
@@ -635,7 +659,8 @@ mod tests {
         let server = Server::new(config);
         let routes = server.route_table();
         // 18 base only
-        assert_eq!(routes.len(), 18);
+        // 19 base (includes /api/v1/health/full)
+        assert_eq!(routes.len(), 19);
     }
 
     // ── Router Integration ────────────────────────────────────────────

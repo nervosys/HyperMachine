@@ -140,6 +140,30 @@ FIPS 140-3 compliant cryptographic modules:
 
 ## Deployment
 
+### GPU Fabric API
+
+HyperMachine provides a GPU Fabric REST API for topology-aware GPU placement and fleet management:
+
+```bash
+# Query GPU topology
+curl http://localhost:8080/api/v1/gpu-fabric/topology
+
+# List fleet hosts
+curl http://localhost:8080/api/v1/gpu-fabric/fleet
+
+# Check capacity for GPU workloads
+curl -X POST http://localhost:8080/api/v1/gpu-fabric/capacity/check \
+  -H "Content-Type: application/json" \
+  -d '{"gpu_count": 4, "min_vram_mb": 40960, "interconnect": "NvLink"}'
+
+# Reserve GPU capacity
+curl -X POST http://localhost:8080/api/v1/gpu-fabric/capacity/reserve \
+  -H "Authorization: Bearer your-key" \
+  -d '{"gpu_count": 8, "sla_tier": "Premium", "duration_secs": 3600}'
+```
+
+### Kubernetes / Terraform
+
 ```bash
 # Kubernetes
 helm install hypermachine ./deploy/helm/hypermachine \
@@ -171,6 +195,7 @@ cargo bench -p hv2-core --bench crypto_bench
 crates/
   hm-cli      # CLI + MCP server
   hm-gui      # Desktop GUI with AI automation API
+  hv1-arm     # ARM64 EL2 hypervisor backend (127 tests)
   hv1-boot    # Type-1 bare-metal bootloader (nightly)
   hv1-core    # Type-1 bare-metal hypervisor core (nightly)
   hv2-core    # Core engine (CPU, memory, devices, crypto)
@@ -178,8 +203,9 @@ crates/
   hv2-gpu     # GPU virtualization (Vulkan/WebGPU, passthrough)
   hv2-net     # Networking (TCP/IP stack, TAP/TUN, virtio-net)
   hv2-agent   # AI agent interface (MCP, WASM plugins)
-  hv2-api     # REST/gRPC API server
+  hv2-api     # REST/gRPC API server + GPU Fabric endpoints
   hv2-cli     # Standalone hypervisor CLI
+  hv2-runtime # Fleet runtime, scheduler, GPU observability
 deploy/
   k8s/        # Kubernetes manifests
   helm/       # Helm charts
