@@ -5,14 +5,15 @@
 //!
 //! ## Architecture
 //!
-//! The server merges four independent routers into one:
+//! The server merges five independent routers into one:
 //!
-//! | Router           | Prefix               | State            |
-//! |------------------|-----------------------|------------------|
-//! | VM CRUD          | `/api/v1/vms`         | `AppState`       |
-//! | Ontology         | `/agentic`            | (stateless)      |
-//! | Events/SSE       | `/api/v1/events`      | `EventBus`       |
-//! | Runtime fleet    | `/api/v1/runtime`     | `RuntimeAppState`|
+//! | Router           | Prefix               | State               |
+//! |------------------|-----------------------|---------------------|
+//! | VM CRUD          | `/api/v1/vms`         | `AppState`          |
+//! | Ontology         | `/agentic`            | (stateless)         |
+//! | Events/SSE       | `/api/v1/events`      | `EventBus`          |
+//! | Runtime fleet    | `/api/v1/runtime`     | `RuntimeAppState`   |
+//! | GPU Fabric       | `/api/v1/gpu-fabric`  | `GpuFabricAppState` |
 //!
 //! Each router keeps its own state via axum state extractors while
 //! sharing a single TCP listener and connection pool.
@@ -30,6 +31,7 @@
 //! (default: 30 seconds, 0 = immediate shutdown).
 
 use crate::events::{self, EventBus};
+use crate::gpu_fabric_routes::{self, GpuFabricAppState};
 use crate::middleware::MiddlewareConfig;
 use crate::rest;
 use crate::runtime_routes::{self, RuntimeAppState};
@@ -238,6 +240,7 @@ impl Server {
     /// - `/agentic/...` — AI agent ontology
     /// - `/api/v1/events/...` — webhooks, SSE streaming
     /// - `/api/v1/runtime/...` — fleet-level operations
+    /// - `/api/v1/gpu-fabric/...` — GPU topology, fleet, capacity
     pub fn build_router(&self) -> Router {
         // Build application state with component awareness
         let app_state = rest::AppState::new()
@@ -252,6 +255,11 @@ impl Server {
             let state = Arc::new(RuntimeAppState::from_runtime_arc(rt.clone()));
             let runtime_router = runtime_routes::create_runtime_router(state);
             app = app.merge(runtime_router);
+
+            // Merge GPU fabric routes (backed by runtime topology/fleet/capacity)
+            let gpu_state = Arc::new(GpuFabricAppState::new());
+            let gpu_router = gpu_fabric_routes::create_gpu_fabric_router(gpu_state);
+            app = app.merge(gpu_router);
         }
 
         // Nest events routes if enabled

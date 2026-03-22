@@ -316,6 +316,68 @@ jobs:
                   -Zbuild-std=core,alloc
                   -Zbuild-std-features=compiler-builtins-mem
 
+    hv1-arm-check:
+        name: HV1 ARM64 Check (nightly, aarch64-unknown-none)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install nightly toolchain
+              uses: dtolnay/rust-toolchain@nightly
+              with:
+                  components: rust-src
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-hv1-arm-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-hv1-arm-
+                      ${{ runner.os }}-cargo-
+
+            - name: Check hv1-arm (aarch64-unknown-none)
+              run: >
+                  cargo +nightly check -p hv1-arm
+                  --target aarch64-unknown-none
+                  -Zbuild-std=core,alloc
+                  -Zbuild-std-features=compiler-builtins-mem
+
+            - name: Check hv1-core with arm64 feature (aarch64-unknown-none)
+              run: >
+                  cargo +nightly check -p hv1-core
+                  --features arm64
+                  --target aarch64-unknown-none
+                  -Zbuild-std=core,alloc
+                  -Zbuild-std-features=compiler-builtins-mem
+
+    hv1-arm-test:
+        name: HV1 ARM64 Test (host)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-hv1-arm-test-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-hv1-arm-test-
+                      ${{ runner.os }}-cargo-
+
+            - name: Run hv1-arm unit tests (host)
+              run: cargo test -p hv1-arm
+
     hv1-test:
         name: HV1 Test (nightly, host)
         runs-on: ubuntu-latest

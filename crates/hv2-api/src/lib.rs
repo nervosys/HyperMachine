@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod events;
+pub mod gpu_fabric_routes;
 pub mod grpc;
 pub mod middleware;
 pub mod ontology;
