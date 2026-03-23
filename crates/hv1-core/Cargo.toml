@@ -22,7 +22,7 @@ acpi = []                  # ACPI support
 [dependencies]
 # No-std compatible crates
 spin = "0.9"
-bitflags = "2.4"
+bitflags = "2.11"
 log = "0.4"
 static_assertions = "1.1"
 
