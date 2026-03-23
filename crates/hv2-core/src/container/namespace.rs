@@ -99,7 +99,7 @@ pub struct NsHandle {
     ns_type: NsType,
     /// Namespace ID
     ns_id: NsId,
-    /// Path to namespace file (e.g., /proc/[pid]/ns/net)
+    /// Path to namespace file (e.g., `/proc/<pid>/ns/net`)
     path: Option<PathBuf>,
 }
 

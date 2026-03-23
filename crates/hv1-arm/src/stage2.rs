@@ -10,16 +10,16 @@
 //!
 //! | Level | Entry covers | Index bits (IPA) |
 //! |-------|-------------|------------------|
-//! | 1     | 1 GB        | [39:30]          |
-//! | 2     | 2 MB        | [29:21]          |
-//! | 3     | 4 KB        | [20:12]          |
+//! | 1     | 1 GB        | \[39:30\]          |
+//! | 2     | 2 MB        | \[29:21\]          |
+//! | 3     | 4 KB        | \[20:12\]          |
 //!
 //! # Descriptor format (stage-2)
 //!
-//! - Bits [1:0]: valid + table/block
-//! - Bits [47:12]: output address (OA)
-//! - Bits [7:6]: S2AP (stage-2 access permissions)
-//! - Bits [5:4]: memory attributes (MemAttr)
+//! - Bits \[1:0\]: valid + table/block
+//! - Bits \[47:12\]: output address (OA)
+//! - Bits \[7:6\]: S2AP (stage-2 access permissions)
+//! - Bits \[5:4\]: memory attributes (MemAttr)
 
 use crate::{Error, Result};
 use bitflags::bitflags;
@@ -33,7 +33,7 @@ pub const HUGE_PAGE_SIZE: usize = 1024 * 1024 * 1024;
 /// Number of entries per page table (4 KB / 8 bytes)
 pub const ENTRIES_PER_TABLE: usize = 512;
 
-/// Bits [47:12] mask for output address
+/// Bits \[47:12\] mask for output address
 const OA_MASK: u64 = 0x0000_FFFF_FFFF_F000;
 
 bitflags! {
@@ -48,9 +48,9 @@ bitflags! {
         const S2AP_READ     = 1 << 6;
         /// Stage-2 access permission: write
         const S2AP_WRITE    = 1 << 7;
-        /// Memory attribute: Device-nGnRnE (bits [5:4] = 0b00)
+        /// Memory attribute: Device-nGnRnE (bits \[5:4\] = 0b00)
         const MEMATTR_DEVICE = 0 << 4;
-        /// Memory attribute: Normal (bits [5:4] = 0b11 → outer/inner write-back)
+        /// Memory attribute: Normal (bits \[5:4\] = 0b11 → outer/inner write-back)
         const MEMATTR_NORMAL = 0b11 << 4;
         /// Access flag
         const AF             = 1 << 10;

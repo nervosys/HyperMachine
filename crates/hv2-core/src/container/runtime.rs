@@ -246,7 +246,7 @@ impl NamespaceType {
         }
     }
 
-    /// Get namespace file name in `/proc/[pid]/ns/`
+    /// Get namespace file name in `/proc/<pid>/ns/`
     pub fn proc_name(&self) -> &'static str {
         match self {
             Self::Pid => "pid",

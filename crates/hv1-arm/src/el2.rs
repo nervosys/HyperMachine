@@ -75,15 +75,15 @@ impl HcrEl2 {
 /// VTTBR_EL2 value combining a VMID with the stage-2 table base address.
 ///
 /// Layout (IPA size ≤ 48 bits):
-///   - Bits [47:1]  — BADDR: stage-2 translation table base (page-aligned)
-///   - Bits [63:48] — VMID (up to 16 bits when VMID16EL2 is supported)
+///   - Bits \[47:1\]  — BADDR: stage-2 translation table base (page-aligned)
+///   - Bits \[63:48\] — VMID (up to 16 bits when VMID16EL2 is supported)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VttbrEl2(u64);
 
 impl VttbrEl2 {
     /// Construct a VTTBR from a VMID and page-table base physical address.
     ///
-    /// `base_addr` must be page-aligned (bits [11:0] == 0).
+    /// `base_addr` must be page-aligned (bits \[11:0\] == 0).
     pub fn new(vmid: u16, base_addr: u64) -> Result<Self> {
         if base_addr & 0xFFF != 0 {
             return Err(Error::InvalidParameter);
@@ -112,7 +112,7 @@ impl VttbrEl2 {
 // Exception class (ESR_EL2.EC) — reason the guest trapped to EL2
 // ---------------------------------------------------------------------------
 
-/// Exception class from ESR_EL2 bits [31:26]
+/// Exception class from ESR_EL2 bits \[31:26\]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ExceptionClass {

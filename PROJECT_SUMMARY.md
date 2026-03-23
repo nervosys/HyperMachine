@@ -166,7 +166,7 @@ async fn main() -> anyhow::Result<()> {
 
 ## Development Status
 
-HV2 is in **advanced development** with a comprehensive feature set across 12 crates (184,556 lines of Rust, 3,923 tests passing, 0 clippy warnings).
+HV2 is in **advanced development** with a comprehensive feature set across 13 crates (230,957 lines of Rust, 4,381 tests passing, 0 clippy warnings).
 
 ✅ **Core Hypervisor**:
 - Multi-backend VM engine (KVM, WHPX, HVF) with full VM exit handling
@@ -254,10 +254,10 @@ HV2 is in **advanced development** with a comprehensive feature set across 12 cr
 
 | Metric              | Value   |
 | ------------------- | ------- |
-| **Lines of Rust**   | 184,556 |
-| **Source Files**    | 263     |
-| **Crates**          | 12      |
-| **Tests Passing**   | 3,923   |
+| **Lines of Rust**   | 230,957 |
+| **Source Files**    | 292     |
+| **Crates**          | 13      |
+| **Tests Passing**   | 4,381   |
 | **Tests Failing**   | 0       |
 | **Clippy Warnings** | 0       |
 | **MSRV**            | 1.87+   |
