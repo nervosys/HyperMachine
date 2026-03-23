@@ -8,12 +8,12 @@
 //! # ISS encoding for system register traps (EC 0x18)
 //!
 //! ```text
-//! ISS [24:20] = Op0
-//! ISS [19:16] = Op1
-//! ISS [15:12] = CRn
-//! ISS [11:8]  = CRm
-//! ISS [7:5]   = Op2
-//! ISS [4:1]   = Rt  (source/dest register index)
+//! ISS \[24:20\] = Op0
+//! ISS \[19:16\] = Op1
+//! ISS \[15:12\] = CRn
+//! ISS \[11:8\]  = CRm
+//! ISS \[7:5\]   = Op2
+//! ISS \[4:1\]   = Rt  (source/dest register index)
 //! ISS [0]     = Direction: 0 = write (MSR), 1 = read (MRS)
 //! ```
 
