@@ -550,7 +550,7 @@ mod tests {
         let mut sw = VirtualSwitch::with_defaults();
         let p0 = sw.add_port("vm-0");
         let p1 = sw.add_port("vm-1");
-        let p2 = sw.add_port("vm-2");
+        let _p2 = sw.add_port("vm-2");
 
         assert_eq!(sw.port_count(), 3);
         assert_eq!(sw.get_port(p0).unwrap().name, "vm-0");
@@ -637,7 +637,7 @@ mod tests {
         });
 
         let p0 = sw.add_port("vm-0");
-        let p1 = sw.add_port("vm-1");
+        let _p1 = sw.add_port("vm-1");
 
         sw.process_frame(p0, mac(1), BROADCAST_MAC, None, 64);
         assert_eq!(sw.mac_count(), 1);
@@ -667,7 +667,7 @@ mod tests {
         let mut sw = VirtualSwitch::with_defaults();
         let p0 = sw.add_port_with_config("vm-0", None, VlanMode::Access(100));
         let p1 = sw.add_port_with_config("vm-1", None, VlanMode::Access(100));
-        let p2 = sw.add_port_with_config("vm-2", None, VlanMode::Access(200));
+        let _p2 = sw.add_port_with_config("vm-2", None, VlanMode::Access(200));
 
         // Frame on VLAN 100 from p0
         let action = sw.process_frame(p0, mac(1), BROADCAST_MAC, Some(100), 64);

@@ -1709,7 +1709,7 @@ un() for signal-safe vCPU execution
 
 **Downstream match updates:** vm.rs (2 match sites), whpx.rs, exit_handler.rs, exit_handling.rs example, guest_execution.rs test
 
-### Phase 48: KVM Backend Methods
+### ✅ Phase 48: KVM Backend Methods
 
 **Status:** Complete
 **Tests:** 2,568+ passing (0 failures)
@@ -1745,7 +1745,7 @@ Added high-level safe wrapper methods to KvmVcpu and KvmVm, consuming the 28 FFI
 **kvm_ffi.rs** Default derives added:
 - kvm_fpu, kvm_xsave, kvm_xcrs, kvm_lapic_state
 
-### Phase 49: Backend Architecture Consolidation
+### ✅ Phase 49: Backend Architecture Consolidation
 
 **Status:** Complete
 **Tests:** 2,568+ passing (0 failures)
@@ -1771,7 +1771,7 @@ Extracted inline WHPX and HVF backend modules from hypervisor.rs into dedicated 
 **backends/mod.rs** updated:
 - Registers hvf_ffi + hvf + HvfBackend (macOS cfg)
 
-### Phase 51: Backend VM Exit Handling Completeness
+### ✅ Phase 51: Backend VM Exit Handling Completeness
 
 **Status:** Complete
 **Tests:** All passing (0 failures)
@@ -1799,7 +1799,7 @@ Filled in missing VM exit reason translations across all three hardware backends
 - Added tracing::warn!() to placeholder run() method directing users to HypervisorBackend::run_vcpu()
 
 
-### Phase 52: Memory Safety Hardening & Stub Elimination
+### ✅ Phase 52: Memory Safety Hardening & Stub Elimination
 
 **Status:** Complete
 **Tests:** All passing (2,568 passed, 0 failed, 26 ignored)
@@ -1833,7 +1833,7 @@ Hardened memory safety, replaced dangerous stubs with proper errors, tightened w
 - Fixed 3 test-only unused imports (whpx.rs, device_manager.rs, mmio.rs)
 - Removed 2 unnecessary `mut` bindings (display_backend.rs, allocator.rs)
 
-### Phase 56: Lock Poisoning Resilience Phase 3 -- Container, Device, Network, Debug & Security Hardening
+### ✅ Phase 56: Lock Poisoning Resilience Phase 3 -- Container, Device, Network, Debug & Security Hardening
 
 **Status:** Complete
 **Tests:** All passing (2,576+ tests, 0 failures)
@@ -1872,7 +1872,7 @@ Final sweep of production lock unwrap sites, replacing all remaining `.lock().un
 - `actions.rs`: 1 lock unwrap hardened
 - `reasoning.rs`: 1 lock unwrap hardened
 
-### Phase 55: Lock Poisoning Resilience Phase 2 -- Device & Agent Hardening
+### ✅ Phase 55: Lock Poisoning Resilience Phase 2 -- Device & Agent Hardening
 
 **Status:** Complete
 **Tests:** All passing (2,576+ tests, 0 failures)
@@ -1903,7 +1903,7 @@ Continued the lock poisoning resilience campaign from Phase 54, hardening all re
 - `planning.rs`: 2x `partial_cmp().unwrap()` -> `partial_cmp().unwrap_or(Ordering::Equal)`
 - `memory.rs`: 2x same pattern (relevance sort in episodic/memory retrieval, 1 in production memory.rs)
 
-### Phase 54: Lock Poisoning Resilience & Unwrap Elimination
+### ✅ Phase 54: Lock Poisoning Resilience & Unwrap Elimination
 
 **Status:** Complete
 **Tests:** All passing (2,576+ tests, 0 failures)
@@ -1933,7 +1933,7 @@ Eliminated ~85+ potential panic sites from production code by replacing `.lock()
 **Panic elimination (1 file, 1 site):**
 - `runtime_services.rs`: Replaced `panic!("System reset requested")` with `eprintln!` + `std::process::abort()` to avoid stack unwinding
 
-### Phase 53: Cryptographic Implementation Hardening
+### ✅ Phase 53: Cryptographic Implementation Hardening
 
 **Status:** Complete
 **Tests:** All passing (1,868+ lib tests, 13 integration tests, 0 failed)
@@ -1961,7 +1961,7 @@ Replaced all placeholder/insecure crypto implementations with `Err(CryptoError::
 - Rewrote all 13 integration tests with `get_crypto()` helper using `FipsMode::Disabled`
 - All crypto operations properly gated with `#[cfg(feature = "ring")]`
 
-### Phase 50: Wire WHPX Backend Trait to Real Implementations
+### ✅ Phase 50: Wire WHPX Backend Trait to Real Implementations
 
 **Status:** Complete
 **Tests:** 2,568+ passing (0 failures)
@@ -1984,7 +1984,7 @@ Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu im
 
 **whpx.rs** (6,302 -> 6,353 lines)
 
-### Phase 57: Dependency Modernization & Tooling Fixes
+### ✅ Phase 57: Dependency Modernization & Tooling Fixes
 
 **Status:** Complete
 
@@ -2009,7 +2009,7 @@ Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu im
 
 ---
 
-### Phase 58: Security Hardening & Code Quality
+### ✅ Phase 58: Security Hardening & Code Quality
 
 **Status:** Complete
 
@@ -2037,7 +2037,7 @@ Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu im
 
 ---
 
-### Phase 59: Tracing Module Compilation Fixes
+### ✅ Phase 59: Tracing Module Compilation Fixes
 
 **Status:** Complete
 
@@ -2054,7 +2054,7 @@ Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu im
 
 **Result:** Removed `hv-tracing` feature gate — module now compiles unconditionally.
 
-### Phase 60: Safety, Hardening & CI Improvements
+### ✅ Phase 60: Safety, Hardening & CI Improvements
 
 **Status:** Complete
 
@@ -2076,7 +2076,7 @@ Wired WhpxBackend HypervisorBackend trait methods from stubs to real WhpxVcpu im
 
 ---
 
-### Phase 65: Clippy TODO Violation Cleanup
+### ✅ Phase 65: Clippy TODO Violation Cleanup
 
 **Status:** Complete
 **Tests:** 2,449 passing (0 failures)
@@ -2110,7 +2110,7 @@ Resolved all 41 clippy violations previously suppressed by 12 `#![allow(...)]` d
 
 ---
 
-### Phase 66: Stateful Runtime Environment (hv2-runtime)
+### ✅ Phase 66: Stateful Runtime Environment (hv2-runtime)
 
 **Status:** Complete
 **Tests:** 2,552 passing (0 failures) — 103 new in hv2-runtime
@@ -2143,7 +2143,7 @@ New `hv2-runtime` crate providing fleet-level VM pool management, workload sched
 
 ---
 
-### Phase 67: Runtime Orchestration
+### ✅ Phase 67: Runtime Orchestration
 
 **Status:** Complete
 **Tests:** 2,569 passing (0 failures) — 17 new orchestration tests (120 total in hv2-runtime)
@@ -2178,7 +2178,7 @@ Wired the 8 hv2-runtime subsystems together with cross-cutting orchestration log
 
 ---
 
-### Phase 68: API Integration
+### ✅ Phase 68: API Integration
 
 **Status:** Complete
 **Tests:** 2,580 passing (0 failures) — 11 new runtime REST API tests (19 total in hv2-api)
@@ -2208,7 +2208,7 @@ Wired `hv2-runtime` into `hv2-api` with fleet-level REST endpoints. Previously, 
 
 ---
 
-### Phase 69: CLI Integration
+### ✅ Phase 69: CLI Integration
 
 **Status:** Complete
 **Tests:** 2,602 passing (0 failures) — 22 new CLI runtime tests (22 total in hv2-cli)
@@ -2236,7 +2236,7 @@ Wired `hv2-runtime` into `hv2-cli` with fleet-level subcommands. Previously, hv2
 
 **Integration:** Added `hv2-runtime` dependency to hv2-cli, `Runtime` variant to `Commands` enum in main.rs, `runtime_commands` module with `execute()` entry point.
 
-### Phase 70: Unified Server
+### ✅ Phase 70: Unified Server
 
 **Status:** Complete
 **Tests:** 2,621 passing (0 failures) — 19 new server tests in hv2-api (38 total)
@@ -2273,7 +2273,7 @@ Created a unified API server that merges all four route groups — VM CRUD, onto
 
 ---
 
-### Phase 71: Observability & Metrics
+### ✅ Phase 71: Observability & Metrics
 
 **Status:** Complete
 **Tests:** 2,653 passing (0 failures) — 25 new metrics tests in hv2-runtime (145 total), 7 new in hv2-api (45 total)
@@ -2325,7 +2325,7 @@ Added structured metrics collection with lock-free atomic primitives, Prometheus
 
 ---
 
-### Phase 72: API Middleware Stack
+### ✅ Phase 72: API Middleware Stack
 
 **Status:** Complete
 **Tests:** 2,693 passing (0 failures) — 40 new middleware tests in hv2-api (85 total)
@@ -2367,7 +2367,7 @@ Added a configurable tower middleware stack to the unified API server. All middl
 
 ---
 
-### Phase 73: Configuration File Support
+### ✅ Phase 73: Configuration File Support
 
 **Tests:** 2,726 passing (0 failures) — 33 new config tests in hv2-api (118 total)
 **Location:** `crates/hv2-api/src/config.rs`, `crates/hv2-cli/src/main.rs`
@@ -2397,7 +2397,7 @@ Added TOML-based configuration file loading with layered merging (defaults → f
 
 ---
 
-### Phase 74: Rate Limiting Middleware
+### ✅ Phase 74: Rate Limiting Middleware
 
 **Tests:** 2,737 passing (0 failures) — 11 new rate limit tests in hv2-api (129 total)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2424,7 +2424,7 @@ Added a token-bucket rate limiter as a new middleware layer, integrated into the
 
 **Builder API:** `MiddlewareConfig::default().rate_limit(config)`, `.rate_limit_enabled(bool)`
 
-### Phase 75: Graceful Shutdown & Lifecycle
+### ✅ Phase 75: Graceful Shutdown & Lifecycle
 
 **Tests:** 2,756 passing (0 failures) — 19 new tests (148 in hv2-api)
 **Location:** `crates/hv2-api/src/server.rs`, `crates/hv2-api/src/config.rs`, `crates/hv2-cli/src/main.rs`
@@ -2447,7 +2447,7 @@ Added graceful shutdown with signal handling, configurable drain timeout, and a 
 - `--shutdown-timeout <secs>` CLI flag on the `serve` subcommand
 - Builder: `ServerConfig::default().shutdown_timeout_secs(60)`
 
-### Phase 76: Request Body Size Limits
+### ✅ Phase 76: Request Body Size Limits
 
 **Tests:** 2,778 passing (0 failures) — 22 new tests (170 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2469,7 +2469,7 @@ Added a 7th composable middleware layer that enforces request body size limits, 
 - `HV2_BODY_LIMIT` environment variable (auto-enables when set)
 - Builder: `.body_limit(config)`, `.body_limit_enabled(bool)`
 
-### Phase 77: Error Handling & Fallback Routes
+### ✅ Phase 77: Error Handling & Fallback Routes
 
 **Tests:** 2,799 passing (0 failures) — 21 new tests (191 in hv2-api)
 **Location:** `crates/hv2-api/src/rest.rs`, `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2500,7 +2500,7 @@ Unified error response format across all API handlers and middleware layers, add
 
 ---
 
-### Phase 78: Health Check Enhancements
+### ✅ Phase 78: Health Check Enhancements
 
 **Tests:** 2,811 passing (0 failures) — 12 new tests (203 in hv2-api)
 **Location:** `crates/hv2-api/src/rest.rs`, `crates/hv2-api/src/server.rs`, `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/runtime_routes.rs`
@@ -2542,7 +2542,7 @@ Added Kubernetes-style liveness and readiness probes, real uptime tracking, comp
 
 ---
 
-### Phase 79: API Pagination & Filtering
+### ✅ Phase 79: API Pagination & Filtering
 
 **Tests:** 2,826 passing (0 failures) — 15 new tests (218 in hv2-api)
 **Location:** `crates/hv2-api/src/rest.rs`, `crates/hv2-api/src/events.rs`, `crates/hv2-api/src/server.rs`
@@ -2571,7 +2571,7 @@ Added offset-based pagination to all list endpoints and a state filter to the VM
 
 ---
 
-### Phase 80: API Versioning & Request Validation
+### ✅ Phase 80: API Versioning & Request Validation
 
 **Tests:** 2,846 passing (0 failures) — 20 new tests (238 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2600,7 +2600,7 @@ Added two new middleware layers: API version header stamping and content-type va
 
 ---
 
-### Phase 81: Request Timeout & Security Headers
+### ✅ Phase 81: Request Timeout & Security Headers
 
 **Tests:** 2,862 passing (0 failures) — 16 new tests (254 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2633,7 +2633,7 @@ Added two new middleware layers: configurable request timeout enforcement and st
 
 ---
 
-### Phase 82: Request ID Propagation
+### ✅ Phase 82: Request ID Propagation
 
 **Tests:** 2,874 passing (0 failures) — 12 new tests (266 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`
@@ -2660,7 +2660,7 @@ Propagated the request ID generated by the outermost middleware layer into all d
 
 ---
 
-### Phase 83: Response Compression
+### ✅ Phase 83: Response Compression
 
 **Tests:** 2,897 passing (0 failures) — 23 new tests (289 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`, `Cargo.toml`
@@ -2695,7 +2695,7 @@ Added gzip and deflate response compression middleware using the `flate2` crate.
 
 ---
 
-### Phase 84: ETag & Conditional Requests
+### ✅ Phase 84: ETag & Conditional Requests
 
 **Tests:** 2,922 passing (0 failures) — 25 new tests (314 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2730,7 +2730,7 @@ Added ETag generation and `If-None-Match` conditional request handling middlewar
 
 ---
 
-### Phase 85: Enhanced Security Headers
+### ✅ Phase 85: Enhanced Security Headers
 
 **Tests:** 2,933 passing (0 failures) — 13 new tests, 2 merged (325 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2759,7 +2759,7 @@ Extended the `SecurityHeadersConfig` with three additional security headers: HST
 
 ---
 
-### Phase 86: IP-Based Access Control
+### ✅ Phase 86: IP-Based Access Control
 
 **Tests:** 2,963 passing (0 failures) — 30 new tests (355 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2795,7 +2795,7 @@ Added IP-based access control middleware with CIDR notation support for allow/de
 
 ---
 
-### Phase 87: Request Body Validation
+### ✅ Phase 87: Request Body Validation
 
 **Tests:** 2,990 passing (0 failures) — 27 new tests (382 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2828,7 +2828,7 @@ Added JSON request body validation middleware that enforces structural constrain
 
 ---
 
-### Phase 88: Request Idempotency
+### ✅ Phase 88: Request Idempotency
 
 **Tests:** 3,012 passing (0 failures) — 22 new tests (404 in hv2-api)
 **Location:** `crates/hv2-api/src/middleware.rs`, `crates/hv2-api/src/config.rs`
@@ -2863,7 +2863,7 @@ Added request idempotency middleware that caches responses for POST/PUT/PATCH re
 
 ---
 
-### Phase 89: Audit Logging
+### ✅ Phase 89: Audit Logging
 
 **Tests:** 3,037 passing (0 failures) — 25 new tests (429 in hv2-api)
 
@@ -2892,7 +2892,7 @@ Added audit logging middleware that emits structured `tracing::info!` events for
 
 ---
 
-### Phase 90: Response Caching
+### ✅ Phase 90: Response Caching
 
 **Tests:** 3,058 passing (0 failures) — 21 new tests (450 in hv2-api)
 
@@ -2922,7 +2922,7 @@ Added response caching middleware that caches GET (and optionally HEAD) response
 
 ---
 
-### Phase 91: Request Deduplication
+### ✅ Phase 91: Request Deduplication
 
 **Tests:** 3,080 passing (0 failures) — 22 new tests (472 in hv2-api)
 
@@ -2954,7 +2954,7 @@ Added request deduplication middleware that prevents concurrent identical mutati
 
 ---
 
-### Phase 92: Request Tracing (W3C Trace Context)
+### ✅ Phase 92: Request Tracing (W3C Trace Context)
 
 **Tests:** 3,087 passing (0 failures) — 29 new tests (501 in hv2-api)
 
@@ -2986,7 +2986,7 @@ Added W3C Trace Context middleware that propagates or generates `traceparent` an
 
 ---
 
-### Phase 93: Request Payload Signing (HMAC-SHA256)
+### ✅ Phase 93: Request Payload Signing (HMAC-SHA256)
 
 **Tests:** 3,117 passing (0 failures) — 30 new tests (531 in hv2-api)
 
@@ -3019,7 +3019,7 @@ Added HMAC-SHA256 request payload signing middleware that verifies the integrity
 
 ---
 
-### Phase 94: Circuit Breaker
+### ✅ Phase 94: Circuit Breaker
 
 **Tests:** 3,139 passing (0 failures) — 22 new tests (553 in hv2-api)
 
@@ -3048,7 +3048,7 @@ Added circuit breaker middleware that protects downstream services by tracking e
 **Config File Support (`config.rs`):**
 - `enable_circuit_breaker: bool`, `circuit_breaker_failure_threshold`, `circuit_breaker_recovery_timeout_secs`, `circuit_breaker_excluded_paths` in `[middleware]` TOML section
 
-### Phase 95: Request Sanitization
+### ✅ Phase 95: Request Sanitization
 
 **Tests:** 3,156 passing (0 failures) — 17 new tests (570 in hv2-api)
 
@@ -3069,7 +3069,7 @@ Added request sanitization middleware that strips dangerous or internal headers 
 **Config File Support (`config.rs`):**
 - `enable_sanitization: bool`, `sanitization_strip_headers`, `sanitization_excluded_paths`, `sanitization_strip_internal_prefix`, `sanitization_max_header_value_length` in `[middleware]` TOML section
 
-### Phase 96: Content Negotiation
+### ✅ Phase 96: Content Negotiation
 
 **Tests:** 3,178 passing (0 failures) — 22 new tests (592 in hv2-api)
 
@@ -3090,7 +3090,7 @@ Added content negotiation middleware that validates the `Accept` request header 
 **Config File Support (`config.rs`):**
 - `enable_content_negotiation: bool`, `content_negotiation_supported_types`, `content_negotiation_default_type`, `content_negotiation_strict`, `content_negotiation_excluded_paths` in `[middleware]` TOML section
 
-### Phase 97: Request Throttling
+### ✅ Phase 97: Request Throttling
 
 **Tests:** 3,192 passing (0 failures) — 14 new tests (606 in hv2-api)
 
@@ -3113,7 +3113,7 @@ Added concurrency-based request throttling middleware that limits the number of 
 
 ---
 
-### Phase 98: Request Retry Hints
+### ✅ Phase 98: Request Retry Hints
 
 **Tests:** 3,209 passing (0 failures) — 17 new tests (623 in hv2-api)
 
@@ -3134,7 +3134,7 @@ Added a retry hints middleware that automatically enriches error responses with 
 
 ---
 
-### Phase 99: Maintenance Mode
+### ✅ Phase 99: Maintenance Mode
 
 **Tests:** 3,226 passing (0 failures) — 17 new tests (640 in hv2-api)
 
@@ -3157,7 +3157,7 @@ Added a maintenance mode middleware that gates all non-excluded requests during 
 
 ---
 
-### Phase 100: API Deprecation
+### ✅ Phase 100: API Deprecation
 
 **Tests:** 3,261 passing (0 failures) — 17 new tests (658 in hv2-api)
 
@@ -3171,7 +3171,7 @@ Added an API deprecation middleware that marks endpoints as deprecated by inject
 
 ---
 
-### Phase 101: Request Costing
+### ✅ Phase 101: Request Costing
 
 **Tests:** 3,279 passing (0 failures) — 18 new tests (675 in hv2-api)
 
@@ -3185,7 +3185,7 @@ Added a request costing middleware that assigns a computed cost value to each re
 
 ---
 
-### Phase 102: Request Fingerprint
+### ✅ Phase 102: Request Fingerprint
 
 **Tests:** 3,295 passing (0 failures) — 18 new tests (693 in hv2-api)
 
@@ -3198,7 +3198,7 @@ Added a request fingerprint middleware that computes a deterministic hash of eac
 
 ---
 
-### Phase 103: Response Signing
+### ✅ Phase 103: Response Signing
 
 **Tests:** 3,317 passing (0 failures) — 16 new tests (709 in hv2-api)
 
@@ -3211,7 +3211,7 @@ Added a response signing middleware that computes an HMAC-SHA256 signature over 
 
 ---
 
-### Phase 104: Request Priority
+### ✅ Phase 104: Request Priority
 
 **Tests:** 3,337 passing (0 failures) — 20 new tests (729 in hv2-api)
 
@@ -3224,7 +3224,7 @@ Added a request priority middleware that assigns QoS priority levels (critical/h
 - `RequestPriorityConfig` — `rules`, `default_priority`, `priority_header`, `reason_header`, `allow_client_override` with `evaluate()` (first match wins)
 - `request_priority_handler` — evaluates rules, supports client override, injects priority + reason headers
 
-### Phase 105: Request Quota
+### ✅ Phase 105: Request Quota
 
 **Tests:** 3,353 passing (0 failures) — 16 new tests (745 in hv2-api)
 
@@ -3235,7 +3235,7 @@ Added a request quota middleware that enforces per-client usage quotas with conf
 - `RequestQuotaConfig` — configurable limit, window duration, header names, excluded paths, and identification strategy
 - `QuotaState` — thread-safe shared state using `parking_lot::Mutex` to track per-client request counts and window start times
 - `request_quota_handler` — identifies clients, checks/updates quota via rolling window, injects quota headers, returns 429 when exceeded
-### Phase 106: Tenant Isolation
+### ✅ Phase 106: Tenant Isolation
 
 **Tests:** 3,368 passing (0 failures) — 15 new tests (760 in hv2-api)
 
@@ -3303,7 +3303,7 @@ Added a Geo-IP Headers middleware that extracts the client IP from a configurabl
 
 ---
 
-### Phase 110: Request Schema Validation
+### ✅ Phase 110: Request Schema Validation
 
 **Tests:** 3,430 passing (0 failures) — 16 new tests (822 in hv2-api)
 
@@ -3323,7 +3323,7 @@ Added a Request Schema Validation middleware that validates incoming JSON reques
 - Positioned as layer 37 of 39 in the middleware stack
 ---
 
-### Phase 111: Request Decompression
+### ✅ Phase 111: Request Decompression
 
 **Tests:** 3,446 passing (0 failures) — 16 new tests (838 in hv2-api)
 
@@ -3343,7 +3343,7 @@ Added a Request Decompression middleware that transparently decompresses incomin
 - Positioned as layer 38 of 40 in the middleware stack
 ---
 
-### Phase 112: Slow Request Detection
+### ✅ Phase 112: Slow Request Detection
 
 **Tests:** 3,462 passing (0 failures) — 16 new tests (854 in hv2-api)
 
@@ -3362,25 +3362,7 @@ Added a Slow Request Detection middleware that measures request processing time 
 - Positioned as layer 39 of 41 in the middleware stack
 ---
 
-### Phase 112: Slow Request Detection
-
-**Tests:** 3,462 passing (0 failures) — 16 new tests (854 in hv2-api)
-
-**Summary:**
-Added a Slow Request Detection middleware that measures request processing time and flags slow requests by injecting response headers when the elapsed time exceeds a configurable threshold. Unlike Request Timeout (which aborts) or Request Timing (which always adds timing), this middleware only annotates responses that breach the threshold, providing a targeted signal for monitoring and alerting.
-
-**Key features:**
-- `SlowRequestConfig` with configurable threshold (default 5000ms)
-- `X-Slow-Request: true` header on slow responses
-- `X-Slow-Request-Ms` header with elapsed milliseconds
-- RFC 7234-style `Warning` header with threshold details
-- Configurable header names for all injected headers
-- Individual toggle for elapsed time, warning header
-- Path exclusions (default `/health`)
-- 16 comprehensive tests using 0ms and 60s thresholds for deterministic results
-- Positioned as layer 39 of 41 in the middleware stack
-
-### Phase 113: Header Propagation
+### ✅ Phase 113: Header Propagation
 
 **Tests:** 3,478 passing (0 failures) — 16 new tests (870 in hv2-api)
 
@@ -3397,7 +3379,7 @@ Added a Header Propagation middleware that copies selected request headers into 
 - 16 comprehensive tests covering: single/multiple header propagation, missing headers, prefix mode, case sensitivity, skip-existing, overwrite mode, excluded paths, list header, POST method, defaults, disabled middleware, summary entry, empty propagation list
 - Positioned as layer 40 of 42 in the middleware stack
 
-### Phase 114: Request Context
+### ✅ Phase 114: Request Context
 
 **Tests:** 3,517 passing (0 failures) — 16 new tests (909 in hv2-api)
 
@@ -3414,7 +3396,7 @@ Added a Request Context middleware that injects structured deployment and servic
 - 16 comprehensive tests covering: environment, service, region (empty/set), instance ID, custom fields, multiple custom fields, custom prefix, excluded paths, list header, list header disabled, all fields together, POST method, defaults, disabled middleware, summary entry
 - Positioned as layer 41 of 43 in the middleware stack
 
-### Phase 115: Agentic Ontology — Composability & Discovery
+### ✅ Phase 115: Agentic Ontology — Composability & Discovery
 
 **Tests:** 3,517 passing (0 failures) — 23 new tests (909 in hv2-api)
 
@@ -3448,7 +3430,7 @@ Enhanced the agentic ontology module (`ontology.rs`) to make the programmatic co
 
 
 
-### Phase 116: Action Plan Executor (2025-06-XX)
+### ✅ Phase 116: Action Plan Executor (2025-06-XX)
 
 **Objective**: Complete the composability loop by adding plan execution capability — agents can now discover, compose, validate, and **execute** multi-step action plans with dependency resolution, variable substitution, operation simulation, and rollback support.
 
@@ -3466,7 +3448,7 @@ Enhanced the agentic ontology module (`ontology.rs`) to make the programmatic co
 **Test Summary**: hv2-api: 944 | Total: 3,552 | All passing ✓
 
 
-### Phase 117: Plan Templates (2025-06-XX)
+### ✅ Phase 117: Plan Templates (2025-06-XX)
 
 **Objective**: Add a library of reusable, parameterized action plan templates that AI agents can discover, inspect, and instantiate — bridging the gap between raw operation discovery and fully composed multi-step plans.
 
@@ -3491,316 +3473,3 @@ Enhanced the agentic ontology module (`ontology.rs`) to make the programmatic co
 **Test Coverage**: 17 new tests covering template library validation, category coverage, get-by-ID, not-found handling, plan validation, instantiation with defaults, all-params, missing required params, nonexistent template, execute-on-instantiate, dry-run, health-check (no params), batch provisioning, full lifecycle, version format, tag validation, and parameter label checks.
 
 **Test Summary**: hv2-api: 944 | Total: 3,552 | All passing ✓
-
-### Phase 115: Agentic Ontology — Composability & Discovery
-
-**Tests:** 3,517 passing (0 failures) — 23 new tests (909 in hv2-api)
-
-**Summary:**
-Enhanced the agentic ontology module (`ontology.rs`) to make the programmatic control layer truly agentic-first, providing a rich ontology for AI agent discoverability and composability. This goes beyond the existing foundation (JSON-LD context, tool format converters, state machines) to add composability primitives that enable agents to reason about operation sequencing, validate multi-step plans, navigate resource relationships, and discover available operations per resource state.
-
-**New composability primitives:**
-- `ActionPlan` / `PlanStep` — Declarative multi-step plans with dependency DAGs and rollback support
-- `PlanValidationResult` — Plan validation with error/warning classification and precondition resolution
-- `Affordances` / `AffordanceOperation` / `AffordanceTransition` — State-aware operation discovery ("what can I do NOW?")
-- `CompositionRules` / `Workflow` / `WorkflowStep` — Pre-defined multi-step workflows (provision_and_start, provision_gpu_workload, graceful_shutdown, decommission)
-- `CompositionConstraint` / `ConstraintType` — Rules governing operation composition (mutually_exclusive, requires_sequence, state_precondition, idempotent, max_concurrent)
-- `CompositionPattern` — Reusable plan templates (monitor_then_scale)
-- `OperationContract` / `Condition` / `ConditionOperator` — Pre/post-condition contracts for every operation with composability and mutual exclusion metadata
-- `ResourceGraph` / `ResourceNode` / `ResourceEdge` — Navigable resource relationship graph
-
-**New discovery protocols:**
-- `AgentCard` / `AgentCapabilities` / `AgentSkill` — A2A (Agent-to-Agent) protocol agent card with skills, capabilities, and authentication config
-- `McpManifest` / `McpCapabilities` / `McpTool` / `McpResource` — MCP (Model Context Protocol) server manifest for Claude and compatible clients
-
-**New API endpoints (7):**
-- `GET /agentic/affordances/{resource_type}/{state}` — State-aware affordance discovery
-- `POST /agentic/plans/validate` — Action plan validation against ontology
-- `GET /agentic/compose` — Composition rules, workflows, constraints, and patterns
-- `GET /agentic/graph` — Resource relationship graph for agent navigation
-- `GET /agentic/contracts` — Operation pre/post-condition contracts
-- `GET /agentic/mcp` — MCP server manifest
-- `GET /.well-known/agent.json` — A2A agent card for multi-agent discovery
-
-**23 comprehensive tests covering:** ontology builds, affordances (running state, stopped state, transitions, unknown state, unknown resource, reversibility), plan validation (valid plan, unknown operation, invalid dependency, self-dependency, duplicate step IDs, empty plan), resource graph (structure, node operations), composition rules (workflows, well-formed steps), operation contracts (preconditions/postconditions, composability), agent card (structure, skills), MCP manifest (structure, tools match operations), condition operators
-
----
-## Test Summary
-
-| Crate       | Test Count | Status        |
-| ----------- | ---------- | ------------- |
-| hv2-core    | 2,233      | ✅ All passing |
-| hv2-api     | 956        | ✅ All passing |
-| hv2-agent   | 396        | ✅ All passing |
-| hv2-runtime | 230        | ✅ All passing |
-| hv2-cpu     | 66         | ✅ All passing |
-| hm-cli      | 55         | ✅ All passing |
-| hm-gui      | 34         | ✅ All passing |
-| hv2-cli     | 22         | ✅ All passing |
-| hv2-gpu     | 20         | ✅ All passing |
-| hv2-net     | 13         | ✅ All passing |
-| hv1-core    | 154        | ✅ All passing |
-| **Total**   | **4,179**  | ✅ All passing |
-
----
-
-## Key Files
-
-| Path                                                | Description                     |
-| --------------------------------------------------- | ------------------------------- |
-| `crates/hv2-core/src/platform.rs`                   | Platform integration            |
-| `crates/hv2-core/src/perf.rs`                       | Performance optimization        |
-| `crates/hv2-core/src/acpi.rs`                       | ACPI table generation           |
-| `crates/hv2-core/src/address_space.rs`              | Guest address space management  |
-| `crates/hv2-core/src/boot/descriptor.rs`            | GDT/IDT/TSS descriptor tables   |
-| `crates/hv2-core/src/boot/mode.rs`                  | CPU mode transitions            |
-| `crates/hv2-core/src/boot/sector.rs`                | BIOS boot sector support        |
-| `crates/hv2-core/src/boot/linux.rs`                 | Linux boot protocol             |
-| `crates/hv2-core/src/boot/multiboot.rs`             | Multiboot specification         |
-| `crates/hv2-core/src/cpuid.rs`                      | CPUID instruction emulation     |
-| `crates/hv2-core/src/exit_handler.rs`               | VM exit handling framework      |
-| `crates/hv2-core/src/interrupt.rs`                  | PIC 8259 implementation         |
-| `crates/hv2-core/src/device_manager.rs`             | Unified device coordination     |
-| `crates/hv2-core/src/devices/ioapic.rs`             | I/O APIC emulation              |
-| `crates/hv2-core/src/devices/lapic.rs`              | Local APIC emulation            |
-| `crates/hv2-core/src/devices/msi.rs`                | MSI/MSI-X interrupt support     |
-| `crates/hv2-core/src/devices/nvme.rs`               | NVMe SSD controller             |
-| `crates/hv2-core/src/devices/virtio_blk.rs`         | VirtIO block device             |
-| `crates/hv2-core/src/devices/disk_image.rs`         | Disk image format support       |
-| `crates/hv2-core/src/devices/ide.rs`                | IDE/ATA disk controller         |
-| `crates/hv2-core/src/devices/virtio.rs`             | VirtIO network device           |
-| `crates/hv2-core/src/devices/timer.rs`              | PIT timer emulation             |
-| `crates/hv2-core/src/devices/keyboard.rs`           | PS/2 keyboard emulation         |
-| `crates/hv2-core/src/devices/serial.rs`             | UART 16550 serial ports         |
-| `crates/hv2-core/src/devices/rtc.rs`                | RTC/CMOS real-time clock        |
-| `crates/hv2-core/src/devices/vga.rs`                | VGA text mode display           |
-| `crates/hv2-core/src/migration/`                    | Live migration support          |
-| `crates/hv2-core/src/security/memory_encryption.rs` | SEV/TDX memory encryption       |
-| `crates/hv2-core/src/security/vtpm.rs`              | Virtual TPM 2.0 device          |
-| `crates/hv2-core/src/security/secure_boot.rs`       | UEFI Secure Boot verification   |
-| `crates/hv2-core/src/container/runtime.rs`          | OCI container runtime           |
-| `crates/hv2-core/src/container/namespace.rs`        | Linux namespace isolation       |
-| `crates/hv2-core/src/container/cgroup.rs`           | Cgroup resource controllers     |
-| `crates/hv2-core/src/debug/gdb.rs`                  | GDB remote serial protocol      |
-| `crates/hv2-core/src/debug/introspection.rs`        | VM introspection API            |
-| `crates/hv2-core/src/networking/vswitch.rs`         | Virtual switch implementation   |
-| `crates/hv2-core/src/networking/filter.rs`          | Network filtering & conntrack   |
-| `crates/hv2-core/src/networking/sriov.rs`           | SR-IOV passthrough support      |
-| `crates/hv2-core/src/usb/xhci.rs`                   | xHCI USB 3.0 host controller    |
-| `crates/hv2-core/src/usb/device.rs`                 | USB device framework            |
-| `crates/hv2-core/src/usb/hid.rs`                    | HID class devices (KB/mouse)    |
-| `crates/hv2-core/src/gpu/core.rs`                   | GPU types and abstractions      |
-| `crates/hv2-core/src/gpu/framebuffer.rs`            | Software framebuffer            |
-| `crates/hv2-core/src/gpu/virtio_gpu.rs`             | VirtIO-GPU 2D device            |
-| `crates/hv2-core/src/audio/core.rs`                 | Audio types and abstractions    |
-| `crates/hv2-core/src/audio/ac97.rs`                 | AC97 audio controller           |
-| `crates/hv2-core/src/snapshot/types.rs`             | Snapshot types and metadata     |
-| `crates/hv2-core/src/snapshot/memory.rs`            | Memory snapshot management      |
-| `crates/hv2-core/src/snapshot/device.rs`            | Device state serialization      |
-| `crates/hv2-core/src/snapshot/manager.rs`           | Snapshot lifecycle management   |
-| `crates/hv2-core/src/audio/hda.rs`                  | Intel HDA controller            |
-| `crates/hv2-core/src/audio/virtio_sound.rs`         | VirtIO sound device             |
-| `crates/hv2-core/src/input/ps2_keyboard.rs`         | PS/2 keyboard with scan codes   |
-| `crates/hv2-core/src/input/ps2_mouse.rs`            | PS/2 mouse with scroll wheel    |
-| `crates/hv2-core/src/input/touchscreen.rs`          | Multi-touch with gestures       |
-| `crates/hv2-core/src/input/gamepad.rs`              | Game controller with rumble     |
-| `crates/hv2-core/src/uefi/types.rs`                 | UEFI core types and GUIDs       |
-| `crates/hv2-core/src/uefi/system_table.rs`          | EFI System Table & Boot Svcs    |
-| `crates/hv2-core/src/uefi/gop.rs`                   | Graphics Output Protocol        |
-| `crates/hv2-core/src/uefi/runtime_services.rs`      | EFI Runtime Services            |
-| `crates/hv2-core/src/pci/types.rs`                  | PCI addressing and types        |
-| `crates/hv2-core/src/pci/config.rs`                 | PCI configuration space         |
-| `crates/hv2-core/src/pci/capabilities.rs`           | PCI/PCIe capabilities           |
-| `crates/hv2-core/src/pci/bus.rs`                    | PCI bus topology                |
-| `crates/hv2-core/src/iommu/types.rs`                | IOMMU core types                |
-| `crates/hv2-core/src/iommu/vtd.rs`                  | Intel VT-d support              |
-| `crates/hv2-core/src/iommu/amd.rs`                  | AMD IOMMU (AMD-Vi)              |
-| `crates/hv2-core/src/iommu/interrupt_remap.rs`      | Interrupt remapping             |
-| `crates/hv2-core/src/numa/types.rs`                 | NUMA core types                 |
-| `crates/hv2-core/src/numa/topology.rs`              | NUMA topology management        |
-| `crates/hv2-core/src/numa/acpi.rs`                  | SRAT/SLIT ACPI tables           |
-| `crates/hv2-core/src/numa/allocator.rs`             | NUMA-aware allocator            |
-| `crates/hv2-core/src/nested/types.rs`               | VMX types and VMCS fields       |
-| `crates/hv2-core/src/nested/shadow_vmcs.rs`         | Shadow VMCS management          |
-| `crates/hv2-core/src/nested/ept.rs`                 | Nested EPT management           |
-| `crates/hv2-core/src/nested/manager.rs`             | Nested virtualization manager   |
-| `crates/hv2-core/src/devices/integration_tests.rs`  | End-to-end tests                |
-| `crates/hv2-agent/src/telemetry.rs`                 | Agent observability & metrics   |
-| `crates/hv2-agent/src/limits.rs`                    | Resource limits & enforcement   |
-| `crates/hv2-agent/src/events.rs`                    | Event streaming & subscriptions |
-| `crates/hv2-agent/src/actions.rs`                   | VM control actions & validation |
-| `crates/hv2-agent/src/policies.rs`                  | Policy rules & enforcement      |
-| `crates/hv2-agent/src/communication.rs`             | Inter-agent messaging & routing |
-| `crates/hv2-agent/src/state.rs`                     | Persistent state & checkpoints  |
-| `crates/hv2-agent/src/tasks.rs`                     | Task scheduling & workflows     |
-| `crates/hv2-agent/src/reasoning.rs`                 | Reasoning & decision making     |
-| `crates/hv2-agent/src/memory.rs`                    | Episodic & semantic memory      |
-| `crates/hv2-agent/src/tools.rs`                     | Tool-use framework              |
-| `crates/hv2-agent/src/perception.rs`                | Environment perception system   |
-| `crates/hv2-runtime/src/lib.rs`                     | Runtime crate root & config     |
-| `crates/hv2-runtime/src/pool.rs`                    | VM pool warm-standby lifecycle  |
-| `crates/hv2-runtime/src/scheduler.rs`               | Workload placement scheduler    |
-| `crates/hv2-runtime/src/workflow.rs`                | DAG workflow engine             |
-| `crates/hv2-runtime/src/store.rs`                   | Durable key-value store (CAS)   |
-| `crates/hv2-runtime/src/gateway.rs`                 | Session-affinity gateway        |
-| `crates/hv2-runtime/src/autoscale.rs`               | Pool autoscaling engine         |
-| `crates/hv2-runtime/src/health.rs`                  | VM health monitoring            |
-| `crates/hv2-runtime/src/billing.rs`                 | Usage metering & invoicing      |
-| `crates/hv2-api/src/config.rs`                      | TOML config file support        |
-
----
-
-## HV1/HV2 Dual-Mode Architecture
-
-### Overview
-
-HyperMachine is designed to support two operational modes:
-
-| Mode    | Type                | Host OS Required          | Target Use Case                |
-| ------- | ------------------- | ------------------------- | ------------------------------ |
-| **HV2** | Type 2 (Hosted)     | Yes (Linux/Windows/macOS) | Development, Testing, Edge     |
-| **HV1** | Type 1 (Bare-metal) | No                        | Production, Cloud, Data Center |
-
-### HV2 Mode (Type 2) - *Currently Implemented*
-
-HV2 runs as a user-space application on an existing host operating system, leveraging platform-specific hypervisor APIs:
-
-| Platform | Backend                    | Hardware Extension |
-| -------- | -------------------------- | ------------------ |
-| Linux    | KVM                        | Intel VT-x / AMD-V |
-| Windows  | WHPX                       | Intel VT-x / AMD-V |
-| macOS    | HVF (Hypervisor.framework) | Apple Hypervisor   |
-
-**Architecture:**
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Guest VMs                             │
-├─────────────────────────────────────────────────────────┤
-│                 HyperMachine (HV2)                       │
-│            (User-space hypervisor layer)                 │
-├─────────────────────────────────────────────────────────┤
-│              KVM / WHPX / HVF API                        │
-├─────────────────────────────────────────────────────────┤
-│                  Host OS Kernel                          │
-├─────────────────────────────────────────────────────────┤
-│                    Hardware                              │
-└─────────────────────────────────────────────────────────┘
-```
-
-### HV1 Mode (Type 1) - *Implemented*
-
-HV1 will run directly on bare metal without a host OS, implementing its own VMX/SVM virtualization:
-
-| Architecture   | Extension | Implementation                 |
-| -------------- | --------- | ------------------------------ |
-| x86-64 (Intel) | VMX       | Direct VMXON/VMCS manipulation |
-| x86-64 (AMD)   | SVM       | Direct VMRUN/VMCB manipulation |
-| ARM64          | EL2       | Direct EL2 hypervisor mode     |
-
-**Architecture:**
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Guest VMs                             │
-├─────────────────────────────────────────────────────────┤
-│                 HyperMachine (HV1)                       │
-│           (Bare-metal hypervisor layer)                  │
-├─────────────────────────────────────────────────────────┤
-│              VMX / SVM / EL2 Hardware                    │
-├─────────────────────────────────────────────────────────┤
-│                    Hardware                              │
-└─────────────────────────────────────────────────────────┘
-```
-
-### HV1 Implementation Phases
-
-#### Phase HV1-1: Core VMX/SVM Support ✅
-- ✅ Direct hardware virtualization without host OS
-- ✅ VMCS/VMCB setup and management
-- ✅ VM entry/exit handling
-- ✅ Minimal trusted computing base (TCB)
-
-#### Phase HV1-2: Memory Virtualization ✅
-- ✅ Extended Page Tables (EPT) for Intel
-- ✅ Nested Page Tables (NPT) for AMD
-- ✅ Direct memory management without host OS assistance
-- ✅ DMA remapping via VT-d/AMD-Vi (IOMMU context)
-
-#### Phase HV1-3: Interrupt Virtualization ✅
-- ✅ Posted interrupts (Intel) / AVIC (AMD)
-- ✅ Direct APIC virtualization (VirtualApic)
-- ✅ Minimal interrupt latency
-- ✅ MSI/MSI-X routing
-
-#### Phase HV1-4: Device Passthrough ✅
-- ✅ PCI passthrough with IOMMU
-- ✅ GPU passthrough support (PassthroughDevice)
-- ✅ NVMe direct access support
-- ✅ IOMMU management (DmaRemapEntry, IommuContext)
-
-#### Phase HV1-5: Boot and Runtime ✅
-- ✅ UEFI bootloader (bootloader_api 0.11 integration)
-- ✅ Firmware integration (hv1-boot crate)
-- ✅ Runtime services (serial, device manager)
-- ✅ Management interface (serial console)
-
-
-#### Phase HV1-6: ARM64/EL2 Support ✅
-- ✅ EL2 initialization (HCR_EL2, VTTBR, exception vector table)
-- ✅ AArch64 vCPU with full register contexts (general, system, SIMD/FP)
-- ✅ Virtual GIC (GICv2/GICv3 with distributor and redistributor)
-- ✅ Stage-2 address translation (IPA→HPA, 4KB/2MB/1GB pages)
-- ✅ System register trapping and emulation
-- ✅ VM management with exit handling (hv1-arm crate, 3,094 lines, 105 tests)
-### Code Sharing Strategy
-
-The codebase is structured to maximize code sharing between HV1 and HV2:
-
-| Component              | Shared | HV2-Specific      | HV1-Specific   |
-| ---------------------- | ------ | ----------------- | -------------- |
-| Device Emulation       | ✅      | -                 | -              |
-| Guest State Management | ✅      | -                 | -              |
-| Memory Abstractions    | ✅      | -                 | -              |
-| Platform Backend       | -      | KVM/WHPX/HVF      | VMX/SVM direct |
-| Memory Mapping         | -      | mmap/VirtualAlloc | EPT/NPT direct |
-| Interrupt Delivery     | -      | Platform API      | Posted/AVIC    |
-
-### Planned Crate Structure
-
-```shell
-crates/
-├── hm-common/          # Shared abstractions (devices, memory, guest state)
-├── hv2-core/           # Type 2 implementation (current)
-├── hv2-cpu/            # Type 2 CPU backends
-├── hv1-core/           # Type 1 implementation (implemented, 124 tests)
-├── hv1-boot/           # Type 1 bootable UEFI image (implemented)
-├── hv1-vmx/            # Intel VMX backend (integrated in hv1-core)
-├── hv1-svm/            # AMD SVM backend (integrated in hv1-core)
-├── hv1-arm/            # ARM EL2 backend (implemented, 105 tests)
-├── hv2-gpu/            # GPU virtualization
-├── hv2-net/            # Network virtualization
-├── hv2-agent/          # AI agent interface
-├── hv2-api/            # Remote APIs
-└── hv2-cli/            # CLI tool
-```
-
-### Benefits of Dual-Mode Architecture
-
-| Benefit             | HV2 Advantage                  | HV1 Advantage             |
-| ------------------- | ------------------------------ | ------------------------- |
-| **Development**     | Easy debugging, standard tools | -                         |
-| **Performance**     | Good for most workloads        | Maximum, no host overhead |
-| **Isolation**       | Good, OS-provided              | Maximum, minimal TCB      |
-| **Deployment**      | Simple, runs anywhere          | Complex, bare metal only  |
-| **Hardware Access** | Via host OS drivers            | Direct hardware control   |
-| **Multi-tenant**    | Shared resources               | Dedicated hardware        |
-
-### Timeline
-
-| Phase             | Target     | Status                        |
-| ----------------- | ---------- | ----------------------------- |
-| HV2 Core          | Q1-Q2 2024 | ✅ Complete                    |
-| HV2 Full Features | Q3-Q4 2024 | ✅ Complete                    |
-| HV1 Research      | Q1 2025    | ✅ Complete                    |
-| HV1 Alpha         | Q2-Q3 2025 | ✅ Complete (124 tests, CI/CD) |
-| HV1 Beta          | Q4 2025    | ✅ Complete (161 + 105 tests)   |
-| HV1 Production    | 2026       | 🔄 In Progress                 |

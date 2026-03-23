@@ -16,6 +16,10 @@
 - [Memory Management](./architecture/memory.md)
 - [GPU Virtualization](./architecture/gpu.md)
 
+# Networking
+
+- [Virtual Switch](./architecture/networking.md)
+
 # AI Integration
 
 - [Overview](./ai/overview.md)

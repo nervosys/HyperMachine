@@ -8,26 +8,27 @@
 | **Platform**     | Windows (x86_64), Linux, macOS                 |
 | **Rust Version** | 1.87+ (stable); nightly for hv1-core, hv1-boot |
 | **Profile**      | Debug + Release                                |
-| **Tests**        | 3,923 passed, 0 failed, 28 ignored             |
+| **Tests**        | 4,341 passed, 0 failed, 28 ignored             |
 | **Clippy**       | 0 warnings (`-D warnings`)                     |
-| **Crates**       | 12 total (10 stable, 2 nightly)                |
+| **Crates**       | 13 total (10 stable, 2 nightly, 1 cross-platform) |
 
 ## Compiled Crates
 
 | #   | Crate           | Lines   | Tests | Status    |
 | --- | --------------- | ------- | ----- | --------- |
-| 1   | **hv2-core**    | 107,748 | 2,207 | ✅         |
-| 2   | **hv2-api**     | 29,190  | 956   | ✅         |
+| 1   | **hv2-core**    | 109,385 | 2,214 | ✅         |
+| 2   | **hv2-api**     | 32,237  | 994   | ✅         |
 | 3   | **hv2-agent**   | 19,423  | 396   | ✅         |
-| 4   | **hv2-runtime** | 6,592   | 145   | ✅         |
+| 4   | **hv2-runtime** | 10,486  | 239   | ✅         |
 | 5   | **hm-cli**      | 5,341   | 55    | ✅         |
 | 6   | **hv2-cpu**     | 4,340   | 66    | ✅         |
-| 7   | **hm-gui**      | 3,227   | 34    | ✅         |
-| 8   | **hv2-gpu**     | 1,716   | 20    | ✅         |
-| 9   | **hv2-net**     | 1,696   | 13    | ✅         |
-| 10  | **hv2-cli**     | 1,026   | 22    | ✅         |
-| 11  | **hv1-core**    | 5,924   | —     | ✅ nightly |
-| 12  | **hv1-boot**    | 253     | —     | ✅ nightly |
+| 7   | **hm-gui**      | 3,642   | 68    | ✅         |
+| 8   | **hv2-gpu**     | 2,070   | 59    | ✅         |
+| 9   | **hv2-net**     | 2,661   | 61    | ✅         |
+| 10  | **hv2-cli**     | 1,281   | 43    | ✅         |
+| 11  | **hv1-core**    | 7,911   | 161   | ✅ nightly |
+| 12  | **hv1-arm**     | 3,100   | 127   | ✅         |
+| 13  | **hv1-boot**    | 295     | —     | ✅ nightly |
 
 **Total: 186,481 lines of Rust across 263 source files.**
 

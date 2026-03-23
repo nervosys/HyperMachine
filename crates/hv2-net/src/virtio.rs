@@ -963,4 +963,176 @@ mod tests {
         assert_eq!(net.stats().rx_dropped.load(Ordering::Relaxed), 1);
         assert_eq!(net.stats().rx_packets.load(Ordering::Relaxed), 0);
     }
+
+    // --- New tests below ---
+
+    #[test]
+    fn test_virtqueue_new() {
+        let q = Virtqueue::new(32);
+        assert_eq!(q.size, 32);
+        assert!(!q.has_available());
+        assert!(!q.is_enabled());
+    }
+
+    #[test]
+    fn test_virtqueue_enable_disable() {
+        let mut q = Virtqueue::new(16);
+        assert!(!q.is_enabled());
+        q.enable();
+        assert!(q.is_enabled());
+    }
+
+    #[test]
+    fn test_virtqueue_set_get_desc() {
+        let mut q = Virtqueue::new(16);
+        let desc = VirtqDesc {
+            addr: 0x1000,
+            len: 256,
+            flags: VirtqDesc::F_WRITE,
+            next: 0,
+        };
+        q.set_desc(0, desc);
+        let got = q.get_desc(0).unwrap();
+        assert_eq!(got.addr, 0x1000);
+        assert_eq!(got.len, 256);
+        assert_eq!(got.flags, VirtqDesc::F_WRITE);
+    }
+
+    #[test]
+    fn test_virtqueue_get_desc_out_of_range() {
+        let q = Virtqueue::new(4);
+        assert!(q.get_desc(100).is_none());
+    }
+
+    #[test]
+    fn test_virtqueue_pop_empty() {
+        let mut q = Virtqueue::new(16);
+        assert_eq!(q.pop_available(), None);
+    }
+
+    #[test]
+    fn test_virtqueue_push_used_multiple() {
+        let mut q = Virtqueue::new(16);
+        q.push_used(0, 64);
+        q.push_used(1, 128);
+        q.push_used(2, 256);
+        assert_eq!(q.used.idx, 3);
+        assert_eq!(q.used.ring[0].id, 0);
+        assert_eq!(q.used.ring[0].len, 64);
+        assert_eq!(q.used.ring[1].id, 1);
+        assert_eq!(q.used.ring[1].len, 128);
+        assert_eq!(q.used.ring[2].id, 2);
+        assert_eq!(q.used.ring[2].len, 256);
+    }
+
+    #[test]
+    fn test_virtq_desc_flags() {
+        assert_eq!(VirtqDesc::F_NEXT, 1);
+        assert_eq!(VirtqDesc::F_WRITE, 2);
+        assert_eq!(VirtqDesc::F_INDIRECT, 4);
+        // Flags are independent bits
+        assert_eq!(VirtqDesc::F_NEXT | VirtqDesc::F_WRITE, 3);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_device_id() {
+        let net = VirtioNet::new(1);
+        assert_eq!(net.device_id(), VIRTIO_NET_DEVICE_ID);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_default_mac() {
+        let net = VirtioNet::new(1);
+        let mac = net.mac().await;
+        // Default MAC: 52:54:00:12:34:56
+        assert_eq!(mac, [0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_multi_queue() {
+        let net = VirtioNet::new(4);
+        assert!(net.device_features() & features::VIRTIO_NET_F_MQ != 0);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_stats_default() {
+        let net = VirtioNet::new(1);
+        let stats = net.stats();
+        assert_eq!(stats.rx_packets.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_packets.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.rx_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.rx_dropped.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_reset() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+        net.set_driver_features(features::VIRTIO_NET_F_CSUM);
+        net.reset().await;
+        assert_eq!(net.negotiated_features(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_set_mac_custom() {
+        let net = VirtioNet::new(1);
+        let custom_mac = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x01];
+        net.set_mac(custom_mac).await;
+        assert_eq!(net.mac().await, custom_mac);
+    }
+
+    #[tokio::test]
+    async fn test_feature_negotiation_masking() {
+        let net = VirtioNet::new(1);
+        let device_features = net.device_features();
+        // Request features not offered by device, should be masked
+        let bogus_feature = 1u64 << 50;
+        net.set_driver_features(device_features | bogus_feature);
+        // Negotiated should not contain the bogus feature
+        let negotiated = net.negotiated_features();
+        assert_eq!(negotiated & bogus_feature, 0);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_get_tx_packets_empty() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+        let packets = net.get_tx_packets().await;
+        assert!(packets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_process_tx_queue_no_descriptors() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+        let packets = net.process_tx_queue(0).await.unwrap();
+        assert!(packets.is_empty());
+    }
+
+    #[test]
+    fn test_net_error_display() {
+        let e = NetError::Network("test".to_string());
+        assert!(format!("{}", e).contains("test"));
+        let e = NetError::Config("bad config".to_string());
+        assert!(format!("{}", e).contains("bad config"));
+    }
+
+    #[test]
+    fn test_guest_memory_impl() {
+        let mem = TestGuestMemory::new(256);
+        let data = [0xAB, 0xCD, 0xEF, 0x01];
+        mem.write(10, &data).unwrap();
+        let mut buf = [0u8; 4];
+        mem.read(10, &mut buf).unwrap();
+        assert_eq!(buf, data);
+    }
+
+    #[test]
+    fn test_guest_memory_out_of_bounds() {
+        let mem = TestGuestMemory::new(16);
+        let mut buf = [0u8; 32];
+        assert!(mem.read(0, &mut buf).is_err());
+        assert!(mem.write(0, &[0u8; 32]).is_err());
+    }
 }

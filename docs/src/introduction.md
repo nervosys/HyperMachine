@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/nervosys/HyperMachine/actions/workflows/ci.yml/badge.svg)](https://github.com/nervosys/HyperMachine/actions)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only%20OR%20Commercial-blue.svg)](https://github.com/nervosys/HyperMachine/blob/master/LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.87%2B-orange.svg)](https://www.rust-lang.org)
 
 **HyperMachine** is a high-performance hypervisor framework written in Rust with first-class AI agent support. It provides both Type-1 (bare-metal) and Type-2 (hosted) virtualization modes.
 

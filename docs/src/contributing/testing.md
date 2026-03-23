@@ -7,11 +7,19 @@ Guidelines for writing and running tests in HyperMachine.
 ```
 crates/
   hv2-core/
-    src/
+    src/             # Unit tests in-module (#[cfg(test)])
     tests/           # Integration tests
-      integration.rs
     benches/         # Benchmarks
       crypto_bench.rs
+      vm_bench.rs
+      vswitch_bench.rs
+  hv2-api/
+    benches/
+      api_bench.rs
+  hm-gui/
+    tests/           # State and API type tests
+  hv2-cli/
+    src/main.rs      # CLI parsing tests
 ```
 
 ## Unit Tests
@@ -76,8 +84,8 @@ fn test_full_vm_lifecycle() {
 ## Running Tests
 
 ```bash
-# All tests
-cargo test --workspace
+# All tests (excludes nightly-only crates)
+cargo test --workspace --exclude hv1-boot --exclude hv1-core
 
 # Specific crate
 cargo test -p hv2-core
@@ -95,5 +103,14 @@ cargo test -- --ignored
 ## Benchmarks
 
 ```bash
-cargo bench -p hv2-core --bench crypto_bench
+# All hv2-core benchmarks
+cargo bench -p hv2-core
+
+# Individual benchmark suites
+cargo bench -p hv2-core --bench crypto_bench    # FIPS crypto (AES, SHA, HMAC, HKDF)
+cargo bench -p hv2-core --bench vm_bench        # Guest memory, snapshots, registers
+cargo bench -p hv2-core --bench vswitch_bench   # MAC table, VLAN sets, packet forwarding
+
+# API benchmarks
+cargo bench -p hv2-api --bench api_bench        # Ontology, tool formats, request parsing
 ```

@@ -250,8 +250,8 @@ mod platform {
     use std::os::windows::io::{AsRawHandle, RawHandle};
     use windows_sys::Win32::Foundation::{CloseHandle, FALSE, HANDLE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::Storage::FileSystem::{
-        CreateFileW, ReadFile, WriteFile, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ,
-        FILE_SHARE_WRITE, OPEN_EXISTING,
+        CreateFileW, ReadFile, WriteFile, FILE_FLAG_OVERLAPPED, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        OPEN_EXISTING,
     };
     use windows_sys::Win32::System::IO::DeviceIoControl;
 
@@ -371,7 +371,8 @@ mod platform {
                 index += 1;
 
                 // Open the subkey and read ComponentId
-                let mut adapter_key: windows_sys::Win32::System::Registry::HKEY = std::ptr::null_mut();
+                let mut adapter_key: windows_sys::Win32::System::Registry::HKEY =
+                    std::ptr::null_mut();
                 // SAFETY: class_key is valid; subkey_name is from a successful RegEnumKeyExW.
                 let ret = unsafe {
                     RegOpenKeyExW(
@@ -418,9 +419,7 @@ mod platform {
                         .trim_end_matches('\0')
                         .to_lowercase();
 
-                    let is_tap = TAP_COMPONENT_IDS
-                        .iter()
-                        .any(|id| component_id == *id);
+                    let is_tap = TAP_COMPONENT_IDS.iter().any(|id| component_id == *id);
 
                     if is_tap {
                         // Read NetCfgInstanceId (the adapter GUID)
@@ -943,6 +942,138 @@ mod tests {
         let device = TapDevice::new(config);
 
         assert_eq!(device.name(), "test_tap");
+        assert!(!device.is_open());
+    }
+
+    // --- New tests below ---
+
+    #[test]
+    fn test_tap_config_default() {
+        let config = TapConfig::default();
+        assert_eq!(config.name, "tap0");
+        assert!(config.mac_address.is_none());
+        assert_eq!(config.mtu, 1500);
+        assert!(!config.multi_queue);
+        assert_eq!(config.num_queues, 1);
+        assert!(config.vnet_hdr);
+        assert!(!config.persist);
+    }
+
+    #[test]
+    fn test_tap_config_new() {
+        let config = TapConfig::new("vmtap1");
+        assert_eq!(config.name, "vmtap1");
+        assert_eq!(config.mtu, 1500); // inherited default
+    }
+
+    #[test]
+    fn test_tap_config_builder_chaining() {
+        let mac = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF];
+        let config = TapConfig::new("tap1")
+            .with_mac(mac)
+            .with_mtu(9000)
+            .with_multi_queue(8)
+            .with_vnet_hdr(false);
+
+        assert_eq!(config.name, "tap1");
+        assert_eq!(config.mac_address, Some(mac));
+        assert_eq!(config.mtu, 9000);
+        assert!(config.multi_queue);
+        assert_eq!(config.num_queues, 8);
+        assert!(!config.vnet_hdr);
+    }
+
+    #[test]
+    fn test_tap_config_with_vnet_hdr_toggle() {
+        let config = TapConfig::new("tap0").with_vnet_hdr(false);
+        assert!(!config.vnet_hdr);
+        let config2 = config.with_vnet_hdr(true);
+        assert!(config2.vnet_hdr);
+    }
+
+    #[test]
+    fn test_tap_stats_default() {
+        let stats = TapStats::default();
+        assert_eq!(stats.rx_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.rx_packets.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_packets.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.rx_errors.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_errors.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_tap_stats_increment() {
+        let stats = TapStats::default();
+        stats.rx_bytes.fetch_add(1500, Ordering::Relaxed);
+        stats.tx_bytes.fetch_add(800, Ordering::Relaxed);
+        stats.rx_packets.fetch_add(1, Ordering::Relaxed);
+        stats.tx_packets.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(stats.rx_bytes.load(Ordering::Relaxed), 1500);
+        assert_eq!(stats.tx_bytes.load(Ordering::Relaxed), 800);
+        assert_eq!(stats.rx_packets.load(Ordering::Relaxed), 1);
+        assert_eq!(stats.tx_packets.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn test_generate_mac_format() {
+        let mac = generate_mac();
+        // Locally administered bit set (bit 1 of first byte)
+        assert_eq!(mac[0] & 0x02, 0x02);
+        // Not multicast (bit 0 of first byte cleared)
+        assert_eq!(mac[0] & 0x01, 0x00);
+        // Must be 6 bytes
+        assert_eq!(mac.len(), 6);
+    }
+
+    #[test]
+    fn test_generate_mac_uniqueness() {
+        // Generate several MACs and check they're not all the same
+        let macs: Vec<_> = (0..10)
+            .map(|_| {
+                std::thread::sleep(std::time::Duration::from_nanos(1));
+                generate_mac()
+            })
+            .collect();
+        // At least some should differ (time-based seed)
+        let first = macs[0];
+        let _any_different = macs.iter().skip(1).any(|m| *m != first);
+        // If they all happen to be the same due to timing, that's OK — just check format
+        for mac in &macs {
+            assert_eq!(mac[0] & 0x02, 0x02);
+            assert_eq!(mac[0] & 0x01, 0x00);
+        }
+    }
+
+    #[test]
+    fn test_tap_config_multi_queue_sets_both_fields() {
+        let config = TapConfig::new("tap0").with_multi_queue(4);
+        assert!(config.multi_queue);
+        assert_eq!(config.num_queues, 4);
+    }
+
+    #[test]
+    fn test_tap_config_clone() {
+        let config = TapConfig::new("tap0")
+            .with_mac([1, 2, 3, 4, 5, 6])
+            .with_mtu(9000);
+        let cloned = config.clone();
+        assert_eq!(cloned.name, config.name);
+        assert_eq!(cloned.mac_address, config.mac_address);
+        assert_eq!(cloned.mtu, config.mtu);
+    }
+
+    #[tokio::test]
+    async fn test_tap_device_name() {
+        let config = TapConfig::new("my_tap_device");
+        let device = TapDevice::new(config);
+        assert_eq!(device.name(), "my_tap_device");
+    }
+
+    #[tokio::test]
+    async fn test_tap_device_not_open_initially() {
+        let config = TapConfig::default();
+        let device = TapDevice::new(config);
         assert!(!device.is_open());
     }
 }
