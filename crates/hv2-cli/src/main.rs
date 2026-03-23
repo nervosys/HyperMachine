@@ -426,3 +426,282 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::*;
+
+    /// Helper: parse CLI args, returning Some(Cli) or None on failure.
+    fn try_parse(args: &[&str]) -> Result<Cli, clap::Error> {
+        Cli::try_parse_from(args)
+    }
+
+    #[test]
+    fn test_version_command() {
+        let cli = try_parse(&["hv2", "version"]).unwrap();
+        assert!(matches!(cli.command, Commands::Version));
+    }
+
+    #[test]
+    fn test_create_command_required_args() {
+        let cli = try_parse(&[
+            "hv2", "create", "--name", "test-vm", "--cpu", "4", "--memory", "8",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Create {
+                name,
+                cpu,
+                memory,
+                gpu,
+                network,
+            } => {
+                assert_eq!(name, "test-vm");
+                assert_eq!(cpu, 4);
+                assert_eq!(memory, 8);
+                assert!(!gpu);
+                assert!(!network);
+            }
+            _ => panic!("Expected Create command"),
+        }
+    }
+
+    #[test]
+    fn test_create_command_defaults() {
+        let cli = try_parse(&["hv2", "create", "--name", "vm1"]).unwrap();
+        match cli.command {
+            Commands::Create { cpu, memory, .. } => {
+                assert_eq!(cpu, 2); // default
+                assert_eq!(memory, 4); // default
+            }
+            _ => panic!("Expected Create command"),
+        }
+    }
+
+    #[test]
+    fn test_create_command_with_gpu_and_network() {
+        let cli = try_parse(&["hv2", "create", "--name", "gpu-vm", "--gpu", "--network"]).unwrap();
+        match cli.command {
+            Commands::Create { gpu, network, .. } => {
+                assert!(gpu);
+                assert!(network);
+            }
+            _ => panic!("Expected Create command"),
+        }
+    }
+
+    #[test]
+    fn test_create_command_missing_name() {
+        let result = try_parse(&["hv2", "create"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_start_command() {
+        let cli = try_parse(&["hv2", "start", "my-vm"]).unwrap();
+        match cli.command {
+            Commands::Start { name } => assert_eq!(name, "my-vm"),
+            _ => panic!("Expected Start command"),
+        }
+    }
+
+    #[test]
+    fn test_stop_command() {
+        let cli = try_parse(&["hv2", "stop", "my-vm"]).unwrap();
+        match cli.command {
+            Commands::Stop { name } => assert_eq!(name, "my-vm"),
+            _ => panic!("Expected Stop command"),
+        }
+    }
+
+    #[test]
+    fn test_status_command() {
+        let cli = try_parse(&["hv2", "status", "my-vm"]).unwrap();
+        match cli.command {
+            Commands::Status { name } => assert_eq!(name, "my-vm"),
+            _ => panic!("Expected Status command"),
+        }
+    }
+
+    #[test]
+    fn test_script_command() {
+        let cli = try_parse(&[
+            "hv2",
+            "script",
+            "my-vm",
+            "--script",
+            "print('hello')",
+            "--timeout",
+            "60",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Script {
+                name,
+                script,
+                timeout,
+            } => {
+                assert_eq!(name, "my-vm");
+                assert_eq!(script, "print('hello')");
+                assert_eq!(timeout, 60);
+            }
+            _ => panic!("Expected Script command"),
+        }
+    }
+
+    #[test]
+    fn test_script_command_default_timeout() {
+        let cli = try_parse(&["hv2", "script", "vm1", "--script", "test"]).unwrap();
+        match cli.command {
+            Commands::Script { timeout, .. } => assert_eq!(timeout, 300), // default
+            _ => panic!("Expected Script command"),
+        }
+    }
+
+    #[test]
+    fn test_serve_command_defaults() {
+        let cli = try_parse(&["hv2", "serve"]).unwrap();
+        match cli.command {
+            Commands::Serve {
+                config,
+                grpc_port,
+                rest_port,
+                no_runtime,
+                no_events,
+                pre_warm,
+                shutdown_timeout,
+            } => {
+                assert!(config.is_none());
+                assert!(grpc_port.is_none());
+                assert!(rest_port.is_none());
+                assert!(!no_runtime);
+                assert!(!no_events);
+                assert!(pre_warm.is_none());
+                assert!(shutdown_timeout.is_none());
+            }
+            _ => panic!("Expected Serve command"),
+        }
+    }
+
+    #[test]
+    fn test_serve_command_with_options() {
+        let cli = try_parse(&[
+            "hv2",
+            "serve",
+            "--config",
+            "custom.toml",
+            "--rest-port",
+            "9090",
+            "--grpc-port",
+            "50051",
+            "--no-runtime",
+            "--no-events",
+            "--pre-warm",
+            "5",
+            "--shutdown-timeout",
+            "30",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Serve {
+                config,
+                grpc_port,
+                rest_port,
+                no_runtime,
+                no_events,
+                pre_warm,
+                shutdown_timeout,
+            } => {
+                assert_eq!(config.unwrap().to_str().unwrap(), "custom.toml");
+                assert_eq!(rest_port, Some(9090));
+                assert_eq!(grpc_port, Some(50051));
+                assert!(no_runtime);
+                assert!(no_events);
+                assert_eq!(pre_warm, Some(5));
+                assert_eq!(shutdown_timeout, Some(30));
+            }
+            _ => panic!("Expected Serve command"),
+        }
+    }
+
+    #[test]
+    fn test_config_init_command() {
+        let cli = try_parse(&["hv2", "config", "init"]).unwrap();
+        match cli.command {
+            Commands::Config(ConfigCommands::Init { output }) => {
+                assert_eq!(output.to_str().unwrap(), "hv2.toml"); // default
+            }
+            _ => panic!("Expected Config Init command"),
+        }
+    }
+
+    #[test]
+    fn test_config_init_custom_output() {
+        let cli = try_parse(&["hv2", "config", "init", "--output", "custom.toml"]).unwrap();
+        match cli.command {
+            Commands::Config(ConfigCommands::Init { output }) => {
+                assert_eq!(output.to_str().unwrap(), "custom.toml");
+            }
+            _ => panic!("Expected Config Init command"),
+        }
+    }
+
+    #[test]
+    fn test_config_check_command() {
+        let cli = try_parse(&["hv2", "config", "check", "myconfig.toml"]).unwrap();
+        match cli.command {
+            Commands::Config(ConfigCommands::Check { path }) => {
+                assert_eq!(path.to_str().unwrap(), "myconfig.toml");
+            }
+            _ => panic!("Expected Config Check command"),
+        }
+    }
+
+    #[test]
+    fn test_config_check_default_path() {
+        let cli = try_parse(&["hv2", "config", "check"]).unwrap();
+        match cli.command {
+            Commands::Config(ConfigCommands::Check { path }) => {
+                assert_eq!(path.to_str().unwrap(), "hv2.toml"); // default
+            }
+            _ => panic!("Expected Config Check command"),
+        }
+    }
+
+    #[test]
+    fn test_config_show_command() {
+        let cli = try_parse(&["hv2", "config", "show", "--config", "my.toml"]).unwrap();
+        match cli.command {
+            Commands::Config(ConfigCommands::Show { config }) => {
+                assert_eq!(config.to_str().unwrap(), "my.toml");
+            }
+            _ => panic!("Expected Config Show command"),
+        }
+    }
+
+    #[test]
+    fn test_verbose_flag() {
+        let cli = try_parse(&["hv2", "--verbose", "version"]).unwrap();
+        assert!(cli.verbose);
+    }
+
+    #[test]
+    fn test_verbose_short_flag() {
+        let cli = try_parse(&["hv2", "-v", "version"]).unwrap();
+        assert!(cli.verbose);
+    }
+
+    #[test]
+    fn test_no_verbose_by_default() {
+        let cli = try_parse(&["hv2", "version"]).unwrap();
+        assert!(!cli.verbose);
+    }
+
+    #[test]
+    fn test_unknown_command_fails() {
+        let result = try_parse(&["hv2", "nonexistent"]);
+        assert!(result.is_err());
+    }
+}

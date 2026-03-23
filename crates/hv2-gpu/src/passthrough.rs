@@ -1055,4 +1055,189 @@ mod tests {
         assert_ne!(PassthroughState::VfioBound, PassthroughState::PassedThrough);
         assert_ne!(PassthroughState::Error, PassthroughState::Detached);
     }
+
+    // --- New tests below ---
+
+    #[test]
+    fn test_pci_address_new() {
+        let addr = PciAddress::new(1, 2, 3, 4);
+        assert_eq!(addr.domain, 1);
+        assert_eq!(addr.bus, 2);
+        assert_eq!(addr.device, 3);
+        assert_eq!(addr.function, 4);
+    }
+
+    #[test]
+    fn test_pci_address_roundtrip() {
+        let addr = PciAddress::new(0, 0x3e, 0x1f, 3);
+        let bdf = addr.to_bdf();
+        let parsed = PciAddress::from_bdf(&bdf).unwrap();
+        assert_eq!(parsed, addr);
+    }
+
+    #[test]
+    fn test_pci_address_short_bdf() {
+        let addr = PciAddress::from_bdf("02:03.1").unwrap();
+        assert_eq!(addr.domain, 0);
+        assert_eq!(addr.bus, 2);
+        assert_eq!(addr.device, 3);
+        assert_eq!(addr.function, 1);
+    }
+
+    #[test]
+    fn test_pci_address_equality() {
+        let a = PciAddress::new(0, 1, 0, 0);
+        let b = PciAddress::new(0, 1, 0, 0);
+        let c = PciAddress::new(0, 2, 0, 0);
+        assert_eq!(a, b);
+        assert_ne!(a, c);
+    }
+
+    #[test]
+    fn test_pci_address_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(PciAddress::new(0, 1, 0, 0));
+        set.insert(PciAddress::new(0, 1, 0, 0)); // duplicate
+        set.insert(PciAddress::new(0, 2, 0, 0));
+        assert_eq!(set.len(), 2);
+    }
+
+    #[test]
+    fn test_passthrough_config_defaults() {
+        let addr = PciAddress::new(0, 1, 0, 0);
+        let config = PassthroughConfig::new(addr.clone(), 0x1002, 0x7340);
+        assert_eq!(config.vendor_id, 0x1002);
+        assert_eq!(config.device_id, 0x7340);
+        assert!(config.iommu_enabled);
+        assert!(config.vfio);
+        assert!(config.reset_on_detach);
+        assert!(config.allow_rebind);
+        assert!(config.bar_sizes.is_empty());
+        assert!(config.msix_enabled);
+        assert!(config.rom_path.is_none());
+        assert_eq!(config.pci_address, addr);
+    }
+
+    #[test]
+    fn test_pci_bar_fields() {
+        let bar = PciBar {
+            index: 0,
+            address: 0xFE00_0000,
+            size: 0x100_0000,
+            is_memory: true,
+            is_64bit: true,
+            prefetchable: true,
+        };
+        assert_eq!(bar.index, 0);
+        assert_eq!(bar.size, 0x100_0000);
+        assert!(bar.is_memory);
+        assert!(bar.is_64bit);
+        assert!(bar.prefetchable);
+    }
+
+    #[test]
+    fn test_gpu_device_info_fields() {
+        let info = GpuDeviceInfo {
+            pci_address: PciAddress::new(0, 1, 0, 0),
+            vendor_id: 0x10de,
+            device_id: 0x2204,
+            subsystem_vendor_id: 0x10de,
+            subsystem_device_id: 0x1467,
+            class_code: 0x030000,
+            name: "NVIDIA RTX 3090".to_string(),
+            driver: Some("nvidia".to_string()),
+            iommu_group: Some(14),
+            bars: vec![PciBar {
+                index: 0,
+                address: 0xFB00_0000,
+                size: 0x100_0000,
+                is_memory: true,
+                is_64bit: true,
+                prefetchable: true,
+            }],
+        };
+        assert_eq!(info.vendor_id, 0x10de);
+        assert_eq!(info.name, "NVIDIA RTX 3090");
+        assert_eq!(info.driver.as_deref(), Some("nvidia"));
+        assert_eq!(info.iommu_group, Some(14));
+        assert_eq!(info.bars.len(), 1);
+    }
+
+    #[test]
+    fn test_passthrough_stats_increment() {
+        let stats = PassthroughStats::default();
+        stats.interrupts.fetch_add(10, Ordering::Relaxed);
+        stats.mmio_reads.fetch_add(50, Ordering::Relaxed);
+        stats.mmio_writes.fetch_add(25, Ordering::Relaxed);
+        stats.dma_transfers.fetch_add(3, Ordering::Relaxed);
+        stats.dma_bytes.fetch_add(4096, Ordering::Relaxed);
+        assert_eq!(stats.interrupts.load(Ordering::Relaxed), 10);
+        assert_eq!(stats.mmio_reads.load(Ordering::Relaxed), 50);
+        assert_eq!(stats.mmio_writes.load(Ordering::Relaxed), 25);
+        assert_eq!(stats.dma_transfers.load(Ordering::Relaxed), 3);
+        assert_eq!(stats.dma_bytes.load(Ordering::Relaxed), 4096);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_passthrough_state_default() {
+        let addr = PciAddress::new(0, 1, 0, 0);
+        let config = PassthroughConfig::new(addr, 0x10de, 0x2204);
+        let pt = GpuPassthrough::new(config);
+        assert_eq!(pt.state().await, PassthroughState::Detached);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_passthrough_pci_address() {
+        let addr = PciAddress::new(0, 3, 0, 0);
+        let config = PassthroughConfig::new(addr.clone(), 0x10de, 0x2204);
+        let pt = GpuPassthrough::new(config);
+        assert_eq!(*pt.pci_address(), addr);
+    }
+
+    #[tokio::test]
+    async fn test_gpu_passthrough_device_info_before_discover() {
+        let addr = PciAddress::new(0, 1, 0, 0);
+        let config = PassthroughConfig::new(addr, 0x10de, 0x2204);
+        let pt = GpuPassthrough::new(config);
+        assert!(pt.device_info().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_detach_already_detached() {
+        let addr = PciAddress::new(0, 1, 0, 0);
+        let config = PassthroughConfig::new(addr, 0x10de, 0x2204);
+        let pt = GpuPassthrough::new(config);
+        // Detaching an already-detached device should be a no-op
+        pt.detach().await.unwrap();
+        assert_eq!(pt.state().await, PassthroughState::Detached);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[test]
+    fn test_enumerate_gpus_non_linux() {
+        let result = enumerate_gpus();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pci_address_from_bdf_too_many_parts() {
+        assert!(PciAddress::from_bdf("0000:01:00.0.1").is_none());
+    }
+
+    #[test]
+    fn test_passthrough_state_all_variants_distinct() {
+        let variants = [
+            PassthroughState::Detached,
+            PassthroughState::HostAttached,
+            PassthroughState::VfioBound,
+            PassthroughState::PassedThrough,
+            PassthroughState::Error,
+        ];
+        for i in 0..variants.len() {
+            for j in (i + 1)..variants.len() {
+                assert_ne!(variants[i], variants[j]);
+            }
+        }
+    }
 }

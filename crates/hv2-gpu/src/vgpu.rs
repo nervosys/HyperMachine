@@ -857,4 +857,214 @@ mod tests {
             Err(e) => panic!("Unexpected error: {:?}", e),
         }
     }
+
+    // --- New tests below ---
+
+    #[test]
+    fn test_gpu_features_default() {
+        let f = GpuFeatures::default();
+        assert!(!f.compute);
+        assert!(!f.graphics);
+        assert!(!f.ray_tracing);
+        assert!(!f.bindless);
+        assert!(!f.sparse_resources);
+        assert!(!f.multi_draw_indirect);
+        assert!(!f.timestamp_query);
+    }
+
+    #[test]
+    fn test_shader_type_variants() {
+        assert_ne!(ShaderType::Vertex, ShaderType::Fragment);
+        assert_ne!(ShaderType::Fragment, ShaderType::Compute);
+        assert_ne!(ShaderType::Vertex, ShaderType::Compute);
+        assert_eq!(ShaderType::Compute, ShaderType::Compute);
+    }
+
+    #[test]
+    fn test_virtual_gpu_stats_default() {
+        let stats = VirtualGpuStats::default();
+        assert_eq!(stats.commands_submitted.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.bytes_allocated.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.bytes_transferred.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.draw_calls.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.compute_dispatches.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.textures_created.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.buffers_created.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn test_virtual_gpu_stats_increment() {
+        let stats = VirtualGpuStats::default();
+        stats.commands_submitted.fetch_add(5, Ordering::Relaxed);
+        stats.bytes_allocated.fetch_add(1024, Ordering::Relaxed);
+        stats.textures_created.fetch_add(3, Ordering::Relaxed);
+        assert_eq!(stats.commands_submitted.load(Ordering::Relaxed), 5);
+        assert_eq!(stats.bytes_allocated.load(Ordering::Relaxed), 1024);
+        assert_eq!(stats.textures_created.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn test_vgpu_name() {
+        let vgpu = VirtualGpu::new("my-gpu-device");
+        assert_eq!(vgpu.name(), "my-gpu-device");
+    }
+
+    #[test]
+    fn test_vgpu_not_initialized_by_default() {
+        let vgpu = VirtualGpu::new("test");
+        assert!(!vgpu.is_initialized());
+    }
+
+    #[tokio::test]
+    async fn test_vgpu_capabilities_none_before_init() {
+        let vgpu = VirtualGpu::new("test");
+        assert!(vgpu.capabilities().await.is_none());
+    }
+
+    #[test]
+    fn test_read_u32_le_boundary() {
+        // Exactly 4 bytes
+        let data = [0xFF, 0xFF, 0xFF, 0xFF];
+        let mut pos = 0;
+        assert_eq!(VirtualGpu::read_u32_le(&data, &mut pos).unwrap(), u32::MAX);
+        assert_eq!(pos, 4);
+    }
+
+    #[test]
+    fn test_read_u64_le_zero() {
+        let data = [0u8; 8];
+        let mut pos = 0;
+        assert_eq!(VirtualGpu::read_u64_le(&data, &mut pos).unwrap(), 0);
+    }
+
+    #[test]
+    fn test_read_u32_le_empty() {
+        let data: [u8; 0] = [];
+        let mut pos = 0;
+        assert!(VirtualGpu::read_u32_le(&data, &mut pos).is_err());
+    }
+
+    #[test]
+    fn test_read_u64_le_too_short() {
+        let data = [0u8; 7]; // 7 bytes, need 8
+        let mut pos = 0;
+        assert!(VirtualGpu::read_u64_le(&data, &mut pos).is_err());
+    }
+
+    #[test]
+    fn test_read_u32_sequential() {
+        let mut data = Vec::new();
+        data.extend_from_slice(&42u32.to_le_bytes());
+        data.extend_from_slice(&100u32.to_le_bytes());
+        data.extend_from_slice(&999u32.to_le_bytes());
+        let mut pos = 0;
+        assert_eq!(VirtualGpu::read_u32_le(&data, &mut pos).unwrap(), 42);
+        assert_eq!(VirtualGpu::read_u32_le(&data, &mut pos).unwrap(), 100);
+        assert_eq!(VirtualGpu::read_u32_le(&data, &mut pos).unwrap(), 999);
+        assert_eq!(pos, 12);
+    }
+
+    #[test]
+    fn test_virtual_gpu_caps_fields() {
+        let caps = VirtualGpuCaps {
+            name: "Test GPU".to_string(),
+            vendor_id: 0x10de,
+            device_id: 0x2204,
+            max_texture_size: 16384,
+            max_buffer_size: 1 << 30,
+            max_compute_workgroup_size: [1024, 1024, 64],
+            max_compute_invocations: 1024,
+            features: GpuFeatures {
+                compute: true,
+                graphics: true,
+                ..Default::default()
+            },
+            backend: "Vulkan".to_string(),
+        };
+        assert_eq!(caps.name, "Test GPU");
+        assert_eq!(caps.vendor_id, 0x10de);
+        assert_eq!(caps.max_texture_size, 16384);
+        assert!(caps.features.compute);
+        assert!(!caps.features.ray_tracing);
+    }
+
+    #[tokio::test]
+    async fn test_vgpu_reset() {
+        let vgpu = VirtualGpu::new("test");
+        vgpu.reset().await.unwrap();
+        // After reset, resource ID counter should be back to 1
+        assert_eq!(vgpu.stats().commands_submitted.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn test_vgpu_wait_idle_uninitialized() {
+        let vgpu = VirtualGpu::new("test");
+        // wait_idle on uninitialized GPU should be a no-op success
+        vgpu.wait_idle().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_dispatch_compute_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu.dispatch_compute(0, [1, 1, 1]).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_allocate_buffer_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu.allocate_buffer(1024, BufferUsages::STORAGE).await;
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_gpu_error_display() {
+        let e = GpuError::NotAvailable("no gpu".to_string());
+        assert!(format!("{}", e).contains("no gpu"));
+        let e = GpuError::InitFailed("init fail".to_string());
+        assert!(format!("{}", e).contains("init fail"));
+        let e = GpuError::Unsupported("nope".to_string());
+        assert!(format!("{}", e).contains("nope"));
+        let e = GpuError::InvalidOperation("bad op".to_string());
+        assert!(format!("{}", e).contains("bad op"));
+        let e = GpuError::IoError("io fail".to_string());
+        assert!(format!("{}", e).contains("io fail"));
+    }
+
+    #[tokio::test]
+    async fn test_submit_commands_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu.submit_commands(&[0x00]).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_write_buffer_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu.write_buffer(1, 0, &[0u8; 16]).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_free_buffer_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu.free_buffer(1).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_texture_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu
+            .create_texture(256, 256, 1, TextureFormat::Rgba8Unorm, TextureUsages::RENDER_ATTACHMENT)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_shader_not_initialized() {
+        let vgpu = VirtualGpu::new("test");
+        let result = vgpu.create_shader("", ShaderType::Compute).await;
+        assert!(result.is_err());
+    }
 }
