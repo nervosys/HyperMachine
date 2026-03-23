@@ -44,20 +44,15 @@ pub type PortId = u32;
 pub type VlanId = u16;
 
 /// Port VLAN mode
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum VlanMode {
     /// Access port: member of a single VLAN (untagged traffic)
     Access(VlanId),
     /// Trunk port: carries multiple VLANs (tagged traffic)
     Trunk(Vec<VlanId>),
     /// No VLAN filtering (all traffic passes through)
+    #[default]
     None,
-}
-
-impl Default for VlanMode {
-    fn default() -> Self {
-        VlanMode::None
-    }
 }
 
 // ============================================================================

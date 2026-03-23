@@ -398,4 +398,49 @@ mod tests {
 
         assert!(Introspection::operation_reference("unknown").is_none());
     }
+
+    #[test]
+    fn test_vm_name_max_length() {
+        let long_name = format!("a{}", "b".repeat(62)); // 63 chars exactly
+        assert!(ToolExecutor::is_valid_vm_name(&long_name));
+
+        let too_long = format!("a{}", "b".repeat(63)); // 64 chars
+        assert!(!ToolExecutor::is_valid_vm_name(&too_long));
+    }
+
+    #[test]
+    fn test_vm_name_unicode_rejected() {
+        assert!(!ToolExecutor::is_valid_vm_name("vm-\u{00e9}")); // accented e
+        assert!(!ToolExecutor::is_valid_vm_name("\u{4e16}")); // CJK char
+    }
+
+    #[test]
+    fn test_operation_reference_all_ops() {
+        let ops = [
+            "vm.create",
+            "vm.start",
+            "vm.stop",
+            "vm.delete",
+            "vm.list",
+            "vm.get",
+            "vm.metrics",
+            "vm.execute_script",
+        ];
+        for op in &ops {
+            let r = Introspection::operation_reference(op);
+            assert!(r.is_some(), "Missing reference for {}", op);
+            assert_eq!(r.as_ref().unwrap()["name"], *op);
+        }
+    }
+
+    #[test]
+    fn test_capabilities_constraints() {
+        let summary = Introspection::capabilities_summary();
+        let constraints = &summary["constraints"];
+        assert_eq!(constraints["vm_name"]["max_length"], 63);
+        assert_eq!(constraints["cpu_cores"]["min"], 1);
+        assert_eq!(constraints["cpu_cores"]["max"], 128);
+        assert_eq!(constraints["memory_gb"]["min"], 1);
+        assert_eq!(constraints["memory_gb"]["max"], 1024);
+    }
 }

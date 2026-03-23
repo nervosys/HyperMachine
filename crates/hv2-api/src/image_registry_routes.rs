@@ -43,6 +43,12 @@ pub struct ImageRegistryAppState {
     pub registry: Arc<ImageRegistry>,
 }
 
+impl Default for ImageRegistryAppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImageRegistryAppState {
     /// Create with default enforce + require-signature config.
     pub fn new() -> Self {
