@@ -10,11 +10,14 @@ pub mod gpu_fabric_routes;
 pub mod grpc;
 pub mod health_routes;
 pub mod image_registry_routes;
+pub mod metrics_routes;
 pub mod middleware;
 pub mod ontology;
 pub mod rest;
 pub mod runtime_routes;
 pub mod server;
+pub mod snapshot_routes;
+pub mod ws_routes;
 
 use thiserror::Error;
 

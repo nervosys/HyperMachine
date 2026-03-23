@@ -4,6 +4,7 @@
 
 pub mod tap;
 pub mod virtio;
+pub mod vswitch;
 
 use thiserror::Error;
 

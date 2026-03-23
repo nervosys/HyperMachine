@@ -5,17 +5,20 @@
 //!
 //! ## Architecture
 //!
-//! The server merges eight independent routers into one:
+//! The server merges eleven independent routers into one:
 //!
-//! | Router           | Prefix               | State                  |
-//! |------------------|-----------------------|------------------------|
-//! | VM CRUD          | `/api/v1/vms`         | `AppState`             |
-//! | Ontology         | `/agentic`            | (stateless)            |
-//! | Events/SSE       | `/api/v1/events`      | `EventBus`             |
-//! | Runtime fleet    | `/api/v1/runtime`     | `RuntimeAppState`      |
-//! | GPU Fabric       | `/api/v1/gpu-fabric`  | `GpuFabricAppState`    |
-//! | Image Registry   | `/api/v1/images`      | `ImageRegistryAppState`|
-//! | Unified Health   | `/api/v1/health/full` | `UnifiedHealthState`   |
+//! | Router           | Prefix                            | State                  |
+//! |------------------|-----------------------------------|------------------------|
+//! | VM CRUD          | `/api/v1/vms`                     | `AppState`             |
+//! | Ontology         | `/agentic`                        | (stateless)            |
+//! | Events/SSE       | `/api/v1/events`                  | `EventBus`             |
+//! | WebSocket        | `/api/v1/events/ws`               | `EventBus`             |
+//! | Runtime fleet    | `/api/v1/runtime`                 | `RuntimeAppState`      |
+//! | GPU Fabric       | `/api/v1/gpu-fabric`              | `GpuFabricAppState`    |
+//! | Image Registry   | `/api/v1/images`                  | `ImageRegistryAppState`|
+//! | Unified Health   | `/api/v1/health/full`             | `UnifiedHealthState`   |
+//! | Prometheus       | `/metrics`                        | `MetricsState`         |
+//! | Snapshots        | `/api/v1/vms/:id/snapshots`       | `SnapshotAppState`     |
 //!
 //! Each router keeps its own state via axum state extractors while
 //! sharing a single TCP listener and connection pool.
@@ -36,9 +39,12 @@ use crate::events::{self, EventBus};
 use crate::gpu_fabric_routes::{self, GpuFabricAppState};
 use crate::health_routes::{self, UnifiedHealthState};
 use crate::image_registry_routes::{self, ImageRegistryAppState};
+use crate::metrics_routes::{self, MetricsState};
 use crate::middleware::MiddlewareConfig;
 use crate::rest;
 use crate::runtime_routes::{self, RuntimeAppState};
+use crate::snapshot_routes::{self, SnapshotAppState};
+use crate::ws_routes;
 use crate::Result;
 use axum::Router;
 use hv2_runtime::{Runtime, RuntimeConfig};
@@ -285,10 +291,24 @@ impl Server {
         let health_router = health_routes::create_health_router(Arc::new(health_state));
         app = app.merge(health_router);
 
+        // Merge unified Prometheus metrics endpoint
+        let metrics_state = Arc::new(MetricsState::new());
+        let metrics_router = metrics_routes::create_metrics_router(metrics_state);
+        app = app.merge(metrics_router);
+
+        // Merge snapshot/restore routes
+        let snapshot_state = Arc::new(SnapshotAppState::new());
+        let snapshot_router = snapshot_routes::create_snapshot_router(snapshot_state);
+        app = app.merge(snapshot_router);
+
         // Nest events routes if enabled
         if let Some(ref bus) = self.event_bus {
             let events_router = events::events_router(bus.clone());
             app = app.nest("/api/v1/events", events_router);
+
+            // Merge WebSocket event streaming
+            let ws_router = ws_routes::create_ws_router(bus.clone());
+            app = app.merge(ws_router);
         }
 
         // Apply middleware stack
@@ -403,6 +423,20 @@ impl Server {
             ("GET", "/agentic/tools/anthropic", "Anthropic tools"),
             ("GET", "/agentic/tools/gemini", "Gemini tools"),
             ("GET", "/.well-known/ai-plugin.json", "AI plugin manifest"),
+            ("GET", "/metrics", "Unified Prometheus metrics"),
+            ("POST", "/api/v1/vms/:id/snapshots", "Create snapshot"),
+            ("GET", "/api/v1/vms/:id/snapshots", "List snapshots"),
+            ("GET", "/api/v1/vms/:id/snapshots/:snap_id", "Get snapshot"),
+            (
+                "DELETE",
+                "/api/v1/vms/:id/snapshots/:snap_id",
+                "Delete snapshot",
+            ),
+            (
+                "POST",
+                "/api/v1/vms/:id/snapshots/:snap_id/restore",
+                "Restore snapshot",
+            ),
         ];
 
         if self.config.enable_events {
@@ -412,6 +446,7 @@ impl Server {
                 ("GET", "/api/v1/events/webhooks/:id", "Get webhook"),
                 ("DELETE", "/api/v1/events/webhooks/:id", "Delete webhook"),
                 ("GET", "/api/v1/events/stream", "SSE event stream"),
+                ("GET", "/api/v1/events/ws", "WebSocket event stream"),
             ]);
         }
 
@@ -647,8 +682,8 @@ mod tests {
     fn test_route_table_all_enabled() {
         let server = test_server();
         let routes = server.route_table();
-        // 19 base + 5 events + 12 runtime = 36
-        assert_eq!(routes.len(), 36);
+        // 25 base + 6 events + 12 runtime = 43
+        assert_eq!(routes.len(), 43);
     }
 
     #[test]
@@ -658,9 +693,8 @@ mod tests {
             .enable_events(false);
         let server = Server::new(config);
         let routes = server.route_table();
-        // 18 base only
-        // 19 base (includes /api/v1/health/full)
-        assert_eq!(routes.len(), 19);
+        // 25 base (includes /metrics, snapshot routes, /api/v1/health/full)
+        assert_eq!(routes.len(), 25);
     }
 
     // ── Router Integration ────────────────────────────────────────────

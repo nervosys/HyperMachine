@@ -46,7 +46,7 @@ tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 prost = "0.14"
 hyper = "1.4"
-axum = "0.7"
+axum = { version = "0.7", features = ["ws"] }
 tower = "0.5"
 
 # GPU acceleration
