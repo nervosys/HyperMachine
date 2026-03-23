@@ -18,7 +18,7 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 | Metric        | Value                                       |
 | ------------- | ------------------------------------------- |
 | Build         | ✅ Clean (0 errors, 0 warnings)              |
-| Tests         | ✅ **4,328 passed**, 0 failed, 28 ignored    |
+| Tests         | ✅ **4,371 passed**, 0 failed, 28 ignored    |
 | Clippy        | ✅ 0 warnings (`-D warnings`)                |
 | Crates        | 13 (10 stable, 2 nightly, 1 cross-platform) |
 | Source files  | 283 `.rs` files                             |
@@ -51,6 +51,8 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 ✅ Secure Boot, vTPM, memory encryption
 ✅ AI agent framework with MCP server (21 modules)
 ✅ Dual gRPC/REST API with WebSocket streaming
+✅ Unified Prometheus `/metrics` endpoint (all subsystem aggregation)
+✅ Snapshot/Restore REST API with per-VM lifecycle management
 ✅ Desktop GUI with AI automation API
 ✅ Fleet runtime with VM pooling, scheduling, and DAG workflows
 ✅ GPU VM Fabric: topology-aware placement, fleet management, capacity reservations, image registry
@@ -73,7 +75,7 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 ```shell
 HyperMachine/
 ├── hv2-core/      # Core hypervisor engine           ✅ 109,196 lines  2,233 tests
-├── hv2-api/       # REST/gRPC API server             ✅  29,743 lines    962 tests
+├── hv2-api/       # REST/gRPC API server             ✅  29,743 lines    976 tests
 ├── hv2-agent/     # AI agent framework               ✅  19,423 lines    396 tests
 ├── hv2-runtime/   # Fleet runtime & scheduling       ✅  10,486 lines    239 tests
 ├── hm-cli/        # CLI + MCP server                 ✅   5,341 lines     55 tests
@@ -81,7 +83,7 @@ HyperMachine/
 ├── hv1-core/      # Type-1 bare-metal core           ✅   7,911 lines    161 tests (nightly)
 ├── hm-gui/        # Desktop GUI + AI automation      ✅   3,227 lines     34 tests
 ├── hv2-gpu/       # GPU virtualization               ✅   1,716 lines     20 tests
-├── hv2-net/       # Networking (TAP/TUN, VirtIO)     ✅   1,696 lines     13 tests
+├── hv2-net/       # Networking (TAP/TUN, VirtIO)     ✅   1,696 lines     30 tests
 ├── hv2-cli/       # Standalone hypervisor CLI        ✅   1,026 lines     22 tests
 ├── hv1-arm/       # ARM64 EL2 hypervisor backend     ✅   3,100 lines    127 tests
 └── hv1-boot/      # Type-1 UEFI bootloader           ✅     295 lines  (nightly)
