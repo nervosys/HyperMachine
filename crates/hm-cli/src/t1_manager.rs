@@ -656,4 +656,288 @@ mod tests {
         let vms = manager.list_vms().await;
         assert!(vms.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_get_vm_found() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("my-vm", 8, 16, true, true)
+            .await
+            .unwrap();
+
+        let vm = manager.get_vm("my-vm").await.unwrap();
+        assert_eq!(vm.name, "my-vm");
+        assert_eq!(vm.cpu_cores, 8);
+        assert_eq!(vm.memory_gb, 16);
+        assert!(vm.gpu_passthrough);
+        assert!(vm.network.sriov);
+    }
+
+    #[tokio::test]
+    async fn test_get_vm_not_found() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        let result = manager.get_vm("nonexistent").await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("not found")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_duplicate_vm() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("dup-vm", 2, 4, false, false)
+            .await
+            .unwrap();
+
+        let result = manager.create_vm("dup-vm", 4, 8, false, false).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent_vm() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        let result = manager.delete_vm("ghost").await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_get_vm_status_no_connection() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("status-vm", 2, 4, false, false)
+            .await
+            .unwrap();
+
+        let metrics = manager.get_vm_status("status-vm").await.unwrap();
+        assert_eq!(metrics.state, T1VmState::Configured);
+        assert_eq!(metrics.cpu_cores, 2);
+        assert_eq!(metrics.memory_gb, 4);
+        assert!(metrics.uptime_seconds.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_export_import_config() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("export-vm", 4, 8, true, false)
+            .await
+            .unwrap();
+
+        let json = manager.export_config("export-vm").await.unwrap();
+
+        // Import into a fresh manager
+        let dir2 = tempdir().unwrap();
+        let manager2 = T1Manager::with_config_dir(dir2.path().to_path_buf()).unwrap();
+
+        let imported = manager2.import_config(&json).await.unwrap();
+        assert_eq!(imported.name, "export-vm");
+        assert_eq!(imported.cpu_cores, 4);
+        assert!(imported.gpu_passthrough);
+    }
+
+    #[tokio::test]
+    async fn test_import_duplicate_rejected() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("imp-vm", 2, 4, false, false)
+            .await
+            .unwrap();
+        let json = manager.export_config("imp-vm").await.unwrap();
+
+        let result = manager.import_config(&json).await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
+    }
+
+    #[tokio::test]
+    async fn test_set_get_connection() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        assert!(manager.get_connection().await.is_none());
+
+        let conn = T1HypervisorConnection {
+            endpoint: "192.168.1.100".to_string(),
+            port: 9443,
+            tls: true,
+            auth_token: Some("tok-abc".to_string()),
+        };
+        manager.set_connection(conn.clone()).await.unwrap();
+
+        let got = manager.get_connection().await.unwrap();
+        assert_eq!(got.endpoint, "192.168.1.100");
+        assert_eq!(got.port, 9443);
+        assert!(got.tls);
+        assert_eq!(got.auth_token.as_deref(), Some("tok-abc"));
+    }
+
+    #[tokio::test]
+    async fn test_ping_hypervisor_no_connection() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        let reachable = manager.ping_hypervisor().await.unwrap();
+        assert!(!reachable);
+    }
+
+    #[tokio::test]
+    async fn test_start_vm_no_connection() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("start-vm", 2, 4, false, false)
+            .await
+            .unwrap();
+
+        let result = manager.start_vm("start-vm").await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No T1 hypervisor connection")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_stop_vm_no_connection() {
+        let dir = tempdir().unwrap();
+        let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
+
+        manager
+            .create_vm("stop-vm", 2, 4, false, false)
+            .await
+            .unwrap();
+
+        let result = manager.stop_vm("stop-vm").await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No T1 hypervisor connection")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_persistence_across_managers() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().to_path_buf();
+
+        {
+            let manager = T1Manager::with_config_dir(path.clone()).unwrap();
+            manager.create_vm("persist", 2, 4, false, false).await.unwrap();
+        }
+
+        let manager2 = T1Manager::with_config_dir(path).unwrap();
+        let vm = manager2.get_vm("persist").await.unwrap();
+        assert_eq!(vm.name, "persist");
+    }
+
+    #[test]
+    fn test_t1_vm_state_display() {
+        assert_eq!(format!("{}", T1VmState::Configured), "Configured");
+        assert_eq!(format!("{}", T1VmState::Running), "Running");
+        assert_eq!(format!("{}", T1VmState::Paused), "Paused");
+        assert_eq!(format!("{}", T1VmState::Stopped), "Stopped");
+        assert_eq!(format!("{}", T1VmState::Error), "Error");
+        assert_eq!(format!("{}", T1VmState::Unknown), "Unknown");
+    }
+
+    #[test]
+    fn test_t1_boot_config_default() {
+        let boot = T1BootConfig::default();
+        assert!(boot.kernel.is_none());
+        assert!(boot.initrd.is_none());
+        assert!(boot.cmdline.is_empty());
+        assert!(boot.uefi);
+    }
+
+    #[test]
+    fn test_t1_hypervisor_connection_default() {
+        let conn = T1HypervisorConnection::default();
+        assert_eq!(conn.endpoint, "127.0.0.1");
+        assert_eq!(conn.port, 8443);
+        assert!(conn.tls);
+        assert!(conn.auth_token.is_none());
+    }
+
+    #[test]
+    fn test_t1_network_config_default() {
+        let net = T1NetworkConfig::default();
+        assert!(!net.sriov);
+        assert!(net.mac_address.is_none());
+        assert!(net.vlan.is_none());
+    }
+
+    #[test]
+    fn test_t1_vm_config_serde_roundtrip() {
+        let config = T1VmConfig {
+            name: "serde-vm".to_string(),
+            cpu_cores: 4,
+            memory_gb: 16,
+            gpu_passthrough: true,
+            network: T1NetworkConfig {
+                sriov: true,
+                mac_address: Some("AA:BB:CC:DD:EE:FF".to_string()),
+                vlan: Some(100),
+            },
+            boot: T1BootConfig::default(),
+            devices: vec![],
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: T1VmConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.name, "serde-vm");
+        assert_eq!(restored.cpu_cores, 4);
+        assert!(restored.gpu_passthrough);
+        assert!(restored.network.sriov);
+        assert_eq!(restored.network.vlan, Some(100));
+    }
+
+    #[test]
+    fn test_t1_script_result_serde() {
+        let result = T1ScriptResult {
+            success: true,
+            stdout: "hello\n".to_string(),
+            stderr: String::new(),
+            exit_code: Some(0),
+            duration_ms: Some(42),
+        };
+        let json = serde_json::to_string(&result).unwrap();
+        let restored: T1ScriptResult = serde_json::from_str(&json).unwrap();
+        assert!(restored.success);
+        assert_eq!(restored.exit_code, Some(0));
+        assert_eq!(restored.duration_ms, Some(42));
+    }
+
+    #[test]
+    fn test_t1_vm_registry_default() {
+        let reg = T1VmRegistry::default();
+        assert!(reg.vms.is_empty());
+        assert_eq!(reg.version, 0);
+    }
 }

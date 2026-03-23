@@ -38,6 +38,12 @@ pub struct SnapshotAppState {
     pub default_config: SnapshotConfig,
 }
 
+impl Default for SnapshotAppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SnapshotAppState {
     /// Create default state
     pub fn new() -> Self {
@@ -56,7 +62,7 @@ impl SnapshotAppState {
     }
 
     /// Get or create a snapshot manager for a VM
-    fn ensure_manager(&self, vm_id: &str) -> () {
+    fn ensure_manager(&self, vm_id: &str) {
         let mut managers = self.managers.write();
         if !managers.contains_key(vm_id) {
             managers.insert(

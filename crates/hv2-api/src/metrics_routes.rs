@@ -47,6 +47,12 @@ pub struct MetricsState {
     event_bus: Option<Arc<EventBus>>,
 }
 
+impl Default for MetricsState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsState {
     /// Create a new metrics state
     pub fn new() -> Self {

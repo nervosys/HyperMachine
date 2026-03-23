@@ -1152,3 +1152,94 @@ impl HyperMachineOntology {
         ]
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ontology_build_version() {
+        let ont = HyperMachineOntology::build();
+        assert_eq!(ont.version, "1.0.0");
+        assert!(!ont.description.is_empty());
+    }
+
+    #[test]
+    fn test_ontology_concepts() {
+        let ont = HyperMachineOntology::build();
+        assert_eq!(ont.concepts.len(), 3);
+
+        let ids: Vec<&str> = ont.concepts.iter().map(|c| c.id.as_str()).collect();
+        assert!(ids.contains(&"vm"));
+        assert!(ids.contains(&"metrics"));
+        assert!(ids.contains(&"script"));
+    }
+
+    #[test]
+    fn test_vm_concept_states() {
+        let ont = HyperMachineOntology::build();
+        let vm = ont.concepts.iter().find(|c| c.id == "vm").unwrap();
+
+        assert_eq!(vm.states.len(), 5);
+        let state_names: Vec<&str> = vm.states.iter().map(|s| s.name.as_str()).collect();
+        assert!(state_names.contains(&"Created"));
+        assert!(state_names.contains(&"Running"));
+        assert!(state_names.contains(&"Paused"));
+        assert!(state_names.contains(&"Stopped"));
+        assert!(state_names.contains(&"Error"));
+    }
+
+    #[test]
+    fn test_ontology_types() {
+        let ont = HyperMachineOntology::build();
+        assert_eq!(ont.types.len(), 4);
+
+        let type_names: Vec<&str> = ont.types.iter().map(|t| t.name.as_str()).collect();
+        assert!(type_names.contains(&"VmName"));
+        assert!(type_names.contains(&"VmState"));
+        assert!(type_names.contains(&"VmInfo"));
+        assert!(type_names.contains(&"ScriptResult"));
+    }
+
+    #[test]
+    fn test_vm_state_enum_values() {
+        let ont = HyperMachineOntology::build();
+        let vm_state = ont.types.iter().find(|t| t.name == "VmState").unwrap();
+        assert_eq!(vm_state.base, "enum");
+        assert_eq!(vm_state.values.len(), 5);
+    }
+
+    #[test]
+    fn test_ontology_operations_categories() {
+        let ont = HyperMachineOntology::build();
+        assert!(ont.operations.contains_key("lifecycle"));
+        assert!(ont.operations.contains_key("query"));
+        assert!(ont.operations.contains_key("execution"));
+    }
+
+    #[test]
+    fn test_ontology_relationships() {
+        let ont = HyperMachineOntology::build();
+        assert!(!ont.relationships.is_empty());
+    }
+
+    #[test]
+    fn test_ontology_examples() {
+        let ont = HyperMachineOntology::build();
+        assert!(!ont.examples.is_empty());
+        for ex in &ont.examples {
+            assert!(!ex.title.is_empty());
+            assert!(!ex.operations.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_ontology_serde_roundtrip() {
+        let ont = HyperMachineOntology::build();
+        let json = serde_json::to_string(&ont).unwrap();
+        let restored: HyperMachineOntology = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.version, ont.version);
+        assert_eq!(restored.concepts.len(), ont.concepts.len());
+        assert_eq!(restored.types.len(), ont.types.len());
+    }
+}

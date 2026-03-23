@@ -383,4 +383,23 @@ mod tests {
         let caps = SchemaEndpoints::capabilities();
         assert!(caps["operations"].as_array().is_some());
     }
+
+    #[test]
+    fn test_agent_schema_fields() {
+        let schema = AgentSchema::build();
+        assert!(schema.schema.contains("json-schema.org"));
+        assert!(schema.id.contains("hypermachine"));
+        assert_eq!(schema.title, "HyperMachine Agent API");
+    }
+
+    #[test]
+    fn test_compact_schema_short_types() {
+        assert_eq!(CompactSchema::short_type("VmName"), "s");
+        assert_eq!(CompactSchema::short_type("string"), "s");
+        assert_eq!(CompactSchema::short_type("integer"), "i");
+        assert_eq!(CompactSchema::short_type("boolean"), "b");
+        assert_eq!(CompactSchema::short_type("float"), "n");
+        assert_eq!(CompactSchema::short_type("number"), "n");
+        assert_eq!(CompactSchema::short_type("unknown"), "s");
+    }
 }

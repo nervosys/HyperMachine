@@ -8,7 +8,7 @@
 | **Platform**     | Windows (x86_64), Linux, macOS                 |
 | **Rust Version** | 1.87+ (stable); nightly for hv1-core, hv1-boot |
 | **Profile**      | Debug + Release                                |
-| **Tests**        | 4,341 passed, 0 failed, 28 ignored             |
+| **Tests**        | 4,381 passed, 0 failed, 28 ignored             |
 | **Clippy**       | 0 warnings (`-D warnings`)                     |
 | **Crates**       | 13 total (10 stable, 2 nightly, 1 cross-platform) |
 
@@ -16,21 +16,21 @@
 
 | #   | Crate           | Lines   | Tests | Status    |
 | --- | --------------- | ------- | ----- | --------- |
-| 1   | **hv2-core**    | 109,385 | 2,214 | ✅         |
-| 2   | **hv2-api**     | 32,237  | 994   | ✅         |
-| 3   | **hv2-agent**   | 19,423  | 396   | ✅         |
-| 4   | **hv2-runtime** | 10,486  | 239   | ✅         |
-| 5   | **hm-cli**      | 5,341   | 55    | ✅         |
-| 6   | **hv2-cpu**     | 4,340   | 66    | ✅         |
-| 7   | **hm-gui**      | 3,642   | 68    | ✅         |
-| 8   | **hv2-gpu**     | 2,070   | 59    | ✅         |
-| 9   | **hv2-net**     | 2,661   | 61    | ✅         |
-| 10  | **hv2-cli**     | 1,281   | 43    | ✅         |
-| 11  | **hv1-core**    | 7,911   | 161   | ✅ nightly |
-| 12  | **hv1-arm**     | 3,100   | 127   | ✅         |
-| 13  | **hv1-boot**    | 295     | —     | ✅ nightly |
+| 1   | **hv2-core**    | 125,876 | 2,214 | ✅         |
+| 2   | **hv2-api**     | 35,742  | 994   | ✅         |
+| 3   | **hv2-agent**   | 22,380  | 396   | ✅         |
+| 4   | **hv2-runtime** | 11,974  | 239   | ✅         |
+| 5   | **hm-cli**      | 6,486   | 89    | ✅         |
+| 6   | **hv2-cpu**     | 4,811   | 66    | ✅         |
+| 7   | **hm-gui**      | 4,011   | 68    | ✅         |
+| 8   | **hv2-gpu**     | 2,341   | 59    | ✅         |
+| 9   | **hv2-net**     | 3,042   | 61    | ✅         |
+| 10  | **hv2-cli**     | 1,469   | 43    | ✅         |
+| 11  | **hv1-core**    | 8,995   | 161   | ✅ nightly |
+| 12  | **hv1-arm**     | 3,490   | 127   | ✅         |
+| 13  | **hv1-boot**    | 340     | —     | ✅ nightly |
 
-**Total: 186,481 lines of Rust across 263 source files.**
+**Total: 230,957 lines of Rust across 292 source files.**
 
 ## Build Commands
 

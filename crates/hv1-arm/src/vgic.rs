@@ -110,6 +110,12 @@ pub struct VirtualDistributor {
     initialized: bool,
 }
 
+impl Default for VirtualDistributor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VirtualDistributor {
     /// Create a new virtual distributor with all interrupts disabled.
     pub fn new() -> Self {
@@ -339,7 +345,7 @@ impl VirtualGic {
 
     /// Inject a virtual SPI into the VM.
     pub fn inject_spi(&mut self, intid: u32) -> Result<()> {
-        if intid < PPI_END || intid >= SPI_END {
+        if !(PPI_END..SPI_END).contains(&intid) {
             return Err(Error::InvalidInterruptId);
         }
         self.distributor.set_pending(intid)

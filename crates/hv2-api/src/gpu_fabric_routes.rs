@@ -38,6 +38,12 @@ pub struct GpuFabricAppState {
     pub capacity: Arc<CapacityManager>,
 }
 
+impl Default for GpuFabricAppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GpuFabricAppState {
     /// Create a fresh (empty) fabric state — useful for tests.
     pub fn new() -> Self {

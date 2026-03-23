@@ -26,6 +26,12 @@ pub struct UnifiedHealthState {
     pub events_enabled: bool,
 }
 
+impl Default for UnifiedHealthState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UnifiedHealthState {
     pub fn new() -> Self {
         Self {

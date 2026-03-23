@@ -554,4 +554,72 @@ mod tests {
         let anthropic_config = ProviderConfig::for_provider(LlmProvider::Anthropic, &ontology);
         assert!(anthropic_config.system_prompt.contains("<capabilities>"));
     }
+
+    #[test]
+    fn test_llm_provider_from_str_aliases() {
+        assert_eq!("openai".parse::<LlmProvider>().unwrap(), LlmProvider::OpenAI);
+        assert_eq!("gpt".parse::<LlmProvider>().unwrap(), LlmProvider::OpenAI);
+        assert_eq!("chatgpt".parse::<LlmProvider>().unwrap(), LlmProvider::OpenAI);
+        assert_eq!("anthropic".parse::<LlmProvider>().unwrap(), LlmProvider::Anthropic);
+        assert_eq!("claude".parse::<LlmProvider>().unwrap(), LlmProvider::Anthropic);
+        assert_eq!("google".parse::<LlmProvider>().unwrap(), LlmProvider::Google);
+        assert_eq!("gemini".parse::<LlmProvider>().unwrap(), LlmProvider::Google);
+        assert_eq!("generic".parse::<LlmProvider>().unwrap(), LlmProvider::Generic);
+        assert_eq!("other".parse::<LlmProvider>().unwrap(), LlmProvider::Generic);
+    }
+
+    #[test]
+    fn test_llm_provider_from_str_unknown() {
+        assert!("mistral".parse::<LlmProvider>().is_err());
+        assert!("".parse::<LlmProvider>().is_err());
+    }
+
+    #[test]
+    fn test_generic_format() {
+        let ontology = HyperMachineOntology::build();
+        let tools = ProviderAdapter::to_generic(&ontology);
+        assert!(!tools.is_empty());
+
+        let create = tools.iter().find(|t| t["name"] == "vm.create").unwrap();
+        assert!(create["description"].as_str().unwrap().contains("Create"));
+        assert!(create["parameters"]["properties"].is_object());
+    }
+
+    #[test]
+    fn test_system_prompts_non_empty() {
+        let prompts = [
+            SystemPrompts::for_openai(),
+            SystemPrompts::for_anthropic(),
+            SystemPrompts::for_gemini(),
+            SystemPrompts::generic(),
+        ];
+        for prompt in &prompts {
+            assert!(!prompt.is_empty());
+            assert!(prompt.contains("HyperMachine"));
+        }
+    }
+
+    #[test]
+    fn test_provider_config_all_providers() {
+        let ontology = HyperMachineOntology::build();
+        let providers = [
+            LlmProvider::OpenAI,
+            LlmProvider::Anthropic,
+            LlmProvider::Google,
+            LlmProvider::Generic,
+        ];
+        for provider in &providers {
+            let config = ProviderConfig::for_provider(*provider, &ontology);
+            assert_eq!(config.provider, *provider);
+            assert!(!config.system_prompt.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_provider_hints_generic_no_parallel() {
+        let ontology = HyperMachineOntology::build();
+        let config = ProviderConfig::for_provider(LlmProvider::Generic, &ontology);
+        assert!(!config.hints.parallel_tool_calls);
+        assert!(config.hints.max_tokens.is_none());
+    }
 }

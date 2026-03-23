@@ -366,7 +366,7 @@ impl GpuTopologyMap {
             if let Some(placement) = self.best_subset_on_host(host_id, gpus, req) {
                 if best_placement
                     .as_ref()
-                    .map_or(true, |b| placement.affinity_score > b.affinity_score)
+                    .is_none_or(|b| placement.affinity_score > b.affinity_score)
                 {
                     best_placement = Some(placement);
                 }
@@ -444,7 +444,7 @@ impl GpuTopologyMap {
                 same_numa,
             };
 
-            if best.as_ref().map_or(true, |b| score > b.affinity_score) {
+            if best.as_ref().is_none_or(|b| score > b.affinity_score) {
                 best = Some(placement);
             }
         }

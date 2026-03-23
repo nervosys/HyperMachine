@@ -454,7 +454,7 @@ impl CapacityManager {
             .read()
             .values()
             .filter(|r| r.state == ReservationState::Active || r.state == ReservationState::FullyUtilized)
-            .filter(|r| vm_class.map_or(true, |c| r.vm_class == c))
+            .filter(|r| vm_class.is_none_or(|c| r.vm_class == c))
             .map(|r| r.instance_count)
             .sum()
     }

@@ -118,7 +118,7 @@ pub struct SystemRegisterContext {
 
 /// SIMD/FP register state (128-bit NEON Q-registers)
 #[repr(C, align(16))]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct SimdFpState {
     /// Q0-Q31 (128-bit each, stored as pairs of u64)
     pub q: [[u64; 2]; 32],
@@ -128,15 +128,6 @@ pub struct SimdFpState {
     pub fpsr: u32,
 }
 
-impl Default for SimdFpState {
-    fn default() -> Self {
-        Self {
-            q: [[0u64; 2]; 32],
-            fpcr: 0,
-            fpsr: 0,
-        }
-    }
-}
 
 impl core::fmt::Debug for SimdFpState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
