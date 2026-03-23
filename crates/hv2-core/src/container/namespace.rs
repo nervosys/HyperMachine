@@ -195,17 +195,27 @@ impl PidNamespace {
 
     /// Unregister a process
     pub fn unregister(&self, virtual_pid: u32) -> Option<u32> {
-        self.processes.write().unwrap_or_else(|e| e.into_inner()).remove(&virtual_pid)
+        self.processes
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&virtual_pid)
     }
 
     /// Translate virtual PID to host PID
     pub fn translate_to_host(&self, virtual_pid: u32) -> Option<u32> {
-        self.processes.read().unwrap_or_else(|e| e.into_inner()).get(&virtual_pid).copied()
+        self.processes
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&virtual_pid)
+            .copied()
     }
 
     /// Get process count
     pub fn process_count(&self) -> usize {
-        self.processes.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.processes
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Set PID limit
@@ -387,18 +397,27 @@ impl NetNamespace {
             mtu: 65536,
             up: true,
         };
-        self.interfaces.write().unwrap_or_else(|e| e.into_inner()).push(lo);
+        self.interfaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(lo);
     }
 
     /// Add interface
     pub fn add_interface(&self, iface: NetInterface) {
-        self.interfaces.write().unwrap_or_else(|e| e.into_inner()).push(iface);
+        self.interfaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(iface);
     }
 
     /// Remove interface
     pub fn remove_interface(&self, name: &str) -> Option<NetInterface> {
         let mut interfaces = self.interfaces.write().unwrap_or_else(|e| e.into_inner());
-        interfaces.iter().position(|i| i.name == name).map(|pos| interfaces.remove(pos))
+        interfaces
+            .iter()
+            .position(|i| i.name == name)
+            .map(|pos| interfaces.remove(pos))
     }
 
     /// Get interface by name
@@ -413,22 +432,34 @@ impl NetNamespace {
 
     /// List interfaces
     pub fn list_interfaces(&self) -> Vec<NetInterface> {
-        self.interfaces.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.interfaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Add route
     pub fn add_route(&self, route: Route) {
-        self.routes.write().unwrap_or_else(|e| e.into_inner()).push(route);
+        self.routes
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(route);
     }
 
     /// List routes
     pub fn list_routes(&self) -> Vec<Route> {
-        self.routes.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.routes
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Add firewall rule
     pub fn add_rule(&self, rule: FirewallRule) {
-        self.rules.write().unwrap_or_else(|e| e.into_inner()).push(rule);
+        self.rules
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(rule);
     }
 
     /// List rules
@@ -526,18 +557,27 @@ impl MntNamespace {
 
     /// Add mount
     pub fn mount(&self, mount: MountPoint) {
-        self.mounts.write().unwrap_or_else(|e| e.into_inner()).push(mount);
+        self.mounts
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(mount);
     }
 
     /// Remove mount
     pub fn umount(&self, target: &PathBuf) -> Option<MountPoint> {
         let mut mounts = self.mounts.write().unwrap_or_else(|e| e.into_inner());
-        mounts.iter().position(|m| &m.target == target).map(|pos| mounts.remove(pos))
+        mounts
+            .iter()
+            .position(|m| &m.target == target)
+            .map(|pos| mounts.remove(pos))
     }
 
     /// List mounts
     pub fn list_mounts(&self) -> Vec<MountPoint> {
-        self.mounts.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.mounts
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Find mount for path
@@ -580,7 +620,10 @@ impl UtsNamespace {
 
     /// Get hostname
     pub fn hostname(&self) -> String {
-        self.hostname.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.hostname
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Set hostname
@@ -590,7 +633,10 @@ impl UtsNamespace {
 
     /// Get domain name
     pub fn domainname(&self) -> String {
-        self.domainname.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.domainname
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Set domain name
@@ -680,7 +726,10 @@ impl IpcNamespace {
             max_bytes: 16384,
             current_bytes: 0,
         };
-        self.msg_queues.write().unwrap_or_else(|e| e.into_inner()).insert(id, queue);
+        self.msg_queues
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, queue);
         id
     }
 
@@ -692,7 +741,10 @@ impl IpcNamespace {
             key,
             values: vec![0; nsems],
         };
-        self.semaphores.write().unwrap_or_else(|e| e.into_inner()).insert(id, sem);
+        self.semaphores
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, sem);
         id
     }
 
@@ -705,23 +757,35 @@ impl IpcNamespace {
             size,
             attached: 0,
         };
-        self.shm_segments.write().unwrap_or_else(|e| e.into_inner()).insert(id, shm);
+        self.shm_segments
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, shm);
         id
     }
 
     /// Get message queue count
     pub fn msg_count(&self) -> usize {
-        self.msg_queues.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.msg_queues
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Get semaphore count
     pub fn sem_count(&self) -> usize {
-        self.semaphores.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.semaphores
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Get shared memory count
     pub fn shm_count(&self) -> usize {
-        self.shm_segments.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.shm_segments
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 }
 
@@ -792,17 +856,28 @@ impl UserNamespace {
 
     /// Add UID mapping
     pub fn add_uid_map(&self, map: IdMap) {
-        self.uid_map.write().unwrap_or_else(|e| e.into_inner()).push(map);
+        self.uid_map
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(map);
     }
 
     /// Add GID mapping
     pub fn add_gid_map(&self, map: IdMap) {
-        self.gid_map.write().unwrap_or_else(|e| e.into_inner()).push(map);
+        self.gid_map
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(map);
     }
 
     /// Map UID to outside
     pub fn map_uid_out(&self, uid: u32) -> Option<u32> {
-        for map in self.uid_map.read().unwrap_or_else(|e| e.into_inner()).iter() {
+        for map in self
+            .uid_map
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+        {
             if let Some(outside) = map.to_outside(uid) {
                 return Some(outside);
             }
@@ -812,7 +887,12 @@ impl UserNamespace {
 
     /// Map UID to inside
     pub fn map_uid_in(&self, uid: u32) -> Option<u32> {
-        for map in self.uid_map.read().unwrap_or_else(|e| e.into_inner()).iter() {
+        for map in self
+            .uid_map
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+        {
             if let Some(inside) = map.to_inside(uid) {
                 return Some(inside);
             }
@@ -822,7 +902,12 @@ impl UserNamespace {
 
     /// Map GID to outside
     pub fn map_gid_out(&self, gid: u32) -> Option<u32> {
-        for map in self.gid_map.read().unwrap_or_else(|e| e.into_inner()).iter() {
+        for map in self
+            .gid_map
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+        {
             if let Some(outside) = map.to_outside(gid) {
                 return Some(outside);
             }
@@ -832,7 +917,12 @@ impl UserNamespace {
 
     /// Map GID to inside
     pub fn map_gid_in(&self, gid: u32) -> Option<u32> {
-        for map in self.gid_map.read().unwrap_or_else(|e| e.into_inner()).iter() {
+        for map in self
+            .gid_map
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+        {
             if let Some(inside) = map.to_inside(gid) {
                 return Some(inside);
             }
@@ -883,7 +973,10 @@ impl NamespaceManager {
     pub fn create_pid_ns(&self, parent: Option<NsId>) -> Arc<PidNamespace> {
         let id = self.alloc_id();
         let ns = Arc::new(PidNamespace::new(id, parent));
-        self.pid_namespaces.write().unwrap_or_else(|e| e.into_inner()).insert(id, ns.clone());
+        self.pid_namespaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, ns.clone());
         ns
     }
 
@@ -891,7 +984,10 @@ impl NamespaceManager {
     pub fn create_net_ns(&self) -> Arc<NetNamespace> {
         let id = self.alloc_id();
         let ns = Arc::new(NetNamespace::new(id));
-        self.net_namespaces.write().unwrap_or_else(|e| e.into_inner()).insert(id, ns.clone());
+        self.net_namespaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, ns.clone());
         ns
     }
 
@@ -899,7 +995,10 @@ impl NamespaceManager {
     pub fn create_mnt_ns(&self, root: PathBuf) -> Arc<MntNamespace> {
         let id = self.alloc_id();
         let ns = Arc::new(MntNamespace::new(id, root));
-        self.mnt_namespaces.write().unwrap_or_else(|e| e.into_inner()).insert(id, ns.clone());
+        self.mnt_namespaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, ns.clone());
         ns
     }
 
@@ -907,7 +1006,10 @@ impl NamespaceManager {
     pub fn create_uts_ns(&self, hostname: impl Into<String>) -> Arc<UtsNamespace> {
         let id = self.alloc_id();
         let ns = Arc::new(UtsNamespace::new(id, hostname));
-        self.uts_namespaces.write().unwrap_or_else(|e| e.into_inner()).insert(id, ns.clone());
+        self.uts_namespaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, ns.clone());
         ns
     }
 
@@ -915,7 +1017,10 @@ impl NamespaceManager {
     pub fn create_ipc_ns(&self) -> Arc<IpcNamespace> {
         let id = self.alloc_id();
         let ns = Arc::new(IpcNamespace::new(id));
-        self.ipc_namespaces.write().unwrap_or_else(|e| e.into_inner()).insert(id, ns.clone());
+        self.ipc_namespaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, ns.clone());
         ns
     }
 
@@ -923,49 +1028,100 @@ impl NamespaceManager {
     pub fn create_user_ns(&self, parent: Option<NsId>) -> Arc<UserNamespace> {
         let id = self.alloc_id();
         let ns = Arc::new(UserNamespace::new(id, parent));
-        self.user_namespaces.write().unwrap_or_else(|e| e.into_inner()).insert(id, ns.clone());
+        self.user_namespaces
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, ns.clone());
         ns
     }
 
     /// Get PID namespace
     pub fn get_pid_ns(&self, id: NsId) -> Option<Arc<PidNamespace>> {
-        self.pid_namespaces.read().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
+        self.pid_namespaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get network namespace
     pub fn get_net_ns(&self, id: NsId) -> Option<Arc<NetNamespace>> {
-        self.net_namespaces.read().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
+        self.net_namespaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get mount namespace
     pub fn get_mnt_ns(&self, id: NsId) -> Option<Arc<MntNamespace>> {
-        self.mnt_namespaces.read().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
+        self.mnt_namespaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get UTS namespace
     pub fn get_uts_ns(&self, id: NsId) -> Option<Arc<UtsNamespace>> {
-        self.uts_namespaces.read().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
+        self.uts_namespaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get IPC namespace
     pub fn get_ipc_ns(&self, id: NsId) -> Option<Arc<IpcNamespace>> {
-        self.ipc_namespaces.read().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
+        self.ipc_namespaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get user namespace
     pub fn get_user_ns(&self, id: NsId) -> Option<Arc<UserNamespace>> {
-        self.user_namespaces.read().unwrap_or_else(|e| e.into_inner()).get(&id).cloned()
+        self.user_namespaces
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .cloned()
     }
 
     /// Get namespace statistics
     pub fn stats(&self) -> NamespaceStats {
         NamespaceStats {
-            pid_count: self.pid_namespaces.read().unwrap_or_else(|e| e.into_inner()).len(),
-            net_count: self.net_namespaces.read().unwrap_or_else(|e| e.into_inner()).len(),
-            mnt_count: self.mnt_namespaces.read().unwrap_or_else(|e| e.into_inner()).len(),
-            uts_count: self.uts_namespaces.read().unwrap_or_else(|e| e.into_inner()).len(),
-            ipc_count: self.ipc_namespaces.read().unwrap_or_else(|e| e.into_inner()).len(),
-            user_count: self.user_namespaces.read().unwrap_or_else(|e| e.into_inner()).len(),
+            pid_count: self
+                .pid_namespaces
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            net_count: self
+                .net_namespaces
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            mnt_count: self
+                .mnt_namespaces
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            uts_count: self
+                .uts_namespaces
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            ipc_count: self
+                .ipc_namespaces
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            user_count: self
+                .user_namespaces
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
         }
     }
 }
