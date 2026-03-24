@@ -21,8 +21,6 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 | **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
 | **Security**    | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
 
-## Killer Features
-
 ### 1. Agentic-First Virtualization
 
 HyperMachine is the first hypervisor designed from the ground up for AI agent workloads. Every VM is an MCP-addressable resource: agents discover capabilities via ontology endpoints, invoke typed tools (`vm.create`, `vm.exec`, `gpu.reserve`), and receive structured results — no shell scraping or brittle CLI wrappers. Multi-LLM tool schemas ship built-in for OpenAI, Anthropic, and Google formats.
