@@ -48,6 +48,7 @@ pub mod mcp;
 pub mod memory;
 pub mod orchestration;
 pub mod perception;
+pub mod permissions;
 pub mod planning;
 pub mod policies;
 pub mod reasoning;
@@ -142,6 +143,13 @@ pub use orchestration::{
     Channel as OrchChannel, Conflict, ConflictResolution, ConflictType, EventType,
     MessagePriority as OrchMessagePriority, MessageType as OrchMessageType, OrchestrationError,
     OrchestratorConfig, TaskState, VmClaim, Workflow as OrchWorkflow, WorkflowState, WorkflowTask,
+};
+
+// Distributed graph-based hierarchical permissions
+pub use permissions::{
+    AuditLog, Delegation, DelegationChain, DelegationConstraint, EffectivePermissions, GrantEdge,
+    GrantId, Permission, PermissionAuditEntry, PermissionChange, PermissionError, PermissionGraph,
+    PermissionSet, Principal, PrincipalId, PrincipalKind, ResolutionEngine, ResourceScope,
 };
 
 use thiserror::Error;
