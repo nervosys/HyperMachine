@@ -3246,7 +3246,7 @@ Added a multi-tenant isolation middleware that extracts and validates tenant ide
 - `TenantIsolationConfig` — configurable tenant header, allow-list, require/default behavior, response header, excluded paths
 - `tenant_isolation_handler` — extracts tenant from request header, validates against allow-list, returns 400/403 on failure, injects tenant ID into response
 ---
-## Phase 107: Response Envelope
+## ✅ Phase 107: Response Envelope
 
 **Tests:** 3,382 passing (0 failures) — 15 new tests (774 in hv2-api)
 
@@ -3265,7 +3265,7 @@ Added a Response Envelope middleware that wraps successful JSON responses in a s
 ---
 
 
-## Phase 108: Request Replay Protection
+## ✅ Phase 108: Request Replay Protection
 
 **Tests:** 3,398 passing (0 failures) — 16 new tests (790 in hv2-api)
 
@@ -3284,7 +3284,7 @@ Added a Request Replay Protection middleware that detects and rejects replayed r
 
 ---
 
-## Phase 109: Geo-IP Headers
+## ✅ Phase 109: Geo-IP Headers
 
 **Tests:** 3,414 passing (0 failures) — 16 new tests (806 in hv2-api)
 
