@@ -63,9 +63,18 @@ sbom.json
 SESSION*_SUMMARY.md
 SESSION*_VISUAL.txt
 PROGRESS_SESSION*.md
+SESSIONS_*_COMPLETE.md
+docs/sessions/
+docs/session_*
 clippy_full.txt
 clippy_warnings.txt
 clippy_check.txt
+
+# Internal business documents (keep out of public repo)
+docs/MONETIZATION_STRATEGY.md
+docs/SALES_COLLATERAL.md
+docs/CLOUD_PROVIDER_VALUE_PROPOSITION.md
+docs/LLM_SERVING_ANALYSIS.md
 
 # One-off dev scripts and planning artifacts
 apply_rs.ps1
