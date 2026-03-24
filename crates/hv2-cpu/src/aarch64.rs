@@ -1158,4 +1158,346 @@ mod tests {
         assert_eq!(sign_extend(0xFF, 8), -1);
         assert_eq!(sign_extend(0x800, 12), -2048);
     }
+
+    #[test]
+    fn test_reset_clears_state() {
+        let mut cpu = AArch64Cpu::new();
+        // Modify various state
+        cpu.set_xreg(0, 0xCAFE);
+        cpu.regs.pc = 0x1000;
+        cpu.write_sys_reg(SystemRegId::SCTLR_EL1, 0xABCD);
+        cpu.raise_irq();
+
+        cpu.reset();
+
+        assert_eq!(cpu.get_xreg(0), 0);
+        assert_eq!(cpu.regs.pc, 0);
+        assert_eq!(cpu.regs.current_el, 1);
+        assert!(!cpu.irq_enabled()); // masked after reset
+        assert!(!cpu.fiq_enabled());
+        assert!(!cpu.is_waiting());
+        assert_eq!(cpu.read_sys_reg(SystemRegId::SCTLR_EL1), 0);
+    }
+
+    #[test]
+    fn test_system_register_roundtrip() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.write_sys_reg(SystemRegId::SCTLR_EL1, 0xDEAD_BEEF);
+        assert_eq!(cpu.read_sys_reg(SystemRegId::SCTLR_EL1), 0xDEAD_BEEF);
+
+        // Unwritten register returns 0
+        assert_eq!(cpu.read_sys_reg(SystemRegId::TTBR0_EL1), 0);
+    }
+
+    #[test]
+    fn test_vbar_write_updates_field() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.write_sys_reg(SystemRegId::VBAR_EL1, 0x8000_0000);
+        assert_eq!(cpu.read_sys_reg(SystemRegId::VBAR_EL1), 0x8000_0000);
+    }
+
+    #[test]
+    fn test_irq_raise_and_clear() {
+        let mut cpu = AArch64Cpu::new();
+        // IRQ masked by default after reset
+        assert!(!cpu.irq_enabled());
+
+        cpu.raise_irq();
+        // Waiting should not be cleared when IRQ is masked
+        cpu.waiting = true;
+        cpu.raise_irq();
+        assert!(cpu.is_waiting()); // still waiting since masked
+
+        // Unmask IRQ
+        cpu.regs.pstate &= !pstate::I;
+        assert!(cpu.irq_enabled());
+
+        cpu.raise_irq();
+        assert!(!cpu.is_waiting()); // woken up
+
+        cpu.clear_irq();
+    }
+
+    #[test]
+    fn test_fiq_raise_and_clear() {
+        let mut cpu = AArch64Cpu::new();
+        assert!(!cpu.fiq_enabled());
+
+        cpu.regs.pstate &= !pstate::F;
+        assert!(cpu.fiq_enabled());
+
+        cpu.waiting = true;
+        cpu.raise_fiq();
+        assert!(!cpu.is_waiting());
+
+        cpu.clear_fiq();
+    }
+
+    #[test]
+    fn test_check_exceptions_irq() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.write_sys_reg(SystemRegId::VBAR_EL1, 0x1000);
+        cpu.regs.pc = 0x2000;
+        cpu.regs.pstate &= !pstate::I; // unmask IRQ
+        cpu.raise_irq();
+
+        let mut mem = vec![0u8; 0x4000];
+        let mut memory = SliceMemory::new(&mut mem);
+        let handled = cpu.check_exceptions(&mut memory).unwrap();
+        assert!(handled);
+        // IRQ vector offset is 0x280
+        assert_eq!(cpu.regs.pc, 0x1000 + 0x280);
+        assert_eq!(cpu.regs.elr_el1, 0x2000); // saved PC
+    }
+
+    #[test]
+    fn test_check_exceptions_fiq_priority() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.write_sys_reg(SystemRegId::VBAR_EL1, 0x1000);
+        cpu.regs.pc = 0x500;
+        cpu.regs.pstate &= !(pstate::I | pstate::F); // unmask both
+        cpu.raise_irq();
+        cpu.raise_fiq();
+
+        let mut mem = vec![0u8; 0x4000];
+        let mut memory = SliceMemory::new(&mut mem);
+        let handled = cpu.check_exceptions(&mut memory).unwrap();
+        assert!(handled);
+        // FIQ has higher priority, vector offset 0x300
+        assert_eq!(cpu.regs.pc, 0x1000 + 0x300);
+    }
+
+    #[test]
+    fn test_fetch_unaligned_pc() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.regs.pc = 3; // misaligned
+
+        let mut data = vec![0u8; 0x100];
+        let mem = SliceMemory::new(&mut data);
+        assert!(cpu.fetch_instruction(&mem).is_err());
+    }
+
+    #[test]
+    fn test_execute_add_immediate() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.set_xreg(1, 100);
+
+        // ADD X0, X1, #42  (64-bit, Rd=0, Rn=1, imm12=42)
+        // sf=1, op=0 (ADD), S=0, shift=0, imm12=42, Rn=1, Rd=0
+        // Encoding: 1|00|100010|0|000000101010|00001|00000
+        let opcode: u32 = 0b1_00_100010_0_000000101010_00001_00000;
+        let mut mem = vec![0u8; 4];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.get_xreg(0), 142);
+    }
+
+    #[test]
+    fn test_execute_sub_immediate() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.set_xreg(1, 200);
+
+        // SUB X0, X1, #50 (64-bit)
+        // sf=1, op=1 (SUB), S=0, shift=0, imm12=50, Rn=1, Rd=0
+        let opcode: u32 = 0b1_10_100010_0_000000110010_00001_00000;
+        let mut mem = vec![0u8; 4];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.get_xreg(0), 150);
+    }
+
+    #[test]
+    fn test_execute_movz() {
+        let mut cpu = AArch64Cpu::new();
+
+        // MOVZ X0, #0x1234
+        // sf=1, opc=10 (MOVZ), hw=0, imm16=0x1234, Rd=0
+        // 1|10|100101|00|0001001000110100|00000
+        let opcode: u32 = 0b1_10_100101_00_0001001000110100_00000;
+        let mut mem = vec![0u8; 4];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.get_xreg(0), 0x1234);
+    }
+
+    #[test]
+    fn test_execute_branch_unconditional() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.regs.pc = 0x1000;
+
+        // B +16 (offset = 4 instructions = 16 bytes, imm26 = 4)
+        // 000101 | imm26=4
+        let opcode: u32 = 0b000101_00000000000000000000000100;
+        let mut mem = vec![0u8; 0x2000];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.regs.pc, 0x1010);
+    }
+
+    #[test]
+    fn test_execute_branch_with_link() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.regs.pc = 0x1000;
+
+        // BL +8 (imm26 = 2)
+        // 100101 | imm26=2
+        let opcode: u32 = 0b100101_00000000000000000000000010;
+        let mut mem = vec![0u8; 0x2000];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.regs.pc, 0x1008);
+        assert_eq!(cpu.regs.x[30], 0x1004); // link register = return address
+    }
+
+    #[test]
+    fn test_execute_store_and_load() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.set_xreg(0, 0xCAFEBABE);
+        cpu.set_xreg(1, 0x100); // base address
+
+        // STR W0, [X1] (32-bit store with unsigned imm offset 0)
+        // size=10, V=0, opc=00 (store), imm12=0, Rn=1, Rt=0
+        // 10|111001|00|000000000000|00001|00000
+        let str_opcode: u32 = 0b10_111001_00_000000000000_00001_00000;
+
+        let mut mem = vec![0u8; 0x200];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(str_opcode, &mut memory).unwrap();
+
+        // Verify memory written
+        assert_eq!(memory.read_u32(0x100).unwrap(), 0xCAFEBABE);
+
+        // LDR W2, [X1] (32-bit load, same offset)
+        // size=10, V=0, opc=01 (load), imm12=0, Rn=1, Rt=2
+        let ldr_opcode: u32 = 0b10_111001_01_000000000000_00001_00010;
+        cpu.execute_instruction(ldr_opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.get_wreg(2), 0xCAFEBABE);
+    }
+
+    #[test]
+    fn test_execute_wfi_sets_waiting() {
+        let mut cpu = AArch64Cpu::new();
+
+        // WFI: system instruction with op0=0, CRn=0011, op1=011, CRm=0010, op2=001
+        // 1101010100|0|00|011|0011|0010|001|11111
+        let opcode: u32 = 0b1101010100_0_00_011_0011_0010_001_11111;
+        let mut mem = vec![0u8; 0x100];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert!(cpu.is_waiting());
+    }
+
+    #[test]
+    fn test_execute_nop() {
+        let mut cpu = AArch64Cpu::new();
+        let pc_before = cpu.regs.pc;
+
+        // NOP: op0=0, CRn=0011, op1=011, CRm=0000, op2=000
+        let opcode: u32 = 0b1101010100_0_00_011_0011_0000_000_11111;
+        let mut mem = vec![0u8; 0x100];
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.execute_instruction(opcode, &mut memory).unwrap();
+
+        assert_eq!(cpu.regs.pc, pc_before + 4);
+        assert!(!cpu.is_waiting());
+    }
+
+    #[test]
+    fn test_eret_restores_state() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.regs.elr_el1 = 0x5000;
+        cpu.regs.spsr_el1 = 0x60000000; // N and Z flags
+
+        // Call eret() directly — the ERET opcode (0xD69F03E0) shares the
+        // branch-register encoding space and is handled after decode.
+        cpu.eret();
+
+        assert_eq!(cpu.regs.pc, 0x5000);
+        assert_eq!(cpu.regs.pstate, 0x60000000);
+    }
+
+    #[test]
+    fn test_memory_out_of_bounds() {
+        let mut data = vec![0u8; 16];
+        let mem = SliceMemory::new(&mut data);
+        assert!(mem.read_u32(20).is_err());
+        assert!(mem.read_u64(16).is_err());
+    }
+
+    #[test]
+    fn test_step_advances_pc() {
+        let mut cpu = AArch64Cpu::new();
+        cpu.regs.pc = 0;
+
+        // Place a NOP at address 0
+        let nop: u32 = 0b1101010100_0_00_011_0011_0000_000_11111;
+        let mut mem = vec![0u8; 0x100];
+        mem[0] = (nop & 0xFF) as u8;
+        mem[1] = ((nop >> 8) & 0xFF) as u8;
+        mem[2] = ((nop >> 16) & 0xFF) as u8;
+        mem[3] = ((nop >> 24) & 0xFF) as u8;
+
+        let mut memory = SliceMemory::new(&mut mem);
+        cpu.step(&mut memory).unwrap();
+
+        assert_eq!(cpu.regs.pc, 4);
+    }
+
+    #[test]
+    fn test_exception_type_variants() {
+        // Ensure all variants exist and are distinct
+        let types = [
+            ExceptionType::Sync,
+            ExceptionType::Irq,
+            ExceptionType::Fiq,
+            ExceptionType::SError,
+        ];
+        for t in &types {
+            // Debug formatting should work
+            let _ = format!("{:?}", t);
+        }
+    }
+
+    #[test]
+    fn test_exception_class_variants() {
+        let classes = [
+            ExceptionClass::Unknown,
+            ExceptionClass::WFxTrap,
+            ExceptionClass::SvcA64,
+            ExceptionClass::HvcA64,
+            ExceptionClass::SmcA64,
+            ExceptionClass::SysReg,
+            ExceptionClass::InstrAbortLower,
+            ExceptionClass::DataAbortLower,
+            ExceptionClass::SpAlign,
+            ExceptionClass::Serror,
+            ExceptionClass::Brk,
+        ];
+        for c in &classes {
+            let _ = format!("{:?}", c);
+        }
+    }
+
+    #[test]
+    fn test_pstate_flag_constants() {
+        // Each flag should be a distinct power of 2
+        let flags = [
+            pstate::N, pstate::Z, pstate::C, pstate::V,
+            pstate::D, pstate::A, pstate::I, pstate::F,
+            pstate::SS, pstate::IL,
+        ];
+        for (i, a) in flags.iter().enumerate() {
+            assert!(a.is_power_of_two(), "Flag {} should be power of 2", i);
+            for b in flags.iter().skip(i + 1) {
+                assert_ne!(a, b, "Flags should be distinct");
+            }
+        }
+    }
 }

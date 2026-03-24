@@ -627,4 +627,89 @@ mod tests {
         assert!(deserialized.network_enabled);
         assert_eq!(deserialized.state, VmState::Running);
     }
+
+    #[tokio::test]
+    async fn test_stop_nonexistent_vm() {
+        let manager = VmManager::new_in_memory().unwrap();
+        let result = manager.stop_vm("ghost").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_nonexistent_vm() {
+        let manager = VmManager::new_in_memory().unwrap();
+        // delete_vm is idempotent — deleting a nonexistent VM succeeds
+        let result = manager.delete_vm("ghost").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_execute_script_vm_not_found() {
+        let manager = VmManager::new_in_memory().unwrap();
+        let result = manager.execute_script("ghost", "print('hi')").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_metrics_vm_not_found() {
+        let manager = VmManager::new_in_memory().unwrap();
+        let result = manager.get_metrics("ghost").await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_create_multiple_vms() {
+        let manager = VmManager::new_in_memory().unwrap();
+        manager.create_vm("vm-1", 2, 4, false, false).await.unwrap();
+        manager.create_vm("vm-2", 4, 8, true, true).await.unwrap();
+        manager.create_vm("vm-3", 1, 2, false, true).await.unwrap();
+
+        let vms = manager.list_vms().await;
+        assert_eq!(vms.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_create_delete_list_cycle() {
+        let manager = VmManager::new_in_memory().unwrap();
+        manager.create_vm("a", 2, 4, false, false).await.unwrap();
+        manager.create_vm("b", 2, 4, false, false).await.unwrap();
+        manager.delete_vm("a").await.unwrap();
+
+        let vms = manager.list_vms().await;
+        assert_eq!(vms.len(), 1);
+        assert_eq!(vms[0].name, "b");
+    }
+
+    #[test]
+    fn test_vm_state_copy_clone() {
+        let state = VmState::Running;
+        let copied = state;
+        let cloned = state.clone();
+        assert_eq!(copied, cloned);
+    }
+
+    #[test]
+    fn test_vm_record_pid_not_serialized() {
+        let now = chrono::Utc::now();
+        let record = VmRecord {
+            name: "test".into(),
+            cpu_cores: 2,
+            memory_gb: 4,
+            gpu_enabled: false,
+            network_enabled: false,
+            state: VmState::Running,
+            created_at: now,
+            updated_at: now,
+            pid: Some(12345),
+        };
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(!json.contains("pid"), "pid should be skipped in serialization");
+    }
+
+    #[tokio::test]
+    async fn test_vm_created_state() {
+        let manager = VmManager::new_in_memory().unwrap();
+        let record = manager.create_vm("fresh", 2, 4, false, false).await.unwrap();
+        assert_eq!(record.state, VmState::Created);
+    }
 }

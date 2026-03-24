@@ -819,3 +819,131 @@ pub async fn serve(addr: impl Into<std::net::SocketAddr>) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_app_state_default() {
+        let state = AppState::default();
+        assert!(!state.runtime_enabled);
+        assert!(!state.events_enabled);
+    }
+
+    #[test]
+    fn test_app_state_builder() {
+        let state = AppState::new()
+            .with_runtime_enabled(true)
+            .with_events_enabled(true);
+        assert!(state.runtime_enabled);
+        assert!(state.events_enabled);
+    }
+
+    #[test]
+    fn test_pagination_params_default() {
+        let params = PaginationParams::default();
+        assert_eq!(params.offset, 0);
+        assert!(params.limit.is_none());
+        assert_eq!(params.effective_limit(), DEFAULT_PAGE_SIZE);
+    }
+
+    #[test]
+    fn test_pagination_params_clamp_max() {
+        let params = PaginationParams {
+            offset: 0,
+            limit: Some(999),
+        };
+        assert_eq!(params.effective_limit(), MAX_PAGE_SIZE);
+    }
+
+    #[test]
+    fn test_pagination_params_clamp_min() {
+        let params = PaginationParams {
+            offset: 0,
+            limit: Some(0),
+        };
+        assert_eq!(params.effective_limit(), 1);
+    }
+
+    #[test]
+    fn test_paginated_response_from_vec() {
+        let items = vec![1, 2, 3];
+        let resp = PaginatedResponse::from_vec(items, 10, 0, 3);
+        assert_eq!(resp.items.len(), 3);
+        assert_eq!(resp.total, 10);
+        assert_eq!(resp.offset, 0);
+        assert_eq!(resp.limit, 3);
+        assert!(resp.has_more);
+    }
+
+    #[test]
+    fn test_paginated_response_no_more() {
+        let items = vec![1, 2, 3];
+        let resp = PaginatedResponse::from_vec(items, 3, 0, 10);
+        assert!(!resp.has_more);
+    }
+
+    #[test]
+    fn test_paginated_response_with_offset() {
+        let items = vec![4, 5];
+        let resp = PaginatedResponse::from_vec(items, 5, 3, 2);
+        assert!(!resp.has_more); // 3 + 2 = 5 = total
+        assert_eq!(resp.offset, 3);
+    }
+
+    #[test]
+    fn test_vm_list_params_effective_limit() {
+        let params = VmListParams {
+            offset: 0,
+            limit: Some(50),
+            state: None,
+        };
+        assert_eq!(params.effective_limit(), 50);
+    }
+
+    #[test]
+    fn test_error_response_serialization() {
+        let err = ErrorResponse {
+            error: "not found".into(),
+            code: "VM_NOT_FOUND".into(),
+            request_id: None,
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["error"], "not found");
+        assert_eq!(json["code"], "VM_NOT_FOUND");
+        // request_id should be skipped when None
+        assert!(json.get("request_id").is_none());
+    }
+
+    #[test]
+    fn test_error_response_with_request_id() {
+        let err = ErrorResponse {
+            error: "bad".into(),
+            code: "INVALID".into(),
+            request_id: Some("req-123".into()),
+        };
+        let json = serde_json::to_value(&err).unwrap();
+        assert_eq!(json["request_id"], "req-123");
+    }
+
+    #[test]
+    fn test_create_router_returns_router() {
+        let _router = create_router();
+    }
+
+    #[test]
+    fn test_create_router_with_custom_state() {
+        let state = AppState::new().with_runtime_enabled(true);
+        let _router = create_router_with_state(state);
+    }
+
+    #[test]
+    fn test_paginated_response_empty() {
+        let items: Vec<String> = vec![];
+        let resp = PaginatedResponse::from_vec(items, 0, 0, 20);
+        assert!(resp.items.is_empty());
+        assert_eq!(resp.total, 0);
+        assert!(!resp.has_more);
+    }
+}

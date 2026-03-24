@@ -799,4 +799,126 @@ mod tests {
         let action = sw.process_frame(p0, mac(2), mac(1), None, 64);
         assert_eq!(action, ForwardAction::Drop);
     }
+
+    #[test]
+    fn test_port_builder_methods() {
+        let port = SwitchPort::new(1, "test-port")
+            .with_mac([0x02, 0x00, 0x00, 0x00, 0x00, 0x01])
+            .with_vlan(VlanMode::Access(100));
+        assert_eq!(port.id, 1);
+        assert_eq!(port.name, "test-port");
+        assert_eq!(port.mac, Some([0x02, 0x00, 0x00, 0x00, 0x00, 0x01]));
+        assert!(port.enabled);
+    }
+
+    #[test]
+    fn test_port_accepts_vlan_access() {
+        let port = SwitchPort::new(1, "p").with_vlan(VlanMode::Access(100));
+        assert!(port.accepts_vlan(Some(100)));
+        assert!(!port.accepts_vlan(Some(200)));
+        assert!(port.accepts_vlan(None)); // untagged accepted on access port
+    }
+
+    #[test]
+    fn test_port_accepts_vlan_trunk() {
+        let port = SwitchPort::new(1, "p").with_vlan(VlanMode::Trunk(vec![100, 200, 300]));
+        assert!(port.accepts_vlan(Some(100)));
+        assert!(port.accepts_vlan(Some(200)));
+        assert!(!port.accepts_vlan(Some(999)));
+    }
+
+    #[test]
+    fn test_port_accepts_vlan_none_mode() {
+        let port = SwitchPort::new(1, "p"); // VlanMode::None
+        assert!(port.accepts_vlan(None));
+        assert!(port.accepts_vlan(Some(42)));
+    }
+
+    #[test]
+    fn test_set_port_enabled_nonexistent() {
+        let mut sw = VirtualSwitch::with_defaults();
+        let result = sw.set_port_enabled(999, false);
+        assert!(!result); // returns false for nonexistent port
+    }
+
+    #[test]
+    fn test_set_port_enabled_toggle() {
+        let mut sw = VirtualSwitch::with_defaults();
+        let p = sw.add_port("vm-0");
+
+        assert!(sw.set_port_enabled(p, false));
+        assert!(!sw.get_port(p).unwrap().enabled);
+
+        assert!(sw.set_port_enabled(p, true));
+        assert!(sw.get_port(p).unwrap().enabled);
+    }
+
+    #[test]
+    fn test_config_accessor() {
+        let config = SwitchConfig {
+            max_mac_entries: 512,
+            mac_aging_timeout: std::time::Duration::from_secs(60),
+            name: "my-switch".into(),
+            promiscuous: true,
+        };
+        let sw = VirtualSwitch::new(config);
+        assert_eq!(sw.config().name, "my-switch");
+        assert_eq!(sw.config().max_mac_entries, 512);
+        assert!(sw.config().promiscuous);
+    }
+
+    #[test]
+    fn test_mac_count_after_learning() {
+        let mut sw = VirtualSwitch::with_defaults();
+        let p0 = sw.add_port("vm-0");
+        let p1 = sw.add_port("vm-1");
+
+        assert_eq!(sw.mac_count(), 0);
+
+        sw.process_frame(p0, mac(1), BROADCAST_MAC, None, 64);
+        assert_eq!(sw.mac_count(), 1);
+
+        sw.process_frame(p1, mac(2), BROADCAST_MAC, None, 64);
+        assert_eq!(sw.mac_count(), 2);
+
+        sw.flush_mac_table();
+        assert_eq!(sw.mac_count(), 0);
+    }
+
+    #[test]
+    fn test_lookup_mac() {
+        let mut sw = VirtualSwitch::with_defaults();
+        let p0 = sw.add_port("vm-0");
+
+        assert!(sw.lookup_mac(&mac(1)).is_none());
+
+        sw.process_frame(p0, mac(1), BROADCAST_MAC, None, 64);
+        assert_eq!(sw.lookup_mac(&mac(1)), Some(p0));
+    }
+
+    #[test]
+    fn test_remove_port() {
+        let mut sw = VirtualSwitch::with_defaults();
+        let p0 = sw.add_port("vm-0");
+        let _p1 = sw.add_port("vm-1");
+        assert_eq!(sw.port_count(), 2);
+
+        let removed = sw.remove_port(p0);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().name, "vm-0");
+        assert_eq!(sw.port_count(), 1);
+
+        // Removing again returns None
+        assert!(sw.remove_port(p0).is_none());
+    }
+
+    #[test]
+    fn test_switch_stats_initial() {
+        let sw = VirtualSwitch::with_defaults();
+        let stats = sw.stats();
+        assert_eq!(stats.forwarded, 0);
+        assert_eq!(stats.flooded, 0);
+        assert_eq!(stats.dropped, 0);
+        assert_eq!(stats.mac_learned, 0);
+    }
 }

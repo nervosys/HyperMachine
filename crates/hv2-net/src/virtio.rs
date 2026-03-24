@@ -1135,4 +1135,105 @@ mod tests {
         assert!(mem.read(0, &mut buf).is_err());
         assert!(mem.write(0, &[0u8; 32]).is_err());
     }
+
+    #[test]
+    fn test_virtio_net_header_size() {
+        assert_eq!(
+            std::mem::size_of::<VirtioNetHeader>(),
+            12,
+            "VirtioNetHeader should be 12 bytes"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_status_transitions() {
+        let net = VirtioNet::new(1);
+        assert_eq!(net.status(), 0);
+
+        net.set_status(1); // ACKNOWLEDGE
+        assert_eq!(net.status(), 1);
+
+        net.set_status(3); // ACKNOWLEDGE | DRIVER
+        assert_eq!(net.status(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_stats_after_rx() {
+        let mut net = VirtioNet::new(1);
+        net.init().await.unwrap();
+
+        let mem = Arc::new(TestGuestMemory::new(4096));
+        net.attach_guest_memory(mem.clone()).await;
+
+        // Set up a descriptor for receiving
+        {
+            let mut q = net.rx_queues[0].lock().await;
+            q.set_desc(0, VirtqDesc {
+                addr: 0,
+                len: 1024,
+                flags: VirtqDesc::F_WRITE,
+                next: 0,
+            });
+            q.available.ring.push(0);
+            q.available.idx = 1;
+            q.enable();
+        }
+
+        let data = vec![0xAA; 100];
+        let _ = net.receive_packet(&data).await;
+
+        let stats = net.stats();
+        // Stats should reflect the attempt
+        let rx_packets = stats.rx_packets.load(std::sync::atomic::Ordering::Relaxed);
+        let rx_dropped = stats.rx_dropped.load(std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            rx_packets > 0 || rx_dropped > 0,
+            "Should have either received or dropped"
+        );
+    }
+
+    #[test]
+    fn test_virtqueue_available_after_push() {
+        let mut q = Virtqueue::new(16);
+        assert!(!q.has_available());
+
+        q.available.ring.push(0);
+        q.available.idx = 1;
+        assert!(q.has_available());
+
+        let idx = q.pop_available();
+        assert_eq!(idx, Some(0));
+        assert!(!q.has_available());
+    }
+
+    #[test]
+    fn test_virtqueue_used_ring() {
+        let mut q = Virtqueue::new(16);
+        assert_eq!(q.used.idx, 0);
+
+        q.push_used(5, 128);
+        assert_eq!(q.used.idx, 1);
+        assert_eq!(q.used.ring[0].id, 5);
+        assert_eq!(q.used.ring[0].len, 128);
+
+        q.push_used(7, 256);
+        assert_eq!(q.used.idx, 2);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_config_default_mac() {
+        let net = VirtioNet::new(1);
+        let mac = net.mac().await;
+        assert_eq!(mac, [0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    }
+
+    #[tokio::test]
+    async fn test_virtio_net_reset_clears_features() {
+        let net = VirtioNet::new(1);
+        net.set_driver_features(0xFFFF);
+        assert_ne!(net.negotiated_features(), 0);
+
+        net.reset().await;
+        assert_eq!(net.negotiated_features(), 0);
+    }
 }
