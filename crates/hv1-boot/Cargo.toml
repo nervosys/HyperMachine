@@ -3,6 +3,7 @@ name = "hv1-boot"
 version.workspace = true
 edition = "2024"  # Requires nightly Rust
 rust-version.workspace = true
+publish = false
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

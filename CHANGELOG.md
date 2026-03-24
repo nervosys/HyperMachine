@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-07-13
+
 ### Fixed
 - **PIC 8259 cascade deadlock**: `acknowledge_interrupt()` and `send_eoi()` held master
   lock while re-acquiring it in slave path, deadlocking on `parking_lot::Mutex`. Added
@@ -66,5 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: Build, test, security audit, coverage, benchmarks, release, and deploy workflows
 - **Security**: `cargo-deny` configuration, Dependabot, seccomp filtering, capability-based access
 
-[Unreleased]: https://github.com/nervosys/HyperMachine/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nervosys/HyperMachine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nervosys/HyperMachine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nervosys/HyperMachine/releases/tag/v0.1.0

@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 rust-version.workspace = true
+publish = false
 description = "HyperMachine Type-1 bare-metal hypervisor core"
 keywords.workspace = true
 categories.workspace = true

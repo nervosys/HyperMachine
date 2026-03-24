@@ -58,14 +58,14 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: api.hypermachine.io
+    - host: api.example.com  # CUSTOMIZE: set to your domain
       paths:
         - path: /
           pathType: Prefix
   tls:
     - secretName: hypermachine-tls
       hosts:
-        - api.hypermachine.io
+        - api.example.com  # CUSTOMIZE: set to your domain
 
 # Resource limits
 resources:
