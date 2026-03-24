@@ -322,3 +322,24 @@ pub async fn serve(addr: impl Into<std::net::SocketAddr>) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_vm_service_impl_new() {
+        let _service = VMServiceImpl::new();
+    }
+
+    #[test]
+    fn test_vm_service_impl_default() {
+        let _service = VMServiceImpl::default();
+    }
+
+    #[test]
+    fn test_vm_service_into_service() {
+        let service = VMServiceImpl::new();
+        let _grpc_service = service.into_service();
+    }
+}

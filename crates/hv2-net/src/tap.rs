@@ -1076,4 +1076,62 @@ mod tests {
         let device = TapDevice::new(config);
         assert!(!device.is_open());
     }
+
+    #[test]
+    fn test_tap_config_default_values() {
+        let config = TapConfig::default();
+        assert_eq!(config.name, "tap0");
+        assert!(config.mac_address.is_none());
+        assert_eq!(config.mtu, 1500);
+        assert!(!config.multi_queue);
+        assert_eq!(config.num_queues, 1);
+        assert!(config.vnet_hdr);
+        assert!(!config.persist);
+    }
+
+    #[test]
+    fn test_tap_config_new_with_name() {
+        let config = TapConfig::new("custom-tap");
+        assert_eq!(config.name, "custom-tap");
+        assert_eq!(config.mtu, 1500); // other defaults preserved
+    }
+
+    #[tokio::test]
+    async fn test_tap_device_config_accessor() {
+        let config = TapConfig::new("mytap").with_mtu(9000);
+        let device = TapDevice::new(config);
+        assert_eq!(device.config().name, "mytap");
+        assert_eq!(device.config().mtu, 9000);
+    }
+
+    #[tokio::test]
+    async fn test_tap_device_stats_initially_zero() {
+        let device = TapDevice::new(TapConfig::default());
+        let stats = device.stats();
+        assert_eq!(stats.rx_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_bytes.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.rx_packets.load(Ordering::Relaxed), 0);
+        assert_eq!(stats.tx_packets.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn test_tap_device_close_idempotent() {
+        let config = TapConfig::default();
+        let mut device = TapDevice::new(config);
+        device.close();
+        assert!(!device.is_open());
+        device.close(); // second close should not panic
+        assert!(!device.is_open());
+    }
+
+    #[test]
+    fn test_generate_mac_locally_administered() {
+        for _ in 0..10 {
+            let mac = generate_mac();
+            // Bit 1 of first byte = locally administered
+            assert!(mac[0] & 0x02 != 0, "MAC should be locally administered");
+            // Bit 0 of first byte = unicast (should be 0)
+            assert!(mac[0] & 0x01 == 0, "MAC should be unicast");
+        }
+    }
 }

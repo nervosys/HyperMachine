@@ -18,7 +18,7 @@ AI agent support. It supports both Type 2 (hosted) and Type 1 (bare-metal) modes
 | Metric        | Value                                       |
 | ------------- | ------------------------------------------- |
 | Build         | ✅ Clean (0 errors, 0 warnings)              |
-| Tests         | ✅ **4,381 passed**, 0 failed, 28 ignored    |
+| Tests         | ✅ **4,413 passed**, 0 failed, 28 ignored    |
 | Clippy        | ✅ 0 warnings (`-D warnings`)                |
 | Crates        | 13 (10 stable, 2 nightly, 1 cross-platform) |
 | Source files  | 292 `.rs` files                             |

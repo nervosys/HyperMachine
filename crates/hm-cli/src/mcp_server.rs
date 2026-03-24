@@ -1038,4 +1038,111 @@ mod tests {
         let required = params.get("required").unwrap().as_array().unwrap();
         assert!(required.iter().any(|v| v == "name"));
     }
+
+    #[test]
+    fn test_create_vm_request_defaults() {
+        let json = r#"{"name": "test-vm"}"#;
+        let req: CreateVmRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.name, "test-vm");
+        assert_eq!(req.cpu_cores, 2);
+        assert_eq!(req.memory_gb, 4);
+        assert!(!req.gpu_enabled);
+        assert!(!req.network_enabled);
+    }
+
+    #[test]
+    fn test_create_vm_request_custom_values() {
+        let json = r#"{"name": "big-vm", "cpu_cores": 16, "memory_gb": 64, "gpu_enabled": true, "network_enabled": true}"#;
+        let req: CreateVmRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.cpu_cores, 16);
+        assert_eq!(req.memory_gb, 64);
+        assert!(req.gpu_enabled);
+        assert!(req.network_enabled);
+    }
+
+    #[test]
+    fn test_execute_script_request_default_timeout() {
+        let json = r#"{"script": "print('hello')"}"#;
+        let req: ExecuteScriptRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.script, "print('hello')");
+        assert_eq!(req.timeout_seconds, 300);
+    }
+
+    #[test]
+    fn test_execute_script_request_custom_timeout() {
+        let json = r#"{"script": "long_task()", "timeout_seconds": 600}"#;
+        let req: ExecuteScriptRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.timeout_seconds, 600);
+    }
+
+    #[test]
+    fn test_tool_call_request_with_agent_id() {
+        let json = r#"{"tool": "vm.list", "arguments": {}, "agent_id": "agent-007"}"#;
+        let req: ToolCallRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.agent_id.unwrap(), "agent-007");
+    }
+
+    #[test]
+    fn test_tool_call_request_without_agent_id() {
+        let json = r#"{"tool": "vm.list", "arguments": {}}"#;
+        let req: ToolCallRequest = serde_json::from_str(json).unwrap();
+        assert!(req.agent_id.is_none());
+    }
+
+    #[test]
+    fn test_tool_definitions_count() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let tools = rt.block_on(async { list_tools().await.0 });
+        assert_eq!(tools.len(), 8);
+    }
+
+    #[test]
+    fn test_tool_definitions_all_have_names_and_descriptions() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let tools = rt.block_on(async { list_tools().await.0 });
+        for tool in &tools {
+            assert!(!tool.name.is_empty(), "Tool should have a name");
+            assert!(!tool.description.is_empty(), "Tool {} should have description", tool.name);
+            assert!(tool.parameters.is_object(), "Tool {} params should be object", tool.name);
+        }
+    }
+
+    #[test]
+    fn test_tool_definitions_expected_names() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let tools = rt.block_on(async { list_tools().await.0 });
+        let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+        for expected in &[
+            "vm.create", "vm.list", "vm.get", "vm.start",
+            "vm.stop", "vm.delete", "vm.metrics", "vm.execute_script",
+        ] {
+            assert!(names.contains(expected), "Missing tool: {}", expected);
+        }
+    }
+
+    #[test]
+    fn test_health_check_response() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let json = rt.block_on(async { health_check().await.0 });
+        assert_eq!(json["status"], "healthy");
+        assert_eq!(json["service"], "hypermachine-mcp");
+        assert!(json["version"].is_string());
+    }
+
+    #[test]
+    fn test_vm_info_serialization() {
+        let info = VmInfo {
+            name: "test".to_string(),
+            cpu_cores: 4,
+            memory_gb: 8,
+            gpu_enabled: true,
+            network_enabled: false,
+            state: "Running".to_string(),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            updated_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+        let json = serde_json::to_value(&info).unwrap();
+        assert_eq!(json["cpu_cores"], 4);
+        assert_eq!(json["state"], "Running");
+    }
 }
