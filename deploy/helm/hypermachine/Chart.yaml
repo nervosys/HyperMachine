@@ -3,8 +3,8 @@ apiVersion: v2
 name: hypermachine
 description: A high-performance, agentic hypervisor framework
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.3.0
+appVersion: "0.3.0"
 kubeVersion: ">=1.25.0"
 
 keywords:

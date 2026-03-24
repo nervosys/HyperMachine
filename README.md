@@ -38,7 +38,7 @@ Alongside classical FIPS 140-3 algorithms (AES-GCM, RSA, ECDSA), HyperMachine sh
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
-~231,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,400+ tests, zero clippy warnings, zero known advisories.
+~206,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,480+ tests, zero clippy warnings, zero known advisories.
 
 ### 6. Semantic GUI Automation
 

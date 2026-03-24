@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-24
+
+### Added
+- **Graph-based hierarchical permissions**: DAG-structured permission system for
+  agentic AI systems with resource scope hierarchy (Root → Org → Tenant → Project → VM),
+  role inheritance with cycle detection, controlled delegation with attenuation and
+  depth limits, permission resolution engine, and append-only audit trail.
+  23 unit tests covering the full permission lifecycle.
+- **Unikernel lifecycle integration tests**: 19 tests covering boot protocols, guest
+  memory management, and pool operations.
+- **Expanded test coverage**: +32 tests across hm-cli, hv2-cpu, hv2-net, and hv2-api.
+
+### Changed
+- Removed internal business strategy and session planning documents from public
+  repository (moved to .gitignore).
+- Removed duplicate docs/GETTING_STARTED.md (root copy is canonical).
+- Bumped Containerfile Rust version to 1.87.
+- Replaced invalid crates.io category `"os"` with `"emulators"`.
+
+### Fixed
+- Resolved all remaining clippy warnings across the workspace.
+
 ## [0.2.0] - 2025-07-13
 
 ### Fixed
@@ -68,6 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: Build, test, security audit, coverage, benchmarks, release, and deploy workflows
 - **Security**: `cargo-deny` configuration, Dependabot, seccomp filtering, capability-based access
 
-[Unreleased]: https://github.com/nervosys/HyperMachine/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/nervosys/HyperMachine/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/nervosys/HyperMachine/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nervosys/HyperMachine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nervosys/HyperMachine/releases/tag/v0.1.0
