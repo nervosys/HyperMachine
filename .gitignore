@@ -49,6 +49,10 @@ flamegraph.svg
 fuzz/corpus/
 fuzz/artifacts/
 
+# TLS private keys
+*.pem
+*.key
+
 # Generated CI artifacts
 sbom.json
 
@@ -62,3 +66,12 @@ PROGRESS_SESSION*.md
 clippy_full.txt
 clippy_warnings.txt
 clippy_check.txt
+
+# One-off dev scripts and planning artifacts
+apply_rs.ps1
+test_script.rhai
+ARCHITECTURAL_COMPARISON.md
+BUILD_STATUS.md
+PROJECT_SUMMARY.md
+STATUS.md
+PROGRESS.md

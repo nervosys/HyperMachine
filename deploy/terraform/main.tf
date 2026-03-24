@@ -14,14 +14,14 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  # Remote state storage — update bucket/region to match your environment
-  backend "s3" {
-    bucket         = "hypermachine-terraform-state"
-    key            = "infrastructure/terraform.tfstate"
-    region         = "us-east-1"
-    encrypt        = true
-    dynamodb_table = "hypermachine-terraform-locks"
-  }
+  # Remote state storage — CUSTOMIZE these values for your environment
+  # backend "s3" {
+  #   bucket         = "your-terraform-state-bucket"
+  #   key            = "infrastructure/terraform.tfstate"
+  #   region         = "us-east-1"
+  #   encrypt        = true
+  #   dynamodb_table = "your-terraform-locks-table"
+  # }
 
   required_providers {
     aws = {
@@ -109,9 +109,9 @@ variable "gpu_instance_type" {
 }
 
 variable "domain_name" {
-  description = "Domain name for API endpoint"
+  description = "Domain name for API endpoint — set to your own domain"
   type        = string
-  default     = "api.hypermachine.io"
+  default     = "api.example.com"
 }
 
 variable "enable_monitoring" {

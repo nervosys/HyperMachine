@@ -4,7 +4,10 @@
 #    or: buildah bud -f Containerfile -t ghcr.io/nervosys/hypermachine:latest .
 
 # --- Build stage ---
-FROM rust:1.84-bookworm AS builder
+FROM rust:1.87-bookworm AS builder
+
+# Install protobuf compiler (required for hv2-api gRPC codegen)
+RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
