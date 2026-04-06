@@ -38,7 +38,7 @@ remote-telemetry = ["dep:reqwest"]
 proptest = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
-tempfile = "3.10"
+tempfile = "3.27"
 
 [lints]
 workspace = true
