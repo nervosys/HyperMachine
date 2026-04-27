@@ -31,7 +31,7 @@ categories = ["virtualization", "os", "hardware-support"]
 
 [workspace.dependencies]
 # Core async runtime
-tokio = { version = "1.42", features = ["full"] }
+tokio = { version = "1.50", features = ["full"] }
 async-trait = "0.1"
 
 # Serialization
@@ -45,7 +45,7 @@ tonic-build = "0.14"
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 prost = "0.14"
-hyper = "1.4"
+hyper = "1.9"
 axum = { version = "0.7", features = ["ws"] }
 tower = "0.5"
 
@@ -79,7 +79,7 @@ clap = { version = "4.5", features = ["derive", "cargo"] }
 colored = "2.1"
 
 # Testing
-proptest = "1.5"
+proptest = "1.11"
 criterion = "0.5"
 
 # Security (Linux only - commented out for Windows compatibility)
@@ -95,8 +95,8 @@ wasmtime-wasi = "24.0"
 flate2 = "1.0"
 
 # Utilities
-uuid = { version = "1.10", features = ["v4", "serde"] }
-bitflags = "2.4"
+uuid = { version = "1.23", features = ["v4", "serde"] }
+bitflags = "2.11"
 rand = "0.8"
 
 [workspace.lints.rust]
