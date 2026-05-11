@@ -19,7 +19,7 @@ gicv3 = []          # GICv3 virtual interrupt controller (default)
 [dependencies]
 # No-std compatible crates
 spin = "0.9"
-bitflags = "2.4"
+bitflags = "2.11"
 log = "0.4"
 static_assertions = "1.1"
 
