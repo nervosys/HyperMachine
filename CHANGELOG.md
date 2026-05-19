@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-03-25
+
+### Added
+- **TLS/HTTPS support** (`hv2-api`): `TlsConfig`, `build_rustls_config()`, and
+  `serve_tls()` for encrypted API transport using rustls.
+- **Permission middleware**: Graph-based permission middleware wired into the API
+  server with resource scope hierarchy and role-based access control.
+- **Fuzz testing targets**: 7 `cargo-fuzz` targets covering API parsing, VM config,
+  agent messages, CPU instruction decoding, memory operations, PCI config, and
+  interrupt controller state.
+- **Integration tests**: 15 tests for `hv2-agent`, 31 for `hv2-cpu`, 15 headless
+  CI tests for `hm-gui`, and 15 end-to-end stack tests for `hv2-api`.
+- **End-to-end stack tests** (`hv2-api`): Full-router tests exercising health checks,
+  VM CRUD lifecycle, runtime sessions, workload scheduling, Prometheus metrics,
+  agentic ontology (JSON-LD), AI tool formats, feature toggling, and snapshots.
+- **Feature-gated GPU** (`hv2-gpu`): `wgpu-backend` and `vulkan-backend` features
+  with optional dependencies so the crate compiles with `--no-default-features`.
+
+### Changed
+- **Axum 0.7 → 0.8 upgrade**: Bumped `axum` workspace dependency from 0.7 to 0.8,
+  migrated WebSocket `Message::Text` to `Utf8Bytes`, updated all route path parameters
+  from `:param` syntax to `{param}` syntax across 7 source files.
+- **Version bump**: Workspace version `0.1.0` → `1.0.0` across all 13 crates.
+- **Documentation link**: Updated `documentation` field in `Cargo.toml` from invalid
+  `docs.rs/hypermachine` to GitHub docs directory.
+
+### Fixed
+- **Axum route parameter syntax**: All VM CRUD routes in `rest.rs` and ontology routes
+  in `ontology.rs` were using `{id}` (Axum 0.8 syntax) while depending on Axum 0.7,
+  causing all parameterized routes to return 404. Fixed by upgrading to Axum 0.8.
+- **Unsafe audit**: Added `SAFETY` comments to 33 unsafe blocks across 7 files
+  (`kvm.rs`, `interrupt.rs`, `memory.rs`, `serial.rs`, `svm.rs`, `vmx.rs`, `vm.rs`).
+
 ## [0.3.0] - 2026-03-24
 
 ### Added
@@ -90,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI/CD**: Build, test, security audit, coverage, benchmarks, release, and deploy workflows
 - **Security**: `cargo-deny` configuration, Dependabot, seccomp filtering, capability-based access
 
-[Unreleased]: https://github.com/nervosys/HyperMachine/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/nervosys/HyperMachine/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/nervosys/HyperMachine/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/nervosys/HyperMachine/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/nervosys/HyperMachine/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/nervosys/HyperMachine/releases/tag/v0.1.0

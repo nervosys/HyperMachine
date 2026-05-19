@@ -99,7 +99,7 @@ tls_key = "/etc/hypermachine/key.pem"
 # Authentication settings
 enabled = true
 api_key_header = "X-API-Key"
-jwt_secret = "your-256-bit-secret"
+jwt_secret = "GENERATE_WITH_openssl_rand_base64_32"
 jwt_expiry_hours = 24
 
 [vm]
@@ -387,5 +387,5 @@ curl http://localhost:8080/health/live
 
 - **Documentation**: https://hypermachine.dev/docs
 - **GitHub Issues**: https://github.com/nervosys/HyperMachine/issues
-- **Enterprise Support**: support@nervosys.com
-- **Security Issues**: security@nervosys.com
+- **Enterprise Support**: support@nervosys.ai
+- **Security Issues**: security@nervosys.ai

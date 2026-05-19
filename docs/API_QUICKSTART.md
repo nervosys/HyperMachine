@@ -238,4 +238,4 @@ All errors return standard HTTP status codes with JSON body:
 
 - **Documentation**: https://hypermachine.dev/docs
 - **GitHub Issues**: https://github.com/nervosys/HyperMachine/issues
-- **Enterprise Support**: support@nervosys.com
+- **Enterprise Support**: support@nervosys.ai
