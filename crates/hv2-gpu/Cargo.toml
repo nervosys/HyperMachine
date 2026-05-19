@@ -11,6 +11,11 @@ keywords.workspace = true
 categories.workspace = true
 description = "HyperMachine GPU virtualization with Vulkan and WebGPU"
 
+[features]
+default = ["wgpu-backend", "vulkan-backend"]
+wgpu-backend = ["dep:wgpu"]
+vulkan-backend = ["dep:ash"]
+
 [dependencies]
 hv2-core = { path = "../hv2-core" }
 
@@ -20,9 +25,9 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
-# GPU support
-wgpu = { workspace = true }
-ash = { workspace = true }
+# GPU support (optional)
+wgpu = { workspace = true, optional = true }
+ash = { workspace = true, optional = true }
 
 [lints]
 workspace = true

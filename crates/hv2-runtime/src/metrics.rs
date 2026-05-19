@@ -847,7 +847,7 @@ mod tests {
         assert_eq!(metrics.pool_total, 3);
         assert_eq!(metrics.sessions_created_total, 1);
         assert_eq!(metrics.maintenance_ticks_total, 1);
-        assert_eq!(metrics.autoscale_enabled, true);
+        assert!(metrics.autoscale_enabled);
         assert_eq!(metrics.autoscale_policy, "TargetUtilization");
         assert!(!metrics.instance_id.is_empty());
     }

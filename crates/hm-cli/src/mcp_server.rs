@@ -252,10 +252,10 @@ pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
     let protected_routes = Router::new()
         .route("/mcp/call", post(call_tool))
         .route("/vms", post(create_vm))
-        .route("/vms/:name", delete(delete_vm))
-        .route("/vms/:name/start", post(start_vm))
-        .route("/vms/:name/stop", post(stop_vm))
-        .route("/vms/:name/script", post(execute_script))
+        .route("/vms/{name}", delete(delete_vm))
+        .route("/vms/{name}/start", post(start_vm))
+        .route("/vms/{name}/stop", post(stop_vm))
+        .route("/vms/{name}/script", post(execute_script))
         .route_layer(middleware::from_fn_with_state(
             state.clone(),
             auth_middleware,
@@ -265,15 +265,15 @@ pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
     let public_routes = Router::new()
         .route("/mcp/tools", get(list_tools))
         .route("/vms", get(list_vms))
-        .route("/vms/:name", get(get_vm))
-        .route("/vms/:name/metrics", get(get_vm_metrics))
+        .route("/vms/{name}", get(get_vm))
+        .route("/vms/{name}/metrics", get(get_vm_metrics))
         .route("/health", get(health_check))
         // Agentic AI endpoints for LLM discovery and introspection
         .route("/agentic/ontology", get(agentic_ontology))
         .route("/agentic/schema", get(agentic_schema))
         .route("/agentic/schema/compact", get(agentic_schema_compact))
         .route("/agentic/capabilities", get(agentic_capabilities))
-        .route("/agentic/providers/:provider", get(agentic_provider_config))
+        .route("/agentic/providers/{provider}", get(agentic_provider_config))
         .route("/agentic/tools/openai", get(agentic_openai_tools))
         .route("/agentic/tools/anthropic", get(agentic_anthropic_tools))
         .route("/agentic/tools/gemini", get(agentic_gemini_tools));

@@ -1102,6 +1102,7 @@ fn decode_bitmask(n: u32, imms: u32, immr: u32, is_64bit: bool) -> u64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unusual_byte_groupings)]
 mod tests {
     use super::*;
 

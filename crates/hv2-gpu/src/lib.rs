@@ -3,6 +3,8 @@
 #![allow(dead_code)]
 
 pub mod passthrough;
+
+#[cfg(feature = "wgpu-backend")]
 pub mod vgpu;
 
 use thiserror::Error;

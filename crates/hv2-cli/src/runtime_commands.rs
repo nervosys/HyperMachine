@@ -487,6 +487,7 @@ fn parse_outcome(outcome: &str) -> anyhow::Result<StepOutcome> {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use hv2_runtime::{PoolConfig, RuntimeConfig};

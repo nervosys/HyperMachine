@@ -410,12 +410,20 @@ mod platform {
                 };
 
                 if ret == 0 && value_type == REG_SZ && data_len > 2 {
-                    // Convert wide string to Rust string (data is UTF-16LE)
+                    // Convert wide string to Rust string (data is UTF-16LE).
+                    //
+                    // SAFETY/CORRECTNESS: `data` is a `Vec<u8>` which is only 1-byte
+                    // aligned, but the Win32 registry returns UTF-16LE bytes whose
+                    // logical alignment may differ from the allocator's. We avoid
+                    // an unaligned `*const u16` cast (which is UB on strict-alignment
+                    // targets) by decoding 16-bit code units from byte pairs.
                     let wide_len = (data_len as usize) / 2;
-                    let wide_slice = unsafe {
-                        std::slice::from_raw_parts(data.as_ptr() as *const u16, wide_len)
-                    };
-                    let component_id = String::from_utf16_lossy(wide_slice)
+                    let wide_bytes = &data[..wide_len * 2];
+                    let wide: Vec<u16> = wide_bytes
+                        .chunks_exact(2)
+                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                        .collect();
+                    let component_id = String::from_utf16_lossy(&wide)
                         .trim_end_matches('\0')
                         .to_lowercase();
 
