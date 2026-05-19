@@ -17,14 +17,14 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 authors = ["HyperMachine Contributors"]
 license = "AGPL-3.0-only OR LicenseRef-Commercial"
 repository = "https://github.com/nervosys/HyperMachine"
 homepage = "https://github.com/nervosys/HyperMachine"
-documentation = "https://docs.rs/hypermachine"
-rust-version = "1.87"
+documentation = "https://github.com/nervosys/HyperMachine/tree/master/docs"
+rust-version = "1.95"
 description = "High-performance hypervisor framework with first-class AI agent support"
 keywords = ["hypervisor", "virtualization", "kvm", "ai-agent", "vm"]
 categories = ["virtualization", "os", "hardware-support"]
@@ -46,8 +46,24 @@ tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 prost = "0.14"
 hyper = "1.4"
-axum = { version = "0.7", features = ["ws"] }
+hyper-util = { version = "0.1", features = [
+    "tokio",
+    "server-auto",
+    "http1",
+    "http2",
+] }
+axum = { version = "0.8", features = ["ws"] }
 tower = "0.5"
+
+# TLS
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "logging",
+    "std",
+    "tls12",
+] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
 
 # GPU acceleration
 wgpu = "22.0"
@@ -88,8 +104,11 @@ criterion = "0.5"
 
 # Scripting for AI agents
 rhai = { version = "1.19", features = ["sync"] }
-wasmtime = "24.0"
-wasmtime-wasi = "24.0"
+# Note: wasmtime is currently optional (off by default) because no source code uses it yet.
+# Enable via the `wasm-scripts` feature on hv2-agent when wiring up a WASM scripting backend.
+# Keeping it out of default builds eliminates multiple wasmtime CVE exposures (RUSTSEC-2026-0085..96).
+wasmtime = { version = "24.0", default-features = false }
+wasmtime-wasi = { version = "24.0", default-features = false }
 
 # Compression
 flate2 = "1.0"
