@@ -1,0 +1,146 @@
+# =============================================================================
+# HyperMachine cross-hypervisor benchmark matrix
+#
+# Each [hypervisor.NAME] block must match an adapter under harness/adapters/.
+# The runner produces one results/<HV>/<workload>/ subdir per combination.
+# =============================================================================
+
+[run]
+# Number of timed samples per (hypervisor, workload) pair.
+# A warm-up run is always discarded in addition to these.
+samples = 5
+# Seconds to sleep between samples (cool-down).
+cooldown_sec = 10
+# Hard upper bound on total runtime; harness aborts gracefully if exceeded.
+budget_sec = 21600 # 6 h
+# Output directory; CLI --out overrides.
+output_dir = "results"
+
+[guest]
+# Image path is resolved relative to benchmarks/. Build via images/build-guest.sh.
+image = "images/build/debian-12-bench.qcow2"
+ssh_user = "bench"
+ssh_key = "images/build/id_ed25519"
+# Workload defaults; can be overridden per workload below.
+cpus = 4
+mem_mib = 4096
+disk_gib = 20
+netif = "user" # or "tap0" if you have a bridge
+
+[host]
+# Pin guest vCPUs to these host CPUs. Empty = no pinning.
+cpu_pin = [4, 5, 6, 7]
+governor = "performance"
+# Services to stop for the duration of the run (Linux). The harness only
+# stops/starts these if present and warns rather than failing.
+stop_services = ["snapd", "packagekit"]
+
+# -----------------------------------------------------------------------------
+# Hypervisor matrix
+#
+# Enabled hypervisors must be installed and runnable by the current user.
+# Each block may override any [guest]/[host] setting.
+# -----------------------------------------------------------------------------
+
+[hypervisor.hypermachine]
+enabled = true
+binary = "../target/release/hm-cli"
+notes = "Reference implementation (this repo). Built via `cargo build --release -p hm-cli`."
+
+[hypervisor.qemu_kvm]
+enabled = true
+binary = "qemu-system-x86_64"
+# extra_args is appended to every VM invocation
+extra_args = ["-cpu", "host", "-machine", "q35,accel=kvm"]
+
+[hypervisor.firecracker]
+enabled = false
+binary = "firecracker"
+notes = "Requires uncompressed kernel + ext4 rootfs; see adapters/firecracker.sh."
+
+[hypervisor.cloud_hypervisor]
+enabled = false
+binary = "cloud-hypervisor"
+
+[hypervisor.virtualbox]
+enabled = false
+binary = "VBoxManage"
+
+[hypervisor.hyper_v]
+enabled = false
+# Windows-only; harness/run.ps1 ignores this on Linux.
+notes = "Requires admin shell and Hyper-V role installed."
+
+# -----------------------------------------------------------------------------
+# Workload matrix
+#
+# Set enabled=false to skip. Per-workload params override [guest] defaults.
+# -----------------------------------------------------------------------------
+
+[workload.boot_cold]
+enabled = true
+
+[workload.boot_warm]
+enabled = true
+# Skipped automatically by adapters that do not implement hv_snapshot/hv_restore.
+
+[workload.cpu_single]
+enabled = true
+threads = 1
+duration = 30
+
+[workload.cpu_multi]
+enabled = true
+threads = 0    # 0 = use [guest].cpus
+duration = 30
+
+[workload.mem_bandwidth]
+enabled = true
+duration = 20
+
+[workload.disk_rand_read_4k]
+enabled = true
+size_mib = 1024
+iodepth = 32
+
+[workload.disk_rand_write_4k]
+enabled = true
+size_mib = 1024
+iodepth = 32
+fsync = true
+
+[workload.disk_seq_read_1m]
+enabled = true
+size_mib = 4096
+iodepth = 4
+
+[workload.net_throughput]
+enabled = true
+duration = 30
+parallel = 4
+
+[workload.net_latency]
+enabled = true
+duration = 30
+
+[workload.vmexit]
+enabled = true
+# Number of iterations per exit type inside the guest microbench.
+iterations = 1000000
+
+[workload.kernel_build]
+enabled = false # heavy; opt-in
+# Linux kernel tarball URL; downloaded once and cached under images/cache/.
+kernel_url = "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.30.tar.xz"
+make_jobs = 0                                                                   # 0 = use [guest].cpus
+
+[workload.density]
+enabled = true
+# Spawn this many idle VMs and sample RSS per VM after settle.
+count = 32
+settle_s = 30
+
+[workload.mgmt_latency]
+enabled = true
+# Number of create+destroy cycles measured.
+cycles = 20
