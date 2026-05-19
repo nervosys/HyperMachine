@@ -341,6 +341,7 @@ pub fn initialize(config: &El2Config) -> Result<()> {
 }
 
 #[cfg(test)]
+#[allow(clippy::identity_op)]
 mod tests {
     use super::*;
     use alloc::format;

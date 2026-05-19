@@ -3,13 +3,18 @@
 //! These tests exercise full VM lifecycle flows spanning multiple modules:
 //! VM creation -> stage-2 mapping -> vCPU init -> exit handling -> sysreg emulation.
 
+// ESR/ISS bit-pattern constructions below intentionally include explicit
+// zero-shift terms (e.g. `(0 << 17)` and trailing `| 0`) to document the
+// architectural field layout; allow clippy::identity_op here.
+#![allow(clippy::identity_op)]
+
 extern crate alloc;
 
 use hv1_arm::el2::{self, HcrEl2, TrapReason};
-use hv1_arm::stage2::{Stage2Attrs, Stage2Mapping, Stage2PageTable, PAGE_SIZE};
-use hv1_arm::sysreg::{EmulationResult, SysregId, SysregTrap};
-use hv1_arm::vcpu::{Vcpu, VcpuState};
-use hv1_arm::vgic::{InterruptState, VirtualGic};
+use hv1_arm::stage2::{Stage2Attrs, Stage2Mapping, PAGE_SIZE};
+use hv1_arm::sysreg::SysregId;
+use hv1_arm::vcpu::VcpuState;
+use hv1_arm::vgic::InterruptState;
 use hv1_arm::vm::{Vm, VmState};
 use hv1_arm::Error;
 

@@ -341,6 +341,8 @@ pub struct VmcsRegion {
 impl VmcsRegion {
     /// Create a new VMCS region
     pub fn new() -> Self {
+        // SAFETY: Reading IA32_VMX_BASIC is valid on Intel CPUs with VMX
+        // support. The low 31 bits contain the VMCS revision identifier.
         let revision_id = unsafe {
             let basic = x86::msr::rdmsr(msr::IA32_VMX_BASIC);
             (basic & 0x7FFF_FFFF) as u32
@@ -372,6 +374,9 @@ pub struct VmxonRegion {
 impl VmxonRegion {
     /// Create a new VMXON region
     pub fn new() -> Self {
+        // SAFETY: Reading IA32_VMX_BASIC is valid on Intel CPUs with VMX
+        // support. The low 31 bits contain the VMCS revision identifier
+        // required for VMXON region initialisation.
         let revision_id = unsafe {
             let basic = x86::msr::rdmsr(msr::IA32_VMX_BASIC);
             (basic & 0x7FFF_FFFF) as u32
@@ -406,6 +411,8 @@ pub fn initialize() -> Result<()> {
     }
 
     // Check IA32_FEATURE_CONTROL MSR
+    // SAFETY: VMX support was confirmed above. Reading this MSR is valid on
+    // Intel CPUs with VMX to check the lock and enable-outside-SMX bits.
     let feature_control = unsafe { x86::msr::rdmsr(msr::IA32_FEATURE_CONTROL) };
 
     // Bit 0: Lock bit
@@ -416,6 +423,9 @@ pub fn initialize() -> Result<()> {
     }
 
     // Set required CR0 bits
+    // SAFETY: Reading VMX fixed-bit MSRs and adjusting CR0 accordingly is the
+    // documented procedure for VMX initialisation (Intel SDM Vol 3, 23.8).
+    // We only set/clear bits that the hardware requires.
     unsafe {
         let cr0_fixed0 = x86::msr::rdmsr(msr::IA32_VMX_CR0_FIXED0);
         let cr0_fixed1 = x86::msr::rdmsr(msr::IA32_VMX_CR0_FIXED1);
@@ -426,6 +436,9 @@ pub fn initialize() -> Result<()> {
     }
 
     // Set required CR4 bits (including VMXE)
+    // SAFETY: Reading VMX fixed-bit MSRs and adjusting CR4 accordingly is the
+    // documented procedure for VMX initialisation (Intel SDM Vol 3, 23.8).
+    // We enable VMXE and apply required fixed bits.
     unsafe {
         let cr4_fixed0 = x86::msr::rdmsr(msr::IA32_VMX_CR4_FIXED0);
         let cr4_fixed1 = x86::msr::rdmsr(msr::IA32_VMX_CR4_FIXED1);
