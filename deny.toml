@@ -20,6 +20,13 @@ ignore = [
     # paste is archived but has no known vulnerabilities
     # Used as transitive dep by wasmtime/cranelift
     "RUSTSEC-2024-0436",
+
+    # core2 unmaintained (all versions yanked). Pulled in transitively via:
+    #   image -> ravif -> rav1e -> bitstream-io -> core2
+    # which arrives through `arboard` (clipboard support in hm-gui).
+    # No safe upgrade exists; no upstream fix is possible. The crate has no
+    # known vulnerabilities, only an unmaintained advisory.
+    "RUSTSEC-2026-0105",
 ]
 
 # ============================================================================

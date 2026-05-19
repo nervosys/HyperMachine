@@ -47,12 +47,14 @@ type: Opaque
 stringData:
   # IMPORTANT: Replace these placeholder values before deploying.
   # Use kubectl create secret or an external secrets operator in production.
-  API_KEY: "changeme"
+  # Generate with: openssl rand -base64 32
+  API_KEY: "REPLACE_ME"
   TLS_CERT: |
     # Add your TLS certificate here
   TLS_KEY: |
     # Add your TLS private key here
-  DB_PASSWORD: "changeme"
+  # Generate with: openssl rand -base64 32
+  DB_PASSWORD: "REPLACE_ME"
 ---
 apiVersion: apps/v1
 kind: Deployment
