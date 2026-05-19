@@ -35,11 +35,21 @@ prost = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
+hyper-util = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
 toml = { workspace = true }
 flate2 = { workspace = true }
+
+# TLS
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+# rustls-pemfile is unmaintained (RUSTSEC-2025-0134); use rustls-pki-types' built-in PEM parser instead.
+rustls-pki-types = { version = "1.10", features = ["std", "alloc"] }
+
+# Constant-time byte equality for secret comparison (API keys, tokens).
+subtle = { version = "2.6", default-features = false }
 
 [build-dependencies]
 tonic-prost-build = { workspace = true }

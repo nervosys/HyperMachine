@@ -91,7 +91,7 @@ async fn handle_socket(mut socket: WebSocket, bus: Arc<EventBus>, query: WsQuery
 
                         // Serialize and send
                         if let Ok(json) = serde_json::to_string(&event) {
-                            if socket.send(Message::Text(json)).await.is_err() {
+                            if socket.send(Message::Text(json.into())).await.is_err() {
                                 break; // Client disconnected
                             }
                         }

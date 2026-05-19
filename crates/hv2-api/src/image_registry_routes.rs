@@ -230,11 +230,14 @@ pub fn create_image_registry_router(state: Arc<ImageRegistryAppState>) -> Router
         .route("/api/v1/images", get(list_images).post(register_image))
         .route("/api/v1/images/config", get(get_config))
         .route("/api/v1/images/check-admission", post(check_admission))
-        .route("/api/v1/images/:reference", get(get_image))
-        .route("/api/v1/images/:reference/approve", post(approve_image))
-        .route("/api/v1/images/:reference/deny", post(deny_image))
-        .route("/api/v1/images/:reference/revoke", post(revoke_image))
-        .route("/api/v1/images/:reference/deprecate", post(deprecate_image))
+        .route("/api/v1/images/{reference}", get(get_image))
+        .route("/api/v1/images/{reference}/approve", post(approve_image))
+        .route("/api/v1/images/{reference}/deny", post(deny_image))
+        .route("/api/v1/images/{reference}/revoke", post(revoke_image))
+        .route(
+            "/api/v1/images/{reference}/deprecate",
+            post(deprecate_image),
+        )
         .with_state(state)
 }
 
@@ -337,7 +340,11 @@ async fn register_image(
             algorithm: sig.algorithm.clone(),
             signature_hex: sig.signature_hex.clone(),
             signed_at: SystemTime::now(),
-            verified: sig.verified,
+            // SECURITY: never trust the client's `verified` flag. The verified bit
+            // must only be set by an out-of-band path that performs an actual
+            // cryptographic check (e.g. cosign/sigstore, PGP, or X.509). Until that
+            // path exists, all signatures are recorded as unverified.
+            verified: false,
         });
     }
 

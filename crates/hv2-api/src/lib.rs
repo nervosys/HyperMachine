@@ -13,10 +13,12 @@ pub mod image_registry_routes;
 pub mod metrics_routes;
 pub mod middleware;
 pub mod ontology;
+pub mod permission_middleware;
 pub mod rest;
 pub mod runtime_routes;
 pub mod server;
 pub mod snapshot_routes;
+pub mod tls;
 pub mod ws_routes;
 
 use thiserror::Error;
