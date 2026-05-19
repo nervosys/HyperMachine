@@ -4,13 +4,20 @@
 **CMMC Version:** 2.0  
 **Target Level:** Level 2 (Advanced)  
 **Last Updated:** 2026-02-02  
-**Classification:** CUI-Applicable  
+**Classification:** Public — describes HyperMachine's CMMC 2.0 control mapping and roadmap.  
+
+> **Status legend.** ✅ Implemented in the current release. 🔄 In progress —
+> partial coverage; track the linked roadmap items for full conformance.
+> 📋 Planned — design captured, not yet implemented. Items marked 🔄 / 📋
+> should NOT be relied on for active contract obligations until promoted to
+> ✅. Customers pursuing assessment should validate against the release they
+> deploy.
 
 ---
 
 ## Executive Summary
 
-This document maps HyperMachine's security controls to the Cybersecurity Maturity Model Certification (CMMC) 2.0 framework, enabling sales to:
+This document maps HyperMachine's security controls to the Cybersecurity Maturity Model Certification (CMMC) 2.0 framework, supporting deployments by:
 - Department of Defense (DoD) contractors
 - Defense Industrial Base (DIB) organizations
 - Federal contractors handling CUI
@@ -376,6 +383,6 @@ A System Security Plan (SSP) template for HyperMachine deployments is available 
 ---
 
 **Document Control:**
-- Author: HyperMachine Compliance Team
-- Reviewers: CISO, Legal, Sales
+- Maintained by: HyperMachine Compliance Maintainers
 - Next Review: 2026-05-02
+- Feedback: open an issue at <https://github.com/nervosys/HyperMachine/issues>
