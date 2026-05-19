@@ -108,7 +108,7 @@ rhai = { version = "1.19", features = ["sync"] }
 # Enable via the `wasm-scripts` feature on hv2-agent when wiring up a WASM scripting backend.
 # Keeping it out of default builds eliminates multiple wasmtime CVE exposures (RUSTSEC-2026-0085..96).
 wasmtime = { version = "24.0", default-features = false }
-wasmtime-wasi = { version = "24.0", default-features = false }
+wasmtime-wasi = { version = "42.0", default-features = false }
 
 # Compression
 flate2 = "1.0"
