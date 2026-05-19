@@ -24,7 +24,7 @@ log = "0.4"
 static_assertions = "1.1"
 
 # ARM64 specific
-aarch64-cpu = "9.4"
+aarch64-cpu = "11.2"
 tock-registers = "0.9"
 
 [dev-dependencies]
