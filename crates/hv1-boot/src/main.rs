@@ -6,7 +6,10 @@
 
 #![no_std]
 #![no_main]
-#![feature(abi_x86_interrupt)]
+// NOTE: abi_x86_interrupt feature reserved for future interrupt handlers (IDT entries).
+// Currently no `extern "x86-interrupt"` functions are defined; re-enable when adding
+// real interrupt handlers in the boot crate.
+// #![feature(abi_x86_interrupt)]
 
 extern crate alloc;
 
@@ -263,6 +266,8 @@ fn enter_hypervisor_mode(vendor: CpuVendor, boot_info: &hv1_core::boot::BootInfo
 
     // Enter the run loop
     let mut handler = DefaultExitHandler;
+    // SAFETY: vCPU 0 was initialised above with valid VMCS/VMCB state and
+    // guest memory. The handler correctly processes VM exits.
     let result = unsafe { vm.run_vcpu(0, &mut handler) };
 
     match result {

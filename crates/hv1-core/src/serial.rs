@@ -144,11 +144,15 @@ impl SerialPort {
 
     /// Check if data is available to read
     pub fn data_available(&self) -> bool {
+        // SAFETY: `self.base` is a valid COM port I/O address set in `new()`.
+        // Reading the LSR is a side-effect-free status check.
         unsafe { self.read_reg(reg::LSR) & lsr::DATA_READY != 0 }
     }
 
     /// Check if the transmit buffer is empty
     pub fn tx_empty(&self) -> bool {
+        // SAFETY: `self.base` is a valid COM port I/O address. Reading LSR is
+        // a side-effect-free status check.
         unsafe { self.read_reg(reg::LSR) & lsr::TX_EMPTY != 0 }
     }
 
@@ -157,12 +161,16 @@ impl SerialPort {
         while !self.data_available() {
             core::hint::spin_loop();
         }
+        // SAFETY: `data_available()` confirmed data is ready. Reading DATA
+        // register at a valid COM port base returns the received byte.
         unsafe { self.read_reg(reg::DATA) }
     }
 
     /// Try to read a byte (non-blocking)
     pub fn try_read(&self) -> Option<u8> {
         if self.data_available() {
+            // SAFETY: `data_available()` confirmed data is ready. Reading DATA
+            // register at a valid COM port base returns the received byte.
             Some(unsafe { self.read_reg(reg::DATA) })
         } else {
             None
@@ -174,6 +182,8 @@ impl SerialPort {
         while !self.tx_empty() {
             core::hint::spin_loop();
         }
+        // SAFETY: `tx_empty()` confirmed the transmit buffer is empty. Writing
+        // DATA register at a valid COM port base transmits the byte.
         unsafe { self.write_reg(reg::DATA, byte) }
     }
 
@@ -254,6 +264,9 @@ macro_rules! serial_println {
 #[allow(static_mut_refs)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
+    // SAFETY: `SERIAL1` is initialised once by `init_global_serial()` before
+    // any printing occurs. It is only accessed through this function, and
+    // this bare-metal code is single-threaded during early boot.
     unsafe {
         SERIAL1.write_fmt(args).ok();
     }

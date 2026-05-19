@@ -44,8 +44,11 @@
 #![no_std]
 #![cfg_attr(feature = "bootloader_api", no_main)]
 #![allow(dead_code, unused_variables, unused_imports)]
-#![feature(abi_x86_interrupt)]
-#![feature(allocator_api)]
+// NOTE: nightly features (`abi_x86_interrupt`, `allocator_api`) were previously
+// enabled but no source actually uses them yet. Re-add when introducing the
+// IDT interrupt handlers or a custom `core::alloc::Allocator` impl.
+// #![feature(abi_x86_interrupt)]
+// #![feature(allocator_api)]
 
 extern crate alloc;
 

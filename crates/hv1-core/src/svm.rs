@@ -534,6 +534,8 @@ pub fn is_supported() -> bool {
 
 /// Check if SVM is disabled by BIOS
 pub fn is_disabled_by_bios() -> bool {
+    // SAFETY: Reading the VM_CR MSR is valid on AMD CPUs with SVM support
+    // (confirmed by `is_supported()` check at the call site).
     unsafe {
         let vm_cr = x86::msr::rdmsr(msr::VM_CR);
         vm_cr & vm_cr::SVM_DISABLE != 0
@@ -551,6 +553,9 @@ pub fn initialize() -> Result<()> {
     }
 
     // Enable SVM by setting EFER.SVME
+    // SAFETY: SVM support was confirmed above and BIOS has not locked it out.
+    // Reading and writing the EFER MSR is valid on AMD CPUs; we only set the
+    // SVME bit while preserving all other bits.
     unsafe {
         let efer = x86::msr::rdmsr(msr::EFER);
         x86::msr::wrmsr(msr::EFER, efer | efer::SVME);
