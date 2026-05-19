@@ -271,4 +271,4 @@ This project is dual-licensed:
 - **Commercial License** — available for use without AGPL obligations. See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL).
 
 For commercial licensing inquiries, contact
-[licensing@nervosys.com](mailto:licensing@nervosys.com).
+[licensing@nervosys.ai](mailto:licensing@nervosys.ai).

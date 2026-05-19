@@ -15,7 +15,7 @@ We take security seriously. If you discover a security vulnerability in HyperMac
 ### How to Report
 
 1. **Do not** open a public GitHub issue for security vulnerabilities.
-2. Email your findings to **security@nervosys.com**.
+2. Email your findings to **security@nervosys.ai**.
 3. Include a detailed description of the vulnerability, steps to reproduce, and potential impact.
 4. If possible, include a proof-of-concept or minimal reproduction.
 
