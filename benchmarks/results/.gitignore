@@ -1,0 +1,4 @@
+# Ignore everything except .gitkeep — runs may be huge.
+*
+!.gitkeep
+!.gitignore

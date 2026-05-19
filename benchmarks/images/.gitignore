@@ -1,0 +1,11 @@
+# Ignore build outputs and run artifacts.
+build/
+cache/
+*.qcow2
+*.vhdx
+*.vdi
+*.img
+*.ext4
+*.raw
+id_ed25519
+id_ed25519.pub
