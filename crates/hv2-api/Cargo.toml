@@ -46,7 +46,7 @@ flate2 = { workspace = true }
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }
 # rustls-pemfile is unmaintained (RUSTSEC-2025-0134); use rustls-pki-types' built-in PEM parser instead.
-rustls-pki-types = { version = "1.10", features = ["std", "alloc"] }
+rustls-pki-types = { version = "1.14", features = ["std", "alloc"] }
 
 # Constant-time byte equality for secret comparison (API keys, tokens).
 subtle = { version = "2.6", default-features = false }
