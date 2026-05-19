@@ -684,6 +684,8 @@ mod tests {
     fn test_vm_state_copy_clone() {
         let state = VmState::Running;
         let copied = state;
+        // Intentionally call .clone() to verify Clone derivation; the type is also Copy.
+        #[allow(clippy::clone_on_copy)]
         let cloned = state.clone();
         assert_eq!(copied, cloned);
     }
