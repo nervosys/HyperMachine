@@ -22,7 +22,7 @@ icon: https://raw.githubusercontent.com/nervosys/HyperMachine/master/img/Hypervi
 
 maintainers:
   - name: nervosys
-    email: support@nervosys.com
+    email: support@nervosys.ai
     url: https://github.com/nervosys
 
 dependencies:

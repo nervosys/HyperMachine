@@ -1,0 +1,49 @@
+[package]
+name = "hv2-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+hv2-core = { path = "../crates/hv2-core" }
+hv2-cpu = { path = "../crates/hv2-cpu" }
+hv2-api = { path = "../crates/hv2-api" }
+
+[[bin]]
+name = "fuzz_x86_execute"
+path = "fuzz_targets/fuzz_x86_execute.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_aarch64_execute"
+path = "fuzz_targets/fuzz_aarch64_execute.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_boot_sector"
+path = "fuzz_targets/fuzz_boot_sector.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_linux_header"
+path = "fuzz_targets/fuzz_linux_header.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_config_parse"
+path = "fuzz_targets/fuzz_config_parse.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_json_validation"
+path = "fuzz_targets/fuzz_json_validation.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_segment_descriptor"
+path = "fuzz_targets/fuzz_segment_descriptor.rs"
+doc = false
