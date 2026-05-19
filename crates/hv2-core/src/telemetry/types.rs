@@ -1208,6 +1208,6 @@ mod tests {
     #[test]
     fn test_default_quantiles() {
         assert_eq!(DEFAULT_QUANTILES.len(), 5);
-        assert!(DEFAULT_QUANTILES.iter().all(|&q| q >= 0.0 && q <= 1.0));
+        assert!(DEFAULT_QUANTILES.iter().all(|&q| (0.0..=1.0).contains(&q)));
     }
 }

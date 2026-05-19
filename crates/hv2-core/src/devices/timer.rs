@@ -555,7 +555,7 @@ mod tests {
 
         // Should be approximately 18.2 ticks per second (allow ±3 ticks tolerance)
         assert!(
-            ticks_per_second >= 15 && ticks_per_second <= 21,
+            (15..=21).contains(&ticks_per_second),
             "Expected ~18 ticks/second, got {}",
             ticks_per_second
         );

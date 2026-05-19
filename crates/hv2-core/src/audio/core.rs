@@ -1180,7 +1180,7 @@ mod tests {
         let vol = Volume::HALF;
         let sample: i16 = 1000;
         let result = vol.apply_s16(sample);
-        assert!(result >= 490 && result <= 510);
+        assert!((490..=510).contains(&result));
 
         let muted = Volume::MUTED;
         assert_eq!(muted.apply_s16(1000), 0);

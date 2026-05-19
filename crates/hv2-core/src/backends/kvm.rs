@@ -889,6 +889,9 @@ impl KvmVcpu {
     /// read data into the buffer at `kvm_run.io.data_offset` before calling
     /// `KVM_RUN` again. KVM will then load it into guest RAX automatically.
     pub fn set_io_data(&self, data: u32, size: u8) -> Result<()> {
+        // SAFETY: `self.run` is a valid mmap'd `kvm_run` page obtained from
+        // `KVM_RUN`. The `data_offset` field points within that same mmap'd
+        // region at an IO data buffer whose size matches the IO exit width.
         unsafe {
             let run = self.run.as_ref();
             let data_ptr =
