@@ -732,7 +732,7 @@ mod tests {
         }
 
         let avg = manager.average_c_state(0).unwrap();
-        assert!(avg >= 0.0 && avg <= 9.0);
+        assert!((0.0..=9.0).contains(&avg));
     }
 
     #[test]

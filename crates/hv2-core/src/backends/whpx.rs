@@ -258,9 +258,7 @@ impl HypervisorBackend for WhpxBackend {
         }
 
         // Track VM for cleanup
-        self.vms
-            .write()
-            .push(whpx_vm.clone());
+        self.vms.write().push(whpx_vm.clone());
 
         Ok(HypervisorVm::new(
             HypervisorPlatform::Whpx,
@@ -333,9 +331,7 @@ impl HypervisorBackend for WhpxBackend {
 
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down WHPX backend");
-        self.vcpu_map
-            .write()
-            .clear();
+        self.vcpu_map.write().clear();
         self.vms.write().clear();
         Ok(())
     }
@@ -511,9 +507,7 @@ impl WhpxVm {
         }
 
         let vcpu = Arc::new(WhpxVcpu::new(self.partition, vcpu_id)?);
-        self.vcpus
-            .write()
-            .push(vcpu.clone());
+        self.vcpus.write().push(vcpu.clone());
         Ok(vcpu)
     }
 
@@ -752,9 +746,7 @@ impl WhpxVm {
         end: u64,
         handler: MmioHandler,
     ) -> Option<(u64, Arc<MmioHandler>)> {
-        let mut handlers = self
-            .mmio_handlers
-            .write();
+        let mut handlers = self.mmio_handlers.write();
         handlers.insert(start, (end, Arc::new(handler)))
     }
 
@@ -822,9 +814,7 @@ impl WhpxVm {
         size: u32,
         data: &mut [u8; 8],
     ) -> Result<()> {
-        let handlers = self
-            .mmio_handlers
-            .read();
+        let handlers = self.mmio_handlers.read();
 
         // Find handler that covers this address
         for (start, (end, handler)) in handlers.iter().rev() {
@@ -856,9 +846,7 @@ impl Drop for WhpxVm {
         // handle is deleted. All handles/pointers originate from successful FFI calls.
         unsafe {
             // vCPUs will be dropped first (RAII order)
-            self.vcpus
-                .write()
-                .clear();
+            self.vcpus.write().clear();
 
             // Free guest memory
             if let Some(ptr) = self.guest_memory {
@@ -1961,16 +1949,12 @@ impl WhpxVcpu {
     /// # }
     /// ```
     pub fn get_interrupt_stats(&self) -> InterruptStats {
-        self.stats
-            .read()
-            .clone()
+        self.stats.read().clone()
     }
 
     /// Reset interrupt delivery statistics to zero.
     pub fn reset_interrupt_stats(&self) {
-        self.stats
-            .write()
-            .reset();
+        self.stats.write().reset();
     }
 
     /// Read the current RFLAGS register value from the vCPU.
@@ -6349,10 +6333,7 @@ mod tests {
                 match vm.handle_io_access(0x3F8, true, 1, &mut data) {
                     Ok(()) => {
                         println!("✓ I/O handler invoked successfully");
-                        assert!(
-                            *handler_called.read(),
-                            "Handler should have been called"
-                        );
+                        assert!(*handler_called.read(), "Handler should have been called");
                     }
                     Err(e) => {
                         println!("⚠ I/O handler test failed: {}", e);
@@ -6397,10 +6378,7 @@ mod tests {
                 match vm.handle_mmio_access(0xFED00100, false, 4, &mut data) {
                     Ok(()) => {
                         println!("✓ MMIO handler invoked successfully");
-                        assert!(
-                            *handler_called.read(),
-                            "Handler should have been called"
-                        );
+                        assert!(*handler_called.read(), "Handler should have been called");
                     }
                     Err(e) => {
                         println!("⚠ MMIO handler test failed: {}", e);
@@ -6790,7 +6768,7 @@ mod tests {
                     // Test success_rate() - returns 0.0 if no injections yet
                     let success_rate = stats.success_rate();
                     assert!(
-                        success_rate >= 0.0 && success_rate <= 100.0,
+                        (0.0..=100.0).contains(&success_rate),
                         "Success rate should be between 0 and 100"
                     );
                     println!("✓ success_rate() = {:.2}%", success_rate);

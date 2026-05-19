@@ -135,12 +135,12 @@ fn bench_vlan_set_operations(c: &mut Criterion) {
 
 fn bench_mac_address_random(c: &mut Criterion) {
     c.bench_function("mac_address/random_local", |b| {
-        b.iter(|| MacAddress::random_local());
+        b.iter(MacAddress::random_local);
     });
 }
 
 fn bench_port_vlan_check(c: &mut Criterion) {
-    let port = Port::new(1, "bench-port", PortType::VmPort);
+    let port = Port::new(1, "bench-port", PortType::Internal);
 
     c.bench_function("port/allows_vlan", |b| {
         let vlan = VlanId::new(1).unwrap();

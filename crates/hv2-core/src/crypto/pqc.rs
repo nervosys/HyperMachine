@@ -1,14 +1,21 @@
 //! Post-Quantum Cryptography Module
 //!
-//! Provides quantum-resistant cryptographic algorithms based on NIST PQC standards.
+//! Provides quantum-resistant cryptographic algorithm **API prototypes** based on
+//! NIST PQC standards. These are simplified placeholder implementations using
+//! SHA-256/HMAC-based constructions for API validation and testing.
 //!
-//! ## Algorithms
+//! **WARNING:** These are NOT production-ready PQC implementations. They do not
+//! contain real lattice-based or hash-tree cryptography (no NTT, no WOTS+, no
+//! FORS, no Hypertree). For production use, integrate a validated PQC library
+//! such as `pqcrypto` or `oqs-rs`.
 //!
-//! - **ML-KEM** (FIPS 203): Module-Lattice-Based Key-Encapsulation Mechanism
+//! ## Algorithms (API Prototypes)
+//!
+//! - **ML-KEM** (FIPS 203 API): Key-Encapsulation Mechanism (placeholder)
 //!   - ML-KEM-512, ML-KEM-768, ML-KEM-1024
-//! - **ML-DSA** (FIPS 204): Module-Lattice-Based Digital Signature Algorithm
+//! - **ML-DSA** (FIPS 204 API): Digital Signature Algorithm (placeholder)
 //!   - ML-DSA-44, ML-DSA-65, ML-DSA-87
-//! - **SLH-DSA** (FIPS 205): Stateless Hash-Based Digital Signature Algorithm
+//! - **SLH-DSA** (FIPS 205 API): Stateless Hash-Based Digital Signature (placeholder)
 //!   - SLH-DSA-SHA2-128f, SLH-DSA-SHAKE-256f
 //!
 //! ## Hybrid Mode

@@ -154,8 +154,7 @@ impl CpuController {
     pub fn weight(&self) -> u64 {
         // Convert shares (2-262144) to weight (1-10000)
         // Default 1024 shares = 100 weight
-        ((self.shares.clamp(2, 262144) - 2) * 9999 / 262142 + 1)
-            .clamp(1, 10000)
+        ((self.shares.clamp(2, 262144) - 2) * 9999 / 262142 + 1).clamp(1, 10000)
     }
 
     /// Calculate max (quota/period) string for v2
@@ -649,7 +648,10 @@ impl Cgroup {
 
     /// Get cpuset controller
     pub fn cpuset(&self) -> CpusetController {
-        self.cpuset.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.cpuset
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Set cpuset controller
@@ -659,7 +661,10 @@ impl Cgroup {
 
     /// Get memory controller
     pub fn memory(&self) -> MemoryController {
-        self.memory.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.memory
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Set memory controller
@@ -689,7 +694,10 @@ impl Cgroup {
 
     /// Get devices controller
     pub fn devices(&self) -> DevicesController {
-        self.devices.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.devices
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Set devices controller
@@ -736,7 +744,11 @@ impl Cgroup {
 
     /// Check if process can be added (PID limit)
     pub fn can_add_proc(&self) -> bool {
-        !self.pids.read().unwrap_or_else(|e| e.into_inner()).at_limit()
+        !self
+            .pids
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .at_limit()
     }
 }
 
@@ -793,7 +805,11 @@ impl CgroupManager {
     /// Get cgroup by path
     pub fn get(&self, relative_path: &str) -> Option<Arc<Cgroup>> {
         let path = self.root.join(relative_path);
-        self.cgroups.read().unwrap_or_else(|e| e.into_inner()).get(&path).cloned()
+        self.cgroups
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&path)
+            .cloned()
     }
 
     /// Delete cgroup
@@ -805,7 +821,12 @@ impl CgroupManager {
 
     /// List all cgroups
     pub fn list(&self) -> Vec<Arc<Cgroup>> {
-        self.cgroups.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+        self.cgroups
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect()
     }
 
     /// Get cgroup count
@@ -1046,7 +1067,7 @@ mod tests {
         io.weight = 500;
 
         let v2_weight = io.v2_weight();
-        assert!(v2_weight >= 1 && v2_weight <= 10000);
+        assert!((1..=10000).contains(&v2_weight));
     }
 
     #[test]
