@@ -76,6 +76,8 @@ pub struct ServerConfig {
     pub middleware: MiddlewareConfig,
     /// Graceful shutdown timeout (seconds before force-killing connections)
     pub shutdown_timeout_secs: u64,
+    /// TLS configuration (None = plain HTTP)
+    pub tls: Option<crate::tls::TlsConfig>,
 }
 
 impl Default for ServerConfig {
@@ -90,6 +92,7 @@ impl Default for ServerConfig {
             pre_warm_count: 2,
             middleware: MiddlewareConfig::default(),
             shutdown_timeout_secs: 30,
+            tls: None,
         }
     }
 }
@@ -146,6 +149,12 @@ impl ServerConfig {
     /// Builder-style: set graceful shutdown timeout (seconds)
     pub fn shutdown_timeout_secs(mut self, secs: u64) -> Self {
         self.shutdown_timeout_secs = secs;
+        self
+    }
+
+    /// Builder-style: set TLS configuration
+    pub fn tls(mut self, config: crate::tls::TlsConfig) -> Self {
+        self.tls = Some(config);
         self
     }
 
@@ -321,18 +330,24 @@ impl Server {
         let app = self.build_router();
         let timeout = self.config.shutdown_timeout_secs;
 
-        tracing::info!("Starting unified REST API server on {}", addr);
-
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .map_err(|e| crate::ApiError::Transport(e.to_string()))?;
 
         let start = Instant::now();
 
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal(timeout))
-            .await
-            .map_err(|e| crate::ApiError::Transport(e.to_string()))?;
+        if let Some(ref tls_config) = self.config.tls {
+            tracing::info!("Starting unified REST API server on https://{}", addr);
+            let rustls_config = crate::tls::build_rustls_config(tls_config)?;
+            let acceptor = tokio_rustls::TlsAcceptor::from(rustls_config);
+            crate::tls::serve_tls(listener, app, acceptor, shutdown_signal(timeout)).await?;
+        } else {
+            tracing::info!("Starting unified REST API server on {}", addr);
+            axum::serve(listener, app)
+                .with_graceful_shutdown(shutdown_signal(timeout))
+                .await
+                .map_err(|e| crate::ApiError::Transport(e.to_string()))?;
+        }
 
         tracing::info!(
             "REST server shut down after {:.1}s uptime",
@@ -358,6 +373,7 @@ impl Server {
         let grpc_addr = self.config.grpc_addr();
         let app = self.build_router();
         let timeout = self.config.shutdown_timeout_secs;
+        let tls_config = self.config.tls.clone();
 
         self.log_startup_banner();
 
@@ -367,12 +383,23 @@ impl Server {
             let listener = tokio::net::TcpListener::bind(rest_addr)
                 .await
                 .map_err(|e| crate::ApiError::Transport(e.to_string()))?;
-            tokio::spawn(async move {
-                axum::serve(listener, app)
-                    .with_graceful_shutdown(shutdown_signal(timeout))
-                    .await
-                    .ok();
-            })
+
+            if let Some(ref tls) = tls_config {
+                let rustls_config = crate::tls::build_rustls_config(tls)?;
+                let acceptor = tokio_rustls::TlsAcceptor::from(rustls_config);
+                tokio::spawn(async move {
+                    crate::tls::serve_tls(listener, app, acceptor, shutdown_signal(timeout))
+                        .await
+                        .ok();
+                })
+            } else {
+                tokio::spawn(async move {
+                    axum::serve(listener, app)
+                        .with_graceful_shutdown(shutdown_signal(timeout))
+                        .await
+                        .ok();
+                })
+            }
         };
 
         let grpc_handle = tokio::spawn(async move {
@@ -410,31 +437,31 @@ impl Server {
             ("GET", "/api/v1/health/full", "Unified health"),
             ("GET", "/api/v1/vms", "List VMs"),
             ("POST", "/api/v1/vms", "Create VM"),
-            ("GET", "/api/v1/vms/:id", "Get VM"),
-            ("DELETE", "/api/v1/vms/:id", "Delete VM"),
-            ("POST", "/api/v1/vms/:id/start", "Start VM"),
-            ("POST", "/api/v1/vms/:id/stop", "Stop VM"),
-            ("POST", "/api/v1/vms/:id/pause", "Pause VM"),
-            ("POST", "/api/v1/vms/:id/resume", "Resume VM"),
-            ("GET", "/api/v1/vms/:id/metrics", "Get metrics"),
-            ("POST", "/api/v1/vms/:id/script", "Execute script"),
+            ("GET", "/api/v1/vms/{id}", "Get VM"),
+            ("DELETE", "/api/v1/vms/{id}", "Delete VM"),
+            ("POST", "/api/v1/vms/{id}/start", "Start VM"),
+            ("POST", "/api/v1/vms/{id}/stop", "Stop VM"),
+            ("POST", "/api/v1/vms/{id}/pause", "Pause VM"),
+            ("POST", "/api/v1/vms/{id}/resume", "Resume VM"),
+            ("GET", "/api/v1/vms/{id}/metrics", "Get metrics"),
+            ("POST", "/api/v1/vms/{id}/script", "Execute script"),
             ("GET", "/agentic/ontology", "AI ontology"),
             ("GET", "/agentic/tools/openai", "OpenAI tools"),
             ("GET", "/agentic/tools/anthropic", "Anthropic tools"),
             ("GET", "/agentic/tools/gemini", "Gemini tools"),
             ("GET", "/.well-known/ai-plugin.json", "AI plugin manifest"),
             ("GET", "/metrics", "Unified Prometheus metrics"),
-            ("POST", "/api/v1/vms/:id/snapshots", "Create snapshot"),
-            ("GET", "/api/v1/vms/:id/snapshots", "List snapshots"),
-            ("GET", "/api/v1/vms/:id/snapshots/:snap_id", "Get snapshot"),
+            ("POST", "/api/v1/vms/{id}/snapshots", "Create snapshot"),
+            ("GET", "/api/v1/vms/{id}/snapshots", "List snapshots"),
+            ("GET", "/api/v1/vms/{id}/snapshots/{snap_id}", "Get snapshot"),
             (
                 "DELETE",
-                "/api/v1/vms/:id/snapshots/:snap_id",
+                "/api/v1/vms/{id}/snapshots/{snap_id}",
                 "Delete snapshot",
             ),
             (
                 "POST",
-                "/api/v1/vms/:id/snapshots/:snap_id/restore",
+                "/api/v1/vms/{id}/snapshots/{snap_id}/restore",
                 "Restore snapshot",
             ),
         ];
@@ -443,8 +470,8 @@ impl Server {
             routes.extend_from_slice(&[
                 ("POST", "/api/v1/events/webhooks", "Create webhook"),
                 ("GET", "/api/v1/events/webhooks", "List webhooks"),
-                ("GET", "/api/v1/events/webhooks/:id", "Get webhook"),
-                ("DELETE", "/api/v1/events/webhooks/:id", "Delete webhook"),
+                ("GET", "/api/v1/events/webhooks/{id}", "Get webhook"),
+                ("DELETE", "/api/v1/events/webhooks/{id}", "Delete webhook"),
                 ("GET", "/api/v1/events/stream", "SSE event stream"),
                 ("GET", "/api/v1/events/ws", "WebSocket event stream"),
             ]);
@@ -461,7 +488,7 @@ impl Server {
                     "Metrics (Prometheus)",
                 ),
                 ("POST", "/api/v1/runtime/sessions", "Create session"),
-                ("DELETE", "/api/v1/runtime/sessions/:id", "Destroy session"),
+                ("DELETE", "/api/v1/runtime/sessions/{id}", "Destroy session"),
                 ("POST", "/api/v1/runtime/workloads", "Submit workload"),
                 (
                     "POST",
@@ -471,10 +498,10 @@ impl Server {
                 ("POST", "/api/v1/runtime/workflows", "Run workflow"),
                 (
                     "POST",
-                    "/api/v1/runtime/workflows/:id/steps/:step",
+                    "/api/v1/runtime/workflows/{id}/steps/{step}",
                     "Advance step",
                 ),
-                ("DELETE", "/api/v1/runtime/workflows/:id", "Cancel workflow"),
+                ("DELETE", "/api/v1/runtime/workflows/{id}", "Cancel workflow"),
                 ("POST", "/api/v1/runtime/maintenance", "Maintenance tick"),
             ]);
         }
@@ -501,8 +528,10 @@ impl Server {
         tracing::info!("┌─────────────────────────────────────────────────");
         tracing::info!("│ HyperMachine API Server v{}", env!("CARGO_PKG_VERSION"));
         tracing::info!("├─────────────────────────────────────────────────");
+        let proto = if self.config.tls.is_some() { "https" } else { "http" };
         tracing::info!(
-            "│ REST : http://{}:{}",
+            "│ REST : {}://{}:{}",
+            proto,
             self.config.host,
             self.config.rest_port
         );
@@ -570,6 +599,7 @@ mod tests {
             pre_warm_count: 2,
             middleware: MiddlewareConfig::none(),
             shutdown_timeout_secs: 30,
+            tls: None,
         }
     }
 

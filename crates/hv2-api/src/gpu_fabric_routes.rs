@@ -242,7 +242,7 @@ pub fn create_gpu_fabric_router(state: Arc<GpuFabricAppState>) -> Router {
             post(create_reservation),
         )
         .route(
-            "/api/v1/gpu-fabric/capacity/reservations/:id",
+            "/api/v1/gpu-fabric/capacity/reservations/{id}",
             delete(cancel_reservation),
         )
         .with_state(state)

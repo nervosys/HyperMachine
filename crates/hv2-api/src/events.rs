@@ -467,8 +467,8 @@ where
         // Webhooks
         .route("/webhooks", post(create_webhook))
         .route("/webhooks", get(list_webhooks))
-        .route("/webhooks/:id", get(get_webhook))
-        .route("/webhooks/:id", delete(delete_webhook))
+        .route("/webhooks/{id}", get(get_webhook))
+        .route("/webhooks/{id}", delete(delete_webhook))
         // SSE streaming
         .route("/stream", get(event_stream))
         // Test endpoint (development only)

@@ -4271,7 +4271,7 @@ mod tests {
         let t = template.unwrap();
         assert_eq!(t.name, "Create and Start VM");
         assert_eq!(t.category, TemplateCategory::Lifecycle);
-        assert!(t.parameters.len() >= 1);
+        assert!(!t.parameters.is_empty());
     }
 
     #[test]

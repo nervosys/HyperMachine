@@ -352,9 +352,25 @@ impl ApiKeyConfig {
     /// Validate the authorization header value.
     ///
     /// Accepts both `Bearer <key>` and bare `<key>` formats.
+    ///
+    /// Uses constant-time comparison to prevent timing attacks that could
+    /// leak the length of a matching prefix of any configured key.
     fn validate(&self, auth_value: &str) -> bool {
-        let key = auth_value.strip_prefix("Bearer ").unwrap_or(auth_value);
-        self.keys.iter().any(|k| k == key)
+        use subtle::ConstantTimeEq;
+        let key = auth_value
+            .strip_prefix("Bearer ")
+            .unwrap_or(auth_value)
+            .as_bytes();
+        // Iterate all configured keys (do not short-circuit on length mismatch) so
+        // both the length comparison and the byte comparison are constant-time per key.
+        let mut matched = subtle::Choice::from(0u8);
+        for configured in &self.keys {
+            let c = configured.as_bytes();
+            if c.len() == key.len() {
+                matched |= c.ct_eq(key);
+            }
+        }
+        matched.into()
     }
 }
 
@@ -7710,6 +7726,7 @@ impl MiddlewareConfig {
 // ============================================================================
 
 #[cfg(test)]
+#[allow(clippy::field_reassign_with_default)]
 mod tests {
     use super::*;
     use axum::body::Body;

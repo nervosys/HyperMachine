@@ -118,6 +118,10 @@ pub struct ServerSection {
     pub pre_warm_count: usize,
     /// Graceful shutdown timeout in seconds (0 = no grace period)
     pub shutdown_timeout_secs: u64,
+    /// TLS certificate chain path (PEM). Set both cert and key to enable TLS.
+    pub tls_cert_path: Option<String>,
+    /// TLS private key path (PEM). Set both cert and key to enable TLS.
+    pub tls_key_path: Option<String>,
 }
 
 impl Default for ServerSection {
@@ -130,6 +134,8 @@ impl Default for ServerSection {
             enable_events: true,
             pre_warm_count: 2,
             shutdown_timeout_secs: 30,
+            tls_cert_path: None,
+            tls_key_path: None,
         }
     }
 }
@@ -751,6 +757,12 @@ impl ConfigFile {
                 self.middleware.enable_body_limit = true;
             }
         }
+        if let Ok(val) = std::env::var("HV2_TLS_CERT") {
+            self.server.tls_cert_path = Some(val);
+        }
+        if let Ok(val) = std::env::var("HV2_TLS_KEY") {
+            self.server.tls_key_path = Some(val);
+        }
     }
 
     /// Validate the configuration.
@@ -1080,6 +1092,13 @@ impl ConfigFile {
             pre_warm_count: self.server.pre_warm_count,
             middleware,
             shutdown_timeout_secs: self.server.shutdown_timeout_secs,
+            tls: match (self.server.tls_cert_path, self.server.tls_key_path) {
+                (Some(cert), Some(key)) => Some(crate::tls::TlsConfig {
+                    cert_path: cert,
+                    key_path: key,
+                }),
+                _ => None,
+            },
         }
     }
 }

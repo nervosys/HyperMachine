@@ -369,18 +369,18 @@ async fn restore_snapshot(
 /// Create the snapshot/restore router
 pub fn create_snapshot_router(state: Arc<SnapshotAppState>) -> Router {
     Router::new()
-        .route("/api/v1/vms/:vm_id/snapshots", post(create_snapshot))
-        .route("/api/v1/vms/:vm_id/snapshots", get(list_snapshots))
+        .route("/api/v1/vms/{vm_id}/snapshots", post(create_snapshot))
+        .route("/api/v1/vms/{vm_id}/snapshots", get(list_snapshots))
         .route(
-            "/api/v1/vms/:vm_id/snapshots/:snap_id",
+            "/api/v1/vms/{vm_id}/snapshots/{snap_id}",
             get(get_snapshot),
         )
         .route(
-            "/api/v1/vms/:vm_id/snapshots/:snap_id",
+            "/api/v1/vms/{vm_id}/snapshots/{snap_id}",
             delete(delete_snapshot),
         )
         .route(
-            "/api/v1/vms/:vm_id/snapshots/:snap_id/restore",
+            "/api/v1/vms/{vm_id}/snapshots/{snap_id}/restore",
             post(restore_snapshot),
         )
         .with_state(state)
@@ -508,7 +508,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("DELETE")
-                    .uri(&format!("/api/v1/vms/vm-002/snapshots/{snap_id}"))
+                    .uri(format!("/api/v1/vms/vm-002/snapshots/{snap_id}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -554,7 +554,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("POST")
-                    .uri(&format!("/api/v1/vms/vm-003/snapshots/{snap_id}/restore"))
+                    .uri(format!("/api/v1/vms/vm-003/snapshots/{snap_id}/restore"))
                     .body(Body::empty())
                     .unwrap(),
             )

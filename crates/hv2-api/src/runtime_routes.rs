@@ -192,15 +192,15 @@ pub fn create_runtime_router(state: Arc<RuntimeAppState>) -> Router {
             get(get_runtime_metrics_prometheus),
         )
         .route("/api/v1/runtime/sessions", post(create_session))
-        .route("/api/v1/runtime/sessions/:id", delete(destroy_session))
+        .route("/api/v1/runtime/sessions/{id}", delete(destroy_session))
         .route("/api/v1/runtime/workloads", post(submit_workload))
         .route("/api/v1/runtime/workloads/schedule", post(schedule_pending))
         .route("/api/v1/runtime/workflows", post(run_workflow))
         .route(
-            "/api/v1/runtime/workflows/:id/steps/:step",
+            "/api/v1/runtime/workflows/{id}/steps/{step}",
             post(advance_workflow_step),
         )
-        .route("/api/v1/runtime/workflows/:id", delete(cancel_workflow))
+        .route("/api/v1/runtime/workflows/{id}", delete(cancel_workflow))
         .route("/api/v1/runtime/maintenance", post(maintenance_tick))
         .with_state(state)
 }
