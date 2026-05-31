@@ -132,13 +132,6 @@ These compile and run today (`cargo run -p <crate> --example <name>`):
 cargo run -p hv2-agent --example agent_mcp_workflow
 ```
 
-**Runnable example:** a self-contained, in-process demo of an agent discovering
-tools (OpenAI/Anthropic/Gemini schemas) and driving the full VM lifecycle:
-
-```bash
-cargo run -p hm-cli --example agent_vm_workflow
-```
-
 ## GUI Automation
 
 HyperMachine includes a desktop GUI with **semantic automation API** for AI agents:
