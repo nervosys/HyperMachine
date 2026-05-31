@@ -516,8 +516,7 @@ pub struct kvm_msr_entry {
 
 /// MSR list for get/set operations
 ///
-/// Variable-length structure. The ntries array has 
-msrs elements.
+/// Variable-length structure. The entries array has nmsrs elements.
 #[repr(C)]
 pub struct kvm_msrs {
     pub nmsrs: u32,
@@ -1038,12 +1037,9 @@ pub unsafe fn kvm_get_supported_cpuid(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
-/// - ddr must be a valid guest physical address
-pub unsafe fn kvm_set_identity_map_addr(
-    vm_fd: RawFd,
-    addr: u64,
-) -> Result<(), std::io::Error> {
+/// - vm_fd must be a valid VM file descriptor
+/// - addr must be a valid guest physical address
+pub unsafe fn kvm_set_identity_map_addr(vm_fd: RawFd, addr: u64) -> Result<(), std::io::Error> {
     let ret = ioctl(vm_fd, KVM_SET_IDENTITY_MAP_ADDR, &addr as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1056,12 +1052,9 @@ pub unsafe fn kvm_set_identity_map_addr(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
+/// - vm_fd must be a valid VM file descriptor
 /// - irq_level must point to valid memory
-pub unsafe fn kvm_irq_line(
-    vm_fd: RawFd,
-    irq_level: &kvm_irq_level,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_irq_line(vm_fd: RawFd, irq_level: &kvm_irq_level) -> Result<(), std::io::Error> {
     let ret = ioctl(vm_fd, KVM_IRQ_LINE, irq_level as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1074,12 +1067,9 @@ pub unsafe fn kvm_irq_line(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
+/// - vm_fd must be a valid VM file descriptor
 /// - chip must point to valid memory with chip_id set
-pub unsafe fn kvm_get_irqchip(
-    vm_fd: RawFd,
-    chip: &mut kvm_irqchip,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_get_irqchip(vm_fd: RawFd, chip: &mut kvm_irqchip) -> Result<(), std::io::Error> {
     let ret = ioctl(vm_fd, KVM_GET_IRQCHIP, chip as *mut _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1092,12 +1082,9 @@ pub unsafe fn kvm_get_irqchip(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
+/// - vm_fd must be a valid VM file descriptor
 /// - chip must point to valid, initialized memory
-pub unsafe fn kvm_set_irqchip(
-    vm_fd: RawFd,
-    chip: &kvm_irqchip,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_set_irqchip(vm_fd: RawFd, chip: &kvm_irqchip) -> Result<(), std::io::Error> {
     let ret = ioctl(vm_fd, KVM_SET_IRQCHIP, chip as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1110,10 +1097,8 @@ pub unsafe fn kvm_set_irqchip(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
-/// - 
-outing must point to a valid kvm_irq_routing with 
-r entries
+/// - vm_fd must be a valid VM file descriptor
+/// - routing must point to a valid kvm_irq_routing with nr entries
 pub unsafe fn kvm_set_gsi_routing(
     vm_fd: RawFd,
     routing: &kvm_irq_routing,
@@ -1130,12 +1115,9 @@ pub unsafe fn kvm_set_gsi_routing(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
+/// - vm_fd must be a valid VM file descriptor
 /// - msi must point to valid memory
-pub unsafe fn kvm_signal_msi(
-    vm_fd: RawFd,
-    msi: &kvm_msi,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_signal_msi(vm_fd: RawFd, msi: &kvm_msi) -> Result<(), std::io::Error> {
     let ret = ioctl(vm_fd, KVM_SIGNAL_MSI, msi as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1148,7 +1130,7 @@ pub unsafe fn kvm_signal_msi(
 ///
 /// # Safety
 ///
-/// - m_fd must be a valid VM file descriptor
+/// - vm_fd must be a valid VM file descriptor
 /// - log must point to valid memory with dirty_bitmap allocated
 pub unsafe fn kvm_get_dirty_log(
     vm_fd: RawFd,
@@ -1166,12 +1148,9 @@ pub unsafe fn kvm_get_dirty_log(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - msrs must point to a valid kvm_msrs with pre-set indices
-pub unsafe fn kvm_get_msrs(
-    vcpu_fd: RawFd,
-    msrs: &mut kvm_msrs,
-) -> Result<i32, std::io::Error> {
+pub unsafe fn kvm_get_msrs(vcpu_fd: RawFd, msrs: &mut kvm_msrs) -> Result<i32, std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_GET_MSRS, msrs as *mut _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1184,12 +1163,9 @@ pub unsafe fn kvm_get_msrs(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - msrs must point to a valid kvm_msrs with entries filled
-pub unsafe fn kvm_set_msrs(
-    vcpu_fd: RawFd,
-    msrs: &kvm_msrs,
-) -> Result<i32, std::io::Error> {
+pub unsafe fn kvm_set_msrs(vcpu_fd: RawFd, msrs: &kvm_msrs) -> Result<i32, std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_MSRS, msrs as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1202,12 +1178,9 @@ pub unsafe fn kvm_set_msrs(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
-/// - pu must point to valid memory
-pub unsafe fn kvm_get_fpu(
-    vcpu_fd: RawFd,
-    fpu: &mut kvm_fpu,
-) -> Result<(), std::io::Error> {
+/// - vcpu_fd must be a valid vCPU file descriptor
+/// - cpu must point to valid memory
+pub unsafe fn kvm_get_fpu(vcpu_fd: RawFd, fpu: &mut kvm_fpu) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_GET_FPU, fpu as *mut _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1220,12 +1193,9 @@ pub unsafe fn kvm_get_fpu(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
-/// - pu must point to valid, initialized memory
-pub unsafe fn kvm_set_fpu(
-    vcpu_fd: RawFd,
-    fpu: &kvm_fpu,
-) -> Result<(), std::io::Error> {
+/// - vcpu_fd must be a valid vCPU file descriptor
+/// - cpu must point to valid, initialized memory
+pub unsafe fn kvm_set_fpu(vcpu_fd: RawFd, fpu: &kvm_fpu) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_FPU, fpu as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1238,7 +1208,7 @@ pub unsafe fn kvm_set_fpu(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - lapic must point to valid memory
 pub unsafe fn kvm_get_lapic(
     vcpu_fd: RawFd,
@@ -1256,12 +1226,9 @@ pub unsafe fn kvm_get_lapic(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - lapic must point to valid, initialized memory
-pub unsafe fn kvm_set_lapic(
-    vcpu_fd: RawFd,
-    lapic: &kvm_lapic_state,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_set_lapic(vcpu_fd: RawFd, lapic: &kvm_lapic_state) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_LAPIC, lapic as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1274,12 +1241,9 @@ pub unsafe fn kvm_set_lapic(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - cpuid must point to a valid kvm_cpuid2 with entries
-pub unsafe fn kvm_set_cpuid2(
-    vcpu_fd: RawFd,
-    cpuid: &kvm_cpuid2,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_set_cpuid2(vcpu_fd: RawFd, cpuid: &kvm_cpuid2) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_CPUID2, cpuid as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1292,7 +1256,7 @@ pub unsafe fn kvm_set_cpuid2(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - mp_state must point to valid memory
 pub unsafe fn kvm_get_mp_state(
     vcpu_fd: RawFd,
@@ -1310,7 +1274,7 @@ pub unsafe fn kvm_get_mp_state(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - mp_state must point to valid, initialized memory
 pub unsafe fn kvm_set_mp_state(
     vcpu_fd: RawFd,
@@ -1328,7 +1292,7 @@ pub unsafe fn kvm_set_mp_state(
 ///
 /// # Safety
 ///
-/// cpu_fd must be a valid vCPU file descriptor.
+/// vcpu_fd must be a valid vCPU file descriptor.
 pub unsafe fn kvm_nmi(vcpu_fd: RawFd) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_NMI, 0);
     if ret < 0 {
@@ -1342,8 +1306,8 @@ pub unsafe fn kvm_nmi(vcpu_fd: RawFd) -> Result<(), std::io::Error> {
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
-/// - vents must point to valid memory
+/// - vcpu_fd must be a valid vCPU file descriptor
+/// - events must point to valid memory
 pub unsafe fn kvm_get_vcpu_events(
     vcpu_fd: RawFd,
     events: &mut kvm_vcpu_events,
@@ -1360,8 +1324,8 @@ pub unsafe fn kvm_get_vcpu_events(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
-/// - vents must point to valid, initialized memory
+/// - vcpu_fd must be a valid vCPU file descriptor
+/// - events must point to valid, initialized memory
 pub unsafe fn kvm_set_vcpu_events(
     vcpu_fd: RawFd,
     events: &kvm_vcpu_events,
@@ -1378,7 +1342,7 @@ pub unsafe fn kvm_set_vcpu_events(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - debug must point to valid memory
 pub unsafe fn kvm_set_guest_debug(
     vcpu_fd: RawFd,
@@ -1396,7 +1360,7 @@ pub unsafe fn kvm_set_guest_debug(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - 	ranslation must point to valid memory with linear_address set
 pub unsafe fn kvm_translate(
     vcpu_fd: RawFd,
@@ -1414,12 +1378,9 @@ pub unsafe fn kvm_translate(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - xsave must point to valid memory
-pub unsafe fn kvm_get_xsave(
-    vcpu_fd: RawFd,
-    xsave: &mut kvm_xsave,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_get_xsave(vcpu_fd: RawFd, xsave: &mut kvm_xsave) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_GET_XSAVE, xsave as *mut _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1432,12 +1393,9 @@ pub unsafe fn kvm_get_xsave(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - xsave must point to valid, initialized memory
-pub unsafe fn kvm_set_xsave(
-    vcpu_fd: RawFd,
-    xsave: &kvm_xsave,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_set_xsave(vcpu_fd: RawFd, xsave: &kvm_xsave) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_XSAVE, xsave as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1450,12 +1408,9 @@ pub unsafe fn kvm_set_xsave(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - xcrs must point to valid memory
-pub unsafe fn kvm_get_xcrs(
-    vcpu_fd: RawFd,
-    xcrs: &mut kvm_xcrs,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_get_xcrs(vcpu_fd: RawFd, xcrs: &mut kvm_xcrs) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_GET_XCRS, xcrs as *mut _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1468,12 +1423,9 @@ pub unsafe fn kvm_get_xcrs(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - xcrs must point to valid, initialized memory
-pub unsafe fn kvm_set_xcrs(
-    vcpu_fd: RawFd,
-    xcrs: &kvm_xcrs,
-) -> Result<(), std::io::Error> {
+pub unsafe fn kvm_set_xcrs(vcpu_fd: RawFd, xcrs: &kvm_xcrs) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_XCRS, xcrs as *const _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
@@ -1486,7 +1438,7 @@ pub unsafe fn kvm_set_xcrs(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - debugregs must point to valid memory
 pub unsafe fn kvm_get_debugregs(
     vcpu_fd: RawFd,
@@ -1504,7 +1456,7 @@ pub unsafe fn kvm_get_debugregs(
 ///
 /// # Safety
 ///
-/// - cpu_fd must be a valid vCPU file descriptor
+/// - vcpu_fd must be a valid vCPU file descriptor
 /// - debugregs must point to valid, initialized memory
 pub unsafe fn kvm_set_debugregs(
     vcpu_fd: RawFd,

@@ -16,7 +16,9 @@
 //! HvfBackend is Send + Sync. All mutable state is protected by
 //! RwLock or atomic operations.
 
-use crate::hypervisor::{HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm};
+use crate::hypervisor::{
+    HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
+};
 use crate::{Error, IoDirection, Result, VCpu, VmExit};
 use async_trait::async_trait;
 use parking_lot::RwLock;
@@ -152,7 +154,7 @@ impl HvfBackend {
         Ok(())
     }
 
-    /// Create a vCPU and register it in cpu_states.
+    /// Create a vCPU and register it in vcpu_states.
     fn create_vcpu(&self, vcpu_id: u32) -> Result<HvVcpuId> {
         let mut hv_vcpu: HvVcpuId = 0;
         // SAFETY: FFI call to hv_vcpu_create with valid mutable pointer to receive the vCPU handle.
@@ -242,9 +244,8 @@ impl HvfBackend {
         let mut reason: u64 = 0;
         // SAFETY: FFI call to hv_vmx_vcpu_read_vmcs with valid vCPU handle and valid mutable
         // pointer to reason. Reading VmExitReason field from VMCS after vCPU has exited.
-        let result = unsafe {
-            hv_vmx_vcpu_read_vmcs(hv_vcpu, VmcsField::VmExitReason as u32, &mut reason)
-        };
+        let result =
+            unsafe { hv_vmx_vcpu_read_vmcs(hv_vcpu, VmcsField::VmExitReason as u32, &mut reason) };
         if result != HV_SUCCESS {
             return Err(Error::Hypervisor(format!(
                 "Failed to read exit reason: {}",
@@ -365,18 +366,10 @@ impl HypervisorBackend for HvfBackend {
                 };
                 Ok(VmExit::Exception { vector, error_code })
             }
-            VMX_EXIT_REASON_EXTERNAL_INTERRUPT => {
-                Ok(VmExit::InterruptWindow)
-            }
-            VMX_EXIT_REASON_TRIPLE_FAULT => {
-                Ok(VmExit::Shutdown)
-            }
-            VMX_EXIT_REASON_CPUID => {
-                Ok(VmExit::Unknown { reason: 10 })
-            }
-            VMX_EXIT_REASON_HLT => {
-                Ok(VmExit::Hlt)
-            }
+            VMX_EXIT_REASON_EXTERNAL_INTERRUPT => Ok(VmExit::InterruptWindow),
+            VMX_EXIT_REASON_TRIPLE_FAULT => Ok(VmExit::Shutdown),
+            VMX_EXIT_REASON_CPUID => Ok(VmExit::Unknown { reason: 10 }),
+            VMX_EXIT_REASON_HLT => Ok(VmExit::Hlt),
             VMX_EXIT_REASON_VMCALL => {
                 // Read hypercall number from RAX and first 6 args from RBX, RCX, RDX, RSI, RDI, RBP
                 let mut rax: u64 = 0;
@@ -423,9 +416,7 @@ impl HypervisorBackend for HvfBackend {
                 unsafe {
                     hv_vcpu_read_register(hv_vcpu, HvX86Reg::Rcx as u32, &mut rcx);
                 }
-                Ok(VmExit::Rdmsr {
-                    index: rcx as u32,
-                })
+                Ok(VmExit::Rdmsr { index: rcx as u32 })
             }
             VMX_EXIT_REASON_WRMSR => {
                 // MSR index in ECX, value in EDX:EAX
