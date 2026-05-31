@@ -586,7 +586,7 @@ impl InferenceEngine {
 
         // Get rules sorted by priority
         let mut rules: Vec<&Rule> = self.rules.values().filter(|r| r.enabled).collect();
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|r| std::cmp::Reverse(r.priority));
 
         for rule in rules {
             // Find all bindings that satisfy conditions
@@ -933,7 +933,10 @@ impl Planner {
         })
     }
 
-    /// Backward chain to find plan
+    /// Backward chain to find a plan achieving all of the goal's postconditions.
+    ///
+    /// Each unsatisfied postcondition is achieved via [`Self::achieve_pattern`],
+    /// which recursively plans to satisfy the chosen action's preconditions.
     fn backward_chain(
         &self,
         goal: &Goal,
@@ -946,47 +949,97 @@ impl Planner {
             return Err(ReasoningError::MaxDepthExceeded(self.max_depth));
         }
 
-        // Find actions that can achieve any of the goal's postconditions
         for pattern in &goal.postconditions {
-            for action in self.actions.values() {
-                if visited.contains(&action.id) {
-                    continue;
-                }
-
-                // Check if action achieves this pattern
-                let achieves = action.effects.iter().any(|effect| {
-                    if let ActionEffect::Add(add_pattern) = effect {
-                        patterns_match(add_pattern, pattern)
-                    } else {
-                        false
-                    }
-                });
-
-                if achieves {
-                    visited.insert(action.id.clone());
-
-                    // Check if preconditions are satisfied
-                    let preconditions_met = action.preconditions.iter().all(|pre| {
-                        let facts = kb.query(
-                            pre.subject.as_deref(),
-                            pre.predicate.as_deref(),
-                            pre.object.as_deref(),
-                        );
-                        !facts.is_empty()
-                    });
-
-                    if preconditions_met {
-                        plan.push(action.id.clone());
-                        return Ok(true);
-                    }
-
-                    // Otherwise, try to satisfy preconditions first
-                    // (simplified - would need full recursive planning)
-                }
+            if Self::pattern_satisfied(pattern, kb) {
+                continue;
+            }
+            if !self.achieve_pattern(pattern, kb, plan, visited, depth)? {
+                return Err(ReasoningError::GoalUnreachable(goal.id.clone()));
             }
         }
 
-        Err(ReasoningError::GoalUnreachable(goal.id.clone()))
+        Ok(true)
+    }
+
+    /// True when at least one fact in the knowledge base matches `pattern`.
+    fn pattern_satisfied(pattern: &FactPattern, kb: &KnowledgeBase) -> bool {
+        !kb.query(
+            pattern.subject.as_deref(),
+            pattern.predicate.as_deref(),
+            pattern.object.as_deref(),
+        )
+        .is_empty()
+    }
+
+    /// Recursively find and schedule actions so that `pattern` holds.
+    ///
+    /// Depth-first backward chaining: to achieve a pattern, pick an action whose
+    /// effects add a matching fact, recursively satisfy that action's
+    /// preconditions, then schedule the action (preconditions first, so the plan
+    /// is topologically ordered). `visited` prevents an action from being used
+    /// twice within a branch — which, together with `max_depth`, bounds the
+    /// recursion — and the plan is rolled back to a checkpoint on a failed branch
+    /// so alternative actions can be tried (backtracking).
+    fn achieve_pattern(
+        &self,
+        pattern: &FactPattern,
+        kb: &KnowledgeBase,
+        plan: &mut Vec<String>,
+        visited: &mut HashSet<String>,
+        depth: u32,
+    ) -> ReasoningResult<bool> {
+        if depth > self.max_depth {
+            return Err(ReasoningError::MaxDepthExceeded(self.max_depth));
+        }
+
+        if Self::pattern_satisfied(pattern, kb) {
+            return Ok(true);
+        }
+
+        for action in self.actions.values() {
+            if visited.contains(&action.id) {
+                continue;
+            }
+
+            let achieves = action.effects.iter().any(|effect| {
+                matches!(
+                    effect,
+                    ActionEffect::Add(add_pattern) if patterns_match(add_pattern, pattern)
+                )
+            });
+            if !achieves {
+                continue;
+            }
+
+            visited.insert(action.id.clone());
+            let plan_checkpoint = plan.len();
+
+            // Recursively satisfy every precondition before scheduling the action.
+            let mut all_met = true;
+            for pre in &action.preconditions {
+                match self.achieve_pattern(pre, kb, plan, visited, depth + 1) {
+                    Ok(true) => {}
+                    // A failed or too-deep sub-branch means this action is not
+                    // usable here; fall through to backtracking.
+                    Ok(false) | Err(ReasoningError::MaxDepthExceeded(_)) => {
+                        all_met = false;
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+
+            if all_met {
+                plan.push(action.id.clone());
+                return Ok(true);
+            }
+
+            // Backtrack: undo this branch and try the next candidate action.
+            plan.truncate(plan_checkpoint);
+            visited.remove(&action.id);
+        }
+
+        Ok(false)
     }
 
     /// Get action count
@@ -1378,7 +1431,10 @@ impl SharedReasoner {
 
     /// Assert a fact
     pub fn assert_fact(&self, fact: Fact) -> ReasoningResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).assert_fact(fact)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .assert_fact(fact)
     }
 
     /// Query facts
@@ -1399,17 +1455,26 @@ impl SharedReasoner {
 
     /// Run inference
     pub fn infer(&self) -> ReasoningResult<Vec<Fact>> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).infer()
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .infer()
     }
 
     /// Get fact count
     pub fn fact_count(&self) -> usize {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).fact_count()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .fact_count()
     }
 
     /// Get rule count
     pub fn rule_count(&self) -> usize {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).rule_count()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .rule_count()
     }
 }
 
@@ -1834,6 +1899,90 @@ mod tests {
         // Now goal is satisfied
         let plan = planner.plan(&goal, &kb).unwrap();
         assert!(plan.is_empty()); // No actions needed
+    }
+
+    #[test]
+    fn test_planner_recursive_multi_step() {
+        // Goal requires a two-step plan: the action that achieves the goal has a
+        // precondition that only another action can satisfy. The old single-level
+        // planner could not solve this; recursive backward chaining can.
+        let mut planner = Planner::new();
+        planner.add_action(
+            Action::new("go_to_food", "Walk to the food")
+                .with_precondition(
+                    FactPattern::any()
+                        .with_subject("agent")
+                        .with_predicate("at")
+                        .with_object("home"),
+                )
+                .with_effect(ActionEffect::Add(
+                    FactPattern::any()
+                        .with_subject("agent")
+                        .with_predicate("near")
+                        .with_object("food"),
+                )),
+        );
+        planner.add_action(
+            Action::new("pick_up", "Pick up the food")
+                .with_precondition(
+                    FactPattern::any()
+                        .with_subject("agent")
+                        .with_predicate("near")
+                        .with_object("food"),
+                )
+                .with_effect(ActionEffect::Add(
+                    FactPattern::any()
+                        .with_subject("agent")
+                        .with_predicate("has")
+                        .with_object("food"),
+                )),
+        );
+
+        let goal = Goal::new("goal-eat", "Have food").with_postcondition(
+            FactPattern::any()
+                .with_subject("agent")
+                .with_predicate("has")
+                .with_object("food"),
+        );
+
+        let mut kb = KnowledgeBase::new();
+        kb.add(Fact::new("agent", "at", "home")).unwrap();
+
+        let plan = planner.plan(&goal, &kb).unwrap();
+        // Preconditions are scheduled before their dependent action.
+        assert_eq!(plan, vec!["go_to_food".to_string(), "pick_up".to_string()]);
+    }
+
+    #[test]
+    fn test_planner_unreachable_when_precondition_unmet() {
+        // Same chain, but the base precondition (agent at home) is absent, so no
+        // valid plan exists and the planner must report the goal unreachable.
+        let mut planner = Planner::new();
+        planner.add_action(
+            Action::new("pick_up", "Pick up the food")
+                .with_precondition(
+                    FactPattern::any()
+                        .with_subject("agent")
+                        .with_predicate("near")
+                        .with_object("food"),
+                )
+                .with_effect(ActionEffect::Add(
+                    FactPattern::any()
+                        .with_subject("agent")
+                        .with_predicate("has")
+                        .with_object("food"),
+                )),
+        );
+
+        let goal = Goal::new("goal-eat", "Have food").with_postcondition(
+            FactPattern::any()
+                .with_subject("agent")
+                .with_predicate("has")
+                .with_object("food"),
+        );
+
+        let kb = KnowledgeBase::new();
+        assert!(planner.plan(&goal, &kb).is_err());
     }
 
     #[test]
