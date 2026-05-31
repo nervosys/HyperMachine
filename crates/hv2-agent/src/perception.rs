@@ -851,22 +851,34 @@ impl SharedPerception {
 
     /// Register a sensor
     pub fn register_sensor(&self, sensor: Sensor) -> PerceptionResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).register_sensor(sensor)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .register_sensor(sensor)
     }
 
     /// Read from a sensor
     pub fn read(&self, sensor_id: &str, observable: &str) -> PerceptionResult<Observation> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).read(sensor_id, observable)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .read(sensor_id, observable)
     }
 
     /// Subscribe to observations
     pub fn subscribe(&self, id: &str, filter: PerceptionFilter) {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).subscribe(id, filter);
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .subscribe(id, filter);
     }
 
     /// Unsubscribe
     pub fn unsubscribe(&self, id: &str) {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).unsubscribe(id);
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .unsubscribe(id);
     }
 
     /// Get current value
@@ -881,7 +893,10 @@ impl SharedPerception {
 
     /// Get sensor count
     pub fn sensor_count(&self) -> usize {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).sensor_count()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .sensor_count()
     }
 }
 

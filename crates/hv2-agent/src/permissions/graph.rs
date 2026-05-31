@@ -474,7 +474,9 @@ mod tests {
         let g = PermissionGraph::new();
         g.add_principal(pid("a1"), PrincipalKind::Agent, "Agent 1")
             .unwrap();
-        let perms = PermissionSet::new().with(Permission::VmRead).with(Permission::VmList);
+        let perms = PermissionSet::new()
+            .with(Permission::VmRead)
+            .with(Permission::VmList);
         let grant_id = g
             .grant(pid("a1"), perms, ResourceScope::Root, None, 0, None)
             .unwrap();

@@ -369,15 +369,13 @@ async fn test_vm_mixed_io_mmio_exits() {
         match exit {
             VmExit::Io {
                 port,
-                direction,
+                direction: IoDirection::Out,
                 data,
                 ..
             } => {
-                if direction == IoDirection::Out {
-                    if let Some(device) = vm.devices().find_io_device(port).await {
-                        let offset = (port - device.base_port()) as u64;
-                        device.write_register(offset, data).await.unwrap();
-                    }
+                if let Some(device) = vm.devices().find_io_device(port).await {
+                    let offset = (port - device.base_port()) as u64;
+                    device.write_register(offset, data).await.unwrap();
                 }
             }
             VmExit::Mmio {
@@ -385,13 +383,11 @@ async fn test_vm_mixed_io_mmio_exits() {
                 data,
                 is_write,
                 ..
-            } => {
-                if is_write {
-                    if let Some(device) = vm.devices().find_mmio_device(phys_addr).await {
-                        let offset = phys_addr - device.base_address();
-                        let value = data[0] as u32;
-                        device.write_register(offset, value).await.unwrap();
-                    }
+            } if is_write => {
+                if let Some(device) = vm.devices().find_mmio_device(phys_addr).await {
+                    let offset = phys_addr - device.base_address();
+                    let value = data[0] as u32;
+                    device.write_register(offset, value).await.unwrap();
                 }
             }
             _ => {}
@@ -620,15 +616,13 @@ async fn test_complete_vm_execution_sequence() {
         match exit {
             VmExit::Io {
                 port,
-                direction,
+                direction: IoDirection::Out,
                 data,
                 ..
             } => {
-                if direction == IoDirection::Out {
-                    if let Some(device) = vm.devices().find_io_device(port).await {
-                        let offset = (port - device.base_port()) as u64;
-                        device.write_register(offset, data).await.unwrap();
-                    }
+                if let Some(device) = vm.devices().find_io_device(port).await {
+                    let offset = (port - device.base_port()) as u64;
+                    device.write_register(offset, data).await.unwrap();
                 }
             }
             VmExit::Hlt => {

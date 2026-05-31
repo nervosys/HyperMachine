@@ -4,8 +4,8 @@
 //! standard headers (Type 0, 1, 2) and PCIe extended configuration.
 
 use super::types::{
-    BarType, ClassCode, CommandRegister, DeviceId, HeaderType, InterruptPin,
-    StatusRegister, VendorId,
+    BarType, ClassCode, CommandRegister, DeviceId, HeaderType, InterruptPin, StatusRegister,
+    VendorId,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 

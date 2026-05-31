@@ -8,8 +8,8 @@ use super::types::{
     SamplingDecision, SpanContext, SpanData, SpanEvent, SpanId, SpanKind, SpanLink, SpanStatus,
     StatusCode, TraceFlags, TraceId,
 };
-use std::cell::RefCell;
 use parking_lot::{Mutex, RwLock};
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 

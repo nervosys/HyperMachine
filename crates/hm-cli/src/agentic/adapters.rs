@@ -450,7 +450,8 @@ impl ProviderConfig {
         match provider {
             LlmProvider::OpenAI => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_openai(ontology)).expect("schema serialization failed"),
+                tools: serde_json::to_value(ProviderAdapter::to_openai(ontology))
+                    .expect("schema serialization failed"),
                 system_prompt: SystemPrompts::for_openai(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -461,7 +462,8 @@ impl ProviderConfig {
             },
             LlmProvider::Anthropic => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_anthropic(ontology)).expect("schema serialization failed"),
+                tools: serde_json::to_value(ProviderAdapter::to_anthropic(ontology))
+                    .expect("schema serialization failed"),
                 system_prompt: SystemPrompts::for_anthropic(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -472,7 +474,8 @@ impl ProviderConfig {
             },
             LlmProvider::Google => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_gemini(ontology)).expect("schema serialization failed"),
+                tools: serde_json::to_value(ProviderAdapter::to_gemini(ontology))
+                    .expect("schema serialization failed"),
                 system_prompt: SystemPrompts::for_gemini(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -483,7 +486,8 @@ impl ProviderConfig {
             },
             LlmProvider::Generic => Self {
                 provider,
-                tools: serde_json::to_value(ProviderAdapter::to_generic(ontology)).expect("schema serialization failed"),
+                tools: serde_json::to_value(ProviderAdapter::to_generic(ontology))
+                    .expect("schema serialization failed"),
                 system_prompt: SystemPrompts::generic(),
                 hints: ProviderHints {
                     temperature: 0.0,
@@ -557,15 +561,39 @@ mod tests {
 
     #[test]
     fn test_llm_provider_from_str_aliases() {
-        assert_eq!("openai".parse::<LlmProvider>().unwrap(), LlmProvider::OpenAI);
+        assert_eq!(
+            "openai".parse::<LlmProvider>().unwrap(),
+            LlmProvider::OpenAI
+        );
         assert_eq!("gpt".parse::<LlmProvider>().unwrap(), LlmProvider::OpenAI);
-        assert_eq!("chatgpt".parse::<LlmProvider>().unwrap(), LlmProvider::OpenAI);
-        assert_eq!("anthropic".parse::<LlmProvider>().unwrap(), LlmProvider::Anthropic);
-        assert_eq!("claude".parse::<LlmProvider>().unwrap(), LlmProvider::Anthropic);
-        assert_eq!("google".parse::<LlmProvider>().unwrap(), LlmProvider::Google);
-        assert_eq!("gemini".parse::<LlmProvider>().unwrap(), LlmProvider::Google);
-        assert_eq!("generic".parse::<LlmProvider>().unwrap(), LlmProvider::Generic);
-        assert_eq!("other".parse::<LlmProvider>().unwrap(), LlmProvider::Generic);
+        assert_eq!(
+            "chatgpt".parse::<LlmProvider>().unwrap(),
+            LlmProvider::OpenAI
+        );
+        assert_eq!(
+            "anthropic".parse::<LlmProvider>().unwrap(),
+            LlmProvider::Anthropic
+        );
+        assert_eq!(
+            "claude".parse::<LlmProvider>().unwrap(),
+            LlmProvider::Anthropic
+        );
+        assert_eq!(
+            "google".parse::<LlmProvider>().unwrap(),
+            LlmProvider::Google
+        );
+        assert_eq!(
+            "gemini".parse::<LlmProvider>().unwrap(),
+            LlmProvider::Google
+        );
+        assert_eq!(
+            "generic".parse::<LlmProvider>().unwrap(),
+            LlmProvider::Generic
+        );
+        assert_eq!(
+            "other".parse::<LlmProvider>().unwrap(),
+            LlmProvider::Generic
+        );
     }
 
     #[test]

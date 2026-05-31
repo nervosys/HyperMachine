@@ -243,7 +243,6 @@ pub struct EventType {
     pub resource_types: Vec<String>,
 }
 
-
 // ============================================================================
 // Composability & Agentic Primitives
 // ============================================================================
@@ -560,8 +559,6 @@ pub enum ConditionOperator {
     NotExists,
 }
 
-
-
 // ============================================================================
 // Plan Execution Engine
 // ============================================================================
@@ -630,7 +627,6 @@ pub struct PlanExecutionRequest {
     /// Variable substitutions for parameterized plans
     pub variables: Option<serde_json::Map<String, serde_json::Value>>,
 }
-
 
 // ============================================================================
 // ============================================================================
@@ -1732,7 +1728,11 @@ impl HyperMachineOntology {
         let mut possible_trans = Vec::new();
 
         // Find the state machine for this resource type
-        if let Some(sm) = self.state_machines.iter().find(|s| s.resource_type == resource_type) {
+        if let Some(sm) = self
+            .state_machines
+            .iter()
+            .find(|s| s.resource_type == resource_type)
+        {
             // Find the current state definition
             if let Some(state) = sm.states.iter().find(|s| s.name == current_state) {
                 // Get operations allowed in this state
@@ -1747,10 +1747,20 @@ impl HyperMachineOntology {
                             http_method: op.http_method.clone(),
                             path: op.path.clone(),
                             preconditions: contract
-                                .map(|c| c.preconditions.iter().map(|p| p.description.clone()).collect())
+                                .map(|c| {
+                                    c.preconditions
+                                        .iter()
+                                        .map(|p| p.description.clone())
+                                        .collect()
+                                })
                                 .unwrap_or_default(),
                             postconditions: contract
-                                .map(|c| c.postconditions.iter().map(|p| p.description.clone()).collect())
+                                .map(|c| {
+                                    c.postconditions
+                                        .iter()
+                                        .map(|p| p.description.clone())
+                                        .collect()
+                                })
                                 .unwrap_or_default(),
                             idempotent: op.idempotent,
                         });
@@ -1762,9 +1772,10 @@ impl HyperMachineOntology {
             for t in &sm.transitions {
                 if t.from_state == current_state {
                     // Check if the reverse transition exists
-                    let reversible = sm.transitions.iter().any(|rt| {
-                        rt.from_state == t.to_state && rt.to_state == t.from_state
-                    });
+                    let reversible = sm
+                        .transitions
+                        .iter()
+                        .any(|rt| rt.from_state == t.to_state && rt.to_state == t.from_state);
                     possible_trans.push(AffordanceTransition {
                         target_state: t.to_state.clone(),
                         trigger_operation: t.trigger_operation.clone(),
@@ -1828,7 +1839,9 @@ impl HyperMachineOntology {
             }
 
             // Resolve preconditions
-            let contract = contracts.iter().find(|c| c.operation_id == step.operation_id);
+            let contract = contracts
+                .iter()
+                .find(|c| c.operation_id == step.operation_id);
             let preconditions_met = contract
                 .map(|c| {
                     // If there are dependencies, assume preconditions will be met by prior steps
@@ -1848,7 +1861,12 @@ impl HyperMachineOntology {
                 operation_id: step.operation_id.clone(),
                 preconditions_met,
                 expected_postconditions: contract
-                    .map(|c| c.postconditions.iter().map(|p| p.description.clone()).collect())
+                    .map(|c| {
+                        c.postconditions
+                            .iter()
+                            .map(|p| p.description.clone())
+                            .collect()
+                    })
                     .unwrap_or_default(),
             });
         }
@@ -1880,7 +1898,9 @@ impl HyperMachineOntology {
         let mut edges = Vec::new();
 
         for resource in &self.resources {
-            let ops_count = self.operations.iter()
+            let ops_count = self
+                .operations
+                .iter()
                 .filter(|op| op.path.contains(&format!("/{}", resource.id)))
                 .count();
 
@@ -1911,7 +1931,8 @@ impl HyperMachineOntology {
                 Workflow {
                     id: "provision_and_start".to_string(),
                     name: "Provision and Start VM".to_string(),
-                    description: "Create a new VM with specified configuration and start it".to_string(),
+                    description: "Create a new VM with specified configuration and start it"
+                        .to_string(),
                     steps: vec![
                         WorkflowStep {
                             order: 1,
@@ -1933,7 +1954,8 @@ impl HyperMachineOntology {
                 Workflow {
                     id: "provision_gpu_workload".to_string(),
                     name: "Provision GPU Workload".to_string(),
-                    description: "Create a GPU-enabled VM, start it, and deploy an agent script".to_string(),
+                    description: "Create a GPU-enabled VM, start it, and deploy an agent script"
+                        .to_string(),
                     steps: vec![
                         WorkflowStep {
                             order: 1,
@@ -1963,15 +1985,13 @@ impl HyperMachineOntology {
                     id: "graceful_shutdown".to_string(),
                     name: "Graceful Shutdown".to_string(),
                     description: "Gracefully stop a VM and verify it is stopped".to_string(),
-                    steps: vec![
-                        WorkflowStep {
-                            order: 1,
-                            operation_id: "stop_vm".to_string(),
-                            description: "Initiate graceful shutdown".to_string(),
-                            required: true,
-                            wait_for_state: Some("stopped".to_string()),
-                        },
-                    ],
+                    steps: vec![WorkflowStep {
+                        order: 1,
+                        operation_id: "stop_vm".to_string(),
+                        description: "Initiate graceful shutdown".to_string(),
+                        required: true,
+                        wait_for_state: Some("stopped".to_string()),
+                    }],
                     category: "lifecycle".to_string(),
                 },
                 Workflow {
@@ -2000,7 +2020,8 @@ impl HyperMachineOntology {
             constraints: vec![
                 CompositionConstraint {
                     name: "lifecycle_mutex".to_string(),
-                    description: "Start, stop, pause, resume are mutually exclusive on a single VM".to_string(),
+                    description: "Start, stop, pause, resume are mutually exclusive on a single VM"
+                        .to_string(),
                     rule_type: ConstraintType::MutuallyExclusive,
                     operations: vec![
                         "start_vm".to_string(),
@@ -2023,13 +2044,15 @@ impl HyperMachineOntology {
                 },
                 CompositionConstraint {
                     name: "script_requires_running".to_string(),
-                    description: "Script execution requires the VM to be in running state".to_string(),
+                    description: "Script execution requires the VM to be in running state"
+                        .to_string(),
                     rule_type: ConstraintType::StatePrecondition,
                     operations: vec!["execute_script".to_string()],
                 },
                 CompositionConstraint {
                     name: "idempotent_reads".to_string(),
-                    description: "GET operations are idempotent and can be called concurrently".to_string(),
+                    description: "GET operations are idempotent and can be called concurrently"
+                        .to_string(),
                     rule_type: ConstraintType::Idempotent,
                     operations: vec![
                         "list_vms".to_string(),
@@ -2038,44 +2061,43 @@ impl HyperMachineOntology {
                     ],
                 },
             ],
-            patterns: vec![
-                CompositionPattern {
-                    name: "monitor_then_scale".to_string(),
-                    description: "Check metrics and conditionally create additional VMs for scaling".to_string(),
-                    template: ActionPlan {
-                        name: "Monitor and Scale".to_string(),
-                        description: "Check VM load and provision new VM if overloaded".to_string(),
-                        steps: vec![
-                            PlanStep {
-                                step_id: "check_metrics".to_string(),
-                                operation_id: "get_metrics".to_string(),
-                                parameters: serde_json::json!({ "id": "${vm_id}" }),
-                                depends_on: vec![],
-                                timeout_seconds: Some(10),
-                            },
-                            PlanStep {
-                                step_id: "provision_new".to_string(),
-                                operation_id: "create_vm".to_string(),
-                                parameters: serde_json::json!({
-                                    "name": "${new_vm_name}",
-                                    "vcpu_count": 4,
-                                    "memory_gb": 8
-                                }),
-                                depends_on: vec!["check_metrics".to_string()],
-                                timeout_seconds: Some(30),
-                            },
-                            PlanStep {
-                                step_id: "start_new".to_string(),
-                                operation_id: "start_vm".to_string(),
-                                parameters: serde_json::json!({ "id": "${new_vm_id}" }),
-                                depends_on: vec!["provision_new".to_string()],
-                                timeout_seconds: Some(60),
-                            },
-                        ],
-                        rollback_on_failure: true,
-                    },
+            patterns: vec![CompositionPattern {
+                name: "monitor_then_scale".to_string(),
+                description: "Check metrics and conditionally create additional VMs for scaling"
+                    .to_string(),
+                template: ActionPlan {
+                    name: "Monitor and Scale".to_string(),
+                    description: "Check VM load and provision new VM if overloaded".to_string(),
+                    steps: vec![
+                        PlanStep {
+                            step_id: "check_metrics".to_string(),
+                            operation_id: "get_metrics".to_string(),
+                            parameters: serde_json::json!({ "id": "${vm_id}" }),
+                            depends_on: vec![],
+                            timeout_seconds: Some(10),
+                        },
+                        PlanStep {
+                            step_id: "provision_new".to_string(),
+                            operation_id: "create_vm".to_string(),
+                            parameters: serde_json::json!({
+                                "name": "${new_vm_name}",
+                                "vcpu_count": 4,
+                                "memory_gb": 8
+                            }),
+                            depends_on: vec!["check_metrics".to_string()],
+                            timeout_seconds: Some(30),
+                        },
+                        PlanStep {
+                            step_id: "start_new".to_string(),
+                            operation_id: "start_vm".to_string(),
+                            parameters: serde_json::json!({ "id": "${new_vm_id}" }),
+                            depends_on: vec!["provision_new".to_string()],
+                            timeout_seconds: Some(60),
+                        },
+                    ],
+                    rollback_on_failure: true,
                 },
-            ],
+            }],
         }
     }
 
@@ -2097,8 +2119,13 @@ impl HyperMachineOntology {
                 AgentSkill {
                     id: "vm_management".to_string(),
                     name: "Virtual Machine Management".to_string(),
-                    description: "Create, configure, start, stop, and delete virtual machines".to_string(),
-                    tags: vec!["vm".to_string(), "compute".to_string(), "infrastructure".to_string()],
+                    description: "Create, configure, start, stop, and delete virtual machines"
+                        .to_string(),
+                    tags: vec![
+                        "vm".to_string(),
+                        "compute".to_string(),
+                        "infrastructure".to_string(),
+                    ],
                     examples: vec![
                         "Create a VM with 4 CPUs and 8GB RAM".to_string(),
                         "Start all stopped VMs".to_string(),
@@ -2108,8 +2135,14 @@ impl HyperMachineOntology {
                 AgentSkill {
                     id: "gpu_compute".to_string(),
                     name: "GPU Compute Orchestration".to_string(),
-                    description: "Attach GPUs to VMs for AI/ML workloads, manage GPU allocation".to_string(),
-                    tags: vec!["gpu".to_string(), "ai".to_string(), "ml".to_string(), "compute".to_string()],
+                    description: "Attach GPUs to VMs for AI/ML workloads, manage GPU allocation"
+                        .to_string(),
+                    tags: vec![
+                        "gpu".to_string(),
+                        "ai".to_string(),
+                        "ml".to_string(),
+                        "compute".to_string(),
+                    ],
                     examples: vec![
                         "Provision a GPU-enabled VM for training".to_string(),
                         "List available GPUs".to_string(),
@@ -2118,8 +2151,13 @@ impl HyperMachineOntology {
                 AgentSkill {
                     id: "agent_scripting".to_string(),
                     name: "Agent Script Execution".to_string(),
-                    description: "Execute Rhai or WASM scripts in sandboxed VM environments".to_string(),
-                    tags: vec!["agent".to_string(), "script".to_string(), "automation".to_string()],
+                    description: "Execute Rhai or WASM scripts in sandboxed VM environments"
+                        .to_string(),
+                    tags: vec![
+                        "agent".to_string(),
+                        "script".to_string(),
+                        "automation".to_string(),
+                    ],
                     examples: vec![
                         "Run a health check script on VM".to_string(),
                         "Execute a maintenance script across all VMs".to_string(),
@@ -2128,8 +2166,13 @@ impl HyperMachineOntology {
                 AgentSkill {
                     id: "monitoring".to_string(),
                     name: "VM Monitoring and Metrics".to_string(),
-                    description: "Collect CPU, memory, disk, and network metrics for VMs".to_string(),
-                    tags: vec!["monitoring".to_string(), "metrics".to_string(), "observability".to_string()],
+                    description: "Collect CPU, memory, disk, and network metrics for VMs"
+                        .to_string(),
+                    tags: vec![
+                        "monitoring".to_string(),
+                        "metrics".to_string(),
+                        "observability".to_string(),
+                    ],
                     examples: vec![
                         "Get CPU usage for all running VMs".to_string(),
                         "Alert when memory exceeds 90%".to_string(),
@@ -2141,28 +2184,35 @@ impl HyperMachineOntology {
                 schemes: vec!["Ed25519-JWT".to_string(), "mTLS".to_string()],
             },
             default_input_modes: vec!["application/json".to_string()],
-            default_output_modes: vec!["application/json".to_string(), "application/ld+json".to_string()],
+            default_output_modes: vec![
+                "application/json".to_string(),
+                "application/ld+json".to_string(),
+            ],
         }
     }
 
     /// Build the MCP server manifest
     pub fn build_mcp_manifest(&self) -> McpManifest {
-        let tools = self.operations.iter().map(|op| {
-            McpTool {
+        let tools = self
+            .operations
+            .iter()
+            .map(|op| McpTool {
                 name: op.id.clone(),
                 description: op.description.clone(),
                 input_schema: self.build_openai_parameters(op),
-            }
-        }).collect();
+            })
+            .collect();
 
-        let resources = self.resources.iter().map(|r| {
-            McpResource {
+        let resources = self
+            .resources
+            .iter()
+            .map(|r| McpResource {
                 uri: format!("hypermachine://{}s", r.id),
                 name: r.name.clone(),
                 description: r.description.clone(),
                 mime_type: "application/json".to_string(),
-            }
-        }).collect();
+            })
+            .collect();
 
         McpManifest {
             name: "hypermachine".to_string(),
@@ -2185,39 +2235,33 @@ impl HyperMachineOntology {
             OperationContract {
                 operation_id: "create_vm".to_string(),
                 preconditions: vec![],
-                postconditions: vec![
-                    Condition {
-                        description: "VM exists in created state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("created"),
-                    },
-                ],
+                postconditions: vec![Condition {
+                    description: "VM exists in created state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("created"),
+                }],
                 invariants: vec!["VM name must be unique".to_string()],
                 composable_with: vec!["start_vm".to_string(), "delete_vm".to_string()],
                 mutually_exclusive_with: vec![],
             },
             OperationContract {
                 operation_id: "start_vm".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must be in created or stopped state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::In,
-                        value: serde_json::json!(["created", "stopped"]),
-                    },
-                ],
-                postconditions: vec![
-                    Condition {
-                        description: "VM transitions to running state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("running"),
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must be in created or stopped state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::In,
+                    value: serde_json::json!(["created", "stopped"]),
+                }],
+                postconditions: vec![Condition {
+                    description: "VM transitions to running state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("running"),
+                }],
                 invariants: vec![],
                 composable_with: vec![
                     "execute_script".to_string(),
@@ -2229,24 +2273,20 @@ impl HyperMachineOntology {
             },
             OperationContract {
                 operation_id: "stop_vm".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must be in running state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("running"),
-                    },
-                ],
-                postconditions: vec![
-                    Condition {
-                        description: "VM transitions to stopped state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("stopped"),
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must be in running state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("running"),
+                }],
+                postconditions: vec![Condition {
+                    description: "VM transitions to stopped state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("stopped"),
+                }],
                 invariants: vec![],
                 composable_with: vec!["delete_vm".to_string(), "start_vm".to_string()],
                 mutually_exclusive_with: vec![
@@ -2257,72 +2297,60 @@ impl HyperMachineOntology {
             },
             OperationContract {
                 operation_id: "pause_vm".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must be in running state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("running"),
-                    },
-                ],
-                postconditions: vec![
-                    Condition {
-                        description: "VM transitions to paused state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("paused"),
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must be in running state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("running"),
+                }],
+                postconditions: vec![Condition {
+                    description: "VM transitions to paused state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("paused"),
+                }],
                 invariants: vec![],
                 composable_with: vec!["resume_vm".to_string()],
                 mutually_exclusive_with: vec!["stop_vm".to_string(), "start_vm".to_string()],
             },
             OperationContract {
                 operation_id: "resume_vm".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must be in paused state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("paused"),
-                    },
-                ],
-                postconditions: vec![
-                    Condition {
-                        description: "VM transitions to running state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("running"),
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must be in paused state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("paused"),
+                }],
+                postconditions: vec![Condition {
+                    description: "VM transitions to running state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("running"),
+                }],
                 invariants: vec![],
                 composable_with: vec!["stop_vm".to_string(), "execute_script".to_string()],
                 mutually_exclusive_with: vec!["pause_vm".to_string()],
             },
             OperationContract {
                 operation_id: "delete_vm".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must be in stopped or created state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::In,
-                        value: serde_json::json!(["stopped", "created", "error"]),
-                    },
-                ],
-                postconditions: vec![
-                    Condition {
-                        description: "VM no longer exists".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "id".to_string(),
-                        operator: ConditionOperator::NotExists,
-                        value: serde_json::Value::Null,
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must be in stopped or created state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::In,
+                    value: serde_json::json!(["stopped", "created", "error"]),
+                }],
+                postconditions: vec![Condition {
+                    description: "VM no longer exists".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "id".to_string(),
+                    operator: ConditionOperator::NotExists,
+                    value: serde_json::Value::Null,
+                }],
                 invariants: vec!["Operation is irreversible".to_string()],
                 composable_with: vec![],
                 mutually_exclusive_with: vec![
@@ -2333,15 +2361,13 @@ impl HyperMachineOntology {
             },
             OperationContract {
                 operation_id: "execute_script".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must be in running state".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "state".to_string(),
-                        operator: ConditionOperator::Equals,
-                        value: serde_json::json!("running"),
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must be in running state".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "state".to_string(),
+                    operator: ConditionOperator::Equals,
+                    value: serde_json::json!("running"),
+                }],
                 postconditions: vec![],
                 invariants: vec![
                     "Script runs in sandboxed environment".to_string(),
@@ -2364,15 +2390,13 @@ impl HyperMachineOntology {
             },
             OperationContract {
                 operation_id: "get_vm".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must exist".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "id".to_string(),
-                        operator: ConditionOperator::Exists,
-                        value: serde_json::Value::Null,
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must exist".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "id".to_string(),
+                    operator: ConditionOperator::Exists,
+                    value: serde_json::Value::Null,
+                }],
                 postconditions: vec![],
                 invariants: vec!["Read-only operation".to_string()],
                 composable_with: vec![
@@ -2385,15 +2409,13 @@ impl HyperMachineOntology {
             },
             OperationContract {
                 operation_id: "get_metrics".to_string(),
-                preconditions: vec![
-                    Condition {
-                        description: "VM must exist".to_string(),
-                        resource_type: "vm".to_string(),
-                        field: "id".to_string(),
-                        operator: ConditionOperator::Exists,
-                        value: serde_json::Value::Null,
-                    },
-                ],
+                preconditions: vec![Condition {
+                    description: "VM must exist".to_string(),
+                    resource_type: "vm".to_string(),
+                    field: "id".to_string(),
+                    operator: ConditionOperator::Exists,
+                    value: serde_json::Value::Null,
+                }],
                 postconditions: vec![],
                 invariants: vec!["Read-only operation".to_string()],
                 composable_with: vec![
@@ -2480,7 +2502,11 @@ impl HyperMachineOntology {
             // Simulate execution based on operation type
             let (success, output, error) = match op {
                 Some(op) => Self::simulate_operation(op, &params),
-                None => (false, None, Some(format!("Operation '{}' not found", step.operation_id))),
+                None => (
+                    false,
+                    None,
+                    Some(format!("Operation '{}' not found", step.operation_id)),
+                ),
             };
 
             step_results.push(PlanStepResult {
@@ -2548,13 +2574,16 @@ impl HyperMachineOntology {
                 }
             }
             // In-degree of this step = number of its dependencies that exist as steps
-            let valid_deps = step.depends_on.iter()
+            let valid_deps = step
+                .depends_on
+                .iter()
                 .filter(|d| step_map.contains_key(d.as_str()))
                 .count();
             in_degree.insert(step.step_id.as_str(), valid_deps);
         }
 
-        let mut queue: std::collections::VecDeque<&str> = in_degree.iter()
+        let mut queue: std::collections::VecDeque<&str> = in_degree
+            .iter()
             .filter(|(_, &deg)| deg == 0)
             .map(|(&id, _)| id)
             .collect();
@@ -2615,11 +2644,11 @@ impl HyperMachineOntology {
                 }
                 serde_json::Value::Object(new_map)
             }
-            serde_json::Value::Array(arr) => {
-                serde_json::Value::Array(
-                    arr.iter().map(|v| Self::substitute_variables(v, variables)).collect(),
-                )
-            }
+            serde_json::Value::Array(arr) => serde_json::Value::Array(
+                arr.iter()
+                    .map(|v| Self::substitute_variables(v, variables))
+                    .collect(),
+            ),
             other => other.clone(),
         }
     }
@@ -2635,7 +2664,8 @@ impl HyperMachineOntology {
     ) -> (bool, Option<serde_json::Value>, Option<String>) {
         match op.id.as_str() {
             "create_vm" => {
-                let name = params.get("name")
+                let name = params
+                    .get("name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("unnamed");
                 let vm_id = format!("vm-{:06x}", {
@@ -2644,16 +2674,23 @@ impl HyperMachineOntology {
                     name.hash(&mut h);
                     h.finish() as u32 & 0xFFFFFF
                 });
-                (true, Some(serde_json::json!({
-                    "id": vm_id,
-                    "name": name,
-                    "state": "created",
-                    "vcpu_count": params.get("vcpu_count").unwrap_or(&serde_json::json!(2)),
-                    "memory_gb": params.get("memory_gb").unwrap_or(&serde_json::json!(4)),
-                })), None)
+                (
+                    true,
+                    Some(serde_json::json!({
+                        "id": vm_id,
+                        "name": name,
+                        "state": "created",
+                        "vcpu_count": params.get("vcpu_count").unwrap_or(&serde_json::json!(2)),
+                        "memory_gb": params.get("memory_gb").unwrap_or(&serde_json::json!(4)),
+                    })),
+                    None,
+                )
             }
             "start_vm" | "stop_vm" | "pause_vm" | "resume_vm" => {
-                let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
+                let id = params
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
                 let new_state = match op.id.as_str() {
                     "start_vm" => "running",
                     "stop_vm" => "stopped",
@@ -2661,40 +2698,59 @@ impl HyperMachineOntology {
                     "resume_vm" => "running",
                     _ => "unknown",
                 };
-                (true, Some(serde_json::json!({
-                    "id": id,
-                    "operation": op.id,
-                    "success": true,
-                    "new_state": new_state,
-                })), None)
+                (
+                    true,
+                    Some(serde_json::json!({
+                        "id": id,
+                        "operation": op.id,
+                        "success": true,
+                        "new_state": new_state,
+                    })),
+                    None,
+                )
             }
             "delete_vm" => {
-                let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("unknown");
-                (true, Some(serde_json::json!({
-                    "id": id,
-                    "deleted": true,
-                })), None)
+                let id = params
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                (
+                    true,
+                    Some(serde_json::json!({
+                        "id": id,
+                        "deleted": true,
+                    })),
+                    None,
+                )
             }
-            "execute_script" => {
-                (true, Some(serde_json::json!({
+            "execute_script" => (
+                true,
+                Some(serde_json::json!({
                     "execution_id": "sim-exec-001",
                     "status": "completed",
                     "output": "simulated script output",
                     "duration_ms": 10,
-                })), None)
-            }
-            "get_vm" | "list_vms" | "get_metrics" => {
-                (true, Some(serde_json::json!({
+                })),
+                None,
+            ),
+            "get_vm" | "list_vms" | "get_metrics" => (
+                true,
+                Some(serde_json::json!({
                     "operation": op.id,
                     "simulated": true,
-                })), None)
-            }
+                })),
+                None,
+            ),
             _ => {
                 // Unknown operations succeed with empty output
-                (true, Some(serde_json::json!({
-                    "operation": op.id,
-                    "simulated": true,
-                })), None)
+                (
+                    true,
+                    Some(serde_json::json!({
+                        "operation": op.id,
+                        "simulated": true,
+                    })),
+                    None,
+                )
             }
         }
     }
@@ -3085,7 +3141,10 @@ impl HyperMachineOntology {
     }
 
     /// Instantiate a plan template with the given parameters
-    pub fn instantiate_template(&self, request: &TemplateInstantiationRequest) -> TemplateInstantiationResult {
+    pub fn instantiate_template(
+        &self,
+        request: &TemplateInstantiationRequest,
+    ) -> TemplateInstantiationResult {
         let template = match Self::get_template(&request.template_id) {
             Some(t) => t,
             None => {
@@ -3138,11 +3197,14 @@ impl HyperMachineOntology {
                 plan: template.plan.clone(),
                 validation: PlanValidationResult {
                     valid: false,
-                    errors: missing_parameters.iter().map(|p| PlanValidationError {
-                        step_id: String::new(),
-                        error_type: "missing_parameter".to_string(),
-                        message: format!("Required parameter '{}' not provided", p),
-                    }).collect(),
+                    errors: missing_parameters
+                        .iter()
+                        .map(|p| PlanValidationError {
+                            step_id: String::new(),
+                            error_type: "missing_parameter".to_string(),
+                            message: format!("Required parameter '{}' not provided", p),
+                        })
+                        .collect(),
                     resolved_steps: vec![],
                     warnings: vec![],
                     estimated_duration_ms: None,
@@ -3156,8 +3218,8 @@ impl HyperMachineOntology {
         // Substitute variables in the plan
         let plan_json = serde_json::to_value(&template.plan).unwrap_or_default();
         let resolved_json = Self::substitute_variables(&plan_json, &variables);
-        let instantiated_plan: ActionPlan = serde_json::from_value(resolved_json)
-            .unwrap_or_else(|_| template.plan.clone());
+        let instantiated_plan: ActionPlan =
+            serde_json::from_value(resolved_json).unwrap_or_else(|_| template.plan.clone());
 
         // Validate the instantiated plan
         let validation = self.validate_plan(&instantiated_plan);
@@ -3184,7 +3246,6 @@ impl HyperMachineOntology {
             missing_parameters,
         }
     }
-
 }
 
 // ============================================================================
@@ -3208,16 +3269,28 @@ where
         .route("/agentic/tools/openai", get(get_openai_tools))
         .route("/agentic/tools/anthropic", get(get_anthropic_tools))
         .route("/agentic/tools/gemini", get(get_gemini_tools))
-        .route("/agentic/affordances/{resource_type}/{state}", get(get_affordances))
-        .route("/agentic/plans/validate", axum::routing::post(validate_plan))
-        .route("/agentic/plans/execute", axum::routing::post(execute_plan_handler))
+        .route(
+            "/agentic/affordances/{resource_type}/{state}",
+            get(get_affordances),
+        )
+        .route(
+            "/agentic/plans/validate",
+            axum::routing::post(validate_plan),
+        )
+        .route(
+            "/agentic/plans/execute",
+            axum::routing::post(execute_plan_handler),
+        )
         .route("/agentic/compose", get(get_composition_rules))
         .route("/agentic/graph", get(get_resource_graph))
         .route("/agentic/contracts", get(get_operation_contracts))
         .route("/agentic/mcp", get(get_mcp_manifest))
         .route("/.well-known/ai-plugin.json", get(get_ai_plugin_manifest))
         .route("/.well-known/agent.json", get(get_agent_card))
-        .route("/agentic/templates", get(list_templates).post(instantiate_template_handler))
+        .route(
+            "/agentic/templates",
+            get(list_templates).post(instantiate_template_handler),
+        )
         .route("/agentic/templates/{id}", get(get_template_handler))
 }
 
@@ -3316,7 +3389,6 @@ async fn get_ai_plugin_manifest() -> Json<AiPluginManifest> {
     })
 }
 
-
 /// Query parameters for affordance lookup
 #[derive(Debug, Deserialize)]
 pub struct AffordanceQuery {
@@ -3360,11 +3432,12 @@ async fn get_agent_card() -> Json<AgentCard> {
     Json(ontology.build_agent_card())
 }
 
-async fn execute_plan_handler(Json(request): Json<PlanExecutionRequest>) -> Json<PlanExecutionResult> {
+async fn execute_plan_handler(
+    Json(request): Json<PlanExecutionRequest>,
+) -> Json<PlanExecutionResult> {
     let ontology = HyperMachineOntology::build();
     Json(ontology.execute_plan(&request))
 }
-
 
 /// Query parameters for template listing
 #[derive(Debug, Deserialize)]
@@ -3396,23 +3469,33 @@ async fn list_templates(Query(query): Query<TemplateQuery>) -> Json<Vec<PlanTemp
 }
 
 /// Get a specific plan template by ID
-async fn get_template_handler(axum::extract::Path(id): axum::extract::Path<String>) -> impl axum::response::IntoResponse {
+async fn get_template_handler(
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> impl axum::response::IntoResponse {
     match HyperMachineOntology::get_template(&id) {
-        Some(template) => (axum::http::StatusCode::OK, Json(serde_json::to_value(template).unwrap())).into_response(),
-        None => (axum::http::StatusCode::NOT_FOUND, Json(serde_json::json!({
-            "error": "template_not_found",
-            "message": format!("Template '{}' not found", id)
-        }))).into_response(),
+        Some(template) => (
+            axum::http::StatusCode::OK,
+            Json(serde_json::to_value(template).unwrap()),
+        )
+            .into_response(),
+        None => (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "template_not_found",
+                "message": format!("Template '{}' not found", id)
+            })),
+        )
+            .into_response(),
     }
 }
 
 /// Instantiate a plan template with parameters, optionally executing it
-async fn instantiate_template_handler(Json(request): Json<TemplateInstantiationRequest>) -> Json<TemplateInstantiationResult> {
+async fn instantiate_template_handler(
+    Json(request): Json<TemplateInstantiationRequest>,
+) -> Json<TemplateInstantiationResult> {
     let ontology = HyperMachineOntology::build();
     Json(ontology.instantiate_template(&request))
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -3457,20 +3540,40 @@ mod tests {
         assert_eq!(aff.current_state, "running");
         assert!(!aff.available_operations.is_empty());
         // Running state should allow stop, pause, execute_script, get_metrics
-        let op_ids: Vec<&str> = aff.available_operations.iter().map(|o| o.operation_id.as_str()).collect();
-        assert!(op_ids.contains(&"stop_vm"), "running state should allow stop");
-        assert!(op_ids.contains(&"pause_vm"), "running state should allow pause");
-        assert!(op_ids.contains(&"execute_script"), "running state should allow script execution");
+        let op_ids: Vec<&str> = aff
+            .available_operations
+            .iter()
+            .map(|o| o.operation_id.as_str())
+            .collect();
+        assert!(
+            op_ids.contains(&"stop_vm"),
+            "running state should allow stop"
+        );
+        assert!(
+            op_ids.contains(&"pause_vm"),
+            "running state should allow pause"
+        );
+        assert!(
+            op_ids.contains(&"execute_script"),
+            "running state should allow script execution"
+        );
     }
 
     #[test]
     fn test_affordances_stopped_state() {
         let ontology = HyperMachineOntology::build();
         let aff = ontology.get_affordances("vm", "stopped");
-        let op_ids: Vec<&str> = aff.available_operations.iter().map(|o| o.operation_id.as_str()).collect();
+        let op_ids: Vec<&str> = aff
+            .available_operations
+            .iter()
+            .map(|o| o.operation_id.as_str())
+            .collect();
         assert!(op_ids.contains(&"start_vm"));
         assert!(op_ids.contains(&"delete_vm"));
-        assert!(!op_ids.contains(&"stop_vm"), "stopped state should not allow stop");
+        assert!(
+            !op_ids.contains(&"stop_vm"),
+            "stopped state should not allow stop"
+        );
     }
 
     #[test]
@@ -3478,7 +3581,11 @@ mod tests {
         let ontology = HyperMachineOntology::build();
         let aff = ontology.get_affordances("vm", "running");
         assert!(!aff.possible_transitions.is_empty());
-        let targets: Vec<&str> = aff.possible_transitions.iter().map(|t| t.target_state.as_str()).collect();
+        let targets: Vec<&str> = aff
+            .possible_transitions
+            .iter()
+            .map(|t| t.target_state.as_str())
+            .collect();
         assert!(targets.contains(&"paused"));
         assert!(targets.contains(&"stopping"));
     }
@@ -3534,15 +3641,13 @@ mod tests {
         let plan = ActionPlan {
             name: "Bad Plan".to_string(),
             description: "Uses unknown operation".to_string(),
-            steps: vec![
-                PlanStep {
-                    step_id: "s1".to_string(),
-                    operation_id: "fly_to_moon".to_string(),
-                    parameters: serde_json::json!({}),
-                    depends_on: vec![],
-                    timeout_seconds: None,
-                },
-            ],
+            steps: vec![PlanStep {
+                step_id: "s1".to_string(),
+                operation_id: "fly_to_moon".to_string(),
+                parameters: serde_json::json!({}),
+                depends_on: vec![],
+                timeout_seconds: None,
+            }],
             rollback_on_failure: false,
         };
         let result = ontology.validate_plan(&plan);
@@ -3556,20 +3661,21 @@ mod tests {
         let plan = ActionPlan {
             name: "Bad Deps".to_string(),
             description: "References nonexistent step".to_string(),
-            steps: vec![
-                PlanStep {
-                    step_id: "s1".to_string(),
-                    operation_id: "create_vm".to_string(),
-                    parameters: serde_json::json!({}),
-                    depends_on: vec!["nonexistent".to_string()],
-                    timeout_seconds: None,
-                },
-            ],
+            steps: vec![PlanStep {
+                step_id: "s1".to_string(),
+                operation_id: "create_vm".to_string(),
+                parameters: serde_json::json!({}),
+                depends_on: vec!["nonexistent".to_string()],
+                timeout_seconds: None,
+            }],
             rollback_on_failure: false,
         };
         let result = ontology.validate_plan(&plan);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.error_type == "invalid_dependency"));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.error_type == "invalid_dependency"));
     }
 
     #[test]
@@ -3578,20 +3684,21 @@ mod tests {
         let plan = ActionPlan {
             name: "Self Dep".to_string(),
             description: "Step depends on itself".to_string(),
-            steps: vec![
-                PlanStep {
-                    step_id: "s1".to_string(),
-                    operation_id: "list_vms".to_string(),
-                    parameters: serde_json::json!({}),
-                    depends_on: vec!["s1".to_string()],
-                    timeout_seconds: None,
-                },
-            ],
+            steps: vec![PlanStep {
+                step_id: "s1".to_string(),
+                operation_id: "list_vms".to_string(),
+                parameters: serde_json::json!({}),
+                depends_on: vec!["s1".to_string()],
+                timeout_seconds: None,
+            }],
             rollback_on_failure: false,
         };
         let result = ontology.validate_plan(&plan);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.error_type == "circular_dependency"));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.error_type == "circular_dependency"));
     }
 
     #[test]
@@ -3620,7 +3727,10 @@ mod tests {
         };
         let result = ontology.validate_plan(&plan);
         assert!(!result.valid);
-        assert!(result.errors.iter().any(|e| e.error_type == "duplicate_step_id"));
+        assert!(result
+            .errors
+            .iter()
+            .any(|e| e.error_type == "duplicate_step_id"));
     }
 
     #[test]
@@ -3642,7 +3752,10 @@ mod tests {
         assert!(!rules.constraints.is_empty());
         assert!(!rules.patterns.is_empty());
         // Check provision_and_start workflow exists
-        assert!(rules.workflows.iter().any(|w| w.id == "provision_and_start"));
+        assert!(rules
+            .workflows
+            .iter()
+            .any(|w| w.id == "provision_and_start"));
     }
 
     #[test]
@@ -3656,7 +3769,11 @@ mod tests {
             let orders: Vec<u32> = workflow.steps.iter().map(|s| s.order).collect();
             let mut sorted = orders.clone();
             sorted.sort();
-            assert_eq!(orders, sorted, "Workflow {} steps not in order", workflow.id);
+            assert_eq!(
+                orders, sorted,
+                "Workflow {} steps not in order",
+                workflow.id
+            );
         }
     }
 
@@ -3665,11 +3782,17 @@ mod tests {
         let contracts = HyperMachineOntology::build_operation_contracts();
         assert!(!contracts.is_empty());
         // start_vm should have preconditions
-        let start = contracts.iter().find(|c| c.operation_id == "start_vm").unwrap();
+        let start = contracts
+            .iter()
+            .find(|c| c.operation_id == "start_vm")
+            .unwrap();
         assert!(!start.preconditions.is_empty());
         assert!(!start.postconditions.is_empty());
         // create_vm should have no preconditions
-        let create = contracts.iter().find(|c| c.operation_id == "create_vm").unwrap();
+        let create = contracts
+            .iter()
+            .find(|c| c.operation_id == "create_vm")
+            .unwrap();
         assert!(create.preconditions.is_empty());
         assert!(!create.postconditions.is_empty());
     }
@@ -3678,11 +3801,21 @@ mod tests {
     fn test_operation_contracts_composability() {
         let contracts = HyperMachineOntology::build_operation_contracts();
         // start_vm should be composable with execute_script
-        let start = contracts.iter().find(|c| c.operation_id == "start_vm").unwrap();
-        assert!(start.composable_with.contains(&"execute_script".to_string()));
+        let start = contracts
+            .iter()
+            .find(|c| c.operation_id == "start_vm")
+            .unwrap();
+        assert!(start
+            .composable_with
+            .contains(&"execute_script".to_string()));
         // delete_vm should be mutually exclusive with start_vm
-        let delete = contracts.iter().find(|c| c.operation_id == "delete_vm").unwrap();
-        assert!(delete.mutually_exclusive_with.contains(&"start_vm".to_string()));
+        let delete = contracts
+            .iter()
+            .find(|c| c.operation_id == "delete_vm")
+            .unwrap();
+        assert!(delete
+            .mutually_exclusive_with
+            .contains(&"start_vm".to_string()));
     }
 
     #[test]
@@ -3731,8 +3864,11 @@ mod tests {
         // MCP tools should map 1:1 from operations
         assert_eq!(mcp.tools.len(), ontology.operations.len());
         for tool in &mcp.tools {
-            assert!(ontology.operations.iter().any(|op| op.id == tool.name),
-                "MCP tool '{}' has no matching operation", tool.name);
+            assert!(
+                ontology.operations.iter().any(|op| op.id == tool.name),
+                "MCP tool '{}' has no matching operation",
+                tool.name
+            );
         }
     }
 
@@ -3741,23 +3877,43 @@ mod tests {
         let ontology = HyperMachineOntology::build();
         let aff = ontology.get_affordances("vm", "running");
         // pause should be reversible (resume goes back to running)
-        let pause_trans = aff.possible_transitions.iter()
+        let pause_trans = aff
+            .possible_transitions
+            .iter()
             .find(|t| t.trigger_operation == "pause_vm");
         assert!(pause_trans.is_some());
-        assert!(pause_trans.unwrap().reversible, "pause should be reversible");
+        assert!(
+            pause_trans.unwrap().reversible,
+            "pause should be reversible"
+        );
     }
 
     #[test]
     fn test_condition_operators() {
         let contracts = HyperMachineOntology::build_operation_contracts();
         // start_vm uses In operator for precondition
-        let start = contracts.iter().find(|c| c.operation_id == "start_vm").unwrap();
-        assert!(start.preconditions.iter().any(|c| c.operator == ConditionOperator::In));
+        let start = contracts
+            .iter()
+            .find(|c| c.operation_id == "start_vm")
+            .unwrap();
+        assert!(start
+            .preconditions
+            .iter()
+            .any(|c| c.operator == ConditionOperator::In));
         // delete_vm uses In for precondition too
-        let delete = contracts.iter().find(|c| c.operation_id == "delete_vm").unwrap();
-        assert!(delete.preconditions.iter().any(|c| c.operator == ConditionOperator::In));
+        let delete = contracts
+            .iter()
+            .find(|c| c.operation_id == "delete_vm")
+            .unwrap();
+        assert!(delete
+            .preconditions
+            .iter()
+            .any(|c| c.operator == ConditionOperator::In));
         // delete postcondition uses NotExists
-        assert!(delete.postconditions.iter().any(|c| c.operator == ConditionOperator::NotExists));
+        assert!(delete
+            .postconditions
+            .iter()
+            .any(|c| c.operator == ConditionOperator::NotExists));
     }
 
     #[test]
@@ -3870,7 +4026,10 @@ mod tests {
         };
         let result = ontology.execute_plan(&request);
         assert_eq!(result.status, PlanExecutionStatus::Completed);
-        assert!(result.step_results.is_empty(), "Dry run should not execute steps");
+        assert!(
+            result.step_results.is_empty(),
+            "Dry run should not execute steps"
+        );
         assert!(result.validation.valid);
     }
 
@@ -4073,8 +4232,15 @@ mod tests {
         assert_eq!(result.step_results.len(), 6);
         assert!(result.step_results.iter().all(|s| s.success));
         // Verify execution order follows dependency chain
-        let order: Vec<&str> = result.step_results.iter().map(|s| s.step_id.as_str()).collect();
-        assert_eq!(order, vec!["create", "start", "pause", "resume", "stop", "delete"]);
+        let order: Vec<&str> = result
+            .step_results
+            .iter()
+            .map(|s| s.step_id.as_str())
+            .collect();
+        assert_eq!(
+            order,
+            vec!["create", "start", "pause", "resume", "stop", "delete"]
+        );
     }
 
     #[test]
@@ -4158,8 +4324,14 @@ mod tests {
         assert_eq!(sorted.len(), 3);
         // a must come before b, b must come before c
         let ids: Vec<&str> = sorted.iter().map(|s| s.step_id.as_str()).collect();
-        assert!(ids.iter().position(|&x| x == "a").unwrap() < ids.iter().position(|&x| x == "b").unwrap());
-        assert!(ids.iter().position(|&x| x == "b").unwrap() < ids.iter().position(|&x| x == "c").unwrap());
+        assert!(
+            ids.iter().position(|&x| x == "a").unwrap()
+                < ids.iter().position(|&x| x == "b").unwrap()
+        );
+        assert!(
+            ids.iter().position(|&x| x == "b").unwrap()
+                < ids.iter().position(|&x| x == "c").unwrap()
+        );
     }
 
     #[test]
@@ -4193,7 +4365,11 @@ mod tests {
     #[test]
     fn test_simulate_create_vm() {
         let ontology = HyperMachineOntology::build();
-        let op = ontology.operations.iter().find(|o| o.id == "create_vm").unwrap();
+        let op = ontology
+            .operations
+            .iter()
+            .find(|o| o.id == "create_vm")
+            .unwrap();
         let params = serde_json::json!({"name": "sim-vm", "vcpu_count": 8});
         let (success, output, error) = HyperMachineOntology::simulate_operation(op, &params);
         assert!(success);
@@ -4247,7 +4423,11 @@ mod tests {
     #[test]
     fn test_build_templates_non_empty() {
         let templates = HyperMachineOntology::build_templates();
-        assert!(templates.len() >= 6, "Should have at least 6 templates, got {}", templates.len());
+        assert!(
+            templates.len() >= 6,
+            "Should have at least 6 templates, got {}",
+            templates.len()
+        );
         // All templates should have unique IDs
         let ids: Vec<&str> = templates.iter().map(|t| t.id.as_str()).collect();
         let unique: std::collections::HashSet<&str> = ids.iter().copied().collect();
@@ -4289,10 +4469,13 @@ mod tests {
             // Templates with operations like create_snapshot/restore_snapshot
             // may not validate since those ops aren't in the base ontology.
             // But lifecycle and monitoring templates should validate.
-            if template.category == TemplateCategory::Lifecycle || template.category == TemplateCategory::Monitoring {
+            if template.category == TemplateCategory::Lifecycle
+                || template.category == TemplateCategory::Monitoring
+            {
                 assert!(
                     validation.valid || !validation.errors.is_empty(),
-                    "Template '{}' should have validation result", template.id
+                    "Template '{}' should have validation result",
+                    template.id
                 );
             }
         }
@@ -4318,7 +4501,10 @@ mod tests {
         assert!(result.defaults_applied.contains(&"memory_mb".to_string()));
         // Plan should have variable substituted
         assert!(result.plan.name.contains("test-server"));
-        assert!(result.execution.is_none(), "Should not execute when execute=false");
+        assert!(
+            result.execution.is_none(),
+            "Should not execute when execute=false"
+        );
     }
 
     #[test]
@@ -4336,7 +4522,10 @@ mod tests {
             dry_run: None,
         };
         let result = ontology.instantiate_template(&request);
-        assert!(result.defaults_applied.is_empty(), "No defaults should be applied when all params provided");
+        assert!(
+            result.defaults_applied.is_empty(),
+            "No defaults should be applied when all params provided"
+        );
         assert!(result.missing_parameters.is_empty());
     }
 
@@ -4365,7 +4554,11 @@ mod tests {
         };
         let result = ontology.instantiate_template(&request);
         assert!(!result.validation.valid);
-        assert!(result.validation.errors.iter().any(|e| e.error_type == "template_not_found"));
+        assert!(result
+            .validation
+            .errors
+            .iter()
+            .any(|e| e.error_type == "template_not_found"));
     }
 
     #[test]
@@ -4403,7 +4596,10 @@ mod tests {
         assert!(result.execution.is_some());
         let exec = result.execution.unwrap();
         assert_eq!(exec.status, PlanExecutionStatus::Completed);
-        assert!(exec.step_results.is_empty(), "Dry run should not execute steps");
+        assert!(
+            exec.step_results.is_empty(),
+            "Dry run should not execute steps"
+        );
     }
 
     #[test]
@@ -4466,10 +4662,19 @@ mod tests {
     fn test_template_version() {
         let templates = HyperMachineOntology::build_templates();
         for template in &templates {
-            assert!(!template.version.is_empty(), "Template '{}' must have a version", template.id);
+            assert!(
+                !template.version.is_empty(),
+                "Template '{}' must have a version",
+                template.id
+            );
             // Should be semver-like
             let parts: Vec<&str> = template.version.split('.').collect();
-            assert_eq!(parts.len(), 3, "Template '{}' version should be semver", template.id);
+            assert_eq!(
+                parts.len(),
+                3,
+                "Template '{}' version should be semver",
+                template.id
+            );
         }
     }
 
@@ -4477,7 +4682,11 @@ mod tests {
     fn test_template_tags_non_empty() {
         let templates = HyperMachineOntology::build_templates();
         for template in &templates {
-            assert!(!template.tags.is_empty(), "Template '{}' must have at least one tag", template.id);
+            assert!(
+                !template.tags.is_empty(),
+                "Template '{}' must have at least one tag",
+                template.id
+            );
         }
     }
 
@@ -4486,8 +4695,18 @@ mod tests {
         let templates = HyperMachineOntology::build_templates();
         for template in &templates {
             for param in &template.parameters {
-                assert!(!param.label.is_empty(), "Parameter '{}' in template '{}' must have a label", param.name, template.id);
-                assert!(!param.description.is_empty(), "Parameter '{}' in template '{}' must have a description", param.name, template.id);
+                assert!(
+                    !param.label.is_empty(),
+                    "Parameter '{}' in template '{}' must have a label",
+                    param.name,
+                    template.id
+                );
+                assert!(
+                    !param.description.is_empty(),
+                    "Parameter '{}' in template '{}' must have a description",
+                    param.name,
+                    template.id
+                );
             }
         }
     }

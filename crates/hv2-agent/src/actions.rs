@@ -544,29 +544,29 @@ impl ActionValidator {
 
         // Validate specific action parameters
         match &request.action {
-            AgentAction::Resource(ResourceAction::SetMemory { bytes }) => {
-                if *bytes > self.max_memory {
-                    return Err(ActionError::InvalidParameters(format!(
-                        "Memory {} exceeds maximum {}",
-                        bytes, self.max_memory
-                    )));
-                }
+            AgentAction::Resource(ResourceAction::SetMemory { bytes })
+                if *bytes > self.max_memory =>
+            {
+                return Err(ActionError::InvalidParameters(format!(
+                    "Memory {} exceeds maximum {}",
+                    bytes, self.max_memory
+                )));
             }
-            AgentAction::Resource(ResourceAction::SetCpuCount { count }) => {
-                if *count > self.max_cpus {
-                    return Err(ActionError::InvalidParameters(format!(
-                        "CPU count {} exceeds maximum {}",
-                        count, self.max_cpus
-                    )));
-                }
+            AgentAction::Resource(ResourceAction::SetCpuCount { count })
+                if *count > self.max_cpus =>
+            {
+                return Err(ActionError::InvalidParameters(format!(
+                    "CPU count {} exceeds maximum {}",
+                    count, self.max_cpus
+                )));
             }
-            AgentAction::Resource(ResourceAction::HotAddCpu { count }) => {
-                if *count > self.max_cpus {
-                    return Err(ActionError::InvalidParameters(format!(
-                        "CPU count {} exceeds maximum {}",
-                        count, self.max_cpus
-                    )));
-                }
+            AgentAction::Resource(ResourceAction::HotAddCpu { count })
+                if *count > self.max_cpus =>
+            {
+                return Err(ActionError::InvalidParameters(format!(
+                    "CPU count {} exceeds maximum {}",
+                    count, self.max_cpus
+                )));
             }
             _ => {}
         }
@@ -698,9 +698,7 @@ impl ActionQueue {
 
     /// Mark action as complete
     pub fn complete(&self, request_id: u64) {
-        self.in_progress
-            .lock()
-            .retain(|id| *id != request_id);
+        self.in_progress.lock().retain(|id| *id != request_id);
     }
 
     /// Get pending count

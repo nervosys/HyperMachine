@@ -1,4 +1,4 @@
-﻿//! Apple Hypervisor Framework (HVF) FFI bindings
+//! Apple Hypervisor Framework (HVF) FFI bindings
 //!
 //! Raw FFI declarations for macOS Hypervisor.framework API.
 //! These bindings provide access to the hardware-accelerated virtualization

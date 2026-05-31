@@ -254,7 +254,12 @@ impl HypervisorBackend for MockHypervisorBackend {
                     tracing::debug!("VM Exit #{}: Hypercall nr={:#x}", count, nr);
                 }
                 VmExit::SystemEvent { type_, flags } => {
-                    tracing::debug!("VM Exit #{}: SystemEvent type={} flags={:#x}", count, type_, flags);
+                    tracing::debug!(
+                        "VM Exit #{}: SystemEvent type={} flags={:#x}",
+                        count,
+                        type_,
+                        flags
+                    );
                 }
                 VmExit::Nmi => {
                     tracing::debug!("VM Exit #{}: NMI", count);
@@ -263,7 +268,12 @@ impl HypervisorBackend for MockHypervisorBackend {
                     tracing::debug!("VM Exit #{}: RDMSR index={:#x}", count, index);
                 }
                 VmExit::Wrmsr { index, data } => {
-                    tracing::debug!("VM Exit #{}: WRMSR index={:#x} data={:#x}", count, index, data);
+                    tracing::debug!(
+                        "VM Exit #{}: WRMSR index={:#x} data={:#x}",
+                        count,
+                        index,
+                        data
+                    );
                 }
                 VmExit::IoapicEoi { vector } => {
                     tracing::debug!("VM Exit #{}: IOAPIC EOI vector={}", count, vector);

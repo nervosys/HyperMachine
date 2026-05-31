@@ -317,12 +317,21 @@ impl PhysicalFunction {
 
     /// Get VF by index
     pub fn get_vf(&self, index: u16) -> Option<VirtualFunction> {
-        self.vfs.read().unwrap_or_else(|e| e.into_inner()).get(&index).cloned()
+        self.vfs
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&index)
+            .cloned()
     }
 
     /// Get all VFs
     pub fn list_vfs(&self) -> Vec<VirtualFunction> {
-        self.vfs.read().unwrap_or_else(|e| e.into_inner()).values().cloned().collect()
+        self.vfs
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .cloned()
+            .collect()
     }
 
     /// Assign VF to VM
@@ -526,14 +535,21 @@ impl SriovManager {
     pub fn register_pf(&self, pf: PhysicalFunction) -> PciAddress {
         let address = pf.address;
         let arc_pf = Arc::new(pf);
-        self.pfs.write().unwrap_or_else(|e| e.into_inner()).insert(address, arc_pf);
+        self.pfs
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(address, arc_pf);
         self.stats.total_pfs.fetch_add(1, Ordering::Relaxed);
         address
     }
 
     /// Unregister physical function
     pub fn unregister_pf(&self, address: PciAddress) -> Option<Arc<PhysicalFunction>> {
-        let pf = self.pfs.write().unwrap_or_else(|e| e.into_inner()).remove(&address);
+        let pf = self
+            .pfs
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&address);
         if pf.is_some() {
             self.stats.total_pfs.fetch_sub(1, Ordering::Relaxed);
         }
@@ -542,12 +558,21 @@ impl SriovManager {
 
     /// Get physical function
     pub fn get_pf(&self, address: PciAddress) -> Option<Arc<PhysicalFunction>> {
-        self.pfs.read().unwrap_or_else(|e| e.into_inner()).get(&address).cloned()
+        self.pfs
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&address)
+            .cloned()
     }
 
     /// List all PFs
     pub fn list_pfs(&self) -> Vec<PciAddress> {
-        self.pfs.read().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect()
+        self.pfs
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Assign device to VM
@@ -558,7 +583,12 @@ impl SriovManager {
         guest_address: Option<PciAddress>,
     ) -> Result<DeviceAssignment, SriovError> {
         // Check if already assigned
-        if self.assignments.read().unwrap_or_else(|e| e.into_inner()).contains_key(&device) {
+        if self
+            .assignments
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(&device)
+        {
             return Err(SriovError::DeviceBusy);
         }
 
@@ -582,7 +612,13 @@ impl SriovManager {
 
     /// Release device from VM
     pub fn release_device(&self, device: PciAddress) -> Result<(), SriovError> {
-        if self.assignments.write().unwrap_or_else(|e| e.into_inner()).remove(&device).is_some() {
+        if self
+            .assignments
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&device)
+            .is_some()
+        {
             self.stats.releases.fetch_add(1, Ordering::Relaxed);
             Ok(())
         } else {
@@ -592,7 +628,11 @@ impl SriovManager {
 
     /// Get device assignment
     pub fn get_assignment(&self, device: PciAddress) -> Option<DeviceAssignment> {
-        self.assignments.read().unwrap_or_else(|e| e.into_inner()).get(&device).cloned()
+        self.assignments
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&device)
+            .cloned()
     }
 
     /// List assignments for VM

@@ -155,7 +155,11 @@ impl KvmBackend {
 
             let max_vcpus = {
                 let v = query_cap(KVM_CAP_MAX_VCPUS);
-                if v > 0 { v } else { DEFAULT_MAX_VCPUS }
+                if v > 0 {
+                    v
+                } else {
+                    DEFAULT_MAX_VCPUS
+                }
             };
 
             Ok(HypervisorCapabilities {
@@ -221,12 +225,18 @@ impl HypervisorBackend for KvmBackend {
         )?);
 
         // Track VM for cleanup
-        self.vms.write().unwrap_or_else(|e| e.into_inner()).push(kvm_vm.clone());
+        self.vms
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(kvm_vm.clone());
 
         // Create vCPUs and register them in the lookup map
         for i in 0..vcpu_count {
             let kvm_vcpu = kvm_vm.create_vcpu(i)?;
-            self.vcpu_map.write().unwrap_or_else(|e| e.into_inner()).insert(i, kvm_vcpu);
+            self.vcpu_map
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(i, kvm_vcpu);
         }
 
         Ok(HypervisorVm::new(
@@ -277,7 +287,10 @@ impl HypervisorBackend for KvmBackend {
         tracing::info!("Shutting down KVM backend");
 
         // Clear vCPU map
-        self.vcpu_map.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.vcpu_map
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
 
         // VMs will be automatically closed when dropped
         self.vms.write().unwrap_or_else(|e| e.into_inner()).clear();
@@ -418,7 +431,10 @@ impl KvmVm {
         }
 
         let vcpu = Arc::new(KvmVcpu::new(self.vm_fd, vcpu_id, self.run_mmap_size)?);
-        self.vcpus.write().unwrap_or_else(|e| e.into_inner()).push(vcpu.clone());
+        self.vcpus
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(vcpu.clone());
         Ok(vcpu)
     }
 
@@ -467,10 +483,7 @@ impl KvmVm {
         // SAFETY: `self.vm_fd` is a valid VM fd.
         unsafe {
             kvm_set_irqchip(self.vm_fd, chip).map_err(|e| {
-                Error::Hypervisor(format!(
-                    "Failed to set IRQ chip {}: {}",
-                    chip.chip_id, e
-                ))
+                Error::Hypervisor(format!("Failed to set IRQ chip {}: {}", chip.chip_id, e))
             })
         }
     }
@@ -479,9 +492,8 @@ impl KvmVm {
     pub fn signal_msi(&self, msi: &kvm_msi) -> Result<()> {
         // SAFETY: `self.vm_fd` is a valid VM fd. `msi` is properly initialized.
         unsafe {
-            kvm_signal_msi(self.vm_fd, msi).map_err(|e| {
-                Error::Hypervisor(format!("Failed to signal MSI: {}", e))
-            })
+            kvm_signal_msi(self.vm_fd, msi)
+                .map_err(|e| Error::Hypervisor(format!("Failed to signal MSI: {}", e)))
         }
     }
 
@@ -491,9 +503,8 @@ impl KvmVm {
     pub fn set_gsi_routing(&self, routing: &kvm_irq_routing) -> Result<()> {
         // SAFETY: `self.vm_fd` is a valid VM fd. `routing` is properly initialized.
         unsafe {
-            kvm_set_gsi_routing(self.vm_fd, routing).map_err(|e| {
-                Error::Hypervisor(format!("Failed to set GSI routing: {}", e))
-            })
+            kvm_set_gsi_routing(self.vm_fd, routing)
+                .map_err(|e| Error::Hypervisor(format!("Failed to set GSI routing: {}", e)))
         }
     }
 
@@ -532,10 +543,7 @@ impl KvmVm {
         // `dirty_bitmap` validity.
         unsafe {
             kvm_get_dirty_log(self.vm_fd, &mut log).map_err(|e| {
-                Error::Hypervisor(format!(
-                    "Failed to get dirty log for slot {}: {}",
-                    slot, e
-                ))
+                Error::Hypervisor(format!("Failed to get dirty log for slot {}: {}", slot, e))
             })
         }
     }
@@ -585,7 +593,10 @@ impl Drop for KvmVm {
         // `create_vm` and is owned exclusively by this `KvmVm`.
         unsafe {
             // vCPUs will be dropped first (RAII order)
-            self.vcpus.write().unwrap_or_else(|e| e.into_inner()).clear();
+            self.vcpus
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .clear();
 
             // Free guest memory
             if let Some(ptr) = self.guest_memory {
@@ -653,15 +664,15 @@ impl KvmVcpu {
             }
 
             let run = match NonNull::new(ptr as *mut kvm_run) {
-                    Some(nn) => nn,
-                    None => {
-                        libc::close(vcpu_fd);
-                        return Err(Error::Hypervisor(format!(
-                            "mmap for vCPU {} returned null pointer",
-                            vcpu_id
-                        )));
-                    }
-                };
+                Some(nn) => nn,
+                None => {
+                    libc::close(vcpu_fd);
+                    return Err(Error::Hypervisor(format!(
+                        "mmap for vCPU {} returned null pointer",
+                        vcpu_id
+                    )));
+                }
+            };
 
             // Initialize vCPU to real mode
             Self::init_real_mode(vcpu_fd)?;
@@ -914,11 +925,13 @@ impl KvmVcpu {
     /// Get general-purpose registers
     pub fn get_regs(&self) -> Result<kvm_regs> {
         let mut regs = kvm_regs::default();
-        // SAFETY: self.vcpu_fd is a valid vCPU fd. 
-egs is a valid output buffer.
+        // SAFETY: self.vcpu_fd is a valid vCPU fd. regs is a valid output buffer.
         unsafe {
             kvm_get_regs(self.vcpu_fd, &mut regs).map_err(|e| {
-                Error::Hypervisor(format!("Failed to get regs for vCPU {}: {}", self.vcpu_id, e))
+                Error::Hypervisor(format!(
+                    "Failed to get regs for vCPU {}: {}",
+                    self.vcpu_id, e
+                ))
             })?;
         }
         Ok(regs)
@@ -926,11 +939,13 @@ egs is a valid output buffer.
 
     /// Set general-purpose registers
     pub fn set_regs(&self, regs: &kvm_regs) -> Result<()> {
-        // SAFETY: self.vcpu_fd is a valid vCPU fd. 
-egs is a valid input.
+        // SAFETY: self.vcpu_fd is a valid vCPU fd. regs is a valid input.
         unsafe {
             kvm_set_regs(self.vcpu_fd, regs).map_err(|e| {
-                Error::Hypervisor(format!("Failed to set regs for vCPU {}: {}", self.vcpu_id, e))
+                Error::Hypervisor(format!(
+                    "Failed to set regs for vCPU {}: {}",
+                    self.vcpu_id, e
+                ))
             })
         }
     }
@@ -969,7 +984,10 @@ egs is a valid input.
         // SAFETY: self.vcpu_fd is a valid vCPU fd.
         unsafe {
             kvm_get_fpu(self.vcpu_fd, &mut fpu).map_err(|e| {
-                Error::Hypervisor(format!("Failed to get FPU for vCPU {}: {}", self.vcpu_id, e))
+                Error::Hypervisor(format!(
+                    "Failed to get FPU for vCPU {}: {}",
+                    self.vcpu_id, e
+                ))
             })?;
         }
         Ok(fpu)
@@ -980,7 +998,10 @@ egs is a valid input.
         // SAFETY: self.vcpu_fd is a valid vCPU fd.
         unsafe {
             kvm_set_fpu(self.vcpu_fd, fpu).map_err(|e| {
-                Error::Hypervisor(format!("Failed to set FPU for vCPU {}: {}", self.vcpu_id, e))
+                Error::Hypervisor(format!(
+                    "Failed to set FPU for vCPU {}: {}",
+                    self.vcpu_id, e
+                ))
             })
         }
     }
@@ -1103,8 +1124,7 @@ egs is a valid input.
 
     /// Read model-specific registers
     ///
-    /// The msrs struct must have 
-msrs set to the number of entries,
+    /// The msrs struct must have nmsrs set to the number of entries,
     /// and each entry's index field set to the MSR index to read.
     /// On return, each entry's data field contains the value read.
     pub fn get_msrs(&self, msrs: &mut kvm_msrs) -> Result<i32> {
@@ -1297,9 +1317,8 @@ impl KvmBackend {
             let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
             header.nent = MAX_ENTRIES as u32;
 
-            kvm_get_supported_cpuid(self.kvm_fd, header).map_err(|e| {
-                Error::Hypervisor(format!("Failed to get supported CPUID: {}", e))
-            })?;
+            kvm_get_supported_cpuid(self.kvm_fd, header)
+                .map_err(|e| Error::Hypervisor(format!("Failed to get supported CPUID: {}", e)))?;
 
             let nent = header.nent as usize;
             let entries_ptr = buf.as_ptr().add(header_size) as *const kvm_cpuid_entry2;

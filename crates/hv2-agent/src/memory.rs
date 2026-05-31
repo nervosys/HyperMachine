@@ -356,7 +356,11 @@ impl EpisodicMemory {
             .values()
             .filter(|e| e.content.to_lowercase().contains(&query_lower))
             .collect();
-        results.sort_by(|a, b| b.strength().partial_cmp(&a.strength()).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.strength()
+                .partial_cmp(&a.strength())
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results
     }
 
@@ -379,7 +383,7 @@ impl EpisodicMemory {
     /// Get recent episodes
     pub fn recent(&self, count: usize) -> Vec<&Episode> {
         let mut episodes: Vec<_> = self.episodes.values().collect();
-        episodes.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        episodes.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
         episodes.into_iter().take(count).collect()
     }
 
@@ -587,7 +591,10 @@ impl WorkingMemory {
         // Evict old items if needed (except pinned)
         while self.current_tokens + item.tokens > self.max_tokens {
             if let Some(pos) = self.items.iter().position(|i| !i.pinned) {
-                let removed = self.items.remove(pos).expect("position from iter was valid");
+                let removed = self
+                    .items
+                    .remove(pos)
+                    .expect("position from iter was valid");
                 self.current_tokens -= removed.tokens;
             } else {
                 return Err(MemoryError::CapacityExceeded(self.max_tokens));
@@ -863,7 +870,11 @@ impl MemorySystem {
         }
 
         // Sort by score and limit
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         results.truncate(config.max_results);
 
         results
@@ -951,42 +962,69 @@ impl SharedMemory {
 
     /// Remember an episode
     pub fn remember_episode(&self, episode: Episode) -> MemoryResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).remember_episode(episode)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remember_episode(episode)
     }
 
     /// Remember a fact
     pub fn remember_fact(&self, fact: SemanticFact) -> MemoryResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).remember_fact(fact)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remember_fact(fact)
     }
 
     /// Add to context
     pub fn add_to_context(&self, item: WorkingItem) -> MemoryResult<()> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).add_to_context(item)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .add_to_context(item)
     }
 
     /// Retrieve memories
     pub fn retrieve(&self, query: &str, config: &RetrievalConfig) -> Vec<RetrievalResult> {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).retrieve(query, config)
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .retrieve(query, config)
     }
 
     /// Consolidate
     pub fn consolidate(&self) {
-        self.inner.write().unwrap_or_else(|e| e.into_inner()).consolidate();
+        self.inner
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .consolidate();
     }
 
     /// Get episode count
     pub fn episode_count(&self) -> usize {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).episodic.len()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .episodic
+            .len()
     }
 
     /// Get fact count
     pub fn fact_count(&self) -> usize {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).semantic.len()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .semantic
+            .len()
     }
 
     /// Get working memory count
     pub fn working_count(&self) -> usize {
-        self.inner.read().unwrap_or_else(|e| e.into_inner()).working.len()
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .working
+            .len()
     }
 }
 

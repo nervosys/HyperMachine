@@ -264,10 +264,7 @@ async fn flush_spans(inner: &RemoteSpanInner) -> Result<(), TracerError> {
         return Ok(());
     }
 
-    let url = format!(
-        "{}/v1/traces",
-        inner.config.endpoint.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/traces", inner.config.endpoint.trim_end_matches('/'));
 
     // Send in batches
     for chunk in spans.chunks(inner.config.max_batch_size) {
@@ -372,8 +369,7 @@ mod tests {
 
     #[test]
     fn test_exporter_creation() {
-        let cfg = RemoteSpanExporterConfig::default()
-            .with_endpoint("https://nervosys.ai/otlp");
+        let cfg = RemoteSpanExporterConfig::default().with_endpoint("https://nervosys.ai/otlp");
         let exporter = RemoteSpanExporter::new(cfg);
         assert!(exporter.is_ok());
     }
@@ -415,7 +411,9 @@ mod tests {
         assert_eq!(exporter.queue_depth(), 3);
 
         // Overflow: should drop oldest
-        exporter.export(vec![make_span("d"), make_span("e")]).unwrap();
+        exporter
+            .export(vec![make_span("d"), make_span("e")])
+            .unwrap();
         assert_eq!(exporter.queue_depth(), 3);
         assert_eq!(exporter.total_dropped(), 2);
     }
@@ -451,8 +449,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_flush_empty() {
-        let cfg = RemoteSpanExporterConfig::default()
-            .with_endpoint("https://example.com/otlp");
+        let cfg = RemoteSpanExporterConfig::default().with_endpoint("https://example.com/otlp");
         let exporter = RemoteSpanExporter::new(cfg).unwrap();
         assert!(exporter.force_flush().await.is_ok());
         assert_eq!(exporter.total_sent(), 0);

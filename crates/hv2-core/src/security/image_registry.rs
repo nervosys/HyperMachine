@@ -119,11 +119,7 @@ pub struct ImageEntry {
 
 impl ImageEntry {
     /// Create a new image entry in PendingReview status
-    pub fn new(
-        reference: impl Into<String>,
-        kind: ImageKind,
-        sha256: impl Into<String>,
-    ) -> Self {
+    pub fn new(reference: impl Into<String>, kind: ImageKind, sha256: impl Into<String>) -> Self {
         let now = SystemTime::now();
         Self {
             reference: reference.into(),
@@ -330,9 +326,10 @@ impl ImageRegistry {
                     ));
                 }
                 if !self.config.trusted_signers.is_empty() {
-                    let trusted = entry.signatures.iter().any(|s| {
-                        s.verified && self.config.trusted_signers.contains(&s.signer)
-                    });
+                    let trusted = entry
+                        .signatures
+                        .iter()
+                        .any(|s| s.verified && self.config.trusted_signers.contains(&s.signer));
                     if !trusted {
                         return AdmissionDecision::Denied(format!(
                             "No trusted signer for {reference}"
@@ -544,10 +541,7 @@ mod tests {
             require_signature: true,
             trusted_signers: vec![],
         });
-        assert_eq!(
-            reg.check_admission("anything"),
-            AdmissionDecision::Allowed
-        );
+        assert_eq!(reg.check_admission("anything"), AdmissionDecision::Allowed);
     }
 
     #[test]

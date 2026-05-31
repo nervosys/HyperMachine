@@ -259,9 +259,9 @@ impl ShadowVmcsCache {
     /// Load a VMCS (VMPTRLD)
     pub fn vmptrld(&mut self, guest_vmcs_addr: u64) -> VmxResult<()> {
         // Check if we already have this VMCS
-        self.vmcs_map.entry(guest_vmcs_addr).or_insert_with(|| {
-            ShadowVmcs::new(guest_vmcs_addr)
-        });
+        self.vmcs_map
+            .entry(guest_vmcs_addr)
+            .or_insert_with(|| ShadowVmcs::new(guest_vmcs_addr));
 
         // Load the VMCS
         if let Some(vmcs) = self.vmcs_map.get_mut(&guest_vmcs_addr) {

@@ -120,7 +120,7 @@ impl SwitchPort {
     pub fn accepts_vlan(&self, vlan: Option<VlanId>) -> bool {
         match (&self.vlan_mode, vlan) {
             (VlanMode::None, _) => true,
-            (VlanMode::Access(_port_vlan), None) => true,         // Untagged → access VLAN
+            (VlanMode::Access(_port_vlan), None) => true, // Untagged → access VLAN
             (VlanMode::Access(port_vlan), Some(v)) => *port_vlan == v,
             (VlanMode::Trunk(vlans), Some(v)) => vlans.contains(&v),
             (VlanMode::Trunk(_), None) => false, // Trunk expects tagged traffic
@@ -475,9 +475,8 @@ impl VirtualSwitch {
         let now = Instant::now();
         let before = self.mac_table.len();
 
-        self.mac_table.retain(|_, entry| {
-            now.duration_since(entry.last_seen) < timeout
-        });
+        self.mac_table
+            .retain(|_, entry| now.duration_since(entry.last_seen) < timeout);
 
         let aged = before - self.mac_table.len();
         self.stats.mac_aged += aged as u64;

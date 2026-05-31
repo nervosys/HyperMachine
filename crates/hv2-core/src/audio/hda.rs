@@ -4,8 +4,8 @@
 //! codec discovery, stream management, and widget support.
 
 use super::core::{
-    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
-    SampleRate, StreamDirection,
+    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat, SampleRate,
+    StreamDirection,
 };
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -572,14 +572,11 @@ impl HdaCodec {
                     0
                 }
             }
-            0x05 => {
+            0x05
                 // Function group type
-                if nid == 1 {
+                if nid == 1 => {
                     0x01 // Audio function group
-                } else {
-                    0
                 }
-            }
             0x09 => {
                 // Audio widget capabilities
                 if let Some(w) = self.widgets.get(&nid) {

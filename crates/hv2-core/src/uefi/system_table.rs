@@ -6,8 +6,7 @@
 #[cfg(test)]
 use super::types::guids;
 use super::types::{
-    AllocateType, Guid, Handle, MemoryAttribute, MemoryDescriptor, MemoryType, Status,
-    TableHeader,
+    AllocateType, Guid, Handle, MemoryAttribute, MemoryDescriptor, MemoryType, Status, TableHeader,
 };
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

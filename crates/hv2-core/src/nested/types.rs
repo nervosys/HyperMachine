@@ -475,18 +475,28 @@ impl std::fmt::Display for VmxInstructionError {
             Self::VmptrldInvalidAddr => write!(f, "VMPTRLD with invalid physical address"),
             Self::VmptrldWithVmxonPtr => write!(f, "VMPTRLD with VMXON pointer"),
             Self::VmptrldIncorrectVmcsRevision => write!(f, "VMPTRLD with incorrect VMCS revision"),
-            Self::VmreadVmwriteUnsupportedField => write!(f, "VMREAD/VMWRITE from/to unsupported VMCS field"),
+            Self::VmreadVmwriteUnsupportedField => {
+                write!(f, "VMREAD/VMWRITE from/to unsupported VMCS field")
+            }
             Self::VmwriteReadonlyField => write!(f, "VMWRITE to read-only VMCS field"),
             Self::VmxonInRoot => write!(f, "VMXON executed in VMX root operation"),
-            Self::VmEntryInvalidExecVmcsPtr => write!(f, "VM entry with invalid executive-VMCS pointer"),
-            Self::VmEntryNonlaunchedExecVmcs => write!(f, "VM entry with non-launched executive VMCS"),
-            Self::VmEntryExecVmcsPtrNotVmxonPtr => write!(f, "VM entry with executive-VMCS pointer not VMXON pointer"),
+            Self::VmEntryInvalidExecVmcsPtr => {
+                write!(f, "VM entry with invalid executive-VMCS pointer")
+            }
+            Self::VmEntryNonlaunchedExecVmcs => {
+                write!(f, "VM entry with non-launched executive VMCS")
+            }
+            Self::VmEntryExecVmcsPtrNotVmxonPtr => {
+                write!(f, "VM entry with executive-VMCS pointer not VMXON pointer")
+            }
             Self::VmcallNonclearVmcs => write!(f, "VMCALL with non-clear VMCS"),
             Self::VmcallInvalidVmExitCtl => write!(f, "VMCALL with invalid VM-exit control fields"),
             Self::VmcallIncorrectMsegRevision => write!(f, "VMCALL with incorrect MSEG revision"),
             Self::VmxoffUnderDualMonitor => write!(f, "VMXOFF under dual-monitor treatment"),
             Self::VmcallInvalidSmmFeatures => write!(f, "VMCALL with invalid SMM-monitor features"),
-            Self::VmEntryInvalidVmExecCtl => write!(f, "VM entry with invalid VM-execution control fields"),
+            Self::VmEntryInvalidVmExecCtl => {
+                write!(f, "VM entry with invalid VM-execution control fields")
+            }
             Self::VmEntryEventsBlockedMovSs => write!(f, "VM entry with events blocked by MOV SS"),
             Self::InvalidOperandToInveptInvvpid => write!(f, "invalid operand to INVEPT/INVVPID"),
         }

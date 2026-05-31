@@ -123,7 +123,10 @@ impl DebugManager {
 
     /// Add memory region
     pub fn add_memory_region(&self, region: MemoryRegion) {
-        self.memory_inspector.write().unwrap_or_else(|e| e.into_inner()).add_region(region);
+        self.memory_inspector
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .add_region(region);
     }
 
     /// Walk page tables
@@ -150,7 +153,12 @@ impl DebugManager {
     /// Get debug statistics
     pub fn stats(&self) -> DebugStats {
         let gdb_stats = self.gdb_stub.stats();
-        let regions = self.memory_inspector.read().unwrap_or_else(|e| e.into_inner()).regions().len();
+        let regions = self
+            .memory_inspector
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .regions()
+            .len();
         let vcpus = self.cpu_inspector.all_states().len();
         let events = self.cpu_inspector.event_count();
 

@@ -503,7 +503,7 @@ impl PolicySet {
             .filter(|r| r.matches(action, resource) && r.condition.evaluate(context))
             .collect();
 
-        matching_rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        matching_rules.sort_by_key(|r| std::cmp::Reverse(r.priority));
 
         // Return the effect of the first matching rule
         matching_rules

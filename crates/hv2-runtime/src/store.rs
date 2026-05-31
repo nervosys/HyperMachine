@@ -210,7 +210,9 @@ impl DurableStore {
                 tracing::info!("External store backend configured with URL: {url}");
                 tracing::warn!("External backend operates in memory-cache mode; writes are not persisted to an external service yet");
             } else {
-                tracing::warn!("External backend selected without external_url; operating as in-memory store");
+                tracing::warn!(
+                    "External backend selected without external_url; operating as in-memory store"
+                );
             }
             BTreeMap::new()
         } else {

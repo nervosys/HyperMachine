@@ -21,10 +21,7 @@ use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use hv2_core::{
-    CreateSnapshotOptions, SnapshotConfig, SnapshotId, SnapshotManager,
-    SnapshotType,
-};
+use hv2_core::{CreateSnapshotOptions, SnapshotConfig, SnapshotId, SnapshotManager, SnapshotType};
 
 // ============================================================================
 // State
@@ -233,7 +230,11 @@ async fn create_snapshot(
                 Ok(_) => {
                     let info = manager.get_snapshot(&snap_id).unwrap();
                     let resp = snapshot_info_to_response(info);
-                    (StatusCode::CREATED, Json(serde_json::to_value(resp).unwrap())).into_response()
+                    (
+                        StatusCode::CREATED,
+                        Json(serde_json::to_value(resp).unwrap()),
+                    )
+                        .into_response()
                 }
                 Err(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
@@ -371,10 +372,7 @@ pub fn create_snapshot_router(state: Arc<SnapshotAppState>) -> Router {
     Router::new()
         .route("/api/v1/vms/{vm_id}/snapshots", post(create_snapshot))
         .route("/api/v1/vms/{vm_id}/snapshots", get(list_snapshots))
-        .route(
-            "/api/v1/vms/{vm_id}/snapshots/{snap_id}",
-            get(get_snapshot),
-        )
+        .route("/api/v1/vms/{vm_id}/snapshots/{snap_id}", get(get_snapshot))
         .route(
             "/api/v1/vms/{vm_id}/snapshots/{snap_id}",
             delete(delete_snapshot),

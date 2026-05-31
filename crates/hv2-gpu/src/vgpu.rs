@@ -1056,7 +1056,13 @@ mod tests {
     async fn test_create_texture_not_initialized() {
         let vgpu = VirtualGpu::new("test");
         let result = vgpu
-            .create_texture(256, 256, 1, TextureFormat::Rgba8Unorm, TextureUsages::RENDER_ATTACHMENT)
+            .create_texture(
+                256,
+                256,
+                1,
+                TextureFormat::Rgba8Unorm,
+                TextureUsages::RENDER_ATTACHMENT,
+            )
             .await;
         assert!(result.is_err());
     }

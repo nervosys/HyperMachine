@@ -194,8 +194,14 @@ mod tests {
         };
 
         let subset = PermissionSet::new().with(Permission::VmRead);
-        g.delegate(&pid("admin"), &pid("worker"), subset, ResourceScope::Org("acme".into()), &constraint)
-            .unwrap();
+        g.delegate(
+            &pid("admin"),
+            &pid("worker"),
+            subset,
+            ResourceScope::Org("acme".into()),
+            &constraint,
+        )
+        .unwrap();
 
         let worker_grants = g.direct_grants(&pid("worker"));
         assert_eq!(worker_grants.len(), 1);
@@ -260,7 +266,10 @@ mod tests {
                 &constraint,
             )
             .unwrap_err();
-        assert!(matches!(err, PermissionError::DelegationDepthExceeded { .. }));
+        assert!(matches!(
+            err,
+            PermissionError::DelegationDepthExceeded { .. }
+        ));
     }
 
     #[test]

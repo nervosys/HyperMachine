@@ -291,11 +291,7 @@ impl GpuMetricsCollector {
     }
 
     /// Get the metrics handle for a specific device.
-    pub fn device_metrics(
-        &self,
-        host_id: &str,
-        device_id: &str,
-    ) -> Option<Arc<GpuDeviceMetrics>> {
+    pub fn device_metrics(&self, host_id: &str, device_id: &str) -> Option<Arc<GpuDeviceMetrics>> {
         self.devices
             .read()
             .get(&(host_id.to_string(), device_id.to_string()))

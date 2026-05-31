@@ -193,12 +193,9 @@ mod tests {
         let g = build_graph();
 
         // agent-1 inherits operator's VmStart at org:acme
-        let eff = ResolutionEngine::resolve(
-            &g,
-            &pid("agent-1"),
-            &ResourceScope::Org("acme".into()),
-        )
-        .unwrap();
+        let eff =
+            ResolutionEngine::resolve(&g, &pid("agent-1"), &ResourceScope::Org("acme".into()))
+                .unwrap();
         assert!(eff.allows(&Permission::VmStart));
         assert!(eff.allows(&Permission::VmRead));
         assert!(!eff.allows(&Permission::GpuAttach));
@@ -228,12 +225,9 @@ mod tests {
         let g = build_graph();
 
         // operator grant is at org:acme — should NOT apply to org:other
-        let eff = ResolutionEngine::resolve(
-            &g,
-            &pid("agent-1"),
-            &ResourceScope::Org("other".into()),
-        )
-        .unwrap();
+        let eff =
+            ResolutionEngine::resolve(&g, &pid("agent-1"), &ResourceScope::Org("other".into()))
+                .unwrap();
         assert!(!eff.allows(&Permission::VmStart));
     }
 
@@ -268,7 +262,10 @@ mod tests {
         };
 
         // agent-3 can read metrics on the specific VM
-        assert!(ResolutionEngine::check(&g, &pid("agent-3"), &Permission::MetricsRead, &target_vm).unwrap());
+        assert!(
+            ResolutionEngine::check(&g, &pid("agent-3"), &Permission::MetricsRead, &target_vm)
+                .unwrap()
+        );
 
         // but not on a sibling VM
         let other_vm = ResourceScope::Vm {
@@ -277,7 +274,10 @@ mod tests {
             project: "ml".into(),
             vm: "gpu-002".into(),
         };
-        assert!(!ResolutionEngine::check(&g, &pid("agent-3"), &Permission::MetricsRead, &other_vm).unwrap());
+        assert!(
+            !ResolutionEngine::check(&g, &pid("agent-3"), &Permission::MetricsRead, &other_vm)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -296,12 +296,9 @@ mod tests {
     #[test]
     fn contributors_are_tracked() {
         let g = build_graph();
-        let eff = ResolutionEngine::resolve(
-            &g,
-            &pid("agent-1"),
-            &ResourceScope::Org("acme".into()),
-        )
-        .unwrap();
+        let eff =
+            ResolutionEngine::resolve(&g, &pid("agent-1"), &ResourceScope::Org("acme".into()))
+                .unwrap();
         // agent-1 has no direct grants, permissions come from "operator" role
         assert!(eff.contributors.contains(&pid("operator")));
     }

@@ -1168,12 +1168,15 @@ mod tests {
         // Set up a descriptor for receiving
         {
             let mut q = net.rx_queues[0].lock().await;
-            q.set_desc(0, VirtqDesc {
-                addr: 0,
-                len: 1024,
-                flags: VirtqDesc::F_WRITE,
-                next: 0,
-            });
+            q.set_desc(
+                0,
+                VirtqDesc {
+                    addr: 0,
+                    len: 1024,
+                    flags: VirtqDesc::F_WRITE,
+                    next: 0,
+                },
+            );
             q.available.ring.push(0);
             q.available.idx = 1;
             q.enable();

@@ -5,8 +5,8 @@
 
 use super::tracer::{SpanExporter, TracerError};
 use super::types::{SpanData, SpanKind, StatusCode};
-use std::io::Write;
 use parking_lot::Mutex;
+use std::io::Write;
 use std::sync::Arc;
 
 /// Console span exporter for debugging
@@ -108,10 +108,13 @@ impl SpanExporter for ConsoleSpanExporter {
         let mut writer = self.writer.lock();
         for span in spans {
             let output = self.format_span(&span);
-            writer.write_all(output.as_bytes())
+            writer
+                .write_all(output.as_bytes())
                 .map_err(|e| TracerError::ExportError(e.to_string()))?;
         }
-        writer.flush().map_err(|e| TracerError::ExportError(e.to_string()))?;
+        writer
+            .flush()
+            .map_err(|e| TracerError::ExportError(e.to_string()))?;
         Ok(())
     }
 
@@ -222,8 +225,16 @@ impl JaegerSpanExporter {
 
     fn convert_span(&self, span: &SpanData) -> JaegerSpan {
         let trace_bytes = span.context.trace_id.to_bytes();
-        let trace_id_high = u64::from_be_bytes(trace_bytes[0..8].try_into().expect("TraceId is always 16 bytes"));
-        let trace_id_low = u64::from_be_bytes(trace_bytes[8..16].try_into().expect("TraceId is always 16 bytes"));
+        let trace_id_high = u64::from_be_bytes(
+            trace_bytes[0..8]
+                .try_into()
+                .expect("TraceId is always 16 bytes"),
+        );
+        let trace_id_low = u64::from_be_bytes(
+            trace_bytes[8..16]
+                .try_into()
+                .expect("TraceId is always 16 bytes"),
+        );
 
         let mut tags = Vec::new();
 
@@ -261,22 +272,26 @@ impl JaegerSpanExporter {
         }
 
         // Convert events to logs
-        let logs: Vec<JaegerLog> = span.events.iter().map(|e| {
-            let mut fields = vec![JaegerTag {
-                key: "event".to_string(),
-                value: JaegerTagValue::String(e.name.clone()),
-            }];
-            for attr in &e.attributes {
-                fields.push(JaegerTag {
-                    key: attr.key.clone(),
-                    value: JaegerTagValue::String(format!("{:?}", attr.value)),
-                });
-            }
-            JaegerLog {
-                timestamp: (e.timestamp / 1000) as i64,
-                fields,
-            }
-        }).collect();
+        let logs: Vec<JaegerLog> = span
+            .events
+            .iter()
+            .map(|e| {
+                let mut fields = vec![JaegerTag {
+                    key: "event".to_string(),
+                    value: JaegerTagValue::String(e.name.clone()),
+                }];
+                for attr in &e.attributes {
+                    fields.push(JaegerTag {
+                        key: attr.key.clone(),
+                        value: JaegerTagValue::String(format!("{:?}", attr.value)),
+                    });
+                }
+                JaegerLog {
+                    timestamp: (e.timestamp / 1000) as i64,
+                    fields,
+                }
+            })
+            .collect();
 
         JaegerSpan {
             trace_id_low,
@@ -403,12 +418,16 @@ impl ZipkinSpanExporter {
             tags.insert("error".to_string(), span.status.message.clone());
         }
 
-        let annotations: Vec<_> = span.events.iter().map(|e| {
-            ZipkinAnnotation {
-                timestamp: e.timestamp / 1000, // Convert to microseconds
-                value: e.name.clone(),
-            }
-        }).collect();
+        let annotations: Vec<_> = span
+            .events
+            .iter()
+            .map(|e| {
+                ZipkinAnnotation {
+                    timestamp: e.timestamp / 1000, // Convert to microseconds
+                    value: e.name.clone(),
+                }
+            })
+            .collect();
 
         ZipkinSpan {
             trace_id: format!("{:032x}", span.context.trace_id.as_u128()),
@@ -444,7 +463,10 @@ impl ZipkinSpanExporter {
             if let Some(ref kind) = span.kind {
                 json.push_str(&format!(r#","kind":"{}""#, kind));
             }
-            json.push_str(&format!(r#","timestamp":{},"duration":{}"#, span.timestamp, span.duration));
+            json.push_str(&format!(
+                r#","timestamp":{},"duration":{}"#,
+                span.timestamp, span.duration
+            ));
             json.push_str(&format!(
                 r#","localEndpoint":{{"serviceName":"{}"}}"#,
                 span.local_endpoint.service_name
@@ -465,7 +487,10 @@ impl ZipkinSpanExporter {
                     if j > 0 {
                         json.push(',');
                     }
-                    json.push_str(&format!(r#"{{"timestamp":{},"value":"{}"}}"#, ann.timestamp, ann.value));
+                    json.push_str(&format!(
+                        r#"{{"timestamp":{},"value":"{}"}}"#,
+                        ann.timestamp, ann.value
+                    ));
                 }
                 json.push(']');
             }
@@ -573,7 +598,7 @@ impl OtlpSpanExporter {
     /// Serialize to JSON format
     pub fn serialize_json(&self, spans: &[SpanData]) -> String {
         let mut json = String::from(r#"{"resourceSpans":[{"resource":{},"scopeSpans":[{"spans":["#);
-        
+
         for (i, span) in spans.iter().enumerate() {
             if i > 0 {
                 json.push(',');
@@ -584,7 +609,10 @@ impl OtlpSpanExporter {
                 hex::encode(&span.context.span_id.to_bytes())
             ));
             if let Some(parent) = span.parent_span_id {
-                json.push_str(&format!(r#","parentSpanId":"{}""#, hex::encode(&parent.to_bytes())));
+                json.push_str(&format!(
+                    r#","parentSpanId":"{}""#,
+                    hex::encode(&parent.to_bytes())
+                ));
             }
             json.push_str(&format!(r#","name":"{}""#, span.name));
             json.push_str(&format!(r#","kind":{}"#, span.kind as u8 + 1));
@@ -600,7 +628,8 @@ impl OtlpSpanExporter {
                     }
                     json.push_str(&format!(
                         r#"{{"key":"{}","value":{{"stringValue":"{}"}}}}"#,
-                        attr.key, format!("{:?}", attr.value).replace('"', "\\\"")
+                        attr.key,
+                        format!("{:?}", attr.value).replace('"', "\\\"")
                     ));
                 }
                 json.push(']');
@@ -614,7 +643,7 @@ impl OtlpSpanExporter {
                 }
             ));
         }
-        
+
         json.push_str("]}]}]}");
         json
     }
@@ -736,8 +765,8 @@ impl SpanExporter for FilteredSpanExporter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::types::{SpanContext, SpanStatus};
+    use super::*;
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -761,8 +790,7 @@ mod tests {
 
     #[test]
     fn test_console_exporter() {
-        let exporter = ConsoleSpanExporter::default()
-            .with_pretty(false);
+        let exporter = ConsoleSpanExporter::default().with_pretty(false);
 
         let span = create_test_span();
         exporter.export(vec![span]).unwrap();
@@ -773,7 +801,7 @@ mod tests {
         let output = Arc::new(Mutex::new(Vec::new()));
         let writer = TestWriter(output.clone());
         let exporter = ConsoleSpanExporter::with_writer(writer).with_pretty(true);
-        
+
         let span = create_test_span();
         exporter.export(vec![span]).unwrap();
 
@@ -783,20 +811,21 @@ mod tests {
     }
 
     struct TestWriter(Arc<Mutex<Vec<u8>>>);
-    
+
     impl Write for TestWriter {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
             self.0.lock().extend_from_slice(buf);
             Ok(buf.len())
         }
-        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
 
     #[test]
     fn test_jaeger_config() {
-        let config = JaegerConfig::new("my-service")
-            .with_agent("jaeger-host", 6832);
-        
+        let config = JaegerConfig::new("my-service").with_agent("jaeger-host", 6832);
+
         assert_eq!(config.service_name, "my-service");
         assert_eq!(config.agent_host, "jaeger-host");
         assert_eq!(config.agent_port, 6832);
@@ -806,10 +835,10 @@ mod tests {
     fn test_jaeger_exporter_convert() {
         let config = JaegerConfig::new("test-service");
         let exporter = JaegerSpanExporter::new(config);
-        
+
         let mut span = create_test_span();
         span.status = SpanStatus::error("test error");
-        
+
         let jaeger_span = exporter.convert_span(&span);
         assert_eq!(jaeger_span.operation_name, "test-span");
         assert!(jaeger_span.tags.iter().any(|t| t.key == "error"));
@@ -817,9 +846,9 @@ mod tests {
 
     #[test]
     fn test_zipkin_config() {
-        let config = ZipkinConfig::new("my-service")
-            .with_endpoint("http://zipkin:9411/api/v2/spans");
-        
+        let config =
+            ZipkinConfig::new("my-service").with_endpoint("http://zipkin:9411/api/v2/spans");
+
         assert_eq!(config.service_name, "my-service");
         assert!(config.endpoint.contains("zipkin"));
     }
@@ -828,10 +857,10 @@ mod tests {
     fn test_zipkin_json_serialization() {
         let config = ZipkinConfig::new("test-service");
         let exporter = ZipkinSpanExporter::new(config);
-        
+
         let span = create_test_span();
         let zipkin_span = exporter.convert_span(&span);
-        
+
         let json = exporter.serialize_json(&[zipkin_span]);
         assert!(json.starts_with('['));
         assert!(json.ends_with(']'));
@@ -844,7 +873,7 @@ mod tests {
             .with_protocol(OtlpProtocol::Grpc)
             .with_header("Authorization", "Bearer token")
             .with_timeout(5000);
-        
+
         assert_eq!(config.protocol, OtlpProtocol::Grpc);
         assert_eq!(config.timeout_ms, 5000);
         assert_eq!(config.headers.len(), 1);
@@ -854,10 +883,10 @@ mod tests {
     fn test_otlp_json_serialization() {
         let config = OtlpConfig::new("http://localhost:4317");
         let exporter = OtlpSpanExporter::new(config);
-        
+
         let span = create_test_span();
         let json = exporter.serialize_json(&[span]);
-        
+
         assert!(json.contains("resourceSpans"));
         assert!(json.contains("test-span"));
     }
@@ -865,17 +894,17 @@ mod tests {
     #[test]
     fn test_composite_exporter() {
         use super::super::tracer::InMemorySpanExporter;
-        
+
         let exporter1 = Arc::new(InMemorySpanExporter::new());
         let exporter2 = Arc::new(InMemorySpanExporter::new());
-        
+
         let composite = CompositeSpanExporter::new()
             .add_exporter(exporter1.clone())
             .add_exporter(exporter2.clone());
-        
+
         let span = create_test_span();
         composite.export(vec![span]).unwrap();
-        
+
         assert_eq!(exporter1.get_spans().len(), 1);
         assert_eq!(exporter2.get_spans().len(), 1);
     }
@@ -883,16 +912,16 @@ mod tests {
     #[test]
     fn test_filtered_exporter_errors_only() {
         use super::super::tracer::InMemorySpanExporter;
-        
+
         let inner = Arc::new(InMemorySpanExporter::new());
         let filtered = FilteredSpanExporter::errors_only(inner.clone());
-        
+
         let ok_span = create_test_span();
         let mut error_span = create_test_span();
         error_span.status = SpanStatus::error("failed");
-        
+
         filtered.export(vec![ok_span, error_span]).unwrap();
-        
+
         let spans = inner.get_spans();
         assert_eq!(spans.len(), 1);
         assert!(spans[0].status.is_error());
@@ -901,21 +930,21 @@ mod tests {
     #[test]
     fn test_filtered_exporter_by_duration() {
         use super::super::tracer::InMemorySpanExporter;
-        
+
         let inner = Arc::new(InMemorySpanExporter::new());
         // Filter to spans longer than 100ms (100_000_000 ns)
         let filtered = FilteredSpanExporter::by_duration(inner.clone(), 100_000_000);
-        
+
         let mut short_span = create_test_span();
         short_span.start_time = 1000000000;
         short_span.end_time = 1010000000; // 10ms
-        
+
         let mut long_span = create_test_span();
         long_span.start_time = 1000000000;
         long_span.end_time = 1200000000; // 200ms
-        
+
         filtered.export(vec![short_span, long_span]).unwrap();
-        
+
         let spans = inner.get_spans();
         assert_eq!(spans.len(), 1);
     }

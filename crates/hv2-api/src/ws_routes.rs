@@ -57,6 +57,9 @@ async fn ws_handler(
 }
 
 /// Handle an established WebSocket connection
+// The Ping arm's `if` cannot be collapsed into a match guard: the guard would
+// have to move the non-`Copy` `Bytes` payload, which the borrow checker rejects.
+#[allow(clippy::collapsible_match)]
 async fn handle_socket(mut socket: WebSocket, bus: Arc<EventBus>, query: WsQuery) {
     let receiver = bus.subscribe();
     let mut stream = BroadcastStream::new(receiver);
@@ -108,6 +111,9 @@ async fn handle_socket(mut socket: WebSocket, bus: Arc<EventBus>, query: WsQuery
                 match msg {
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(Message::Ping(data))) => {
+                        // Reply with a Pong; stop the loop if the socket is gone.
+                        // (Clippy's collapsible_match guard suggestion doesn't
+                        // apply: `data: Bytes` can't be moved into a match guard.)
                         if socket.send(Message::Pong(data)).await.is_err() {
                             break;
                         }

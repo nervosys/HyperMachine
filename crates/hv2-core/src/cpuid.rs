@@ -553,8 +553,7 @@ impl CpuidEmulator {
                     ;
             CpuidResult::new(
                 0, // Max subleaf = 0
-                ebx,
-                0, // ECX features
+                ebx, 0, // ECX features
                 0, // EDX features
             )
         } else {

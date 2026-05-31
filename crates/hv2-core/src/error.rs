@@ -61,10 +61,7 @@ mod tests {
     fn display_string_variants() {
         assert_eq!(Error::VM("boom".into()).to_string(), "VM error: boom");
         assert_eq!(Error::Cpu("halt".into()).to_string(), "CPU error: halt");
-        assert_eq!(
-            Error::Memory("oom".into()).to_string(),
-            "Memory error: oom"
-        );
+        assert_eq!(Error::Memory("oom".into()).to_string(), "Memory error: oom");
         assert_eq!(
             Error::Device("lost".into()).to_string(),
             "Device error: lost"

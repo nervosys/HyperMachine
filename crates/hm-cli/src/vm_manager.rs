@@ -705,13 +705,19 @@ mod tests {
             pid: Some(12345),
         };
         let json = serde_json::to_string(&record).unwrap();
-        assert!(!json.contains("pid"), "pid should be skipped in serialization");
+        assert!(
+            !json.contains("pid"),
+            "pid should be skipped in serialization"
+        );
     }
 
     #[tokio::test]
     async fn test_vm_created_state() {
         let manager = VmManager::new_in_memory().unwrap();
-        let record = manager.create_vm("fresh", 2, 4, false, false).await.unwrap();
+        let record = manager
+            .create_vm("fresh", 2, 4, false, false)
+            .await
+            .unwrap();
         assert_eq!(record.state, VmState::Created);
     }
 }

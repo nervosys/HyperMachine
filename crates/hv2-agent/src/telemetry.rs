@@ -602,7 +602,10 @@ impl TelemetryCollector {
         let name = info.name.clone();
         let counter = Arc::new(Counter::new());
 
-        self.metric_info.write().expect("lock poisoned").insert(name.clone(), info);
+        self.metric_info
+            .write()
+            .expect("lock poisoned")
+            .insert(name.clone(), info);
         self.counters
             .write()
             .expect("lock poisoned")
@@ -616,7 +619,10 @@ impl TelemetryCollector {
         let name = info.name.clone();
         let gauge = Arc::new(Gauge::new());
 
-        self.metric_info.write().expect("lock poisoned").insert(name.clone(), info);
+        self.metric_info
+            .write()
+            .expect("lock poisoned")
+            .insert(name.clone(), info);
         self.gauges
             .write()
             .expect("lock poisoned")
@@ -628,8 +634,14 @@ impl TelemetryCollector {
     /// Register a histogram metric
     pub fn register_histogram(&self, info: MetricInfo, histogram: Histogram) {
         let name = info.name.clone();
-        self.metric_info.write().expect("lock poisoned").insert(name.clone(), info);
-        self.histograms.write().expect("lock poisoned").insert(name, histogram);
+        self.metric_info
+            .write()
+            .expect("lock poisoned")
+            .insert(name.clone(), info);
+        self.histograms
+            .write()
+            .expect("lock poisoned")
+            .insert(name, histogram);
     }
 
     /// Get or create a counter
@@ -668,7 +680,12 @@ impl TelemetryCollector {
 
     /// Record a histogram observation
     pub fn observe(&self, name: &str, value: f64) {
-        if let Some(histogram) = self.histograms.write().expect("lock poisoned").get_mut(name) {
+        if let Some(histogram) = self
+            .histograms
+            .write()
+            .expect("lock poisoned")
+            .get_mut(name)
+        {
             histogram.observe(value);
         }
     }
@@ -729,7 +746,10 @@ impl TelemetryCollector {
         span.end();
 
         // Remove from active
-        self.active_spans.write().expect("lock poisoned").remove(&span.id);
+        self.active_spans
+            .write()
+            .expect("lock poisoned")
+            .remove(&span.id);
 
         // Add to completed spans
         let mut spans = self.spans.write().expect("lock poisoned");
@@ -772,12 +792,21 @@ impl TelemetryCollector {
 
     /// Get histogram
     pub fn get_histogram(&self, name: &str) -> Option<Histogram> {
-        self.histograms.read().expect("lock poisoned").get(name).cloned()
+        self.histograms
+            .read()
+            .expect("lock poisoned")
+            .get(name)
+            .cloned()
     }
 
     /// Get all metric names
     pub fn metric_names(&self) -> Vec<String> {
-        self.metric_info.read().expect("lock poisoned").keys().cloned().collect()
+        self.metric_info
+            .read()
+            .expect("lock poisoned")
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Get uptime

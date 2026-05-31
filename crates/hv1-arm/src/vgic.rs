@@ -226,8 +226,7 @@ impl VirtualDistributor {
             if !irq.enabled {
                 continue;
             }
-            if irq.state != InterruptState::Pending
-                && irq.state != InterruptState::ActiveAndPending
+            if irq.state != InterruptState::Pending && irq.state != InterruptState::ActiveAndPending
             {
                 continue;
             }
@@ -401,9 +400,18 @@ mod tests {
     #[test]
     fn distributor_invalid_intid() {
         let mut dist = VirtualDistributor::new();
-        assert_eq!(dist.enable_irq(MAX_INTID as u32), Err(Error::InvalidInterruptId));
-        assert_eq!(dist.disable_irq(MAX_INTID as u32), Err(Error::InvalidInterruptId));
-        assert_eq!(dist.set_priority(MAX_INTID as u32, 0), Err(Error::InvalidInterruptId));
+        assert_eq!(
+            dist.enable_irq(MAX_INTID as u32),
+            Err(Error::InvalidInterruptId)
+        );
+        assert_eq!(
+            dist.disable_irq(MAX_INTID as u32),
+            Err(Error::InvalidInterruptId)
+        );
+        assert_eq!(
+            dist.set_priority(MAX_INTID as u32, 0),
+            Err(Error::InvalidInterruptId)
+        );
     }
 
     #[test]
@@ -447,7 +455,10 @@ mod tests {
 
         // EOI
         dist.eoi(spi).unwrap();
-        assert_eq!(dist.irq_config(spi).unwrap().state, InterruptState::Inactive);
+        assert_eq!(
+            dist.irq_config(spi).unwrap().state,
+            InterruptState::Inactive
+        );
     }
 
     #[test]

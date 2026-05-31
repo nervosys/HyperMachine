@@ -857,7 +857,11 @@ impl Planner {
             }
 
             // Get node with lowest heuristic
-            open.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal).reverse());
+            open.sort_by(|a, b| {
+                a.2.partial_cmp(&b.2)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .reverse()
+            });
             let Some((state, action_sequence, _)) = open.pop() else {
                 return Err(PlanningError::NoPlanFound);
             };
@@ -919,7 +923,9 @@ impl Planner {
             open.sort_by(|a, b| {
                 let f_a = a.2 + a.3;
                 let f_b = b.2 + b.3;
-                f_a.partial_cmp(&f_b).unwrap_or(std::cmp::Ordering::Equal).reverse()
+                f_a.partial_cmp(&f_b)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .reverse()
             });
             let Some((state, action_sequence, g, _)) = open.pop() else {
                 return Err(PlanningError::NoPlanFound);
@@ -1053,7 +1059,7 @@ impl GoalManager {
     /// Get goals by priority.
     pub fn goals_by_priority(&self) -> Vec<&Goal> {
         let mut goals: Vec<_> = self.goals.values().collect();
-        goals.sort_by(|a, b| b.priority.value().cmp(&a.priority.value()));
+        goals.sort_by_key(|g| std::cmp::Reverse(g.priority.value()));
         goals
     }
 
@@ -1191,7 +1197,10 @@ impl PlanningSystem {
         if let Some(action) = action {
             // Check preconditions
             if !action.is_applicable(&self.world_state) {
-                let plan = self.plans.get_mut(plan_id).ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
+                let plan = self
+                    .plans
+                    .get_mut(plan_id)
+                    .ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
                 if let Some(step) = plan.current_mut() {
                     step.fail("Preconditions not met");
                 }
@@ -1202,7 +1211,10 @@ impl PlanningSystem {
             // Apply effects
             action.apply(&mut self.world_state);
 
-            let plan = self.plans.get_mut(plan_id).ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
+            let plan = self
+                .plans
+                .get_mut(plan_id)
+                .ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
             if let Some(step) = plan.current_mut() {
                 step.complete();
             }
@@ -1210,7 +1222,10 @@ impl PlanningSystem {
 
             Ok(!plan.is_complete())
         } else {
-            let plan = self.plans.get_mut(plan_id).ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
+            let plan = self
+                .plans
+                .get_mut(plan_id)
+                .ok_or_else(|| PlanningError::PlanNotFound(plan_id.to_string()))?;
             if let Some(step) = plan.current_mut() {
                 step.fail("Action not found");
             }

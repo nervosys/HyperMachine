@@ -4,7 +4,6 @@
 //! When a VM exits hardware virtualization mode, it returns an exit reason
 //! that the hypervisor must handle before resuming execution.
 
-
 /// Direction of I/O operation
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -277,7 +277,10 @@ impl RateLimiter {
 
     /// Reset the rate limiter
     pub fn reset(&self) {
-        self.timestamps.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.timestamps
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     /// Get the limit

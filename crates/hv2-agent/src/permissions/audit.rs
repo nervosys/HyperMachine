@@ -87,7 +87,9 @@ impl AuditLog {
                 PermissionChange::RoleAssigned { principal: p, .. } => p == principal,
                 PermissionChange::Granted { grantee, .. } => grantee == principal,
                 PermissionChange::Revoked { grantee, .. } => grantee == principal,
-                PermissionChange::Delegated { from, to, .. } => from == principal || to == principal,
+                PermissionChange::Delegated { from, to, .. } => {
+                    from == principal || to == principal
+                }
             })
             .collect()
     }

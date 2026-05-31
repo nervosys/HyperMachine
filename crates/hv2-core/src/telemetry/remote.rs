@@ -292,10 +292,7 @@ async fn flush_buffer(inner: &RemoteExporterInner) -> ExporterResult<()> {
         return Ok(());
     }
 
-    let url = format!(
-        "{}/v1/metrics",
-        inner.config.endpoint.trim_end_matches('/')
-    );
+    let url = format!("{}/v1/metrics", inner.config.endpoint.trim_end_matches('/'));
 
     for payload in batches {
         if let Err(e) = send_with_retry(inner, &url, &payload).await {
@@ -420,8 +417,7 @@ mod tests {
 
     #[test]
     fn test_exporter_creation() {
-        let cfg = RemoteExporterConfig::default()
-            .with_endpoint("https://nervosys.ai/otlp");
+        let cfg = RemoteExporterConfig::default().with_endpoint("https://nervosys.ai/otlp");
         let exporter = RemoteMetricExporter::new(cfg);
         assert!(exporter.is_ok());
         let exporter = exporter.unwrap();
@@ -434,8 +430,7 @@ mod tests {
     fn test_queue_and_depth() {
         use super::super::types::{MetricFamily, MetricSample, MetricType};
 
-        let cfg = RemoteExporterConfig::default()
-            .with_endpoint("https://example.com/otlp");
+        let cfg = RemoteExporterConfig::default().with_endpoint("https://example.com/otlp");
         let exporter = RemoteMetricExporter::new(cfg).unwrap();
 
         let mut family = MetricFamily::new("test_counter", MetricType::Counter, "A test counter");
@@ -473,8 +468,7 @@ mod tests {
     fn test_metric_exporter_trait() {
         use super::super::types::{MetricFamily, MetricSample, MetricType};
 
-        let cfg = RemoteExporterConfig::default()
-            .with_endpoint("https://example.com/otlp");
+        let cfg = RemoteExporterConfig::default().with_endpoint("https://example.com/otlp");
         let exporter = RemoteMetricExporter::new(cfg).unwrap();
 
         let mut family = MetricFamily::new("test", MetricType::Gauge, "Test");
@@ -487,8 +481,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_flush_empty_buffer() {
-        let cfg = RemoteExporterConfig::default()
-            .with_endpoint("https://example.com/otlp");
+        let cfg = RemoteExporterConfig::default().with_endpoint("https://example.com/otlp");
         let exporter = RemoteMetricExporter::new(cfg).unwrap();
 
         // Flushing an empty buffer should succeed
@@ -499,8 +492,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shutdown_prevents_queue() {
-        let cfg = RemoteExporterConfig::default()
-            .with_endpoint("https://example.com/otlp");
+        let cfg = RemoteExporterConfig::default().with_endpoint("https://example.com/otlp");
         let exporter = RemoteMetricExporter::new(cfg).unwrap();
 
         exporter.shutdown().await.unwrap();

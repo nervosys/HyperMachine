@@ -20,7 +20,11 @@ fn main() -> eframe::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("hypermachine_gui=info".parse().expect("valid tracing directive"))
+                .add_directive(
+                    "hypermachine_gui=info"
+                        .parse()
+                        .expect("valid tracing directive"),
+                )
                 .add_directive("wgpu=off".parse().expect("valid tracing directive"))
                 .add_directive("wgpu_hal=off".parse().expect("valid tracing directive"))
                 .add_directive("wgpu_core=off".parse().expect("valid tracing directive"))

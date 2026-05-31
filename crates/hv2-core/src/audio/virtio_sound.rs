@@ -4,8 +4,8 @@
 //! PCM streams, jacks, and channel mapping support.
 
 use super::core::{
-    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
-    SampleRate, StreamDirection,
+    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat, SampleRate,
+    StreamDirection,
 };
 
 /// VirtIO sound request types

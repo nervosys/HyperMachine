@@ -1100,12 +1100,13 @@ mod tests {
             .unwrap();
 
         // Attach backing and transfer
-        gpu.attach_backing(1, vec![(0x1000, 64 * 64 * 4)])
-            .unwrap();
+        gpu.attach_backing(1, vec![(0x1000, 64 * 64 * 4)]).unwrap();
         gpu.transfer_to_host_2d(1, Rect::new(0, 0, 32, 32), 0)
             .unwrap();
 
         // Invalid resource
-        assert!(gpu.transfer_to_host_2d(999, Rect::new(0, 0, 1, 1), 0).is_err());
+        assert!(gpu
+            .transfer_to_host_2d(999, Rect::new(0, 0, 1, 1), 0)
+            .is_err());
     }
 }

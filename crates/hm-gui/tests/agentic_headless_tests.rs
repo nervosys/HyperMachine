@@ -5,8 +5,8 @@
 //! making them safe for headless CI environments.
 
 use hm_gui::agentic::{
-    AutomationError, AutomationHandle, CommandResult, DialogType, GuiCommand,
-    NavigateParams, SelectVmParams, SelectionMode, ViewType, VmActionType,
+    AutomationError, AutomationHandle, CommandResult, DialogType, GuiCommand, NavigateParams,
+    SelectVmParams, SelectionMode, ViewType, VmActionType,
 };
 use serde_json::json;
 use std::thread;
@@ -249,7 +249,10 @@ fn vm_action_sends_correct_command() {
             }
             thread::yield_now();
         };
-        assert!(matches!(req.command, GuiCommand::VmAction(VmActionType::Start)));
+        assert!(matches!(
+            req.command,
+            GuiCommand::VmAction(VmActionType::Start)
+        ));
         req.response_tx
             .send(CommandResult::success("vm_action", None))
             .unwrap();

@@ -320,28 +320,32 @@ impl SchemaEndpoints {
     pub fn provider_config(provider: LlmProvider) -> serde_json::Value {
         use super::adapters::ProviderConfig;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderConfig::for_provider(provider, &ontology)).expect("schema serialization failed")
+        serde_json::to_value(ProviderConfig::for_provider(provider, &ontology))
+            .expect("schema serialization failed")
     }
 
     /// Get tools in OpenAI format
     pub fn openai_tools() -> serde_json::Value {
         use super::adapters::ProviderAdapter;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderAdapter::to_openai(&ontology)).expect("schema serialization failed")
+        serde_json::to_value(ProviderAdapter::to_openai(&ontology))
+            .expect("schema serialization failed")
     }
 
     /// Get tools in Anthropic format
     pub fn anthropic_tools() -> serde_json::Value {
         use super::adapters::ProviderAdapter;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderAdapter::to_anthropic(&ontology)).expect("schema serialization failed")
+        serde_json::to_value(ProviderAdapter::to_anthropic(&ontology))
+            .expect("schema serialization failed")
     }
 
     /// Get tools in Gemini format
     pub fn gemini_tools() -> serde_json::Value {
         use super::adapters::ProviderAdapter;
         let ontology = HyperMachineOntology::build();
-        serde_json::to_value(ProviderAdapter::to_gemini(&ontology)).expect("schema serialization failed")
+        serde_json::to_value(ProviderAdapter::to_gemini(&ontology))
+            .expect("schema serialization failed")
     }
 
     /// Get capabilities summary

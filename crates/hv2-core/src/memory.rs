@@ -97,8 +97,10 @@ impl GuestMemory {
                 if end_offset > region.size {
                     return Err(Error::Memory(format!(
                         "Access 0x{:x}..0x{:x} exceeds region 0x{:x}..0x{:x} (overrun by {} bytes)",
-                        guest_addr, guest_addr + len,
-                        region.guest_addr, region.guest_addr + region.size,
+                        guest_addr,
+                        guest_addr + len,
+                        region.guest_addr,
+                        region.guest_addr + region.size,
                         end_offset - region.size
                     )));
                 }
@@ -110,7 +112,6 @@ impl GuestMemory {
             guest_addr
         )))
     }
-
 
     /// Write bytes to guest memory
     pub fn write_bytes(&self, guest_addr: GuestAddress, data: &[u8]) -> Result<()> {
@@ -220,7 +221,6 @@ mod tests {
         assert_eq!(data, read_data);
     }
 
-
     #[test]
     fn test_write_bytes_bounds_check() {
         let memory = GuestMemory::new(1024 * 1024).unwrap();
@@ -255,4 +255,3 @@ mod tests {
         assert!(data.is_empty());
     }
 }
-

@@ -128,7 +128,6 @@ pub struct SimdFpState {
     pub fpsr: u32,
 }
 
-
 impl core::fmt::Debug for SimdFpState {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SimdFpState")

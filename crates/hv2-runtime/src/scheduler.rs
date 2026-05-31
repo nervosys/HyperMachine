@@ -256,7 +256,7 @@ impl Scheduler {
         }
         pending.push(workload);
         // Sort by priority (highest first)
-        pending.sort_by(|a, b| b.priority.cmp(&a.priority));
+        pending.sort_by_key(|b| std::cmp::Reverse(b.priority));
         Ok(())
     }
 

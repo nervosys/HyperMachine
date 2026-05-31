@@ -1,29 +1,59 @@
 //! Integration tests for hv2-agent cross-module flows.
 
 use hv2_agent::{
-    // Tools
-    ToolRegistry, ToolDefinition, ToolParameter, ParameterType, ToolCall, RegisteredTool,
-    ToolCategory,
     // Actions
-    ActionRequest, AgentAction, PowerAction, ActionValidator,
-    // Policies
-    PolicySet, PolicyRule, PolicyAction, PolicyEffect, PolicyContext, ResourceId,
-    // Permissions
-    PermissionGraph, PrincipalId, PrincipalKind, Permission, PermissionSet, ResourceScope,
-    ResolutionEngine,
-    // MCP
-    McpServer, AgentCapabilities,
+    ActionRequest,
+    ActionValidator,
+    AgentAction,
+    AgentCapabilities,
     // Orchestration
-    AgentOrchestrator, AgentRole,
+    AgentOrchestrator,
+    AgentRole,
+    Episode,
     // Memory
-    EpisodicMemory, SemanticMemory, WorkingMemory,
-    Episode, SemanticFact, WorkingItem,
+    EpisodicMemory,
     // Events
-    EventBus, EventCategory, EventSeverity, EventFilter, VmEvent,
+    EventBus,
+    EventCategory,
+    EventFilter,
+    EventSeverity,
+    // MCP
+    McpServer,
+    ParameterType,
+    Permission,
+    // Permissions
+    PermissionGraph,
+    PermissionSet,
+    PolicyAction,
+    PolicyContext,
+    PolicyEffect,
+    PolicyRule,
+    // Policies
+    PolicySet,
+    PowerAction,
+    PrincipalId,
+    PrincipalKind,
+    RegisteredTool,
+    ResolutionEngine,
+    ResourceId,
+    ResourceScope,
+    SemanticFact,
+    SemanticMemory,
     // State
-    StateStore, StateValue,
+    StateStore,
+    StateValue,
     // Telemetry
-    TelemetryCollector, TelemetryConfig,
+    TelemetryCollector,
+    TelemetryConfig,
+    ToolCall,
+    ToolCategory,
+    ToolDefinition,
+    ToolParameter,
+    // Tools
+    ToolRegistry,
+    VmEvent,
+    WorkingItem,
+    WorkingMemory,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -34,8 +64,9 @@ use std::collections::HashMap;
 fn tool_register_and_execute() {
     let mut registry = ToolRegistry::new();
 
-    let def = ToolDefinition::new("vm_start", "Start a VM", ToolCategory::System)
-        .with_parameter(ToolParameter::required("vm_id", ParameterType::String, "VM ID"));
+    let def = ToolDefinition::new("vm_start", "Start a VM", ToolCategory::System).with_parameter(
+        ToolParameter::required("vm_id", ParameterType::String, "VM ID"),
+    );
 
     let tool = RegisteredTool::new(def, |args: &HashMap<String, serde_json::Value>| {
         let vm_id = args.get("vm_id").unwrap().as_str().unwrap();
@@ -44,8 +75,7 @@ fn tool_register_and_execute() {
 
     registry.register(tool).unwrap();
 
-    let call = ToolCall::new("call-1", "vm_start", "agent-a")
-        .with_arg("vm_id", json!("vm-123"));
+    let call = ToolCall::new("call-1", "vm_start", "agent-a").with_arg("vm_id", json!("vm-123"));
 
     let result = registry.execute(&call).unwrap();
     assert!(result.success);
@@ -58,8 +88,9 @@ fn tool_register_and_execute() {
 fn tool_missing_required_param_rejected() {
     let mut registry = ToolRegistry::new();
 
-    let def = ToolDefinition::new("vm_stop", "Stop a VM", ToolCategory::System)
-        .with_parameter(ToolParameter::required("vm_id", ParameterType::String, "VM ID"));
+    let def = ToolDefinition::new("vm_stop", "Stop a VM", ToolCategory::System).with_parameter(
+        ToolParameter::required("vm_id", ParameterType::String, "VM ID"),
+    );
 
     let tool = RegisteredTool::new(def, |_| Ok(json!("ok")));
     registry.register(tool).unwrap();
@@ -253,9 +284,7 @@ fn working_memory_add_and_evict() {
 fn state_store_set_get_delete() {
     let mut store = StateStore::new("test-store");
 
-    store
-        .set("counter", StateValue::from_string("42"))
-        .unwrap();
+    store.set("counter", StateValue::from_string("42")).unwrap();
     let val = store.get("counter");
     assert!(val.is_some());
 

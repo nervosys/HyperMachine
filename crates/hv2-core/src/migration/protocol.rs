@@ -9,9 +9,7 @@ use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
 use super::dirty_tracking::{DirtyTracker, PAGE_SIZE};
-use super::state::{
-    CpuState, DeviceState, SerializeError, SerializeResult,
-};
+use super::state::{CpuState, DeviceState, SerializeError, SerializeResult};
 
 /// Migration stage
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -276,7 +274,10 @@ impl MigrationController {
         }
 
         *stage = MigrationStage::PreCopy;
-        *self.precopy_start.write().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+        *self
+            .precopy_start
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
 
         Ok(())
     }
@@ -333,7 +334,10 @@ impl MigrationController {
 
     /// Add pages to transfer queue
     pub fn queue_pages(&self, pages: Vec<PageData>) {
-        let mut pending = self.pending_pages.write().unwrap_or_else(|e| e.into_inner());
+        let mut pending = self
+            .pending_pages
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         for page in pages {
             pending.push_back(page);
         }
@@ -341,7 +345,10 @@ impl MigrationController {
 
     /// Get next batch of pages to transfer
     pub fn get_pages_batch(&self, max_pages: usize) -> Vec<PageData> {
-        let mut pending = self.pending_pages.write().unwrap_or_else(|e| e.into_inner());
+        let mut pending = self
+            .pending_pages
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         let mut batch = Vec::with_capacity(max_pages);
 
         for _ in 0..max_pages {
@@ -429,7 +436,10 @@ impl MigrationController {
 
     /// Get pending page count
     pub fn pending_page_count(&self) -> usize {
-        self.pending_pages.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.pending_pages
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 }
 
@@ -524,32 +534,52 @@ impl MigrationStream {
 
     /// Send a message
     pub fn send(&self, msg: MigrationMessage) {
-        self.outgoing.write().unwrap_or_else(|e| e.into_inner()).push_back(msg);
+        self.outgoing
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(msg);
     }
 
     /// Receive a message
     pub fn receive(&self) -> Option<MigrationMessage> {
-        self.incoming.write().unwrap_or_else(|e| e.into_inner()).pop_front()
+        self.incoming
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front()
     }
 
     /// Push incoming message (from network)
     pub fn push_incoming(&self, msg: MigrationMessage) {
-        self.incoming.write().unwrap_or_else(|e| e.into_inner()).push_back(msg);
+        self.incoming
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push_back(msg);
     }
 
     /// Pop outgoing message (for network)
     pub fn pop_outgoing(&self) -> Option<MigrationMessage> {
-        self.outgoing.write().unwrap_or_else(|e| e.into_inner()).pop_front()
+        self.outgoing
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front()
     }
 
     /// Check if has outgoing messages
     pub fn has_outgoing(&self) -> bool {
-        !self.outgoing.read().unwrap_or_else(|e| e.into_inner()).is_empty()
+        !self
+            .outgoing
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
     }
 
     /// Check if has incoming messages
     pub fn has_incoming(&self) -> bool {
-        !self.incoming.read().unwrap_or_else(|e| e.into_inner()).is_empty()
+        !self
+            .incoming
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
     }
 }
 

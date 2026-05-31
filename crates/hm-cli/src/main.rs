@@ -892,13 +892,16 @@ mod tests {
     fn test_parse_t2_create_defaults() {
         let cli = Cli::try_parse_from(["hm", "t2", "create", "--name", "myvm"]).unwrap();
         match cli.command {
-            Commands::T2 { command: T2Commands::Create {
-                name,
-                cpu,
-                memory,
-                gpu,
-                network,
-            }} => {
+            Commands::T2 {
+                command:
+                    T2Commands::Create {
+                        name,
+                        cpu,
+                        memory,
+                        gpu,
+                        network,
+                    },
+            } => {
                 assert_eq!(name, "myvm");
                 assert_eq!(cpu, 2);
                 assert_eq!(memory, 4);
@@ -912,18 +915,30 @@ mod tests {
     #[test]
     fn test_parse_t2_create_all_options() {
         let cli = Cli::try_parse_from([
-            "hm", "t2", "create", "--name", "big-vm", "--cpu", "16", "--memory", "64", "--gpu",
+            "hm",
+            "t2",
+            "create",
+            "--name",
+            "big-vm",
+            "--cpu",
+            "16",
+            "--memory",
+            "64",
+            "--gpu",
             "--network",
         ])
         .unwrap();
         match cli.command {
-            Commands::T2 { command: T2Commands::Create {
-                cpu,
-                memory,
-                gpu,
-                network,
-                ..
-            }} => {
+            Commands::T2 {
+                command:
+                    T2Commands::Create {
+                        cpu,
+                        memory,
+                        gpu,
+                        network,
+                        ..
+                    },
+            } => {
                 assert_eq!(cpu, 16);
                 assert_eq!(memory, 64);
                 assert!(gpu);
@@ -937,12 +952,12 @@ mod tests {
     fn test_parse_t1_create_defaults() {
         let cli = Cli::try_parse_from(["hm", "t1", "create", "--name", "bmvm"]).unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Create {
-                name,
-                cpu,
-                memory,
-                ..
-            }} => {
+            Commands::T1 {
+                command:
+                    T1Commands::Create {
+                        name, cpu, memory, ..
+                    },
+            } => {
                 assert_eq!(name, "bmvm");
                 assert_eq!(cpu, 2);
                 assert_eq!(memory, 4);
@@ -953,14 +968,16 @@ mod tests {
 
     #[test]
     fn test_parse_t1_connect_defaults() {
-        let cli =
-            Cli::try_parse_from(["hm", "t1", "connect", "10.0.0.1"]).unwrap();
+        let cli = Cli::try_parse_from(["hm", "t1", "connect", "10.0.0.1"]).unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Connect {
-                endpoint,
-                port,
-                no_tls,
-            }} => {
+            Commands::T1 {
+                command:
+                    T1Commands::Connect {
+                        endpoint,
+                        port,
+                        no_tls,
+                    },
+            } => {
                 assert_eq!(endpoint, "10.0.0.1");
                 assert_eq!(port, 8443);
                 assert!(!no_tls);
@@ -972,19 +989,13 @@ mod tests {
     #[test]
     fn test_parse_t1_connect_custom_port() {
         let cli = Cli::try_parse_from([
-            "hm",
-            "t1",
-            "connect",
-            "10.0.0.1",
-            "--port",
-            "9999",
-            "--no-tls",
+            "hm", "t1", "connect", "10.0.0.1", "--port", "9999", "--no-tls",
         ])
         .unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Connect {
-                port, no_tls, ..
-            }} => {
+            Commands::T1 {
+                command: T1Commands::Connect { port, no_tls, .. },
+            } => {
                 assert_eq!(port, 9999);
                 assert!(no_tls);
             }
@@ -1009,15 +1020,9 @@ mod tests {
 
     #[test]
     fn test_parse_serve_custom_ports() {
-        let cli = Cli::try_parse_from([
-            "hm",
-            "serve",
-            "--grpc-port",
-            "9090",
-            "--rest-port",
-            "3000",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["hm", "serve", "--grpc-port", "9090", "--rest-port", "3000"])
+                .unwrap();
         match cli.command {
             Commands::Serve {
                 grpc_port,
@@ -1045,13 +1050,23 @@ mod tests {
     #[test]
     fn test_parse_t1_visible_alias() {
         let cli = Cli::try_parse_from(["hm", "type1", "list"]).unwrap();
-        assert!(matches!(cli.command, Commands::T1 { command: T1Commands::List }));
+        assert!(matches!(
+            cli.command,
+            Commands::T1 {
+                command: T1Commands::List
+            }
+        ));
     }
 
     #[test]
     fn test_parse_t2_visible_alias() {
         let cli = Cli::try_parse_from(["hm", "type2", "list"]).unwrap();
-        assert!(matches!(cli.command, Commands::T2 { command: T2Commands::List }));
+        assert!(matches!(
+            cli.command,
+            Commands::T2 {
+                command: T2Commands::List
+            }
+        ));
     }
 
     #[test]
@@ -1061,16 +1076,17 @@ mod tests {
 
     #[test]
     fn test_parse_t1_script_defaults() {
-        let cli = Cli::try_parse_from([
-            "hm", "t1", "script", "vm1", "--script", "echo hi",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["hm", "t1", "script", "vm1", "--script", "echo hi"]).unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Script {
-                name,
-                script,
-                timeout,
-            }} => {
+            Commands::T1 {
+                command:
+                    T1Commands::Script {
+                        name,
+                        script,
+                        timeout,
+                    },
+            } => {
                 assert_eq!(name, "vm1");
                 assert_eq!(script, "echo hi");
                 assert_eq!(timeout, 300);
@@ -1081,10 +1097,11 @@ mod tests {
 
     #[test]
     fn test_parse_t2_delete_force() {
-        let cli =
-            Cli::try_parse_from(["hm", "t2", "delete", "old-vm", "--force"]).unwrap();
+        let cli = Cli::try_parse_from(["hm", "t2", "delete", "old-vm", "--force"]).unwrap();
         match cli.command {
-            Commands::T2 { command: T2Commands::Delete { name, force } } => {
+            Commands::T2 {
+                command: T2Commands::Delete { name, force },
+            } => {
                 assert_eq!(name, "old-vm");
                 assert!(force);
             }
@@ -1097,7 +1114,9 @@ mod tests {
         // Without name
         let cli = Cli::try_parse_from(["hm", "t1", "status"]).unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Status { name } } => {
+            Commands::T1 {
+                command: T1Commands::Status { name },
+            } => {
                 assert!(name.is_none());
             }
             _ => panic!("Expected T1 Status"),
@@ -1106,7 +1125,9 @@ mod tests {
         // With name
         let cli = Cli::try_parse_from(["hm", "t1", "status", "vm1"]).unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Status { name } } => {
+            Commands::T1 {
+                command: T1Commands::Status { name },
+            } => {
                 assert_eq!(name.unwrap(), "vm1");
             }
             _ => panic!("Expected T1 Status"),
@@ -1115,12 +1136,12 @@ mod tests {
 
     #[test]
     fn test_parse_t1_export() {
-        let cli = Cli::try_parse_from([
-            "hm", "t1", "export", "vm1", "--output", "/tmp/out",
-        ])
-        .unwrap();
+        let cli =
+            Cli::try_parse_from(["hm", "t1", "export", "vm1", "--output", "/tmp/out"]).unwrap();
         match cli.command {
-            Commands::T1 { command: T1Commands::Export { name, output } } => {
+            Commands::T1 {
+                command: T1Commands::Export { name, output },
+            } => {
                 assert_eq!(name, "vm1");
                 assert_eq!(output.unwrap(), "/tmp/out");
             }

@@ -4,8 +4,8 @@
 //! PCM playback/capture streams and mixer control.
 
 use super::core::{
-    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat,
-    SampleRate, StereoVolume, StreamDirection, Volume,
+    AudioParams, AudioStats, AudioStream, ChannelLayout, PcmStream, SampleFormat, SampleRate,
+    StereoVolume, StreamDirection, Volume,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 

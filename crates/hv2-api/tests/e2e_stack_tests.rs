@@ -84,10 +84,7 @@ async fn unified_full_health_check() {
     let server = Server::new(test_config());
     let app = server.build_router();
 
-    let resp = app
-        .oneshot(get("/api/v1/health/full"))
-        .await
-        .unwrap();
+    let resp = app.oneshot(get("/api/v1/health/full")).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let json = body_json(resp).await;
@@ -195,10 +192,7 @@ async fn runtime_status_returns_pool_info() {
     let server = Server::new(test_config());
     let app = server.build_router();
 
-    let resp = app
-        .oneshot(get("/api/v1/runtime/status"))
-        .await
-        .unwrap();
+    let resp = app.oneshot(get("/api/v1/runtime/status")).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let json = body_json(resp).await;
@@ -281,10 +275,7 @@ async fn agentic_ontology_json_ld() {
     let server = Server::new(test_config());
     let app = server.build_router();
 
-    let resp = app
-        .oneshot(get("/agentic/ontology"))
-        .await
-        .unwrap();
+    let resp = app.oneshot(get("/agentic/ontology")).await.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let json = body_json(resp).await;
@@ -324,9 +315,7 @@ async fn ai_plugin_manifest() {
 
 #[tokio::test]
 async fn runtime_disabled_hides_routes() {
-    let config = test_config()
-        .enable_runtime(false)
-        .enable_events(false);
+    let config = test_config().enable_runtime(false).enable_events(false);
     let server = Server::new(config);
     let app = server.build_router();
 
@@ -335,18 +324,13 @@ async fn runtime_disabled_hides_routes() {
     assert_eq!(resp.status(), StatusCode::OK);
 
     // Runtime status should 404
-    let resp = app
-        .oneshot(get("/api/v1/runtime/status"))
-        .await
-        .unwrap();
+    let resp = app.oneshot(get("/api/v1/runtime/status")).await.unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
 async fn feature_summary_reflects_config() {
-    let config = test_config()
-        .enable_runtime(false)
-        .enable_events(true);
+    let config = test_config().enable_runtime(false).enable_events(true);
     let server = Server::new(config);
 
     let summary = server.feature_summary();

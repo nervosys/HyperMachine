@@ -122,7 +122,11 @@ fn linux_bzimage_validates_and_prepares_memory_regions() {
     let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
 
     // Should have: initrd, boot_params, cmdline, kernel
-    assert!(regions.len() >= 3, "Expected >=3 regions, got {}", regions.len());
+    assert!(
+        regions.len() >= 3,
+        "Expected >=3 regions, got {}",
+        regions.len()
+    );
 
     // Verify boot_params at setup_addr
     let bp = regions.iter().find(|(a, _)| *a == 0x90000);
@@ -133,7 +137,10 @@ fn linux_bzimage_validates_and_prepares_memory_regions() {
     let cl = regions.iter().find(|(a, _)| *a == 0x91000);
     assert!(cl.is_some(), "cmdline must be at setup_addr + 0x1000");
     let cmdline_bytes = &cl.unwrap().1;
-    assert!(cmdline_bytes.ends_with(&[0]), "cmdline must be null-terminated");
+    assert!(
+        cmdline_bytes.ends_with(&[0]),
+        "cmdline must be null-terminated"
+    );
 
     // Verify initrd at 32MB
     let rd = regions.iter().find(|(a, _)| *a == 0x200_0000);
@@ -174,10 +181,15 @@ fn multiboot_with_model_weight_modules() {
 
     MultibootProtocol::validate_params(&info).unwrap();
 
-    let mb_info = MultibootProtocol::create_multiboot_info(&info, 0x10000, 0x11000, Some(0x12000), 0x13000);
+    let mb_info =
+        MultibootProtocol::create_multiboot_info(&info, 0x10000, 0x11000, Some(0x12000), 0x13000);
     // flags should have modules bit set
     let flags = u32::from_le_bytes(mb_info[0..4].try_into().unwrap());
-    assert_ne!(flags & (1 << 3), 0, "mods bit must be set when modules present");
+    assert_ne!(
+        flags & (1 << 3),
+        0,
+        "mods bit must be set when modules present"
+    );
     assert_eq!(
         u32::from_le_bytes(mb_info[20..24].try_into().unwrap()),
         2,
@@ -233,8 +245,7 @@ fn guest_memory_multiboot_info_roundtrip() {
         memory_map: vec![(0, 640 * 1024), (1024 * 1024, 127 * 1024 * 1024)],
     };
 
-    let mb_data =
-        MultibootProtocol::create_multiboot_info(&info, 0x10000, 0x11000, None, 0x12000);
+    let mb_data = MultibootProtocol::create_multiboot_info(&info, 0x10000, 0x11000, None, 0x12000);
     let mmap_data = MultibootProtocol::create_memory_map(&info.memory_map);
 
     let mem = GuestMemory::new(2 * 1024 * 1024).unwrap();
@@ -307,7 +318,9 @@ fn unikernel_admitted_then_served_via_pool() {
 
     // Step 3: create runtime with warm pool, create session
     let rt = runtime_with_warm_pool(2);
-    let session = rt.create_session("llm-session-1", BillingTier::Premium).unwrap();
+    let session = rt
+        .create_session("llm-session-1", BillingTier::Premium)
+        .unwrap();
     assert!(!session.vm_id.is_empty());
 
     // Verify VM is assigned
@@ -358,9 +371,15 @@ fn concurrent_unikernel_sessions_are_independent() {
     assert_ne!(s1.vm_id, s3.vm_id);
 
     // Record different billing for each
-    rt.billing_engine().record("inf-1", "gpu_minutes", 60.0).unwrap();
-    rt.billing_engine().record("inf-2", "gpu_minutes", 120.0).unwrap();
-    rt.billing_engine().record("inf-3", "cpu_seconds", 300.0).unwrap();
+    rt.billing_engine()
+        .record("inf-1", "gpu_minutes", 60.0)
+        .unwrap();
+    rt.billing_engine()
+        .record("inf-2", "gpu_minutes", 120.0)
+        .unwrap();
+    rt.billing_engine()
+        .record("inf-3", "cpu_seconds", 300.0)
+        .unwrap();
 
     // Destroy in arbitrary order
     let inv2 = rt.destroy_session("inf-2").unwrap().unwrap();
@@ -413,7 +432,9 @@ fn gpu_placement_feeds_into_boot_cmdline() {
 #[test]
 fn multiboot_unikernel_with_gpu_config() {
     let mut topo = build_inference_topology();
-    let placement = topo.find_placement(&GpuRequirements::default().count(1)).unwrap();
+    let placement = topo
+        .find_placement(&GpuRequirements::default().count(1))
+        .unwrap();
     topo.allocate(&placement.gpu_ids);
 
     let info = MultibootInfo {
@@ -532,7 +553,9 @@ fn full_unikernel_lifecycle_e2e() {
 
     // ── 2. GPU Topology Placement ───────────────────────────────
     let mut topo = build_inference_topology();
-    let placement = topo.find_placement(&GpuRequirements::default().count(1)).unwrap();
+    let placement = topo
+        .find_placement(&GpuRequirements::default().count(1))
+        .unwrap();
     topo.allocate(&placement.gpu_ids);
     let gpu_id = placement.gpu_ids[0].clone();
 

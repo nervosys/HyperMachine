@@ -165,13 +165,13 @@ impl BootSetup {
                 ));
             }
 
-            // Check setup doesn't overlap with kernel
+            // Check setup doesn't overlap with kernel. Two half-open intervals
+            // [setup, setup_end) and [kernel_addr, kernel_end) overlap iff each
+            // starts before the other ends.
             let setup_end = setup + 0x10000; // Setup is typically max 64KB
             let kernel_end = kernel_addr + kernel_size as u64;
 
-            if (setup < kernel_end && setup_end > kernel_addr)
-                || (kernel_addr < setup_end && kernel_end > setup)
-            {
+            if setup < kernel_end && setup_end > kernel_addr {
                 return Err(Error::VM("Setup region overlaps with kernel region".into()));
             }
         }

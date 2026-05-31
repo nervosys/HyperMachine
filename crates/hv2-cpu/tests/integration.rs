@@ -5,11 +5,10 @@
 // (e.g. sf|opc|imm|Rn|Rd) which trigger clippy::unusual_byte_groupings.
 #![allow(clippy::unusual_byte_groupings)]
 
-use hv2_cpu::x86_64::{flags, MemoryAccess, SliceMemory, X86_64Cpu};
 use hv2_cpu::aarch64::{
-    self,
-    AArch64Cpu, MemoryAccess as AArch64MemoryAccess, SliceMemory as AArch64SliceMemory,
+    self, AArch64Cpu, MemoryAccess as AArch64MemoryAccess, SliceMemory as AArch64SliceMemory,
 };
+use hv2_cpu::x86_64::{flags, MemoryAccess, SliceMemory, X86_64Cpu};
 
 // ─── X86-64: Instruction Execution ─────────────────────────────────
 
@@ -58,7 +57,11 @@ fn x86_xor_zero_idiom_sets_zf() {
     let mut prog = vec![0x31, 0xC0]; // XOR EAX, EAX
     cpu.execute_with_memory(&mut prog).unwrap();
     assert_eq!(cpu.registers().rax, 0);
-    assert_ne!(cpu.registers().rflags & flags::ZF, 0, "ZF should be set after XOR zero idiom");
+    assert_ne!(
+        cpu.registers().rflags & flags::ZF,
+        0,
+        "ZF should be set after XOR zero idiom"
+    );
 }
 
 #[test]
@@ -68,7 +71,11 @@ fn x86_cmp_equal_sets_zf() {
     cpu.registers_mut().rax = 0x42;
     let mut prog = vec![0x3C, 0x42]; // CMP AL, 0x42
     cpu.execute_with_memory(&mut prog).unwrap();
-    assert_ne!(cpu.registers().rflags & flags::ZF, 0, "ZF should be set when CMP operands equal");
+    assert_ne!(
+        cpu.registers().rflags & flags::ZF,
+        0,
+        "ZF should be set when CMP operands equal"
+    );
 }
 
 #[test]
@@ -78,7 +85,11 @@ fn x86_test_zero_sets_zf() {
     cpu.registers_mut().rax = 0x00;
     let mut prog = vec![0xA8, 0xFF]; // TEST AL, 0xFF
     cpu.execute_with_memory(&mut prog).unwrap();
-    assert_ne!(cpu.registers().rflags & flags::ZF, 0, "ZF should be set when TEST result is zero");
+    assert_ne!(
+        cpu.registers().rflags & flags::ZF,
+        0,
+        "ZF should be set when TEST result is zero"
+    );
 }
 
 #[test]
@@ -402,10 +413,16 @@ fn aarch64_system_register_roundtrip() {
     let mut cpu = AArch64Cpu::new();
 
     cpu.write_sys_reg(aarch64::SystemRegId::SCTLR_EL1, 0x0000_0000_3050_5070);
-    assert_eq!(cpu.read_sys_reg(aarch64::SystemRegId::SCTLR_EL1), 0x0000_0000_3050_5070);
+    assert_eq!(
+        cpu.read_sys_reg(aarch64::SystemRegId::SCTLR_EL1),
+        0x0000_0000_3050_5070
+    );
 
     cpu.write_sys_reg(aarch64::SystemRegId::MAIR_EL1, 0xFF440C0400);
-    assert_eq!(cpu.read_sys_reg(aarch64::SystemRegId::MAIR_EL1), 0xFF440C0400);
+    assert_eq!(
+        cpu.read_sys_reg(aarch64::SystemRegId::MAIR_EL1),
+        0xFF440C0400
+    );
 }
 
 // ─── AArch64: SliceMemory ──────────────────────────────────────────

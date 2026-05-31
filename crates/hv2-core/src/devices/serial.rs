@@ -534,7 +534,10 @@ mod tests {
 
         // Enable FIFO and clear both FIFOs
         device
-            .write(FCR_OFFSET, &[FCR_FIFO_ENABLE | FCR_RX_FIFO_RESET | FCR_TX_FIFO_RESET])
+            .write(
+                FCR_OFFSET,
+                &[FCR_FIFO_ENABLE | FCR_RX_FIFO_RESET | FCR_TX_FIFO_RESET],
+            )
             .await
             .unwrap();
 
@@ -549,7 +552,11 @@ mod tests {
 
         // IIR should show FIFOs enabled (bits 6-7)
         device.read(IIR_OFFSET, &mut buf).await.unwrap();
-        assert_ne!(buf[0] & IIR_FIFO_ENABLED, 0, "FIFO bits should be set in IIR");
+        assert_ne!(
+            buf[0] & IIR_FIFO_ENABLED,
+            0,
+            "FIFO bits should be set in IIR"
+        );
     }
 
     #[tokio::test]

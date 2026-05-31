@@ -488,11 +488,7 @@ impl fmt::Display for RuntimeMetrics {
             "Pool:      total={} warm={} assigned={} failed={}",
             self.pool_total, self.pool_warm, self.pool_assigned, self.pool_failed
         )?;
-        writeln!(
-            f,
-            "Scheduler: pending={}",
-            self.scheduler_pending
-        )?;
+        writeln!(f, "Scheduler: pending={}", self.scheduler_pending)?;
         writeln!(f, "Workflows: active={}", self.workflows_active)?;
         writeln!(f, "Gateway:   routes={}", self.gateway_routes)?;
         writeln!(
@@ -881,8 +877,10 @@ mod tests {
         runtime.health_monitor().register("vm-2");
 
         let metrics = collector.collect(&runtime);
-        let total_health =
-            metrics.health_healthy + metrics.health_degraded + metrics.health_unhealthy + metrics.health_unknown;
+        let total_health = metrics.health_healthy
+            + metrics.health_degraded
+            + metrics.health_unhealthy
+            + metrics.health_unknown;
         assert_eq!(total_health, 2);
     }
 

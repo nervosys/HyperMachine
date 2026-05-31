@@ -822,15 +822,13 @@ fn validate_json_value(
                 }
             }
         }
-        serde_json::Value::String(s) => {
-            if s.len() > config.max_string_length {
-                return Some(BodyValidationError::MaxStringLengthExceeded {
-                    length: s.len(),
-                    limit: config.max_string_length,
-                });
-            }
+        serde_json::Value::String(s) if s.len() > config.max_string_length => {
+            return Some(BodyValidationError::MaxStringLengthExceeded {
+                length: s.len(),
+                limit: config.max_string_length,
+            });
         }
-        _ => {} // Number, Bool, Null — no structural constraints
+        _ => {} // Number, Bool, Null, in-bounds strings — no structural constraints
     }
     None
 }

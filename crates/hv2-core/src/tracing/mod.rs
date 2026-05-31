@@ -44,36 +44,33 @@
 //! let svg = flame_graph.to_svg(800, 600);
 //! ```
 
-pub mod types;
-pub mod tracer;
 pub mod exporters;
 pub mod profiler;
 #[cfg(feature = "remote-telemetry")]
 pub mod remote;
+pub mod tracer;
+pub mod types;
 
 // Re-export core types
 pub use types::{
-    TraceId, SpanId, TraceFlags, SpanContext, TraceState,
-    SpanKind, StatusCode, SpanStatus, AttributeValue, Attribute,
-    SpanEvent, SpanLink, SpanData, SamplingDecision, SamplingResult,
-    Sampler, AlwaysOnSampler, AlwaysOffSampler, TraceIdRatioSampler,
-    ParentBasedSampler, InstrumentationScope, Resource,
+    AlwaysOffSampler, AlwaysOnSampler, Attribute, AttributeValue, InstrumentationScope,
+    ParentBasedSampler, Resource, Sampler, SamplingDecision, SamplingResult, SpanContext, SpanData,
+    SpanEvent, SpanId, SpanKind, SpanLink, SpanStatus, StatusCode, TraceFlags, TraceId,
+    TraceIdRatioSampler, TraceState,
 };
 
 // Re-export tracer types
 pub use tracer::{
-    SpanProcessor, SimpleSpanProcessor, BatchSpanProcessor,
-    SpanExporter, InMemorySpanExporter, TracerError, TracerResult,
-    SpanBuilder, Span, IdGenerator, DefaultIdGenerator,
-    Tracer, TracerProvider, TracerProviderBuilder,
-    Context, ContextGuard,
+    BatchSpanProcessor, Context, ContextGuard, DefaultIdGenerator, IdGenerator,
+    InMemorySpanExporter, SimpleSpanProcessor, Span, SpanBuilder, SpanExporter, SpanProcessor,
+    Tracer, TracerError, TracerProvider, TracerProviderBuilder, TracerResult,
 };
 
 // Re-export exporters
 pub use exporters::{
-    ConsoleSpanExporter, JaegerConfig, JaegerSpanExporter,
-    ZipkinConfig, ZipkinSpanExporter, OtlpConfig, OtlpProtocol,
-    OtlpSpanExporter, CompositeSpanExporter, FilteredSpanExporter,
+    CompositeSpanExporter, ConsoleSpanExporter, FilteredSpanExporter, JaegerConfig,
+    JaegerSpanExporter, OtlpConfig, OtlpProtocol, OtlpSpanExporter, ZipkinConfig,
+    ZipkinSpanExporter,
 };
 
 #[cfg(feature = "remote-telemetry")]
@@ -81,10 +78,9 @@ pub use remote::{RemoteSpanExporter, RemoteSpanExporterConfig};
 
 // Re-export profiler types
 pub use profiler::{
-    ProfileFrame, StackSample, ProfileData, ProfilerError, ProfilerResult,
-    ProfilerConfig, ProfilerState, CpuProfiler, FlameGraphNode,
-    FlameGraphBuilder, FunctionProfile, InstrumentedProfiler,
-    ProfileGuard, AllocationProfile, AllocationSite,
+    AllocationProfile, AllocationSite, CpuProfiler, FlameGraphBuilder, FlameGraphNode,
+    FunctionProfile, InstrumentedProfiler, ProfileData, ProfileFrame, ProfileGuard, ProfilerConfig,
+    ProfilerError, ProfilerResult, ProfilerState, StackSample,
 };
 
 #[cfg(test)]
@@ -110,7 +106,8 @@ mod tests {
         let parent_ctx = parent.context().clone();
 
         // Create child span
-        let mut child = tracer.span_builder("child-operation")
+        let mut child = tracer
+            .span_builder("child-operation")
             .with_kind(SpanKind::Internal)
             .with_parent(parent_ctx.clone())
             .with_attribute("key", "value")
@@ -170,38 +167,20 @@ mod tests {
     fn test_sampling() {
         // Test always-on sampler
         let sampler = AlwaysOnSampler;
-        let result = sampler.should_sample(
-            None,
-            TraceId::new(),
-            "test",
-            SpanKind::Internal,
-            &[],
-            &[],
-        );
+        let result =
+            sampler.should_sample(None, TraceId::new(), "test", SpanKind::Internal, &[], &[]);
         assert_eq!(result.decision, SamplingDecision::RecordAndSample);
 
         // Test always-off sampler
         let sampler = AlwaysOffSampler;
-        let result = sampler.should_sample(
-            None,
-            TraceId::new(),
-            "test",
-            SpanKind::Internal,
-            &[],
-            &[],
-        );
+        let result =
+            sampler.should_sample(None, TraceId::new(), "test", SpanKind::Internal, &[], &[]);
         assert_eq!(result.decision, SamplingDecision::Drop);
 
         // Test ratio sampler (0% should always drop)
         let sampler = TraceIdRatioSampler::new(0.0);
-        let result = sampler.should_sample(
-            None,
-            TraceId::new(),
-            "test",
-            SpanKind::Internal,
-            &[],
-            &[],
-        );
+        let result =
+            sampler.should_sample(None, TraceId::new(), "test", SpanKind::Internal, &[], &[]);
         assert_eq!(result.decision, SamplingDecision::Drop);
     }
 
@@ -228,9 +207,7 @@ mod tests {
 
     #[test]
     fn test_profiler_integration() {
-        let profiler = CpuProfiler::with_config(
-            ProfilerConfig::default().with_frequency(99)
-        );
+        let profiler = CpuProfiler::with_config(ProfilerConfig::default().with_frequency(99));
 
         profiler.start().unwrap();
 
@@ -334,9 +311,7 @@ mod tests {
 
         // Create second trace linked to first
         let link = SpanLink::new(ctx1.clone());
-        let span2 = tracer.span_builder("second")
-            .with_link(link)
-            .start(&tracer);
+        let span2 = tracer.span_builder("second").with_link(link).start(&tracer);
         span2.end();
 
         let spans = exporter.get_spans();

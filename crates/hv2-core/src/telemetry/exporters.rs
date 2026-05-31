@@ -2,11 +2,9 @@
 //!
 //! Export metrics in various formats for external consumption.
 
-use super::types::{
-    HistogramData, MetricFamily, MetricLabels, MetricType, MetricValue,
-};
 #[cfg(test)]
 use super::types::MetricSample;
+use super::types::{HistogramData, MetricFamily, MetricLabels, MetricType, MetricValue};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Write;

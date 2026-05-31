@@ -1490,9 +1490,16 @@ mod tests {
     fn test_pstate_flag_constants() {
         // Each flag should be a distinct power of 2
         let flags = [
-            pstate::N, pstate::Z, pstate::C, pstate::V,
-            pstate::D, pstate::A, pstate::I, pstate::F,
-            pstate::SS, pstate::IL,
+            pstate::N,
+            pstate::Z,
+            pstate::C,
+            pstate::V,
+            pstate::D,
+            pstate::A,
+            pstate::I,
+            pstate::F,
+            pstate::SS,
+            pstate::IL,
         ];
         for (i, a) in flags.iter().enumerate() {
             assert!(a.is_power_of_two(), "Flag {} should be power of 2", i);

@@ -468,16 +468,12 @@ impl SecureBootManager {
 
     /// Add hash to allowlist
     pub fn allow_hash(&self, hash: Vec<u8>, description: impl Into<String>) {
-        self.hash_allowlist
-            .write()
-            .insert(hash, description.into());
+        self.hash_allowlist.write().insert(hash, description.into());
     }
 
     /// Add hash to blocklist
     pub fn block_hash(&self, hash: Vec<u8>, description: impl Into<String>) {
-        self.hash_blocklist
-            .write()
-            .insert(hash, description.into());
+        self.hash_blocklist.write().insert(hash, description.into());
     }
 
     /// Check if hash is allowed

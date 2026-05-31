@@ -662,10 +662,7 @@ mod tests {
         let dir = tempdir().unwrap();
         let manager = T1Manager::with_config_dir(dir.path().to_path_buf()).unwrap();
 
-        manager
-            .create_vm("my-vm", 8, 16, true, true)
-            .await
-            .unwrap();
+        manager.create_vm("my-vm", 8, 16, true, true).await.unwrap();
 
         let vm = manager.get_vm("my-vm").await.unwrap();
         assert_eq!(vm.name, "my-vm");
@@ -682,12 +679,7 @@ mod tests {
 
         let result = manager.get_vm("nonexistent").await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("not found")
-        );
+        assert!(result.unwrap_err().to_string().contains("not found"));
     }
 
     #[tokio::test]
@@ -813,12 +805,10 @@ mod tests {
 
         let result = manager.start_vm("start-vm").await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("No T1 hypervisor connection")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No T1 hypervisor connection"));
     }
 
     #[tokio::test]
@@ -833,12 +823,10 @@ mod tests {
 
         let result = manager.stop_vm("stop-vm").await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("No T1 hypervisor connection")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No T1 hypervisor connection"));
     }
 
     #[tokio::test]
@@ -848,7 +836,10 @@ mod tests {
 
         {
             let manager = T1Manager::with_config_dir(path.clone()).unwrap();
-            manager.create_vm("persist", 2, 4, false, false).await.unwrap();
+            manager
+                .create_vm("persist", 2, 4, false, false)
+                .await
+                .unwrap();
         }
 
         let manager2 = T1Manager::with_config_dir(path).unwrap();

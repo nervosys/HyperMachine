@@ -345,24 +345,20 @@ impl IdeChannel {
     /// Read from command block register
     fn read_command_reg(&mut self, offset: u16) -> u8 {
         match offset {
-            regs::DATA => {
-                if self.data_position < self.data_buffer.len() {
-                    let value = self.data_buffer[self.data_position];
-                    self.data_position += 1;
+            regs::DATA if self.data_position < self.data_buffer.len() => {
+                let value = self.data_buffer[self.data_position];
+                self.data_position += 1;
 
-                    // Check if we've read a complete sector
-                    if self.data_position.is_multiple_of(SECTOR_SIZE) && !self.write_mode {
-                        self.sectors_remaining = self.sectors_remaining.saturating_sub(1);
-                        if self.sectors_remaining == 0 {
-                            self.status &= !status::DRQ;
-                            self.data_buffer.clear();
-                            self.data_position = 0;
-                        }
+                // Check if we've read a complete sector
+                if self.data_position.is_multiple_of(SECTOR_SIZE) && !self.write_mode {
+                    self.sectors_remaining = self.sectors_remaining.saturating_sub(1);
+                    if self.sectors_remaining == 0 {
+                        self.status &= !status::DRQ;
+                        self.data_buffer.clear();
+                        self.data_position = 0;
                     }
-                    value
-                } else {
-                    0
                 }
+                value
             }
             regs::ERROR => self.error,
             regs::SECTOR_COUNT => {
@@ -404,38 +400,36 @@ impl IdeChannel {
     /// Write to command block register
     fn write_command_reg(&mut self, offset: u16, value: u8) {
         match offset {
-            regs::DATA => {
-                if self.write_mode && self.data_position < self.data_buffer.len() {
-                    self.data_buffer[self.data_position] = value;
-                    self.data_position += 1;
+            regs::DATA if self.write_mode && self.data_position < self.data_buffer.len() => {
+                self.data_buffer[self.data_position] = value;
+                self.data_position += 1;
 
-                    // Check if we've written a complete sector
-                    if self.data_position.is_multiple_of(SECTOR_SIZE) {
-                        // Write the sector to disk
-                        let sector_start = self.data_position - SECTOR_SIZE;
-                        // Copy sector data to avoid borrow conflict
-                        let sector_data: Vec<u8> =
-                            self.data_buffer[sector_start..self.data_position].to_vec();
-                        let current_lba = self.current_lba;
+                // Check if we've written a complete sector
+                if self.data_position.is_multiple_of(SECTOR_SIZE) {
+                    // Write the sector to disk
+                    let sector_start = self.data_position - SECTOR_SIZE;
+                    // Copy sector data to avoid borrow conflict
+                    let sector_data: Vec<u8> =
+                        self.data_buffer[sector_start..self.data_position].to_vec();
+                    let current_lba = self.current_lba;
 
-                        if self
-                            .selected_drive_mut()
-                            .write_sectors(current_lba, &sector_data)
-                        {
-                            self.current_lba += 1;
-                            self.sectors_remaining = self.sectors_remaining.saturating_sub(1);
+                    if self
+                        .selected_drive_mut()
+                        .write_sectors(current_lba, &sector_data)
+                    {
+                        self.current_lba += 1;
+                        self.sectors_remaining = self.sectors_remaining.saturating_sub(1);
 
-                            if self.sectors_remaining == 0 {
-                                self.status &= !status::DRQ;
-                                self.status |= status::DRDY;
-                                self.data_buffer.clear();
-                                self.data_position = 0;
-                                self.write_mode = false;
-                                self.raise_interrupt();
-                            }
-                        } else {
-                            self.set_error(error::ABRT);
+                        if self.sectors_remaining == 0 {
+                            self.status &= !status::DRQ;
+                            self.status |= status::DRDY;
+                            self.data_buffer.clear();
+                            self.data_position = 0;
+                            self.write_mode = false;
+                            self.raise_interrupt();
                         }
+                    } else {
+                        self.set_error(error::ABRT);
                     }
                 }
             }
@@ -697,18 +691,14 @@ impl IdeController {
         match port {
             IDE_PRIMARY_BASE..=0x1F7 => {
                 let offset = port - IDE_PRIMARY_BASE;
-                self.primary
-                    .lock()
-                    .write_command_reg(offset, value);
+                self.primary.lock().write_command_reg(offset, value);
             }
             IDE_PRIMARY_CTRL => {
                 self.primary.lock().write_control_reg(value);
             }
             IDE_SECONDARY_BASE..=0x177 => {
                 let offset = port - IDE_SECONDARY_BASE;
-                self.secondary
-                    .lock()
-                    .write_command_reg(offset, value);
+                self.secondary.lock().write_command_reg(offset, value);
             }
             IDE_SECONDARY_CTRL => {
                 self.secondary.lock().write_control_reg(value);

@@ -430,7 +430,9 @@ impl CapacityManager {
         self.reservations
             .read()
             .values()
-            .filter(|r| r.state == ReservationState::Active || r.state == ReservationState::FullyUtilized)
+            .filter(|r| {
+                r.state == ReservationState::Active || r.state == ReservationState::FullyUtilized
+            })
             .cloned()
             .collect()
     }
@@ -453,7 +455,9 @@ impl CapacityManager {
         self.reservations
             .read()
             .values()
-            .filter(|r| r.state == ReservationState::Active || r.state == ReservationState::FullyUtilized)
+            .filter(|r| {
+                r.state == ReservationState::Active || r.state == ReservationState::FullyUtilized
+            })
             .filter(|r| vm_class.is_none_or(|c| r.vm_class == c))
             .map(|r| r.instance_count)
             .sum()
@@ -526,10 +530,8 @@ mod tests {
     #[test]
     fn test_class_capacity_limit() {
         let cm = CapacityManager::new();
-        cm.register_class(
-            VmClass::new("tiny", SlaTier::BestEffort).max(1),
-        )
-        .unwrap();
+        cm.register_class(VmClass::new("tiny", SlaTier::BestEffort).max(1))
+            .unwrap();
 
         cm.increment_class_usage("tiny").unwrap();
         let err = cm.increment_class_usage("tiny").unwrap_err();
@@ -540,7 +542,12 @@ mod tests {
     fn test_create_reservation() {
         let cm = setup();
         let id = cm
-            .create_reservation("tenant-1", "gpu-a100-premium", 10, Duration::from_secs(3600))
+            .create_reservation(
+                "tenant-1",
+                "gpu-a100-premium",
+                10,
+                Duration::from_secs(3600),
+            )
             .unwrap();
 
         let rsv = cm.get_reservation(&id).unwrap();

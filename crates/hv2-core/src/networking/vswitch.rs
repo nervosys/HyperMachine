@@ -763,50 +763,32 @@ impl VirtualSwitch {
     pub fn add_port(&self, name: &str, port_type: PortType) -> PortId {
         let id = self.next_port_id.fetch_add(1, Ordering::SeqCst) as PortId;
         let port = Port::new(id, name, port_type);
-        self.ports
-            .write()
-            .insert(id, port);
+        self.ports.write().insert(id, port);
         id
     }
 
     /// Remove port
     pub fn remove_port(&self, port_id: PortId) -> Option<Port> {
-        let port = self
-            .ports
-            .write()
-            .remove(&port_id);
+        let port = self.ports.write().remove(&port_id);
         if port.is_some() {
-            self.mac_table
-                .write()
-                .flush_port(port_id);
+            self.mac_table.write().flush_port(port_id);
         }
         port
     }
 
     /// Get port
     pub fn get_port(&self, port_id: PortId) -> Option<Port> {
-        self.ports
-            .read()
-            .get(&port_id)
-            .cloned()
+        self.ports.read().get(&port_id).cloned()
     }
 
     /// List all ports
     pub fn list_ports(&self) -> Vec<Port> {
-        self.ports
-            .read()
-            .values()
-            .cloned()
-            .collect()
+        self.ports.read().values().cloned().collect()
     }
 
     /// Set port state
     pub fn set_port_state(&self, port_id: PortId, state: PortState) -> bool {
-        if let Some(port) = self
-            .ports
-            .write()
-            .get_mut(&port_id)
-        {
+        if let Some(port) = self.ports.write().get_mut(&port_id) {
             port.state = state;
             true
         } else {
@@ -816,11 +798,7 @@ impl VirtualSwitch {
 
     /// Set port VLAN mode
     pub fn set_port_vlan(&self, port_id: PortId, mode: VlanMode) -> bool {
-        if let Some(port) = self
-            .ports
-            .write()
-            .get_mut(&port_id)
-        {
+        if let Some(port) = self.ports.write().get_mut(&port_id) {
             port.vlan_mode = mode;
             true
         } else {
@@ -830,11 +808,7 @@ impl VirtualSwitch {
 
     /// Enable/disable port
     pub fn set_port_enabled(&self, port_id: PortId, enabled: bool) -> bool {
-        if let Some(port) = self
-            .ports
-            .write()
-            .get_mut(&port_id)
-        {
+        if let Some(port) = self.ports.write().get_mut(&port_id) {
             port.admin_enabled = enabled;
             true
         } else {
@@ -844,11 +818,7 @@ impl VirtualSwitch {
 
     /// Set port link state
     pub fn set_port_link(&self, port_id: PortId, up: bool) -> bool {
-        if let Some(port) = self
-            .ports
-            .write()
-            .get_mut(&port_id)
-        {
+        if let Some(port) = self.ports.write().get_mut(&port_id) {
             port.link_up = up;
             true
         } else {
@@ -890,11 +860,7 @@ impl VirtualSwitch {
 
         // Update port stats
         drop(ports);
-        if let Some(port) = self
-            .ports
-            .write()
-            .get_mut(&ingress_port)
-        {
+        if let Some(port) = self.ports.write().get_mut(&ingress_port) {
             port.stats.add_rx(
                 frame.size() as u64,
                 frame.is_multicast(),
@@ -1001,9 +967,7 @@ impl VirtualSwitch {
         ingress_port: PortId,
         frame: &EthernetFrame,
     ) -> Option<(PortId, EthernetFrame)> {
-        let sources = self
-            .mirror_sources
-            .read();
+        let sources = self.mirror_sources.read();
         let dest = self.mirror_dest.read();
 
         if sources.contains(&ingress_port) {
@@ -1016,17 +980,13 @@ impl VirtualSwitch {
 
     /// Configure port mirroring
     pub fn set_mirror(&self, sources: Vec<PortId>, destination: PortId) {
-        *self
-            .mirror_sources
-            .write() = sources.into_iter().collect();
+        *self.mirror_sources.write() = sources.into_iter().collect();
         *self.mirror_dest.write() = Some(destination);
     }
 
     /// Disable port mirroring
     pub fn disable_mirror(&self) {
-        self.mirror_sources
-            .write()
-            .clear();
+        self.mirror_sources.write().clear();
         *self.mirror_dest.write() = None;
     }
 
@@ -1039,11 +999,7 @@ impl VirtualSwitch {
     pub fn disable_stp(&self) {
         self.stp_enabled.store(false, Ordering::Release);
         // Set all ports to forwarding
-        for port in self
-            .ports
-            .write()
-            .values_mut()
-        {
+        for port in self.ports.write().values_mut() {
             port.state = PortState::Forwarding;
         }
     }
@@ -1060,32 +1016,22 @@ impl VirtualSwitch {
 
     /// Age MAC table
     pub fn age_mac_table(&self) -> usize {
-        self.mac_table
-            .write()
-            .age()
+        self.mac_table.write().age()
     }
 
     /// Flush MAC table
     pub fn flush_mac_table(&self) {
-        self.mac_table
-            .write()
-            .flush_dynamic();
+        self.mac_table.write().flush_dynamic();
     }
 
     /// Add static MAC entry
     pub fn add_static_mac(&self, mac: MacAddress, port: PortId, vlan: VlanId) -> bool {
-        self.mac_table
-            .write()
-            .add_static(mac, port, vlan)
+        self.mac_table.write().add_static(mac, port, vlan)
     }
 
     /// Get MAC table entries
     pub fn mac_entries(&self) -> Vec<MacEntry> {
-        self.mac_table
-            .read()
-            .entries()
-            .cloned()
-            .collect()
+        self.mac_table.read().entries().cloned().collect()
     }
 
     /// Get statistics
@@ -1096,11 +1042,7 @@ impl VirtualSwitch {
     /// Reset statistics
     pub fn reset_stats(&self) {
         *self.stats.write() = SwitchStats::default();
-        for port in self
-            .ports
-            .write()
-            .values_mut()
-        {
+        for port in self.ports.write().values_mut() {
             port.stats = PortStats::default();
         }
     }

@@ -453,7 +453,11 @@ impl Server {
             ("GET", "/metrics", "Unified Prometheus metrics"),
             ("POST", "/api/v1/vms/{id}/snapshots", "Create snapshot"),
             ("GET", "/api/v1/vms/{id}/snapshots", "List snapshots"),
-            ("GET", "/api/v1/vms/{id}/snapshots/{snap_id}", "Get snapshot"),
+            (
+                "GET",
+                "/api/v1/vms/{id}/snapshots/{snap_id}",
+                "Get snapshot",
+            ),
             (
                 "DELETE",
                 "/api/v1/vms/{id}/snapshots/{snap_id}",
@@ -501,7 +505,11 @@ impl Server {
                     "/api/v1/runtime/workflows/{id}/steps/{step}",
                     "Advance step",
                 ),
-                ("DELETE", "/api/v1/runtime/workflows/{id}", "Cancel workflow"),
+                (
+                    "DELETE",
+                    "/api/v1/runtime/workflows/{id}",
+                    "Cancel workflow",
+                ),
                 ("POST", "/api/v1/runtime/maintenance", "Maintenance tick"),
             ]);
         }
@@ -528,7 +536,11 @@ impl Server {
         tracing::info!("┌─────────────────────────────────────────────────");
         tracing::info!("│ HyperMachine API Server v{}", env!("CARGO_PKG_VERSION"));
         tracing::info!("├─────────────────────────────────────────────────");
-        let proto = if self.config.tls.is_some() { "https" } else { "http" };
+        let proto = if self.config.tls.is_some() {
+            "https"
+        } else {
+            "http"
+        };
         tracing::info!(
             "│ REST : {}://{}:{}",
             proto,

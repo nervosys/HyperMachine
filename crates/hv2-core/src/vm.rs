@@ -754,7 +754,6 @@ impl VM {
                 tracing::debug!("IOAPIC EOI vector={}", vector);
                 Ok(true)
             }
-
         }
     }
 
@@ -1054,7 +1053,6 @@ impl VM {
                 tracing::debug!("IOAPIC EOI vector={}", vector);
                 Ok(true)
             }
-
         }
     }
 

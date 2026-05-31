@@ -986,7 +986,9 @@ impl NvmeController {
         let mut storage = self.storage.write();
         let end = offset as usize + data.len();
         if end > storage.len() {
-            return Err(crate::Error::Memory("Write past end of storage".to_string()));
+            return Err(crate::Error::Memory(
+                "Write past end of storage".to_string(),
+            ));
         }
         storage[offset as usize..end].copy_from_slice(data);
         Ok(())

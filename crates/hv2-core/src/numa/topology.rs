@@ -6,12 +6,12 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(test)]
+use super::types::NUMA_DISTANCE_LOCAL;
 use super::types::{
     AllocationPolicy, CpuAffinity, DistanceMatrix, InterleavingMode, MemoryAffinity, MemoryRange,
     NodeId, NodeStats,
 };
-#[cfg(test)]
-use super::types::NUMA_DISTANCE_LOCAL;
 
 /// A single NUMA node with its resources
 #[derive(Debug, Clone)]

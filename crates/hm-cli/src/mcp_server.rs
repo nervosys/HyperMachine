@@ -1102,8 +1102,16 @@ mod tests {
         let tools = rt.block_on(async { list_tools().await.0 });
         for tool in &tools {
             assert!(!tool.name.is_empty(), "Tool should have a name");
-            assert!(!tool.description.is_empty(), "Tool {} should have description", tool.name);
-            assert!(tool.parameters.is_object(), "Tool {} params should be object", tool.name);
+            assert!(
+                !tool.description.is_empty(),
+                "Tool {} should have description",
+                tool.name
+            );
+            assert!(
+                tool.parameters.is_object(),
+                "Tool {} params should be object",
+                tool.name
+            );
         }
     }
 
@@ -1113,8 +1121,14 @@ mod tests {
         let tools = rt.block_on(async { list_tools().await.0 });
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
         for expected in &[
-            "vm.create", "vm.list", "vm.get", "vm.start",
-            "vm.stop", "vm.delete", "vm.metrics", "vm.execute_script",
+            "vm.create",
+            "vm.list",
+            "vm.get",
+            "vm.start",
+            "vm.stop",
+            "vm.delete",
+            "vm.metrics",
+            "vm.execute_script",
         ] {
             assert!(names.contains(expected), "Missing tool: {}", expected);
         }
