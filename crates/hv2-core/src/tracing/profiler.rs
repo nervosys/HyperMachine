@@ -3,8 +3,8 @@
 //! Provides CPU profiling, flame graph generation, and hot path detection
 //! for performance analysis of the hypervisor.
 
-use std::collections::HashMap;
 use parking_lot::{Mutex, RwLock};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 /// Profile entry representing a sampled stack frame
@@ -135,7 +135,7 @@ impl ProfileData {
         }
 
         let mut sorted: Vec<_> = func_counts.into_iter().collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|x| std::cmp::Reverse(x.1));
 
         sorted
             .into_iter()
@@ -154,7 +154,7 @@ impl ProfileData {
     /// Get hot paths (most sampled complete stacks)
     pub fn hot_paths(&self, limit: usize) -> Vec<(Vec<String>, u64, f64)> {
         let mut sorted: Vec<_> = self.stacks.iter().map(|(k, v)| (k.clone(), *v)).collect();
-        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted.sort_by_key(|x| std::cmp::Reverse(x.1));
 
         sorted
             .into_iter()
@@ -626,11 +626,7 @@ impl FunctionProfile {
 
     /// Average call time
     pub fn avg_time_ns(&self) -> u64 {
-        if self.call_count > 0 {
-            self.total_time_ns / self.call_count
-        } else {
-            0
-        }
+        self.total_time_ns.checked_div(self.call_count).unwrap_or(0)
     }
 
     /// Record a call
@@ -690,14 +686,14 @@ impl InstrumentedProfiler {
     /// Get top functions by total time
     pub fn top_by_total_time(&self, limit: usize) -> Vec<FunctionProfile> {
         let mut profiles = self.get_profiles();
-        profiles.sort_by(|a, b| b.total_time_ns.cmp(&a.total_time_ns));
+        profiles.sort_by_key(|p| std::cmp::Reverse(p.total_time_ns));
         profiles.into_iter().take(limit).collect()
     }
 
     /// Get top functions by call count
     pub fn top_by_call_count(&self, limit: usize) -> Vec<FunctionProfile> {
         let mut profiles = self.get_profiles();
-        profiles.sort_by(|a, b| b.call_count.cmp(&a.call_count));
+        profiles.sort_by_key(|p| std::cmp::Reverse(p.call_count));
         profiles.into_iter().take(limit).collect()
     }
 
@@ -812,7 +808,7 @@ impl AllocationProfile {
     /// Get top allocation sites by bytes
     pub fn top_sites(&self, limit: usize) -> Vec<&AllocationSite> {
         let mut sites: Vec<_> = self.sites.values().collect();
-        sites.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+        sites.sort_by_key(|s| std::cmp::Reverse(s.bytes));
         sites.into_iter().take(limit).collect()
     }
 }

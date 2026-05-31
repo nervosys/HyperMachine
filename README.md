@@ -18,7 +18,7 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 | **GPU**         | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL                         |
 | **AI-First**    | MCP server, scriptable API, WASM plugins, LLM tool formats                   |
 | **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
-| **Security**    | FIPS 140-3 crypto, seccomp filtering, capability-based access, audit logging |
+| **Security**    | FIPS-approved + post-quantum crypto, capability-based access, audit logging |
 
 ### 1. Agentic-First Virtualization
 
@@ -34,11 +34,11 @@ HyperMachine models GPU interconnect topology (NVLink, NVSwitch, PCIe) and makes
 
 ### 4. Post-Quantum Cryptography
 
-Alongside classical FIPS 140-3 algorithms (AES-GCM, RSA, ECDSA), HyperMachine ships ML-KEM (Kyber) for key encapsulation, ML-DSA (Dilithium) for digital signatures, and SLH-DSA (SPHINCS+) for hash-based signatures — all NIST-standardized, quantum-resistant, and available today.
+Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine ships ML-KEM (Kyber) for key encapsulation, ML-DSA (Dilithium) for digital signatures, and SLH-DSA (SPHINCS+) for hash-based signatures — all NIST-standardized, quantum-resistant, and backed by the audited pure-Rust [RustCrypto](https://github.com/RustCrypto) implementations (not placeholders).
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
-~206,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,480+ tests, zero clippy warnings, zero known advisories.
+~206,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,480+ tests and `cargo clippy -D warnings` clean. Security advisories in the active dependency graph are triaged in [`deny.toml`](deny.toml) (one accepted with justification: the `rsa` crate's Marvin-attack timing advisory, for which no fixed release exists).
 
 ### 6. Semantic GUI Automation
 
@@ -158,13 +158,21 @@ This semantic approach is **superior to screen-based automation** (like Anthropi
 
 ## Cryptography
 
-FIPS 140-3 compliant cryptographic modules:
+Implementations of FIPS-approved classical algorithms plus the NIST
+post-quantum schemes. Classical AES-GCM/SHA come from the [`ring`](https://github.com/briansmith/ring)
+backend, RSA from the pure-Rust [`rsa`](https://github.com/RustCrypto/RSA) crate,
+and the post-quantum schemes from [RustCrypto](https://github.com/RustCrypto)
+(`ml-kem`, `ml-dsa`, `slh-dsa`). These are validated _algorithm_ implementations,
+not a FIPS 140-3 _validated module_.
 
 | Type             | Algorithms                                             |
 | ---------------- | ------------------------------------------------------ |
-| **Symmetric**    | AES-128/256-GCM, SHA-256/384/512, HMAC, HKDF           |
-| **Asymmetric**   | RSA-2048/3072/4096, ECDSA P-256/P-384/P-521            |
+| **Symmetric**    | AES-256-GCM, SHA-256/384/512, HMAC, HKDF               |
+| **Asymmetric**   | RSA-2048/3072/4096, ECDSA P-256/P-384[^p521]           |
 | **Post-Quantum** | ML-KEM (Kyber), ML-DSA (Dilithium), SLH-DSA (SPHINCS+) |
+
+[^p521]: ECDSA P-521 keys can be represented but key generation and signing
+    require a backend other than `ring`, which does not support that curve.
 
 ## Deployment
 

@@ -22,9 +22,9 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Instant;
 #[cfg(test)]
 use std::time::Duration;
+use std::time::Instant;
 
 /// Default coalescing window in microseconds
 pub const DEFAULT_COALESCE_WINDOW_US: u64 = 100;
@@ -544,11 +544,7 @@ impl ExitStats {
     /// Get average time for a specific exit type
     pub fn get_avg_time_ns(&self, exit_type: ExitType) -> u64 {
         let count = self.get_count(exit_type);
-        if count > 0 {
-            self.get_time_ns(exit_type) / count
-        } else {
-            0
-        }
+        self.get_time_ns(exit_type).checked_div(count).unwrap_or(0)
     }
 
     /// Get total exit count
@@ -583,7 +579,7 @@ impl ExitStats {
         }
 
         // Sort by count descending
-        by_type.sort_by(|a, b| b.count.cmp(&a.count));
+        by_type.sort_by_key(|e| std::cmp::Reverse(e.count));
 
         ExitStatsSummary {
             total_exits: self.total_exits(),
@@ -709,11 +705,7 @@ impl PerfCounter {
     /// Get average time in nanoseconds
     pub fn avg_ns(&self) -> u64 {
         let count = self.count();
-        if count > 0 {
-            self.total_ns() / count
-        } else {
-            0
-        }
+        self.total_ns().checked_div(count).unwrap_or(0)
     }
 
     /// Get minimum time in nanoseconds
