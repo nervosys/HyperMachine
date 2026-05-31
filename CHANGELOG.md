@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   slots, and cancels — exercising `CapacityManager`.
 - **MCP workflow regression tests** (`hv2-agent`): `tests/mcp_workflow.rs` locks
   in the schema↔handler parameter contract for the common-workload tools.
+- **Guest-command round-trip** (`hv2-agent`): new `guest.exec.status` MCP tool
+  and `AgentSession::deliver_guest_response` API complete the `guest.exec` /
+  `guest.file.*` loop — an agent submits a command, the guest-agent channel
+  delivers the result, and the agent polls it to completion. Covered by a
+  regression test and shown in `agent_mcp_workflow`.
 - **Recursive planner** (`hv2-agent`): the GOAP planner now performs real
   recursive backward chaining with backtracking to satisfy action
   preconditions, replacing the previous single-level stub.

@@ -80,19 +80,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n[boot]");
     call!(server, session, "vm.start", json!({ "vm_id": vm_id }));
 
-    // 4. Run a workload in the guest. In a real deployment the guest agent is
-    //    installed in the image; here we mark its channel connected so the call
-    //    is dispatched rather than rejected.
+    // 4. Run a workload in the guest, then poll it to completion — a full
+    //    guest-agent round-trip. In a real deployment the guest agent is
+    //    installed in the image and its channel delivers the result; here we
+    //    mark the channel connected and deliver the result via the same API the
+    //    transport uses (`deliver_guest_response`).
     println!("\n[run workload]");
     session.set_state(
         &format!("guest_agent:{vm_id}"),
         json!({ "connected": true }),
     );
-    call!(
+    let submitted = call!(
         server,
         session,
         "guest.exec",
         json!({ "vm_id": vm_id, "command": "python", "args": ["train.py", "--epochs", "1"] })
+    );
+    let request_id = submitted["request_id"]
+        .as_str()
+        .expect("guest.exec returns a request_id")
+        .to_string();
+
+    // The guest agent finishes the command and returns its result.
+    session.deliver_guest_response(
+        &request_id,
+        json!({ "exit_code": 0, "stdout": "epoch 1/1  loss=0.118\n", "stderr": "" }),
+    );
+
+    // The agent polls until the result is ready.
+    call!(
+        server,
+        session,
+        "guest.exec.status",
+        json!({ "request_id": request_id })
     );
 
     // 5. Observe.

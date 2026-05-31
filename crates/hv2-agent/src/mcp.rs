@@ -744,6 +744,29 @@ impl McpServer {
         );
 
         tools.insert(
+            "guest.exec.status".to_string(),
+            McpTool {
+                name: "guest.exec.status".to_string(),
+                description:
+                    "Poll the result of a submitted guest request (guest.exec / guest.file.*)"
+                        .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "request_id": {
+                            "type": "string",
+                            "description": "Request ID returned by the submitting call"
+                        }
+                    },
+                    "required": ["request_id"]
+                }),
+                category: ToolCategory::System,
+                required_capabilities: vec![AgentCapability::GuestExec],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
             "guest.file.read".to_string(),
             McpTool {
                 name: "guest.file.read".to_string(),
@@ -1525,6 +1548,28 @@ impl McpServer {
                 }))
             }
 
+            "guest.exec.status" => {
+                let request_id = params
+                    .get("request_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: request_id")?;
+                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
+
+                // A delivered response (from the guest agent channel) wins.
+                if let Some(resp) = state.get(&format!("guest_resp:{}", request_id)) {
+                    let mut out = resp.clone();
+                    out["request_id"] = json!(request_id);
+                    out["status"] = json!("completed");
+                    return Ok(out);
+                }
+                // Otherwise the request is still pending (or unknown).
+                if state.contains_key(&format!("guest_req:{}", request_id)) {
+                    Ok(json!({ "request_id": request_id, "status": "pending" }))
+                } else {
+                    Err(format!("Unknown request_id: {}", request_id))
+                }
+            }
+
             "guest.file.read" => {
                 let vm_id = params
                     .get("vm_id")
@@ -1880,6 +1925,22 @@ impl AgentSession {
     pub fn get_state(&self, key: &str) -> Option<JsonValue> {
         let state = self.state.read().unwrap_or_else(|e| e.into_inner());
         state.get(key).cloned()
+    }
+
+    /// Deliver a guest-agent response for a previously submitted request.
+    ///
+    /// In production this is called by the guest-agent channel transport when
+    /// the in-guest agent returns a result; an agent then retrieves it via the
+    /// `guest.exec.status` tool. Tests and examples call this directly to
+    /// complete a `guest.exec` / `guest.file.*` round-trip. The `response`
+    /// object is returned verbatim by `guest.exec.status` (with `status` set to
+    /// `"completed"`), so it typically carries `exit_code` / `stdout` / `stderr`.
+    pub fn deliver_guest_response(&self, request_id: &str, response: JsonValue) {
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
+        state.insert(format!("guest_resp:{}", request_id), response);
+        if let Some(req) = state.get_mut(&format!("guest_req:{}", request_id)) {
+            req["status"] = json!("completed");
+        }
     }
 }
 
