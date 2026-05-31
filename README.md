@@ -126,6 +126,8 @@ These compile and run today (`cargo run -p <crate> --example <name>`):
 | `agent_mcp_workflow` | `hv2-agent` | An agent driving a full VM lifecycle over the MCP tool surface (provision → boot → `guest.exec` → snapshot → resize → restore → teardown) with an audit log |
 | `llm_tool_schemas`   | `hv2-agent` | The MCP tool registry projected into OpenAI / Anthropic / Gemini tool-use formats |
 | `agent_vm_workflow`  | `hm-cli`    | Tool discovery + VM lifecycle through the typed `ToolExecutor` and agentic ontology |
+| `multi_agent_orchestration` | `hv2-agent` | Multiple role-scoped agents coordinating: exclusive VM claims, role enforcement, inter-agent messaging |
+| `gpu_fabric_reservation` | `hv2-runtime` | Publishing a GPU VM class and reserving capacity with SLA tiers via `CapacityManager` |
 | `agent_script` / `integrated` | `hv2-agent` | Rhai-scripted agent decision-making and agent↔device (serial/MMIO) interaction |
 
 ```bash

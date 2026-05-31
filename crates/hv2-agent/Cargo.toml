@@ -68,3 +68,7 @@ path = "examples/agent_mcp_workflow.rs"
 [[example]]
 name = "llm_tool_schemas"
 path = "examples/llm_tool_schemas.rs"
+
+[[example]]
+name = "multi_agent_orchestration"
+path = "examples/multi_agent_orchestration.rs"

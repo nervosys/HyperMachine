@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   → teardown — and prints the resulting audit log.
 - **LLM tool-schema example** (`hv2-agent`): `llm_tool_schemas` projects the MCP
   tool registry into the OpenAI, Anthropic, and Gemini tool-use formats.
+- **Multi-agent orchestration example** (`hv2-agent`): `multi_agent_orchestration`
+  shows role-scoped agents, exclusive VM claims (conflict-free coordination), and
+  inter-agent messaging via `AgentOrchestrator`.
+- **GPU-fabric reservation example** (`hv2-runtime`): `gpu_fabric_reservation`
+  publishes a GPU VM class, reserves capacity with SLA tiers, consumes/releases
+  slots, and cancels — exercising `CapacityManager`.
 - **MCP workflow regression tests** (`hv2-agent`): `tests/mcp_workflow.rs` locks
   in the schema↔handler parameter contract for the common-workload tools.
 - **Recursive planner** (`hv2-agent`): the GOAP planner now performs real
