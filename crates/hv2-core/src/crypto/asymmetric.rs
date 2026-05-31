@@ -224,19 +224,43 @@ impl FipsCrypto {
     // RSA Key Generation
     // ========================================================================
 
-    /// Generate an RSA key pair
+    /// Generate an RSA key pair.
     ///
-    /// Uses FIPS-approved random number generation for key material.
-    /// Generate an RSA key pair
-    ///
-    /// **Not yet implemented.** The `ring` crate does not support RSA key generation.
-    /// Use an external tool (e.g., OpenSSL) to generate keys and load them via
-    /// `RsaPrivateKey` construction from DER/PKCS#8 components.
+    /// Uses the pure-Rust `rsa` crate (RustCrypto) seeded from the OS CSPRNG.
+    /// All components (n, e, d, p, q, and the CRT values) are stored as raw
+    /// big-endian byte strings.
     pub fn generate_rsa_keypair(&self, size: RsaKeySize) -> CryptoResult<RsaPrivateKey> {
-        let _ = size;
-        Err(CryptoError::NotImplemented(
-            "RSA key generation is not supported by ring; load keys from PKCS#8/DER instead".into(),
-        ))
+        use rsa::traits::{PrivateKeyParts, PublicKeyParts};
+
+        let bits = size.bytes() * 8;
+        let mut rng = rand::rngs::OsRng;
+
+        let mut key = rsa::RsaPrivateKey::new(&mut rng, bits)
+            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA keygen: {e}")))?;
+        // Precompute the CRT values (dp, dq, qinv).
+        key.precompute()
+            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA precompute: {e}")))?;
+
+        let primes = key.primes();
+        if primes.len() != 2 {
+            return Err(CryptoError::KeyGenerationFailed(
+                "expected exactly two RSA primes".into(),
+            ));
+        }
+
+        Ok(RsaPrivateKey {
+            public: RsaPublicKey {
+                n: key.n().to_bytes_be(),
+                e: key.e().to_bytes_be(),
+                size,
+            },
+            d: key.d().to_bytes_be(),
+            p: primes[0].to_bytes_be(),
+            q: primes[1].to_bytes_be(),
+            dp: key.dp().map(|v| v.to_bytes_be()).unwrap_or_default(),
+            dq: key.dq().map(|v| v.to_bytes_be()).unwrap_or_default(),
+            qinv: key.qinv().map(|v| v.to_bytes_be().1).unwrap_or_default(),
+        })
     }
 
     /// Extract public key from private key
@@ -413,110 +437,123 @@ impl FipsCrypto {
     // Digital Signatures
     // ========================================================================
 
-    /// Sign data with RSA private key
+    /// Sign data with an RSA private key (PKCS#1 v1.5 or PSS, SHA-256/384/512).
     ///
-    /// When the `ring` feature is enabled, the private key's `d` field must
-    /// contain the DER-encoded PKCS#8 key material.
+    /// Uses the pure-Rust `rsa` crate, reconstructing the signing key from the
+    /// stored raw components. The message is hashed with the algorithm's digest
+    /// before padding is applied.
     pub fn rsa_sign(
         &self,
         private_key: &RsaPrivateKey,
         data: &[u8],
         algorithm: SignatureAlgorithm,
     ) -> CryptoResult<Signature> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::signature::{self, RsaKeyPair};
+        use rsa::sha2::{Digest, Sha256, Sha384, Sha512};
+        use rsa::{BigUint, Pkcs1v15Sign, Pss};
 
-            let padding_alg: &dyn signature::RsaEncoding = match algorithm {
-                SignatureAlgorithm::RsaPkcs1Sha256 => &signature::RSA_PKCS1_SHA256,
-                SignatureAlgorithm::RsaPkcs1Sha384 => &signature::RSA_PKCS1_SHA384,
-                SignatureAlgorithm::RsaPkcs1Sha512 => &signature::RSA_PKCS1_SHA512,
-                SignatureAlgorithm::RsaPssSha256 => &signature::RSA_PSS_SHA256,
-                SignatureAlgorithm::RsaPssSha384 => &signature::RSA_PSS_SHA384,
-                SignatureAlgorithm::RsaPssSha512 => &signature::RSA_PSS_SHA512,
-                _ => {
-                    return Err(CryptoError::UnsupportedAlgorithm(format!(
-                        "{:?} is not an RSA algorithm",
-                        algorithm
-                    )));
-                }
-            };
+        let key = rsa::RsaPrivateKey::from_components(
+            BigUint::from_bytes_be(&private_key.public.n),
+            BigUint::from_bytes_be(&private_key.public.e),
+            BigUint::from_bytes_be(&private_key.d),
+            vec![
+                BigUint::from_bytes_be(&private_key.p),
+                BigUint::from_bytes_be(&private_key.q),
+            ],
+        )
+        .map_err(|e| CryptoError::InvalidInput(format!("invalid RSA private key: {e}")))?;
 
-            // The `d` field holds PKCS#8/DER bytes
-            let key_pair = RsaKeyPair::from_pkcs8(&private_key.d)
-                .map_err(|_| CryptoError::InvalidInput("Invalid RSA PKCS#8 key data".into()))?;
-
-            let rng = SystemRandom::new();
-            let mut sig = vec![0u8; key_pair.public().modulus_len()];
-            key_pair
-                .sign(padding_alg, &rng, data, &mut sig)
-                .map_err(|_| CryptoError::EncryptionFailed("RSA signing failed".into()))?;
-
-            return Ok(Signature {
-                data: sig,
-                algorithm,
-            });
+        let mut rng = rand::rngs::OsRng;
+        let sig = match algorithm {
+            SignatureAlgorithm::RsaPkcs1Sha256 => {
+                key.sign(Pkcs1v15Sign::new::<Sha256>(), &Sha256::digest(data))
+            }
+            SignatureAlgorithm::RsaPkcs1Sha384 => {
+                key.sign(Pkcs1v15Sign::new::<Sha384>(), &Sha384::digest(data))
+            }
+            SignatureAlgorithm::RsaPkcs1Sha512 => {
+                key.sign(Pkcs1v15Sign::new::<Sha512>(), &Sha512::digest(data))
+            }
+            SignatureAlgorithm::RsaPssSha256 => {
+                key.sign_with_rng(&mut rng, Pss::new::<Sha256>(), &Sha256::digest(data))
+            }
+            SignatureAlgorithm::RsaPssSha384 => {
+                key.sign_with_rng(&mut rng, Pss::new::<Sha384>(), &Sha384::digest(data))
+            }
+            SignatureAlgorithm::RsaPssSha512 => {
+                key.sign_with_rng(&mut rng, Pss::new::<Sha512>(), &Sha512::digest(data))
+            }
+            _ => {
+                return Err(CryptoError::UnsupportedAlgorithm(format!(
+                    "{:?} is not an RSA algorithm",
+                    algorithm
+                )));
+            }
         }
+        .map_err(|e| CryptoError::EncryptionFailed(format!("RSA signing failed: {e}")))?;
 
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (private_key, data, algorithm);
-            Err(CryptoError::NotImplemented(
-                "RSA signing requires the `ring` feature".into(),
-            ))
-        }
+        Ok(Signature {
+            data: sig,
+            algorithm,
+        })
     }
 
     /// Verify RSA signature
     ///
-    /// When the `ring` feature is enabled, verification uses ring's RSA
-    /// public key verification with the public key components (n, e).
+    /// Verify an RSA signature (PKCS#1 v1.5 or PSS, SHA-256/384/512) using the
+    /// pure-Rust `rsa` crate and the public key components (n, e).
     pub fn rsa_verify(
         &self,
         public_key: &RsaPublicKey,
         data: &[u8],
         signature: &Signature,
     ) -> CryptoResult<bool> {
+        use rsa::sha2::{Digest, Sha256, Sha384, Sha512};
+        use rsa::{BigUint, Pkcs1v15Sign, Pss};
+
         if signature.data.len() != public_key.size.bytes() {
             return Ok(false);
         }
 
-        #[cfg(feature = "ring")]
-        {
-            use ring::signature;
+        let key = rsa::RsaPublicKey::new(
+            BigUint::from_bytes_be(&public_key.n),
+            BigUint::from_bytes_be(&public_key.e),
+        )
+        .map_err(|e| CryptoError::InvalidInput(format!("invalid RSA public key: {e}")))?;
 
-            let verify_alg: &dyn signature::VerificationAlgorithm = match signature.algorithm {
-                SignatureAlgorithm::RsaPkcs1Sha256 => &signature::RSA_PKCS1_2048_8192_SHA256,
-                SignatureAlgorithm::RsaPkcs1Sha384 => &signature::RSA_PKCS1_2048_8192_SHA384,
-                SignatureAlgorithm::RsaPkcs1Sha512 => &signature::RSA_PKCS1_2048_8192_SHA512,
-                SignatureAlgorithm::RsaPssSha256 => &signature::RSA_PSS_2048_8192_SHA256,
-                SignatureAlgorithm::RsaPssSha384 => &signature::RSA_PSS_2048_8192_SHA384,
-                SignatureAlgorithm::RsaPssSha512 => &signature::RSA_PSS_2048_8192_SHA512,
-                _ => {
-                    return Err(CryptoError::UnsupportedAlgorithm(format!(
-                        "{:?} is not an RSA algorithm",
-                        signature.algorithm
-                    )));
-                }
-            };
-
-            // Construct DER-encoded RSA public key (PKCS#1 RSAPublicKey)
-            let pub_key_der = encode_rsa_public_key_der(&public_key.n, &public_key.e);
-
-            let peer_public_key = signature::UnparsedPublicKey::new(verify_alg, &pub_key_der);
-            match peer_public_key.verify(data, &signature.data) {
-                Ok(()) => return Ok(true),
-                Err(_) => return Ok(false),
+        let result = match signature.algorithm {
+            SignatureAlgorithm::RsaPkcs1Sha256 => key.verify(
+                Pkcs1v15Sign::new::<Sha256>(),
+                &Sha256::digest(data),
+                &signature.data,
+            ),
+            SignatureAlgorithm::RsaPkcs1Sha384 => key.verify(
+                Pkcs1v15Sign::new::<Sha384>(),
+                &Sha384::digest(data),
+                &signature.data,
+            ),
+            SignatureAlgorithm::RsaPkcs1Sha512 => key.verify(
+                Pkcs1v15Sign::new::<Sha512>(),
+                &Sha512::digest(data),
+                &signature.data,
+            ),
+            SignatureAlgorithm::RsaPssSha256 => {
+                key.verify(Pss::new::<Sha256>(), &Sha256::digest(data), &signature.data)
             }
-        }
+            SignatureAlgorithm::RsaPssSha384 => {
+                key.verify(Pss::new::<Sha384>(), &Sha384::digest(data), &signature.data)
+            }
+            SignatureAlgorithm::RsaPssSha512 => {
+                key.verify(Pss::new::<Sha512>(), &Sha512::digest(data), &signature.data)
+            }
+            _ => {
+                return Err(CryptoError::UnsupportedAlgorithm(format!(
+                    "{:?} is not an RSA algorithm",
+                    signature.algorithm
+                )));
+            }
+        };
 
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (public_key, data, signature);
-            Err(CryptoError::NotImplemented(
-                "RSA verification requires the `ring` feature".into(),
-            ))
-        }
+        Ok(result.is_ok())
     }
 
     /// Sign data with ECDSA private key
@@ -552,10 +589,10 @@ impl FipsCrypto {
                 .sign(&rng, data)
                 .map_err(|_| CryptoError::EncryptionFailed("ECDSA signing failed".into()))?;
 
-            return Ok(Signature {
+            Ok(Signature {
                 data: sig.as_ref().to_vec(),
                 algorithm,
-            });
+            })
         }
 
         #[cfg(not(feature = "ring"))]
@@ -609,8 +646,8 @@ impl FipsCrypto {
 
             let peer_public_key = UnparsedPublicKey::new(verify_alg, &pub_key_bytes);
             match peer_public_key.verify(data, &signature.data) {
-                Ok(()) => return Ok(true),
-                Err(_) => return Ok(false),
+                Ok(()) => Ok(true),
+                Err(_) => Ok(false),
             }
         }
 
@@ -869,16 +906,30 @@ mod tests {
     }
 
     #[test]
-    fn test_rsa_keypair_generation_not_supported() {
+    fn test_rsa_keygen_sign_verify() {
         let crypto = get_crypto();
-        // ring does not support RSA key generation
-        for size in [
-            RsaKeySize::Rsa2048,
-            RsaKeySize::Rsa3072,
-            RsaKeySize::Rsa4096,
+        // RSA-2048 keeps the test fast; larger sizes use the same code path.
+        let key = crypto
+            .generate_rsa_keypair(RsaKeySize::Rsa2048)
+            .expect("RSA keygen failed");
+        assert_eq!(key.public.size, RsaKeySize::Rsa2048);
+        assert_eq!(key.public.n.len(), 256);
+
+        let message = b"RSA round-trip test";
+        for alg in [
+            SignatureAlgorithm::RsaPkcs1Sha256,
+            SignatureAlgorithm::RsaPssSha256,
         ] {
-            let result = crypto.generate_rsa_keypair(size);
-            assert!(result.is_err(), "RSA keygen should return NotImplemented");
+            let sig = crypto
+                .rsa_sign(&key, message, alg)
+                .expect("RSA sign failed");
+            assert!(crypto
+                .rsa_verify(&key.public, message, &sig)
+                .expect("RSA verify failed"));
+            // A tampered message must fail verification.
+            assert!(!crypto
+                .rsa_verify(&key.public, b"tampered", &sig)
+                .expect("RSA verify failed"));
         }
     }
 

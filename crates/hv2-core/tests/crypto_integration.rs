@@ -141,9 +141,7 @@ mod fips_integration {
 }
 
 mod asymmetric_integration {
-    use hv2_core::crypto::asymmetric::{EcCurve, RsaKeySize};
-    #[cfg(feature = "ring")]
-    use hv2_core::crypto::asymmetric::SignatureAlgorithm;
+    use hv2_core::crypto::asymmetric::{EcCurve, RsaKeySize, SignatureAlgorithm};
     use hv2_core::crypto::fips::{FipsCrypto, FipsMode};
 
     fn get_crypto() -> FipsCrypto {
@@ -151,25 +149,28 @@ mod asymmetric_integration {
     }
 
     #[test]
-    fn test_rsa_keygen_requires_ring() {
+    fn test_rsa_keygen_sign_verify() {
+        // RSA key generation is provided by the pure-Rust `rsa` crate; signing
+        // and verification round-trip via PKCS#1 v1.5.
         let crypto = get_crypto();
-        let result = crypto.generate_rsa_keypair(RsaKeySize::Rsa2048);
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "RSA keygen requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let key = result.unwrap();
-            assert_eq!(key.public.size, RsaKeySize::Rsa2048);
-            let message = b"Test message for RSA signature";
-            let signature = crypto
-                .rsa_sign(&key, message, SignatureAlgorithm::RsaPkcs1Sha256)
-                .expect("RSA signing failed");
-            assert_eq!(signature.algorithm, SignatureAlgorithm::RsaPkcs1Sha256);
-            let valid = crypto
-                .rsa_verify(&key.public, message, &signature)
-                .expect("Verify failed");
-            assert!(valid);
-        }
+        let key = crypto
+            .generate_rsa_keypair(RsaKeySize::Rsa2048)
+            .expect("RSA keygen failed");
+        assert_eq!(key.public.size, RsaKeySize::Rsa2048);
+
+        let message = b"Test message for RSA signature";
+        let signature = crypto
+            .rsa_sign(&key, message, SignatureAlgorithm::RsaPkcs1Sha256)
+            .expect("RSA signing failed");
+        assert_eq!(signature.algorithm, SignatureAlgorithm::RsaPkcs1Sha256);
+
+        assert!(crypto
+            .rsa_verify(&key.public, message, &signature)
+            .expect("RSA verify failed"));
+        // A tampered message must not verify.
+        assert!(!crypto
+            .rsa_verify(&key.public, b"tampered message", &signature)
+            .expect("RSA verify failed"));
     }
 
     #[test]
@@ -183,7 +184,9 @@ mod asymmetric_integration {
             let key = result.unwrap();
             assert_eq!(key.public.curve, EcCurve::P256);
             let message = b"Test message for ECDSA signature";
-            let signature = crypto.ecdsa_sign(&key, message).expect("ECDSA signing failed");
+            let signature = crypto
+                .ecdsa_sign(&key, message)
+                .expect("ECDSA signing failed");
             let valid = crypto
                 .ecdsa_verify(&key.public, message, &signature)
                 .expect("Verify failed");
@@ -200,65 +203,55 @@ mod pqc_integration {
         FipsCrypto::new(FipsMode::Disabled).unwrap()
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
-    fn test_ml_kem_requires_ring() {
+    fn test_ml_kem_roundtrip() {
         let crypto = get_crypto();
-        // ML-KEM keygen only uses RNG, so it works without `ring`
         let sk = crypto.ml_kem_keygen(MlKemParameterSet::MlKem768).unwrap();
         assert_eq!(sk.public.parameter_set, MlKemParameterSet::MlKem768);
 
-        // But encaps uses SHA-256 which requires `ring`
-        let result = crypto.ml_kem_encaps(&sk.public);
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "ML-KEM encaps requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let (ciphertext, shared_secret1) = result.unwrap();
-            let shared_secret2 = crypto
-                .ml_kem_decaps(&sk, &ciphertext)
-                .expect("Decaps failed");
-            assert_eq!(shared_secret1.len(), 32);
-            assert_eq!(shared_secret2.len(), 32);
-        }
+        let (ciphertext, shared_secret1) = crypto.ml_kem_encaps(&sk.public).expect("Encaps failed");
+        let shared_secret2 = crypto
+            .ml_kem_decaps(&sk, &ciphertext)
+            .expect("Decaps failed");
+        assert_eq!(shared_secret1.len(), 32);
+        // Encapsulated and decapsulated shared secrets must agree.
+        assert_eq!(shared_secret1, shared_secret2);
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
-    fn test_ml_dsa_requires_ring() {
+    fn test_ml_dsa_roundtrip() {
         let crypto = get_crypto();
-        let result = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65);
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "ML-DSA requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let secret_key = result.unwrap();
-            let message = b"Post-quantum secure message";
-            let signature = crypto
-                .ml_dsa_sign(&secret_key, message)
-                .expect("ML-DSA signing failed");
-            let valid = crypto
-                .ml_dsa_verify(&secret_key.public, message, &signature)
-                .expect("Verify failed");
-            assert!(valid);
-        }
+        let secret_key = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).unwrap();
+        let message = b"Post-quantum secure message";
+        let signature = crypto
+            .ml_dsa_sign(&secret_key, message)
+            .expect("ML-DSA signing failed");
+        assert!(crypto
+            .ml_dsa_verify(&secret_key.public, message, &signature)
+            .expect("Verify failed"));
+        assert!(!crypto
+            .ml_dsa_verify(&secret_key.public, b"tampered", &signature)
+            .expect("Verify failed"));
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
-    fn test_slh_dsa_requires_ring() {
+    fn test_slh_dsa_roundtrip() {
         let crypto = get_crypto();
-        let result = crypto.slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f);
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "SLH-DSA requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let secret_key = result.unwrap();
-            let message = b"Hash-based signature test";
-            let signature = crypto
-                .slh_dsa_sign(&secret_key, message)
-                .expect("SLH-DSA signing failed");
-            let valid = crypto
-                .slh_dsa_verify(&secret_key.public, message, &signature)
-                .expect("Verify failed");
-            assert!(valid);
-        }
+        let secret_key = crypto
+            .slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f)
+            .unwrap();
+        let message = b"Hash-based signature test";
+        let signature = crypto
+            .slh_dsa_sign(&secret_key, message)
+            .expect("SLH-DSA signing failed");
+        assert!(crypto
+            .slh_dsa_verify(&secret_key.public, message, &signature)
+            .expect("Verify failed"));
+        assert!(!crypto
+            .slh_dsa_verify(&secret_key.public, b"tampered", &signature)
+            .expect("Verify failed"));
     }
 }

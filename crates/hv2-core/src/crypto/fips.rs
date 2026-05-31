@@ -1,14 +1,20 @@
-//! FIPS 140-3 Compliant Cryptographic Module
+//! FIPS-Aligned Cryptographic Module
 //!
-//! This module provides FIPS-validated cryptographic primitives for HyperMachine.
-//! When compiled with `fips` feature, uses FIPS-validated implementations.
+//! This module provides implementations of FIPS-approved cryptographic
+//! *algorithms* (AES-GCM, SHA-2, HMAC, ECDSA, RSA) backed by the vetted
+//! `ring` and RustCrypto libraries. The `FipsMode` setting gates which
+//! algorithms are permitted and drives the power-on self-tests (KATs).
 //!
-//! # Security Compliance
+//! **Note:** these are validated algorithm implementations, not a FIPS 140-3
+//! *validated module* — no CMVP certificate is claimed. The references below
+//! indicate the standards the algorithms follow, not a certification status.
 //!
-//! - FIPS 140-3 Level 1 (software)
-//! - NIST SP 800-56A (key agreement)
-//! - NIST SP 800-56B (key transport)
-//! - NIST SP 800-90A (DRBG)
+//! # Standards followed
+//!
+//! - FIPS 197 / SP 800-38D (AES, AES-GCM)
+//! - FIPS 180-4 (SHA-2), FIPS 198-1 (HMAC)
+//! - FIPS 186-5 (ECDSA, RSA), SP 800-56A (ECDH)
+//! - SP 800-90A (DRBG)
 //!
 //! # Usage
 //!
@@ -442,9 +448,10 @@ impl FipsCrypto {
         plaintext: &[u8],
         aad: &[u8],
     ) -> CryptoResult<Vec<u8>> {
-        // This is a placeholder - in production, use ring, aws-lc-rs, or OpenSSL FIPS
-        // For now, we'll use a simple XOR for demonstration (NOT SECURE!)
-
+        // AES-256-GCM is provided exclusively by the validated `ring` backend
+        // (enabled by default). There is intentionally no software fallback:
+        // a hand-rolled construction would not be FIPS-validated and risks
+        // silently shipping non-conformant crypto.
         #[cfg(feature = "ring")]
         {
             use ring::aead::{
@@ -474,40 +481,15 @@ impl FipsCrypto {
                 .seal_in_place_append_tag(Aad::from(aad), &mut in_out)
                 .map_err(|_| CryptoError::EncryptionFailed("Seal failed".into()))?;
 
-            return Ok(in_out);
+            Ok(in_out)
         }
 
         #[cfg(not(feature = "ring"))]
         {
-            // Software AES-GCM fallback (simplified AES-CTR + GHASH equivalent)
-            // This uses AES-128 in CTR mode with HMAC-SHA256 for authentication.
-            // NOTE: This is a functional placeholder, not a FIPS-certified implementation.
-            let _ = aad; // AAD included in authentication tag computation
-
-            // Derive encryption key and auth key from the main key
-            let enc_key = self.sha256(&[key, b"enc"].concat())?;
-            let auth_key = self.sha256(&[key, b"auth"].concat())?;
-
-            // CTR-mode encryption: keystream = SHA256(enc_key || nonce || counter)
-            let mut ciphertext = vec![0u8; plaintext.len()];
-            for (i, chunk) in plaintext.chunks(32).enumerate() {
-                let counter = (i as u32).to_le_bytes();
-                let keystream = self.sha256(&[&enc_key[..], nonce, &counter].concat())?;
-                for (j, byte) in chunk.iter().enumerate() {
-                    ciphertext[i * 32 + j] = byte ^ keystream[j];
-                }
-            }
-
-            // Authentication tag: HMAC(auth_key, nonce || aad || ciphertext || lengths)
-            let aad_len = (aad.len() as u64).to_be_bytes();
-            let ct_len = (ciphertext.len() as u64).to_be_bytes();
-            let tag_input = [nonce, aad, &ciphertext[..], &aad_len, &ct_len].concat();
-            let tag = self.hmac_sha256(&auth_key, &tag_input)?;
-
-            // Append 16-byte tag (truncated to GCM tag size)
-            ciphertext.extend_from_slice(&tag[..16]);
-
-            Ok(ciphertext)
+            let _ = (key, nonce, plaintext, aad);
+            Err(CryptoError::NotImplemented(
+                "AES-GCM requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -547,52 +529,15 @@ impl FipsCrypto {
                 .open_in_place(Aad::from(aad), &mut in_out)
                 .map_err(|_| CryptoError::AuthenticationFailed)?;
 
-            return Ok(plaintext.to_vec());
+            Ok(plaintext.to_vec())
         }
 
         #[cfg(not(feature = "ring"))]
         {
-            // Software AES-GCM decrypt fallback (matches encrypt fallback above)
-            if ciphertext.len() < 16 {
-                return Err(CryptoError::DecryptionFailed(
-                    "Ciphertext too short for auth tag".into(),
-                ));
-            }
-
-            let tag_offset = ciphertext.len() - 16;
-            let ct_data = &ciphertext[..tag_offset];
-            let received_tag = &ciphertext[tag_offset..];
-
-            // Derive keys
-            let enc_key = self.sha256(&[key, b"enc"].concat())?;
-            let auth_key = self.sha256(&[key, b"auth"].concat())?;
-
-            // Verify authentication tag
-            let aad_len = (aad.len() as u64).to_be_bytes();
-            let ct_len = (ct_data.len() as u64).to_be_bytes();
-            let tag_input = [nonce, aad, ct_data, &aad_len, &ct_len].concat();
-            let expected_tag = self.hmac_sha256(&auth_key, &tag_input)?;
-
-            // Constant-time tag comparison
-            let mut diff = 0u8;
-            for (a, b) in received_tag.iter().zip(expected_tag[..16].iter()) {
-                diff |= a ^ b;
-            }
-            if diff != 0 {
-                return Err(CryptoError::AuthenticationFailed);
-            }
-
-            // CTR-mode decryption (same as encryption)
-            let mut plaintext = vec![0u8; ct_data.len()];
-            for (i, chunk) in ct_data.chunks(32).enumerate() {
-                let counter = (i as u32).to_le_bytes();
-                let keystream = self.sha256(&[&enc_key[..], nonce, &counter].concat())?;
-                for (j, byte) in chunk.iter().enumerate() {
-                    plaintext[i * 32 + j] = byte ^ keystream[j];
-                }
-            }
-
-            Ok(plaintext)
+            let _ = (key, nonce, ciphertext, aad);
+            Err(CryptoError::NotImplemented(
+                "AES-GCM requires the `ring` feature".into(),
+            ))
         }
     }
 
@@ -608,7 +553,7 @@ impl FipsCrypto {
             let result = digest(&SHA256, data);
             let mut hash = [0u8; 32];
             hash.copy_from_slice(result.as_ref());
-            return Ok(hash);
+            Ok(hash)
         }
 
         #[cfg(not(feature = "ring"))]
@@ -628,7 +573,7 @@ impl FipsCrypto {
             let result = digest(&SHA384, data);
             let mut hash = [0u8; 48];
             hash.copy_from_slice(result.as_ref());
-            return Ok(hash);
+            Ok(hash)
         }
 
         #[cfg(not(feature = "ring"))]
@@ -648,7 +593,7 @@ impl FipsCrypto {
             let result = digest(&SHA512, data);
             let mut hash = [0u8; 64];
             hash.copy_from_slice(result.as_ref());
-            return Ok(hash);
+            Ok(hash)
         }
 
         #[cfg(not(feature = "ring"))]
@@ -673,7 +618,7 @@ impl FipsCrypto {
             let tag = hmac::sign(&key, data);
             let mut result = [0u8; 32];
             result.copy_from_slice(tag.as_ref());
-            return Ok(result);
+            Ok(result)
         }
 
         #[cfg(not(feature = "ring"))]
@@ -694,7 +639,7 @@ impl FipsCrypto {
             let tag = hmac::sign(&key, data);
             let mut result = [0u8; 64];
             result.copy_from_slice(tag.as_ref());
-            return Ok(result);
+            Ok(result)
         }
 
         #[cfg(not(feature = "ring"))]
@@ -730,7 +675,7 @@ impl FipsCrypto {
             let mut out = vec![0u8; output_len];
             okm.fill(&mut out)
                 .map_err(|_| CryptoError::KeyDerivationFailed("HKDF fill failed".into()))?;
-            return Ok(out);
+            Ok(out)
         }
 
         #[cfg(not(feature = "ring"))]

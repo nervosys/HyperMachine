@@ -27,6 +27,16 @@ ignore = [
     # No safe upgrade exists; no upstream fix is possible. The crate has no
     # known vulnerabilities, only an unmaintained advisory.
     "RUSTSEC-2026-0105",
+
+    # Marvin Attack: timing sidechannel in the pure-Rust `rsa` crate.
+    # `rsa` is the only pure-Rust RSA implementation that supports key
+    # generation (ring/aws-lc-rs do not), so it backs the asymmetric crypto
+    # module's RSA keygen/sign. There is no fixed release upstream. The attack
+    # requires an adversary able to make precise timing measurements of RSA
+    # private-key operations on chosen inputs; HyperMachine does not expose RSA
+    # as an online decryption oracle. Tracked for migration once a constant-time
+    # release ships.
+    "RUSTSEC-2023-0071",
 ]
 
 # ============================================================================

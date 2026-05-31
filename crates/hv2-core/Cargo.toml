@@ -28,10 +28,22 @@ bitflags = { workspace = true }
 rand = { workspace = true }
 ring = { version = "0.17", optional = true }
 reqwest = { workspace = true, optional = true }
+# Pure-Rust RSA (RustCrypto) — provides RSA key generation and signing, which
+# `ring` does not support. Used by the asymmetric crypto module.
+rsa = { version = "0.9.10", features = ["sha2"] }
+# Post-quantum cryptography (pure-Rust RustCrypto implementations).
+# ml-kem: FIPS 203 (ML-KEM), ml-dsa: FIPS 204 (ML-DSA), slh-dsa: FIPS 205 (SLH-DSA).
+ml-kem = { version = "0.3.2", features = ["getrandom"], optional = true }
+ml-dsa = { version = "0.1.0", optional = true }
+slh-dsa = { version = "=0.2.0-rc.5", optional = true }
 
 [features]
-default = []
+# `ring` provides the validated AES-GCM/SHA backend; `pqc` provides real
+# post-quantum algorithms. Both are on by default so the crypto claims hold
+# out of the box. Build with --no-default-features to opt out.
+default = ["ring", "pqc"]
 fips = []
+pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 remote-telemetry = ["dep:reqwest"]
 
 [dev-dependencies]

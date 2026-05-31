@@ -1,27 +1,36 @@
 //! Post-Quantum Cryptography Module
 //!
-//! Provides quantum-resistant cryptographic algorithm **API prototypes** based on
-//! NIST PQC standards. These are simplified placeholder implementations using
-//! SHA-256/HMAC-based constructions for API validation and testing.
+//! Provides quantum-resistant cryptographic algorithms standardized by NIST,
+//! backed by the pure-Rust [RustCrypto] implementations `ml-kem`, `ml-dsa`, and
+//! `slh-dsa`. These are real lattice-based (ML-KEM/ML-DSA) and hash-based
+//! (SLH-DSA) schemes — not placeholders.
 //!
-//! **WARNING:** These are NOT production-ready PQC implementations. They do not
-//! contain real lattice-based or hash-tree cryptography (no NTT, no WOTS+, no
-//! FORS, no Hypertree). For production use, integrate a validated PQC library
-//! such as `pqcrypto` or `oqs-rs`.
+//! The implementations are compiled when the `pqc` feature is enabled (on by
+//! default). With `--no-default-features` the operations return
+//! [`CryptoError::NotImplemented`].
 //!
-//! ## Algorithms (API Prototypes)
+//! ## Algorithms
 //!
-//! - **ML-KEM** (FIPS 203 API): Key-Encapsulation Mechanism (placeholder)
+//! - **ML-KEM** (FIPS 203): Module-Lattice Key-Encapsulation Mechanism
 //!   - ML-KEM-512, ML-KEM-768, ML-KEM-1024
-//! - **ML-DSA** (FIPS 204 API): Digital Signature Algorithm (placeholder)
+//! - **ML-DSA** (FIPS 204): Module-Lattice Digital Signature Algorithm
 //!   - ML-DSA-44, ML-DSA-65, ML-DSA-87
-//! - **SLH-DSA** (FIPS 205 API): Stateless Hash-Based Digital Signature (placeholder)
-//!   - SLH-DSA-SHA2-128f, SLH-DSA-SHAKE-256f
+//! - **SLH-DSA** (FIPS 205): Stateless Hash-Based Digital Signature Algorithm
+//!   - SLH-DSA-SHA2/SHAKE, 128/192/256, fast & small variants
+//!
+//! ## Key serialization
+//!
+//! The `data` field of each key/ciphertext/signature stores the canonical
+//! byte encoding from the underlying crate. ML-KEM decapsulation keys are
+//! stored as their 64-byte FIPS 203 seed (the preferred serialization), from
+//! which the full key is deterministically reconstructed.
 //!
 //! ## Hybrid Mode
 //!
 //! For transitional security, use hybrid schemes combining classical (ECDH/ECDSA)
 //! with post-quantum algorithms.
+//!
+//! [RustCrypto]: https://github.com/RustCrypto
 
 use super::fips::{CryptoError, CryptoResult, FipsCrypto};
 use serde::{Deserialize, Serialize};
@@ -328,24 +337,141 @@ pub enum HybridSignatureScheme {
 }
 
 // ============================================================================
-// FipsCrypto Implementation
+// FipsCrypto Implementation (real, RustCrypto-backed)
 // ============================================================================
 
+/// A `rand_core` 0.10 CSPRNG adapter sourcing entropy from the OS via `rand`'s
+/// `OsRng` (BCryptGenRandom on Windows, getrandom(2)/`/dev/urandom` on Linux).
+///
+/// `slh-dsa` requires a `CryptoRng` from `rand_core` 0.10; the `Rng`/`CryptoRng`
+/// traits are blanket-derived from the infallible `TryRng`/`TryCryptoRng` impls.
+#[cfg(feature = "pqc")]
+struct PqcOsRng;
+
+#[cfg(feature = "pqc")]
+impl PqcOsRng {
+    fn fill(dst: &mut [u8]) {
+        use rand::RngCore as _;
+        rand::rngs::OsRng.fill_bytes(dst);
+    }
+}
+
+#[cfg(feature = "pqc")]
+impl slh_dsa::signature::rand_core::TryRng for PqcOsRng {
+    type Error = core::convert::Infallible;
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        let mut b = [0u8; 4];
+        Self::fill(&mut b);
+        Ok(u32::from_le_bytes(b))
+    }
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        let mut b = [0u8; 8];
+        Self::fill(&mut b);
+        Ok(u64::from_le_bytes(b))
+    }
+    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
+        Self::fill(dst);
+        Ok(())
+    }
+}
+
+#[cfg(feature = "pqc")]
+impl slh_dsa::signature::rand_core::TryCryptoRng for PqcOsRng {}
+
+/// Dispatch an ML-KEM operation over the concrete parameter type, binding it to
+/// the type alias `$alias` inside `$body`.
+#[cfg(feature = "pqc")]
+macro_rules! mlkem_with {
+    ($params:expr, $alias:ident, $body:block) => {
+        match $params {
+            MlKemParameterSet::MlKem512 => {
+                type $alias = ml_kem::MlKem512;
+                $body
+            }
+            MlKemParameterSet::MlKem768 => {
+                type $alias = ml_kem::MlKem768;
+                $body
+            }
+            MlKemParameterSet::MlKem1024 => {
+                type $alias = ml_kem::MlKem1024;
+                $body
+            }
+        }
+    };
+}
+
+/// Dispatch an ML-DSA operation over the concrete parameter type.
+#[cfg(feature = "pqc")]
+macro_rules! mldsa_with {
+    ($params:expr, $alias:ident, $body:block) => {
+        match $params {
+            MlDsaParameterSet::MlDsa44 => {
+                type $alias = ml_dsa::MlDsa44;
+                $body
+            }
+            MlDsaParameterSet::MlDsa65 => {
+                type $alias = ml_dsa::MlDsa65;
+                $body
+            }
+            MlDsaParameterSet::MlDsa87 => {
+                type $alias = ml_dsa::MlDsa87;
+                $body
+            }
+        }
+    };
+}
+
+/// Dispatch an SLH-DSA operation over the concrete parameter type.
+#[cfg(feature = "pqc")]
+macro_rules! slhdsa_with {
+    ($params:expr, $alias:ident, $body:block) => {
+        match $params {
+            SlhDsaParameterSet::Sha2_128f => {
+                type $alias = slh_dsa::Sha2_128f;
+                $body
+            }
+            SlhDsaParameterSet::Sha2_128s => {
+                type $alias = slh_dsa::Sha2_128s;
+                $body
+            }
+            SlhDsaParameterSet::Sha2_192f => {
+                type $alias = slh_dsa::Sha2_192f;
+                $body
+            }
+            SlhDsaParameterSet::Sha2_256f => {
+                type $alias = slh_dsa::Sha2_256f;
+                $body
+            }
+            SlhDsaParameterSet::Shake128f => {
+                type $alias = slh_dsa::Shake128f;
+                $body
+            }
+            SlhDsaParameterSet::Shake256f => {
+                type $alias = slh_dsa::Shake256f;
+                $body
+            }
+        }
+    };
+}
+
+#[cfg(feature = "pqc")]
 impl FipsCrypto {
     // ========================================================================
-    // ML-KEM Operations
+    // ML-KEM Operations (FIPS 203, via `ml-kem`)
     // ========================================================================
 
-    /// Generate ML-KEM key pair
+    /// Generate an ML-KEM key pair. The secret key stores the 64-byte FIPS 203
+    /// seed; the public (encapsulation) key stores its canonical encoding.
     pub fn ml_kem_keygen(&self, params: MlKemParameterSet) -> CryptoResult<MlKemSecretKey> {
-        let mut public_data = vec![0u8; params.public_key_bytes()];
-        let mut secret_data = vec![0u8; params.secret_key_bytes()];
+        use ml_kem::kem::{Kem, KeyExport};
 
-        self.random_bytes(&mut public_data)?;
-        self.random_bytes(&mut secret_data)?;
-
-        // Embed public key in secret key (per FIPS 203)
-        secret_data[..params.public_key_bytes()].copy_from_slice(&public_data);
+        let (secret_data, public_data) = mlkem_with!(params, P, {
+            let (dk, ek) = P::generate_keypair();
+            let seed = dk.to_seed().ok_or_else(|| {
+                CryptoError::KeyDerivationFailed("ML-KEM seed unavailable".into())
+            })?;
+            (seed.to_vec(), ek.to_bytes().to_vec())
+        });
 
         Ok(MlKemSecretKey {
             public: MlKemPublicKey {
@@ -356,77 +482,73 @@ impl FipsCrypto {
         })
     }
 
-    /// ML-KEM encapsulation - generate ciphertext and shared secret
+    /// ML-KEM encapsulation - generate ciphertext and shared secret.
     pub fn ml_kem_encaps(
         &self,
         public_key: &MlKemPublicKey,
     ) -> CryptoResult<(MlKemCiphertext, Vec<u8>)> {
+        use ml_kem::kem::{Encapsulate, Key};
+        use ml_kem::EncapsulationKey;
+
         let params = public_key.parameter_set;
-
-        // Generate random message
-        let mut m = vec![0u8; 32];
-        self.random_bytes(&mut m)?;
-
-        // Derive shared secret (simplified - uses SHAKE256 in real implementation)
-        let shared_secret = self.sha256(&[&public_key.data[..], &m[..]].concat())?;
-
-        // Generate ciphertext
-        let mut ciphertext_data = vec![0u8; params.ciphertext_bytes()];
-        let ct_seed = self.sha256(&[&m[..], &public_key.data[..]].concat())?;
-        for (i, chunk) in ciphertext_data.chunks_mut(32).enumerate() {
-            let block = self.sha256(&[&ct_seed[..], &[i as u8]].concat())?;
-            let len = chunk.len().min(32);
-            chunk[..len].copy_from_slice(&block[..len]);
-        }
+        let (ciphertext_data, shared_secret) = mlkem_with!(params, P, {
+            let arr = Key::<EncapsulationKey<P>>::try_from(&public_key.data[..])
+                .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM public key".into()))?;
+            let ek = EncapsulationKey::<P>::new(&arr)
+                .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM public key".into()))?;
+            let (ct, ss) = ek.encapsulate();
+            (ct.to_vec(), ss.to_vec())
+        });
 
         Ok((
             MlKemCiphertext {
                 data: ciphertext_data,
                 parameter_set: params,
             },
-            shared_secret.to_vec(),
+            shared_secret,
         ))
     }
 
-    /// ML-KEM decapsulation - derive shared secret from ciphertext
+    /// ML-KEM decapsulation - derive shared secret from ciphertext.
     pub fn ml_kem_decaps(
         &self,
         secret_key: &MlKemSecretKey,
         ciphertext: &MlKemCiphertext,
     ) -> CryptoResult<Vec<u8>> {
+        use ml_kem::kem::{Ciphertext, Decapsulate};
+        use ml_kem::DecapsulationKey;
+
         if ciphertext.parameter_set != secret_key.public.parameter_set {
             return Err(CryptoError::InvalidInput("Parameter set mismatch".into()));
         }
 
-        // Derive shared secret (simplified)
-        let shared_secret = self.sha256(&[&secret_key.data[..], &ciphertext.data[..]].concat())?;
+        let params = secret_key.public.parameter_set;
+        let shared_secret = mlkem_with!(params, P, {
+            let seed = ml_kem::Seed::try_from(&secret_key.data[..])
+                .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM secret key".into()))?;
+            let dk = DecapsulationKey::<P>::from_seed(seed);
+            let ct = Ciphertext::<P>::try_from(&ciphertext.data[..])
+                .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM ciphertext".into()))?;
+            dk.decapsulate(&ct).to_vec()
+        });
 
-        Ok(shared_secret.to_vec())
+        Ok(shared_secret)
     }
 
     // ========================================================================
-    // ML-DSA Operations
+    // ML-DSA Operations (FIPS 204, via `ml-dsa`)
     // ========================================================================
 
-    /// Generate ML-DSA key pair
+    /// Generate an ML-DSA key pair.
     pub fn ml_dsa_keygen(&self, params: MlDsaParameterSet) -> CryptoResult<MlDsaSecretKey> {
-        let mut public_data = vec![0u8; params.public_key_bytes()];
-        let mut secret_data = vec![0u8; params.secret_key_bytes()];
+        use ml_dsa::signature::Keypair;
+        use ml_dsa::{Generate, KeyExport, SigningKey};
 
-        // Generate seed
-        let mut seed = vec![0u8; 32];
-        self.random_bytes(&mut seed)?;
-
-        // Expand seed to keys (simplified)
-        let expanded = self.hkdf_sha256(&seed, &[], b"ML-DSA-KeyGen", params.secret_key_bytes())?;
-        secret_data.copy_from_slice(&expanded);
-
-        let pk_seed = self.sha256(&secret_data)?;
-        for (i, chunk) in public_data.chunks_mut(32).enumerate() {
-            let block = self.sha256(&[&pk_seed[..], &[i as u8]].concat())?;
-            let len = chunk.len().min(32);
-            chunk[..len].copy_from_slice(&block[..len]);
-        }
+        let (secret_data, public_data) = mldsa_with!(params, P, {
+            let sk = SigningKey::<P>::generate();
+            let vk = sk.verifying_key();
+            (sk.to_bytes().to_vec(), vk.to_bytes().to_vec())
+        });
 
         Ok(MlDsaSecretKey {
             public: MlDsaPublicKey {
@@ -437,26 +559,25 @@ impl FipsCrypto {
         })
     }
 
-    /// ML-DSA sign
+    /// ML-DSA sign.
     pub fn ml_dsa_sign(
         &self,
         secret_key: &MlDsaSecretKey,
         message: &[u8],
     ) -> CryptoResult<MlDsaSignature> {
+        use ml_dsa::signature::Signer;
+        use ml_dsa::{KeyInit, SigningKey};
+
         let params = secret_key.public.parameter_set;
-
-        // Hash message
-        let msg_hash = self.sha512(message)?;
-
-        // Generate signature (simplified)
-        let mut sig_data = vec![0u8; params.signature_bytes()];
-        let sig_seed = self.hmac_sha256(&secret_key.data[..32], &msg_hash)?;
-
-        for (i, chunk) in sig_data.chunks_mut(32).enumerate() {
-            let block = self.sha256(&[&sig_seed[..], &[i as u8]].concat())?;
-            let len = chunk.len().min(32);
-            chunk[..len].copy_from_slice(&block[..len]);
-        }
+        let sig_data = mldsa_with!(params, P, {
+            let arr = ml_dsa::common::Key::<SigningKey<P>>::try_from(&secret_key.data[..])
+                .map_err(|_| CryptoError::InvalidInput("invalid ML-DSA secret key".into()))?;
+            let sk = SigningKey::<P>::new(&arr);
+            let sig = sk
+                .try_sign(message)
+                .map_err(|e| CryptoError::EncryptionFailed(format!("ML-DSA sign: {e}")))?;
+            sig.encode().to_vec()
+        });
 
         Ok(MlDsaSignature {
             data: sig_data,
@@ -464,71 +585,47 @@ impl FipsCrypto {
         })
     }
 
-    /// ML-DSA verify
-    ///
-    /// Verifies a signature against the public key.
-    /// This simplified implementation recomputes the expected signature
-    /// from the public key and message, matching the simplified sign scheme.
+    /// ML-DSA verify.
     pub fn ml_dsa_verify(
         &self,
         public_key: &MlDsaPublicKey,
         message: &[u8],
         signature: &MlDsaSignature,
     ) -> CryptoResult<bool> {
+        use ml_dsa::signature::Verifier;
+        use ml_dsa::{KeyInit, Signature, VerifyingKey};
+
         if signature.parameter_set != public_key.parameter_set {
             return Ok(false);
         }
 
-        if signature.data.len() != signature.parameter_set.signature_bytes() {
-            return Ok(false);
-        }
+        let valid = mldsa_with!(public_key.parameter_set, P, {
+            let arr = match ml_dsa::common::Key::<VerifyingKey<P>>::try_from(&public_key.data[..]) {
+                Ok(a) => a,
+                Err(_) => return Ok(false),
+            };
+            let vk = VerifyingKey::<P>::new(&arr);
+            let sig = match Signature::<P>::try_from(&signature.data[..]) {
+                Ok(s) => s,
+                Err(_) => return Ok(false),
+            };
+            vk.verify(message, &sig).is_ok()
+        });
 
-        // Recompute sig_seed using the public key as a verification seed.
-        // In the simplified sign: sig_seed = HMAC(secret_key[..32], SHA512(msg))
-        // We recompute: sig_seed = HMAC(public_key.data[..32], SHA512(msg))
-        // The sign and verify will match when the public key corresponds to
-        // the secret key (since pk_seed = SHA256(secret_data), and we use
-        // the first 32 bytes of public_data which = SHA256(pk_seed || 0)).
-        let msg_hash = self.sha512(message)?;
-        let pk_bytes = if public_key.data.len() >= 32 {
-            &public_key.data[..32]
-        } else {
-            &public_key.data
-        };
-        let sig_seed = self.hmac_sha256(pk_bytes, &msg_hash)?;
-
-        let params = signature.parameter_set;
-        let mut expected_sig = vec![0u8; params.signature_bytes()];
-        for (i, chunk) in expected_sig.chunks_mut(32).enumerate() {
-            let block = self.sha256(&[&sig_seed[..], &[i as u8]].concat())?;
-            let len = chunk.len().min(32);
-            chunk[..len].copy_from_slice(&block[..len]);
-        }
-
-        // Constant-time comparison
-        let mut diff = 0u8;
-        for (a, b) in signature.data.iter().zip(expected_sig.iter()) {
-            diff |= a ^ b;
-        }
-
-        Ok(diff == 0)
+        Ok(valid)
     }
 
     // ========================================================================
-    // SLH-DSA Operations
+    // SLH-DSA Operations (FIPS 205, via `slh-dsa`)
     // ========================================================================
 
-    /// Generate SLH-DSA key pair
+    /// Generate an SLH-DSA key pair.
     pub fn slh_dsa_keygen(&self, params: SlhDsaParameterSet) -> CryptoResult<SlhDsaSecretKey> {
-        let mut public_data = vec![0u8; params.public_key_bytes()];
-        let mut secret_data = vec![0u8; params.secret_key_bytes()];
-
-        self.random_bytes(&mut secret_data)?;
-
-        // Derive public key from secret (simplified)
-        let pk = self.sha256(&secret_data)?;
-        let pk_len = public_data.len().min(32);
-        public_data[..pk_len].copy_from_slice(&pk[..pk_len]);
+        let (secret_data, public_data) = slhdsa_with!(params, P, {
+            let sk = slh_dsa::SigningKey::<P>::new(&mut PqcOsRng);
+            let vk: &slh_dsa::VerifyingKey<P> = sk.as_ref();
+            (sk.to_bytes().to_vec(), vk.to_bytes().to_vec())
+        });
 
         Ok(SlhDsaSecretKey {
             public: SlhDsaPublicKey {
@@ -539,24 +636,23 @@ impl FipsCrypto {
         })
     }
 
-    /// SLH-DSA sign
+    /// SLH-DSA sign (deterministic).
     pub fn slh_dsa_sign(
         &self,
         secret_key: &SlhDsaSecretKey,
         message: &[u8],
     ) -> CryptoResult<SlhDsaSignature> {
+        use slh_dsa::signature::Signer;
+
         let params = secret_key.public.parameter_set;
-
-        // Generate signature using hash-based tree (simplified)
-        let mut sig_data = vec![0u8; params.signature_bytes()];
-        let msg_hash = self.sha256(message)?;
-        let sig_seed = self.hmac_sha256(&secret_key.data, &msg_hash)?;
-
-        for (i, chunk) in sig_data.chunks_mut(32).enumerate() {
-            let block = self.sha256(&[&sig_seed[..], &(i as u32).to_le_bytes()].concat())?;
-            let len = chunk.len().min(32);
-            chunk[..len].copy_from_slice(&block[..len]);
-        }
+        let sig_data = slhdsa_with!(params, P, {
+            let sk = slh_dsa::SigningKey::<P>::try_from(&secret_key.data[..])
+                .map_err(|_| CryptoError::InvalidInput("invalid SLH-DSA secret key".into()))?;
+            let sig = sk
+                .try_sign(message)
+                .map_err(|e| CryptoError::EncryptionFailed(format!("SLH-DSA sign: {e}")))?;
+            sig.to_vec()
+        });
 
         Ok(SlhDsaSignature {
             data: sig_data,
@@ -564,46 +660,107 @@ impl FipsCrypto {
         })
     }
 
-    /// SLH-DSA verify
-    ///
-    /// Verifies a signature against the public key.
-    /// This simplified implementation recomputes the expected signature
-    /// from the public key and message, matching the simplified sign scheme.
+    /// SLH-DSA verify.
     pub fn slh_dsa_verify(
         &self,
         public_key: &SlhDsaPublicKey,
         message: &[u8],
         signature: &SlhDsaSignature,
     ) -> CryptoResult<bool> {
+        use slh_dsa::signature::Verifier;
+
         if signature.parameter_set != public_key.parameter_set {
             return Ok(false);
         }
 
-        if signature.data.len() != signature.parameter_set.signature_bytes() {
-            return Ok(false);
-        }
+        let valid = slhdsa_with!(public_key.parameter_set, P, {
+            let vk = match slh_dsa::VerifyingKey::<P>::try_from(&public_key.data[..]) {
+                Ok(v) => v,
+                Err(_) => return Ok(false),
+            };
+            let sig = match slh_dsa::Signature::<P>::try_from(&signature.data[..]) {
+                Ok(s) => s,
+                Err(_) => return Ok(false),
+            };
+            vk.verify(message, &sig).is_ok()
+        });
 
-        // Recompute signature using public key data as verification seed.
-        // Sign used: sig_seed = HMAC(secret_key.data, SHA256(msg))
-        // Verify uses: sig_seed = HMAC(public_key.data, SHA256(msg))
-        let msg_hash = self.sha256(message)?;
-        let sig_seed = self.hmac_sha256(&public_key.data, &msg_hash)?;
+        Ok(valid)
+    }
+}
 
-        let params = signature.parameter_set;
-        let mut expected_sig = vec![0u8; params.signature_bytes()];
-        for (i, chunk) in expected_sig.chunks_mut(32).enumerate() {
-            let block = self.sha256(&[&sig_seed[..], &(i as u32).to_le_bytes()].concat())?;
-            let len = chunk.len().min(32);
-            chunk[..len].copy_from_slice(&block[..len]);
-        }
+// ============================================================================
+// Fallback when the `pqc` feature is disabled
+// ============================================================================
 
-        // Constant-time comparison
-        let mut diff = 0u8;
-        for (a, b) in signature.data.iter().zip(expected_sig.iter()) {
-            diff |= a ^ b;
-        }
+#[cfg(not(feature = "pqc"))]
+impl FipsCrypto {
+    fn pqc_disabled<T>() -> CryptoResult<T> {
+        Err(CryptoError::NotImplemented(
+            "post-quantum cryptography requires the `pqc` feature".into(),
+        ))
+    }
 
-        Ok(diff == 0)
+    /// ML-KEM key generation (requires the `pqc` feature).
+    pub fn ml_kem_keygen(&self, _params: MlKemParameterSet) -> CryptoResult<MlKemSecretKey> {
+        Self::pqc_disabled()
+    }
+    /// ML-KEM encapsulation (requires the `pqc` feature).
+    pub fn ml_kem_encaps(
+        &self,
+        _public_key: &MlKemPublicKey,
+    ) -> CryptoResult<(MlKemCiphertext, Vec<u8>)> {
+        Self::pqc_disabled()
+    }
+    /// ML-KEM decapsulation (requires the `pqc` feature).
+    pub fn ml_kem_decaps(
+        &self,
+        _secret_key: &MlKemSecretKey,
+        _ciphertext: &MlKemCiphertext,
+    ) -> CryptoResult<Vec<u8>> {
+        Self::pqc_disabled()
+    }
+    /// ML-DSA key generation (requires the `pqc` feature).
+    pub fn ml_dsa_keygen(&self, _params: MlDsaParameterSet) -> CryptoResult<MlDsaSecretKey> {
+        Self::pqc_disabled()
+    }
+    /// ML-DSA sign (requires the `pqc` feature).
+    pub fn ml_dsa_sign(
+        &self,
+        _secret_key: &MlDsaSecretKey,
+        _message: &[u8],
+    ) -> CryptoResult<MlDsaSignature> {
+        Self::pqc_disabled()
+    }
+    /// ML-DSA verify (requires the `pqc` feature).
+    pub fn ml_dsa_verify(
+        &self,
+        _public_key: &MlDsaPublicKey,
+        _message: &[u8],
+        _signature: &MlDsaSignature,
+    ) -> CryptoResult<bool> {
+        Self::pqc_disabled()
+    }
+    /// SLH-DSA key generation (requires the `pqc` feature).
+    pub fn slh_dsa_keygen(&self, _params: SlhDsaParameterSet) -> CryptoResult<SlhDsaSecretKey> {
+        Self::pqc_disabled()
+    }
+    /// SLH-DSA sign (requires the `pqc` feature).
+    pub fn slh_dsa_sign(
+        &self,
+        _secret_key: &SlhDsaSecretKey,
+        _message: &[u8],
+    ) -> CryptoResult<SlhDsaSignature> {
+        Self::pqc_disabled()
+    }
+    /// SLH-DSA verify (requires the `pqc` feature).
+    pub fn slh_dsa_verify(
+        &self,
+        _public_key: &SlhDsaPublicKey,
+        _message: &[u8],
+        _signature: &SlhDsaSignature,
+    ) -> CryptoResult<bool> {
+        Self::pqc_disabled()
     }
 }
 
@@ -617,10 +774,10 @@ mod tests {
     use crate::crypto::fips::FipsMode;
 
     fn get_crypto() -> FipsCrypto {
-        // Use Disabled mode to skip self-tests (which require `ring` feature)
         FipsCrypto::new(FipsMode::Disabled).unwrap()
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
     fn test_ml_kem_keygen() {
         let crypto = get_crypto();
@@ -630,33 +787,35 @@ mod tests {
             MlKemParameterSet::MlKem768,
             MlKemParameterSet::MlKem1024,
         ] {
-            // ML-KEM keygen only uses RNG (not SHA/HKDF), so it works without `ring`
             let sk = crypto.ml_kem_keygen(params).unwrap();
+            // Public (encapsulation) key uses the canonical FIPS 203 encoding.
             assert_eq!(sk.public.data.len(), params.public_key_bytes());
-            assert_eq!(sk.data.len(), params.secret_key_bytes());
+            // Secret key is stored as the 64-byte seed.
+            assert_eq!(sk.data.len(), 64);
         }
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
     fn test_ml_kem_encaps_decaps() {
         let crypto = get_crypto();
-        // ML-KEM keygen only uses RNG, so it works without `ring`
-        let sk = crypto.ml_kem_keygen(MlKemParameterSet::MlKem768).unwrap();
+        for params in [
+            MlKemParameterSet::MlKem512,
+            MlKemParameterSet::MlKem768,
+            MlKemParameterSet::MlKem1024,
+        ] {
+            let sk = crypto.ml_kem_keygen(params).unwrap();
+            let (ct, ss_send) = crypto.ml_kem_encaps(&sk.public).unwrap();
+            assert_eq!(ct.data.len(), params.ciphertext_bytes());
+            assert_eq!(ss_send.len(), 32);
 
-        // But encaps uses SHA-256 which requires `ring`
-        let result = crypto.ml_kem_encaps(&sk.public);
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "ML-KEM encaps requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let (ct, ss1) = result.unwrap();
-            assert_eq!(ct.data.len(), MlKemParameterSet::MlKem768.ciphertext_bytes());
-            assert_eq!(ss1.len(), 32);
-            let ss2 = crypto.ml_kem_decaps(&sk, &ct).unwrap();
-            assert_eq!(ss2.len(), 32);
+            // Decapsulation must recover the same shared secret.
+            let ss_recv = crypto.ml_kem_decaps(&sk, &ct).unwrap();
+            assert_eq!(ss_send, ss_recv);
         }
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
     fn test_ml_dsa_keygen() {
         let crypto = get_crypto();
@@ -666,75 +825,73 @@ mod tests {
             MlDsaParameterSet::MlDsa65,
             MlDsaParameterSet::MlDsa87,
         ] {
-            let result = crypto.ml_dsa_keygen(params);
-            // Without the `ring` feature, PQC keygen fails (uses SHA/HKDF internally)
-            #[cfg(not(feature = "ring"))]
-            assert!(result.is_err(), "ML-DSA keygen requires `ring` feature");
-            #[cfg(feature = "ring")]
-            {
-                let sk = result.unwrap();
-                assert_eq!(sk.public.data.len(), params.public_key_bytes());
-                assert_eq!(sk.data.len(), params.secret_key_bytes());
-            }
+            let sk = crypto.ml_dsa_keygen(params).unwrap();
+            assert_eq!(sk.public.data.len(), params.public_key_bytes());
+            assert!(!sk.data.is_empty());
         }
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
     fn test_ml_dsa_sign_verify() {
         let crypto = get_crypto();
-        let result = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65);
-        // Without the `ring` feature, PQC operations fail
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "ML-DSA requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let sk = result.unwrap();
-            let message = b"Post-quantum signature test";
-            let sig = crypto.ml_dsa_sign(&sk, message).unwrap();
-            assert_eq!(sig.data.len(), MlDsaParameterSet::MlDsa65.signature_bytes());
-            let valid = crypto.ml_dsa_verify(&sk.public, message, &sig).unwrap();
-            assert!(valid);
-        }
+        let sk = crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).unwrap();
+        let message = b"Post-quantum signature test";
+
+        let sig = crypto.ml_dsa_sign(&sk, message).unwrap();
+        assert_eq!(sig.data.len(), MlDsaParameterSet::MlDsa65.signature_bytes());
+        assert!(crypto.ml_dsa_verify(&sk.public, message, &sig).unwrap());
+
+        // A tampered message must fail verification.
+        assert!(!crypto
+            .ml_dsa_verify(&sk.public, b"different message", &sig)
+            .unwrap());
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
     fn test_slh_dsa_keygen() {
         let crypto = get_crypto();
 
-        for params in [
-            SlhDsaParameterSet::Sha2_128f,
-            SlhDsaParameterSet::Sha2_256f,
-            SlhDsaParameterSet::Shake256f,
-        ] {
-            let result = crypto.slh_dsa_keygen(params);
-            // Without the `ring` feature, PQC keygen fails (uses SHA/HKDF internally)
-            #[cfg(not(feature = "ring"))]
-            assert!(result.is_err(), "SLH-DSA keygen requires `ring` feature");
-            #[cfg(feature = "ring")]
-            {
-                let sk = result.unwrap();
-                assert_eq!(sk.public.data.len(), params.public_key_bytes());
-                assert_eq!(sk.data.len(), params.secret_key_bytes());
-            }
+        for params in [SlhDsaParameterSet::Sha2_128f, SlhDsaParameterSet::Shake128f] {
+            let sk = crypto.slh_dsa_keygen(params).unwrap();
+            assert_eq!(sk.public.data.len(), params.public_key_bytes());
+            assert_eq!(sk.data.len(), params.secret_key_bytes());
         }
     }
 
+    #[cfg(feature = "pqc")]
     #[test]
     fn test_slh_dsa_sign_verify() {
         let crypto = get_crypto();
-        let result = crypto.slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f);
-        // Without the `ring` feature, PQC operations fail
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "SLH-DSA requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let sk = result.unwrap();
-            let message = b"Hash-based signature test";
-            let sig = crypto.slh_dsa_sign(&sk, message).unwrap();
-            assert_eq!(sig.data.len(), SlhDsaParameterSet::Sha2_128f.signature_bytes());
-            let valid = crypto.slh_dsa_verify(&sk.public, message, &sig).unwrap();
-            assert!(valid);
-        }
+        // Use the fast 128-bit variant to keep the test quick.
+        let sk = crypto
+            .slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f)
+            .unwrap();
+        let message = b"Hash-based signature test";
+
+        let sig = crypto.slh_dsa_sign(&sk, message).unwrap();
+        assert_eq!(
+            sig.data.len(),
+            SlhDsaParameterSet::Sha2_128f.signature_bytes()
+        );
+        assert!(crypto.slh_dsa_verify(&sk.public, message, &sig).unwrap());
+
+        // A tampered message must fail verification.
+        assert!(!crypto
+            .slh_dsa_verify(&sk.public, b"tampered", &sig)
+            .unwrap());
+    }
+
+    #[cfg(not(feature = "pqc"))]
+    #[test]
+    fn test_pqc_disabled_returns_error() {
+        let crypto = get_crypto();
+        assert!(crypto.ml_kem_keygen(MlKemParameterSet::MlKem768).is_err());
+        assert!(crypto.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).is_err());
+        assert!(crypto
+            .slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f)
+            .is_err());
     }
 
     #[test]
