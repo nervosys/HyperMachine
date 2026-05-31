@@ -60,3 +60,11 @@ path = "examples/advanced.rs"
 [[example]]
 name = "integrated"
 path = "examples/integrated.rs"
+
+[[example]]
+name = "agent_mcp_workflow"
+path = "examples/agent_mcp_workflow.rs"
+
+[[example]]
+name = "llm_tool_schemas"
+path = "examples/llm_tool_schemas.rs"

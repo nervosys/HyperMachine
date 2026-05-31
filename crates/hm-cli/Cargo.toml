@@ -19,6 +19,10 @@ path = "src/lib.rs"
 name = "hm"
 path = "src/main.rs"
 
+[[example]]
+name = "agent_vm_workflow"
+path = "examples/agent_vm_workflow.rs"
+
 [dependencies]
 hv2-core = { path = "../hv2-core" }
 hv2-agent = { path = "../hv2-agent" }

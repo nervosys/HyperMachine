@@ -375,7 +375,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM to start"
                         },
@@ -385,7 +385,7 @@ impl McpServer {
                             "default": false
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::VmLifecycle,
                 required_capabilities: vec![AgentCapability::VmWrite],
@@ -401,7 +401,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM to stop"
                         },
@@ -416,7 +416,7 @@ impl McpServer {
                             "default": 60
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::VmLifecycle,
                 required_capabilities: vec![AgentCapability::VmWrite],
@@ -432,7 +432,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM to delete"
                         },
@@ -442,7 +442,7 @@ impl McpServer {
                             "default": false
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::VmLifecycle,
                 required_capabilities: vec![AgentCapability::VmManage],
@@ -485,12 +485,12 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::VmLifecycle,
                 required_capabilities: vec![AgentCapability::VmRead],
@@ -507,7 +507,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
@@ -527,7 +527,7 @@ impl McpServer {
                             "default": true
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::Resources,
                 required_capabilities: vec![AgentCapability::VmWrite],
@@ -543,7 +543,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
@@ -562,7 +562,7 @@ impl McpServer {
                             "default": 1
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::Monitoring,
                 required_capabilities: vec![AgentCapability::MetricsRead],
@@ -579,7 +579,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
@@ -597,7 +597,7 @@ impl McpServer {
                             "default": true
                         }
                     },
-                    "required": ["vm_name", "snapshot_name"]
+                    "required": ["vm_id", "snapshot_name"]
                 }),
                 category: ToolCategory::Snapshots,
                 required_capabilities: vec![AgentCapability::SnapshotManage],
@@ -613,16 +613,12 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "snapshot_id": {
                             "type": "string",
-                            "description": "Name of the VM"
-                        },
-                        "snapshot_name": {
-                            "type": "string",
-                            "description": "Name of the snapshot to restore"
+                            "description": "ID of the snapshot to restore (from snapshot.create)"
                         }
                     },
-                    "required": ["vm_name", "snapshot_name"]
+                    "required": ["snapshot_id"]
                 }),
                 category: ToolCategory::Snapshots,
                 required_capabilities: vec![AgentCapability::SnapshotManage],
@@ -638,12 +634,12 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::Snapshots,
                 required_capabilities: vec![AgentCapability::VmRead],
@@ -660,11 +656,11 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
-                        "network_name": {
+                        "network": {
                             "type": "string",
                             "description": "Name of the network to attach"
                         },
@@ -673,7 +669,7 @@ impl McpServer {
                             "description": "MAC address (auto-generated if not specified)"
                         }
                     },
-                    "required": ["vm_name", "network_name"]
+                    "required": ["vm_id", "network"]
                 }),
                 category: ToolCategory::Network,
                 required_capabilities: vec![AgentCapability::NetworkAdmin],
@@ -689,16 +685,16 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
-                        "interface_name": {
+                        "interface_id": {
                             "type": "string",
-                            "description": "Name of the interface to detach"
+                            "description": "ID of the interface to detach (from network.attach)"
                         }
                     },
-                    "required": ["vm_name", "interface_name"]
+                    "required": ["vm_id", "interface_id"]
                 }),
                 category: ToolCategory::Network,
                 required_capabilities: vec![AgentCapability::NetworkAdmin],
@@ -715,7 +711,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
@@ -739,7 +735,7 @@ impl McpServer {
                             "default": true
                         }
                     },
-                    "required": ["vm_name", "command"]
+                    "required": ["vm_id", "command"]
                 }),
                 category: ToolCategory::System,
                 required_capabilities: vec![AgentCapability::GuestExec],
@@ -755,7 +751,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
@@ -769,7 +765,7 @@ impl McpServer {
                             "default": 1024
                         }
                     },
-                    "required": ["vm_name", "path"]
+                    "required": ["vm_id", "path"]
                 }),
                 category: ToolCategory::System,
                 required_capabilities: vec![AgentCapability::GuestExec],
@@ -785,7 +781,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM"
                         },
@@ -803,7 +799,7 @@ impl McpServer {
                             "default": "text"
                         }
                     },
-                    "required": ["vm_name", "path", "content"]
+                    "required": ["vm_id", "path", "content"]
                 }),
                 category: ToolCategory::System,
                 required_capabilities: vec![AgentCapability::GuestExec],
@@ -908,7 +904,7 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM to claim"
                         },
@@ -918,7 +914,7 @@ impl McpServer {
                             "default": 300
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::Coordination,
                 required_capabilities: vec![
@@ -937,12 +933,12 @@ impl McpServer {
                 parameters: json!({
                     "type": "object",
                     "properties": {
-                        "vm_name": {
+                        "vm_id": {
                             "type": "string",
                             "description": "Name of the VM to release"
                         }
                     },
-                    "required": ["vm_name"]
+                    "required": ["vm_id"]
                 }),
                 category: ToolCategory::Coordination,
                 required_capabilities: vec![AgentCapability::Coordination],
@@ -1175,11 +1171,14 @@ impl McpServer {
                     .get("name")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: name")?;
-                let cpus = params.get("cpus").and_then(|v| v.as_u64()).unwrap_or(1);
-                let memory_mb = params
-                    .get("memory_mb")
+                let cpu_cores = params
+                    .get("cpu_cores")
                     .and_then(|v| v.as_u64())
-                    .unwrap_or(512);
+                    .unwrap_or(2);
+                let memory_gb = params
+                    .get("memory_gb")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(4);
                 let vm_id = uuid_v4();
 
                 // Record the VM in the session's owned_vms
@@ -1193,8 +1192,8 @@ impl McpServer {
                 let vm_state = json!({
                     "id": vm_id,
                     "name": name,
-                    "cpus": cpus,
-                    "memory_mb": memory_mb,
+                    "cpu_cores": cpu_cores,
+                    "memory_gb": memory_gb,
                     "status": "created",
                     "created_at_epoch_ms": SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
@@ -1208,7 +1207,7 @@ impl McpServer {
                     .insert(format!("vm:{}", vm_id), vm_state.clone());
 
                 Ok(
-                    json!({ "vm_id": vm_id, "status": "created", "name": name, "cpus": cpus, "memory_mb": memory_mb }),
+                    json!({ "vm_id": vm_id, "status": "created", "name": name, "cpu_cores": cpu_cores, "memory_gb": memory_gb }),
                 )
             }
 
@@ -1296,11 +1295,11 @@ impl McpServer {
                 let vm = state
                     .get_mut(&key)
                     .ok_or_else(|| format!("VM not found: {}", vm_id))?;
-                if let Some(cpus) = params.get("cpus").and_then(|v| v.as_u64()) {
-                    vm["cpus"] = json!(cpus);
+                if let Some(cpu_cores) = params.get("cpu_cores").and_then(|v| v.as_u64()) {
+                    vm["cpu_cores"] = json!(cpu_cores);
                 }
-                if let Some(memory_mb) = params.get("memory_mb").and_then(|v| v.as_u64()) {
-                    vm["memory_mb"] = json!(memory_mb);
+                if let Some(memory_gb) = params.get("memory_gb").and_then(|v| v.as_u64()) {
+                    vm["memory_gb"] = json!(memory_gb);
                 }
                 Ok(json!({ "vm_id": vm_id, "status": "resized", "vm": vm.clone() }))
             }
@@ -1332,15 +1331,15 @@ impl McpServer {
                     .get("vm_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: vm_id")?;
-                let name = params
-                    .get("name")
+                let snapshot_name = params
+                    .get("snapshot_name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("snapshot");
                 let snapshot_id = uuid_v4();
                 let snap = json!({
                     "snapshot_id": snapshot_id,
                     "vm_id": vm_id,
-                    "name": name,
+                    "name": snapshot_name,
                     "created_at_epoch_ms": SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
                         .unwrap_or_default()

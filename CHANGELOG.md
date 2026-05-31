@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Real post-quantum cryptography** (`hv2-core`): ML-KEM (FIPS 203), ML-DSA
+  (FIPS 204), and SLH-DSA (FIPS 205) now delegate to the audited pure-Rust
+  RustCrypto crates (`ml-kem`, `ml-dsa`, `slh-dsa`) with real
+  keygen/encapsulation/sign/verify and canonical byte serialization, replacing
+  the previous SHA-256/HMAC API placeholders. Gated behind the default `pqc`
+  feature.
+- **Real RSA** (`hv2-core`): RSA key generation and PKCS#1 v1.5 / PSS signing
+  via the pure-Rust `rsa` crate (the `ring` backend cannot generate RSA keys).
+- **Agent-driven VM workflow example** (`hm-cli`): `agent_vm_workflow` shows an
+  AI agent discovering tools (OpenAI/Anthropic/Gemini schemas) and driving a
+  full VM lifecycle (`vm.create` → `start` → `execute_script` → `delete`)
+  through the typed `ToolExecutor`.
+- **MCP workload example** (`hv2-agent`): `agent_mcp_workflow` drives a complete
+  VM lifecycle over the `McpServer` tool surface — capability-scoped session,
+  tool discovery, provision → boot → `guest.exec` → snapshot → resize → restore
+  → teardown — and prints the resulting audit log.
+- **LLM tool-schema example** (`hv2-agent`): `llm_tool_schemas` projects the MCP
+  tool registry into the OpenAI, Anthropic, and Gemini tool-use formats.
+- **MCP workflow regression tests** (`hv2-agent`): `tests/mcp_workflow.rs` locks
+  in the schema↔handler parameter contract for the common-workload tools.
+- **Recursive planner** (`hv2-agent`): the GOAP planner now performs real
+  recursive backward chaining with backtracking to satisfy action
+  preconditions, replacing the previous single-level stub.
+
+### Changed
+- **Crypto enabled by default** (`hv2-core`): `default = ["ring", "pqc"]`, so
+  AES-256-GCM/SHA use the validated `ring` backend out of the box. The insecure
+  software AES-GCM fallback is removed — without `ring` the operations return
+  `NotImplemented` instead of weak crypto.
+- **README/docs**: reconciled crypto claims — "FIPS-approved algorithm
+  implementations, not a FIPS 140-3 validated module"; AES-256-GCM only; added
+  an ECDSA P-521 caveat; PQC described as real and RustCrypto-backed.
+
+### Fixed
+- **KVM/HVF FFI doc-comment corruption** (`hv2-core`): repaired control bytes
+  (VT/FF/ESC/BEL) and a split `///` comment in the Linux (`kvm_ffi.rs`) and
+  macOS (`hvf.rs`) backends that produced module-scope syntax errors — invisible
+  on Windows (cfg-gated) but breaking Linux/macOS compilation and `cargo fmt`.
+- **Clippy**: resolved lints surfaced by enabling `ring`/`pqc` and by the
+  toolchain bump (`needless_return`, `collapsible_match`, `unnecessary_sort_by`,
+  `manual_checked_ops`); workspace is `clippy -D warnings` and `cargo fmt`
+  clean. Aligned `clippy.toml` MSRV to 1.95.
+- **MCP tool schema/handler mismatch** (`hv2-agent`): the published tool schemas
+  disagreed with the dispatcher, so agents following the advertised contract got
+  wrong results — `vm.create` ignored `cpu_cores`/`memory_gb` (silently creating
+  a 1-CPU/512 MB VM), and VM/snapshot/network tools advertised `vm_name`/
+  `snapshot_name`/`network_name`/`interface_name` while the handler read
+  `vm_id`/`snapshot_id`/`network`/`interface_id`. Schemas and handlers are now
+  consistent and covered by regression tests.
+
+### Security
+- Triaged RUSTSEC-2023-0071 (the `rsa` crate's Marvin-attack timing
+  side-channel) in `deny.toml` with justification; no fixed upstream release
+  exists and HyperMachine does not expose RSA as an online decryption oracle.
+
 ## [1.0.0] - 2026-03-25
 
 ### Added

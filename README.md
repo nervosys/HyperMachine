@@ -106,7 +106,7 @@ curl -X POST http://localhost:8080/mcp/call \
   -d '{"tool": "vm.create", "arguments": {"name": "ai-sandbox", "cpu_cores": 4}}'
 ```
 
-**Python SDK:**
+**Python SDK** (planned — not yet shipped in this repository):
 
 ```python
 from hypermachine import HyperMachine
@@ -115,6 +115,28 @@ hm = HyperMachine("http://localhost:8080", api_key="your-key")
 vm = hm.create_vm("sandbox", cpu=4, memory="8G", gpu=True)
 vm.start()
 vm.exec("echo 'Hello from AI agent'")
+```
+
+### Runnable examples
+
+These compile and run today (`cargo run -p <crate> --example <name>`):
+
+| Example | Crate | Shows |
+| ------- | ----- | ----- |
+| `agent_mcp_workflow` | `hv2-agent` | An agent driving a full VM lifecycle over the MCP tool surface (provision → boot → `guest.exec` → snapshot → resize → restore → teardown) with an audit log |
+| `llm_tool_schemas`   | `hv2-agent` | The MCP tool registry projected into OpenAI / Anthropic / Gemini tool-use formats |
+| `agent_vm_workflow`  | `hm-cli`    | Tool discovery + VM lifecycle through the typed `ToolExecutor` and agentic ontology |
+| `agent_script` / `integrated` | `hv2-agent` | Rhai-scripted agent decision-making and agent↔device (serial/MMIO) interaction |
+
+```bash
+cargo run -p hv2-agent --example agent_mcp_workflow
+```
+
+**Runnable example:** a self-contained, in-process demo of an agent discovering
+tools (OpenAI/Anthropic/Gemini schemas) and driving the full VM lifecycle:
+
+```bash
+cargo run -p hm-cli --example agent_vm_workflow
 ```
 
 ## GUI Automation
