@@ -11,6 +11,7 @@ use crate::interrupt::VirtualApic;
 use crate::memory::{FrameAllocator, GuestMemoryMapper};
 use crate::vcpu::Vcpu;
 use crate::{CpuVendor, Error, Result};
+use alloc::{boxed::Box, vec::Vec};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// VM ID counter
@@ -95,8 +96,10 @@ pub struct Vm {
     config: VmConfig,
     /// CPU vendor
     vendor: CpuVendor,
-    /// vCPUs (using array instead of Vec for no_std)
-    vcpus: [Option<Vcpu>; MAX_VCPUS_PER_VM],
+    /// vCPUs. Heap-allocated (boxed slice of length `MAX_VCPUS_PER_VM`) so the
+    /// `Vm` struct stays small on the stack — inlining the array made `Vm`
+    /// multi-megabyte, overflowing the stack when returned by value.
+    vcpus: Box<[Option<Vcpu>]>,
     /// Number of active vCPUs
     vcpu_count: usize,
     /// Guest memory mapper
@@ -105,8 +108,8 @@ pub struct Vm {
     frame_allocator: FrameAllocator,
     /// EPT pointer (Intel) or NCR3 (AMD)
     ept_pointer: u64,
-    /// Per-vCPU virtual APICs
-    vapics: [Option<VirtualApic>; MAX_VCPUS_PER_VM],
+    /// Per-vCPU virtual APICs. Heap-allocated for the same reason as `vcpus`.
+    vapics: Box<[Option<VirtualApic>]>,
     /// Device manager for I/O exit routing
     device_manager: DeviceManager,
 }
@@ -120,20 +123,25 @@ impl Vm {
 
         let id = VM_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-        // Initialize empty vcpu array
-        const NONE_VCPU: Option<Vcpu> = None;
+        // Allocate the per-vCPU slots on the heap. Building through a `Vec`
+        // (rather than a `[None; N]` literal) keeps the large array off the
+        // stack, which is essential on the constrained bare-metal stack.
+        let mut vcpus: Vec<Option<Vcpu>> = Vec::new();
+        vcpus.resize_with(MAX_VCPUS_PER_VM, || None);
+        let mut vapics: Vec<Option<VirtualApic>> = Vec::new();
+        vapics.resize_with(MAX_VCPUS_PER_VM, || None);
 
         Ok(Self {
             id,
             state: VmState::Uninitialized,
             config,
             vendor,
-            vcpus: [NONE_VCPU; MAX_VCPUS_PER_VM],
+            vcpus: vcpus.into_boxed_slice(),
             vcpu_count: 0,
             memory_mapper: GuestMemoryMapper::new(),
             frame_allocator: FrameAllocator::new(),
             ept_pointer: 0,
-            vapics: [const { None }; MAX_VCPUS_PER_VM],
+            vapics: vapics.into_boxed_slice(),
             device_manager: DeviceManager::new(),
         })
     }
