@@ -67,6 +67,10 @@ harness = false
 name = "vswitch_bench"
 harness = false
 
+[[bench]]
+name = "cow_bench"
+harness = false
+
 [[example]]
 name = "serial_console"
 path = "examples/serial_console.rs"

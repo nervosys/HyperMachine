@@ -53,6 +53,7 @@ pub mod input;
 pub mod interrupt;
 pub mod iommu;
 pub mod memory;
+pub mod memory_cow;
 pub mod migration;
 pub mod mmio;
 pub mod nested;
@@ -221,6 +222,7 @@ pub use iommu::{
     PAGE_SIZE_2M, PAGE_SIZE_4K,
 };
 pub use memory::{GuestMemory, MemoryMapping, MemoryRegion};
+pub use memory_cow::{CowMemory, MemoryTemplate};
 pub use migration::{
     crc32, shared_dirty_tracker, CpuState as MigrationCpuState, DescriptorTable, DeviceState,
     DirtyBitmap, DirtyStats, DirtyTracker, MemoryRegionState, Migratable, MigrationConfig,
