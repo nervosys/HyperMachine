@@ -15,6 +15,27 @@ the same hardware with the same guest image.
 > See [`METHODOLOGY.md`](METHODOLOGY.md) for the full measurement methodology
 > and the rationale for shipping the harness but no figures.
 
+## In-process micro-benchmarks (criterion)
+
+Separate from the cross-hypervisor harness below, the core crates ship
+[criterion](https://github.com/bheisler/criterion.rs) micro-benchmarks that run
+in-process on any platform — no guest image or external hypervisor required:
+
+| Bench           | Crate      | Measures                                                                |
+| --------------- | ---------- | ----------------------------------------------------------------------- |
+| `crypto_bench`  | `hv2-core` | AES-256-GCM, SHA-256/512, HMAC, HKDF, RNG throughput                     |
+| `vm_bench`      | `hv2-core` | guest-memory read/write and VM lifecycle latency                        |
+| `vswitch_bench` | `hv2-core` | virtual-switch MAC learn/lookup and VLAN membership checks              |
+| `api_bench`     | `hv2-api`  | ontology (de)serialization, LLM tool-format conversion, request parsing |
+
+```bash
+cargo bench -p hv2-core   # crypto_bench, vm_bench, vswitch_bench
+cargo bench -p hv2-api    # api_bench
+```
+
+Unlike the cross-hypervisor figures, these are reproducible anywhere; criterion
+writes detailed reports (HTML, CSV, saved baselines) to `target/criterion/`.
+
 ## Quick start
 
 ### Linux host (KVM-class hypervisors)
