@@ -562,13 +562,19 @@ impl VirtioGpu {
 
     /// Transfer data to host (from guest backing to resource)
     ///
-    /// Copies pixel data from the resource's attached backing pages into
-    /// the resource's pixel buffer within the specified rectangle.
+    /// Copies pixel data from the resource's attached backing pages — which
+    /// live in guest physical memory — into the resource's pixel buffer,
+    /// walking the requested rectangle one pixel at a time. `guest_mem` is the
+    /// guest physical address space; `offset` is the starting byte offset into
+    /// the flattened backing storage. Reads/writes that would fall outside the
+    /// backing, the guest memory, or the resource buffer are skipped, so the
+    /// call never panics on a malformed request from the guest.
     pub fn transfer_to_host_2d(
         &mut self,
         resource_id: u32,
         rect: Rect,
         offset: u64,
+        guest_mem: &[u8],
     ) -> Result<(), GpuResponse> {
         let resource = self
             .resources
@@ -580,28 +586,47 @@ impl VirtioGpu {
             return Ok(());
         }
 
-        // Flatten backing pages into a contiguous byte stream
-        let total_backing: usize = resource.backing.iter().map(|(_, len)| *len as usize).sum();
-        let bpp = resource.format.bytes_per_pixel();
-        let stride = resource.width * bpp;
+        let bpp = resource.format.bytes_per_pixel() as usize;
+        // The backing is a scatter list of guest pages; clone the (addr, len)
+        // descriptors so we can read them while mutating `resource.data`.
+        let backing = resource.backing.clone();
+        let total_backing: usize = backing.iter().map(|(_, len)| *len as usize).sum();
 
-        // Copy from backing pages into resource pixel data
+        // Map a flattened backing offset onto the owning guest page and read
+        // that byte from guest memory.
+        let read_byte = |flat: usize| -> Option<u8> {
+            let mut page_start = 0usize;
+            for (addr, len) in &backing {
+                let len = *len as usize;
+                if flat < page_start + len {
+                    let phys = (*addr as usize).checked_add(flat - page_start)?;
+                    return guest_mem.get(phys).copied();
+                }
+                page_start += len;
+            }
+            None
+        };
+
         // offset is the byte offset into the backing storage
         let mut backing_offset = offset as usize;
         for y in rect.y..rect.y + rect.height {
             for x in rect.x..rect.x + rect.width {
-                if let Some(dst_off) = resource.pixel_offset(x, y) {
-                    if backing_offset + (bpp as usize) <= total_backing {
-                        // In a real implementation, we'd read from guest memory
-                        // at the backing page addresses. Here we advance the
-                        // offset to track the transfer position.
-                        backing_offset += bpp as usize;
+                let Some(dst_off) = resource.pixel_offset(x, y) else {
+                    continue;
+                };
+                if backing_offset + bpp > total_backing || dst_off + bpp > resource.data.len() {
+                    // Source or destination exhausted — stop transferring.
+                    return Ok(());
+                }
+                for b in 0..bpp {
+                    if let Some(byte) = read_byte(backing_offset + b) {
+                        resource.data[dst_off + b] = byte;
                     }
                 }
+                backing_offset += bpp;
             }
         }
 
-        let _ = (stride, total_backing);
         Ok(())
     }
 
@@ -1095,18 +1120,53 @@ mod tests {
         gpu.create_resource_2d(1, GpuFormat::X8R8G8B8Unorm, 64, 64)
             .unwrap();
 
+        let bpp = GpuFormat::X8R8G8B8Unorm.bytes_per_pixel() as usize;
+        let backing_addr = 0x1000usize;
+        let backing_len = 64 * 64 * bpp;
+        // Guest memory with a recognizable pattern in the backing region.
+        let mut guest_mem = vec![0u8; backing_addr + backing_len];
+        for i in 0..backing_len {
+            guest_mem[backing_addr + i] = (i % 251) as u8;
+        }
+
         // Transfer without backing — should succeed (no-op)
-        gpu.transfer_to_host_2d(1, Rect::new(0, 0, 64, 64), 0)
+        gpu.transfer_to_host_2d(1, Rect::new(0, 0, 64, 64), 0, &guest_mem)
+            .unwrap();
+        assert!(
+            gpu.get_resource(1).unwrap().data.iter().all(|&b| b == 0),
+            "no backing attached: resource must be untouched"
+        );
+
+        // Attach backing and transfer the top-left 32x32 rectangle.
+        gpu.attach_backing(1, vec![(backing_addr as u64, backing_len as u32)])
+            .unwrap();
+        gpu.transfer_to_host_2d(1, Rect::new(0, 0, 32, 32), 0, &guest_mem)
             .unwrap();
 
-        // Attach backing and transfer
-        gpu.attach_backing(1, vec![(0x1000, 64 * 64 * 4)]).unwrap();
-        gpu.transfer_to_host_2d(1, Rect::new(0, 0, 32, 32), 0)
-            .unwrap();
+        // Each transferred pixel must equal the source bytes. The walk advances
+        // through the backing pixel-by-pixel in row-major order, so the pixel at
+        // (x, y) within the rect comes from backing offset (y*32 + x) * bpp.
+        let res = gpu.get_resource(1).unwrap();
+        for y in 0..32u32 {
+            for x in 0..32u32 {
+                let dst = res.pixel_offset(x, y).unwrap();
+                let src = (y as usize * 32 + x as usize) * bpp;
+                for b in 0..bpp {
+                    assert_eq!(
+                        res.data[dst + b],
+                        ((src + b) % 251) as u8,
+                        "pixel ({x},{y}) byte {b} mismatch"
+                    );
+                }
+            }
+        }
+        // A pixel outside the transferred rect stays zero.
+        let outside = res.pixel_offset(40, 40).unwrap();
+        assert_eq!(&res.data[outside..outside + bpp], &[0, 0, 0, 0]);
 
         // Invalid resource
         assert!(gpu
-            .transfer_to_host_2d(999, Rect::new(0, 0, 1, 1), 0)
+            .transfer_to_host_2d(999, Rect::new(0, 0, 1, 1), 0, &guest_mem)
             .is_err());
     }
 }
