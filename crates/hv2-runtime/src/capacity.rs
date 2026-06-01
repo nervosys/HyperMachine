@@ -8,6 +8,8 @@
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
+use crate::topology::{GpuPlacement, GpuRequirements, GpuTopologyMap};
+
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
@@ -105,6 +107,21 @@ pub struct VmClass {
     pub gpu_count: u32,
     /// GPU model requirement (empty = any)
     pub gpu_model: String,
+    /// Minimum VRAM per GPU in bytes (0 = any). Drives topology placement.
+    #[serde(default)]
+    pub gpu_min_vram_bytes: u64,
+    /// Minimum GPU compute capability (e.g. 80 = A100, 90 = H100; 0 = any).
+    #[serde(default)]
+    pub gpu_min_compute_capability: u32,
+    /// Require NVLink/NVSwitch between all GPUs in the placement.
+    #[serde(default)]
+    pub gpu_require_nvlink: bool,
+    /// Require all GPUs on the same NUMA node.
+    #[serde(default)]
+    pub gpu_same_numa: bool,
+    /// Minimum aggregate interconnect bandwidth in GB/s (0 = any).
+    #[serde(default)]
+    pub gpu_min_bandwidth_gbps: f64,
     /// SLA tier
     pub sla_tier: SlaTier,
     /// Whether this class requires dedicated (non-shared) hosts
@@ -127,6 +144,11 @@ impl VmClass {
             memory_bytes: 4 * 1024 * 1024 * 1024,
             gpu_count: 0,
             gpu_model: String::new(),
+            gpu_min_vram_bytes: 0,
+            gpu_min_compute_capability: 0,
+            gpu_require_nvlink: false,
+            gpu_same_numa: false,
+            gpu_min_bandwidth_gbps: 0.0,
             sla_tier,
             dedicated_host: false,
             rate_per_hour: 0.0,
@@ -158,6 +180,57 @@ impl VmClass {
         self.gpu_count = count;
         self.gpu_model = model.into();
         self
+    }
+
+    /// Builder: minimum VRAM per GPU in bytes.
+    pub fn gpu_min_vram(mut self, bytes: u64) -> Self {
+        self.gpu_min_vram_bytes = bytes;
+        self
+    }
+
+    /// Builder: minimum GPU compute capability (e.g. 80 = A100, 90 = H100).
+    pub fn gpu_compute_capability(mut self, cc: u32) -> Self {
+        self.gpu_min_compute_capability = cc;
+        self
+    }
+
+    /// Builder: require NVLink/NVSwitch between all GPUs.
+    pub fn gpu_nvlink(mut self) -> Self {
+        self.gpu_require_nvlink = true;
+        self
+    }
+
+    /// Builder: require all GPUs on the same NUMA node.
+    pub fn gpu_same_numa_node(mut self) -> Self {
+        self.gpu_same_numa = true;
+        self
+    }
+
+    /// Builder: minimum aggregate interconnect bandwidth in GB/s.
+    pub fn gpu_min_bandwidth(mut self, gbps: f64) -> Self {
+        self.gpu_min_bandwidth_gbps = gbps;
+        self
+    }
+
+    /// Translate this class's GPU attributes into topology [`GpuRequirements`].
+    ///
+    /// Returns `None` for CPU-only classes (`gpu_count == 0`). This is the bridge
+    /// from a billed VM SKU to the bandwidth/NUMA/NVLink-aware placement engine:
+    /// the result feeds [`GpuTopologyMap::find_placement`], so a reservation can
+    /// be validated against real hardware instead of an opaque model string.
+    pub fn gpu_requirements(&self) -> Option<GpuRequirements> {
+        if self.gpu_count == 0 {
+            return None;
+        }
+        Some(GpuRequirements {
+            gpu_count: self.gpu_count,
+            min_vram_bytes: self.gpu_min_vram_bytes,
+            min_compute_capability: self.gpu_min_compute_capability,
+            same_numa: self.gpu_same_numa,
+            require_nvlink: self.gpu_require_nvlink,
+            prefer_colocated: true,
+            min_bandwidth_gbps: self.gpu_min_bandwidth_gbps,
+        })
     }
 
     /// Builder: set hourly rate
@@ -279,6 +352,30 @@ impl CapacityManager {
     /// Get a VM class by name
     pub fn get_class(&self, name: &str) -> Option<VmClass> {
         self.classes.read().get(name).cloned()
+    }
+
+    /// Find a topology-valid GPU placement for a registered class.
+    ///
+    /// Returns `Ok(None)` for CPU-only classes, `Ok(Some(placement))` when the
+    /// topology can satisfy the class's GPU spec, or an error when the class is
+    /// unknown or no placement exists — so a GPU reservation can be validated
+    /// against the real fabric before it is granted.
+    pub fn place_class(
+        &self,
+        class_name: &str,
+        topology: &GpuTopologyMap,
+    ) -> CapacityResult<Option<GpuPlacement>> {
+        let class = self
+            .get_class(class_name)
+            .ok_or_else(|| CapacityError::VmClassNotFound(class_name.to_string()))?;
+        match class.gpu_requirements() {
+            None => Ok(None),
+            Some(req) => topology.find_placement(&req).map(Some).map_err(|e| {
+                CapacityError::InvalidConfig(format!(
+                    "class '{class_name}' has no valid GPU placement: {e}"
+                ))
+            }),
+        }
     }
 
     /// List all VM classes
@@ -678,5 +775,99 @@ mod tests {
             .create_reservation("t1", "cpu-standard", 0, Duration::from_secs(3600))
             .unwrap_err();
         assert!(matches!(err, CapacityError::InvalidConfig(_)));
+    }
+
+    /// Small DGX-like fabric: 8x A100-80GB on host-1, NVSwitch within each
+    /// 4-GPU NUMA group and NVLink across groups.
+    fn gpu_topology() -> GpuTopologyMap {
+        use crate::topology::{GpuDevice, GpuInterconnect};
+        let mut map = GpuTopologyMap::new();
+        for i in 0..8 {
+            let gpu = GpuDevice::new(format!("gpu-{i}"), "host-1", "A100-80GB")
+                .numa(if i < 4 { 0 } else { 1 })
+                .pci(format!("0000:{i:02x}:00.0"))
+                .vram(80 * 1024 * 1024 * 1024)
+                .capability(80);
+            map.add_device(gpu);
+        }
+        for i in 0..8 {
+            for j in (i + 1)..8 {
+                let ic = if i / 4 == j / 4 {
+                    GpuInterconnect::NvSwitch
+                } else {
+                    GpuInterconnect::NvLink
+                };
+                map.add_link(&format!("gpu-{i}"), &format!("gpu-{j}"), ic, 12);
+            }
+        }
+        map
+    }
+
+    #[test]
+    fn cpu_only_class_has_no_gpu_requirements() {
+        let class = VmClass::new("cpu-standard", SlaTier::Standard).vcpus(8);
+        assert!(class.gpu_requirements().is_none());
+    }
+
+    #[test]
+    fn gpu_class_bridges_to_topology_placement() {
+        let topo = gpu_topology();
+        let class = VmClass::new("gpu-a100-4x", SlaTier::Premium)
+            .gpus(4, "A100-80GB")
+            .gpu_min_vram(40 * 1024 * 1024 * 1024)
+            .gpu_compute_capability(80)
+            .gpu_nvlink();
+
+        let req = class
+            .gpu_requirements()
+            .expect("a GPU class yields requirements");
+        assert_eq!(req.gpu_count, 4);
+        assert!(req.require_nvlink);
+        assert_eq!(req.min_compute_capability, 80);
+
+        let placement = topo.find_placement(&req).expect("4x A100 is placeable");
+        assert_eq!(placement.gpu_ids.len(), 4);
+    }
+
+    #[test]
+    fn place_class_validates_registered_class() {
+        let topo = gpu_topology();
+        let cm = CapacityManager::new();
+        cm.register_class(
+            VmClass::new("gpu-a100-4x", SlaTier::Premium)
+                .gpus(4, "A100-80GB")
+                .gpu_compute_capability(80),
+        )
+        .unwrap();
+        cm.register_class(VmClass::new("cpu-standard", SlaTier::Standard))
+            .unwrap();
+
+        // CPU-only class needs no placement.
+        assert!(cm.place_class("cpu-standard", &topo).unwrap().is_none());
+        // GPU class resolves to a concrete placement.
+        let placement = cm.place_class("gpu-a100-4x", &topo).unwrap().unwrap();
+        assert_eq!(placement.gpu_ids.len(), 4);
+        // Unknown class errors.
+        assert!(matches!(
+            cm.place_class("nope", &topo).unwrap_err(),
+            CapacityError::VmClassNotFound(_)
+        ));
+    }
+
+    #[test]
+    fn place_class_rejects_unsatisfiable_spec() {
+        let topo = gpu_topology();
+        let cm = CapacityManager::new();
+        // Compute capability 100 — no such GPU in this fabric (max is 80).
+        cm.register_class(
+            VmClass::new("gpu-future", SlaTier::Premium)
+                .gpus(1, "B200")
+                .gpu_compute_capability(100),
+        )
+        .unwrap();
+        assert!(matches!(
+            cm.place_class("gpu-future", &topo).unwrap_err(),
+            CapacityError::InvalidConfig(_)
+        ));
     }
 }
