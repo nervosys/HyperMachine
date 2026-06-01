@@ -229,18 +229,25 @@ cd deploy/terraform && terraform apply -var="environment=production"
 
 ## Performance
 
-Benchmarks on AMD Ryzen 9 7950X:
+Crypto throughput from `crypto_bench` on an AMD Ryzen 9 9900X (64 KiB blocks).
+AES-GCM and SHA run on the validated `ring` backend (AES-NI hardware
+acceleration), which is enabled by default:
 
-| Operation           | Throughput |
-| ------------------- | ---------- |
-| AES-256-GCM encrypt | ~600 MiB/s |
-| AES-256-GCM decrypt | ~700 MiB/s |
-| SHA-256             | ~3.7 GiB/s |
-| SHA-512             | ~3.5 GiB/s |
+| Operation           | Throughput  |
+| ------------------- | ----------- |
+| AES-256-GCM encrypt | ~9.0 GiB/s  |
+| AES-256-GCM decrypt | ~10.1 GiB/s |
+| SHA-256             | ~2.5 GiB/s  |
+| SHA-512             | ~0.76 GiB/s |
+| HMAC-SHA256         | ~2.3 GiB/s  |
 
 ```bash
 cargo bench -p hv2-core --bench crypto_bench
 ```
+
+> Numbers are hardware- and backend-dependent. AES-GCM is AES-NI accelerated;
+> SHA throughput reflects `ring`'s software implementation on this CPU. Run the
+> command above to reproduce on your own hardware.
 
 ## Project Structure
 
