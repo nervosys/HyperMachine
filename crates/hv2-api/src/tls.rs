@@ -51,7 +51,7 @@ pub fn build_rustls_config(tls: &TlsConfig) -> crate::Result<Arc<rustls::ServerC
     Ok(Arc::new(config))
 }
 
-/// Serve an axum [`Router`] over TLS with graceful shutdown.
+/// Serve an axum [`Router`](axum::Router) over TLS with graceful shutdown.
 ///
 /// Uses `tokio-rustls` for the TLS handshake and `hyper-util` for
 /// HTTP/1.1 + HTTP/2 connection handling (auto-detected via ALPN).

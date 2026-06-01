@@ -268,7 +268,7 @@ impl CorsConfig {
     }
 }
 
-/// CORS middleware handler (called by closure from [`MiddlewareConfig::apply`]).
+/// CORS middleware handler (called by closure from [`MiddlewareConfig::apply`](crate::middleware::MiddlewareConfig::apply)).
 ///
 /// Handles OPTIONS preflight requests with 204 No Content and adds CORS
 /// headers to all responses. If the request origin is not in the allow-list,
@@ -374,7 +374,7 @@ impl ApiKeyConfig {
     }
 }
 
-/// API key auth middleware handler (called by closure from [`MiddlewareConfig::apply`]).
+/// API key auth middleware handler (called by closure from [`MiddlewareConfig::apply`](crate::middleware::MiddlewareConfig::apply)).
 fn api_key_handler(
     config: ApiKeyConfig,
     request: Request,

@@ -131,7 +131,7 @@ pub fn required_permission(method: &axum::http::Method, path: &str) -> Option<Pe
 
 /// Axum middleware handler for permission enforcement.
 ///
-/// This is called by a closure from [`MiddlewareConfig::apply`].
+/// This is called by a closure from [`MiddlewareConfig::apply`](crate::middleware::MiddlewareConfig::apply).
 pub fn permission_handler(
     config: PermissionMiddlewareConfig,
     request: Request,

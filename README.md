@@ -38,7 +38,7 @@ Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
-~206,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,480+ tests and `cargo clippy -D warnings` clean. Security advisories in the active dependency graph are triaged in [`deny.toml`](deny.toml) (one accepted with justification: the `rsa` crate's Marvin-attack timing advisory, for which no fixed release exists).
+~238,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,600+ tests and `cargo clippy -D warnings` clean. Security advisories in the active dependency graph are triaged in [`deny.toml`](deny.toml) (one accepted with justification: the `rsa` crate's Marvin-attack timing advisory, for which no fixed release exists).
 
 ### 6. Semantic GUI Automation
 
