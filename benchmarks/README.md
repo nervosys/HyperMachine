@@ -8,6 +8,12 @@ the same hardware with the same guest image.
 > test host with the chosen hypervisors and a built guest image before they
 > will produce numbers. See [`images/README.md`](images/README.md) and
 > [`harness/README.md`](harness/README.md).
+>
+> **No comparison numbers are published in this repository.** A fair run needs
+> a dedicated bare-metal Linux host with KVM and every competitor installed —
+> which neither the (Windows) dev host nor the (virtualized) CI runners provide.
+> See [`METHODOLOGY.md`](METHODOLOGY.md) for the full measurement methodology
+> and the rationale for shipping the harness but no figures.
 
 ## Quick start
 
