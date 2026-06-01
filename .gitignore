@@ -10,6 +10,8 @@ target/
 # Cargo.lock — committed for reproducible binary builds
 .vscode/
 .idea/
+# Claude Code harness runtime state
+.claude/
 *.swp
 *.swo
 *~
