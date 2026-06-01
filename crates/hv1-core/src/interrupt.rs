@@ -165,21 +165,33 @@ impl LocalApic {
     }
 
     /// Get the APIC ID
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn id(&self) -> u8 {
         ((self.read(apic_reg::ID) >> 24) & 0xFF) as u8
     }
 
     /// Get the APIC version
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn version(&self) -> u32 {
         self.read(apic_reg::VERSION)
     }
 
     /// Send End of Interrupt
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn eoi(&self) {
         self.write(apic_reg::EOI, 0);
     }
 
     /// Enable the APIC
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn enable(&self) {
         let svr = self.read(apic_reg::SVR);
         // Set bit 8 (APIC enable) and set spurious vector
@@ -190,12 +202,18 @@ impl LocalApic {
     }
 
     /// Disable the APIC
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn disable(&self) {
         let svr = self.read(apic_reg::SVR);
         self.write(apic_reg::SVR, svr & !(1 << 8));
     }
 
     /// Send an IPI to another CPU
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn send_ipi(&self, target_apic_id: u8, vector: u8) {
         // Set target APIC ID in ICR high
         self.write(apic_reg::ICR_HIGH, (target_apic_id as u32) << 24);
@@ -205,6 +223,9 @@ impl LocalApic {
     }
 
     /// Send an IPI to all CPUs (including self)
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn send_ipi_all(&self, vector: u8) {
         // All including self, fixed delivery mode
         self.write(apic_reg::ICR_HIGH, 0);
@@ -212,6 +233,9 @@ impl LocalApic {
     }
 
     /// Send an IPI to all CPUs except self
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn send_ipi_all_except_self(&self, vector: u8) {
         // All excluding self, fixed delivery mode
         self.write(apic_reg::ICR_HIGH, 0);
@@ -219,6 +243,9 @@ impl LocalApic {
     }
 
     /// Configure the APIC timer
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn configure_timer(&self, vector: u8, divide: u8, periodic: bool) {
         // Set divide configuration
         let dcr = match divide {
@@ -240,16 +267,25 @@ impl LocalApic {
     }
 
     /// Start the APIC timer
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn start_timer(&self, initial_count: u32) {
         self.write(apic_reg::TIMER_ICR, initial_count);
     }
 
     /// Stop the APIC timer
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn stop_timer(&self) {
         self.write(apic_reg::TIMER_ICR, 0);
     }
 
     /// Get the current timer count
+    ///
+    /// # Safety
+    /// Requires that the APIC base address is correctly mapped.
     pub unsafe fn timer_current(&self) -> u32 {
         self.read(apic_reg::TIMER_CCR)
     }

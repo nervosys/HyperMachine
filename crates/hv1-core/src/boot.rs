@@ -298,7 +298,7 @@ fn detect_smp_from_rsdp(rsdp_addr: u64) {
         let sdt_len = core::ptr::read_volatile(sdt.add(4) as *const u32) as usize;
 
         // Validate SDT header checksum
-        if sdt_len < 36 || sdt_len > 0x10_0000 {
+        if !(36..=0x10_0000).contains(&sdt_len) {
             return; // Implausible length — reject
         }
         let mut sdt_checksum: u8 = 0;
@@ -345,7 +345,7 @@ unsafe fn parse_madt(madt_addr: u64) {
     let madt_len = core::ptr::read_volatile(madt.add(4) as *const u32) as usize;
 
     // Validate MADT checksum
-    if madt_len < 44 || madt_len > 0x10_0000 {
+    if !(44..=0x10_0000).contains(&madt_len) {
         return; // Implausible length
     }
     let mut checksum: u8 = 0;

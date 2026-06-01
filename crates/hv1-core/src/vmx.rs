@@ -454,6 +454,11 @@ pub fn initialize() -> Result<()> {
 }
 
 /// Execute VMXON instruction
+///
+/// # Safety
+/// Must run at ring 0 with `CR4.VMXE` set. `vmxon_region` must be a 4 KiB-aligned
+/// VMXON region initialized with the CPU's VMCS revision ID, and identity-mapped
+/// (its address is used as a physical address). Enters VMX root operation.
 pub unsafe fn vmxon(vmxon_region: &VmxonRegion) -> Result<()> {
     let addr = vmxon_region as *const _ as u64;
     let mut flags: u64;
@@ -476,6 +481,9 @@ pub unsafe fn vmxon(vmxon_region: &VmxonRegion) -> Result<()> {
 }
 
 /// Execute VMXOFF instruction
+///
+/// # Safety
+/// Must run at ring 0 while already in VMX root operation. Leaves VMX operation.
 pub unsafe fn vmxoff() -> Result<()> {
     asm!("vmxoff", options(nostack));
     VMX_ENABLED.store(false, Ordering::SeqCst);
@@ -483,6 +491,10 @@ pub unsafe fn vmxoff() -> Result<()> {
 }
 
 /// Execute VMCLEAR instruction
+///
+/// # Safety
+/// Must run at ring 0 in VMX root operation. `vmcs_region` must be a 4 KiB-aligned
+/// VMCS region (its address is used as a physical address).
 pub unsafe fn vmclear(vmcs_region: &VmcsRegion) -> Result<()> {
     let addr = vmcs_region as *const _ as u64;
     let mut flags: u64;
@@ -504,6 +516,10 @@ pub unsafe fn vmclear(vmcs_region: &VmcsRegion) -> Result<()> {
 }
 
 /// Execute VMPTRLD instruction
+///
+/// # Safety
+/// Must run at ring 0 in VMX root operation. `vmcs_region` must be a valid,
+/// 4 KiB-aligned VMCS with the correct revision ID; it becomes the current VMCS.
 pub unsafe fn vmptrld(vmcs_region: &VmcsRegion) -> Result<()> {
     let addr = vmcs_region as *const _ as u64;
     let mut flags: u64;
@@ -525,6 +541,10 @@ pub unsafe fn vmptrld(vmcs_region: &VmcsRegion) -> Result<()> {
 }
 
 /// Write to VMCS field
+///
+/// # Safety
+/// Must run at ring 0 in VMX root operation with a current VMCS loaded
+/// (via `vmptrld`). `field` must be a valid, writable VMCS field encoding.
 pub unsafe fn vmwrite(field: VmcsField, value: u64) -> Result<()> {
     let mut flags: u64;
 
@@ -546,6 +566,10 @@ pub unsafe fn vmwrite(field: VmcsField, value: u64) -> Result<()> {
 }
 
 /// Read from VMCS field
+///
+/// # Safety
+/// Must run at ring 0 in VMX root operation with a current VMCS loaded
+/// (via `vmptrld`). `field` must be a valid VMCS field encoding.
 pub unsafe fn vmread(field: VmcsField) -> Result<u64> {
     let mut value: u64;
     let mut flags: u64;
@@ -568,6 +592,11 @@ pub unsafe fn vmread(field: VmcsField) -> Result<u64> {
 }
 
 /// Execute VMLAUNCH instruction
+///
+/// # Safety
+/// Must run at ring 0 in VMX root operation with a fully-configured current VMCS
+/// (host/guest state and controls set). Transfers control to the guest; only
+/// returns on launch failure.
 #[allow(unused_assignments)]
 pub unsafe fn vmlaunch() -> Result<()> {
     let mut flags: u64;
@@ -585,6 +614,10 @@ pub unsafe fn vmlaunch() -> Result<()> {
 }
 
 /// Execute VMRESUME instruction
+///
+/// # Safety
+/// Must run at ring 0 in VMX root operation with a current VMCS that has already
+/// been launched. Resumes the guest; only returns on resume failure.
 #[allow(unused_assignments)]
 pub unsafe fn vmresume() -> Result<()> {
     let mut flags: u64;

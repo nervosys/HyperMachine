@@ -566,6 +566,11 @@ pub fn initialize() -> Result<()> {
 }
 
 /// Set the host save area physical address
+///
+/// # Safety
+/// Must run at ring 0 with SVM enabled (`EFER.SVME`). `host_save_area` must be a
+/// 4 KiB-aligned, identity-mapped region that stays allocated for the lifetime of
+/// SVM operation (its address is written to `VM_HSAVE_PA` as a physical address).
 pub unsafe fn set_host_save_area(host_save_area: &HostSaveArea) -> Result<()> {
     let addr = host_save_area as *const _ as u64;
     x86::msr::wrmsr(msr::VM_HSAVE_PA, addr);
@@ -573,6 +578,11 @@ pub unsafe fn set_host_save_area(host_save_area: &HostSaveArea) -> Result<()> {
 }
 
 /// Execute VMRUN instruction
+///
+/// # Safety
+/// Must run at ring 0 with SVM enabled and the host save area configured. `vmcb`
+/// must be a fully-initialized, 4 KiB-aligned, identity-mapped VMCB (its address
+/// is used as a physical address). Runs the guest until the next #VMEXIT.
 pub unsafe fn vmrun(vmcb: &mut Vmcb) -> Result<()> {
     let vmcb_pa = vmcb as *mut _ as u64;
 
@@ -586,6 +596,10 @@ pub unsafe fn vmrun(vmcb: &mut Vmcb) -> Result<()> {
 }
 
 /// Execute VMSAVE instruction
+///
+/// # Safety
+/// Must run at ring 0 with SVM enabled. `vmcb` must be a 4 KiB-aligned,
+/// identity-mapped VMCB; additional host state is saved into it.
 pub unsafe fn vmsave(vmcb: &Vmcb) {
     let vmcb_pa = vmcb as *const _ as u64;
 
@@ -597,6 +611,10 @@ pub unsafe fn vmsave(vmcb: &Vmcb) {
 }
 
 /// Execute VMLOAD instruction
+///
+/// # Safety
+/// Must run at ring 0 with SVM enabled. `vmcb` must be a 4 KiB-aligned,
+/// identity-mapped VMCB; additional host state is loaded from it.
 pub unsafe fn vmload(vmcb: &Vmcb) {
     let vmcb_pa = vmcb as *const _ as u64;
 
@@ -608,11 +626,17 @@ pub unsafe fn vmload(vmcb: &Vmcb) {
 }
 
 /// Execute STGI instruction (set global interrupt flag)
+///
+/// # Safety
+/// Must run at ring 0 with SVM enabled. Sets the global interrupt flag.
 pub unsafe fn stgi() {
     asm!("stgi", options(nostack));
 }
 
 /// Execute CLGI instruction (clear global interrupt flag)
+///
+/// # Safety
+/// Must run at ring 0 with SVM enabled. Clears the global interrupt flag.
 pub unsafe fn clgi() {
     asm!("clgi", options(nostack));
 }

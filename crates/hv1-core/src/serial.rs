@@ -114,6 +114,10 @@ impl SerialPort {
     }
 
     /// Initialize with a specific baud rate
+    ///
+    /// # Safety
+    /// The configured COM port base must address a real 16550-class UART, and
+    /// the caller must have exclusive access to it (ring 0, port I/O allowed).
     pub unsafe fn init_with_baud(&mut self, baud: u32) {
         let divisor = (115200 / baud) as u16;
 
