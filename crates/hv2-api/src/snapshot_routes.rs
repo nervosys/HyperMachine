@@ -89,6 +89,11 @@ pub struct CreateSnapshotRequest {
     pub snapshot_type: String,
     /// Parent snapshot ID (for incremental)
     pub parent_id: Option<u64>,
+    /// When true, return `202 Accepted` immediately with the snapshot in
+    /// `creating` state and finalize the capture off the request path (poll the
+    /// snapshot to observe it reach `valid`). Defaults to synchronous capture.
+    #[serde(default)]
+    pub async_capture: bool,
 }
 
 fn default_snapshot_type() -> String {
@@ -219,32 +224,60 @@ async fn create_snapshot(
         options.parent_id = Some(SnapshotId::new(parent));
     }
 
+    let async_capture = req.async_capture;
     let mut managers = state.managers.write();
     let manager = managers.get_mut(&vm_id).unwrap();
 
-    match manager.begin_snapshot(options) {
-        Ok(snap_id) => {
-            // Complete the snapshot immediately (in a real system, this
-            // would be async with actual CPU/memory/device capture)
-            match manager.complete_snapshot() {
-                Ok(_) => {
-                    let info = manager.get_snapshot(&snap_id).unwrap();
-                    let resp = snapshot_info_to_response(info);
-                    (
-                        StatusCode::CREATED,
-                        Json(serde_json::to_value(resp).unwrap()),
-                    )
-                        .into_response()
-                }
-                Err(e) => (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(serde_json::json!({"error": e.to_string()})),
-                )
-                    .into_response(),
+    let snap_id = match manager.begin_snapshot(options) {
+        Ok(id) => id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": e.to_string()})),
+            )
+                .into_response();
+        }
+    };
+
+    if async_capture {
+        // Return 202 with the snapshot still `creating`; finalize off the
+        // request path so a long capture doesn't block the client. (Real
+        // CPU/memory/device capture would happen in the spawned task once
+        // wired to a live VM.) The snapshot is observable via GET until it
+        // reaches `valid`.
+        let info = manager.get_snapshot(&snap_id).unwrap();
+        let resp = snapshot_info_to_response(info);
+        drop(managers);
+
+        let state_bg = state.clone();
+        let vm_id_bg = vm_id.clone();
+        tokio::spawn(async move {
+            let mut managers = state_bg.managers.write();
+            if let Some(manager) = managers.get_mut(&vm_id_bg) {
+                let _ = manager.complete_snapshot();
             }
+        });
+
+        return (
+            StatusCode::ACCEPTED,
+            Json(serde_json::to_value(resp).unwrap()),
+        )
+            .into_response();
+    }
+
+    // Synchronous (default): finalize the snapshot before responding.
+    match manager.complete_snapshot() {
+        Ok(_) => {
+            let info = manager.get_snapshot(&snap_id).unwrap();
+            let resp = snapshot_info_to_response(info);
+            (
+                StatusCode::CREATED,
+                Json(serde_json::to_value(resp).unwrap()),
+            )
+                .into_response()
         }
         Err(e) => (
-            StatusCode::BAD_REQUEST,
+            StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({"error": e.to_string()})),
         )
             .into_response(),
@@ -636,5 +669,66 @@ mod tests {
         let snap: SnapshotResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(snap.name, "checkpoint-1");
         assert_eq!(snap.snapshot_type, "Checkpoint");
+    }
+
+    #[tokio::test]
+    async fn test_async_snapshot_capture() {
+        let state = test_state();
+        let app = create_snapshot_router(state);
+
+        // Request async capture: 202 with the snapshot still `Creating`.
+        let body = serde_json::json!({
+            "name": "async-snap",
+            "snapshot_type": "full",
+            "async_capture": true
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/vms/vm-async/snapshots")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let snap: SnapshotResponse = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(snap.state, "Creating");
+        let snap_id = snap.id;
+
+        // Poll until the background task finalizes the snapshot to `Valid`.
+        let mut final_state = String::new();
+        for _ in 0..100 {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/api/v1/vms/vm-async/snapshots/{snap_id}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let s: SnapshotResponse = serde_json::from_slice(&bytes).unwrap();
+            final_state = s.state;
+            if final_state == "Valid" {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        assert_eq!(
+            final_state, "Valid",
+            "async snapshot must finalize to Valid"
+        );
     }
 }
