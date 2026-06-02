@@ -100,6 +100,11 @@ impl AgentRuntime {
         self.server.session_count()
     }
 
+    /// Session ids of all live agents.
+    pub fn agent_session_ids(&self) -> Vec<String> {
+        self.sandboxes.lock().keys().cloned().collect()
+    }
+
     /// Fleet-wide memory cost: the single shared baseline plus every agent's
     /// private (copied-on-write) pages.
     pub fn fleet_memory_bytes(&self) -> usize {

@@ -4,6 +4,7 @@
 
 #![allow(dead_code)]
 
+pub mod agent_runtime_routes;
 pub mod config;
 pub mod events;
 pub mod gpu_fabric_routes;
