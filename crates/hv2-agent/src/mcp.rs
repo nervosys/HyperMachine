@@ -37,7 +37,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -50,7 +50,7 @@ pub struct McpServer {
     /// Server configuration
     config: McpConfig,
     /// Audit log
-    audit_log: RwLock<Vec<AuditEntry>>,
+    audit_log: RwLock<VecDeque<AuditEntry>>,
 }
 
 /// MCP Server configuration
@@ -64,6 +64,9 @@ pub struct McpConfig {
     pub audit_enabled: bool,
     /// Rate limit (calls per minute per session)
     pub rate_limit: u32,
+    /// Maximum retained audit-log entries; the oldest are dropped beyond this
+    /// so a long-running agent runtime cannot grow the log without bound.
+    pub max_audit_entries: usize,
 }
 
 impl Default for McpConfig {
@@ -73,6 +76,7 @@ impl Default for McpConfig {
             default_timeout: Duration::from_secs(60),
             audit_enabled: true,
             rate_limit: 100,
+            max_audit_entries: 10_000,
         }
     }
 }
@@ -305,7 +309,7 @@ impl McpServer {
             tools: RwLock::new(HashMap::new()),
             sessions: RwLock::new(HashMap::new()),
             config,
-            audit_log: RwLock::new(Vec::new()),
+            audit_log: RwLock::new(VecDeque::new()),
         };
 
         // Register default tools
@@ -1176,10 +1180,14 @@ impl McpServer {
                 error: response.error.clone(),
                 execution_time_ms: response.execution_time_ms,
             };
-            self.audit_log
-                .write()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(entry);
+            let mut log = self.audit_log.write().unwrap_or_else(|e| e.into_inner());
+            log.push_back(entry);
+            // Bound memory: drop the oldest entries beyond the configured cap.
+            // A fixed-size ring also avoids reallocation under the lock at
+            // steady state, shortening the hold time on this shared path.
+            while log.len() > self.config.max_audit_entries {
+                log.pop_front();
+            }
         }
 
         response
@@ -2007,5 +2015,25 @@ mod tests {
 
         assert!(response.success);
         assert!(response.result.is_some());
+    }
+
+    #[tokio::test]
+    async fn audit_log_is_bounded() {
+        // A long-running agent runtime must not grow the audit log without
+        // bound; the oldest entries are dropped beyond `max_audit_entries`.
+        let server = McpServer::with_config(McpConfig {
+            audit_enabled: true,
+            max_audit_entries: 5,
+            rate_limit: u32::MAX,
+            ..Default::default()
+        });
+        let session = server
+            .create_session("audit-agent", AgentCapabilities::full())
+            .unwrap();
+
+        for _ in 0..20 {
+            let _ = session.call_tool(&server, "system.info", json!({})).await;
+        }
+        assert_eq!(server.get_audit_log(100).len(), 5);
     }
 }
