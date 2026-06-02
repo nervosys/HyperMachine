@@ -19,6 +19,7 @@
 //! | Unified Health   | `/api/v1/health/full`             | `UnifiedHealthState`   |
 //! | Prometheus       | `/metrics`                        | `MetricsState`         |
 //! | Snapshots        | `/api/v1/vms/:id/snapshots`       | `SnapshotAppState`     |
+//! | Agent Runtime    | `/api/v1/agents`                  | `AgentRuntimeAppState` |
 //!
 //! Each router keeps its own state via axum state extractors while
 //! sharing a single TCP listener and connection pool.
@@ -35,6 +36,7 @@
 //! Configure the drain period via `ServerConfig::shutdown_timeout_secs`
 //! (default: 30 seconds, 0 = immediate shutdown).
 
+use crate::agent_runtime_routes::{self, AgentRuntimeAppState};
 use crate::events::{self, EventBus};
 use crate::gpu_fabric_routes::{self, GpuFabricAppState};
 use crate::health_routes::{self, UnifiedHealthState};
@@ -50,6 +52,10 @@ use axum::Router;
 use hv2_runtime::{Runtime, RuntimeConfig};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// Placeholder warm-baseline size for the mounted agent runtime. A production
+/// deployment supplies a real booted-agent image instead.
+const AGENT_BASELINE_BYTES: usize = 1024 * 1024;
 
 // ============================================================================
 // Server Configuration
@@ -309,6 +315,13 @@ impl Server {
         let snapshot_state = Arc::new(SnapshotAppState::new());
         let snapshot_router = snapshot_routes::create_snapshot_router(snapshot_state);
         app = app.merge(snapshot_router);
+
+        // Merge agent-runtime routes (CoW agent fleet over a warm baseline).
+        // The placeholder baseline is replaced by a real agent image in a
+        // production deployment.
+        let agent_state = Arc::new(AgentRuntimeAppState::new(&vec![0u8; AGENT_BASELINE_BYTES]));
+        let agent_router = agent_runtime_routes::create_agent_runtime_router(agent_state);
+        app = app.merge(agent_router);
 
         // Nest events routes if enabled
         if let Some(ref bus) = self.event_bus {
