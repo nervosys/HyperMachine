@@ -41,9 +41,14 @@ wasm-scripts = ["dep:wasmtime", "dep:wasmtime-wasi"]
 [dev-dependencies]
 proptest = { workspace = true }
 tracing-subscriber = { workspace = true }
+criterion = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "mcp_bench"
+harness = false
 
 [[example]]
 name = "basic"

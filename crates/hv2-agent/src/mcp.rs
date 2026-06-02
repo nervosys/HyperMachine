@@ -1110,36 +1110,41 @@ impl McpServer {
             *count += 1;
         }
 
-        // Get tool definition
-        let tool = match self.get_tool(&request.tool) {
-            Some(t) => t,
-            None => {
-                return ToolCallResponse {
-                    id: request.id,
-                    success: false,
-                    result: None,
-                    error: Some(format!("Tool not found: {}", request.tool)),
-                    execution_time_ms: start.elapsed().as_millis() as u64,
-                };
-            }
-        };
-
-        // Check capabilities
-        for cap in &tool.required_capabilities {
-            if !session.capabilities.has(*cap) {
-                return ToolCallResponse {
-                    id: request.id,
-                    success: false,
-                    result: None,
-                    error: Some(format!("Missing capability: {:?}", cap)),
-                    execution_time_ms: start.elapsed().as_millis() as u64,
-                };
+        // Verify the tool exists and the session holds its required
+        // capabilities under a short read lock — without cloning the tool's
+        // (potentially large) JSON schema on every call. `request.tool` is the
+        // tool name, so dispatch needs no clone. The lock is released before the
+        // `.await` below.
+        {
+            let tools = self.tools.read().unwrap_or_else(|e| e.into_inner());
+            let tool = match tools.get(&request.tool) {
+                Some(t) => t,
+                None => {
+                    return ToolCallResponse {
+                        id: request.id,
+                        success: false,
+                        result: None,
+                        error: Some(format!("Tool not found: {}", request.tool)),
+                        execution_time_ms: start.elapsed().as_millis() as u64,
+                    };
+                }
+            };
+            for cap in &tool.required_capabilities {
+                if !session.capabilities.has(*cap) {
+                    return ToolCallResponse {
+                        id: request.id,
+                        success: false,
+                        result: None,
+                        error: Some(format!("Missing capability: {:?}", cap)),
+                        execution_time_ms: start.elapsed().as_millis() as u64,
+                    };
+                }
             }
         }
 
         // Execute tool via the dispatch table in execute_tool_impl
         let result = self
-            .execute_tool_impl(&tool.name, &request.parameters, session)
+            .execute_tool_impl(&request.tool, &request.parameters, session)
             .await;
 
         let response = match result {
