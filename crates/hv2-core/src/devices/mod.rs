@@ -17,7 +17,6 @@ pub mod timer;
 pub mod vga;
 pub mod virtio;
 pub mod virtio_blk;
-pub mod virtio_gpu;
 
 #[cfg(test)]
 mod integration_tests;
@@ -71,7 +70,6 @@ pub use virtio_blk::{
     BlockConfig, BlockRequestHeader, RequestType, VirtioBlock, VIRTIO_BLK_DEVICE_ID,
     VIRTIO_BLK_SECTOR_SIZE,
 };
-pub use virtio_gpu::{
-    Cursor, DisplayInfo, GpuCommand, GpuFormat, GpuResponse, Resource2d, Scanout, SharedVirtioGpu,
-    VirtioGpu,
-};
+// virtio_gpu lives in `crate::gpu` (the crate-root `VirtioGpu`); the former
+// parallel `devices::virtio_gpu` implementation was removed as an unused
+// duplicate.
