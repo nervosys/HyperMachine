@@ -77,3 +77,7 @@ path = "examples/llm_tool_schemas.rs"
 [[example]]
 name = "multi_agent_orchestration"
 path = "examples/multi_agent_orchestration.rs"
+
+[[example]]
+name = "agent_runtime"
+path = "examples/agent_runtime.rs"

@@ -52,6 +52,7 @@ pub mod permissions;
 pub mod planning;
 pub mod policies;
 pub mod reasoning;
+pub mod runtime;
 pub mod sandbox;
 pub mod script;
 pub mod state;
@@ -111,6 +112,7 @@ pub use reasoning::{
     KnowledgeBase, PatternPosition, Planner, ReasoningError, ReasoningResult, Rule, SharedReasoner,
     TruthValue,
 };
+pub use runtime::{AgentHandle, AgentRuntime};
 pub use sandbox::{Sandbox, SandboxConfig};
 pub use script::{ScriptEngine, ScriptResult};
 pub use state::{
