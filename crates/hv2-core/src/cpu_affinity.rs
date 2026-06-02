@@ -21,6 +21,46 @@ pub fn core_count() -> usize {
         .unwrap_or(1)
 }
 
+/// Number of host NUMA nodes (always `>= 1`).
+///
+/// Used to validate a VM's requested memory node. Falls back to `1` (a single
+/// node) when the host topology cannot be queried.
+pub fn numa_node_count() -> u32 {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Threading::GetNumaHighestNodeNumber;
+        let mut highest: u32 = 0;
+        // SAFETY: writes a single u32; returns 0 (FALSE) on failure.
+        let ok = unsafe { GetNumaHighestNodeNumber(&mut highest) };
+        if ok != 0 {
+            highest.saturating_add(1)
+        } else {
+            1
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Count `nodeN` directories under the sysfs NUMA node tree.
+        let count = std::fs::read_dir("/sys/devices/system/node")
+            .map(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .filter(|e| {
+                        let name = e.file_name();
+                        let name = name.to_string_lossy();
+                        name.strip_prefix("node")
+                            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
+        (count as u32).max(1)
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        1
+    }
+}
+
 /// Pin the **current OS thread** to a single host core.
 ///
 /// Returns an error if the OS rejects the request (e.g. the core does not
@@ -84,6 +124,11 @@ mod tests {
     #[test]
     fn core_count_is_positive() {
         assert!(core_count() >= 1);
+    }
+
+    #[test]
+    fn numa_node_count_is_positive() {
+        assert!(numa_node_count() >= 1);
     }
 
     #[test]

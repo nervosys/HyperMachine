@@ -16,6 +16,7 @@ async fn create_test_vm(name: &str) -> Result<Arc<VM>> {
         enable_tracing: true,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let vm = Arc::new(VM::new(config)?);

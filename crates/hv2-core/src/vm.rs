@@ -59,6 +59,10 @@ pub struct VMConfig {
     /// vCPU affinity: map vCPU ID to host CPU core (optional)
     #[serde(default)]
     pub vcpu_affinity: Vec<(u32, usize)>,
+    /// Bind this VM's guest memory to a host NUMA node (optional). Pair with
+    /// `vcpu_affinity` cores on the same node for NUMA-local execution.
+    #[serde(default)]
+    pub memory_numa_node: Option<u32>,
 }
 
 fn default_parallel_vcpu() -> bool {
@@ -133,6 +137,7 @@ impl Default for VMConfig {
             enable_tracing: false,
             parallel_vcpu: true,
             vcpu_affinity: Vec::new(),
+            memory_numa_node: None,
         }
     }
 }
@@ -243,13 +248,26 @@ impl VM {
         // Reject a malformed vCPU affinity map instead of silently ignoring it.
         config.validate_affinity()?;
 
+        // Reject a memory NUMA node that does not exist on this host.
+        if let Some(node) = config.memory_numa_node {
+            let node_count = crate::cpu_affinity::numa_node_count();
+            if node >= node_count {
+                return Err(Error::Config(format!(
+                    "memory_numa_node {node} does not exist (host has {node_count} NUMA node(s))"
+                )));
+            }
+        }
+
         // Create vCPUs
         let vcpus: Vec<Arc<VCpu>> = (0..config.vcpu_count)
             .map(|id| Arc::new(VCpu::new(id)))
             .collect();
 
-        // Create guest memory
-        let memory = Arc::new(GuestMemory::new(config.memory_size)?);
+        // Create guest memory, bound to the requested host NUMA node when set.
+        let memory = Arc::new(GuestMemory::new_on_node(
+            config.memory_size,
+            config.memory_numa_node,
+        )?);
 
         // Initialize main memory region
         memory.allocate_region(config.memory_size, false)?;
@@ -1559,6 +1577,16 @@ mod tests {
         let config = VMConfig {
             vcpu_count: 1,
             vcpu_affinity: vec![(7, 0)], // vCPU 7 does not exist
+            ..Default::default()
+        };
+        assert!(VM::new(config).is_err());
+    }
+
+    #[tokio::test]
+    async fn vm_new_rejects_invalid_memory_numa_node() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            memory_numa_node: Some(9_999), // no such NUMA node
             ..Default::default()
         };
         assert!(VM::new(config).is_err());

@@ -338,6 +338,7 @@ async fn create_test_vm() -> Arc<VM> {
         enable_tracing: true,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     Arc::new(VM::new(config).expect("Failed to create VM"))
@@ -509,6 +510,7 @@ async fn test_execute_hello_binary() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -904,6 +906,7 @@ async fn test_execute_multiboot() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1004,6 +1007,7 @@ async fn test_execute_interrupt_demo() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1088,6 +1092,7 @@ async fn test_execute_mmio_test() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1154,6 +1159,7 @@ async fn test_state_management_tracking() {
         enable_tracing: true,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1225,6 +1231,7 @@ async fn test_multi_vcpu_state_management() {
         enable_tracing: true,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1490,6 +1497,7 @@ async fn pinned_vcpu_runs_to_completion() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: vec![(0, 0)], // pin vCPU 0 to host core 0
+        memory_numa_node: None,
     };
     let backend = Arc::new(MockHypervisorBackend::with_exits(vec![VmExit::Hlt]));
     let vm = Arc::new(VM::new_with_backend(config, backend).expect("create VM"));

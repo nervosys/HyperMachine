@@ -121,6 +121,7 @@ async fn setup_test_vm_with_devices(
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let vm = Arc::new(VM::new(config).unwrap());
@@ -656,6 +657,7 @@ async fn test_vm_memory_configuration() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let vm = VM::new(config).unwrap();
@@ -681,6 +683,7 @@ async fn test_vm_vcpu_configuration() {
         enable_tracing: false,
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
+        memory_numa_node: None,
     };
 
     let vm = VM::new(config).unwrap();
