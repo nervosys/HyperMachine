@@ -23,7 +23,7 @@
 use crate::memory::GuestMemory;
 use crate::{Error, Result};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, Weak};
 
 /// Page granularity for copy-on-write sharing (4 KiB), matching the snapshot
 /// subsystem's [`crate::snapshot::memory::PAGE_SIZE`].
@@ -235,6 +235,110 @@ impl CowMemory {
     }
 }
 
+/// A pool that spawns copy-on-write agent sandboxes from one warm baseline.
+///
+/// The baseline — a booted guest, a loaded model runtime, a primed interpreter
+/// — is captured once as a [`MemoryTemplate`]. Each [`SandboxPool::spawn`] hands
+/// out a [`Sandbox`] whose memory is a CoW clone: O(1) to create and sharing the
+/// baseline read-only until written. The pool keeps weak references to the live
+/// sandboxes so a runtime can read its fleet-wide memory cost at any time — the
+/// density win is that N idle sandboxes cost ~one baseline, not N baselines.
+pub struct SandboxPool {
+    template: Arc<MemoryTemplate>,
+    live: Mutex<Vec<Weak<Mutex<CowMemory>>>>,
+}
+
+impl SandboxPool {
+    /// Build a pool from a baseline image.
+    pub fn from_bytes(baseline: &[u8]) -> Self {
+        Self::from_template(MemoryTemplate::from_bytes(baseline))
+    }
+
+    /// Build a pool from a pre-captured template.
+    pub fn from_template(template: Arc<MemoryTemplate>) -> Self {
+        Self {
+            template,
+            live: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Spawn a new sandbox — an O(1) copy-on-write clone of the baseline.
+    pub fn spawn(&self) -> Sandbox {
+        let mem = Arc::new(Mutex::new(self.template.instantiate()));
+        let mut live = self.live.lock().unwrap_or_else(|e| e.into_inner());
+        live.push(Arc::downgrade(&mem));
+        Sandbox { mem }
+    }
+
+    /// Number of live sandboxes (dropped ones are pruned).
+    pub fn live_count(&self) -> usize {
+        let mut live = self.live.lock().unwrap_or_else(|e| e.into_inner());
+        live.retain(|w| w.strong_count() > 0);
+        live.len()
+    }
+
+    /// Bytes of the shared baseline (counted once for the whole fleet).
+    pub fn baseline_bytes(&self) -> usize {
+        self.template.len()
+    }
+
+    /// Total private (copied-on-write) bytes across all live sandboxes — the
+    /// fleet's marginal RAM cost beyond the single shared baseline.
+    pub fn total_private_bytes(&self) -> usize {
+        let mut live = self.live.lock().unwrap_or_else(|e| e.into_inner());
+        live.retain(|w| w.strong_count() > 0);
+        live.iter()
+            .filter_map(|w| w.upgrade())
+            .map(|m| m.lock().unwrap_or_else(|e| e.into_inner()).resident_bytes())
+            .sum()
+    }
+
+    /// Total fleet memory: the shared baseline plus all private pages.
+    pub fn total_bytes(&self) -> usize {
+        self.baseline_bytes() + self.total_private_bytes()
+    }
+}
+
+/// A single agent sandbox: a copy-on-write view over its pool's baseline.
+#[derive(Clone)]
+pub struct Sandbox {
+    mem: Arc<Mutex<CowMemory>>,
+}
+
+impl Sandbox {
+    /// Read `len` bytes from sandbox memory at `offset`.
+    pub fn read(&self, offset: usize, len: usize) -> Result<Vec<u8>> {
+        self.mem
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .read(offset, len)
+    }
+
+    /// Write `data` at `offset`, copying touched baseline pages private first.
+    pub fn write(&self, offset: usize, data: &[u8]) -> Result<()> {
+        self.mem
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .write(offset, data)
+    }
+
+    /// Private (copied) bytes this sandbox holds beyond the shared baseline.
+    pub fn private_bytes(&self) -> usize {
+        self.mem
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .resident_bytes()
+    }
+
+    /// Flatten the current memory into a contiguous image (e.g. for a backend).
+    pub fn materialize(&self) -> Vec<u8> {
+        self.mem
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .materialize()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -342,5 +446,43 @@ mod tests {
         let tmpl = MemoryTemplate::capture(&mem).unwrap();
         let clone = tmpl.instantiate();
         assert_eq!(clone.read(addr as usize, 16).unwrap(), vec![0x42; 16]);
+    }
+
+    #[test]
+    fn pool_spawns_isolated_sandboxes_and_tracks_density() {
+        let pool = SandboxPool::from_bytes(&pattern(4 * PAGE_SIZE));
+        assert_eq!(pool.baseline_bytes(), 4 * PAGE_SIZE);
+
+        let a = pool.spawn();
+        let b = pool.spawn();
+        assert_eq!(pool.live_count(), 2);
+        // Idle sandboxes hold no private memory — all shared with the baseline.
+        assert_eq!(pool.total_private_bytes(), 0);
+        assert_eq!(pool.total_bytes(), 4 * PAGE_SIZE);
+
+        // Writing in `a` copies one page private, isolated from `b`.
+        a.write(0, &[0xFF; 8]).unwrap();
+        assert_eq!(a.private_bytes(), PAGE_SIZE);
+        assert_eq!(b.private_bytes(), 0);
+        assert_eq!(pool.total_private_bytes(), PAGE_SIZE);
+        assert_eq!(pool.total_bytes(), 5 * PAGE_SIZE);
+
+        // `b` still reads the baseline; `a` sees its own write.
+        assert_eq!(b.read(0, 8).unwrap(), pattern(4 * PAGE_SIZE)[0..8]);
+        assert_eq!(a.read(0, 8).unwrap(), vec![0xFF; 8]);
+    }
+
+    #[test]
+    fn dropped_sandboxes_are_pruned() {
+        let pool = SandboxPool::from_bytes(&pattern(PAGE_SIZE));
+        let a = pool.spawn();
+        {
+            let _b = pool.spawn();
+            assert_eq!(pool.live_count(), 2);
+        }
+        // `_b` was dropped — the pool prunes it.
+        assert_eq!(pool.live_count(), 1);
+        drop(a);
+        assert_eq!(pool.live_count(), 0);
     }
 }

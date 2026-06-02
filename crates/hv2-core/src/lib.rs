@@ -223,7 +223,7 @@ pub use iommu::{
     PAGE_SIZE_2M, PAGE_SIZE_4K,
 };
 pub use memory::{GuestMemory, MemoryMapping, MemoryRegion};
-pub use memory_cow::{CowMemory, MemoryTemplate};
+pub use memory_cow::{CowMemory, MemoryTemplate, Sandbox, SandboxPool};
 pub use migration::{
     crc32, shared_dirty_tracker, CpuState as MigrationCpuState, DescriptorTable, DeviceState,
     DirtyBitmap, DirtyStats, DirtyTracker, MemoryRegionState, Migratable, MigrationConfig,
