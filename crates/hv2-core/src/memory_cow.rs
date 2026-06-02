@@ -172,6 +172,12 @@ impl CowMemory {
     /// Read `buf.len()` bytes starting at `offset` into `buf`.
     pub fn read_into(&self, offset: usize, buf: &mut [u8]) -> Result<()> {
         self.check_bounds(offset, buf.len())?;
+        if self.overlay.is_empty() {
+            // Fast path: no page has diverged from the template yet (the common
+            // case for an idle clone) — one contiguous copy, no per-page lookups.
+            buf.copy_from_slice(&self.template.data[offset..offset + buf.len()]);
+            return Ok(());
+        }
         let mut pos = offset;
         let mut done = 0;
         while done < buf.len() {
@@ -201,11 +207,13 @@ impl CowMemory {
             let page = pos / PAGE_SIZE;
             let po = pos % PAGE_SIZE;
             let n = (PAGE_SIZE - po).min(data.len() - done);
-            // Copy-on-write: materialize the page privately on first write.
-            if !self.overlay.contains_key(&page) {
-                self.overlay.insert(page, self.template.page(page).to_vec());
-            }
-            let pg = self.overlay.get_mut(&page).expect("page just inserted");
+            // Copy-on-write: materialize the page privately on first write (a
+            // single hash lookup via `entry`).
+            let template = &self.template;
+            let pg = self
+                .overlay
+                .entry(page)
+                .or_insert_with(|| template.page(page).to_vec());
             pg[po..po + n].copy_from_slice(&data[done..done + n]);
             pos += n;
             done += n;

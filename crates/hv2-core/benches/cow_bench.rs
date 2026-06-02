@@ -55,5 +55,28 @@ fn bench_first_write(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_clone_vs_copy, bench_first_write);
+/// Reading an idle (unmodified) clone — the common case for shared agent
+/// memory. Exercises the no-overlay fast path.
+fn bench_read_idle_clone(c: &mut Criterion) {
+    let size = 4 * 1024 * 1024;
+    let tmpl = MemoryTemplate::from_bytes(&vec![0xABu8; size]);
+    let clone = tmpl.instantiate();
+    let mut buf = vec![0u8; size];
+
+    let mut group = c.benchmark_group("cow_read");
+    group.throughput(Throughput::Bytes(size as u64));
+    group.bench_function("read_full_idle_clone", |b| {
+        b.iter(|| {
+            clone.read_into(black_box(0), black_box(&mut buf)).unwrap();
+        });
+    });
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_clone_vs_copy,
+    bench_first_write,
+    bench_read_idle_clone
+);
 criterion_main!(benches);
