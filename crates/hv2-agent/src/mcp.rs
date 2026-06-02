@@ -67,6 +67,10 @@ pub struct McpConfig {
     /// Maximum retained audit-log entries; the oldest are dropped beyond this
     /// so a long-running agent runtime cannot grow the log without bound.
     pub max_audit_entries: usize,
+    /// Sessions idle longer than this are eligible for automatic reclamation
+    /// when `create_session` hits `max_sessions`, so dead agent sessions don't
+    /// permanently consume slots.
+    pub session_idle_timeout: Duration,
 }
 
 impl Default for McpConfig {
@@ -77,6 +81,7 @@ impl Default for McpConfig {
             audit_enabled: true,
             rate_limit: 100,
             max_audit_entries: 10_000,
+            session_idle_timeout: Duration::from_secs(30 * 60),
         }
     }
 }
@@ -1017,11 +1022,14 @@ impl McpServer {
         agent_id: &str,
         capabilities: AgentCapabilities,
     ) -> Result<Arc<AgentSession>, String> {
-        let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
-        if sessions.len() >= self.config.max_sessions {
-            return Err("Maximum sessions reached".to_string());
+        if self.session_count() >= self.config.max_sessions {
+            // At capacity — reclaim idle sessions before rejecting, so a
+            // long-running runtime doesn't deadlock on leaked sessions.
+            self.expire_idle_sessions(self.config.session_idle_timeout);
+            if self.session_count() >= self.config.max_sessions {
+                return Err("Maximum sessions reached".to_string());
+            }
         }
-        drop(sessions);
 
         let session_id = format!("session-{}-{}", agent_id, uuid_v4());
         let session = Arc::new(AgentSession {
@@ -1040,6 +1048,37 @@ impl McpServer {
         sessions.insert(session_id, Arc::clone(&session));
 
         Ok(session)
+    }
+
+    /// Number of live agent sessions.
+    pub fn session_count(&self) -> usize {
+        self.sessions
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
+    }
+
+    /// Explicitly close (remove) a session. Returns `true` if it existed.
+    pub fn close_session(&self, session_id: &str) -> bool {
+        self.sessions
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session_id)
+            .is_some()
+    }
+
+    /// Reap sessions idle longer than `max_idle`, returning the number removed.
+    /// A long-running agent runtime can call this periodically; `create_session`
+    /// also calls it automatically when it hits `max_sessions`.
+    pub fn expire_idle_sessions(&self, max_idle: Duration) -> usize {
+        let now = Instant::now();
+        let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
+        let before = sessions.len();
+        sessions.retain(|_, s| {
+            let last = *s.last_activity.read().unwrap_or_else(|e| e.into_inner());
+            now.duration_since(last) < max_idle
+        });
+        before - sessions.len()
     }
 
     /// List available tools
@@ -2035,5 +2074,50 @@ mod tests {
             let _ = session.call_tool(&server, "system.info", json!({})).await;
         }
         assert_eq!(server.get_audit_log(100).len(), 5);
+    }
+
+    #[tokio::test]
+    async fn close_session_removes_it() {
+        let server = McpServer::new();
+        let s = server
+            .create_session("a", AgentCapabilities::full())
+            .unwrap();
+        assert_eq!(server.session_count(), 1);
+        assert!(server.close_session(&s.id));
+        assert_eq!(server.session_count(), 0);
+        assert!(!server.close_session("nope"));
+    }
+
+    #[tokio::test]
+    async fn expire_idle_sessions_reaps_idle() {
+        let server = McpServer::new();
+        let _a = server
+            .create_session("a", AgentCapabilities::full())
+            .unwrap();
+        let _b = server
+            .create_session("b", AgentCapabilities::full())
+            .unwrap();
+        assert_eq!(server.session_count(), 2);
+        // max_idle = 0 makes every session eligible for reclamation.
+        assert_eq!(server.expire_idle_sessions(Duration::from_secs(0)), 2);
+        assert_eq!(server.session_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn create_session_reclaims_at_capacity() {
+        // With a zero idle timeout, an at-capacity create reclaims the idle
+        // session instead of rejecting the new agent.
+        let server = McpServer::with_config(McpConfig {
+            max_sessions: 1,
+            session_idle_timeout: Duration::from_secs(0),
+            ..Default::default()
+        });
+        let _first = server
+            .create_session("a", AgentCapabilities::full())
+            .unwrap();
+        assert_eq!(server.session_count(), 1);
+        let second = server.create_session("b", AgentCapabilities::full());
+        assert!(second.is_ok());
+        assert_eq!(server.session_count(), 1);
     }
 }
