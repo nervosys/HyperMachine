@@ -152,6 +152,17 @@ pub struct RegisterVmClassRequest {
     pub gpu_count: u32,
     #[serde(default)]
     pub gpu_model: String,
+    /// Structured GPU spec used for topology-aware placement.
+    #[serde(default)]
+    pub gpu_min_vram_bytes: u64,
+    #[serde(default)]
+    pub gpu_min_compute_capability: u32,
+    #[serde(default)]
+    pub gpu_require_nvlink: bool,
+    #[serde(default)]
+    pub gpu_same_numa: bool,
+    #[serde(default)]
+    pub gpu_min_bandwidth_gbps: f64,
     #[serde(default)]
     pub dedicated_host: bool,
     #[serde(default)]
@@ -192,6 +203,12 @@ pub struct VmClassSummary {
     pub name: String,
     pub gpu_count: u32,
     pub max_instances: u32,
+}
+
+/// Returned by the class-placement endpoint for a CPU-only class.
+#[derive(Debug, Serialize)]
+pub struct NoGpuPlacement {
+    pub gpu_required: bool,
 }
 
 // ── Common ──
@@ -236,6 +253,10 @@ pub fn create_gpu_fabric_router(state: Arc<GpuFabricAppState>) -> Router {
         .route(
             "/api/v1/gpu-fabric/capacity/classes",
             post(register_vm_class),
+        )
+        .route(
+            "/api/v1/gpu-fabric/capacity/classes/{name}/placement",
+            get(class_placement),
         )
         .route(
             "/api/v1/gpu-fabric/capacity/reservations",
@@ -406,11 +427,25 @@ async fn register_vm_class(
         }
     };
 
-    let vm_class = VmClass::new(req.name, sla_tier)
+    let mut vm_class = VmClass::new(req.name, sla_tier)
         .description(req.description)
         .vcpus(req.vcpus)
         .memory(req.memory_bytes)
-        .gpus(req.gpu_count, req.gpu_model);
+        .gpus(req.gpu_count, req.gpu_model)
+        .gpu_min_vram(req.gpu_min_vram_bytes)
+        .gpu_compute_capability(req.gpu_min_compute_capability)
+        .gpu_min_bandwidth(req.gpu_min_bandwidth_gbps)
+        .rate(req.rate_per_hour)
+        .max(req.max_instances);
+    if req.gpu_require_nvlink {
+        vm_class = vm_class.gpu_nvlink();
+    }
+    if req.gpu_same_numa {
+        vm_class = vm_class.gpu_same_numa_node();
+    }
+    if req.dedicated_host {
+        vm_class = vm_class.dedicated();
+    }
 
     match state.capacity.register_class(vm_class) {
         Ok(()) => StatusCode::CREATED.into_response(),
@@ -419,6 +454,52 @@ async fn register_vm_class(
             Json(FabricErrorResponse {
                 error: e.to_string(),
                 code: "CLASS_REGISTER_FAILED".into(),
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /api/v1/gpu-fabric/capacity/classes/{name}/placement
+///
+/// Resolve a registered class's GPU spec against the current fabric topology:
+/// `200` with a concrete placement, `200` `{gpu_required:false}` for a CPU-only
+/// class, `404` if the class is unknown, or `422` if the fabric cannot satisfy
+/// the spec.
+async fn class_placement(
+    State(state): State<Arc<GpuFabricAppState>>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    if state.capacity.get_class(&name).is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(FabricErrorResponse {
+                error: format!("VM class not found: {name}"),
+                code: "CLASS_NOT_FOUND".into(),
+            }),
+        )
+            .into_response();
+    }
+
+    let topo = state.topology.read();
+    match state.capacity.place_class(&name, &topo) {
+        Ok(Some(placement)) => Json(PlacementResponse {
+            gpu_ids: placement.gpu_ids,
+            host_id: placement.host_id,
+            affinity_score: placement.affinity_score,
+            aggregate_bandwidth_gbps: placement.aggregate_bandwidth_gbps,
+            same_numa: placement.same_numa,
+        })
+        .into_response(),
+        Ok(None) => Json(NoGpuPlacement {
+            gpu_required: false,
+        })
+        .into_response(),
+        Err(e) => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(FabricErrorResponse {
+                error: e.to_string(),
+                code: "PLACEMENT_FAILED".into(),
             }),
         )
             .into_response(),
@@ -599,5 +680,110 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> StatusCode {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    async fn get_status(app: &Router, uri: &str) -> StatusCode {
+        app.clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+
+    #[tokio::test]
+    async fn class_placement_unknown_returns_404() {
+        let app = test_app();
+        assert_eq!(
+            get_status(&app, "/api/v1/gpu-fabric/capacity/classes/nope/placement").await,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn class_placement_cpu_only_returns_ok() {
+        let app = test_app();
+        assert_eq!(
+            post_json(
+                &app,
+                "/api/v1/gpu-fabric/capacity/classes",
+                serde_json::json!({ "name": "cpu-std", "sla_tier": "standard" }),
+            )
+            .await,
+            StatusCode::CREATED
+        );
+        // CPU-only class needs no GPU placement.
+        assert_eq!(
+            get_status(
+                &app,
+                "/api/v1/gpu-fabric/capacity/classes/cpu-std/placement"
+            )
+            .await,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn class_placement_unsatisfiable_returns_422() {
+        let app = test_app();
+        // A GPU class, but the fabric has no GPUs registered.
+        assert_eq!(
+            post_json(
+                &app,
+                "/api/v1/gpu-fabric/capacity/classes",
+                serde_json::json!({ "name": "gpu-1x", "sla_tier": "premium", "gpu_count": 1 }),
+            )
+            .await,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            get_status(&app, "/api/v1/gpu-fabric/capacity/classes/gpu-1x/placement").await,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[tokio::test]
+    async fn class_placement_with_device_returns_ok() {
+        let app = test_app();
+        // Register one GPU in the fabric, then a 1-GPU class — placeable.
+        assert_eq!(
+            post_json(
+                &app,
+                "/api/v1/gpu-fabric/topology/devices",
+                serde_json::json!({
+                    "id": "gpu-0", "host_id": "host-1", "model": "A100",
+                    "numa_node": 0, "pci_address": "0000:3b:00.0"
+                }),
+            )
+            .await,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            post_json(
+                &app,
+                "/api/v1/gpu-fabric/capacity/classes",
+                serde_json::json!({ "name": "gpu-1x", "sla_tier": "premium", "gpu_count": 1 }),
+            )
+            .await,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            get_status(&app, "/api/v1/gpu-fabric/capacity/classes/gpu-1x/placement").await,
+            StatusCode::OK
+        );
     }
 }
