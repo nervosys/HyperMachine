@@ -61,6 +61,75 @@ pub fn numa_node_count() -> u32 {
     }
 }
 
+/// The host NUMA node a given logical core belongs to, if the topology can be
+/// queried. Returns `None` when unknown (caller falls back to host-default
+/// memory placement).
+pub fn numa_node_for_core(core: usize) -> Option<u32> {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Threading::GetNumaProcessorNode;
+        if core > u8::MAX as usize {
+            return None;
+        }
+        let mut node: u8 = 0;
+        // SAFETY: writes a single u8; returns 0 (FALSE) on failure.
+        let ok = unsafe { GetNumaProcessorNode(core as u8, &mut node) };
+        if ok != 0 {
+            Some(node as u32)
+        } else {
+            None
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // Find the node whose `cpulist` contains `core`.
+        let dir = std::fs::read_dir("/sys/devices/system/node").ok()?;
+        for entry in dir.filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if let Some(num) = name
+                .strip_prefix("node")
+                .and_then(|n| n.parse::<u32>().ok())
+            {
+                let path = format!("/sys/devices/system/node/{name}/cpulist");
+                if let Ok(list) = std::fs::read_to_string(&path) {
+                    if cpulist_contains(&list, core) {
+                        return Some(num);
+                    }
+                }
+            }
+        }
+        None
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        let _ = core;
+        None
+    }
+}
+
+/// Whether a Linux sysfs `cpulist` string (e.g. `"0-3,8,12-15"`) includes
+/// `core`. Kept platform-independent so the range parsing is unit-tested
+/// everywhere even though it is only consulted on Linux.
+fn cpulist_contains(list: &str, core: usize) -> bool {
+    for part in list.trim().split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        if let Some((a, b)) = part.split_once('-') {
+            if let (Ok(a), Ok(b)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) {
+                if core >= a && core <= b {
+                    return true;
+                }
+            }
+        } else if part.parse::<usize>() == Ok(core) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Pin the **current OS thread** to a single host core.
 ///
 /// Returns an error if the OS rejects the request (e.g. the core does not
@@ -129,6 +198,22 @@ mod tests {
     #[test]
     fn numa_node_count_is_positive() {
         assert!(numa_node_count() >= 1);
+    }
+
+    #[test]
+    fn cpulist_parsing() {
+        let list = "0-3,8,12-15";
+        assert!(cpulist_contains(list, 0));
+        assert!(cpulist_contains(list, 2));
+        assert!(cpulist_contains(list, 3));
+        assert!(cpulist_contains(list, 8));
+        assert!(cpulist_contains(list, 13));
+        assert!(cpulist_contains(list, 15));
+        assert!(!cpulist_contains(list, 4));
+        assert!(!cpulist_contains(list, 9));
+        assert!(!cpulist_contains(list, 16));
+        // Trailing newline (as sysfs returns) is tolerated.
+        assert!(cpulist_contains("0-1\n", 1));
     }
 
     #[test]

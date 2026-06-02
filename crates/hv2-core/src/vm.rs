@@ -124,6 +124,35 @@ impl VMConfig {
             .find(|(id, _)| *id == vcpu_id)
             .map(|(_, core)| *core)
     }
+
+    /// Resolve the host NUMA node this VM's guest memory should be bound to.
+    ///
+    /// An explicit [`Self::memory_numa_node`] wins. Otherwise, if every pinned
+    /// core in [`Self::vcpu_affinity`] resolves to the *same* host NUMA node,
+    /// that node is used — so setting `vcpu_affinity` alone already yields
+    /// NUMA-local memory. Returns `None` (host-default placement) when there is
+    /// no affinity, the pinned cores span multiple nodes, or the host topology
+    /// cannot be queried.
+    pub fn resolve_memory_node(&self) -> Option<u32> {
+        if let Some(node) = self.memory_numa_node {
+            return Some(node);
+        }
+        if self.vcpu_affinity.is_empty() {
+            return None;
+        }
+        let mut resolved = None;
+        for &(_, core) in &self.vcpu_affinity {
+            match crate::cpu_affinity::numa_node_for_core(core) {
+                Some(n) => match resolved {
+                    None => resolved = Some(n),
+                    Some(existing) if existing == n => {}
+                    Some(_) => return None, // cores span multiple nodes
+                },
+                None => return None, // unknown topology
+            }
+        }
+        resolved
+    }
 }
 
 impl Default for VMConfig {
@@ -263,10 +292,11 @@ impl VM {
             .map(|id| Arc::new(VCpu::new(id)))
             .collect();
 
-        // Create guest memory, bound to the requested host NUMA node when set.
+        // Create guest memory, bound to the resolved host NUMA node — explicit
+        // when set, otherwise derived from the pinned cores' node.
         let memory = Arc::new(GuestMemory::new_on_node(
             config.memory_size,
-            config.memory_numa_node,
+            config.resolve_memory_node(),
         )?);
 
         // Initialize main memory region
@@ -1590,5 +1620,35 @@ mod tests {
             ..Default::default()
         };
         assert!(VM::new(config).is_err());
+    }
+
+    #[test]
+    fn resolve_memory_node_prefers_explicit() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(0, 0)],
+            memory_numa_node: Some(2),
+            ..Default::default()
+        };
+        assert_eq!(config.resolve_memory_node(), Some(2));
+    }
+
+    #[test]
+    fn resolve_memory_node_none_without_affinity_or_explicit() {
+        assert_eq!(VMConfig::default().resolve_memory_node(), None);
+    }
+
+    #[test]
+    fn resolve_memory_node_derives_from_pinned_core() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(0, 0)],
+            ..Default::default()
+        };
+        // With no explicit node, derivation follows the pinned core's host node.
+        assert_eq!(
+            config.resolve_memory_node(),
+            crate::cpu_affinity::numa_node_for_core(0)
+        );
     }
 }
