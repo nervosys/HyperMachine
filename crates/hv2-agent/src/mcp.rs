@@ -41,6 +41,22 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
+/// Details of a reclaimed session, handed to a [`TeardownHook`] so the runtime
+/// can release the real resources (e.g. VMs) the session owned.
+#[derive(Debug, Clone)]
+pub struct SessionTeardown {
+    /// The closed session's id.
+    pub session_id: String,
+    /// The agent that owned the session.
+    pub agent_id: String,
+    /// VM ids the session created and still owned at teardown.
+    pub owned_vms: Vec<String>,
+}
+
+/// Callback invoked when a session is closed or reclaimed. A runtime registers
+/// one via [`McpServer::on_session_teardown`] to tear down owned resources.
+pub type TeardownHook = Arc<dyn Fn(&SessionTeardown) + Send + Sync>;
+
 /// MCP Server - manages agent sessions and tool execution
 pub struct McpServer {
     /// Registered tools
@@ -51,6 +67,8 @@ pub struct McpServer {
     config: McpConfig,
     /// Audit log
     audit_log: RwLock<VecDeque<AuditEntry>>,
+    /// Optional hook invoked when a session is closed/reclaimed.
+    teardown_hook: RwLock<Option<TeardownHook>>,
 }
 
 /// MCP Server configuration
@@ -315,6 +333,7 @@ impl McpServer {
             sessions: RwLock::new(HashMap::new()),
             config,
             audit_log: RwLock::new(VecDeque::new()),
+            teardown_hook: RwLock::new(None),
         };
 
         // Register default tools
@@ -1058,27 +1077,99 @@ impl McpServer {
             .len()
     }
 
-    /// Explicitly close (remove) a session. Returns `true` if it existed.
-    pub fn close_session(&self, session_id: &str) -> bool {
-        self.sessions
+    /// Register a hook invoked whenever a session is closed or reclaimed, so the
+    /// runtime can tear down the VMs/resources the session owned. Replaces any
+    /// previously-registered hook.
+    pub fn on_session_teardown<F>(&self, hook: F)
+    where
+        F: Fn(&SessionTeardown) + Send + Sync + 'static,
+    {
+        *self
+            .teardown_hook
             .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(session_id)
-            .is_some()
+            .unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(hook));
     }
 
-    /// Reap sessions idle longer than `max_idle`, returning the number removed.
-    /// A long-running agent runtime can call this periodically; `create_session`
-    /// also calls it automatically when it hits `max_sessions`.
+    /// Run teardown for a reclaimed session: record it in the audit log and
+    /// invoke the teardown hook with the session's owned VMs. The caller must
+    /// not hold the `sessions` lock (the hook may be slow or re-enter).
+    fn run_teardown(&self, session: &AgentSession) {
+        let owned_vms = session
+            .owned_vms
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+
+        if self.config.audit_enabled {
+            let entry = AuditEntry {
+                timestamp: SystemTime::now(),
+                session_id: session.id.clone(),
+                agent_id: session.agent_id.clone(),
+                tool: "session.teardown".to_string(),
+                parameters: json!({ "owned_vms": owned_vms }),
+                success: true,
+                error: None,
+                execution_time_ms: 0,
+            };
+            let mut log = self.audit_log.write().unwrap_or_else(|e| e.into_inner());
+            log.push_back(entry);
+            while log.len() > self.config.max_audit_entries {
+                log.pop_front();
+            }
+        }
+
+        let hook = self
+            .teardown_hook
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(hook) = hook {
+            hook(&SessionTeardown {
+                session_id: session.id.clone(),
+                agent_id: session.agent_id.clone(),
+                owned_vms,
+            });
+        }
+    }
+
+    /// Explicitly close (remove) a session, running teardown. Returns `true` if
+    /// it existed.
+    pub fn close_session(&self, session_id: &str) -> bool {
+        let removed = self
+            .sessions
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session_id);
+        match removed {
+            Some(session) => {
+                self.run_teardown(&session);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Reap sessions idle longer than `max_idle`, running teardown for each, and
+    /// return the number removed. A long-running agent runtime can call this
+    /// periodically; `create_session` also calls it automatically at capacity.
     pub fn expire_idle_sessions(&self, max_idle: Duration) -> usize {
         let now = Instant::now();
-        let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
-        let before = sessions.len();
-        sessions.retain(|_, s| {
-            let last = *s.last_activity.read().unwrap_or_else(|e| e.into_inner());
-            now.duration_since(last) < max_idle
-        });
-        before - sessions.len()
+        let removed: Vec<Arc<AgentSession>> = {
+            let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
+            let expired: Vec<String> = sessions
+                .iter()
+                .filter(|(_, s)| {
+                    let last = *s.last_activity.read().unwrap_or_else(|e| e.into_inner());
+                    now.duration_since(last) >= max_idle
+                })
+                .map(|(k, _)| k.clone())
+                .collect();
+            expired.iter().filter_map(|k| sessions.remove(k)).collect()
+        };
+        for session in &removed {
+            self.run_teardown(session);
+        }
+        removed.len()
     }
 
     /// List available tools
@@ -2119,5 +2210,28 @@ mod tests {
         let second = server.create_session("b", AgentCapabilities::full());
         assert!(second.is_ok());
         assert_eq!(server.session_count(), 1);
+    }
+
+    #[tokio::test]
+    async fn teardown_hook_fires_with_owned_vms() {
+        let server = McpServer::new();
+        let torn_down: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(vec![]));
+        let captured = Arc::clone(&torn_down);
+        server.on_session_teardown(move |t| {
+            captured.lock().unwrap().extend(t.owned_vms.iter().cloned());
+        });
+
+        let session = server
+            .create_session("a", AgentCapabilities::full())
+            .unwrap();
+        // The session creates (and thus owns) a VM.
+        let resp = session
+            .call_tool(&server, "vm.create", json!({ "name": "x" }))
+            .await;
+        assert!(resp.success);
+
+        // Closing the session must invoke the hook with the owned VM.
+        assert!(server.close_session(&session.id));
+        assert_eq!(torn_down.lock().unwrap().len(), 1);
     }
 }
