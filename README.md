@@ -24,6 +24,8 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 
 HyperMachine is the first hypervisor designed from the ground up for AI agent workloads. Every VM is an MCP-addressable resource: agents discover capabilities via ontology endpoints, invoke typed tools (`vm.create`, `vm.exec`, `gpu.reserve`), and receive structured results — no shell scraping or brittle CLI wrappers. Multi-LLM tool schemas ship built-in for OpenAI, Anthropic, and Google formats.
 
+A built-in **agent runtime** turns this into a fleet service: agents spawn in O(1) as copy-on-write clones of a warm baseline (100 idle agents cost ~one baseline, not 100), run tool-calling loops over a fast MCP dispatch path, and have their sessions and memory reclaimed automatically. It is exposed over a tenant-scoped, optionally-authenticated REST API (`/api/v1/agents`).
+
 ### 2. Dual-Mode Architecture (Type-1 + Type-2)
 
 A single codebase runs as both a **Type-2 hosted hypervisor** (KVM, WHPX, HVF) and a **Type-1 bare-metal hypervisor** (Intel VMX, AMD SVM) with no code duplication. The same VM definitions, device models, and API surface work in both modes — develop on your laptop, deploy bare-metal in production.
@@ -106,6 +108,25 @@ curl -X POST http://localhost:8080/mcp/call \
   -d '{"tool": "vm.create", "arguments": {"name": "ai-sandbox", "cpu_cores": 4}}'
 ```
 
+### Agent runtime API
+
+Spawn and operate a fleet of copy-on-write agents over HTTP. Each agent gets an
+MCP session plus an O(1) sandbox cloned from a warm baseline. Requests are
+tenant-scoped via `X-Tenant-Id` (an agent is owned by the tenant that spawned
+it), with an optional `Authorization: Bearer <token>`:
+
+```bash
+# Spawn a tenant-scoped agent (O(1) CoW sandbox from the warm baseline)
+curl -X POST http://localhost:8080/api/v1/agents \
+  -H "X-Tenant-Id: acme" -H "Content-Type: application/json" \
+  -d '{"agent_id": "researcher", "capabilities": "operator"}'
+
+curl http://localhost:8080/api/v1/agents        -H "X-Tenant-Id: acme"  # list
+curl http://localhost:8080/api/v1/agents/fleet  -H "X-Tenant-Id: acme"  # fleet memory
+curl -X POST http://localhost:8080/api/v1/agents/reap -d '{"max_idle_secs": 600}'
+curl -X DELETE http://localhost:8080/api/v1/agents/<session_id> -H "X-Tenant-Id: acme"
+```
+
 **Python SDK** (planned — not yet shipped in this repository):
 
 ```python
@@ -127,6 +148,7 @@ These compile and run today (`cargo run -p <crate> --example <name>`):
 | `llm_tool_schemas`   | `hv2-agent` | The MCP tool registry projected into OpenAI / Anthropic / Gemini tool-use formats |
 | `agent_vm_workflow`  | `hm-cli`    | Tool discovery + VM lifecycle through the typed `ToolExecutor` and agentic ontology |
 | `multi_agent_orchestration` | `hv2-agent` | Multiple role-scoped agents coordinating: exclusive VM claims, role enforcement, inter-agent messaging |
+| `agent_runtime` | `hv2-agent` | End-to-end agent runtime: 100 agents spawned from one warm baseline (O(1), ~100× memory density), kept isolated, calling tools, then reclaimed |
 | `gpu_fabric_reservation` | `hv2-runtime` | Publishing a GPU VM class and reserving capacity with SLA tiers via `CapacityManager` |
 | `agent_script` / `integrated` | `hv2-agent` | Rhai-scripted agent decision-making and agent↔device (serial/MMIO) interaction |
 
