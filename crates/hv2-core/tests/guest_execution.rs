@@ -1476,3 +1476,26 @@ async fn test_memory_management_pattern_improvement() {
 
     println!("✅ Memory management improvements verified!");
 }
+
+/// A VM with `vcpu_affinity` set must run its vCPU on a dedicated, core-pinned
+/// thread and still execute the vCPU loop to completion.
+#[tokio::test]
+async fn pinned_vcpu_runs_to_completion() {
+    let config = VMConfig {
+        name: "pinned-vcpu-test".to_string(),
+        vcpu_count: 1,
+        memory_size: 64 * 1024 * 1024,
+        enable_gpu: false,
+        enable_networking: false,
+        enable_tracing: false,
+        parallel_vcpu: false,
+        vcpu_affinity: vec![(0, 0)], // pin vCPU 0 to host core 0
+    };
+    let backend = Arc::new(MockHypervisorBackend::with_exits(vec![VmExit::Hlt]));
+    let vm = Arc::new(VM::new_with_backend(config, backend).expect("create VM"));
+
+    vm.start().await.expect("start VM");
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), vm.run()).await;
+    assert!(result.is_ok(), "pinned vCPU run timed out");
+    assert!(result.unwrap().is_ok(), "pinned vCPU run returned an error");
+}

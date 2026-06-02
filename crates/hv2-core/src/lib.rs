@@ -34,6 +34,7 @@ pub mod backends;
 pub mod boot;
 pub mod config;
 pub mod container;
+pub mod cpu_affinity;
 pub mod cpuid;
 pub mod crypto;
 pub mod debug;

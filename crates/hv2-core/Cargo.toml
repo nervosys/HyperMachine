@@ -37,6 +37,16 @@ ml-kem = { version = "0.3.2", features = ["getrandom"], optional = true }
 ml-dsa = { version = "0.1.0", optional = true }
 slh-dsa = { version = "=0.2.0-rc.5", optional = true }
 
+# CPU affinity (vCPU pinning) — platform-specific syscalls.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+] }
+
 [features]
 # `ring` provides the validated AES-GCM/SHA backend; `pqc` provides real
 # post-quantum algorithms. Both are on by default so the crypto claims hold

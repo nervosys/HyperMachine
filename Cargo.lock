@@ -3037,6 +3037,7 @@ dependencies = [
  "bitflags 2.10.0",
  "chrono",
  "criterion",
+ "libc",
  "memmap2",
  "ml-dsa",
  "ml-kem",
@@ -3055,6 +3056,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

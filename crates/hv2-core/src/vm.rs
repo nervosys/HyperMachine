@@ -493,7 +493,11 @@ impl VM {
             self.config.vcpu_count
         );
 
-        if self.config.parallel_vcpu && self.config.vcpu_count > 1 {
+        // Pinned vCPUs always use the parallel path, which gives each vCPU its
+        // own (optionally core-pinned) thread — even for a single vCPU.
+        if (self.config.parallel_vcpu && self.config.vcpu_count > 1)
+            || !self.config.vcpu_affinity.is_empty()
+        {
             self.run_parallel().await
         } else {
             self.run_single().await
@@ -582,7 +586,7 @@ impl VM {
         &self,
         vcpu: Arc<VCpu>,
         stats: Arc<VCpuStats>,
-        mut rx: mpsc::Receiver<VCpuMessage>,
+        rx: mpsc::Receiver<VCpuMessage>,
     ) -> JoinHandle<Result<()>> {
         let backend = self.backend.clone();
         let running = self.running.clone();
@@ -593,97 +597,185 @@ impl VM {
         let memory = self.memory.clone();
         let event_bus = self.event_bus.clone();
         let vm_name = self.config.name.clone();
+        let vcpu_id = vcpu.id();
+        let core = self.config.affinity_for(vcpu_id);
 
-        tokio::spawn(async move {
-            tracing::info!("vCPU {} task started", vcpu.id());
-            let mut paused = false;
-
-            loop {
-                // Check for control messages (non-blocking)
-                match rx.try_recv() {
-                    Ok(VCpuMessage::Stop) => {
-                        tracing::debug!("vCPU {} received stop", vcpu.id());
-                        break;
-                    }
-                    Ok(VCpuMessage::Pause) => {
-                        tracing::debug!("vCPU {} paused", vcpu.id());
-                        paused = true;
-                        continue;
-                    }
-                    Ok(VCpuMessage::Resume) => {
-                        tracing::debug!("vCPU {} resumed", vcpu.id());
-                        paused = false;
-                    }
-                    Ok(VCpuMessage::Interrupt { vector }) => {
-                        tracing::debug!("vCPU {} injecting interrupt {}", vcpu.id(), vector);
-                        if let Err(e) = backend.inject_interrupt(&vcpu, vector).await {
-                            tracing::warn!("Failed to inject interrupt: {}", e);
+        match core {
+            // Pinned vCPU: run the loop on a dedicated OS thread bound to `core`
+            // with its own current-thread runtime, so the vCPU never migrates
+            // across cores. A thin tokio task awaits the thread's result, keeping
+            // the returned handle type unchanged.
+            Some(core) => tokio::spawn(async move {
+                let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+                let spawned = std::thread::Builder::new()
+                    .name(format!("vcpu-{vcpu_id}-core{core}"))
+                    .spawn(move || {
+                        match crate::cpu_affinity::pin_current_thread(core) {
+                            Ok(()) => {
+                                tracing::info!("vCPU {vcpu_id} pinned to host core {core}");
+                            }
+                            Err(e) => {
+                                tracing::warn!("vCPU {vcpu_id}: failed to pin to core {core}: {e}");
+                            }
                         }
-                        stats.interrupts.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Err(mpsc::error::TryRecvError::Empty) => {}
-                    Err(mpsc::error::TryRecvError::Disconnected) => {
-                        tracing::debug!("vCPU {} channel disconnected", vcpu.id());
-                        break;
-                    }
+                        let rt = match tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                        {
+                            Ok(rt) => rt,
+                            Err(e) => {
+                                let _ = done_tx.send(Err(Error::Config(format!(
+                                    "failed to build vCPU {vcpu_id} runtime: {e}"
+                                ))));
+                                return;
+                            }
+                        };
+                        let res = rt.block_on(Self::run_vcpu_loop(
+                            vcpu,
+                            stats,
+                            rx,
+                            backend,
+                            running,
+                            state,
+                            exit_notify,
+                            devices,
+                            pic,
+                            memory,
+                            event_bus,
+                            vm_name,
+                        ));
+                        let _ = done_tx.send(res);
+                    });
+                if let Err(e) = spawned {
+                    return Err(Error::Config(format!(
+                        "failed to spawn pinned vCPU {vcpu_id} thread: {e}"
+                    )));
                 }
+                done_rx.await.unwrap_or(Ok(()))
+            }),
+            // Unpinned vCPU: existing behavior on the shared tokio runtime.
+            None => tokio::spawn(Self::run_vcpu_loop(
+                vcpu,
+                stats,
+                rx,
+                backend,
+                running,
+                state,
+                exit_notify,
+                devices,
+                pic,
+                memory,
+                event_bus,
+                vm_name,
+            )),
+        }
+    }
 
-                // If paused, wait for resume message
-                if paused {
-                    match rx.recv().await {
-                        Some(VCpuMessage::Resume) => paused = false,
-                        Some(VCpuMessage::Stop) | None => break,
-                        _ => continue,
-                    }
-                }
+    /// The vCPU execution loop, factored out so it can run either as a tokio
+    /// task (unpinned) or via `block_on` on a dedicated, core-pinned thread.
+    #[allow(clippy::too_many_arguments)]
+    async fn run_vcpu_loop(
+        vcpu: Arc<VCpu>,
+        stats: Arc<VCpuStats>,
+        mut rx: mpsc::Receiver<VCpuMessage>,
+        backend: Arc<dyn HypervisorBackend>,
+        running: Arc<AtomicBool>,
+        state: Arc<RwLock<VMState>>,
+        exit_notify: Arc<Notify>,
+        devices: Arc<DeviceManager>,
+        pic: Arc<Pic8259>,
+        memory: Arc<GuestMemory>,
+        event_bus: EventBus,
+        vm_name: String,
+    ) -> Result<()> {
+        tracing::info!("vCPU {} task started", vcpu.id());
+        let mut paused = false;
 
-                // Check if VM should stop
-                if !running.load(Ordering::SeqCst) {
+        loop {
+            // Check for control messages (non-blocking)
+            match rx.try_recv() {
+                Ok(VCpuMessage::Stop) => {
+                    tracing::debug!("vCPU {} received stop", vcpu.id());
                     break;
                 }
-
-                // Run vCPU until exit
-                let start = std::time::Instant::now();
-                let exit = match backend.run_vcpu(&vcpu).await {
-                    Ok(exit) => exit,
-                    Err(e) => {
-                        tracing::error!("vCPU {} run error: {}", vcpu.id(), e);
-                        *state.write() = VMState::Error;
-                        exit_notify.notify_waiters();
-                        return Err(e);
+                Ok(VCpuMessage::Pause) => {
+                    tracing::debug!("vCPU {} paused", vcpu.id());
+                    paused = true;
+                    continue;
+                }
+                Ok(VCpuMessage::Resume) => {
+                    tracing::debug!("vCPU {} resumed", vcpu.id());
+                    paused = false;
+                }
+                Ok(VCpuMessage::Interrupt { vector }) => {
+                    tracing::debug!("vCPU {} injecting interrupt {}", vcpu.id(), vector);
+                    if let Err(e) = backend.inject_interrupt(&vcpu, vector).await {
+                        tracing::warn!("Failed to inject interrupt: {}", e);
                     }
-                };
-                stats
-                    .run_time_ns
-                    .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
-                stats.exits.fetch_add(1, Ordering::Relaxed);
-
-                // Handle the exit
-                let should_continue = Self::handle_exit_static(
-                    &vcpu,
-                    &stats,
-                    exit,
-                    &vm_name,
-                    &devices,
-                    &pic,
-                    &memory,
-                    backend.as_ref(),
-                    &event_bus,
-                    &state,
-                    &exit_notify,
-                )
-                .await?;
-
-                if !should_continue {
-                    running.store(false, Ordering::SeqCst);
-                    exit_notify.notify_waiters();
+                    stats.interrupts.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(mpsc::error::TryRecvError::Empty) => {}
+                Err(mpsc::error::TryRecvError::Disconnected) => {
+                    tracing::debug!("vCPU {} channel disconnected", vcpu.id());
                     break;
                 }
             }
 
-            tracing::info!("vCPU {} task exited (exits={})", vcpu.id(), stats.exits());
-            Ok(())
-        })
+            // If paused, wait for resume message
+            if paused {
+                match rx.recv().await {
+                    Some(VCpuMessage::Resume) => paused = false,
+                    Some(VCpuMessage::Stop) | None => break,
+                    _ => continue,
+                }
+            }
+
+            // Check if VM should stop
+            if !running.load(Ordering::SeqCst) {
+                break;
+            }
+
+            // Run vCPU until exit
+            let start = std::time::Instant::now();
+            let exit = match backend.run_vcpu(&vcpu).await {
+                Ok(exit) => exit,
+                Err(e) => {
+                    tracing::error!("vCPU {} run error: {}", vcpu.id(), e);
+                    *state.write() = VMState::Error;
+                    exit_notify.notify_waiters();
+                    return Err(e);
+                }
+            };
+            stats
+                .run_time_ns
+                .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
+            stats.exits.fetch_add(1, Ordering::Relaxed);
+
+            // Handle the exit
+            let should_continue = Self::handle_exit_static(
+                &vcpu,
+                &stats,
+                exit,
+                &vm_name,
+                &devices,
+                &pic,
+                &memory,
+                backend.as_ref(),
+                &event_bus,
+                &state,
+                &exit_notify,
+            )
+            .await?;
+
+            if !should_continue {
+                running.store(false, Ordering::SeqCst);
+                exit_notify.notify_waiters();
+                break;
+            }
+        }
+
+        tracing::info!("vCPU {} task exited (exits={})", vcpu.id(), stats.exits());
+        Ok(())
     }
 
     /// Static version of handle_exit for use in spawned tasks
