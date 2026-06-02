@@ -233,6 +233,24 @@ impl CowMemory {
         out.truncate(self.template.len);
         out
     }
+
+    /// Write this sandbox's full memory image into a [`GuestMemory`] region
+    /// starting at guest address `base`. This is the bridge from a CoW sandbox
+    /// to a hypervisor-backed VM: spawn cheaply (O(1)), then pay the copy only
+    /// for the sandbox(es) you actually boot. Streams page-by-page to avoid
+    /// materializing a second full image.
+    pub fn write_to(&self, mem: &GuestMemory, base: u64) -> Result<()> {
+        let len = self.len();
+        let mut buf = vec![0u8; PAGE_SIZE];
+        let mut off = 0;
+        while off < len {
+            let n = PAGE_SIZE.min(len - off);
+            self.read_into(off, &mut buf[..n])?;
+            mem.write_bytes(base + off as u64, &buf[..n])?;
+            off += n;
+        }
+        Ok(())
+    }
 }
 
 /// A pool that spawns copy-on-write agent sandboxes from one warm baseline.
@@ -336,6 +354,15 @@ impl Sandbox {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .materialize()
+    }
+
+    /// Write this sandbox's memory image into a [`GuestMemory`] at guest address
+    /// `base` — the bridge to booting the agent on a hypervisor backend.
+    pub fn write_to_guest(&self, mem: &GuestMemory, base: u64) -> Result<()> {
+        self.mem
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .write_to(mem, base)
     }
 }
 
@@ -484,5 +511,21 @@ mod tests {
         assert_eq!(pool.live_count(), 1);
         drop(a);
         assert_eq!(pool.live_count(), 0);
+    }
+
+    #[test]
+    fn write_to_guest_round_trips() {
+        // A sandbox's memory image can be loaded into a GuestMemory region —
+        // the bridge to booting the agent on a hypervisor backend.
+        let pool = SandboxPool::from_bytes(&pattern(2 * PAGE_SIZE));
+        let sb = pool.spawn();
+        sb.write(10, &[0xAA; 4]).unwrap(); // diverge from the baseline
+
+        let mem = GuestMemory::new(2 * PAGE_SIZE as u64).unwrap();
+        mem.allocate_region(2 * PAGE_SIZE as u64, false).unwrap();
+        sb.write_to_guest(&mem, 0).unwrap();
+
+        // The guest memory now holds the sandbox's exact current image.
+        assert_eq!(mem.read_bytes(0, 2 * PAGE_SIZE).unwrap(), sb.materialize());
     }
 }
