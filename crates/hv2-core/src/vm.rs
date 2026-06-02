@@ -65,6 +65,63 @@ fn default_parallel_vcpu() -> bool {
     true
 }
 
+impl VMConfig {
+    /// Validate the optional [`Self::vcpu_affinity`] map.
+    ///
+    /// Every entry must reference a vCPU that exists in this config and a host
+    /// core that exists on this machine, and no vCPU or host core may appear
+    /// twice. An empty map (the default) is always valid and leaves vCPU
+    /// scheduling to the host.
+    ///
+    /// This makes `vcpu_affinity` a *checked* input rather than silently-ignored
+    /// configuration. Enforcing the mapping at run time — pinning each vCPU
+    /// thread to its core — additionally requires running pinned vCPUs on
+    /// dedicated OS threads (see [`Self::affinity_for`]).
+    pub fn validate_affinity(&self) -> Result<()> {
+        if self.vcpu_affinity.is_empty() {
+            return Ok(());
+        }
+        let core_count = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let mut seen_vcpus = std::collections::HashSet::new();
+        let mut seen_cores = std::collections::HashSet::new();
+        for &(vcpu, core) in &self.vcpu_affinity {
+            if vcpu >= self.vcpu_count {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity references vCPU {vcpu}, but the VM has {} vCPU(s)",
+                    self.vcpu_count
+                )));
+            }
+            if core >= core_count {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity pins vCPU {vcpu} to host core {core}, but only \
+                     {core_count} core(s) are available"
+                )));
+            }
+            if !seen_vcpus.insert(vcpu) {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity maps vCPU {vcpu} more than once"
+                )));
+            }
+            if !seen_cores.insert(core) {
+                return Err(Error::Config(format!(
+                    "vcpu_affinity pins more than one vCPU to host core {core}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// The host core a given vCPU is pinned to, if any.
+    pub fn affinity_for(&self, vcpu_id: u32) -> Option<usize> {
+        self.vcpu_affinity
+            .iter()
+            .find(|(id, _)| *id == vcpu_id)
+            .map(|(_, core)| *core)
+    }
+}
+
 impl Default for VMConfig {
     fn default() -> Self {
         Self {
@@ -182,6 +239,9 @@ impl VM {
         if config.memory_size == 0 {
             return Err(Error::Config("Memory size must be > 0".to_string()));
         }
+
+        // Reject a malformed vCPU affinity map instead of silently ignoring it.
+        config.validate_affinity()?;
 
         // Create vCPUs
         let vcpus: Vec<Arc<VCpu>> = (0..config.vcpu_count)
@@ -1340,5 +1400,75 @@ mod tests {
 
         let vm = VM::new(config).unwrap();
         assert_eq!(vm.vcpus().len(), 4);
+    }
+
+    #[test]
+    fn affinity_empty_is_valid() {
+        let config = VMConfig::default();
+        assert!(config.validate_affinity().is_ok());
+        assert_eq!(config.affinity_for(0), None);
+    }
+
+    #[test]
+    fn affinity_valid_mapping_passes() {
+        // Pin vCPU 0 to host core 0 (always exists); leave vCPU 1 unpinned.
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(0, 0)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_ok());
+        assert_eq!(config.affinity_for(0), Some(0));
+        assert_eq!(config.affinity_for(1), None);
+    }
+
+    #[test]
+    fn affinity_rejects_unknown_vcpu() {
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(5, 0)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[test]
+    fn affinity_rejects_out_of_range_core() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(0, 1_000_000)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[test]
+    fn affinity_rejects_duplicate_core() {
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(0, 0), (1, 0)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[test]
+    fn affinity_rejects_duplicate_vcpu() {
+        let config = VMConfig {
+            vcpu_count: 2,
+            vcpu_affinity: vec![(0, 0), (0, 1)],
+            ..Default::default()
+        };
+        assert!(config.validate_affinity().is_err());
+    }
+
+    #[tokio::test]
+    async fn vm_new_rejects_invalid_affinity() {
+        let config = VMConfig {
+            vcpu_count: 1,
+            vcpu_affinity: vec![(7, 0)], // vCPU 7 does not exist
+            ..Default::default()
+        };
+        assert!(VM::new(config).is_err());
     }
 }
