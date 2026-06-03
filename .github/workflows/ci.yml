@@ -38,6 +38,11 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cargo-
 
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Run cargo check
               run: cargo check --workspace --all-targets --exclude hv1-core --exclude hv1-boot
 
@@ -64,6 +69,11 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cargo-
 
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Run tests
               run: cargo test --workspace --exclude hv2-core --exclude hv1-core --exclude hv1-boot
 
@@ -87,6 +97,11 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cargo-core-
                       ${{ runner.os }}-cargo-
+
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Run core tests
               run: cargo test -p hv2-core
@@ -165,6 +180,11 @@ jobs:
                       ${{ runner.os }}-cargo-msrv-
                       ${{ runner.os }}-cargo-
 
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Check MSRV compatibility
               run: cargo check --workspace --all-targets --exclude hv1-core --exclude hv1-boot
 
@@ -205,6 +225,11 @@ jobs:
                       ${{ runner.os }}-cargo-clippy-
                       ${{ runner.os }}-cargo-
 
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Run clippy
               run: cargo clippy --workspace --all-targets --exclude hv1-core --exclude hv1-boot -- -D warnings
 
@@ -216,6 +241,11 @@ jobs:
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
+
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Build documentation
               run: cargo doc --workspace --no-deps --exclude hv1-core --exclude hv1-boot
@@ -257,6 +287,11 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cargo-build-
                       ${{ runner.os }}-cargo-
+
+            - name: Install protoc
+              uses: arduino/setup-protoc@v3
+              with:
+                  repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Build CLIs
               run: |
