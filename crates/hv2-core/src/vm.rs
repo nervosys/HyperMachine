@@ -1480,6 +1480,21 @@ impl VM {
 mod tests {
     use super::*;
 
+    /// Build a VM for tests that need a real hypervisor backend, returning
+    /// `None` when none is available in the environment (e.g. CI or WSL2 where
+    /// `/dev/kvm` is not accessible). Callers return early on `None`, matching
+    /// the "skip when the backend is unavailable" convention the WHPX and KVM
+    /// backend tests already use.
+    fn vm_or_skip(config: VMConfig) -> Option<VM> {
+        match VM::new(config) {
+            Ok(vm) => Some(vm),
+            Err(e) => {
+                eprintln!("skipping: no hypervisor backend available ({e})");
+                None
+            }
+        }
+    }
+
     #[tokio::test]
     async fn test_vm_creation() {
         let config = VMConfig {
@@ -1489,7 +1504,9 @@ mod tests {
             ..Default::default()
         };
 
-        let vm = VM::new(config).unwrap();
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
         assert_eq!(vm.state(), VMState::Created);
         assert_eq!(vm.vcpus().len(), 2);
         assert_eq!(vm.all_vcpu_stats().len(), 2);
@@ -1498,7 +1515,9 @@ mod tests {
     #[tokio::test]
     async fn test_vm_lifecycle() {
         let config = VMConfig::default();
-        let vm = VM::new(config).unwrap();
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
 
         vm.start().await.unwrap();
         assert_eq!(vm.state(), VMState::Running);
@@ -1513,7 +1532,9 @@ mod tests {
             vcpu_count: 4,
             ..Default::default()
         };
-        let vm = VM::new(config).unwrap();
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
 
         // Each vCPU should have its own stats
         for i in 0..4 {
@@ -1538,7 +1559,9 @@ mod tests {
         assert!(config.parallel_vcpu);
         assert_eq!(config.vcpu_count, 4);
 
-        let vm = VM::new(config).unwrap();
+        let Some(vm) = vm_or_skip(config) else {
+            return;
+        };
         assert_eq!(vm.vcpus().len(), 4);
     }
 
