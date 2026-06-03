@@ -3506,6 +3506,7 @@ mod tests {
             "guest.exec",
             "snapshot.create",
             "network.attach",
+            "gpu.attach",
             "agent.broadcast",
             "system.info",
         ] {
@@ -3904,6 +3905,7 @@ mod tests {
             "vm.resume",
             "guest.exec",
             "snapshot.create",
+            "gpu.attach",
             "agent.broadcast",
             "system.info",
         ] {

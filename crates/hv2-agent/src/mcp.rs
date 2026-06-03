@@ -144,6 +144,8 @@ pub enum ToolCategory {
     Coordination,
     /// System administration
     System,
+    /// GPU fabric: device inventory and VM accelerator allocation
+    GpuFabric,
 }
 
 /// Agent capabilities (permissions)
@@ -768,6 +770,120 @@ impl McpServer {
                 }),
                 category: ToolCategory::Network,
                 required_capabilities: vec![AgentCapability::NetworkAdmin],
+                enabled: true,
+            },
+        );
+
+        // GPU fabric tools — device inventory and accelerator allocation. The
+        // agent card advertises "GPU Compute Orchestration"; these are the
+        // concrete tools an agent uses to drive it.
+        tools.insert(
+            "gpu.register".to_string(),
+            McpTool {
+                name: "gpu.register".to_string(),
+                description:
+                    "Register a GPU device into the fabric inventory so it can be allocated to VMs"
+                        .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "device_id": {
+                            "type": "string",
+                            "description": "Unique device identifier (e.g. gpu-0)"
+                        },
+                        "model": {
+                            "type": "string",
+                            "description": "GPU model (e.g. H100, A100)"
+                        },
+                        "vram_gb": {
+                            "type": "integer",
+                            "description": "On-board VRAM in GB",
+                            "minimum": 1,
+                            "default": 80
+                        },
+                        "compute_capability": {
+                            "type": "integer",
+                            "description": "Compute capability tier (80 = A100, 90 = H100)",
+                            "default": 90
+                        }
+                    },
+                    "required": ["device_id", "model"]
+                }),
+                category: ToolCategory::GpuFabric,
+                required_capabilities: vec![AgentCapability::Admin],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "gpu.list".to_string(),
+            McpTool {
+                name: "gpu.list".to_string(),
+                description: "List GPU devices in the fabric and their allocation status"
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "only_available": {
+                            "type": "boolean",
+                            "description": "Return only unallocated devices",
+                            "default": false
+                        }
+                    }
+                }),
+                category: ToolCategory::GpuFabric,
+                required_capabilities: vec![AgentCapability::MetricsRead],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "gpu.attach".to_string(),
+            McpTool {
+                name: "gpu.attach".to_string(),
+                description: "Attach a free GPU device to a VM, reserving it for that VM".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM to attach the GPU to"
+                        },
+                        "device_id": {
+                            "type": "string",
+                            "description": "GPU device to attach (must be registered and unallocated)"
+                        }
+                    },
+                    "required": ["vm_id", "device_id"]
+                }),
+                category: ToolCategory::GpuFabric,
+                required_capabilities: vec![AgentCapability::VmWrite],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "gpu.detach".to_string(),
+            McpTool {
+                name: "gpu.detach".to_string(),
+                description: "Detach a GPU device from a VM and return it to the available pool"
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM the GPU is attached to"
+                        },
+                        "device_id": {
+                            "type": "string",
+                            "description": "GPU device to detach"
+                        }
+                    },
+                    "required": ["vm_id", "device_id"]
+                }),
+                category: ToolCategory::GpuFabric,
+                required_capabilities: vec![AgentCapability::VmWrite],
                 enabled: true,
             },
         );
@@ -1667,6 +1783,133 @@ impl McpServer {
                 }))
             }
 
+            // ── GPU fabric ───────────────────────────────────────────
+            "gpu.register" => {
+                let device_id = params
+                    .get("device_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: device_id")?;
+                let model = params
+                    .get("model")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: model")?;
+                let vram_gb = params.get("vram_gb").and_then(|v| v.as_u64()).unwrap_or(80);
+                let compute_capability = params
+                    .get("compute_capability")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(90);
+                let key = format!("gpu:{}", device_id);
+                let mut state = session.state.write().unwrap_or_else(|e| e.into_inner());
+                if state.contains_key(&key) {
+                    return Err(format!("GPU device already registered: {}", device_id));
+                }
+                let device = json!({
+                    "device_id": device_id,
+                    "model": model,
+                    "vram_gb": vram_gb,
+                    "compute_capability": compute_capability,
+                    "allocated_to": JsonValue::Null,
+                });
+                state.insert(key, device.clone());
+                Ok(device)
+            }
+
+            "gpu.list" => {
+                let only_available = params
+                    .get("only_available")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
+                let devices: Vec<&JsonValue> = state
+                    .iter()
+                    .filter(|(k, _)| k.starts_with("gpu:"))
+                    .map(|(_, v)| v)
+                    .filter(|d| !only_available || d["allocated_to"].is_null())
+                    .collect();
+                let available = devices
+                    .iter()
+                    .filter(|d| d["allocated_to"].is_null())
+                    .count();
+                Ok(json!({
+                    "devices": devices,
+                    "total": devices.len(),
+                    "available": available,
+                }))
+            }
+
+            "gpu.attach" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let device_id = params
+                    .get("device_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: device_id")?;
+                let vm_key = format!("vm:{}", vm_id);
+                let gpu_key = format!("gpu:{}", device_id);
+                let mut state = session.state.write().unwrap_or_else(|e| e.into_inner());
+                if !state.contains_key(&vm_key) {
+                    return Err(format!("VM not found: {}", vm_id));
+                }
+                // Claim the device (rejecting a double-allocation), then record
+                // it on the VM. Two sequential get_mut borrows, never aliased.
+                {
+                    let dev = state
+                        .get_mut(&gpu_key)
+                        .ok_or_else(|| format!("GPU device not found: {}", device_id))?;
+                    if !dev["allocated_to"].is_null() {
+                        return Err(format!(
+                            "GPU {} already allocated to {}",
+                            device_id, dev["allocated_to"]
+                        ));
+                    }
+                    dev["allocated_to"] = json!(vm_id);
+                }
+                let vm = state.get_mut(&vm_key).expect("vm presence checked above");
+                if !vm.get("gpus").map(|g| g.is_array()).unwrap_or(false) {
+                    vm["gpus"] = json!([]);
+                }
+                vm["gpus"]
+                    .as_array_mut()
+                    .expect("gpus is an array")
+                    .push(json!(device_id));
+                vm["gpu_enabled"] = json!(true);
+                Ok(json!({ "vm_id": vm_id, "device_id": device_id, "status": "attached" }))
+            }
+
+            "gpu.detach" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let device_id = params
+                    .get("device_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: device_id")?;
+                let vm_key = format!("vm:{}", vm_id);
+                let gpu_key = format!("gpu:{}", device_id);
+                let mut state = session.state.write().unwrap_or_else(|e| e.into_inner());
+                {
+                    let dev = state
+                        .get_mut(&gpu_key)
+                        .ok_or_else(|| format!("GPU device not found: {}", device_id))?;
+                    if dev["allocated_to"].as_str() != Some(vm_id) {
+                        return Err(format!("GPU {} is not attached to VM {}", device_id, vm_id));
+                    }
+                    dev["allocated_to"] = JsonValue::Null;
+                }
+                if let Some(vm) = state.get_mut(&vm_key) {
+                    if let Some(gpus) = vm["gpus"].as_array_mut() {
+                        gpus.retain(|d| d.as_str() != Some(device_id));
+                        if gpus.is_empty() {
+                            vm["gpu_enabled"] = json!(false);
+                        }
+                    }
+                }
+                Ok(json!({ "vm_id": vm_id, "device_id": device_id, "status": "detached" }))
+            }
+
             // ── Guest operations ─────────────────────────────────────
             "guest.exec" => {
                 let vm_id = params
@@ -2273,6 +2516,117 @@ mod tests {
             .call_tool(&server, "vm.resume", json!({ "vm_id": vm_id.clone() }))
             .await;
         assert!(!resume_again.success, "resume should reject a running VM");
+    }
+
+    #[tokio::test]
+    async fn gpu_attach_detach_lifecycle() {
+        let server = McpServer::new();
+        let session = server
+            .create_session("gpu-agent", AgentCapabilities::full())
+            .unwrap();
+
+        // Register two GPUs into the fabric inventory.
+        for dev in ["gpu-0", "gpu-1"] {
+            let r = session
+                .call_tool(
+                    &server,
+                    "gpu.register",
+                    json!({ "device_id": dev, "model": "H100", "vram_gb": 80 }),
+                )
+                .await;
+            assert!(r.success, "register {dev} failed: {:?}", r.error);
+        }
+        // Duplicate registration is rejected.
+        let dup = session
+            .call_tool(
+                &server,
+                "gpu.register",
+                json!({ "device_id": "gpu-0", "model": "H100" }),
+            )
+            .await;
+        assert!(!dup.success, "duplicate register should fail");
+
+        let listed = session.call_tool(&server, "gpu.list", json!({})).await;
+        assert_eq!(listed.result.unwrap()["available"], 2);
+
+        // A VM to attach to.
+        let created = session
+            .call_tool(&server, "vm.create", json!({ "name": "trainer" }))
+            .await;
+        let vm_id = created.result.unwrap()["vm_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // Attach gpu-0; availability drops to 1.
+        let attached = session
+            .call_tool(
+                &server,
+                "gpu.attach",
+                json!({ "vm_id": vm_id.clone(), "device_id": "gpu-0" }),
+            )
+            .await;
+        assert!(attached.success, "attach failed: {:?}", attached.error);
+        let avail = session
+            .call_tool(&server, "gpu.list", json!({ "only_available": true }))
+            .await;
+        assert_eq!(avail.result.unwrap()["available"], 1);
+
+        // Double-allocation and unknown-VM attach are both rejected.
+        let dbl = session
+            .call_tool(
+                &server,
+                "gpu.attach",
+                json!({ "vm_id": vm_id.clone(), "device_id": "gpu-0" }),
+            )
+            .await;
+        assert!(!dbl.success, "attaching an allocated GPU should fail");
+        let no_vm = session
+            .call_tool(
+                &server,
+                "gpu.attach",
+                json!({ "vm_id": "ghost", "device_id": "gpu-1" }),
+            )
+            .await;
+        assert!(!no_vm.success, "attach to unknown VM should fail");
+
+        // Detach returns the device to the pool; a second detach fails.
+        let detached = session
+            .call_tool(
+                &server,
+                "gpu.detach",
+                json!({ "vm_id": vm_id.clone(), "device_id": "gpu-0" }),
+            )
+            .await;
+        assert!(detached.success, "detach failed: {:?}", detached.error);
+        let detach_again = session
+            .call_tool(
+                &server,
+                "gpu.detach",
+                json!({ "vm_id": vm_id.clone(), "device_id": "gpu-0" }),
+            )
+            .await;
+        assert!(!detach_again.success, "detaching a free GPU should fail");
+
+        let final_list = session.call_tool(&server, "gpu.list", json!({})).await;
+        assert_eq!(final_list.result.unwrap()["available"], 2);
+    }
+
+    #[tokio::test]
+    async fn gpu_register_requires_admin() {
+        // Operators can attach/list but not register fabric hardware.
+        let server = McpServer::new();
+        let session = server
+            .create_session("op-agent", AgentCapabilities::operator())
+            .unwrap();
+        let r = session
+            .call_tool(
+                &server,
+                "gpu.register",
+                json!({ "device_id": "gpu-9", "model": "H100" }),
+            )
+            .await;
+        assert!(!r.success, "operator must not register GPU hardware");
     }
 
     #[tokio::test]

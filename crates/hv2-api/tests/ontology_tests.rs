@@ -489,6 +489,9 @@ async fn test_mcp_manifest_endpoint_serves_full_surface() {
         "guest.exec",
         "snapshot.create",
         "network.attach",
+        "gpu.register",
+        "gpu.attach",
+        "gpu.detach",
         "agent.broadcast",
         "system.info",
     ] {
