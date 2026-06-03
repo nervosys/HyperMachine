@@ -1352,6 +1352,53 @@ mod tests {
         assert!(parse_sparse_mmap(&buf, 0).is_empty());
     }
 
+    // Exercise the MMIO fast-path machinery (routing + volatile access) against
+    // a real anonymous mmap — everything the kernel would set up except the
+    // VFIO fd. Runs on Linux (incl. WSL2); needs no GPU or IOMMU.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn volatile_mmio_roundtrips_over_real_mmap() {
+        let len = 4096usize;
+        // SAFETY: standard anonymous mmap; result is checked against MAP_FAILED.
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                -1,
+                0,
+            )
+        };
+        assert_ne!(ptr, libc::MAP_FAILED, "mmap failed");
+        let base = ptr.cast::<u8>();
+
+        // A mapped BAR sub-range whose BAR offset is 0x1000.
+        let range = MmapRange {
+            bar_offset: 0x1000,
+            len: len as u64,
+        };
+        let intra = range_contains_access(range, 0x1040, 4).expect("aligned in-range access");
+        assert_eq!(intra, 0x40);
+
+        // SAFETY: every offset below is width-aligned and within the mapping.
+        unsafe {
+            write_volatile_mmio(base.add(intra as usize), 4, 0xDEAD_BEEF);
+            assert_eq!(read_volatile_mmio(base.add(intra as usize), 4), 0xDEAD_BEEF);
+
+            write_volatile_mmio(base.add(0x80), 8, 0x1122_3344_5566_7788);
+            assert_eq!(read_volatile_mmio(base.add(0x80), 8), 0x1122_3344_5566_7788);
+
+            write_volatile_mmio(base.add(0x100), 2, 0xABCD);
+            assert_eq!(read_volatile_mmio(base.add(0x100), 2), 0xABCD);
+
+            write_volatile_mmio(base.add(0x101), 1, 0x5A);
+            assert_eq!(read_volatile_mmio(base.add(0x101), 1), 0x5A);
+
+            libc::munmap(ptr, len);
+        }
+    }
+
     #[test]
     fn test_pci_address_from_bdf() {
         let addr = PciAddress::from_bdf("0000:01:00.0").unwrap();
