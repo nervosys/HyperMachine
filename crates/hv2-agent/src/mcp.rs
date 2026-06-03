@@ -453,6 +453,48 @@ impl McpServer {
         );
 
         tools.insert(
+            "vm.pause".to_string(),
+            McpTool {
+                name: "vm.pause".to_string(),
+                description: "Pause a running virtual machine, freezing its vCPUs while retaining memory state".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM to pause"
+                        }
+                    },
+                    "required": ["vm_id"]
+                }),
+                category: ToolCategory::VmLifecycle,
+                required_capabilities: vec![AgentCapability::VmWrite],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "vm.resume".to_string(),
+            McpTool {
+                name: "vm.resume".to_string(),
+                description: "Resume a paused virtual machine, restoring vCPU execution from frozen memory state".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM to resume"
+                        }
+                    },
+                    "required": ["vm_id"]
+                }),
+                category: ToolCategory::VmLifecycle,
+                required_capabilities: vec![AgentCapability::VmWrite],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
             "vm.delete".to_string(),
             McpTool {
                 name: "vm.delete".to_string(),
@@ -1411,6 +1453,46 @@ impl McpServer {
                 Ok(json!({ "vm_id": vm_id, "status": "stopped", "force": force }))
             }
 
+            "vm.pause" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let key = format!("vm:{}", vm_id);
+                let mut state = session.state.write().unwrap_or_else(|e| e.into_inner());
+                let vm = state
+                    .get_mut(&key)
+                    .ok_or_else(|| format!("VM not found: {}", vm_id))?;
+                if vm["status"] != json!("running") {
+                    return Err(format!(
+                        "VM {} cannot be paused (status: {})",
+                        vm_id, vm["status"]
+                    ));
+                }
+                vm["status"] = json!("paused");
+                Ok(json!({ "vm_id": vm_id, "status": "paused" }))
+            }
+
+            "vm.resume" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let key = format!("vm:{}", vm_id);
+                let mut state = session.state.write().unwrap_or_else(|e| e.into_inner());
+                let vm = state
+                    .get_mut(&key)
+                    .ok_or_else(|| format!("VM not found: {}", vm_id))?;
+                if vm["status"] != json!("paused") {
+                    return Err(format!(
+                        "VM {} cannot be resumed (status: {})",
+                        vm_id, vm["status"]
+                    ));
+                }
+                vm["status"] = json!("running");
+                Ok(json!({ "vm_id": vm_id, "status": "running" }))
+            }
+
             "vm.delete" => {
                 let vm_id = params
                     .get("vm_id")
@@ -2147,6 +2229,50 @@ mod tests {
 
         assert!(response.success);
         assert!(response.result.is_some());
+    }
+
+    #[tokio::test]
+    async fn vm_pause_resume_lifecycle() {
+        let server = McpServer::new();
+        let session = server
+            .create_session("lifecycle-agent", AgentCapabilities::full())
+            .unwrap();
+
+        let created = session
+            .call_tool(&server, "vm.create", json!({ "name": "pausable" }))
+            .await;
+        assert!(created.success, "create failed: {:?}", created.error);
+        let vm_id = created.result.unwrap()["vm_id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        // Pausing a non-running VM is rejected.
+        let bad = session
+            .call_tool(&server, "vm.pause", json!({ "vm_id": vm_id.clone() }))
+            .await;
+        assert!(!bad.success, "pause should reject a non-running VM");
+
+        // running -> paused -> running
+        session
+            .call_tool(&server, "vm.start", json!({ "vm_id": vm_id.clone() }))
+            .await;
+        let paused = session
+            .call_tool(&server, "vm.pause", json!({ "vm_id": vm_id.clone() }))
+            .await;
+        assert!(paused.success, "pause failed: {:?}", paused.error);
+        assert_eq!(paused.result.unwrap()["status"], "paused");
+
+        // Resuming is only valid from paused; a second resume must fail.
+        let resumed = session
+            .call_tool(&server, "vm.resume", json!({ "vm_id": vm_id.clone() }))
+            .await;
+        assert!(resumed.success, "resume failed: {:?}", resumed.error);
+        assert_eq!(resumed.result.unwrap()["status"], "running");
+        let resume_again = session
+            .call_tool(&server, "vm.resume", json!({ "vm_id": vm_id.clone() }))
+            .await;
+        assert!(!resume_again.success, "resume should reject a running VM");
     }
 
     #[tokio::test]
