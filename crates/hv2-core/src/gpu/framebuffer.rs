@@ -131,6 +131,22 @@ impl Framebuffer {
         let stride = self.stride() as usize;
         let row_bytes = width as usize * bpp;
 
+        // Fast path: a full-width vertical move (the console-scroll case) spans
+        // a contiguous source and destination, so it is a single memmove
+        // instead of one bounds-checked copy per scanline. `copy_within` has
+        // memmove semantics and handles up/down overlap correctly.
+        if src_x == 0 && dst_x == 0 && row_bytes == stride && src_y + height <= self.mode.height {
+            let len = height as usize * stride;
+            let src_start = src_y as usize * stride;
+            let dst_start = dst_y as usize * stride;
+            if src_start + len <= self.data.len() && dst_start + len <= self.data.len() {
+                self.data.copy_within(src_start..src_start + len, dst_start);
+                self.invalidate(&Rect::new(dst_x, dst_y, width, height));
+                self.stats.blits.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
+        }
+
         // Create temporary buffer for overlapping copies
         let mut row_buffer = vec![0u8; row_bytes];
 

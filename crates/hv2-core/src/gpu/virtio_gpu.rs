@@ -278,6 +278,25 @@ impl GpuResource {
         let src_stride = rect.width as usize * bpp;
         let dst_stride = self.stride() as usize;
 
+        if src_stride == 0 || rect.height == 0 {
+            return;
+        }
+
+        // Fast path: a full-width transfer (x == 0, matching strides) lays the
+        // source rows out contiguously over a contiguous destination span, so
+        // the whole rectangle collapses to a single memcpy instead of one
+        // bounds-checked copy per scanline. This is the common whole-surface
+        // flush a guest issues after rendering a frame.
+        if rect.x == 0 && src_stride == dst_stride {
+            let total = src_stride * rect.height as usize;
+            let dst_start = rect.y as usize * dst_stride;
+            if offset + total <= data.len() && dst_start + total <= self.data.len() {
+                self.data[dst_start..dst_start + total]
+                    .copy_from_slice(&data[offset..offset + total]);
+                return;
+            }
+        }
+
         for y in 0..rect.height {
             let src_row_start = offset + y as usize * src_stride;
             let dst_row_start = (rect.y + y) as usize * dst_stride + rect.x as usize * bpp;
@@ -1068,6 +1087,40 @@ mod tests {
         let resource = gpu.get_resource(1).unwrap();
         let pixel = resource.get_pixel(5, 5);
         assert_eq!(pixel.r, 255);
+    }
+
+    #[test]
+    fn test_transfer_to_host_fast_and_general_paths() {
+        // 4x4 R8G8B8A8 resource: stride = 16 bytes.
+        let mut gpu = VirtioGpu::new("gpu0", 100, 100);
+        gpu.create_resource_2d(1, VirtioGpuFormat::R8G8B8A8Unorm, 4, 4)
+            .unwrap();
+        gpu.attach_backing(1).unwrap();
+
+        // General path: a 2x2 sub-rect at (1,1) where src_stride (8) differs
+        // from dst_stride (16), so the per-scanline branch runs.
+        let block = [
+            10u8, 20, 30, 40, 50, 60, 70, 80, // row 0: two pixels
+            11, 21, 31, 41, 51, 61, 71, 81, // row 1: two pixels
+        ];
+        gpu.transfer_to_host_2d(1, &Rect::new(1, 1, 2, 2), &block, 0)
+            .unwrap();
+        let r = gpu.get_resource(1).unwrap();
+        assert_eq!(r.get_pixel(1, 1).r, 10);
+        assert_eq!(r.get_pixel(2, 1).r, 50);
+        assert_eq!(r.get_pixel(1, 2).r, 11);
+        assert_eq!(r.get_pixel(0, 0).r, 0, "untouched pixel stays clear");
+
+        // Fast path at y>0: a full-width 4x2 block at (0,2) is contiguous in
+        // both source and destination and collapses to one memcpy.
+        let rows = vec![123u8; 4 * 4 * 2];
+        gpu.transfer_to_host_2d(1, &Rect::new(0, 2, 4, 2), &rows, 0)
+            .unwrap();
+        let r = gpu.get_resource(1).unwrap();
+        assert_eq!(r.get_pixel(0, 2).r, 123);
+        assert_eq!(r.get_pixel(3, 3).r, 123);
+        // The fast path must not bleed into the rows above it.
+        assert_eq!(r.get_pixel(0, 0).r, 0);
     }
 
     #[test]
