@@ -105,7 +105,7 @@ pub struct TapStats {
 mod platform {
     use super::*;
     use std::ffi::CString;
-    use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+    use std::os::unix::io::{AsRawFd, RawFd};
 
     /// Linux TAP device flags
     mod flags {

@@ -3092,6 +3092,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "hv2-core",
+ "libc",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
