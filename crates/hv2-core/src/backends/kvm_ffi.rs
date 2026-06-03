@@ -886,6 +886,7 @@ pub unsafe fn kvm_set_user_memory_region(
 ///
 /// - `vm_fd` must be a valid VM file descriptor
 /// - `vcpu_id` must be < max_vcpus
+///
 /// Returns a vCPU file descriptor that must be closed.
 pub unsafe fn kvm_create_vcpu(vm_fd: RawFd, vcpu_id: u32) -> Result<RawFd, std::io::Error> {
     let ret = ioctl(vm_fd, KVM_CREATE_VCPU, vcpu_id as usize);
@@ -1375,7 +1376,7 @@ pub unsafe fn kvm_set_guest_debug(
 /// # Safety
 ///
 /// - vcpu_fd must be a valid vCPU file descriptor
-/// - 	ranslation must point to valid memory with linear_address set
+/// - translation must point to valid memory with linear_address set
 pub unsafe fn kvm_translate(
     vcpu_fd: RawFd,
     translation: &mut kvm_translation,

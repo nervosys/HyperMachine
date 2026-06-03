@@ -941,7 +941,7 @@ impl GpuPassthrough {
             let read_size = size as u64;
             if offset
                 .checked_add(read_size)
-                .map_or(true, |end| end > region.size)
+                .is_none_or(|end| end > region.size)
             {
                 return Err(GpuError::InvalidOperation(format!(
                     "MMIO read out of bounds: BAR{} offset=0x{:x} size={} region_size=0x{:x}",
@@ -1062,7 +1062,7 @@ impl GpuPassthrough {
             let write_size = size as u64;
             if offset
                 .checked_add(write_size)
-                .map_or(true, |end| end > region.size)
+                .is_none_or(|end| end > region.size)
             {
                 return Err(GpuError::InvalidOperation(format!(
                     "MMIO write out of bounds: BAR{} offset=0x{:x} size={} region_size=0x{:x}",
