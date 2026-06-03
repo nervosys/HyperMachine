@@ -422,6 +422,7 @@ async fn test_tool_count_consistency() {
 
     // Get Gemini tools
     let gemini_response = router
+        .clone()
         .oneshot(test_request("/agentic/tools/gemini"))
         .await
         .unwrap();
@@ -436,7 +437,15 @@ async fn test_tool_count_consistency() {
         .unwrap()
         .len();
 
-    // All formats should expose the same number of tools
+    // Get native MCP manifest tools
+    let mcp_response = router.oneshot(test_request("/agentic/mcp")).await.unwrap();
+    let mcp_body = axum::body::to_bytes(mcp_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let mcp_json: serde_json::Value = serde_json::from_slice(&mcp_body).unwrap();
+    let mcp_count = mcp_json.get("tools").unwrap().as_array().unwrap().len();
+
+    // Every agent-facing transport must expose the same tool count.
     assert_eq!(
         openai_count, anthropic_count,
         "OpenAI and Anthropic tool counts differ: {} vs {}",
@@ -447,4 +456,51 @@ async fn test_tool_count_consistency() {
         "OpenAI and Gemini tool counts differ: {} vs {}",
         openai_count, gemini_count
     );
+    assert_eq!(
+        openai_count, mcp_count,
+        "OpenAI and native MCP manifest tool counts differ: {} vs {}",
+        openai_count, mcp_count
+    );
+}
+
+#[tokio::test]
+async fn test_mcp_manifest_endpoint_serves_full_surface() {
+    let router = create_router();
+    let response = router.oneshot(test_request("/agentic/mcp")).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    let tools = json.get("tools").unwrap().as_array().unwrap();
+    let names: Vec<&str> = tools
+        .iter()
+        .map(|t| t.get("name").unwrap().as_str().unwrap())
+        .collect();
+
+    // The native MCP surface must carry the same dotted-name registry tools as
+    // the LLM projections — including the lifecycle tools and every category.
+    for expected in [
+        "vm.create",
+        "vm.pause",
+        "vm.resume",
+        "guest.exec",
+        "snapshot.create",
+        "network.attach",
+        "agent.broadcast",
+        "system.info",
+    ] {
+        assert!(
+            names.contains(&expected),
+            "MCP manifest endpoint missing '{expected}'"
+        );
+    }
+
+    // Each tool must expose a real JSON Schema input_schema.
+    for tool in tools {
+        let schema = tool.get("input_schema").unwrap();
+        assert_eq!(schema.get("type").unwrap(), "object");
+    }
 }

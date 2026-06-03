@@ -1644,55 +1644,6 @@ impl HyperMachineOntology {
         OpenAITools { tools }
     }
 
-    fn build_openai_parameters(&self, op: &Operation) -> serde_json::Value {
-        let mut properties = serde_json::Map::new();
-        let mut required = Vec::new();
-
-        for param in &op.parameters {
-            if param.location == ParameterLocation::Path
-                || param.location == ParameterLocation::Query
-            {
-                // Merge schema with description for tool formats
-                let mut param_schema = param.schema.clone();
-                if let Some(obj) = param_schema.as_object_mut() {
-                    obj.insert(
-                        "description".to_string(),
-                        serde_json::Value::String(param.description.clone()),
-                    );
-                }
-                properties.insert(param.name.clone(), param_schema);
-                if param.required {
-                    required.push(param.name.clone());
-                }
-            }
-        }
-
-        if let Some(ref body) = op.request_body {
-            if let Some(props) = body.schema.get("properties") {
-                if let Some(obj) = props.as_object() {
-                    for (k, v) in obj {
-                        properties.insert(k.clone(), v.clone());
-                    }
-                }
-            }
-            if let Some(req) = body.schema.get("required") {
-                if let Some(arr) = req.as_array() {
-                    for r in arr {
-                        if let Some(s) = r.as_str() {
-                            required.push(s.to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        serde_json::json!({
-            "type": "object",
-            "properties": properties,
-            "required": required
-        })
-    }
-
     /// Convert to Anthropic MCP tool format
     pub fn to_anthropic_tools(&self) -> AnthropicTools {
         let tools = mcp_registry_tools()
@@ -2204,13 +2155,18 @@ impl HyperMachineOntology {
 
     /// Build the MCP server manifest
     pub fn build_mcp_manifest(&self) -> McpManifest {
-        let tools = self
-            .operations
-            .iter()
-            .map(|op| McpTool {
-                name: op.id.clone(),
-                description: op.description.clone(),
-                input_schema: self.build_openai_parameters(op),
+        // The native MCP manifest must serve the SAME tools as the live MCP
+        // registry — the single source of truth that also drives the
+        // OpenAI/Anthropic/Gemini projections. Projecting from the registry
+        // (rather than the hand-maintained `operations` list) keeps every
+        // agent-facing surface in lockstep with what `call_tool` can actually
+        // dispatch.
+        let tools = mcp_registry_tools()
+            .into_iter()
+            .map(|t| McpTool {
+                name: t.name,
+                description: t.description,
+                input_schema: t.parameters,
             })
             .collect();
 
@@ -3915,16 +3871,45 @@ mod tests {
     }
 
     #[test]
-    fn test_mcp_tools_match_operations() {
+    fn test_mcp_manifest_matches_registry() {
         let ontology = HyperMachineOntology::build();
         let mcp = ontology.build_mcp_manifest();
-        // MCP tools should map 1:1 from operations
-        assert_eq!(mcp.tools.len(), ontology.operations.len());
-        for tool in &mcp.tools {
+        let registry = mcp_registry_tools();
+
+        // The native /agentic/mcp manifest must expose exactly the live MCP
+        // registry — same surface as the OpenAI/Anthropic/Gemini projections,
+        // so no agent transport sees a stale or partial tool set.
+        assert_eq!(
+            mcp.tools.len(),
+            registry.len(),
+            "MCP manifest tool count drifted from the registry"
+        );
+        for t in &registry {
+            let tool = mcp
+                .tools
+                .iter()
+                .find(|m| m.name == t.name)
+                .unwrap_or_else(|| panic!("registry tool '{}' missing from MCP manifest", t.name));
+            // The manifest must carry the tool's real input schema, not an empty stub.
+            assert_eq!(
+                tool.input_schema, t.parameters,
+                "MCP manifest schema for '{}' diverged from the registry",
+                t.name
+            );
+        }
+        // Spot-check that lifecycle + cross-category tools are all present.
+        for name in [
+            "vm.create",
+            "vm.pause",
+            "vm.resume",
+            "guest.exec",
+            "snapshot.create",
+            "agent.broadcast",
+            "system.info",
+        ] {
             assert!(
-                ontology.operations.iter().any(|op| op.id == tool.name),
-                "MCP tool '{}' has no matching operation",
-                tool.name
+                mcp.tools.iter().any(|m| m.name == name),
+                "MCP manifest is missing '{name}'"
             );
         }
     }
