@@ -8,6 +8,8 @@ use crate::{GpuError, Result};
 #[cfg(target_os = "linux")]
 use std::collections::HashMap;
 use std::path::PathBuf;
+#[cfg(target_os = "linux")]
+use std::sync::atomic::AtomicI32;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 #[cfg(target_os = "linux")]
@@ -212,7 +214,6 @@ impl VfioContainer {
     /// Create a new VFIO container
     pub fn new() -> Result<Self> {
         use std::ffi::CString;
-        use std::os::unix::io::RawFd;
 
         // SAFETY: CString::new on a literal without embedded NULs never fails
         let path = CString::new("/dev/vfio/vfio").expect("static path has no NUL bytes");
@@ -318,14 +319,182 @@ impl Drop for VfioContainer {
     }
 }
 
-/// VFIO BAR region mapping info (cached from VFIO_DEVICE_GET_REGION_INFO)
+/// A sub-range of a BAR that VFIO permits `mmap`-ing, described by geometry
+/// alone so the routing and capability-parsing logic stays platform-agnostic
+/// and unit-testable (the actual mapping is Linux/`unsafe` and lives below).
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct MmapRange {
+    /// Byte offset of this range from the start of the BAR.
+    bar_offset: u64,
+    /// Length of the range in bytes.
+    len: u64,
+}
+
+/// VFIO capability id for a sparse-`mmap` description (`linux/vfio.h`).
+#[cfg(any(target_os = "linux", test))]
+const VFIO_REGION_INFO_CAP_SPARSE_MMAP: u16 = 1;
+
+/// If an aligned `[offset, offset + size)` access lies entirely within
+/// `range`, return its offset *within the range* (for direct pointer access);
+/// otherwise `None`, meaning the caller must fall back to `pread`/`pwrite`.
+///
+/// Misaligned accesses always fall back: typed volatile access to mapped MMIO
+/// requires natural alignment, and the page-aligned mapping base means an
+/// access aligned within the BAR is aligned within the mapping.
+#[cfg(any(target_os = "linux", test))]
+fn range_contains_access(range: MmapRange, offset: u64, size: u8) -> Option<u64> {
+    let size = size as u64;
+    if size == 0 || !offset.is_multiple_of(size) {
+        return None;
+    }
+    let end = offset.checked_add(size)?;
+    let range_end = range.bar_offset.checked_add(range.len)?;
+    if offset >= range.bar_offset && end <= range_end {
+        Some(offset - range.bar_offset)
+    } else {
+        None
+    }
+}
+
+/// Parse the VFIO sparse-`mmap` capability out of a `vfio_region_info`
+/// capability buffer. `buf` is the whole region-info structure as returned by
+/// the kernel; the capability chain begins at byte `cap_offset` from its start.
+/// Returns the mmap-able sub-ranges, or an empty vec if the chain holds no
+/// sparse-mmap capability (in which case the whole region is mappable).
+///
+/// ABI (`linux/vfio.h`):
+/// ```text
+/// struct vfio_info_cap_header { __u16 id; __u16 version; __u32 next; }
+/// struct vfio_region_info_cap_sparse_mmap {
+///     header; __u32 nr_areas; __u32 reserved;
+///     struct { __u64 offset; __u64 size; } areas[nr_areas];
+/// }
+/// ```
+/// `next` is a byte offset from the start of `buf`; `0` ends the chain.
+#[cfg(any(target_os = "linux", test))]
+fn parse_sparse_mmap(buf: &[u8], cap_offset: u32) -> Vec<MmapRange> {
+    let read_u16 = |b: &[u8], p: usize| u16::from_le_bytes([b[p], b[p + 1]]);
+    let read_u32 = |b: &[u8], p: usize| u32::from_le_bytes([b[p], b[p + 1], b[p + 2], b[p + 3]]);
+    let read_u64 = |b: &[u8], p: usize| {
+        u64::from_le_bytes([
+            b[p],
+            b[p + 1],
+            b[p + 2],
+            b[p + 3],
+            b[p + 4],
+            b[p + 5],
+            b[p + 6],
+            b[p + 7],
+        ])
+    };
+
+    let mut pos = cap_offset as usize;
+    // Bound the walk so a malformed/cyclic chain can never spin.
+    for _ in 0..64 {
+        if pos == 0 || pos + 8 > buf.len() {
+            break;
+        }
+        let id = read_u16(buf, pos);
+        let next = read_u32(buf, pos + 4) as usize;
+
+        if id == VFIO_REGION_INFO_CAP_SPARSE_MMAP {
+            // header(8) + nr_areas(4) + reserved(4), then the areas[].
+            let body = pos + 8;
+            if body + 8 > buf.len() {
+                break;
+            }
+            let nr_areas = read_u32(buf, body) as usize;
+            let areas = body + 8;
+            let mut ranges = Vec::with_capacity(nr_areas);
+            for a in 0..nr_areas {
+                let base = areas + a * 16;
+                if base + 16 > buf.len() {
+                    break;
+                }
+                let off = read_u64(buf, base);
+                let len = read_u64(buf, base + 8);
+                if len > 0 {
+                    ranges.push(MmapRange {
+                        bar_offset: off,
+                        len,
+                    });
+                }
+            }
+            return ranges;
+        }
+
+        // The chain must move strictly forward.
+        if next <= pos {
+            break;
+        }
+        pos = next;
+    }
+    Vec::new()
+}
+
+/// A BAR sub-range mapped into our address space via `mmap` on the VFIO fd.
 #[cfg(target_os = "linux")]
-#[derive(Debug, Clone, Copy)]
+struct MappedRange {
+    /// Geometry of this range within the BAR.
+    range: MmapRange,
+    /// `mmap` base pointer for the range.
+    ptr: *mut u8,
+    /// Length passed to `mmap` (and to `munmap` on teardown).
+    map_len: usize,
+}
+
+// SAFETY: `ptr` refers to a shared device mapping (`MAP_SHARED`) that stays
+// valid for the lifetime of the attachment. The device hardware — not Rust —
+// owns the memory's interior mutability; all access goes through volatile
+// reads/writes, so concurrent use across threads is sound.
+#[cfg(target_os = "linux")]
+unsafe impl Send for MappedRange {}
+#[cfg(target_os = "linux")]
+unsafe impl Sync for MappedRange {}
+
+/// VFIO BAR region mapping info (cached from VFIO_DEVICE_GET_REGION_INFO).
+#[cfg(target_os = "linux")]
 struct VfioBarRegion {
-    /// Offset within the VFIO device fd for this BAR region
+    /// Offset within the VFIO device fd for this BAR region.
     offset: u64,
-    /// Size of this BAR region in bytes
+    /// Size of this BAR region in bytes.
     size: u64,
+    /// `mmap`'d sub-ranges. Empty means no fast path — every access to this
+    /// BAR falls back to `pread`/`pwrite`.
+    mapped: Vec<MappedRange>,
+}
+
+/// Read a naturally-aligned 1/2/4/8-byte value from mapped MMIO.
+///
+/// # Safety
+/// `ptr` must point `size` valid bytes into a live device mapping and be
+/// aligned to `size`. PCI MMIO is little-endian; on the supported (x86-64)
+/// hosts a native typed load matches that ordering.
+#[cfg(target_os = "linux")]
+unsafe fn read_volatile_mmio(ptr: *const u8, size: u8) -> u64 {
+    match size {
+        1 => u64::from(ptr.read_volatile()),
+        2 => u64::from(ptr.cast::<u16>().read_volatile()),
+        4 => u64::from(ptr.cast::<u32>().read_volatile()),
+        8 => ptr.cast::<u64>().read_volatile(),
+        _ => 0,
+    }
+}
+
+/// Write a naturally-aligned 1/2/4/8-byte value to mapped MMIO.
+///
+/// # Safety
+/// As [`read_volatile_mmio`]; `ptr` must be writable device-mapped memory.
+#[cfg(target_os = "linux")]
+unsafe fn write_volatile_mmio(ptr: *mut u8, size: u8, value: u64) {
+    match size {
+        1 => ptr.write_volatile(value as u8),
+        2 => ptr.cast::<u16>().write_volatile(value as u16),
+        4 => ptr.cast::<u32>().write_volatile(value as u32),
+        8 => ptr.cast::<u64>().write_volatile(value),
+        _ => {}
+    }
 }
 
 /// GPU passthrough manager
@@ -342,6 +511,11 @@ pub struct GpuPassthrough {
     /// VFIO device fd (Linux only)
     #[cfg(target_os = "linux")]
     vfio_device_fd: Mutex<Option<i32>>,
+    /// Lock-free mirror of the VFIO device fd for the MMIO hot path (`pread`/
+    /// `pwrite` fallback). `-1` when detached. Set under the same critical
+    /// sections that own `vfio_device_fd`, read with `Acquire` on every access.
+    #[cfg(target_os = "linux")]
+    device_fd: AtomicI32,
     /// Cached BAR region mappings from VFIO (Linux only)
     #[cfg(target_os = "linux")]
     bar_regions: RwLock<[Option<VfioBarRegion>; 6]>,
@@ -367,7 +541,9 @@ impl GpuPassthrough {
             #[cfg(target_os = "linux")]
             vfio_device_fd: Mutex::new(None),
             #[cfg(target_os = "linux")]
-            bar_regions: RwLock::new([None; 6]),
+            device_fd: AtomicI32::new(-1),
+            #[cfg(target_os = "linux")]
+            bar_regions: RwLock::new(std::array::from_fn(|_| None)),
             attached: AtomicBool::new(false),
             stats: Arc::new(PassthroughStats::default()),
             interrupt_handler: RwLock::new(None),
@@ -444,10 +620,12 @@ impl GpuPassthrough {
 
             // Read IOMMU group
             let iommu_link = sysfs_path.join("iommu_group");
-            let iommu_group = std::fs::read_link(&iommu_link)
-                .ok()
-                .and_then(|p| p.file_name())
-                .and_then(|n| n.to_string_lossy().parse::<u32>().ok());
+            let iommu_group = std::fs::read_link(&iommu_link).ok().and_then(|p| {
+                // Keep the borrow of `p` inside the closure: file_name() returns
+                // a reference into `p`, which is dropped at the closure boundary.
+                p.file_name()
+                    .and_then(|n| n.to_string_lossy().parse::<u32>().ok())
+            });
 
             // Read BARs
             let mut bars = Vec::new();
@@ -534,8 +712,11 @@ impl GpuPassthrough {
 
             *self.vfio_container.lock().await = Some(container);
             *self.vfio_device_fd.lock().await = Some(device_fd);
+            // Publish the fd for the lock-free MMIO fallback path.
+            self.device_fd.store(device_fd, Ordering::Release);
 
-            // Query VFIO region info for each BAR (indices 0-5)
+            // Query VFIO region info for each BAR (indices 0-5) and map the
+            // mmap-able sub-ranges for the direct-access fast path.
             self.discover_bar_regions(device_fd).await;
 
             *self.state.write().await = PassthroughState::PassedThrough;
@@ -606,8 +787,11 @@ impl GpuPassthrough {
         //   }
         // Total size = 32 bytes
         const VFIO_DEVICE_GET_REGION_INFO: u64 = 0x3B68;
+        const VFIO_REGION_INFO_FLAG_MMAP: u32 = 1 << 1;
+        const VFIO_REGION_INFO_FLAG_CAPS: u32 = 1 << 3;
+        const REGION_INFO_SIZE: usize = 32;
 
-        let mut regions = [None; 6];
+        let mut regions: [Option<VfioBarRegion>; 6] = std::array::from_fn(|_| None);
 
         for bar_index in 0u32..6 {
             #[repr(C)]
@@ -621,7 +805,7 @@ impl GpuPassthrough {
             }
 
             let mut info = VfioRegionInfo {
-                argsz: std::mem::size_of::<VfioRegionInfo>() as u32,
+                argsz: REGION_INFO_SIZE as u32,
                 flags: 0,
                 index: bar_index,
                 cap_offset: 0,
@@ -629,22 +813,102 @@ impl GpuPassthrough {
                 offset: 0,
             };
 
-            // SAFETY: device_fd is a valid VFIO device fd; info is a properly sized buffer.
+            // First pass: learn flags/size/offset and (via argsz) how large a
+            // buffer the kernel needs to also hand back the capability chain.
+            // SAFETY: device_fd is a valid VFIO device fd; info is correctly sized.
             let ret = unsafe { libc::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, &mut info) };
+            if ret != 0 || info.size == 0 {
+                continue;
+            }
 
-            if ret == 0 && info.size > 0 {
-                tracing::debug!(
-                    "BAR{}: offset=0x{:x} size=0x{:x} flags=0x{:x}",
-                    bar_index,
-                    info.offset,
-                    info.size,
-                    info.flags,
-                );
-                regions[bar_index as usize] = Some(VfioBarRegion {
-                    offset: info.offset,
-                    size: info.size,
+            let mappable = info.flags & VFIO_REGION_INFO_FLAG_MMAP != 0;
+            let has_caps = info.flags & VFIO_REGION_INFO_FLAG_CAPS != 0;
+
+            // Work out which sub-ranges of the BAR may be mapped.
+            let ranges: Vec<MmapRange> = if !mappable {
+                Vec::new()
+            } else if has_caps && info.argsz as usize > REGION_INFO_SIZE {
+                // Second pass: re-issue with a buffer big enough to receive the
+                // capability chain, then parse out the sparse-mmap areas.
+                let total = info.argsz as usize;
+                let mut buf = vec![0u8; total];
+                buf[0..4].copy_from_slice(&info.argsz.to_le_bytes());
+                buf[8..12].copy_from_slice(&bar_index.to_le_bytes());
+                // SAFETY: buf is `total` (== requested argsz) bytes with the
+                // argsz/index header set; the kernel fills the remainder.
+                let ret2 = unsafe {
+                    libc::ioctl(device_fd, VFIO_DEVICE_GET_REGION_INFO, buf.as_mut_ptr())
+                };
+                let parsed = if ret2 == 0 {
+                    let cap_offset = u32::from_le_bytes([buf[12], buf[13], buf[14], buf[15]]);
+                    parse_sparse_mmap(&buf, cap_offset)
+                } else {
+                    Vec::new()
+                };
+                if parsed.is_empty() {
+                    // Mappable, but no sparse description: the whole region maps.
+                    vec![MmapRange {
+                        bar_offset: 0,
+                        len: info.size,
+                    }]
+                } else {
+                    parsed
+                }
+            } else {
+                // Mappable with no capability chain: the whole region maps.
+                vec![MmapRange {
+                    bar_offset: 0,
+                    len: info.size,
+                }]
+            };
+
+            // Map each range into our address space at its VFIO fd offset.
+            let mut mapped = Vec::new();
+            for range in ranges {
+                let fd_off = info.offset.wrapping_add(range.bar_offset) as libc::off_t;
+                // SAFETY: device_fd is the VFIO device fd; (offset, len) come
+                // from the kernel's region / sparse descriptors and are page
+                // aligned, as mmap requires.
+                let ptr = unsafe {
+                    libc::mmap(
+                        std::ptr::null_mut(),
+                        range.len as usize,
+                        libc::PROT_READ | libc::PROT_WRITE,
+                        libc::MAP_SHARED,
+                        device_fd,
+                        fd_off,
+                    )
+                };
+                if ptr == libc::MAP_FAILED {
+                    tracing::debug!(
+                        "BAR{} mmap failed (off=0x{:x} len=0x{:x}): {}",
+                        bar_index,
+                        range.bar_offset,
+                        range.len,
+                        std::io::Error::last_os_error()
+                    );
+                    continue;
+                }
+                mapped.push(MappedRange {
+                    range,
+                    ptr: ptr.cast(),
+                    map_len: range.len as usize,
                 });
             }
+
+            tracing::debug!(
+                "BAR{}: offset=0x{:x} size=0x{:x} flags=0x{:x} mmap_ranges={}",
+                bar_index,
+                info.offset,
+                info.size,
+                info.flags,
+                mapped.len(),
+            );
+            regions[bar_index as usize] = Some(VfioBarRegion {
+                offset: info.offset,
+                size: info.size,
+                mapped,
+            });
         }
 
         *self.bar_regions.write().await = regions;
@@ -670,6 +934,7 @@ impl GpuPassthrough {
 
             let regions = self.bar_regions.read().await;
             let region = regions[bar_idx]
+                .as_ref()
                 .ok_or_else(|| GpuError::NotAvailable(format!("BAR{} region not mapped", bar)))?;
 
             // Validate the read is within the BAR region bounds
@@ -692,19 +957,37 @@ impl GpuPassthrough {
                 )));
             }
 
-            let fd_guard = self.vfio_device_fd.lock().await;
-            let device_fd = fd_guard
-                .as_ref()
-                .ok_or_else(|| GpuError::NotAvailable("VFIO device fd not available".into()))?;
+            // Fast path: a direct volatile load from a mapped BAR sub-range —
+            // no syscall, no lock. This is the common case once a device is up.
+            for mr in &region.mapped {
+                if let Some(intra) = range_contains_access(mr.range, offset, size) {
+                    // SAFETY: the router guarantees intra + size <= range.len so
+                    // the pointer stays within the mapping; offset is
+                    // size-aligned and the mapping base is page-aligned, so the
+                    // access is naturally aligned.
+                    let value = unsafe { read_volatile_mmio(mr.ptr.add(intra as usize), size) };
+                    return Ok(value);
+                }
+            }
+
+            // Fallback: positioned read on the lock-free fd mirror (for
+            // sub-ranges the kernel did not expose as mappable).
+            let device_fd = self.device_fd.load(Ordering::Acquire);
+            if device_fd < 0 {
+                return Err(GpuError::NotAvailable(
+                    "VFIO device fd not available".into(),
+                ));
+            }
 
             let mut buf = [0u8; 8];
             let file_offset = region.offset + offset;
 
-            // SAFETY: device_fd is a valid VFIO device fd. buf is a properly aligned buffer.
-            // pread64 reads from the fd at the given offset without changing the file position.
+            // SAFETY: device_fd is a valid VFIO device fd; buf holds 8 bytes and
+            // read_size <= 8. pread64 is positioned I/O and thread-safe across
+            // concurrent callers on the same fd.
             let bytes_read = unsafe {
                 libc::pread64(
-                    *device_fd,
+                    device_fd,
                     buf.as_mut_ptr().cast(),
                     read_size as usize,
                     file_offset as i64,
@@ -729,13 +1012,6 @@ impl GpuPassthrough {
                 _ => unreachable!(),
             };
 
-            tracing::trace!(
-                "MMIO read: BAR{} offset=0x{:x} size={} -> 0x{:x}",
-                bar,
-                offset,
-                size,
-                value
-            );
             Ok(value)
         }
 
@@ -779,6 +1055,7 @@ impl GpuPassthrough {
 
             let regions = self.bar_regions.read().await;
             let region = regions[bar_idx]
+                .as_ref()
                 .ok_or_else(|| GpuError::NotAvailable(format!("BAR{} region not mapped", bar)))?;
 
             // Validate the write is within the BAR region bounds
@@ -801,20 +1078,34 @@ impl GpuPassthrough {
                 )));
             }
 
-            let fd_guard = self.vfio_device_fd.lock().await;
-            let device_fd = fd_guard
-                .as_ref()
-                .ok_or_else(|| GpuError::NotAvailable("VFIO device fd not available".into()))?;
+            // Fast path: a direct volatile store into a mapped BAR sub-range.
+            for mr in &region.mapped {
+                if let Some(intra) = range_contains_access(mr.range, offset, size) {
+                    // SAFETY: see the read path — bounded, aligned, live mapping.
+                    unsafe {
+                        write_volatile_mmio(mr.ptr.add(intra as usize), size, value);
+                    }
+                    return Ok(());
+                }
+            }
+
+            // Fallback: positioned write on the lock-free fd mirror.
+            let device_fd = self.device_fd.load(Ordering::Acquire);
+            if device_fd < 0 {
+                return Err(GpuError::NotAvailable(
+                    "VFIO device fd not available".into(),
+                ));
+            }
 
             // Convert value to bytes (little-endian)
             let buf: [u8; 8] = value.to_le_bytes();
             let file_offset = region.offset + offset;
 
-            // SAFETY: device_fd is a valid VFIO device fd. buf is a properly aligned buffer.
-            // pwrite64 writes to the fd at the given offset without changing the file position.
+            // SAFETY: device_fd is a valid VFIO device fd; buf holds 8 bytes and
+            // write_size <= 8. pwrite64 is positioned, thread-safe I/O.
             let bytes_written = unsafe {
                 libc::pwrite64(
-                    *device_fd,
+                    device_fd,
                     buf.as_ptr().cast(),
                     write_size as usize,
                     file_offset as i64,
@@ -830,13 +1121,6 @@ impl GpuPassthrough {
                 )));
             }
 
-            tracing::trace!(
-                "MMIO write: BAR{} offset=0x{:x} size={} value=0x{:x}",
-                bar,
-                offset,
-                size,
-                value
-            );
             Ok(())
         }
 
@@ -863,6 +1147,28 @@ impl GpuPassthrough {
 
         #[cfg(target_os = "linux")]
         {
+            // Drain any in-flight MMIO first: taking the regions write lock
+            // waits for all readers (which hold the read guard across each
+            // access) to finish, so nothing can touch a mapping or the fd while
+            // we tear them down. Unmap every BAR range, then clear the table.
+            {
+                let mut regions = self.bar_regions.write().await;
+                for region in regions.iter_mut().flatten() {
+                    for mr in region.mapped.drain(..) {
+                        // SAFETY: ptr/map_len come from a successful mmap and are
+                        // unmapped exactly once here.
+                        unsafe {
+                            libc::munmap(mr.ptr.cast(), mr.map_len);
+                        }
+                    }
+                }
+                *regions = std::array::from_fn(|_| None);
+            }
+
+            // Retire the lock-free fd mirror before closing, so a late fallback
+            // access observes -1 rather than a closed/recycled fd.
+            self.device_fd.store(-1, Ordering::Release);
+
             // Close VFIO device
             if let Some(fd) = self.vfio_device_fd.lock().await.take() {
                 // SAFETY: fd is a valid VFIO device fd from a successful ioctl call.
@@ -903,6 +1209,20 @@ impl Drop for GpuPassthrough {
         // Note: async drop not possible, cleanup handled by RAII
         #[cfg(target_os = "linux")]
         {
+            // Unmap any BAR mappings still live (best-effort; at drop there
+            // should be no concurrent accessor, so try_write succeeds).
+            if let Ok(mut regions) = self.bar_regions.try_write() {
+                for region in regions.iter_mut().flatten() {
+                    for mr in region.mapped.drain(..) {
+                        // SAFETY: ptr/map_len come from a successful mmap, unmapped once.
+                        unsafe {
+                            libc::munmap(mr.ptr.cast(), mr.map_len);
+                        }
+                    }
+                }
+            }
+            self.device_fd.store(-1, Ordering::Release);
+
             // Synchronously close VFIO device fd if still open
             if let Ok(mut fd_guard) = self.vfio_device_fd.try_lock() {
                 if let Some(fd) = fd_guard.take() {
@@ -964,6 +1284,73 @@ pub fn enumerate_gpus() -> Result<Vec<GpuDeviceInfo>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn range_contains_access_routes_aligned_in_bounds_only() {
+        let r = MmapRange {
+            bar_offset: 0x1000,
+            len: 0x1000,
+        };
+        // Aligned and inside → offset within the range.
+        assert_eq!(range_contains_access(r, 0x1000, 4), Some(0));
+        assert_eq!(range_contains_access(r, 0x1040, 4), Some(0x40));
+        // Final 8 bytes of the range.
+        assert_eq!(range_contains_access(r, 0x1ff8, 8), Some(0xff8));
+        // Misaligned access falls back (volatile typed load needs alignment).
+        assert_eq!(range_contains_access(r, 0x1001, 4), None);
+        // Spanning past the end falls back.
+        assert_eq!(range_contains_access(r, 0x1ffc, 8), None);
+        // Before the range falls back.
+        assert_eq!(range_contains_access(r, 0x0ff8, 8), None);
+    }
+
+    #[test]
+    fn parse_sparse_mmap_extracts_areas() {
+        // region_info header is 32 bytes; place the capability chain after it.
+        let cap = 32usize;
+        let mut buf = vec![0u8; cap + 16 + 32];
+        // vfio_info_cap_header { id = SPARSE_MMAP, version = 1, next = 0 }
+        buf[cap..cap + 2].copy_from_slice(&VFIO_REGION_INFO_CAP_SPARSE_MMAP.to_le_bytes());
+        buf[cap + 2..cap + 4].copy_from_slice(&1u16.to_le_bytes());
+        buf[cap + 4..cap + 8].copy_from_slice(&0u32.to_le_bytes());
+        // nr_areas = 2, reserved = 0
+        buf[cap + 8..cap + 12].copy_from_slice(&2u32.to_le_bytes());
+        // areas[0] = { offset: 0x1000, size: 0x2000 }
+        let a0 = cap + 16;
+        buf[a0..a0 + 8].copy_from_slice(&0x1000u64.to_le_bytes());
+        buf[a0 + 8..a0 + 16].copy_from_slice(&0x2000u64.to_le_bytes());
+        // areas[1] = { offset: 0x4000, size: 0x1000 }
+        let a1 = a0 + 16;
+        buf[a1..a1 + 8].copy_from_slice(&0x4000u64.to_le_bytes());
+        buf[a1 + 8..a1 + 16].copy_from_slice(&0x1000u64.to_le_bytes());
+
+        let ranges = parse_sparse_mmap(&buf, cap as u32);
+        assert_eq!(
+            ranges,
+            vec![
+                MmapRange {
+                    bar_offset: 0x1000,
+                    len: 0x2000
+                },
+                MmapRange {
+                    bar_offset: 0x4000,
+                    len: 0x1000
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_sparse_mmap_absent_or_other_cap_is_empty() {
+        // A single non-sparse capability that terminates the chain.
+        let cap = 32usize;
+        let mut buf = vec![0u8; cap + 8];
+        buf[cap..cap + 2].copy_from_slice(&7u16.to_le_bytes()); // some other id
+        buf[cap + 4..cap + 8].copy_from_slice(&0u32.to_le_bytes()); // next = 0
+        assert!(parse_sparse_mmap(&buf, cap as u32).is_empty());
+        // A zero cap_offset means "no capabilities".
+        assert!(parse_sparse_mmap(&buf, 0).is_empty());
+    }
 
     #[test]
     fn test_pci_address_from_bdf() {
