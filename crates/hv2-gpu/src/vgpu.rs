@@ -138,6 +138,20 @@ pub struct VirtualGpuStats {
     pub buffers_created: AtomicU32,
 }
 
+/// A compiled compute pipeline cached across dispatches.
+///
+/// Pipeline creation triggers shader specialization in the WGPU backend and is
+/// by far the most expensive step in a dispatch. Keying on
+/// `(shader_id, binding_count)` lets a hot dispatch loop reuse the pipeline and
+/// bind-group layout, rebuilding only the cheap, buffer-specific bind group.
+/// Resource IDs are handed out by a monotonic counter and never reused, so a
+/// cache key always refers to the same shader.
+#[derive(Clone)]
+struct CachedComputePipeline {
+    pipeline: Arc<wgpu::ComputePipeline>,
+    bind_group_layout: Option<Arc<wgpu::BindGroupLayout>>,
+}
+
 /// Virtual GPU device
 pub struct VirtualGpu {
     /// Device name
@@ -158,6 +172,9 @@ pub struct VirtualGpu {
     textures: Mutex<HashMap<u32, GpuTextureResource>>,
     /// Shaders
     shaders: Mutex<HashMap<u32, GpuShader>>,
+    /// Compiled compute pipelines, keyed by (shader_id, binding_count), so a
+    /// hot dispatch loop does not recompile the pipeline on every call.
+    compute_pipelines: Mutex<HashMap<(u32, usize), CachedComputePipeline>>,
     /// Next resource ID
     next_resource_id: AtomicU32,
     /// Statistics
@@ -180,6 +197,7 @@ impl VirtualGpu {
             memory_regions: Mutex::new(HashMap::new()),
             textures: Mutex::new(HashMap::new()),
             shaders: Mutex::new(HashMap::new()),
+            compute_pipelines: Mutex::new(HashMap::new()),
             next_resource_id: AtomicU32::new(1),
             stats: Arc::new(VirtualGpuStats::default()),
             initialized: std::sync::atomic::AtomicBool::new(false),
@@ -290,6 +308,12 @@ impl VirtualGpu {
     /// Get statistics
     pub fn stats(&self) -> &VirtualGpuStats {
         &self.stats
+    }
+
+    /// Number of compiled compute pipelines currently cached.
+    #[cfg(test)]
+    pub(crate) async fn cached_pipeline_count(&self) -> usize {
+        self.compute_pipelines.lock().await.len()
     }
 
     /// Allocate GPU memory buffer
@@ -612,73 +636,98 @@ impl VirtualGpu {
             .as_ref()
             .ok_or_else(|| GpuError::NotAvailable("Queue not initialized".into()))?;
 
-        let shaders = self.shaders.lock().await;
-        let shader = shaders
-            .get(&shader_id)
-            .ok_or_else(|| GpuError::NotAvailable(format!("Shader {} not found", shader_id)))?;
+        let binding_count = buffer_ids.len();
+        let cache_key = (shader_id, binding_count);
 
-        if shader.shader_type != ShaderType::Compute {
-            return Err(GpuError::Unsupported(
-                "Shader is not a compute shader".into(),
-            ));
-        }
+        // Fetch or build the (expensive) compute pipeline. Cached across
+        // dispatches so a steady-state loop only pays bind-group construction.
+        let cached = {
+            let mut cache = self.compute_pipelines.lock().await;
+            if let Some(c) = cache.get(&cache_key) {
+                c.clone()
+            } else {
+                // Cache miss: build the pipeline once. `ShaderModule` is not
+                // clonable, so hold the shaders lock for this build only (lock
+                // order is always cache -> shaders; no path takes the inverse).
+                let shaders = self.shaders.lock().await;
+                let shader = shaders.get(&shader_id).ok_or_else(|| {
+                    GpuError::NotAvailable(format!("Shader {} not found", shader_id))
+                })?;
+                if shader.shader_type != ShaderType::Compute {
+                    return Err(GpuError::Unsupported(
+                        "Shader is not a compute shader".into(),
+                    ));
+                }
 
-        // Build bind group layout entries and bind group entries from buffer IDs
-        let regions = self.memory_regions.lock().await;
-        let mut layout_entries = Vec::new();
-        let mut bg_entries = Vec::new();
+                let (pipeline_layout, bind_group_layout) = if binding_count == 0 {
+                    (None, None)
+                } else {
+                    let layout_entries: Vec<wgpu::BindGroupLayoutEntry> = (0..binding_count)
+                        .map(|i| wgpu::BindGroupLayoutEntry {
+                            binding: i as u32,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        })
+                        .collect();
+                    let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                        label: Some("vgpu_compute_bgl"),
+                        entries: &layout_entries,
+                    });
+                    let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                        label: Some("vgpu_compute_pl"),
+                        bind_group_layouts: &[&bgl],
+                        push_constant_ranges: &[],
+                    });
+                    (Some(pl), Some(bgl))
+                };
 
-        for (i, &buf_id) in buffer_ids.iter().enumerate() {
-            let region = regions.get(&buf_id).ok_or_else(|| {
-                GpuError::NotAvailable(format!("Buffer {} not found for binding {}", buf_id, i))
-            })?;
+                let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("vgpu_compute_pipeline"),
+                    layout: pipeline_layout.as_ref(),
+                    module: &shader.module,
+                    entry_point: "main",
+                    compilation_options: Default::default(),
+                    cache: None,
+                });
+                drop(shaders);
 
-            layout_entries.push(wgpu::BindGroupLayoutEntry {
-                binding: i as u32,
-                visibility: wgpu::ShaderStages::COMPUTE,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: false },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            });
-
-            bg_entries.push(wgpu::BindGroupEntry {
-                binding: i as u32,
-                resource: region.buffer.as_entire_binding(),
-            });
-        }
-
-        // Create pipeline layout and bind group if we have bindings
-        let (pipeline_layout, bind_group) = if buffer_ids.is_empty() {
-            (None, None)
-        } else {
-            let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("vgpu_compute_bgl"),
-                entries: &layout_entries,
-            });
-            let bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("vgpu_compute_bg"),
-                layout: &bgl,
-                entries: &bg_entries,
-            });
-            let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("vgpu_compute_pl"),
-                bind_group_layouts: &[&bgl],
-                push_constant_ranges: &[],
-            });
-            (Some(pl), Some(bg))
+                let entry = CachedComputePipeline {
+                    pipeline: Arc::new(pipeline),
+                    bind_group_layout: bind_group_layout.map(Arc::new),
+                };
+                cache.insert(cache_key, entry.clone());
+                entry
+            }
         };
 
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("vgpu_compute_pipeline"),
-            layout: pipeline_layout.as_ref(),
-            module: &shader.module,
-            entry_point: "main",
-            compilation_options: Default::default(),
-            cache: None,
-        });
+        // Build the per-dispatch bind group from the actual buffers. Cheap
+        // relative to pipeline creation, and necessarily buffer-specific.
+        let bind_group = if let Some(bgl_arc) = &cached.bind_group_layout {
+            let bgl: &wgpu::BindGroupLayout = bgl_arc;
+            let regions = self.memory_regions.lock().await;
+            let mut bg_entries = Vec::with_capacity(binding_count);
+            for (i, &buf_id) in buffer_ids.iter().enumerate() {
+                let region = regions.get(&buf_id).ok_or_else(|| {
+                    GpuError::NotAvailable(format!("Buffer {} not found for binding {}", buf_id, i))
+                })?;
+                bg_entries.push(wgpu::BindGroupEntry {
+                    binding: i as u32,
+                    resource: region.buffer.as_entire_binding(),
+                });
+            }
+            Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("vgpu_compute_bg"),
+                layout: bgl,
+                entries: &bg_entries,
+            }))
+        } else {
+            None
+        };
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("vgpu_compute_encoder"),
@@ -689,7 +738,7 @@ impl VirtualGpu {
                 label: Some("vgpu_compute_pass"),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&pipeline);
+            pass.set_pipeline(&cached.pipeline);
             if let Some(bg) = &bind_group {
                 pass.set_bind_group(0, bg, &[]);
             }
@@ -740,6 +789,46 @@ mod tests {
         let vgpu = VirtualGpu::new("test-vgpu");
         assert_eq!(vgpu.name(), "test-vgpu");
         assert!(!vgpu.is_initialized());
+    }
+
+    #[tokio::test]
+    async fn compute_pipeline_is_cached_across_dispatches() {
+        let mut vgpu = VirtualGpu::new("cache-test");
+        match vgpu.init().await {
+            Ok(()) => {
+                let shader = vgpu
+                    .create_shader(
+                        "@group(0) @binding(0) var<storage, read_write> data: array<u32>;\n\
+                         @compute @workgroup_size(1)\n\
+                         fn main(@builtin(global_invocation_id) gid: vec3<u32>) {\n\
+                             data[gid.x] = data[gid.x] + 1u;\n\
+                         }",
+                        ShaderType::Compute,
+                    )
+                    .await
+                    .unwrap();
+                let buf = vgpu
+                    .allocate_buffer(256, BufferUsages::STORAGE | BufferUsages::COPY_DST)
+                    .await
+                    .unwrap();
+
+                assert_eq!(vgpu.cached_pipeline_count().await, 0);
+                vgpu.dispatch_compute_with_bindings(shader, [1, 1, 1], &[buf])
+                    .await
+                    .unwrap();
+                vgpu.dispatch_compute_with_bindings(shader, [1, 1, 1], &[buf])
+                    .await
+                    .unwrap();
+
+                // Two dispatches of the same (shader, binding_count) must compile
+                // the pipeline exactly once.
+                assert_eq!(vgpu.cached_pipeline_count().await, 1);
+                assert_eq!(vgpu.stats().compute_dispatches.load(Ordering::Relaxed), 2);
+            }
+            // No GPU adapter on this host — nothing to exercise.
+            Err(GpuError::NotAvailable(_)) => {}
+            Err(e) => panic!("Unexpected error: {:?}", e),
+        }
     }
 
     #[tokio::test]
