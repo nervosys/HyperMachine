@@ -789,6 +789,15 @@ pub struct GeminiFunction {
     pub parameters: serde_json::Value,
 }
 
+/// The complete MCP tool registry — every agent-callable tool with its JSON
+/// schema, scoped to full capabilities. This is the single source of truth for
+/// the agentic tool surface (it matches `/mcp/tools` and `/mcp/call`), so the
+/// LLM tool exports below cannot drift from the tools an agent can actually
+/// invoke.
+fn mcp_registry_tools() -> Vec<hv2_agent::McpTool> {
+    hv2_agent::McpServer::new().list_tools(&hv2_agent::AgentCapabilities::full())
+}
+
 // ============================================================================
 // Ontology Builder
 // ============================================================================
@@ -1617,15 +1626,17 @@ impl HyperMachineOntology {
 
     /// Convert to OpenAI function calling format
     pub fn to_openai_tools(&self) -> OpenAITools {
-        let tools = self
-            .operations
-            .iter()
-            .map(|op| OpenAITool {
+        // Project the complete MCP registry so the OpenAI tool list covers every
+        // agent-callable tool (vm.*, guest.*, snapshot.*, network.*, agent.*,
+        // system.*), not just the core VM-lifecycle REST operations.
+        let tools = mcp_registry_tools()
+            .into_iter()
+            .map(|t| OpenAITool {
                 tool_type: "function".to_string(),
                 function: OpenAIFunction {
-                    name: op.id.clone(),
-                    description: op.description.clone(),
-                    parameters: self.build_openai_parameters(op),
+                    name: t.name,
+                    description: t.description,
+                    parameters: t.parameters,
                 },
             })
             .collect();
@@ -1684,13 +1695,12 @@ impl HyperMachineOntology {
 
     /// Convert to Anthropic MCP tool format
     pub fn to_anthropic_tools(&self) -> AnthropicTools {
-        let tools = self
-            .operations
-            .iter()
-            .map(|op| AnthropicTool {
-                name: op.id.clone(),
-                description: op.description.clone(),
-                input_schema: self.build_openai_parameters(op),
+        let tools = mcp_registry_tools()
+            .into_iter()
+            .map(|t| AnthropicTool {
+                name: t.name,
+                description: t.description,
+                input_schema: t.parameters,
             })
             .collect();
 
@@ -1703,13 +1713,14 @@ impl HyperMachineOntology {
 
     /// Convert to Google Gemini format
     pub fn to_gemini_tools(&self) -> GeminiTools {
-        let function_declarations = self
-            .operations
-            .iter()
-            .map(|op| GeminiFunction {
-                name: op.id.clone(),
-                description: op.description.clone(),
-                parameters: self.build_openai_parameters(op),
+        let function_declarations = mcp_registry_tools()
+            .into_iter()
+            .map(|t| GeminiFunction {
+                // Gemini function names disallow '.', so map dotted MCP tool
+                // names (e.g. `vm.create`) to `vm_create`.
+                name: t.name.replace('.', "_"),
+                description: t.description,
+                parameters: t.parameters,
             })
             .collect();
 
@@ -3510,11 +3521,57 @@ mod tests {
     }
 
     #[test]
+    fn agentic_tools_cover_the_full_mcp_registry() {
+        let onto = HyperMachineOntology::build();
+        let registry = mcp_registry_tools();
+        assert!(registry.len() >= 20, "expected the full MCP tool set");
+
+        // Every MCP tool must appear in the OpenAI export — no silent drift, no
+        // missing capability for an agent.
+        let openai = onto.to_openai_tools();
+        let names: std::collections::HashSet<&str> = openai
+            .tools
+            .iter()
+            .map(|t| t.function.name.as_str())
+            .collect();
+        assert_eq!(openai.tools.len(), registry.len());
+        for tool in &registry {
+            assert!(
+                names.contains(tool.name.as_str()),
+                "OpenAI export missing {}",
+                tool.name
+            );
+        }
+
+        // Spot-check the categories that were previously absent from the ontology.
+        for expected in [
+            "vm.create",
+            "vm.resize",
+            "guest.exec",
+            "snapshot.create",
+            "network.attach",
+            "agent.broadcast",
+            "system.info",
+        ] {
+            assert!(names.contains(expected), "agentic tools missing {expected}");
+        }
+
+        // Anthropic matches; Gemini sanitizes dotted names.
+        assert_eq!(onto.to_anthropic_tools().tools.len(), registry.len());
+        let gemini = onto.to_gemini_tools();
+        assert_eq!(gemini.function_declarations.len(), registry.len());
+        assert!(gemini
+            .function_declarations
+            .iter()
+            .any(|f| f.name == "vm_create"));
+    }
+
+    #[test]
     fn test_openai_conversion() {
         let ontology = HyperMachineOntology::build();
         let tools = ontology.to_openai_tools();
         assert!(!tools.tools.is_empty());
-        assert!(tools.tools.iter().any(|t| t.function.name == "create_vm"));
+        assert!(tools.tools.iter().any(|t| t.function.name == "vm.create"));
     }
 
     #[test]

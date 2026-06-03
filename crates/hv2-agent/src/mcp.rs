@@ -846,6 +846,7 @@ impl McpServer {
                         },
                         "encoding": {
                             "type": "string",
+                            "description": "Content encoding",
                             "enum": ["text", "base64"],
                             "default": "text"
                         }
@@ -877,6 +878,7 @@ impl McpServer {
                         },
                         "priority": {
                             "type": "string",
+                            "description": "Message priority",
                             "enum": ["low", "normal", "high", "critical"],
                             "default": "normal"
                         }

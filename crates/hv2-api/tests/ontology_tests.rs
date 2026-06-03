@@ -313,12 +313,12 @@ async fn test_vm_management_tools_present() {
         })
         .collect();
 
-    // Verify essential VM management tools are present
-    assert!(tool_names.contains(&"create_vm"), "Missing create_vm tool");
-    assert!(tool_names.contains(&"delete_vm"), "Missing delete_vm tool");
-    assert!(tool_names.contains(&"start_vm"), "Missing start_vm tool");
-    assert!(tool_names.contains(&"stop_vm"), "Missing stop_vm tool");
-    assert!(tool_names.contains(&"list_vms"), "Missing list_vms tool");
+    // Verify essential VM management tools are present (MCP tool names).
+    assert!(tool_names.contains(&"vm.create"), "Missing vm.create tool");
+    assert!(tool_names.contains(&"vm.delete"), "Missing vm.delete tool");
+    assert!(tool_names.contains(&"vm.start"), "Missing vm.start tool");
+    assert!(tool_names.contains(&"vm.stop"), "Missing vm.stop tool");
+    assert!(tool_names.contains(&"vm.list"), "Missing vm.list tool");
 }
 
 #[tokio::test]
@@ -336,21 +336,24 @@ async fn test_tool_parameters_have_descriptions() {
 
     let tools = json.get("tools").unwrap().as_array().unwrap();
 
+    let mut missing = Vec::new();
     for tool in tools {
         let func = tool.get("function").unwrap();
+        let name = func.get("name").unwrap().as_str().unwrap();
         let params = func.get("parameters").unwrap();
         let properties = params.get("properties").unwrap().as_object().unwrap();
 
-        // Each property should have a description
+        // Each property should have a description.
         for (prop_name, prop_value) in properties {
-            assert!(
-                prop_value.get("description").is_some(),
-                "Parameter '{}' in tool '{}' missing description",
-                prop_name,
-                func.get("name").unwrap()
-            );
+            if prop_value.get("description").is_none() {
+                missing.push(format!("{name}.{prop_name}"));
+            }
         }
     }
+    assert!(
+        missing.is_empty(),
+        "tool parameters missing descriptions: {missing:?}"
+    );
 }
 
 // ============================================================================
