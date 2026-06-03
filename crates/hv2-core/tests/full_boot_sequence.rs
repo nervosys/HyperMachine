@@ -3,6 +3,9 @@
 //! These tests verify the complete boot flow from initial CPU state
 //! through descriptor table loading, mode transitions, and final boot state.
 
+// WHPX backend is Windows-only; gate this suite to Windows.
+#![cfg(target_os = "windows")]
+
 use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
 use hv2_core::boot::linux::{LinuxBootParams, LinuxBootProtocol};
 use hv2_core::boot::multiboot::{MultibootInfo, MultibootProtocol};

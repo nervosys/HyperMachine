@@ -5,7 +5,7 @@
 
 #![cfg(target_os = "linux")]
 
-use hv2_core::backends::kvm::{KvmBackend, KvmVcpu, KvmVm};
+use hv2_core::backends::kvm::KvmBackend;
 use hv2_core::hypervisor::{HypervisorBackend, HypervisorPlatform};
 use hv2_core::{IoDirection, VmExit};
 

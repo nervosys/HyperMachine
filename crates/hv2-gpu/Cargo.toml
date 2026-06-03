@@ -29,5 +29,9 @@ tracing = { workspace = true }
 wgpu = { workspace = true, optional = true }
 ash = { workspace = true, optional = true }
 
+# VFIO GPU passthrough uses raw syscalls (ioctl/mmap/pread) on Linux only.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 [lints]
 workspace = true

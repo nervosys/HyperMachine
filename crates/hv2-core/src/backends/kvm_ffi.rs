@@ -566,9 +566,16 @@ pub struct kvm_dirty_log {
 
 /// LAPIC (Local APIC) state - 1 KiB register page
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct kvm_lapic_state {
     pub regs: [u8; 1024],
+}
+
+// `derive(Default)` only covers arrays up to 32 elements; impl by hand.
+impl Default for kvm_lapic_state {
+    fn default() -> Self {
+        Self { regs: [0; 1024] }
+    }
 }
 
 /// In-kernel IRQ chip state (PIC or IOAPIC)
@@ -677,9 +684,16 @@ pub struct kvm_guest_debug_arch {
 
 /// XSAVE state (extended processor state)
 #[repr(C)]
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 pub struct kvm_xsave {
     pub region: [u32; 1024],
+}
+
+// `derive(Default)` only covers arrays up to 32 elements; impl by hand.
+impl Default for kvm_xsave {
+    fn default() -> Self {
+        Self { region: [0; 1024] }
+    }
 }
 
 /// Extended control register entry

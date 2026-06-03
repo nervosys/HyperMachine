@@ -12,6 +12,11 @@
 //! - Segment register configuration
 //! - Error handling for invalid inputs
 
+// WHPX is the Windows Hypervisor Platform backend; this suite drives it
+// directly, so gate the file to Windows. The Linux backend is covered by
+// tests/kvm_backend.rs.
+#![cfg(target_os = "windows")]
+
 use hv2_core::{
     backends::whpx::{CpuMode, WhpxBackend, WhpxVm},
     boot::{

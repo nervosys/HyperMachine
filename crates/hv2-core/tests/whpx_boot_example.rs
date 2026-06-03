@@ -36,6 +36,8 @@ use hv2_core::backends::whpx::WhpxBackend;
 #[cfg(target_os = "windows")]
 use hv2_core::HypervisorBackend;
 
+// Only the Windows boot tests load guest binaries from disk.
+#[cfg(target_os = "windows")]
 use std::path::Path;
 
 // ============================================================================
@@ -48,17 +50,15 @@ use std::path::Path;
 /// - Running on Windows
 /// - Hyper-V Platform feature is enabled
 /// - CPU has hardware virtualization support
+///
+/// Only the Windows boot tests query this; there is no non-Windows caller.
 #[cfg(target_os = "windows")]
 fn is_whpx_available() -> bool {
     WhpxBackend::new().is_ok()
 }
 
-#[cfg(not(target_os = "windows"))]
-fn is_whpx_available() -> bool {
-    false
-}
-
 /// Load a guest binary file from examples/guest_code/
+#[cfg(target_os = "windows")]
 fn load_guest_binary(filename: &str) -> Option<Vec<u8>> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../examples/guest_code")

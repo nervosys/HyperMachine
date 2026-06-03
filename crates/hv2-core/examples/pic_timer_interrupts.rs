@@ -9,10 +9,21 @@
 //!
 //! Run with: cargo run --example pic_timer_interrupts
 
+// WHPX is the Windows-only backend. On Windows this example drives a real VM;
+// elsewhere it falls back to the backend-free PIC demonstration below.
+#[cfg(target_os = "windows")]
 use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
 use hv2_core::interrupt::Pic8259;
 use hv2_core::Result;
 
+#[cfg(not(target_os = "windows"))]
+fn main() -> Result<()> {
+    // No WHPX backend off Windows — run the PIC-only demonstration, which
+    // needs no hypervisor backend.
+    demonstrate_pic_only()
+}
+
+#[cfg(target_os = "windows")]
 fn main() -> Result<()> {
     println!("=== PIC Timer Interrupt Example ===\n");
 

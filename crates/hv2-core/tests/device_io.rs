@@ -2,6 +2,9 @@
 //!
 //! Tests the integration of device emulation with the I/O handler system.
 
+// WHPX backend is Windows-only; gate this suite to Windows.
+#![cfg(target_os = "windows")]
+
 use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
 use std::sync::{Arc, RwLock};
 
