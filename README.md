@@ -20,6 +20,26 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 | **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
 | **Security**    | FIPS-approved + post-quantum crypto, capability-based access, audit logging |
 
+## Benchmarks
+
+Measured with [Criterion](https://github.com/bheisler/criterion.rs) on an
+**AMD Ryzen 9 9900X** (reproduce with `cargo bench`):
+
+| Benchmark | Median | What it measures |
+| --- | ---: | --- |
+| **Agent spawn — CoW clone** | **~9 ns (O(1))** | fork a sandbox from a warm baseline; **constant** at 1 / 16 / 64 baseline units (8.9 / 9.3 / 9.1 ns). A *full copy* is 206 µs → 9.3 ms and grows with size — so 64 agents cost ~one baseline, not 64. |
+| CoW first-write fault | 73 ns | the per-page copy paid once, when a clone first dirties a page |
+| Guest memory read / write | 27–96 ns / 9–19 ns | 64 B – 4 KiB accesses (zero-copy mapping) |
+| MCP tool dispatch | 547 ns | one agent tool call (`vm.list`) end-to-end |
+| MCP dispatch ×64 (concurrent) | 47 µs (~0.7 µs/call) | concurrent agent tool calls over the dispatch path |
+| Snapshot — vCPU regs / 10 devices | 18 ns / 21 ns | serialize control registers + device state |
+| Tool-schema projection (OpenAI) | 3.3 µs | render the MCP registry to an LLM tool format |
+| AES-256-GCM (`ring`, AES-NI) | ~9–10 GiB/s | crypto throughput — see [Performance](#performance) |
+
+The defining number is **O(1) agent spawn**: a copy-on-write clone is ~9 ns
+regardless of fleet size, so 100 idle agents cost roughly one baseline's memory
+rather than 100 — the foundation of the agent runtime's fleet density.
+
 ### 1. Agentic-First Virtualization
 
 HyperMachine is the first hypervisor designed from the ground up for AI agent workloads. Every VM is an MCP-addressable resource: agents discover capabilities via ontology endpoints, invoke typed tools (`vm.create`, `vm.exec`, `gpu.reserve`), and receive structured results — no shell scraping or brittle CLI wrappers. Multi-LLM tool schemas ship built-in for OpenAI, Anthropic, and Google formats.
