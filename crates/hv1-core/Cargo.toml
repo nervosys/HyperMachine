@@ -27,11 +27,6 @@ bitflags = "2.4"
 log = "0.4"
 static_assertions = "1.1"
 
-# x86_64 specific
-x86_64 = "0.15"
-x86 = "0.52"
-raw-cpuid = "11.0"
-
 # Memory management
 linked_list_allocator = "0.10"
 
@@ -39,7 +34,12 @@ linked_list_allocator = "0.10"
 bootloader_api = { version = "0.11", optional = true }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-# Additional x86_64 dependencies
+# x86-only crates (CPU structures/intrinsics, MSR access, CPUID). hv1-core is
+# the x86_64 Intel-VMX / AMD-SVM Type-1 hypervisor; ARM is the separate
+# hv1-arm crate, so these must not be pulled into non-x86 builds.
+x86_64 = "0.15"
+x86 = "0.52"
+raw-cpuid = "11.0"
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 hv1-arm = { path = "../hv1-arm", optional = true }
