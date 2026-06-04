@@ -1,0 +1,6 @@
+# Canonicalize commit identities. Maps an earlier personal commit email to the
+# project's organization identity so `git log`/`git shortlog`/`git blame` and
+# GitHub display the org address. (This does not rewrite history; the raw commit
+# objects are unchanged. For full removal, a history rewrite + force-push is
+# required — see the release notes.)
+nervosys <opensource@nervosys.ai> <adam.michael.erickson@gmail.com>

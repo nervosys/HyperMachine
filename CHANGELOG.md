@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-04
+
 ### Added
+- **Complete agentic tool ontology** (`hv2-agent` / `hv2-api`): a 30-tool MCP
+  registry (vm / gpu / guest / snapshot / network / agent / system — including
+  `vm.pause` / `vm.resume` and the `gpu.*` fabric tools) is the single source of
+  truth, projected identically to the native MCP manifest and the OpenAI /
+  Anthropic / Gemini tool-use formats. All four agent transports are verified in
+  lockstep by drift-guard tests.
+- **GPU acceleration fast paths** (`hv2-gpu` / `hv2-core`): WGPU compute
+  pipelines are cached across dispatches (no per-call recompile), and
+  `TRANSFER_TO_HOST_2D` / framebuffer scroll collapse contiguous regions to a
+  single `memcpy`.
+- **VFIO passthrough mmap fast path** (`hv2-gpu`, Linux): MMIO maps the BAR
+  regions (parsing the sparse-mmap capability chain) for lock-free volatile
+  access, falling back to positioned `pread` / `pwrite` only for non-mappable
+  ranges.
 - **Real post-quantum cryptography** (`hv2-core`): ML-KEM (FIPS 203), ML-DSA
   (FIPS 204), and SLH-DSA (FIPS 205) now delegate to the audited pure-Rust
   RustCrypto crates (`ml-kem`, `ml-dsa`, `slh-dsa`) with real
@@ -68,6 +84,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `snapshot_name`/`network_name`/`interface_name` while the handler read
   `vm_id`/`snapshot_id`/`network`/`interface_id`. Schemas and handlers are now
   consistent and covered by regression tests.
+- **Cross-platform build & test** (workspace): the `cfg(target_os = "linux")`
+  paths — VFIO passthrough, the TAP network device, and the KVM FFI — now build
+  and lint clean on Linux (previously: undeclared `libc` deps, an escaping
+  borrow in `enumerate_gpus`, unconditional WHPX imports, and `derive(Default)`
+  on >32-element arrays, all invisible to the Windows dev host). Backend-
+  dependent tests skip gracefully where `/dev/kvm` is unavailable, so the full
+  suite is green on Windows, Linux, and macOS.
+
+### Performance
+- Measured with Criterion on an AMD Ryzen 9 9900X (`cargo bench`): **O(1) agent
+  spawn** — a copy-on-write clone is ~9 ns regardless of fleet size (constant at
+  1/16/64 baseline units) versus a full copy at 206 µs–9.3 ms; CoW first-write
+  fault 73 ns; guest-memory read/write 27–96 ns / 9–19 ns; MCP tool dispatch
+  547 ns (47 µs for 64 concurrent); snapshot 18–21 ns; AES-256-GCM ~9–10 GiB/s
+  (AES-NI). See the README Benchmarks table.
 
 ### Security
 - Triaged RUSTSEC-2023-0071 (the `rsa` crate's Marvin-attack timing

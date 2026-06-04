@@ -2806,7 +2806,7 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "hm-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2829,7 +2829,7 @@ dependencies = [
 
 [[package]]
 name = "hm-gui"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2914,7 +2914,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 
 [[package]]
 name = "hv1-arm"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "aarch64-cpu",
  "bitflags 2.10.0",
@@ -2926,7 +2926,7 @@ dependencies = [
 
 [[package]]
 name = "hv1-boot"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bootloader",
  "bootloader_api",
@@ -2938,7 +2938,7 @@ dependencies = [
 
 [[package]]
 name = "hv1-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "bitflags 2.10.0",
  "bootloader_api",
@@ -2954,7 +2954,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-agent"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2975,7 +2975,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-api"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3011,7 +3011,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-cli"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3030,7 +3030,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-core"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3062,7 +3062,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-cpu"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "hv2-core",
@@ -3072,7 +3072,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-gpu"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "ash",
@@ -3087,7 +3087,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-net"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3101,7 +3101,7 @@ dependencies = [
 
 [[package]]
 name = "hv2-runtime"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
