@@ -13,6 +13,7 @@ members = [
     "crates/hv2-cli",
     "crates/hm-cli",
     "crates/hm-gui",
+    "crates/hypermachine",
 ]
 resolver = "2"
 

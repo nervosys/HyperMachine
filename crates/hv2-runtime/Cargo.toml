@@ -12,8 +12,8 @@ categories.workspace = true
 description = "HyperMachine stateful runtime environment for agentic workflows"
 
 [dependencies]
-hv2-core = { path = "../hv2-core" }
-hv2-agent = { path = "../hv2-agent" }
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }

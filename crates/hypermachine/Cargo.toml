@@ -1,0 +1,23 @@
+[package]
+name = "hypermachine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine — a high-performance hypervisor framework with first-class AI-agent support. Frontdoor crate that re-exports the hv2 Type-2 hypervisor stack (core, cpu, gpu, net, agent, runtime, api)."
+readme = "README.md"
+
+[dependencies]
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-cpu = { path = "../hv2-cpu", version = "1.1.0" }
+hv2-gpu = { path = "../hv2-gpu", version = "1.1.0" }
+hv2-net = { path = "../hv2-net", version = "1.1.0" }
+hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
+hv2-runtime = { path = "../hv2-runtime", version = "1.1.0" }
+hv2-api = { path = "../hv2-api", version = "1.1.0" }

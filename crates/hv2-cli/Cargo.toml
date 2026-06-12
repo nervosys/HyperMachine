@@ -16,10 +16,10 @@ name = "hv2"
 path = "src/main.rs"
 
 [dependencies]
-hv2-core = { path = "../hv2-core" }
-hv2-agent = { path = "../hv2-agent" }
-hv2-api = { path = "../hv2-api" }
-hv2-runtime = { path = "../hv2-runtime" }
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
+hv2-api = { path = "../hv2-api", version = "1.1.0" }
+hv2-runtime = { path = "../hv2-runtime", version = "1.1.0" }
 
 tokio = { workspace = true }
 anyhow = { workspace = true }

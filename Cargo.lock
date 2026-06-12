@@ -3224,6 +3224,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hypermachine"
+version = "1.1.0"
+dependencies = [
+ "hv2-agent",
+ "hv2-api",
+ "hv2-core",
+ "hv2-cpu",
+ "hv2-gpu",
+ "hv2-net",
+ "hv2-runtime",
+]
+
+[[package]]
 name = "iana-time-zone"
 version = "0.1.65"
 source = "registry+https://github.com/rust-lang/crates.io-index"
