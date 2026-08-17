@@ -12,7 +12,11 @@
 //! Hypervisor.framework runs one VM per process and offers no hard per-thread
 //! pinning) treat it as a best-effort no-op.
 
-use crate::{Error, Result};
+// `Error` is only constructed by the Linux and Windows pinning paths; on other
+// platforms `pin_current_thread` is an infallible no-op.
+#[cfg(any(target_os = "linux", windows))]
+use crate::Error;
+use crate::Result;
 
 /// Number of logical host cores available for scheduling.
 pub fn core_count() -> usize {

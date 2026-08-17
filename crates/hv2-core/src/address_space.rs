@@ -356,7 +356,7 @@ impl GuestAddressSpace {
         let mut regions = self.regions.write();
 
         // Check for overlaps
-        for (_, existing) in regions.iter() {
+        for existing in regions.values() {
             if region.overlaps(existing) {
                 return Err(Error::Memory(format!(
                     "Region '{}' [{:#x}-{:#x}) overlaps with '{}' [{:#x}-{:#x})",
@@ -427,7 +427,7 @@ impl GuestAddressSpace {
         let regions = self.regions.read();
 
         // Find the region that contains this address
-        for (_, region) in regions.iter() {
+        for region in regions.values() {
             if region.contains(guest_addr) {
                 return Some(region.clone());
             }

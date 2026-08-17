@@ -47,29 +47,29 @@ pub fn configure_dark_theme(ctx: &egui::Context) {
     visuals.faint_bg_color = colors.surface_light;
 
     visuals.widgets.noninteractive.bg_fill = colors.surface;
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, colors.text);
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, colors.text);
     visuals.widgets.noninteractive.corner_radius = CornerRadius::same(4);
 
     visuals.widgets.inactive.bg_fill = colors.surface_light;
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, colors.text);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, colors.text);
     visuals.widgets.inactive.corner_radius = CornerRadius::same(4);
 
     visuals.widgets.hovered.bg_fill = colors.primary.linear_multiply(0.3);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, colors.text);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, colors.text);
     visuals.widgets.hovered.corner_radius = CornerRadius::same(4);
 
     visuals.widgets.active.bg_fill = colors.primary;
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0, Color32::WHITE);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, Color32::WHITE);
     visuals.widgets.active.corner_radius = CornerRadius::same(4);
 
     visuals.widgets.open.bg_fill = colors.surface_light;
-    visuals.widgets.open.fg_stroke = Stroke::new(1.0, colors.text);
+    visuals.widgets.open.fg_stroke = Stroke::new(1.0_f32, colors.text);
     visuals.widgets.open.corner_radius = CornerRadius::same(4);
 
     visuals.selection.bg_fill = colors.primary.linear_multiply(0.4);
-    visuals.selection.stroke = Stroke::new(1.0, colors.primary);
+    visuals.selection.stroke = Stroke::new(1.0_f32, colors.primary);
     visuals.window_corner_radius = CornerRadius::same(8);
-    visuals.window_stroke = Stroke::new(1.0, colors.border);
+    visuals.window_stroke = Stroke::new(1.0_f32, colors.border);
     visuals.window_shadow = egui::Shadow::NONE;
     visuals.handle_shape = egui::style::HandleShape::Rect { aspect_ratio: 0.5 };
 
