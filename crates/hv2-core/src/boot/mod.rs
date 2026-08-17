@@ -65,6 +65,7 @@ pub mod linux;
 pub mod mode;
 pub mod multiboot;
 pub mod sector;
+pub mod source;
 
 use crate::{Error, Result};
 

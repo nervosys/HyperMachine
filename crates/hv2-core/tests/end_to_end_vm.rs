@@ -137,6 +137,7 @@ async fn setup_test_vm_with_devices(
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
+        boot: None,
     };
 
     let vm = Arc::new(vm_or_skip(config)?);
@@ -695,6 +696,7 @@ async fn test_vm_memory_configuration() {
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
+        boot: None,
     };
 
     let Some(vm) = vm_or_skip(config) else {
@@ -723,6 +725,7 @@ async fn test_vm_vcpu_configuration() {
         parallel_vcpu: false,
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
+        boot: None,
     };
 
     let Some(vm) = vm_or_skip(config) else {

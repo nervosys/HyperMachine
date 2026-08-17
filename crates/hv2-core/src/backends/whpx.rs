@@ -54,7 +54,7 @@
 
 use super::whpx_ffi::*;
 use crate::boot::linux::{LinuxBootParams, LinuxBootProtocol};
-use crate::boot::multiboot::{MultibootInfo, MultibootProtocol};
+use crate::boot::multiboot::{MultibootInfo, MultibootLayout, MultibootProtocol};
 use crate::boot::BootSetup;
 use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
@@ -327,6 +327,41 @@ impl HypervisorBackend for WhpxBackend {
             _ => u64::from(data),
         };
         whpx_vcpu.set_rax(masked)
+    }
+
+    async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        let whpx_vm = self.vms.read().last().cloned().ok_or_else(|| {
+            Error::VM("no WHPX partition — create_vm must run before load_boot".into())
+        })?;
+
+        match boot {
+            crate::boot::source::LoadedBoot::Linux(params) => {
+                whpx_vcpu.boot_linux(&whpx_vm, params, params.kernel_addr)
+            }
+            crate::boot::source::LoadedBoot::Multiboot(info) => {
+                whpx_vcpu.boot_multiboot(&whpx_vm, info, crate::boot::source::DEFAULT_KERNEL_ADDR)
+            }
+            crate::boot::source::LoadedBoot::Raw {
+                data,
+                load_addr,
+                entry,
+            } => {
+                whpx_vm.write_guest_memory(*load_addr, data)?;
+                // A raw image is entered in real mode, where the entry address
+                // is a CS:IP pair rather than a linear address. Split it the
+                // way the reset vector does: segment on a 16-byte boundary.
+                let cs = (*entry >> 4) as u16;
+                let ip = (*entry & 0xF) as u16;
+                whpx_vcpu.setup_real_mode_boot(cs, ip)
+            }
+        }
     }
 
     async fn shutdown(&mut self) -> Result<()> {
@@ -4533,18 +4568,17 @@ impl WhpxVcpu {
         // Step 2: Allocate standard memory regions
         let (gdt_base, _idt_base, _page_table_base, stack_pointer) =
             BootSetup::allocate_standard_tables();
-        let multiboot_info_addr = 0x9000u64; // Standard location for multiboot_info
-        let cmdline_addr = 0x9400u64; // Command line after multiboot_info
-        let mmap_addr = 0x9800u64; // Memory map after command line
-        let kernel_addr = entry_point; // Load kernel at entry point address
-        let modules_addr = 0x200000u64; // Modules at 2MB
+        // Share the layout with every other backend so their guest memory
+        // images cannot drift apart.
+        let layout = MultibootLayout::default().with_kernel_addr(entry_point);
+        let multiboot_info_addr = layout.info_addr;
 
         tracing::debug!(
             "Memory layout: GDT=0x{:X}, multiboot_info=0x{:X}, kernel=0x{:X}, modules=0x{:X}, stack=0x{:X}",
             gdt_base,
             multiboot_info_addr,
-            kernel_addr,
-            modules_addr,
+            layout.kernel_addr,
+            layout.first_module_addr,
             stack_pointer
         );
 
@@ -4562,66 +4596,13 @@ impl WhpxVcpu {
             ds_selector
         );
 
-        // Step 4: Write kernel image to guest memory
-        vm.write_guest_memory(kernel_addr, &info.kernel_image)?;
-        tracing::debug!(
-            "✓ Kernel loaded: {} bytes at 0x{:016X}",
-            info.kernel_image.len(),
-            kernel_addr
-        );
-
-        // Step 5: Write modules to guest memory (if provided)
-        let mut module_addrs = Vec::new();
-        let mut current_module_addr = modules_addr;
-        for (i, module) in info.modules.iter().enumerate() {
-            vm.write_guest_memory(current_module_addr, &module.data)?;
-            module_addrs.push((current_module_addr, module.data.len() as u64));
-            tracing::debug!(
-                "✓ Module {} loaded: {} bytes at 0x{:016X}",
-                i,
-                module.data.len(),
-                current_module_addr
-            );
-            // Align next module to 4KB boundary
-            current_module_addr += (module.data.len() as u64).div_ceil(4096) * 4096;
+        // Steps 4-6: Write the whole boot environment — kernel, modules, the
+        // module descriptor list, command lines, memory map, and the
+        // multiboot_info structure that points at them all.
+        for (addr, data) in MultibootProtocol::prepare_guest_memory(info, &layout)? {
+            vm.write_guest_memory(addr, &data)?;
+            tracing::debug!("✓ wrote {} bytes at 0x{:016X}", data.len(), addr);
         }
-
-        // Step 6: Create and write multiboot_info structure
-        let multiboot_info_data = MultibootProtocol::create_multiboot_info(
-            info,
-            multiboot_info_addr,
-            cmdline_addr,
-            if module_addrs.is_empty() {
-                None
-            } else {
-                Some(modules_addr)
-            },
-            mmap_addr,
-        );
-        vm.write_guest_memory(multiboot_info_addr, &multiboot_info_data)?;
-        tracing::debug!(
-            "✓ multiboot_info written: {} bytes at 0x{:016X}",
-            multiboot_info_data.len(),
-            multiboot_info_addr
-        );
-
-        // Write command line
-        let cmdline_bytes = info.cmdline.as_bytes();
-        if !cmdline_bytes.is_empty() {
-            let mut cmdline_with_null = cmdline_bytes.to_vec();
-            cmdline_with_null.push(0); // Null terminator
-            vm.write_guest_memory(cmdline_addr, &cmdline_with_null)?;
-            tracing::debug!("✓ Command line written: {:?}", info.cmdline);
-        }
-
-        // Write memory map
-        let mmap_data = MultibootProtocol::create_memory_map(&info.memory_map);
-        vm.write_guest_memory(mmap_addr, &mmap_data)?;
-        tracing::debug!(
-            "✓ Memory map written: {} entries, {} bytes",
-            info.memory_map.len(),
-            mmap_data.len()
-        );
 
         // Step 7: Enable protected mode (32-bit, no paging)
         self.enable_protected_mode()?;

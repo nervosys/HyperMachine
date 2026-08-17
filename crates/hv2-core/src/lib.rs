@@ -90,6 +90,7 @@ pub use audio::{
     VirtioSndPcmFormat, VirtioSndPcmRate, VirtioSndStatus, VirtioSoundDevice, Volume, Widget,
     WidgetType,
 };
+pub use boot::source::{BootSource, LoadedBoot};
 pub use config::Config;
 pub use container::{
     Cgroup, CgroupManager, CgroupManagerStats, CgroupVersion, Container, ContainerCpuConfig,

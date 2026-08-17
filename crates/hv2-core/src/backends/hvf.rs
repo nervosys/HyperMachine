@@ -16,6 +16,9 @@
 //! HvfBackend is Send + Sync. All mutable state is protected by
 //! RwLock or atomic operations.
 
+use crate::boot::multiboot::{MultibootLayout, MultibootProtocol};
+use crate::boot::BootSetup;
+use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
 };
@@ -45,6 +48,86 @@ struct MemoryMapping {
     host_ptr: *mut u8,
 }
 
+/// The host allocation backing guest RAM, owned by the backend.
+#[derive(Debug)]
+struct GuestAllocation {
+    ptr: *mut u8,
+    size: u64,
+}
+
+// SAFETY: `ptr` is a plain owned allocation. The backend serialises access to
+// it through the `RwLock` holding this struct, and Hypervisor.framework accepts
+// the mapping from any thread in the process.
+unsafe impl Send for GuestAllocation {}
+unsafe impl Sync for GuestAllocation {}
+
+/// `RFLAGS` with only the always-set reserved bit 1, i.e. interrupts disabled.
+const RFLAGS_RESERVED: u64 = 0x2;
+
+/// `CR0.PE` — protected mode enable.
+const CR0_PE: u64 = 1 << 0;
+
+/// `CR0.ET` — extension type; reads as 1 on every CPU since the 486.
+const CR0_ET: u64 = 1 << 4;
+
+/// Segment access rights for a flat 32-bit code segment: type 0xB
+/// (execute/read, accessed), S=1, P=1, D/B=1, G=1.
+const AR_FLAT_CODE32: u64 = 0xC09B;
+
+/// Segment access rights for a flat 32-bit data segment: type 0x3
+/// (read/write, accessed), S=1, P=1, D/B=1, G=1.
+const AR_FLAT_DATA32: u64 = 0xC093;
+
+/// Segment access rights for a real-mode code segment: type 0xB, S=1, P=1,
+/// with 16-bit default size and byte granularity.
+const AR_REAL_MODE_CODE: u64 = 0x9B;
+
+/// Access rights marking a segment unusable (bit 16).
+const AR_UNUSABLE: u64 = 1 << 16;
+
+/// Write an architectural register, mapping the FFI status to an `Error`.
+fn write_reg(hv_vcpu: HvVcpuId, reg: HvX86Reg, value: u64) -> Result<()> {
+    // SAFETY: FFI call with a vCPU handle obtained from `hv_vcpu_create` and a
+    // register id from the `HvX86Reg` enum, both valid by construction.
+    let result = unsafe { hv_vcpu_write_register(hv_vcpu, reg as u32, value) };
+    if result != HV_SUCCESS {
+        return Err(Error::Hypervisor(format!(
+            "Failed to write {:?}: {}",
+            reg, result
+        )));
+    }
+    Ok(())
+}
+
+/// Read an architectural register, mapping the FFI status to an `Error`.
+fn read_reg(hv_vcpu: HvVcpuId, reg: HvX86Reg) -> Result<u64> {
+    let mut value = 0u64;
+    // SAFETY: FFI call with a valid vCPU handle, a register id from the
+    // `HvX86Reg` enum, and a valid pointer to a live local.
+    let result = unsafe { hv_vcpu_read_register(hv_vcpu, reg as u32, &mut value) };
+    if result != HV_SUCCESS {
+        return Err(Error::Hypervisor(format!(
+            "Failed to read {:?}: {}",
+            reg, result
+        )));
+    }
+    Ok(value)
+}
+
+/// Write a VMCS field, mapping the FFI status to an `Error`.
+fn write_vmcs(hv_vcpu: HvVcpuId, field: VmcsField, value: u64) -> Result<()> {
+    // SAFETY: FFI call with a valid vCPU handle and a field encoding from the
+    // `VmcsField` enum.
+    let result = unsafe { hv_vmx_vcpu_write_vmcs(hv_vcpu, field as u32, value) };
+    if result != HV_SUCCESS {
+        return Err(Error::Hypervisor(format!(
+            "Failed to write VMCS field {:?}: {}",
+            field, result
+        )));
+    }
+    Ok(())
+}
+
 // -- HvfBackend --
 
 /// Apple Hypervisor Framework backend.
@@ -71,6 +154,8 @@ pub struct HvfBackend {
     vm_created: AtomicBool,
     vcpu_states: RwLock<HashMap<u32, VCpuState>>,
     memory_mappings: RwLock<Vec<MemoryMapping>>,
+    /// Host allocation backing guest RAM, created by `create_vm`.
+    guest_memory: RwLock<Option<GuestAllocation>>,
     initialized: AtomicBool,
 }
 
@@ -127,8 +212,143 @@ impl HvfBackend {
             vm_created: AtomicBool::new(false),
             vcpu_states: RwLock::new(HashMap::new()),
             memory_mappings: RwLock::new(Vec::new()),
+            guest_memory: RwLock::new(None),
             initialized: AtomicBool::new(false),
         })
+    }
+
+    /// Write `data` into guest physical memory at `addr`.
+    ///
+    /// The allocation mapped at GPA 0 by `create_vm` backs the whole guest
+    /// physical address space, so a host-side write through it is immediately
+    /// visible to the guest.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if guest memory was never allocated, or if the write
+    /// would fall outside it.
+    pub fn write_guest_memory(&self, addr: u64, data: &[u8]) -> Result<()> {
+        let guard = self.guest_memory.read();
+        let allocation = guard
+            .as_ref()
+            .ok_or_else(|| Error::Memory("Guest memory not allocated".into()))?;
+
+        let end = addr
+            .checked_add(data.len() as u64)
+            .ok_or_else(|| Error::Memory(format!("Write at {:#x} overflows a u64", addr)))?;
+        if end > allocation.size {
+            return Err(Error::Memory(format!(
+                "Write at {:#x} with length {} exceeds guest memory size {:#x}",
+                addr,
+                data.len(),
+                allocation.size
+            )));
+        }
+
+        // SAFETY: The bounds check above guarantees the destination lies within
+        // the `allocation.size` region `ptr` owns, and the host-private source
+        // cannot overlap the guest allocation.
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                allocation.ptr.add(addr as usize),
+                data.len(),
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Put a vCPU into 32-bit protected mode with flat 4 GB segments and
+    /// paging off — the entry state both the Linux 32-bit boot protocol and
+    /// Multiboot require.
+    ///
+    /// Each segment's selector, base, limit, and access rights are written
+    /// together, because VM entry loads the hidden descriptor cache from the
+    /// VMCS rather than walking the GDT. LDTR is marked unusable and TR is
+    /// given a minimal busy-TSS descriptor, both of which VM entry checks.
+    fn enter_flat_protected_mode(
+        &self,
+        hv_vcpu: HvVcpuId,
+        gdt_base: u64,
+        gdt_len: u64,
+    ) -> Result<()> {
+        const CODE_SELECTOR: u64 = 0x08;
+        const DATA_SELECTOR: u64 = 0x10;
+
+        write_vmcs(hv_vcpu, VmcsField::GuestCsSelector, CODE_SELECTOR)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestCsBase, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestCsLimit, 0xFFFF_FFFF)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestCsAccessRights, AR_FLAT_CODE32)?;
+
+        for (selector, base, limit, ar) in [
+            (
+                VmcsField::GuestDsSelector,
+                VmcsField::GuestDsBase,
+                VmcsField::GuestDsLimit,
+                VmcsField::GuestDsAccessRights,
+            ),
+            (
+                VmcsField::GuestEsSelector,
+                VmcsField::GuestEsBase,
+                VmcsField::GuestEsLimit,
+                VmcsField::GuestEsAccessRights,
+            ),
+            (
+                VmcsField::GuestFsSelector,
+                VmcsField::GuestFsBase,
+                VmcsField::GuestFsLimit,
+                VmcsField::GuestFsAccessRights,
+            ),
+            (
+                VmcsField::GuestGsSelector,
+                VmcsField::GuestGsBase,
+                VmcsField::GuestGsLimit,
+                VmcsField::GuestGsAccessRights,
+            ),
+            (
+                VmcsField::GuestSsSelector,
+                VmcsField::GuestSsBase,
+                VmcsField::GuestSsLimit,
+                VmcsField::GuestSsAccessRights,
+            ),
+        ] {
+            write_vmcs(hv_vcpu, selector, DATA_SELECTOR)?;
+            write_vmcs(hv_vcpu, base, 0)?;
+            write_vmcs(hv_vcpu, limit, 0xFFFF_FFFF)?;
+            write_vmcs(hv_vcpu, ar, AR_FLAT_DATA32)?;
+        }
+
+        // VM entry rejects a usable LDTR that does not describe a real LDT, so
+        // say plainly that there isn't one.
+        write_vmcs(hv_vcpu, VmcsField::GuestLdtrSelector, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestLdtrBase, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestLdtrLimit, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestLdtrAccessRights, AR_UNUSABLE)?;
+
+        // TR, by contrast, must be usable: type 11 (busy 32-bit TSS), present.
+        write_vmcs(hv_vcpu, VmcsField::GuestTrSelector, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestTrBase, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestTrLimit, 0xFFFF)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestTrAccessRights, 0x8B)?;
+
+        write_vmcs(hv_vcpu, VmcsField::GuestGdtrBase, gdt_base)?;
+        write_vmcs(
+            hv_vcpu,
+            VmcsField::GuestGdtrLimit,
+            gdt_len.saturating_sub(1),
+        )?;
+        write_vmcs(hv_vcpu, VmcsField::GuestIdtrBase, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestIdtrLimit, 0xFFFF)?;
+
+        write_reg(hv_vcpu, HvX86Reg::Cr0, CR0_PE | CR0_ET)?;
+        write_reg(hv_vcpu, HvX86Reg::Cr3, 0)?;
+        write_reg(hv_vcpu, HvX86Reg::Cr4, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestCr0, CR0_PE | CR0_ET)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestCr3, 0)?;
+        write_vmcs(hv_vcpu, VmcsField::GuestCr4, 0)?;
+
+        Ok(())
     }
 
     // -- Internal helpers --
@@ -315,6 +535,33 @@ impl HypervisorBackend for HvfBackend {
             )));
         }
 
+        // Allocate and map guest RAM at GPA 0. Without this the VM has no
+        // memory at all, so there is nowhere to put a guest.
+        if memory_size > 0 && self.guest_memory.read().is_none() {
+            let layout = std::alloc::Layout::from_size_align(memory_size as usize, 4096)
+                .map_err(|e| Error::Memory(format!("Invalid memory layout: {}", e)))?;
+
+            // SAFETY: `layout` has a non-zero size (checked above) and a valid
+            // 4 KB alignment. The allocation is owned by this backend and freed
+            // in `Drop`.
+            let ptr = unsafe { std::alloc::alloc_zeroed(layout) };
+            if ptr.is_null() {
+                return Err(Error::Memory("Failed to allocate guest memory".into()));
+            }
+
+            if let Err(e) = self.map_memory(0, memory_size, ptr) {
+                // SAFETY: `ptr` came from `alloc_zeroed` with this same layout
+                // and has not been freed or handed out.
+                unsafe { std::alloc::dealloc(ptr, layout) };
+                return Err(e);
+            }
+
+            *self.guest_memory.write() = Some(GuestAllocation {
+                ptr,
+                size: memory_size,
+            });
+        }
+
         // Create vCPUs
         for i in 0..vcpu_count {
             self.create_vcpu(i)?;
@@ -325,6 +572,110 @@ impl HypervisorBackend for HvfBackend {
             vcpu_count,
             memory_size,
         ))
+    }
+
+    async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
+        use crate::boot::source::LoadedBoot;
+
+        let hv_vcpu = {
+            let states = self.vcpu_states.read();
+            states
+                .get(&vcpu.id())
+                .ok_or_else(|| Error::Hypervisor(format!("HVF vCPU {} not found", vcpu.id())))?
+                .hv_vcpu
+        };
+
+        // Every protocol starts the same way: the images go into guest RAM.
+        for (addr, data) in boot.memory_regions()? {
+            self.write_guest_memory(addr, &data)?;
+        }
+
+        match boot {
+            LoadedBoot::Linux(params) => {
+                let (gdt_base, _idt_base, _pt_base, stack_pointer) =
+                    BootSetup::allocate_standard_tables();
+                let gdt = GdtBuilder::new()
+                    .add_null()
+                    .add_code_32bit(0, 0xFFFF_FFFF, 0)
+                    .add_data_32bit(0, 0xFFFF_FFFF, 0)
+                    .build();
+                self.write_guest_memory(gdt_base, &gdt)?;
+
+                self.enter_flat_protected_mode(hv_vcpu, gdt_base, gdt.len() as u64)?;
+
+                write_reg(hv_vcpu, HvX86Reg::Rip, params.kernel_addr)?;
+                // The 32-bit Linux boot protocol passes boot_params in ESI.
+                write_reg(hv_vcpu, HvX86Reg::Rsi, params.setup_addr)?;
+                write_reg(hv_vcpu, HvX86Reg::Rsp, stack_pointer)?;
+                write_reg(hv_vcpu, HvX86Reg::Rbp, stack_pointer)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRip, params.kernel_addr)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRsp, stack_pointer)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRflags, RFLAGS_RESERVED)?;
+
+                tracing::info!(
+                    "HVF: Linux kernel at {:#x}, boot_params at {:#x}",
+                    params.kernel_addr,
+                    params.setup_addr
+                );
+                Ok(())
+            }
+
+            LoadedBoot::Multiboot(info) => {
+                let layout = MultibootLayout::default();
+                let (gdt_base, _idt_base, _pt_base, stack_pointer) =
+                    BootSetup::allocate_standard_tables();
+                let gdt = GdtBuilder::new()
+                    .add_null()
+                    .add_code_32bit(0, 0xFFFF_FFFF, 0)
+                    .add_data_32bit(0, 0xFFFF_FFFF, 0)
+                    .build();
+                self.write_guest_memory(gdt_base, &gdt)?;
+
+                self.enter_flat_protected_mode(hv_vcpu, gdt_base, gdt.len() as u64)?;
+
+                write_reg(hv_vcpu, HvX86Reg::Rip, layout.kernel_addr)?;
+                write_reg(
+                    hv_vcpu,
+                    HvX86Reg::Rax,
+                    u64::from(MultibootProtocol::bootloader_magic()),
+                )?;
+                write_reg(hv_vcpu, HvX86Reg::Rbx, layout.info_addr)?;
+                write_reg(hv_vcpu, HvX86Reg::Rsp, stack_pointer)?;
+                write_reg(hv_vcpu, HvX86Reg::Rbp, stack_pointer)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRip, layout.kernel_addr)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRsp, stack_pointer)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRflags, RFLAGS_RESERVED)?;
+
+                tracing::info!(
+                    "HVF: Multiboot kernel at {:#x}, info at {:#x}, {} module(s)",
+                    layout.kernel_addr,
+                    layout.info_addr,
+                    info.modules.len()
+                );
+                Ok(())
+            }
+
+            LoadedBoot::Raw { entry, .. } => {
+                // A raw image is entered in real mode, where the entry address
+                // is a CS:IP pair rather than a linear address.
+                let segment = (*entry >> 4) as u16;
+                let offset = *entry & 0xF;
+
+                write_vmcs(hv_vcpu, VmcsField::GuestCsSelector, u64::from(segment))?;
+                write_vmcs(hv_vcpu, VmcsField::GuestCsBase, u64::from(segment) << 4)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestCsLimit, 0xFFFF)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestCsAccessRights, AR_REAL_MODE_CODE)?;
+
+                let cr0 = read_reg(hv_vcpu, HvX86Reg::Cr0)?;
+                write_reg(hv_vcpu, HvX86Reg::Cr0, cr0 & !CR0_PE)?;
+                write_reg(hv_vcpu, HvX86Reg::Rip, offset)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRip, offset)?;
+                write_vmcs(hv_vcpu, VmcsField::GuestRflags, RFLAGS_RESERVED)?;
+
+                tracing::info!("HVF: raw image entered at {:04x}:{:04x}", segment, offset);
+                Ok(())
+            }
+        }
     }
 
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
@@ -588,10 +939,23 @@ impl HypervisorBackend for HvfBackend {
         }
 
         // Unmap memory
-        for mapping in self.memory_mappings.read().iter() {
+        for mapping in self.memory_mappings.write().drain(..) {
             // SAFETY: FFI call to hv_vm_unmap with guest address and size that were previously
             // registered via hv_vm_map.
             unsafe { hv_vm_unmap(mapping.guest_addr, mapping.size) };
+        }
+
+        // Free guest RAM — only after unmapping it, so the hypervisor is never
+        // left holding a mapping to memory the allocator has reclaimed.
+        if let Some(allocation) = self.guest_memory.write().take() {
+            // SAFETY: `ptr` came from `alloc_zeroed` in `create_vm` with this
+            // same size and 4 KB alignment, was unmapped just above, and is not
+            // referenced anywhere else.
+            unsafe {
+                let layout =
+                    std::alloc::Layout::from_size_align_unchecked(allocation.size as usize, 4096);
+                std::alloc::dealloc(allocation.ptr, layout);
+            }
         }
 
         // Destroy VM

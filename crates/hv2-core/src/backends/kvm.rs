@@ -43,6 +43,9 @@
 //! ```
 
 use super::kvm_ffi::*;
+use crate::boot::multiboot::{MultibootLayout, MultibootProtocol};
+use crate::boot::BootSetup;
+use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
 };
@@ -52,6 +55,65 @@ use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 use std::ptr::NonNull;
 use std::sync::{Arc, RwLock};
+
+// ── Boot-time architectural constants ───────────────────────────────────────
+//
+// The boot GDT built in `load_boot` is null / code / data, so the code segment
+// is at byte offset 8 and the data segment at 16 — which are their selectors.
+
+/// Selector of the flat 32-bit code segment in the boot GDT.
+const CODE_SELECTOR: u16 = 0x08;
+/// Selector of the flat 32-bit data segment in the boot GDT.
+const DATA_SELECTOR: u16 = 0x10;
+/// `CR0.PE` — protected mode enable.
+const CR0_PE: u64 = 1 << 0;
+/// `CR0.ET` — extension type; reads as 1 on every CPU since the 486.
+const CR0_ET: u64 = 1 << 4;
+/// The always-set reserved bit 1 of `RFLAGS`.
+const RFLAGS_RESERVED: u64 = 0x2;
+
+/// Put `sregs` into 32-bit protected mode with flat 4 GB segments and paging
+/// off — the machine state both the Linux 32-bit boot protocol and Multiboot
+/// require on entry.
+///
+/// KVM loads the hidden segment descriptors straight from `sregs`, so the guest
+/// runs correctly from the first instruction without walking the GDT. The GDT
+/// still has to exist and `sregs.gdt` still has to point at it, because a
+/// kernel reloads its segments early and would fault on a null GDTR.
+#[cfg(target_os = "linux")]
+fn apply_flat_protected_mode(sregs: &mut kvm_sregs) {
+    let code = kvm_segment {
+        base: 0,
+        limit: 0xFFFF_FFFF,
+        selector: CODE_SELECTOR,
+        type_: 0b1011, // execute/read, accessed
+        present: 1,
+        dpl: 0,
+        db: 1, // 32-bit operand size
+        s: 1,  // code/data descriptor
+        l: 0,  // not 64-bit
+        g: 1,  // limit in 4 KB pages
+        avl: 0,
+        unusable: 0,
+        padding: 0,
+    };
+    let data = kvm_segment {
+        selector: DATA_SELECTOR,
+        type_: 0b0011, // read/write, accessed
+        ..code
+    };
+
+    sregs.cs = code;
+    sregs.ds = data;
+    sregs.es = data;
+    sregs.fs = data;
+    sregs.gs = data;
+    sregs.ss = data;
+    sregs.cr0 = CR0_PE | CR0_ET;
+    sregs.cr4 = 0;
+    sregs.cr3 = 0;
+    sregs.efer = 0;
+}
 
 /// KVM hypervisor backend
 ///
@@ -283,6 +345,137 @@ impl HypervisorBackend for KvmBackend {
         kvm_vcpu.set_io_data(data, size)
     }
 
+    async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
+        use crate::boot::source::LoadedBoot;
+
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+            map.get(&vcpu.id())
+                .cloned()
+                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
+        };
+        let kvm_vm = self
+            .vms
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .last()
+            .cloned()
+            .ok_or_else(|| {
+                Error::Hypervisor("no KVM VM — create_vm must run before load_boot".into())
+            })?;
+
+        // Every protocol starts the same way: the images go into guest RAM.
+        for (addr, data) in boot.memory_regions()? {
+            kvm_vm.write_guest_memory(addr, &data)?;
+        }
+
+        match boot {
+            LoadedBoot::Linux(params) => {
+                // The 32-bit Linux boot protocol: enter at the protected-mode
+                // kernel with paging off, flat 4 GB segments, and ESI pointing
+                // at boot_params. KVM loads the hidden segment descriptors
+                // straight from `sregs`, so the transition needs no GDT walk —
+                // but Linux reloads the segments early, so a real GDT is still
+                // written into guest memory and GDTR pointed at it.
+                let (gdt_base, _idt_base, _pt_base, stack_pointer) =
+                    BootSetup::allocate_standard_tables();
+
+                let gdt = GdtBuilder::new()
+                    .add_null()
+                    .add_code_32bit(0, 0xFFFF_FFFF, 0)
+                    .add_data_32bit(0, 0xFFFF_FFFF, 0)
+                    .build();
+                kvm_vm.write_guest_memory(gdt_base, &gdt)?;
+
+                let mut sregs = kvm_vcpu.get_sregs()?;
+                sregs.gdt.base = gdt_base;
+                sregs.gdt.limit = (gdt.len() - 1) as u16;
+                apply_flat_protected_mode(&mut sregs);
+                kvm_vcpu.set_sregs(&sregs)?;
+
+                let mut regs = kvm_vcpu.get_regs()?;
+                regs.rip = params.kernel_addr;
+                regs.rsi = params.setup_addr; // boot_params, per the protocol
+                regs.rsp = stack_pointer;
+                regs.rbp = stack_pointer;
+                regs.rflags = RFLAGS_RESERVED;
+                kvm_vcpu.set_regs(&regs)?;
+
+                tracing::info!(
+                    "KVM: Linux kernel loaded at {:#x}, boot_params at {:#x}",
+                    params.kernel_addr,
+                    params.setup_addr
+                );
+                Ok(())
+            }
+
+            LoadedBoot::Raw { entry, .. } => {
+                // A raw image is entered in real mode, where the entry address
+                // is a CS:IP pair. Point CS's hidden base at the paragraph and
+                // start IP at the remainder, as the reset vector does.
+                let segment = (*entry >> 4) as u16;
+                let offset = (*entry & 0xF) as u16;
+
+                let mut sregs = kvm_vcpu.get_sregs()?;
+                sregs.cs.base = u64::from(segment) << 4;
+                sregs.cs.selector = segment;
+                sregs.cr0 &= !CR0_PE;
+                kvm_vcpu.set_sregs(&sregs)?;
+
+                let mut regs = kvm_vcpu.get_regs()?;
+                regs.rip = u64::from(offset);
+                regs.rflags = RFLAGS_RESERVED;
+                kvm_vcpu.set_regs(&regs)?;
+
+                tracing::info!("KVM: raw image entered at {:04x}:{:04x}", segment, offset);
+                Ok(())
+            }
+
+            LoadedBoot::Multiboot(info) => {
+                // Multiboot hands control to the kernel in 32-bit protected
+                // mode with paging off — the same machine state as the Linux
+                // entry above — but with EAX holding the bootloader magic and
+                // EBX the multiboot_info address, which is how the kernel
+                // recognises that it was Multiboot-loaded at all.
+                let layout = MultibootLayout::default();
+                let (gdt_base, _idt_base, _pt_base, stack_pointer) =
+                    BootSetup::allocate_standard_tables();
+
+                let gdt = GdtBuilder::new()
+                    .add_null()
+                    .add_code_32bit(0, 0xFFFF_FFFF, 0)
+                    .add_data_32bit(0, 0xFFFF_FFFF, 0)
+                    .build();
+                kvm_vm.write_guest_memory(gdt_base, &gdt)?;
+
+                let mut sregs = kvm_vcpu.get_sregs()?;
+                sregs.gdt.base = gdt_base;
+                sregs.gdt.limit = (gdt.len() - 1) as u16;
+                apply_flat_protected_mode(&mut sregs);
+                kvm_vcpu.set_sregs(&sregs)?;
+
+                let mut regs = kvm_vcpu.get_regs()?;
+                regs.rip = layout.kernel_addr;
+                regs.rax = u64::from(MultibootProtocol::bootloader_magic());
+                regs.rbx = layout.info_addr;
+                regs.rsp = stack_pointer;
+                regs.rbp = stack_pointer;
+                // Multiboot requires interrupts disabled on entry, which is
+                // RFLAGS with only the reserved bit set.
+                regs.rflags = RFLAGS_RESERVED;
+                kvm_vcpu.set_regs(&regs)?;
+
+                tracing::info!(
+                    "KVM: Multiboot kernel at {:#x}, info at {:#x}, {} module(s)",
+                    layout.kernel_addr,
+                    layout.info_addr,
+                    info.modules.len()
+                );
+                Ok(())
+            }
+        }
+    }
+
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down KVM backend");
 
@@ -441,6 +634,49 @@ impl KvmVm {
     /// Get guest memory pointer
     pub fn guest_memory(&self) -> Option<NonNull<u8>> {
         self.guest_memory
+    }
+
+    /// Write `data` into guest physical memory at `addr`.
+    ///
+    /// The guest memory allocated in [`KvmVm::new`] is registered with KVM as
+    /// slot 0 covering GPA `0..memory_size`, so a host-side write through the
+    /// same allocation is visible to the guest immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if guest memory was never allocated, or if the write
+    /// would fall outside it.
+    pub fn write_guest_memory(&self, addr: u64, data: &[u8]) -> Result<()> {
+        let ptr = self
+            .guest_memory
+            .ok_or_else(|| Error::Memory("Guest memory not allocated".into()))?;
+
+        let end = addr
+            .checked_add(data.len() as u64)
+            .ok_or_else(|| Error::Memory(format!("Write at {:#x} overflows a u64", addr)))?;
+        if end > self.memory_size {
+            return Err(Error::Memory(format!(
+                "Write at {:#x} with length {} exceeds guest memory size {:#x}",
+                addr,
+                data.len(),
+                self.memory_size
+            )));
+        }
+
+        // SAFETY: The bounds check above guarantees `addr + data.len()` is
+        // within the `memory_size` allocation `ptr` points at, and the source
+        // and destination cannot overlap (one is host-private, one is the
+        // guest allocation).
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                data.as_ptr(),
+                ptr.as_ptr().add(addr as usize),
+                data.len(),
+            );
+        }
+
+        tracing::debug!("Wrote {} bytes to guest memory at {:#x}", data.len(), addr);
+        Ok(())
     }
 
     // ========================================================================

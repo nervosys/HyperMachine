@@ -122,6 +122,52 @@ pub enum VmcsField {
     VmEntryExceptionErrorCode = 0x4018,
     GuestInterruptibilityState = 0x4824,
     GuestActivityState = 0x4826,
+
+    // -- Guest segment state (Intel SDM Vol. 3, Appendix B) --
+    //
+    // A segment needs all four of selector, base, limit, and access rights
+    // written together: the CPU loads the hidden descriptor cache from these
+    // fields on VM entry rather than walking the GDT, so a half-written
+    // segment produces a VM-entry failure rather than a fault the guest sees.
+    GuestEsSelector = 0x0800,
+    GuestCsSelector = 0x0802,
+    GuestSsSelector = 0x0804,
+    GuestDsSelector = 0x0806,
+    GuestFsSelector = 0x0808,
+    GuestGsSelector = 0x080A,
+    GuestLdtrSelector = 0x080C,
+    GuestTrSelector = 0x080E,
+
+    GuestEsLimit = 0x4800,
+    GuestCsLimit = 0x4802,
+    GuestSsLimit = 0x4804,
+    GuestDsLimit = 0x4806,
+    GuestFsLimit = 0x4808,
+    GuestGsLimit = 0x480A,
+    GuestLdtrLimit = 0x480C,
+    GuestTrLimit = 0x480E,
+    GuestGdtrLimit = 0x4810,
+    GuestIdtrLimit = 0x4812,
+
+    GuestEsAccessRights = 0x4814,
+    GuestCsAccessRights = 0x4816,
+    GuestSsAccessRights = 0x4818,
+    GuestDsAccessRights = 0x481A,
+    GuestFsAccessRights = 0x481C,
+    GuestGsAccessRights = 0x481E,
+    GuestLdtrAccessRights = 0x4820,
+    GuestTrAccessRights = 0x4822,
+
+    GuestEsBase = 0x6806,
+    GuestCsBase = 0x6808,
+    GuestSsBase = 0x680A,
+    GuestDsBase = 0x680C,
+    GuestFsBase = 0x680E,
+    GuestGsBase = 0x6810,
+    GuestLdtrBase = 0x6812,
+    GuestTrBase = 0x6814,
+    GuestGdtrBase = 0x6816,
+    GuestIdtrBase = 0x6818,
 }
 
 // -- Opaque types --

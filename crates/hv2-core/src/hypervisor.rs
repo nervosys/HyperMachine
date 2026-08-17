@@ -178,6 +178,30 @@ pub trait HypervisorBackend: Send + Sync {
         self.inject_interrupt(vcpu, vector).await
     }
 
+    /// Load a boot source into this backend's guest memory and prepare `vcpu`
+    /// to execute it.
+    ///
+    /// Called once per VM, after [`Self::create_vm`], for a VM configured with
+    /// a boot source. Implementations write the images into guest physical
+    /// memory and set up whatever architectural state the protocol requires
+    /// (GDT, page tables, CPU mode, and the protocol's entry registers).
+    ///
+    /// The caller sets the generic [`VCpu`] instruction pointer to
+    /// [`crate::boot::source::LoadedBoot::entry_point`] afterwards, so a backend whose vCPU state
+    /// lives entirely in the shared `VCpu` need only write memory.
+    ///
+    /// The default implementation reports [`Error::NotSupported`]: a backend
+    /// that cannot boot a guest says so rather than silently starting a VM
+    /// that will never execute.
+    async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
+        let _ = vcpu;
+        Err(Error::NotSupported(format!(
+            "{} backend cannot boot a {} guest",
+            self.platform(),
+            boot.protocol()
+        )))
+    }
+
     /// Shutdown the hypervisor
     async fn shutdown(&mut self) -> Result<()>;
 
@@ -496,6 +520,25 @@ impl HypervisorBackend for TcgBackend {
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
         tracing::debug!("TCG: Queuing interrupt {} for vCPU {}", vector, vcpu.id());
         self.pending_interrupts.lock().push_back(vector);
+        Ok(())
+    }
+
+    async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
+        // TCG has no architectural state of its own — it reads and writes the
+        // shared `VCpu` — so loading the images into the flat address space is
+        // the whole job. The caller sets RIP to the entry point.
+        for (addr, data) in boot.memory_regions()? {
+            self.map_memory(addr, &data);
+        }
+
+        tracing::warn!(
+            "TCG: loaded a {} boot image for vCPU {} into emulated memory, but the TCG \
+             interpreter executes only a handful of opcodes — this guest will not run. \
+             Use KVM, WHPX, or HVF.",
+            boot.protocol(),
+            vcpu.id()
+        );
+
         Ok(())
     }
 

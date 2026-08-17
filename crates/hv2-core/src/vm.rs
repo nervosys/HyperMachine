@@ -63,6 +63,14 @@ pub struct VMConfig {
     /// `vcpu_affinity` cores on the same node for NUMA-local execution.
     #[serde(default)]
     pub memory_numa_node: Option<u32>,
+
+    /// What this VM boots — a Linux kernel, a Multiboot kernel, or a raw image.
+    ///
+    /// `None` creates a VM with vCPUs and empty guest memory. That is the right
+    /// shape for a caller that writes guest code itself (tests, unikernel
+    /// harnesses), but such a VM has nothing to execute until something does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot: Option<crate::boot::source::BootSource>,
 }
 
 fn default_parallel_vcpu() -> bool {
@@ -142,13 +150,13 @@ impl VMConfig {
         }
         let mut resolved = None;
         for &(_, core) in &self.vcpu_affinity {
-            match crate::cpu_affinity::numa_node_for_core(core) {
-                Some(n) => match resolved {
-                    None => resolved = Some(n),
-                    Some(existing) if existing == n => {}
-                    Some(_) => return None, // cores span multiple nodes
-                },
-                None => return None, // unknown topology
+            // An unknown topology means we cannot promise NUMA locality, so
+            // fall back to host-default placement rather than guessing.
+            let node = crate::cpu_affinity::numa_node_for_core(core)?;
+            match resolved {
+                None => resolved = Some(node),
+                Some(existing) if existing == node => {}
+                Some(_) => return None, // cores span multiple nodes
             }
         }
         resolved
@@ -167,9 +175,15 @@ impl Default for VMConfig {
             parallel_vcpu: true,
             vcpu_affinity: Vec::new(),
             memory_numa_node: None,
+            boot: None,
         }
     }
 }
+
+/// How long [`VM::stop`] waits for a launched execution loop to unwind before
+/// giving up on it. The loop checks the running flag once per VM exit, so this
+/// only elapses for a guest that has stopped exiting altogether.
+const RUN_LOOP_REAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// Message type for vCPU coordination
 #[derive(Debug)]
@@ -241,6 +255,20 @@ pub struct VM {
     vcpu_stats: Vec<Arc<VCpuStats>>,
     /// vCPU task handles (only populated when running in parallel mode)
     vcpu_tasks: RwLock<Vec<VCpuTaskState>>,
+    /// Backend VM handle (partition / VM fd), created by [`VM::provision`].
+    ///
+    /// Held for the VM's lifetime: dropping it would tear down the backend's
+    /// partition out from under the running vCPUs.
+    hv_vm: RwLock<Option<crate::hypervisor::HypervisorVm>>,
+    /// The background execution loop spawned by [`VM::launch`], if any.
+    run_task: RwLock<Option<JoinHandle<Result<()>>>>,
+    /// Image allowlist consulted by [`VM::provision`], if installed.
+    ///
+    /// `None` — the default — admits any readable boot image, which is what
+    /// every caller before this expected. Install one with
+    /// [`VM::set_image_registry`] to make a denied or revoked image fail to
+    /// provision rather than merely be queryable.
+    image_registry: RwLock<Option<Arc<crate::security::image_registry::ImageRegistry>>>,
 }
 
 impl VM {
@@ -328,6 +356,9 @@ impl VM {
             running: Arc::new(AtomicBool::new(false)),
             vcpu_stats,
             vcpu_tasks: RwLock::new(Vec::new()),
+            hv_vm: RwLock::new(None),
+            run_task: RwLock::new(None),
+            image_registry: RwLock::new(None),
         })
     }
 
@@ -339,6 +370,177 @@ impl VM {
     /// Get VM state
     pub fn state(&self) -> VMState {
         *self.state.read()
+    }
+
+    /// Provision this VM on its hypervisor backend and load its boot source.
+    ///
+    /// This is the step that turns a configured VM into one the hardware knows
+    /// about: it creates the backend's partition (WHPX) or VM file descriptor
+    /// (KVM) along with the backing vCPUs, then — if [`VMConfig::boot`] names a
+    /// boot source — reads the images, writes them into guest physical memory,
+    /// and leaves vCPU 0 at the entry point with the architectural state the
+    /// boot protocol requires.
+    ///
+    /// Calling it more than once is a no-op, so [`VM::start`] and [`VM::launch`]
+    /// can both call it without coordinating.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the backend cannot create the VM, if a boot image is
+    /// missing or malformed, if the images do not fit in guest memory, or if
+    /// the backend does not support the configured boot protocol.
+    pub async fn provision(&self) -> Result<()> {
+        if self.hv_vm.read().is_some() {
+            return Ok(());
+        }
+
+        // Resolve, admit, and size-check the boot image *before* the backend is
+        // asked for anything. Refusing a disallowed image after a partition
+        // exists would allocate hypervisor resources for a VM that was never
+        // going to run — and would hide the refusal behind whatever the backend
+        // happened to say first.
+        let boot = match &self.config.boot {
+            Some(source) => {
+                let loaded = source.load()?;
+
+                self.admit_boot_image(&loaded)?;
+
+                let needed = loaded.highest_address()?;
+                if needed > self.config.memory_size {
+                    return Err(Error::Config(format!(
+                        "boot images need guest memory up to {:#x} but VM '{}' has only {:#x}",
+                        needed, self.config.name, self.config.memory_size
+                    )));
+                }
+                Some(loaded)
+            }
+            None => None,
+        };
+
+        let hv_vm = self
+            .backend
+            .create_vm(self.config.vcpu_count, self.config.memory_size)
+            .await?;
+
+        tracing::info!(
+            "Provisioned VM '{}' on the {} backend ({} vCPUs, {} MiB)",
+            self.config.name,
+            self.backend.platform(),
+            self.config.vcpu_count,
+            self.config.memory_size / (1024 * 1024),
+        );
+
+        if let Some(loaded) = boot {
+            let boot_vcpu = &self.vcpus[0];
+            self.backend.load_boot(boot_vcpu, &loaded).await?;
+
+            // Backends that keep no vCPU state of their own (TCG, mocks) read
+            // the shared `VCpu`, so the entry point has to land there too.
+            let mut regs = boot_vcpu.registers();
+            regs.rip = loaded.entry_point();
+            boot_vcpu.set_registers(regs);
+
+            tracing::info!(
+                "VM '{}': loaded {} boot image ({} bytes), entry {:#x}",
+                self.config.name,
+                loaded.protocol(),
+                loaded.image_bytes(),
+                loaded.entry_point(),
+            );
+        }
+
+        *self.hv_vm.write() = Some(hv_vm);
+        Ok(())
+    }
+
+    /// Refuse a boot image the installed registry does not admit.
+    ///
+    /// With no registry installed this is a no-op, which is the default and
+    /// preserves the behaviour every existing caller relies on.
+    fn admit_boot_image(&self, loaded: &crate::boot::source::LoadedBoot) -> Result<()> {
+        use crate::security::image_registry::AdmissionDecision;
+
+        let Some(registry) = self.image_registry.read().clone() else {
+            return Ok(());
+        };
+
+        // Identify the bytes about to be loaded, not the path they came from.
+        // A digest we cannot compute is a denial, never a pass: an enforcement
+        // point that fails open is not one.
+        let digest = loaded.primary_image_digest()?;
+
+        match registry.check_admission_by_digest(&digest) {
+            AdmissionDecision::Allowed => Ok(()),
+            AdmissionDecision::AllowedWithWarning(warning) => {
+                tracing::warn!("VM '{}': {}", self.config.name, warning);
+                Ok(())
+            }
+            AdmissionDecision::Denied(reason) => Err(Error::PermissionDenied(format!(
+                "VM '{}': boot image rejected by the image registry: {reason}",
+                self.config.name
+            ))),
+        }
+    }
+
+    /// Gate this VM's boot images on an image allowlist.
+    ///
+    /// Without one — the default — any readable image boots. With one, a VM
+    /// refuses to provision unless the registry admits the digest of the kernel
+    /// (or raw image) it is about to load.
+    pub fn set_image_registry(
+        &self,
+        registry: Arc<crate::security::image_registry::ImageRegistry>,
+    ) {
+        *self.image_registry.write() = Some(registry);
+    }
+
+    /// The installed image registry, if any.
+    pub fn image_registry(&self) -> Option<Arc<crate::security::image_registry::ImageRegistry>> {
+        self.image_registry.read().clone()
+    }
+
+    /// Whether this VM has been provisioned on its backend.
+    pub fn is_provisioned(&self) -> bool {
+        self.hv_vm.read().is_some()
+    }
+
+    /// Provision, start, and begin executing this VM in the background.
+    ///
+    /// This is the whole-VM entry point a CLI or API handler wants: on return
+    /// the guest is running, and the execution loop continues on a spawned task
+    /// until [`VM::stop`] is called or the guest shuts down.
+    ///
+    /// Use [`VM::run`] instead when you want to own the execution loop and
+    /// await it yourself.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if provisioning fails or the VM is not in a startable
+    /// state. Failures *inside* the execution loop surface through
+    /// [`VM::stop`], which awaits the loop and propagates its result.
+    pub async fn launch(self: &Arc<Self>) -> Result<()> {
+        self.provision().await?;
+        self.start().await?;
+
+        let vm = Arc::clone(self);
+        let handle = tokio::spawn(async move {
+            match vm.run().await {
+                // A `stop()` that lands before the spawned loop is scheduled
+                // leaves it starting against a VM that is already stopped.
+                // That is the stop working, not a failure to report.
+                Err(Error::InvalidState(reason)) if vm.state() != VMState::Running => {
+                    tracing::debug!(
+                        "VM '{}' stopped before its loop ran: {reason}",
+                        vm.config.name
+                    );
+                    Ok(())
+                }
+                other => other,
+            }
+        });
+        *self.run_task.write() = Some(handle);
+
+        Ok(())
     }
 
     /// Start the VM
@@ -463,6 +665,32 @@ impl VM {
             *state = VMState::Stopped;
         }
         self.exit_notify.notify_waiters();
+
+        // Reap the background execution loop, if this VM was launched. This
+        // must come *after* `notify_waiters`: in parallel mode the loop is
+        // parked on that notification, so awaiting it any earlier would
+        // deadlock against the notification stop() has not yet sent.
+        //
+        // A guest that never takes a VM exit would park the loop indefinitely,
+        // so the wait is bounded — stop() stays responsive and the task is
+        // abandoned rather than allowed to hang its caller.
+        let run_task = self.run_task.write().take();
+        if let Some(handle) = run_task {
+            match tokio::time::timeout(RUN_LOOP_REAP_TIMEOUT, handle).await {
+                Ok(Ok(Ok(()))) => {}
+                Ok(Ok(Err(e))) => {
+                    tracing::error!("VM '{}' execution loop failed: {}", self.config.name, e);
+                    *self.state.write() = VMState::Error;
+                    return Err(e);
+                }
+                Ok(Err(e)) => tracing::warn!("VM execution task join error: {:?}", e),
+                Err(_) => tracing::warn!(
+                    "VM '{}' execution loop did not exit within {:?}; abandoning it",
+                    self.config.name,
+                    RUN_LOOP_REAP_TIMEOUT
+                ),
+            }
+        }
 
         tracing::info!("VM '{}' stopped", self.config.name);
 

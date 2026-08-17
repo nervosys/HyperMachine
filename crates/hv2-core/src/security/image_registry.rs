@@ -203,11 +203,22 @@ pub enum AdmissionDecision {
     Denied(String),
 }
 
-/// Image allowlist registry
+/// Image allowlist registry.
 ///
-/// Central registry for the fleet that tracks which images are approved
-/// for use. Provides admission checks that the scheduler and VM
-/// provisioning path call before launching workloads.
+/// Central catalogue for the fleet, tracking which images are approved for use.
+///
+/// # Nothing on the provisioning path calls this yet
+///
+/// [`Self::check_admission`] is reachable from
+/// `POST /api/v1/images/check-admission`, where a client may *ask* for a
+/// decision, and from tests. Neither the scheduler nor `VM::provision` consults
+/// it, so registering, denying, or revoking an image does not currently stop a
+/// VM from booting that image — the decision is advisory until a caller places
+/// it on a path that can refuse.
+///
+/// Note that [`RegistryConfig::default`] uses [`EnforcementMode::Enforce`],
+/// which describes what this registry *would* do at an enforcement point, not
+/// what the system does today.
 pub struct ImageRegistry {
     /// Configuration
     config: RegistryConfig,
@@ -306,17 +317,49 @@ impl ImageRegistry {
         }
 
         let images = self.images.read();
-        let entry = match images.get(reference) {
-            Some(e) => e,
-            None => {
-                return if self.config.mode == EnforcementMode::Enforce {
-                    AdmissionDecision::Denied(format!("Image not in registry: {reference}"))
-                } else {
-                    AdmissionDecision::Allowed
-                };
-            }
-        };
+        match images.get(reference) {
+            Some(entry) => self.decide(entry),
+            None => self.unknown_image(&format!("Image not in registry: {reference}")),
+        }
+    }
 
+    /// Admission for an image identified by its SHA-256 digest.
+    ///
+    /// This is what an enforcement point on the provisioning path uses: it
+    /// identifies the bytes actually about to be loaded, so renaming or moving
+    /// a file cannot change the answer. `digest` is lower-case hex.
+    ///
+    /// A digest matching no entry is treated exactly as an unknown reference —
+    /// denied under [`EnforcementMode::Enforce`], allowed otherwise.
+    pub fn check_admission_by_digest(&self, digest: &str) -> AdmissionDecision {
+        if self.config.mode == EnforcementMode::Disabled {
+            return AdmissionDecision::Allowed;
+        }
+
+        let images = self.images.read();
+        // Digests are not the map key, so this is a scan. Fleet registries hold
+        // tens of images, and it runs once per VM provision.
+        match images
+            .values()
+            .find(|entry| entry.sha256.eq_ignore_ascii_case(digest))
+        {
+            Some(entry) => self.decide(entry),
+            None => self.unknown_image(&format!("No registry entry for digest {digest}")),
+        }
+    }
+
+    /// What to do about an image with no matching entry.
+    fn unknown_image(&self, reason: &str) -> AdmissionDecision {
+        if self.config.mode == EnforcementMode::Enforce {
+            AdmissionDecision::Denied(reason.to_string())
+        } else {
+            AdmissionDecision::Allowed
+        }
+    }
+
+    /// The admission rule for an entry that exists, shared by every lookup.
+    fn decide(&self, entry: &ImageEntry) -> AdmissionDecision {
+        let reference = &entry.reference;
         match entry.status {
             ApprovalStatus::Approved => {
                 // Verify signature trust if configured
