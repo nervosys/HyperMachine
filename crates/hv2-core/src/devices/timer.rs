@@ -598,7 +598,13 @@ mod tests {
     }
     #[tokio::test]
     async fn test_timer_total_ticks() {
-        // Test that total_ticks() accurately reflects timer activity
+        // Virtual time, not wall-clock. The timer task uses
+        // `MissedTickBehavior::Skip`, so on a loaded machine real ticks are
+        // dropped rather than queued and a wall-clock assertion flakes — this
+        // test failed exactly that way under a parallel build. Pausing the
+        // clock and advancing it by hand makes the count deterministic.
+        tokio::time::pause();
+
         let pic = Arc::new(Pic8259::new());
         let mut timer = TimerDevice::new("PIT".to_string(), 0x40);
 
@@ -606,16 +612,32 @@ mod tests {
 
         timer.set_pic(Arc::clone(&pic));
 
-        // Wait for task to start
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        // Let the spawned task reach its first `tick().await`.
+        tokio::task::yield_now().await;
 
-        // Wait for multiple ticks (at 18.2 Hz, 300ms = ~5.5 ticks)
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Advance one period at a time until the counter has moved far enough,
+        // bounded so a timer that never ticks still fails rather than hanging.
+        // The bound is generous because one advance does not always translate
+        // into one counted tick — channel 0 only counts down to terminal count
+        // — and the point here is that the counter advances with elapsed
+        // periods, not the exact ratio.
+        const PERIOD: Duration = Duration::from_micros(54_925);
+        const TARGET: u64 = 4;
 
-        let ticks = timer.total_ticks();
+        let mut ticks = 0;
+        for _ in 0..64 {
+            tokio::time::advance(PERIOD).await;
+            tokio::task::yield_now().await;
+            ticks = timer.total_ticks();
+            if ticks >= TARGET {
+                break;
+            }
+        }
+
         assert!(
-            ticks >= 4,
-            "Should have at least 4 ticks after 300ms, got {}",
+            ticks >= TARGET,
+            "Should have reached {} ticks within 64 periods, got {}",
+            TARGET,
             ticks
         );
 
