@@ -67,7 +67,7 @@ tokio-rustls = "0.26"
 rustls-pemfile = "2"
 
 # GPU acceleration
-wgpu = "22.0"
+wgpu = "24.0"
 ash = "0.38"
 
 # Memory management
