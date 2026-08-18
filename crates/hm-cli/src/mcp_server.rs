@@ -140,6 +140,9 @@ pub struct CreateVmRequest {
     pub gpu_enabled: bool,
     #[serde(default)]
     pub network_enabled: bool,
+    /// What this VM boots. Omit it for a VM with no guest code.
+    #[serde(default)]
+    pub boot: Option<hv2_core::BootSource>,
 }
 
 fn default_cpu() -> u32 {
@@ -417,7 +420,8 @@ async fn list_tools() -> Json<Vec<ToolDefinition>> {
         },
         ToolDefinition {
             name: "vm.execute_script".to_string(),
-            description: "Execute a script inside a running VM".to_string(),
+            description: "Evaluate a Rhai script on the host against a read-only view of the VM. \n                          Does NOT run commands inside the guest OS."
+                .to_string(),
             parameters: serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -591,12 +595,13 @@ async fn create_vm(
 ) -> Result<Json<VmInfo>, (StatusCode, String)> {
     state
         .vm_manager
-        .create_vm(
+        .create_bootable_vm(
             &request.name,
             request.cpu_cores,
             request.memory_gb,
             request.gpu_enabled,
             request.network_enabled,
+            request.boot,
         )
         .await
         .map(|v| {

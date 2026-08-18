@@ -80,13 +80,29 @@ impl ToolExecutor {
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // What the VM boots, if the agent asked for one.
+        let boot = match args.get("boot") {
+            Some(value) => Some(
+                serde_json::from_value::<hv2_core::BootSource>(value.clone())
+                    .map_err(|e| format!("Invalid boot source: {e}"))?,
+            ),
+            None => None,
+        };
+
         // Validate name
         if !Self::is_valid_vm_name(name) {
             return Err("Invalid VM name: must start with a letter and contain only alphanumeric characters and hyphens".to_string());
         }
 
         self.vm_manager
-            .create_vm(name, cpu_cores, memory_gb, gpu_enabled, network_enabled)
+            .create_bootable_vm(
+                name,
+                cpu_cores,
+                memory_gb,
+                gpu_enabled,
+                network_enabled,
+                boot,
+            )
             .await
             .map(|vm| {
                 json!({
@@ -95,6 +111,7 @@ impl ToolExecutor {
                     "memory_gb": vm.memory_gb,
                     "gpu_enabled": vm.gpu_enabled,
                     "network_enabled": vm.network_enabled,
+                    "boot_protocol": vm.boot.as_ref().map(|b| b.protocol()),
                     "state": format!("{}", vm.state),
                     "created_at": vm.created_at.to_rfc3339()
                 })
@@ -349,13 +366,16 @@ impl Introspection {
             })),
             "vm.execute_script" => Some(json!({
                 "name": "vm.execute_script",
-                "description": "Execute a script in a running VM",
+                "description": "Evaluate a Rhai script on the host against a read-only view of \
+                                the VM. Does NOT run commands inside the guest OS.",
                 "parameters": {
                     "name": { "type": "string", "required": true, "description": "VM name" },
-                    "script": { "type": "string", "required": true, "description": "Script content" },
+                    "script": { "type": "string", "required": true, "description": "Rhai source. In scope: vm_state, vm_name, vcpu_count, memory_size" },
                     "timeout_seconds": { "type": "integer", "required": false, "default": 300, "range": [1, 3600] }
                 },
-                "example": { "name": "my-vm", "script": "echo 'Hello'" }
+                // A shell command was the previous example; Rhai cannot run one,
+                // so it taught agents a mental model the engine does not support.
+                "example": { "name": "my-vm", "script": "vcpu_count * 2" }
             })),
             _ => None,
         }

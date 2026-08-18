@@ -406,7 +406,7 @@ Available operations:
 - vm.list: List all VMs
 - vm.get: Get VM details
 - vm.metrics: Get VM performance metrics
-- vm.execute_script: Run a script in a VM
+- vm.execute_script: Evaluate a Rhai script on the host against a read-only view of a VM (not inside the guest OS)
 
 Guidelines:
 1. Always check vm.list before creating to avoid name conflicts

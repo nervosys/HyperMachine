@@ -31,7 +31,9 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
 use colored::*;
+use hv2_core::BootSource;
 use std::io;
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// HyperMachine - High-performance hypervisor with AI agent support
@@ -207,6 +209,24 @@ enum T2Commands {
         /// Enable networking
         #[arg(long)]
         network: bool,
+
+        /// Linux kernel to boot (bzImage). Without a boot image the VM is
+        /// created but has no guest code to execute.
+        #[arg(long, value_name = "PATH")]
+        kernel: Option<PathBuf>,
+
+        /// Initial ramdisk to load alongside --kernel
+        #[arg(long, value_name = "PATH", requires = "kernel")]
+        initrd: Option<PathBuf>,
+
+        /// Kernel command line passed to --kernel
+        #[arg(long, value_name = "ARGS", requires = "kernel")]
+        cmdline: Option<String>,
+
+        /// Raw image to load at 0x7C00 and execute (boot sector, unikernel).
+        /// Mutually exclusive with --kernel.
+        #[arg(long, value_name = "PATH", conflicts_with = "kernel")]
+        image: Option<PathBuf>,
     },
 
     /// Start a Type 2 VM
@@ -605,6 +625,31 @@ async fn handle_t1(command: T1Commands) -> Result<()> {
     Ok(())
 }
 
+/// Build a [`BootSource`] from the `t2 create` boot flags.
+///
+/// `--kernel` and `--image` are mutually exclusive at the clap level, and
+/// `--initrd` / `--cmdline` require `--kernel`, so at most one arm applies.
+/// Returns `None` when no boot flag was given — a VM with no guest code.
+fn build_boot_source(
+    kernel: Option<PathBuf>,
+    initrd: Option<PathBuf>,
+    cmdline: Option<String>,
+    image: Option<PathBuf>,
+) -> Option<BootSource> {
+    if let Some(kernel) = kernel {
+        let mut source = BootSource::linux(kernel);
+        if let Some(initrd) = initrd {
+            source = source.with_initrd(initrd);
+        }
+        if let Some(cmdline) = cmdline {
+            source = source.with_cmdline(cmdline);
+        }
+        return Some(source);
+    }
+
+    image.map(BootSource::raw)
+}
+
 /// Handle Type 2 (hosted) hypervisor commands
 async fn handle_t2(command: T2Commands) -> Result<()> {
     println!("{}", "[T2 Hosted Mode]".cyan().bold());
@@ -618,10 +663,18 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
             memory,
             gpu,
             network,
+            kernel,
+            initrd,
+            cmdline,
+            image,
         } => {
             println!("{}", "Creating VM...".green().bold());
 
-            let record = manager.create_vm(&name, cpu, memory, gpu, network).await?;
+            let boot = build_boot_source(kernel, initrd, cmdline, image);
+
+            let record = manager
+                .create_bootable_vm(&name, cpu, memory, gpu, network, boot)
+                .await?;
 
             println!("  Name:    {}", record.name.cyan());
             println!("  CPUs:    {}", record.cpu_cores);
@@ -643,10 +696,28 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
                 }
             );
 
+            match &record.boot {
+                Some(source) => println!(
+                    "  Boot:    {} ({})",
+                    source.image_path().display(),
+                    source.protocol()
+                ),
+                None => println!("  Boot:    {}", "none — no guest code".yellow()),
+            }
+
             println!(
                 "{}",
                 format!("✓ VM '{}' created successfully", name).green()
             );
+
+            if record.boot.is_none() {
+                println!(
+                    "{}",
+                    "  Note: this VM has no boot image, so starting it will not execute a \
+                     guest. Recreate it with --kernel or --image to boot one."
+                        .yellow()
+                );
+            }
         }
 
         T2Commands::Start { name } => {
@@ -900,6 +971,9 @@ mod tests {
                         memory,
                         gpu,
                         network,
+                        kernel,
+                        image,
+                        ..
                     },
             } => {
                 assert_eq!(name, "myvm");
@@ -907,6 +981,8 @@ mod tests {
                 assert_eq!(memory, 4);
                 assert!(!gpu);
                 assert!(!network);
+                assert!(kernel.is_none());
+                assert!(image.is_none());
             }
             _ => panic!("Expected T2 Create"),
         }

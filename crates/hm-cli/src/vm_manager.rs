@@ -5,7 +5,7 @@
 
 use anyhow::{Context, Result};
 use hv2_agent::AgentVM;
-use hv2_core::VMState;
+use hv2_core::{BootSource, VMState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -25,6 +25,13 @@ pub struct VmRecord {
     pub gpu_enabled: bool,
     /// Networking enabled
     pub network_enabled: bool,
+    /// What this VM boots, if anything.
+    ///
+    /// `None` — the default, and what every registry written before boot
+    /// sources existed deserializes to — means the VM is created but has no
+    /// guest code, so `hm t2 start` brings it up without executing anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub boot: Option<BootSource>,
     /// Current state (persisted)
     pub state: VmState,
     /// Creation timestamp
@@ -166,7 +173,10 @@ impl VmManager {
         Ok(())
     }
 
-    /// Create a new VM
+    /// Create a new VM with no boot source.
+    ///
+    /// The VM is registered and can be started, but has no guest code to run.
+    /// Use [`VmManager::create_bootable_vm`] to give it one.
     pub async fn create_vm(
         &self,
         name: &str,
@@ -175,6 +185,40 @@ impl VmManager {
         gpu_enabled: bool,
         network_enabled: bool,
     ) -> Result<VmRecord> {
+        self.create_bootable_vm(
+            name,
+            cpu_cores,
+            memory_gb,
+            gpu_enabled,
+            network_enabled,
+            None,
+        )
+        .await
+    }
+
+    /// Create a new VM, optionally with a boot source.
+    ///
+    /// The boot source is validated here rather than at start time, so
+    /// `hm t2 create --kernel /wrong/path` fails immediately instead of
+    /// registering a VM that cannot start.
+    pub async fn create_bootable_vm(
+        &self,
+        name: &str,
+        cpu_cores: u32,
+        memory_gb: u64,
+        gpu_enabled: bool,
+        network_enabled: bool,
+        boot: Option<BootSource>,
+    ) -> Result<VmRecord> {
+        if let Some(source) = &boot {
+            source.load().with_context(|| {
+                format!(
+                    "cannot create VM '{name}': its boot image {} is unusable",
+                    source.image_path().display()
+                )
+            })?;
+        }
+
         let mut registry = self.registry.write().await;
 
         // Check if VM already exists
@@ -189,6 +233,7 @@ impl VmManager {
             memory_gb,
             gpu_enabled,
             network_enabled,
+            boot,
             state: VmState::Created,
             created_at: now,
             updated_at: now,
@@ -226,21 +271,42 @@ impl VmManager {
             anyhow::bail!("VM '{}' is already running", name);
         }
 
-        // Build and start the AgentVM
-        let vm = AgentVM::builder()
+        // Build the AgentVM
+        let mut builder = AgentVM::builder()
             .name(name)
             .cpu_cores(record.cpu_cores)
             .memory_gb(record.memory_gb)
             .enable_gpu(record.gpu_enabled)
             .enable_networking(record.network_enabled)
-            .with_tracing()
+            .with_tracing();
+
+        if let Some(source) = record.boot.clone() {
+            builder = builder.boot(source);
+        }
+
+        let vm = builder
             .build()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to build VM: {}", e))?;
 
-        vm.start()
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to start VM: {}", e))?;
+        if record.boot.is_some() {
+            // Provision the backend partition, load the boot images, and run
+            // the guest.
+            vm.launch()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to launch VM: {}", e))?;
+        } else {
+            // Nothing to execute: bring the VM up without a guest, which is
+            // what this command has always done for a VM with no boot image.
+            vm.start()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to start VM: {}", e))?;
+            tracing::warn!(
+                "VM '{}' has no boot image, so no guest code is executing. \
+                 Recreate it with --kernel or --image to boot a guest.",
+                name
+            );
+        }
 
         // Store active VM
         {
@@ -610,6 +676,7 @@ mod tests {
             memory_gb: 16,
             gpu_enabled: true,
             network_enabled: true,
+            boot: None,
             state: VmState::Running,
             created_at: now,
             updated_at: now,
@@ -699,6 +766,7 @@ mod tests {
             memory_gb: 4,
             gpu_enabled: false,
             network_enabled: false,
+            boot: None,
             state: VmState::Running,
             created_at: now,
             updated_at: now,
