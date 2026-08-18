@@ -22,13 +22,39 @@ impl SnapshotId {
         self.0
     }
 
-    /// Generate a new unique ID based on timestamp
+    /// Generate a new ID: the current time in nanoseconds, forced to be
+    /// strictly greater than every ID this process has already handed out.
+    ///
+    /// The bare timestamp was not unique. Two snapshots created within the
+    /// same clock tick received the same ID, and since a snapshot's parent is
+    /// referenced by ID, an incremental snapshot could end up recorded as its
+    /// own parent -- which turned `SnapshotManager::get_chain` into an
+    /// unbounded loop that allocated until the process was killed. macOS has
+    /// coarse enough `SystemTime` granularity to hit this reliably; Linux and
+    /// Windows did not, so it only ever showed up on one platform.
+    ///
+    /// Ordering elsewhere keys off `created_at`, not this value, so the clamp
+    /// costs nothing but the guarantee.
     pub fn generate() -> Self {
+        use std::sync::atomic::{AtomicU64, Ordering};
         use std::time::UNIX_EPOCH;
-        let duration = SystemTime::now()
+
+        static LAST: AtomicU64 = AtomicU64::new(0);
+
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap_or_default();
-        Self(duration.as_nanos() as u64)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+
+        // CAS loop: whoever wins publishes `max(now, last + 1)`, so concurrent
+        // callers cannot collide either.
+        let previous = LAST
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |last| {
+                Some(now.max(last.saturating_add(1)))
+            })
+            .unwrap_or(0);
+
+        Self(now.max(previous.saturating_add(1)))
     }
 }
 

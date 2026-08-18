@@ -473,8 +473,21 @@ impl SnapshotManager {
     pub fn get_chain(&self, id: &SnapshotId) -> Vec<&SnapshotInfo> {
         let mut chain = Vec::new();
         let mut current_id = Some(*id);
+        // A parent link that cycles would otherwise push forever and allocate
+        // until the process is killed. A chain cannot legitimately be longer
+        // than the catalog, so that bound is both correct and cheap; it makes
+        // a malformed catalog return a truncated chain instead of an OOM.
+        let mut visited = std::collections::HashSet::with_capacity(self.catalog.len());
 
         while let Some(id) = current_id {
+            if !visited.insert(id) {
+                tracing::warn!(
+                    "snapshot chain for {} contains a cycle at {}; truncating",
+                    id,
+                    id
+                );
+                break;
+            }
             if let Some(info) = self.catalog.get(&id) {
                 chain.push(info);
                 current_id = info.parent_id;
@@ -752,6 +765,41 @@ mod tests {
         assert_eq!(chain[0].id, base_id);
         assert_eq!(chain[1].id, inc1_id);
         assert_eq!(chain[2].id, inc2_id);
+    }
+
+    #[test]
+    fn ids_generated_back_to_back_are_distinct() {
+        // The bare-timestamp generator collided whenever two snapshots landed
+        // in the same clock tick, which made an incremental snapshot its own
+        // parent and turned get_chain into an unbounded allocation.
+        let ids: Vec<_> = (0..1000).map(|_| SnapshotId::generate()).collect();
+        let unique: std::collections::HashSet<_> = ids.iter().copied().collect();
+        assert_eq!(unique.len(), ids.len(), "generated IDs must be unique");
+        assert!(
+            ids.windows(2).all(|w| w[0].value() < w[1].value()),
+            "generated IDs must be strictly increasing"
+        );
+    }
+
+    #[test]
+    fn get_chain_survives_a_cycle() {
+        // A lookup must not be able to exhaust memory, however the catalog got
+        // into this state.
+        let mut manager = SnapshotManager::with_defaults();
+        let id = manager
+            .begin_snapshot(CreateSnapshotOptions::full())
+            .unwrap();
+        manager.complete_snapshot().unwrap();
+
+        // Point the snapshot at itself.
+        manager.catalog.get_mut(&id).unwrap().parent_id = Some(id);
+
+        let chain = manager.get_chain(&id);
+        assert_eq!(
+            chain.len(),
+            1,
+            "a self-parented snapshot yields itself once"
+        );
     }
 
     #[test]
