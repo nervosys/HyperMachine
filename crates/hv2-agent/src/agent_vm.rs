@@ -1,7 +1,7 @@
 //! AI-scriptable VM with enhanced capabilities for autonomous agents
 
 use crate::{AgentError, CapabilitySet, Result, Sandbox, SandboxConfig, ScriptEngine};
-use hv2_core::{VMConfig, VMState, VM};
+use hv2_core::{BootSource, VMConfig, VMState, VM};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -55,8 +55,52 @@ impl AgentVMBuilder {
         self
     }
 
+    /// Set what this VM boots.
+    ///
+    /// Without one the VM is created with vCPUs and empty guest memory, so
+    /// [`AgentVM::launch`] has nothing to execute.
+    pub fn boot(mut self, source: BootSource) -> Self {
+        self.config.boot = Some(source);
+        self
+    }
+
+    /// Boot a Linux kernel, with an optional initrd and command line.
+    pub fn boot_linux(
+        mut self,
+        kernel: impl Into<std::path::PathBuf>,
+        initrd: Option<impl Into<std::path::PathBuf>>,
+        cmdline: impl Into<String>,
+    ) -> Self {
+        let mut source = BootSource::linux(kernel).with_cmdline(cmdline);
+        if let Some(initrd) = initrd {
+            source = source.with_initrd(initrd);
+        }
+        self.config.boot = Some(source);
+        self
+    }
+
     pub fn script_timeout(mut self, timeout: Duration) -> Self {
         self.script_timeout = timeout;
+        self
+    }
+
+    /// What scripts on this VM are allowed to do.
+    ///
+    /// Defaults to [`CapabilitySet::default`] (`VmRead` + `Metrics`).
+    /// [`ScriptEngine`] requires `VmRead`, so a set without it refuses every
+    /// script.
+    pub fn capabilities(mut self, capabilities: CapabilitySet) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    /// Resource limits for script execution.
+    ///
+    /// `max_cpu_time` bounds a script alongside [`Self::script_timeout`] — the
+    /// stricter of the two wins. See [`Sandbox`] for what this does and does
+    /// not enforce.
+    pub fn sandbox(mut self, config: SandboxConfig) -> Self {
+        self.sandbox_config = config;
         self
     }
 
@@ -96,16 +140,32 @@ impl AgentVM {
         AgentVMBuilder::new()
     }
 
-    /// Execute an AI agent script
+    /// The wall-clock bound applied to a script.
+    ///
+    /// Two settings can bound a script — the builder's `script_timeout` and the
+    /// sandbox's `max_cpu_time` — so the stricter one wins. Honouring only one
+    /// would silently ignore a caller who tightened the other.
+    pub fn effective_script_timeout(&self) -> Duration {
+        self.script_timeout
+            .min(Duration::from_secs(self.sandbox.config().max_cpu_time))
+    }
+
+    /// Evaluate a Rhai script on the host against a read-only view of this VM.
+    ///
+    /// This does **not** execute anything inside the guest — see the
+    /// [`script`](crate::script) module docs.
     pub async fn execute_agent_script(&self, script: &str) -> Result<serde_json::Value> {
         tracing::info!("Executing agent script");
 
-        // Run script in sandbox with timeout
+        // Bounded by wall-clock time and by the engine's own operation limit.
+        // The `Sandbox` is a policy object, not OS-level containment: what keeps
+        // a script off the network and filesystem is that Rhai's default engine
+        // registers no I/O at all.
         let vm = Arc::clone(&self.vm);
         let script_engine = Arc::clone(&self.script_engine);
         let script = script.to_string();
 
-        let result = timeout(self.script_timeout, async move {
+        let result = timeout(self.effective_script_timeout(), async move {
             script_engine.execute(&script, vm).await
         })
         .await
@@ -120,11 +180,31 @@ impl AgentVM {
         self.vm.state()
     }
 
-    /// Start the VM
+    /// Start the VM without executing guest code.
+    ///
+    /// This moves the VM into the `Running` state and makes it visible to the
+    /// rest of the stack, but nothing drives its vCPUs. Use [`Self::launch`] to
+    /// actually boot the guest.
     pub async fn start(&self) -> Result<()> {
         self.vm.start().await?;
         *self.started_at.write().await = Some(Instant::now());
         Ok(())
+    }
+
+    /// Provision the VM on its hypervisor backend, load its boot source, and
+    /// run the guest.
+    ///
+    /// On return the guest is executing on a background task. This is what a
+    /// CLI or API "start this VM" handler wants.
+    pub async fn launch(&self) -> Result<()> {
+        self.vm.launch().await?;
+        *self.started_at.write().await = Some(Instant::now());
+        Ok(())
+    }
+
+    /// Whether this VM has a boot source configured.
+    pub fn has_boot_source(&self) -> bool {
+        self.vm.config().boot.is_some()
     }
 
     /// Stop the VM
@@ -203,6 +283,60 @@ mod tests {
         };
 
         assert_eq!(vm.state(), VMState::Created);
+    }
+
+    #[tokio::test]
+    async fn the_stricter_of_the_two_script_bounds_wins() {
+        // Neither setting had a builder method before, so both were pinned at
+        // their defaults and `SandboxConfig` bounded nothing.
+        let tight_sandbox = SandboxConfig {
+            max_cpu_time: 5,
+            ..Default::default()
+        };
+        let Ok(vm) = AgentVM::builder()
+            .name("bounded")
+            .script_timeout(Duration::from_secs(600))
+            .sandbox(tight_sandbox)
+            .build()
+            .await
+        else {
+            eprintln!("skipping: no hypervisor backend available");
+            return;
+        };
+
+        assert_eq!(vm.effective_script_timeout(), Duration::from_secs(5));
+
+        // ...and the same in the other direction.
+        let Ok(vm) = AgentVM::builder()
+            .name("bounded-other-way")
+            .script_timeout(Duration::from_secs(2))
+            .build()
+            .await
+        else {
+            return;
+        };
+        assert_eq!(vm.effective_script_timeout(), Duration::from_secs(2));
+    }
+
+    #[tokio::test]
+    async fn a_vm_built_without_vm_read_refuses_scripts() {
+        // The capability gate is only meaningful if a caller can actually
+        // install a set that lacks `VmRead`.
+        let Ok(vm) = AgentVM::builder()
+            .name("uncapable")
+            .capabilities(CapabilitySet::new())
+            .build()
+            .await
+        else {
+            eprintln!("skipping: no hypervisor backend available");
+            return;
+        };
+
+        let err = vm
+            .execute_agent_script("vcpu_count")
+            .await
+            .expect_err("must refuse");
+        assert!(err.to_string().contains("VmRead"), "got: {err}");
     }
 
     #[tokio::test]

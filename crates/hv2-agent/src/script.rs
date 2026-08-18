@@ -1,6 +1,18 @@
-//! Script execution engine for AI agents
+//! Script execution engine for AI agents.
+//!
+//! # What this does and does not do
+//!
+//! Scripts run **on the host**, in an embedded Rhai interpreter, with a
+//! read-only view of one VM pushed into scope. Nothing here executes inside the
+//! guest: there is no in-guest agent and no serial-console protocol, so a script
+//! can observe a VM's configuration and state but cannot run a command in the
+//! operating system the VM is booting. An agent choosing this operation to
+//! "run something in the VM" would be choosing the wrong tool.
+//!
+//! Execution requires [`Capability::VmRead`], matching the read-only VM data the
+//! scope exposes.
 
-use crate::{AgentError, CapabilitySet, Result};
+use crate::{AgentError, Capability, CapabilitySet, Result};
 use hv2_core::VM;
 use parking_lot::RwLock;
 use rhai::{Engine, Scope};
@@ -35,8 +47,20 @@ impl ScriptEngine {
         }
     }
 
-    /// Execute a script with VM context
+    /// Execute a script against a read-only view of `vm`, on the host.
+    ///
+    /// Requires [`Capability::VmRead`]. See the module docs for why this cannot
+    /// run anything inside the guest.
     pub async fn execute(&self, script: &str, vm: Arc<VM>) -> Result<serde_json::Value> {
+        // The engine was constructed with a capability set; until now nothing
+        // consulted it, so a set deliberately stripped of `VmRead` still got a
+        // full view of the VM.
+        if !self.capabilities.has(Capability::VmRead) {
+            return Err(AgentError::Script(
+                "script execution requires the VmRead capability".to_string(),
+            ));
+        }
+
         let engine = self.engine.read();
         let mut scope = Scope::new();
 
@@ -111,6 +135,34 @@ mod tests {
                 None
             }
         }
+    }
+
+    #[tokio::test]
+    async fn execution_requires_the_vm_read_capability() {
+        let Some(vm) = vm_or_skip() else {
+            return;
+        };
+        // An empty set is what a caller uses to say "this script gets nothing".
+        // Before the gate existed it got the same VM view as a full set.
+        let engine = ScriptEngine::new(CapabilitySet::new());
+
+        let err = engine
+            .execute("vcpu_count", vm)
+            .await
+            .expect_err("an uncapable engine must refuse");
+
+        assert!(err.to_string().contains("VmRead"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn a_readonly_capability_set_can_execute() {
+        let Some(vm) = vm_or_skip() else {
+            return;
+        };
+        let engine = ScriptEngine::new(CapabilitySet::readonly());
+
+        let result = engine.execute("1 + 1", vm).await.unwrap();
+        assert_eq!(result, serde_json::json!(2));
     }
 
     #[tokio::test]

@@ -1,7 +1,20 @@
-//! Resource limits and enforcement for AI agent operations
+//! Resource quotas for AI agent operations.
 //!
-//! This module provides configurable resource quotas and real-time enforcement
-//! to prevent runaway agents from consuming excessive system resources.
+//! Configurable quotas plus the primitives that check them: [`RateLimiter`],
+//! [`ConcurrencyLimiter`], and [`TokenBucket`].
+//!
+//! # These enforce only where a caller consults them
+//!
+//! Nothing here installs itself. A limiter constrains an operation exactly when
+//! that operation calls `try_acquire` (or equivalent) and honours the result —
+//! there is no ambient interception. In particular **the MCP tool path in
+//! [`mcp`](crate::mcp) does not consult this module**: an agent's tool calls are
+//! gated by capabilities, VM ownership, an optional
+//! [`PolicySet`](crate::policies::PolicySet), and `McpConfig::rate_limit` — that
+//! last one being its own per-session limiter, not this module's
+//! [`RateLimiter`]. Treat this as a toolkit for an embedder building its own
+//! enforcement point, not as a guarantee that a runaway agent is already
+//! bounded.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};

@@ -1,4 +1,20 @@
-//! Sandbox for safe script execution
+//! Resource and permission policy for script execution.
+//!
+//! # This is a policy object, not OS-level containment
+//!
+//! [`Sandbox`] holds limits and answers questions about them. It does not
+//! install seccomp filters, spawn an isolated process, or account for memory —
+//! [`Sandbox::check_permission`] and [`Sandbox::validate_resources`] only take
+//! effect where a caller consults them, and a caller that never asks is never
+//! constrained.
+//!
+//! What actually keeps an agent script off the network and filesystem is that
+//! [`ScriptEngine`](crate::ScriptEngine) builds a Rhai engine that registers no
+//! I/O functions at all, so there is nothing for a script to call. `max_cpu_time`
+//! is enforced, as a wall-clock bound, by
+//! [`AgentVM::effective_script_timeout`](crate::AgentVM::effective_script_timeout);
+//! `max_memory` and `allowed_syscalls` describe intent for a future
+//! process-isolated backend and constrain nothing today.
 
 use crate::Result;
 use serde::{Deserialize, Serialize};
@@ -6,19 +22,24 @@ use serde::{Deserialize, Serialize};
 /// Sandbox configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxConfig {
-    /// Maximum memory usage in bytes
+    /// Maximum memory usage in bytes. Declarative only — nothing measures a
+    /// script's memory today.
     pub max_memory: u64,
 
-    /// Maximum CPU time in seconds
+    /// Maximum CPU time in seconds. Enforced as a wall-clock bound on script
+    /// execution, alongside `AgentVM`'s `script_timeout`; the stricter wins.
     pub max_cpu_time: u64,
 
-    /// Enable network access
+    /// Enable network access. Moot for the Rhai engine, which registers no
+    /// networking for a script to reach.
     pub allow_network: bool,
 
-    /// Enable filesystem access
+    /// Enable filesystem access. Moot for the Rhai engine, which registers no
+    /// file I/O for a script to reach.
     pub allow_filesystem: bool,
 
-    /// Allowed syscalls
+    /// Allowed syscalls. Declarative only — there is no process boundary to
+    /// filter, so nothing consults this.
     pub allowed_syscalls: Vec<String>,
 }
 

@@ -42,6 +42,7 @@ pub mod agent_vm;
 pub mod capabilities;
 pub mod communication;
 pub mod events;
+pub mod gpu_host;
 pub mod learning;
 pub mod limits;
 pub mod mcp;
@@ -59,6 +60,7 @@ pub mod state;
 pub mod tasks;
 pub mod telemetry;
 pub mod tools;
+pub mod vm_host;
 
 pub use actions::{
     ActionCategory, ActionError, ActionExecutor, ActionQueue, ActionRequest, ActionResponse,
@@ -76,6 +78,7 @@ pub use events::{
     EventAggregator, EventBus, EventCategory, EventError, EventFilter, EventProcessor,
     EventReceiver, EventResult, EventSeverity, VmEvent,
 };
+pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
 pub use learning::{
     ActionValue, Experience, ExperienceBuffer, LearningConfig, LearningError, LearningRateSchedule,
     LearningResult, LearningState, LearningStats, LearningSystem, Reward, SharedLearning, Skill,
@@ -132,6 +135,7 @@ pub use tools::{
     ToolCategory, ToolChain, ToolChainStep, ToolDefinition, ToolError, ToolHandler, ToolParameter,
     ToolRegistry, ToolResult,
 };
+pub use vm_host::{LocalVmHost, VmDescriptor, VmHost, VmMetrics, VmSpec};
 
 // MCP interface for AI agent tool-use
 pub use mcp::{

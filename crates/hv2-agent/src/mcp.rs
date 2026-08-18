@@ -69,6 +69,24 @@ pub struct McpServer {
     audit_log: RwLock<VecDeque<AuditEntry>>,
     /// Optional hook invoked when a session is closed/reclaimed.
     teardown_hook: RwLock<Option<TeardownHook>>,
+    /// Where the `vm.*` tools dispatch.
+    ///
+    /// `None` — the default — keeps the server's own bookkeeping, so tool
+    /// schemas, capability scoping, and agent logic are exercisable with no
+    /// hypervisor present. Install one with [`McpServer::set_vm_host`] and the
+    /// same tool calls drive real VMs.
+    vm_host: RwLock<Option<Arc<dyn crate::vm_host::VmHost>>>,
+    /// Where the `gpu.*` tools dispatch, on the same terms as `vm_host`.
+    gpu_host: RwLock<Option<Arc<dyn crate::gpu_host::GpuHost>>>,
+    /// Governance evaluated before every tool call.
+    ///
+    /// `None` — the default — leaves capabilities and VM ownership as the only
+    /// gate, which is what the server has always done. Install a set with
+    /// [`McpServer::set_policy_set`] and every call is additionally checked
+    /// against it. Note that [`PolicySet`](crate::policies::PolicySet) denies by
+    /// default, so an installed set must explicitly allow what agents may do —
+    /// including any tool added later, which a set written today cannot name.
+    policies: RwLock<Option<Arc<crate::policies::PolicySet>>>,
 }
 
 /// MCP Server configuration
@@ -336,11 +354,161 @@ impl McpServer {
             config,
             audit_log: RwLock::new(VecDeque::new()),
             teardown_hook: RwLock::new(None),
+            vm_host: RwLock::new(None),
+            gpu_host: RwLock::new(None),
+            policies: RwLock::new(None),
         };
 
         // Register default tools
         server.register_default_tools();
         server
+    }
+
+    /// Point the `vm.*` tools at a real hypervisor.
+    ///
+    /// Until this is called the server keeps its own per-session VM records:
+    /// the tools validate parameters and enforce the lifecycle state machine,
+    /// but no guest is created. After it, `vm.create` allocates a VM and
+    /// `vm.start` boots it.
+    ///
+    /// Ownership is still enforced by the server — a session may only act on
+    /// VMs it created — so a host shared between sessions stays isolated.
+    pub fn set_vm_host(&self, host: Arc<dyn crate::vm_host::VmHost>) {
+        *self.vm_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed VM host, if any.
+    pub fn vm_host(&self) -> Option<Arc<dyn crate::vm_host::VmHost>> {
+        self.vm_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Point the `gpu.*` tools at a real GPU fabric.
+    ///
+    /// Without one the server tracks devices per session, which cannot model
+    /// the thing that actually matters about GPUs: a physical device attached
+    /// to one VM is unavailable to every other, across every session. A host
+    /// enforces that exclusivity fleet-wide.
+    pub fn set_gpu_host(&self, host: Arc<dyn crate::gpu_host::GpuHost>) {
+        *self.gpu_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed GPU host, if any.
+    pub fn gpu_host(&self) -> Option<Arc<dyn crate::gpu_host::GpuHost>> {
+        self.gpu_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Govern every tool call with a policy set.
+    ///
+    /// Capabilities answer "may this agent use this kind of tool at all"; a
+    /// policy set answers "may this agent take this action, on this resource,
+    /// right now" — the questions capabilities cannot express, such as denying
+    /// destructive actions outside a maintenance window.
+    ///
+    /// [`PolicySet`](crate::policies::PolicySet) denies by default. A set that
+    /// does not name a tool therefore blocks it, which is the safe direction for
+    /// tools added after the set was written, but does mean an installed policy
+    /// must be kept current with the registry.
+    pub fn set_policy_set(&self, policies: Arc<crate::policies::PolicySet>) {
+        *self.policies.write().unwrap_or_else(|e| e.into_inner()) = Some(policies);
+    }
+
+    /// The installed policy set, if any.
+    pub fn policy_set(&self) -> Option<Arc<crate::policies::PolicySet>> {
+        self.policies
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Stop governing tool calls, returning to capabilities and ownership only.
+    pub fn clear_policy_set(&self) {
+        *self.policies.write().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    /// The action and resource a tool call represents, for policy evaluation.
+    ///
+    /// A tool the mapping does not recognise becomes
+    /// [`PolicyAction::Custom`](crate::policies::PolicyAction::Custom) carrying
+    /// the tool name, so a policy can still speak about it by name and a
+    /// deny-by-default set still refuses it.
+    fn policy_request(
+        tool_name: &str,
+        params: &JsonValue,
+    ) -> (crate::policies::PolicyAction, crate::policies::ResourceId) {
+        use crate::policies::{PolicyAction, ResourceId};
+
+        let action = match tool_name {
+            "vm.create" => PolicyAction::VmCreate,
+            "vm.start" => PolicyAction::VmStart,
+            "vm.stop" => PolicyAction::VmStop,
+            "vm.pause" => PolicyAction::VmPause,
+            "vm.resume" => PolicyAction::VmResume,
+            "vm.delete" => PolicyAction::VmDelete,
+            "vm.resize" => PolicyAction::ResourceModify,
+            "vm.list" | "vm.status" | "vm.metrics" | "gpu.list" | "snapshot.list"
+            | "agent.list" | "system.info" | "system.health" => PolicyAction::ResourceRead,
+            "snapshot.create" => PolicyAction::SnapshotCreate,
+            "snapshot.restore" => PolicyAction::SnapshotRestore,
+            "network.attach" => PolicyAction::NetworkAttach,
+            "network.detach" => PolicyAction::NetworkDetach,
+            "gpu.attach" | "gpu.register" => PolicyAction::ResourceAllocate,
+            "gpu.detach" => PolicyAction::ResourceDeallocate,
+            other => PolicyAction::Custom(other.to_string()),
+        };
+
+        // The namespace before the dot is the resource type, so a rule can be
+        // written against `vm` or `gpu` as a whole with `ResourceId::wildcard`.
+        let resource_type = tool_name.split('.').next().unwrap_or(tool_name);
+        let identifier = ["vm_id", "device_id", "snapshot_id", "name"]
+            .iter()
+            .find_map(|key| params.get(*key).and_then(|v| v.as_str()));
+
+        let resource = match identifier {
+            Some(id) => ResourceId::new(resource_type, id),
+            None => ResourceId::wildcard(resource_type),
+        };
+
+        (action, resource)
+    }
+
+    /// Build the evaluation context for `session`, stamped with the current
+    /// UTC wall-clock time so time-window rules can fire.
+    fn policy_context(session: &AgentSession) -> crate::policies::PolicyContext {
+        let secs = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let days = secs / 86_400;
+        let seconds_today = secs % 86_400;
+        // 1970-01-01 was a Thursday, and `TimeWindow` counts 0 = Sunday.
+        let day_of_week = ((days + 4) % 7) as u8;
+
+        crate::policies::PolicyContext::new(&session.agent_id).with_time(
+            (seconds_today / 3600) as u8,
+            ((seconds_today % 3600) / 60) as u8,
+            day_of_week,
+        )
+    }
+
+    /// Whether a session may act on `vm_id`.
+    ///
+    /// With a shared host, the VM's existence is no longer proof that the
+    /// caller created it — so ownership is checked explicitly before any tool
+    /// touches a VM.
+    fn session_owns(session: &AgentSession, vm_id: &str) -> bool {
+        session
+            .owned_vms
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|id| id == vm_id)
     }
 
     /// Register the default HyperMachine tools
@@ -384,9 +552,34 @@ impl McpServer {
                             "description": "Enable network connectivity",
                             "default": true
                         },
-                        "boot_image": {
-                            "type": "string",
-                            "description": "Path to boot disk image (optional)"
+                        "boot": {
+                            "type": "object",
+                            "description": "What the VM boots. Omit for a VM with no guest \
+                                            code — it can be started, but nothing executes.",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["linux", "multiboot", "raw"],
+                                    "description": "Boot protocol"
+                                },
+                                "kernel": {
+                                    "type": "string",
+                                    "description": "Path to the kernel image (linux, multiboot)"
+                                },
+                                "initrd": {
+                                    "type": "string",
+                                    "description": "Path to an initial ramdisk (linux)"
+                                },
+                                "cmdline": {
+                                    "type": "string",
+                                    "description": "Kernel command line (linux, multiboot)"
+                                },
+                                "image": {
+                                    "type": "string",
+                                    "description": "Path to a raw image loaded verbatim (raw)"
+                                }
+                            },
+                            "required": ["type"]
                         }
                     },
                     "required": ["name"]
@@ -1436,10 +1629,29 @@ impl McpServer {
             }
         }
 
+        // Governance, when an operator installed a policy set. A denial flows
+        // through the same result path as a failed call rather than returning
+        // early, so it lands in the audit log — an unrecorded denial is the one
+        // an incident review most needs to see.
+        let denial = self.policy_set().and_then(|policies| {
+            let (action, resource) = Self::policy_request(&request.tool, &request.parameters);
+            match policies.evaluate(&action, &resource, &Self::policy_context(session)) {
+                crate::policies::PolicyEffect::Allow => None,
+                crate::policies::PolicyEffect::Deny => Some(format!(
+                    "Denied by policy '{}': {:?} on {}:{}",
+                    policies.name, action, resource.resource_type, resource.identifier
+                )),
+            }
+        });
+
         // Execute tool via the dispatch table in execute_tool_impl
-        let result = self
-            .execute_tool_impl(&request.tool, &request.parameters, session)
-            .await;
+        let result = match denial {
+            Some(error) => Err(error),
+            None => {
+                self.execute_tool_impl(&request.tool, &request.parameters, session)
+                    .await
+            }
+        };
 
         let response = match result {
             Ok(value) => ToolCallResponse {
@@ -1483,6 +1695,327 @@ impl McpServer {
         response
     }
 
+    /// Run a VM lifecycle tool against an installed [`VmHost`](crate::vm_host::VmHost).
+    ///
+    /// Returns `None` when there is no host, or when the tool has no host
+    /// equivalent — in both cases the caller falls through to the server's own
+    /// session-state handling.
+    async fn dispatch_to_vm_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+        session: &AgentSession,
+    ) -> Option<Result<JsonValue, String>> {
+        let host = self.vm_host()?;
+
+        if !matches!(
+            tool_name,
+            "vm.create"
+                | "vm.start"
+                | "vm.stop"
+                | "vm.pause"
+                | "vm.resume"
+                | "vm.delete"
+                | "vm.status"
+                | "vm.list"
+                | "vm.metrics"
+        ) {
+            return None;
+        }
+
+        Some(
+            self.run_vm_host_tool(host.as_ref(), tool_name, params, session)
+                .await,
+        )
+    }
+
+    /// The body of [`Self::dispatch_to_vm_host`], once a host is known to apply.
+    async fn run_vm_host_tool(
+        &self,
+        host: &dyn crate::vm_host::VmHost,
+        tool_name: &str,
+        params: &JsonValue,
+        session: &AgentSession,
+    ) -> Result<JsonValue, String> {
+        use crate::vm_host::VmSpec;
+
+        /// Pull `vm_id` out and confirm this session created that VM.
+        fn owned_vm_id<'a>(
+            params: &'a JsonValue,
+            session: &AgentSession,
+        ) -> Result<&'a str, String> {
+            let vm_id = params
+                .get("vm_id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing required parameter: vm_id")?;
+            if !McpServer::session_owns(session, vm_id) {
+                // Same message as a genuinely absent VM: a session should not
+                // be able to probe for the existence of another's VMs.
+                return Err(format!("VM not found: {vm_id}"));
+            }
+            Ok(vm_id)
+        }
+
+        /// Keep the session's mirror of a VM in step with the host's view, so
+        /// tools that read session state (`vm.metrics`, snapshots) still work.
+        fn mirror(session: &AgentSession, descriptor: &crate::vm_host::VmDescriptor) -> JsonValue {
+            let value = serde_json::to_value(descriptor).unwrap_or(JsonValue::Null);
+            session
+                .state
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(format!("vm:{}", descriptor.vm_id), value.clone());
+            value
+        }
+
+        match tool_name {
+            "vm.create" => {
+                let name = params
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: name")?;
+
+                let mut spec = VmSpec::new(name);
+                if let Some(cores) = params.get("cpu_cores").and_then(|v| v.as_u64()) {
+                    spec.cpu_cores = cores as u32;
+                }
+                if let Some(memory) = params.get("memory_gb").and_then(|v| v.as_u64()) {
+                    spec.memory_gb = memory;
+                }
+                if let Some(boot) = params.get("boot") {
+                    spec.boot = serde_json::from_value(boot.clone())
+                        .map_err(|e| format!("Invalid boot source: {e}"))?;
+                }
+
+                let descriptor = host.create(spec).await?;
+                session
+                    .owned_vms
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(descriptor.vm_id.clone());
+                Ok(mirror(session, &descriptor))
+            }
+
+            "vm.start" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let descriptor = host.start(vm_id).await?;
+                Ok(mirror(session, &descriptor))
+            }
+
+            "vm.stop" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let force = params
+                    .get("force")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let descriptor = host.stop(vm_id, force).await?;
+                let mut value = mirror(session, &descriptor);
+                value["force"] = json!(force);
+                Ok(value)
+            }
+
+            "vm.pause" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let descriptor = host.pause(vm_id).await?;
+                Ok(mirror(session, &descriptor))
+            }
+
+            "vm.resume" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let descriptor = host.resume(vm_id).await?;
+                Ok(mirror(session, &descriptor))
+            }
+
+            "vm.delete" => {
+                let vm_id = owned_vm_id(params, session)?;
+                host.delete(vm_id).await?;
+                session
+                    .state
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(&format!("vm:{vm_id}"));
+                session
+                    .owned_vms
+                    .write()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .retain(|id| id != vm_id);
+                Ok(json!({ "vm_id": vm_id, "status": "deleted" }))
+            }
+
+            "vm.status" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let descriptor = host.status(vm_id).await?;
+                Ok(mirror(session, &descriptor))
+            }
+
+            "vm.list" => {
+                // The host may be shared, so report only this session's VMs.
+                let owned = session
+                    .owned_vms
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone();
+                let vms: Vec<JsonValue> = host
+                    .list()
+                    .await?
+                    .into_iter()
+                    .filter(|v| owned.contains(&v.vm_id))
+                    .map(|v| serde_json::to_value(v).unwrap_or(JsonValue::Null))
+                    .collect();
+                let total = vms.len();
+                Ok(json!({ "vms": vms, "total": total }))
+            }
+
+            "vm.metrics" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let metrics = host.metrics(vm_id).await?;
+                serde_json::to_value(metrics).map_err(|e| e.to_string())
+            }
+
+            other => Err(format!("Tool has no VM-host implementation: {other}")),
+        }
+    }
+
+    /// Run a GPU tool against an installed [`GpuHost`](crate::gpu_host::GpuHost).
+    ///
+    /// Returns `None` when there is no host or the tool has no host equivalent,
+    /// in which case the caller falls through to session state.
+    async fn dispatch_to_gpu_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+        session: &AgentSession,
+    ) -> Option<Result<JsonValue, String>> {
+        let host = self.gpu_host()?;
+
+        if !matches!(
+            tool_name,
+            "gpu.register" | "gpu.list" | "gpu.attach" | "gpu.detach"
+        ) {
+            return None;
+        }
+
+        Some(
+            self.run_gpu_host_tool(host.as_ref(), tool_name, params, session)
+                .await,
+        )
+    }
+
+    /// The body of [`Self::dispatch_to_gpu_host`], once a host is known to apply.
+    async fn run_gpu_host_tool(
+        &self,
+        host: &dyn crate::gpu_host::GpuHost,
+        tool_name: &str,
+        params: &JsonValue,
+        session: &AgentSession,
+    ) -> Result<JsonValue, String> {
+        use crate::gpu_host::GpuDescriptor;
+
+        fn device_id(params: &JsonValue) -> Result<&str, String> {
+            params
+                .get("device_id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| "Missing required parameter: device_id".to_string())
+        }
+
+        /// A GPU may only be attached to a VM the calling session owns.
+        fn owned_vm_id<'a>(
+            params: &'a JsonValue,
+            session: &AgentSession,
+        ) -> Result<&'a str, String> {
+            let vm_id = params
+                .get("vm_id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing required parameter: vm_id")?;
+            if !McpServer::session_owns(session, vm_id) {
+                return Err(format!("VM not found: {vm_id}"));
+            }
+            Ok(vm_id)
+        }
+
+        /// Mirror an attachment onto the session's VM record, so tools that
+        /// read session state still see the VM's GPUs.
+        fn mirror_attachment(session: &AgentSession, vm_id: &str, device_id: &str, attached: bool) {
+            let mut state = session.state.write().unwrap_or_else(|e| e.into_inner());
+            let Some(vm) = state.get_mut(&format!("vm:{vm_id}")) else {
+                return;
+            };
+            if !vm.get("gpus").map(|g| g.is_array()).unwrap_or(false) {
+                vm["gpus"] = json!([]);
+            }
+            let gpus = vm["gpus"].as_array_mut().expect("gpus is an array");
+            if attached {
+                if !gpus.iter().any(|d| d.as_str() == Some(device_id)) {
+                    gpus.push(json!(device_id));
+                }
+            } else {
+                gpus.retain(|d| d.as_str() != Some(device_id));
+            }
+            let any = !gpus.is_empty();
+            vm["gpu_enabled"] = json!(any);
+        }
+
+        match tool_name {
+            "gpu.register" => {
+                let device = GpuDescriptor {
+                    device_id: device_id(params)?.to_string(),
+                    model: params
+                        .get("model")
+                        .and_then(|v| v.as_str())
+                        .ok_or("Missing required parameter: model")?
+                        .to_string(),
+                    vram_gb: params.get("vram_gb").and_then(|v| v.as_u64()).unwrap_or(80),
+                    compute_capability: params
+                        .get("compute_capability")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(90) as u32,
+                    allocated_to: None,
+                };
+                let registered = host.register(device).await?;
+                Ok(serde_json::to_value(registered).unwrap_or(JsonValue::Null))
+            }
+
+            "gpu.list" => {
+                let only_available = params
+                    .get("only_available")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                let all = host.list().await?;
+                let available = all.iter().filter(|d| d.is_available()).count();
+                let devices: Vec<JsonValue> = all
+                    .iter()
+                    .filter(|d| !only_available || d.is_available())
+                    .map(|d| serde_json::to_value(d).unwrap_or(JsonValue::Null))
+                    .collect();
+
+                Ok(json!({
+                    "devices": devices,
+                    "total": devices.len(),
+                    "available": available,
+                }))
+            }
+
+            "gpu.attach" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let device_id = device_id(params)?;
+                host.attach(vm_id, device_id).await?;
+                mirror_attachment(session, vm_id, device_id, true);
+                Ok(json!({ "vm_id": vm_id, "device_id": device_id, "status": "attached" }))
+            }
+
+            "gpu.detach" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let device_id = device_id(params)?;
+                host.detach(vm_id, device_id).await?;
+                mirror_attachment(session, vm_id, device_id, false);
+                Ok(json!({ "vm_id": vm_id, "device_id": device_id, "status": "detached" }))
+            }
+
+            other => Err(format!("Tool has no GPU-host implementation: {other}")),
+        }
+    }
+
     /// Internal tool execution dispatch
     async fn execute_tool_impl(
         &self,
@@ -1490,6 +2023,17 @@ impl McpServer {
         params: &JsonValue,
         session: &AgentSession,
     ) -> Result<JsonValue, String> {
+        // A real hypervisor or GPU fabric, when installed, takes the lifecycle
+        // tools for its resource. Everything else — and every tool when neither
+        // is installed — falls through to the server's own session-state
+        // implementation below.
+        if let Some(result) = self.dispatch_to_vm_host(tool_name, params, session).await {
+            return result;
+        }
+        if let Some(result) = self.dispatch_to_gpu_host(tool_name, params, session).await {
+            return result;
+        }
+
         match tool_name {
             // ── VM lifecycle ──────────────────────────────────────────
             "vm.create" => {
@@ -1677,17 +2221,25 @@ impl McpServer {
                     .ok_or("Missing required parameter: vm_id")?;
                 let key = format!("vm:{}", vm_id);
                 let state = session.state.read().unwrap_or_else(|e| e.into_inner());
-                if !state.contains_key(&key) {
-                    return Err(format!("VM not found: {}", vm_id));
-                }
+                let record = state
+                    .get(&key)
+                    .ok_or_else(|| format!("VM not found: {}", vm_id))?;
+
+                // With no host installed there is nothing to measure. Null is
+                // the honest answer; the zeros this used to return were
+                // indistinguishable from a genuinely idle guest.
                 Ok(json!({
                     "vm_id": vm_id,
-                    "cpu_usage_percent": 0.0,
-                    "memory_usage_percent": 0.0,
-                    "disk_read_bytes": 0,
-                    "disk_write_bytes": 0,
-                    "net_rx_bytes": 0,
-                    "net_tx_bytes": 0
+                    "status": record.get("status").cloned().unwrap_or(JsonValue::Null),
+                    "vcpu_count": record.get("cpu_cores").cloned().unwrap_or(JsonValue::Null),
+                    "memory_total_bytes": record
+                        .get("memory_gb")
+                        .and_then(|v| v.as_u64())
+                        .map(|gb| json!(gb * 1024 * 1024 * 1024))
+                        .unwrap_or(JsonValue::Null),
+                    "uptime_seconds": JsonValue::Null,
+                    "cpu_usage_percent": JsonValue::Null,
+                    "memory_used_bytes": JsonValue::Null
                 }))
             }
 
@@ -2415,7 +2967,7 @@ impl AgentSession {
 }
 
 /// Generate a UUID v4 string
-fn uuid_v4() -> String {
+pub(crate) fn uuid_v4() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)

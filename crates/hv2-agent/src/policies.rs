@@ -1,11 +1,28 @@
-//! Agent Policies - Rules and constraints for AI agent operations
+//! Agent policies — rules and constraints for AI agent operations.
 //!
-//! This module provides a comprehensive policy framework for controlling
-//! what AI agents can and cannot do, including:
+//! A policy framework for expressing what agents may and may not do:
 //! - Permission policies (allow/deny rules)
 //! - Time-based policies (scheduling)
 //! - Resource policies (quotas)
 //! - Behavioral policies (safety constraints)
+//!
+//! # Where this is enforced
+//!
+//! [`PolicySet::evaluate`] answers a question; it does not intercept anything on
+//! its own. It takes effect wherever a caller asks it and acts on the answer.
+//!
+//! The MCP tool surface is such a caller, but only on request:
+//! [`McpServer::set_policy_set`](crate::mcp::McpServer::set_policy_set) installs
+//! a set, after which every tool call is evaluated before dispatch and a denial
+//! is refused and audited. With no set installed — the default — an agent is
+//! gated by capabilities and VM ownership alone.
+//!
+//! Note that [`PolicySet::new`] denies by default, so an installed set must name
+//! everything agents may do, including tools added after it was written.
+//!
+//! See [`limits`](crate::limits), which is still consult-only, and
+//! [`permissions`](crate::permissions), which `hv2-api`'s permission middleware
+//! wires into a request path.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
