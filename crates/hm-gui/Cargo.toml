@@ -14,7 +14,7 @@ categories.workspace = true
 [dependencies]
 # GUI framework
 eframe = { version = "0.31", features = ["persistence", "wgpu"] }
-egui = "0.31"
+egui = "0.34"
 egui_extras = { version = "0.31", features = ["image"] }
 
 # Async runtime
