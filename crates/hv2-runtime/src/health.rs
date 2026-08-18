@@ -425,15 +425,23 @@ mod tests {
 
     #[test]
     fn test_due_checks() {
-        let monitor = test_monitor();
+        // A long interval on purpose. The shared `test_monitor()` helper uses
+        // 1 ms, which this test then raced: any scheduling hiccup between
+        // recording a probe and asking again made the check due, and the second
+        // assertion failed. A never-checked VM is due regardless of interval,
+        // so the first assertion does not need a short one — and with a long
+        // interval the second cannot flake.
+        let monitor = HealthMonitor::new(HealthCheckConfig {
+            check_interval: Duration::from_secs(3600),
+            ..Default::default()
+        });
         monitor.register("vm-1");
 
-        // Should need check immediately (never checked)
-        std::thread::sleep(Duration::from_millis(5));
+        // Never checked, so due immediately.
         let due = monitor.due_checks();
         assert_eq!(due.len(), 1);
 
-        // After checking, should not need another immediately
+        // Just checked, so not due again for an hour.
         monitor.record_probe("vm-1", success_probe()).unwrap();
         let due = monitor.due_checks();
         assert_eq!(due.len(), 0);

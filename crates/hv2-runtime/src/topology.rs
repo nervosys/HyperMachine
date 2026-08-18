@@ -275,12 +275,36 @@ impl GpuTopologyMap {
         self.links.insert(format!("{to}:{from}"), rev);
     }
 
-    /// Get all devices on a specific host
+    /// Get the *available* devices on a specific host.
+    ///
+    /// Allocated devices are excluded — this feeds placement, which only cares
+    /// about what it can still hand out. Use [`Self::devices`] to enumerate the
+    /// full inventory.
     pub fn devices_on_host(&self, host_id: &str) -> Vec<&GpuDevice> {
         self.devices
             .values()
             .filter(|d| d.host_id == host_id && !d.allocated)
             .collect()
+    }
+
+    /// Every device in the inventory, allocated or not.
+    ///
+    /// Ordered by device id so callers that report inventory produce stable
+    /// output across runs.
+    pub fn devices(&self) -> Vec<&GpuDevice> {
+        let mut devices: Vec<&GpuDevice> = self.devices.values().collect();
+        devices.sort_by(|a, b| a.id.cmp(&b.id));
+        devices
+    }
+
+    /// Look up one device by id, whether or not it is allocated.
+    pub fn device(&self, id: &str) -> Option<&GpuDevice> {
+        self.devices.get(id)
+    }
+
+    /// Whether a device with this id is in the inventory.
+    pub fn contains_device(&self, id: &str) -> bool {
+        self.devices.contains_key(id)
     }
 
     /// Get the interconnect between two devices

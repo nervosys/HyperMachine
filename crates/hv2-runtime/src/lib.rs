@@ -62,6 +62,7 @@
 
 #![allow(dead_code)]
 
+pub mod agent_gpu_host;
 pub mod autoscale;
 pub mod billing;
 pub mod capacity;
@@ -76,6 +77,7 @@ pub mod store;
 pub mod topology;
 pub mod workflow;
 
+pub use agent_gpu_host::AgentGpuHost;
 pub use autoscale::{
     AutoscaleConfig, AutoscaleDecision, AutoscaleMetrics, AutoscalePolicy, AutoscaleResult,
     Autoscaler, ScaleDirection, ScaleEvent, ScaleReason,
