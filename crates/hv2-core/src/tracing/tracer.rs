@@ -966,7 +966,22 @@ mod tests {
 
         let spans = exporter.get_spans();
         assert_eq!(spans.len(), 1);
-        assert!(spans[0].end_time > spans[0].start_time);
+
+        // What this test is about is that dropping the span ended it, not that
+        // measurable time passed. Timestamps come from SystemTime::now(), whose
+        // granularity on macOS is coarser than an empty block, so a strictly
+        // greater end_time is not guaranteed -- that assertion failed there
+        // while passing on Linux and Windows. A zero-duration span is valid.
+        assert!(
+            spans[0].end_time > 0,
+            "dropping the span should have stamped an end time"
+        );
+        assert!(
+            spans[0].end_time >= spans[0].start_time,
+            "end_time {} must not precede start_time {}",
+            spans[0].end_time,
+            spans[0].start_time
+        );
     }
 
     #[test]
