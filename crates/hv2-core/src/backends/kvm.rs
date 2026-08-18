@@ -638,7 +638,7 @@ impl KvmVm {
 
     /// Write `data` into guest physical memory at `addr`.
     ///
-    /// The guest memory allocated in [`KvmVm::new`] is registered with KVM as
+    /// The guest memory allocated in `KvmVm::new` is registered with KVM as
     /// slot 0 covering GPA `0..memory_size`, so a host-side write through the
     /// same allocation is visible to the guest immediately.
     ///
