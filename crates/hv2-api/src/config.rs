@@ -126,6 +126,14 @@ pub struct ServerSection {
     pub tls_cert_path: Option<String>,
     /// TLS private key path (PEM). Set both cert and key to enable TLS.
     pub tls_key_path: Option<String>,
+    /// Refuse to boot a VM whose image the `/api/v1/images` allowlist does not
+    /// admit.
+    ///
+    /// Off by default. The registry enforces by default, so turning this on
+    /// with an empty catalogue refuses every boot image until images are
+    /// registered and approved.
+    #[serde(default)]
+    pub enforce_image_admission: bool,
 }
 
 impl Default for ServerSection {
@@ -138,6 +146,7 @@ impl Default for ServerSection {
             enable_events: true,
             pre_warm_count: 2,
             shutdown_timeout_secs: 30,
+            enforce_image_admission: false,
             tls_cert_path: None,
             tls_key_path: None,
         }
@@ -1096,6 +1105,7 @@ impl ConfigFile {
             pre_warm_count: self.server.pre_warm_count,
             middleware,
             shutdown_timeout_secs: self.server.shutdown_timeout_secs,
+            enforce_image_admission: self.server.enforce_image_admission,
             tls: match (self.server.tls_cert_path, self.server.tls_key_path) {
                 (Some(cert), Some(key)) => Some(crate::tls::TlsConfig {
                     cert_path: cert,

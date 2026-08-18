@@ -84,6 +84,14 @@ pub struct ServerConfig {
     pub shutdown_timeout_secs: u64,
     /// TLS configuration (None = plain HTTP)
     pub tls: Option<crate::tls::TlsConfig>,
+    /// Gate VM boot images on the image allowlist served at `/api/v1/images`.
+    ///
+    /// Off by default, and deliberately so: `RegistryConfig::default` is
+    /// `EnforcementMode::Enforce`, so switching this on with an empty catalogue
+    /// refuses *every* boot image until images are registered and approved.
+    /// Enable it once the catalogue is populated, or start the registry in
+    /// `EnforcementMode::Audit` to see what would be blocked first.
+    pub enforce_image_admission: bool,
 }
 
 impl Default for ServerConfig {
@@ -99,6 +107,7 @@ impl Default for ServerConfig {
             middleware: MiddlewareConfig::default(),
             shutdown_timeout_secs: 30,
             tls: None,
+            enforce_image_admission: false,
         }
     }
 }
@@ -267,10 +276,18 @@ impl Server {
     /// - `/api/v1/runtime/...` — fleet-level operations
     /// - `/api/v1/gpu-fabric/...` — GPU topology, fleet, capacity
     pub fn build_router(&self) -> Router {
+        // One registry instance, shared by the `/api/v1/images` routes and the
+        // VMs this API creates — otherwise approving an image over REST would
+        // have no bearing on whether a VM could boot it.
+        let image_state = Arc::new(ImageRegistryAppState::new());
+
         // Build application state with component awareness
-        let app_state = rest::AppState::new()
+        let mut app_state = rest::AppState::new()
             .with_runtime_enabled(self.config.enable_runtime)
             .with_events_enabled(self.config.enable_events);
+        if self.config.enforce_image_admission {
+            app_state = app_state.with_image_registry(Arc::clone(&image_state.registry));
+        }
 
         // Start with the VM CRUD + ontology + health router
         let mut app = rest::create_router_with_state(app_state);
@@ -291,8 +308,7 @@ impl Server {
             let gpu_router = gpu_fabric_routes::create_gpu_fabric_router(gpu_state.clone());
             app = app.merge(gpu_router);
 
-            // Merge image registry routes
-            let image_state = Arc::new(ImageRegistryAppState::new());
+            // Merge image registry routes, backed by the shared registry above
             let image_router =
                 image_registry_routes::create_image_registry_router(image_state.clone());
             app = app.merge(image_router);
@@ -625,6 +641,9 @@ mod tests {
             middleware: MiddlewareConfig::none(),
             shutdown_timeout_secs: 30,
             tls: None,
+            // Struct-update syntax so a new field does not break every
+            // test helper that builds a config.
+            ..ServerConfig::default()
         }
     }
 

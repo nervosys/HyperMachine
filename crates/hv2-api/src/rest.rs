@@ -9,6 +9,7 @@ use axum::{
     Json, Router,
 };
 use hv2_agent::AgentVM;
+use hv2_core::BootSource;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +27,13 @@ pub struct AppState {
     pub runtime_enabled: bool,
     /// Whether the events subsystem is enabled
     pub events_enabled: bool,
+    /// Image allowlist applied to every VM this API creates.
+    ///
+    /// `None` — the default — admits any readable boot image. Share the same
+    /// registry the `/api/v1/images/*` routes serve and approving, denying, or
+    /// revoking an image there decides whether a VM can boot it, instead of
+    /// only answering questions about it.
+    image_registry: Option<Arc<hv2_core::security::image_registry::ImageRegistry>>,
 }
 
 impl AppState {
@@ -35,6 +43,26 @@ impl AppState {
             start_time: Instant::now(),
             runtime_enabled: false,
             events_enabled: false,
+            image_registry: None,
+        }
+    }
+
+    /// Builder-style: gate this API's VMs on an image allowlist.
+    ///
+    /// Pass the registry the image-registry routes were built with, so the two
+    /// cannot disagree about which images are approved.
+    pub fn with_image_registry(
+        mut self,
+        registry: Arc<hv2_core::security::image_registry::ImageRegistry>,
+    ) -> Self {
+        self.image_registry = Some(registry);
+        self
+    }
+
+    /// Apply the installed allowlist, if any, to a newly built VM.
+    fn gate_images(&self, vm: &AgentVM) {
+        if let Some(registry) = &self.image_registry {
+            vm.vm().set_image_registry(Arc::clone(registry));
         }
     }
 
@@ -108,6 +136,174 @@ pub fn create_router() -> Router {
     create_router_with_state(AppState::new())
 }
 
+/// Exposes the REST server's VM inventory as a [`VmHost`].
+///
+/// The ontology's plan executor and the `/api/v1/vms` endpoints have to act on
+/// the *same* VMs — a plan that creates a VM the REST API cannot see, or stops
+/// one that isn't the one it named, would be worse than no plan execution at
+/// all. Rather than duplicate the inventory, this adapter hands the executor
+/// the map the handlers already use.
+///
+/// VMs are keyed by name, matching `POST /api/v1/vms`.
+struct ApiVmHost {
+    vms: Arc<RwLock<HashMap<String, Arc<AgentVM>>>>,
+    /// The same allowlist `AppState` applies, so a VM created by a plan is
+    /// gated exactly as one created through `POST /api/v1/vms`.
+    image_registry: Option<Arc<hv2_core::security::image_registry::ImageRegistry>>,
+}
+
+impl ApiVmHost {
+    async fn describe(&self, id: &str) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        let vms = self.vms.read().await;
+        let vm = vms.get(id).ok_or_else(|| format!("VM not found: {id}"))?;
+        let config = vm.vm().config().clone();
+
+        Ok(hv2_agent::VmDescriptor {
+            vm_id: id.to_string(),
+            name: config.name,
+            cpu_cores: config.vcpu_count,
+            // The REST API speaks gigabytes; the VM config stores bytes.
+            memory_gb: config.memory_size / (1024 * 1024 * 1024),
+            status: format!("{:?}", vm.state()).to_lowercase(),
+            boot_protocol: config.boot.as_ref().map(|b| b.protocol().to_string()),
+        })
+    }
+
+    async fn get(&self, id: &str) -> std::result::Result<Arc<AgentVM>, String> {
+        self.vms
+            .read()
+            .await
+            .get(id)
+            .cloned()
+            .ok_or_else(|| format!("VM not found: {id}"))
+    }
+}
+
+#[async_trait::async_trait]
+impl hv2_agent::VmHost for ApiVmHost {
+    async fn create(
+        &self,
+        spec: hv2_agent::VmSpec,
+    ) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        if self.vms.read().await.contains_key(&spec.name) {
+            return Err(format!("VM already exists: {}", spec.name));
+        }
+        if let Some(source) = &spec.boot {
+            source.load().map_err(|e| e.to_string())?;
+        }
+
+        let mut builder = AgentVM::builder()
+            .name(&spec.name)
+            .cpu_cores(spec.cpu_cores)
+            .memory_gb(spec.memory_gb)
+            .enable_gpu(spec.enable_gpu)
+            .enable_networking(spec.enable_networking);
+        if let Some(source) = spec.boot.clone() {
+            builder = builder.boot(source);
+        }
+
+        let vm = builder.build().await.map_err(|e| e.to_string())?;
+        if let Some(registry) = &self.image_registry {
+            vm.vm().set_image_registry(Arc::clone(registry));
+        }
+        let id = spec.name.clone();
+        self.vms.write().await.insert(id.clone(), Arc::new(vm));
+
+        self.describe(&id).await
+    }
+
+    async fn start(&self, vm_id: &str) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        let vm = self.get(vm_id).await?;
+        let started = if vm.has_boot_source() {
+            vm.launch().await
+        } else {
+            vm.start().await
+        };
+        started.map_err(|e| e.to_string())?;
+        self.describe(vm_id).await
+    }
+
+    async fn stop(
+        &self,
+        vm_id: &str,
+        _force: bool,
+    ) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        self.get(vm_id)
+            .await?
+            .stop()
+            .await
+            .map_err(|e| e.to_string())?;
+        self.describe(vm_id).await
+    }
+
+    async fn pause(&self, vm_id: &str) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        self.get(vm_id)
+            .await?
+            .pause()
+            .await
+            .map_err(|e| e.to_string())?;
+        self.describe(vm_id).await
+    }
+
+    async fn resume(&self, vm_id: &str) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        self.get(vm_id)
+            .await?
+            .resume()
+            .await
+            .map_err(|e| e.to_string())?;
+        self.describe(vm_id).await
+    }
+
+    async fn delete(&self, vm_id: &str) -> std::result::Result<(), String> {
+        // Stop first: dropping a running VM would strand its backend partition
+        // and execution loop.
+        if let Ok(vm) = self.get(vm_id).await {
+            let _ = vm.stop().await;
+        }
+        self.vms
+            .write()
+            .await
+            .remove(vm_id)
+            .map(|_| ())
+            .ok_or_else(|| format!("VM not found: {vm_id}"))
+    }
+
+    async fn status(&self, vm_id: &str) -> std::result::Result<hv2_agent::VmDescriptor, String> {
+        self.describe(vm_id).await
+    }
+
+    async fn list(&self) -> std::result::Result<Vec<hv2_agent::VmDescriptor>, String> {
+        let ids: Vec<String> = self.vms.read().await.keys().cloned().collect();
+        let mut descriptors = Vec::with_capacity(ids.len());
+        for id in ids {
+            descriptors.push(self.describe(&id).await?);
+        }
+        Ok(descriptors)
+    }
+
+    async fn metrics(&self, vm_id: &str) -> std::result::Result<hv2_agent::VmMetrics, String> {
+        // The same telemetry `GET /api/v1/vms/{id}/metrics` serves, so a plan
+        // step and a direct request cannot disagree about a VM.
+        let descriptor = self.describe(vm_id).await?;
+        let measured = self
+            .get(vm_id)
+            .await?
+            .get_metrics()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(hv2_agent::VmMetrics {
+            vm_id: descriptor.vm_id,
+            status: descriptor.status,
+            vcpu_count: measured.vcpu_count,
+            memory_total_bytes: measured.memory_size,
+            uptime_seconds: Some(measured.uptime_seconds),
+            cpu_usage_percent: measured.cpu_usage_percent,
+            memory_used_bytes: measured.memory_used_bytes,
+        })
+    }
+}
+
 /// Create REST API router with the given application state
 ///
 /// The `state` argument lets callers inject component-awareness (e.g.
@@ -115,6 +311,14 @@ pub fn create_router() -> Router {
 /// convenience [`create_router`] function delegates here with a
 /// default `AppState`.
 pub fn create_router_with_state(state: AppState) -> Router {
+    // Plan execution acts on the same VM inventory the REST handlers use, so
+    // `/agentic/plans/execute` is a control plane over this server's VMs rather
+    // than a rehearsal against nothing.
+    let plan_executor = Arc::new(crate::ontology::VmHostExecutor::new(Arc::new(ApiVmHost {
+        vms: Arc::clone(&state.vms),
+        image_registry: state.image_registry.clone(),
+    })));
+
     Router::new()
         .route("/health", get(health_check))
         .route("/health/live", get(liveness_check))
@@ -128,7 +332,9 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/api/v1/vms/{id}/metrics", get(get_metrics))
         .route("/api/v1/vms/{id}/script", post(execute_script))
         // Agentic ontology routes for AI agent discovery
-        .merge(crate::ontology::create_ontology_router())
+        .merge(crate::ontology::create_ontology_router_with_executor(
+            plan_executor,
+        ))
         .with_state(Arc::new(state))
 }
 
@@ -406,6 +612,10 @@ struct CreateVMRequest {
     enable_gpu: bool,
     #[serde(default)]
     enable_networking: bool,
+    /// What this VM boots. Omit it to create a VM with no guest code — it can
+    /// be started, but nothing will execute until something loads guest memory.
+    #[serde(default)]
+    boot: Option<BootSource>,
 }
 
 fn default_vcpu_count() -> u32 {
@@ -430,25 +640,45 @@ async fn create_vm(
     State(state): State<Arc<AppState>>,
     Json(req): Json<CreateVMRequest>,
 ) -> std::result::Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    // Build the VM
-    let vm = AgentVM::builder()
-        .name(&req.name)
-        .cpu_cores(req.vcpu_count)
-        .memory_gb(req.memory_gb)
-        .enable_gpu(req.enable_gpu)
-        .enable_networking(req.enable_networking)
-        .build()
-        .await
-        .map_err(|e| {
+    // Reject an unusable boot image before anything is allocated, and report it
+    // as the client error it is rather than a 500.
+    if let Some(source) = &req.boot {
+        source.load().map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     error: e.to_string(),
-                    code: "VM_CREATE_FAILED".to_string(),
+                    code: "INVALID_BOOT_SOURCE".to_string(),
                     request_id: None,
                 }),
             )
         })?;
+    }
+
+    // Build the VM
+    let mut builder = AgentVM::builder()
+        .name(&req.name)
+        .cpu_cores(req.vcpu_count)
+        .memory_gb(req.memory_gb)
+        .enable_gpu(req.enable_gpu)
+        .enable_networking(req.enable_networking);
+
+    if let Some(source) = req.boot.clone() {
+        builder = builder.boot(source);
+    }
+
+    let vm = builder.build().await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: "VM_CREATE_FAILED".to_string(),
+                request_id: None,
+            }),
+        )
+    })?;
+
+    state.gate_images(&vm);
 
     let id = req.name.clone();
     let response = CreateVMResponse {
@@ -563,7 +793,16 @@ async fn start_vm(
         )
     })?;
 
-    vm.start().await.map_err(|e| {
+    // A VM with a boot source is launched — provisioned on the hypervisor
+    // backend, its images loaded, and its guest running. One without has no
+    // guest code, so it only transitions state.
+    let started = if vm.has_boot_source() {
+        vm.launch().await
+    } else {
+        vm.start().await
+    };
+
+    started.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {

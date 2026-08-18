@@ -192,6 +192,14 @@ pub struct OperationResponse {
 
 /// Rate limiting configuration for an operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A rate limit published for an operation.
+///
+/// **Advisory.** This is metadata the server publishes so a client can pace
+/// itself; nothing reads it back to reject a request. The only rate limiting
+/// this server actually performs is the optional HTTP middleware token bucket
+/// (`MiddlewareConfig::enable_rate_limit`, off by default), which is global
+/// rather than per-operation. An agent must not assume it will receive a 429
+/// on exceeding these numbers, nor that staying under them is required.
 pub struct RateLimit {
     pub requests_per_minute: u32,
     pub burst_size: u32,
@@ -626,6 +634,466 @@ pub struct PlanExecutionRequest {
     pub timeout_seconds: Option<u64>,
     /// Variable substitutions for parameterized plans
     pub variables: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+// ============================================================================
+// Plan execution — where a validated plan meets a real resource
+// ============================================================================
+
+/// Dispatches an ontology operation to something that can carry it out.
+///
+/// The ontology owns *what* a plan means — its steps, their dependencies, its
+/// preconditions — and a `PlanExecutor` owns *what actually happens*. Splitting
+/// them lets the same plan be dry-run against [`SimulatingExecutor`] and then
+/// run for real against [`VmHostExecutor`], with identical ordering and
+/// validation both times.
+#[async_trait::async_trait]
+pub trait PlanExecutor: Send + Sync {
+    /// Carry out one operation, returning its output or an error message.
+    async fn execute(
+        &self,
+        operation: &Operation,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
+
+    /// Undo a step that already succeeded, during rollback.
+    ///
+    /// `output` is what [`Self::execute`] returned for that step, which is
+    /// usually where the identifier of the thing to undo lives.
+    ///
+    /// The default is `Ok(())` — correct for a read-only operation, and the
+    /// reason an executor only has to describe the operations it can reverse.
+    /// Return an error when a step genuinely cannot be undone, so the result
+    /// reports the resource as left behind rather than cleaned up.
+    async fn compensate(
+        &self,
+        operation: &Operation,
+        params: &serde_json::Value,
+        output: Option<&serde_json::Value>,
+    ) -> Result<(), String> {
+        let _ = (operation, params, output);
+        Ok(())
+    }
+}
+
+/// What one step produced.
+struct StepOutcome {
+    success: bool,
+    output: Option<serde_json::Value>,
+    error: Option<String>,
+}
+
+impl StepOutcome {
+    fn missing_operation(operation_id: &str) -> Self {
+        Self {
+            success: false,
+            output: None,
+            error: Some(format!("Operation '{}' not found", operation_id)),
+        }
+    }
+}
+
+/// Whether the plan loop should keep going.
+enum StepFlow {
+    Continue,
+    Break,
+}
+
+impl StepFlow {
+    fn is_break(&self) -> bool {
+        matches!(self, Self::Break)
+    }
+}
+
+/// One in-progress plan execution.
+///
+/// Owns everything both the simulated and the real execution paths share —
+/// validation, dependency ordering, variable substitution, and how a run's
+/// status is decided — so the two cannot drift apart.
+struct PlanRun {
+    execution_id: String,
+    plan_name: String,
+    rollback_on_failure: bool,
+    validation: PlanValidationResult,
+    sorted_steps: Vec<PlanStep>,
+    variables: serde_json::Map<String, serde_json::Value>,
+    /// Parameters actually used per step, kept for compensation.
+    executed_params: Vec<serde_json::Value>,
+    step_results: Vec<PlanStepResult>,
+    failed: bool,
+    start_time: std::time::Instant,
+}
+
+impl PlanRun {
+    /// Validate and prepare a run, or return the finished result directly when
+    /// the plan is invalid or this is a dry run.
+    ///
+    /// The early-return result is boxed: it is much larger than a `PlanRun`,
+    /// and an unboxed `Err` of that size would bloat every call.
+    fn begin(
+        ontology: &HyperMachineOntology,
+        request: &PlanExecutionRequest,
+    ) -> Result<Self, Box<PlanExecutionResult>> {
+        let execution_id = HyperMachineOntology::execution_id(&request.plan.name);
+        let start_time = std::time::Instant::now();
+        let validation = ontology.validate_plan(&request.plan);
+
+        if !validation.valid {
+            return Err(Box::new(PlanExecutionResult {
+                execution_id,
+                plan_name: request.plan.name.clone(),
+                status: PlanExecutionStatus::ValidationFailed,
+                step_results: vec![],
+                duration_ms: start_time.elapsed().as_millis() as u64,
+                rolled_back_steps: vec![],
+                validation,
+            }));
+        }
+
+        if request.dry_run.unwrap_or(false) {
+            return Err(Box::new(PlanExecutionResult {
+                execution_id,
+                plan_name: request.plan.name.clone(),
+                status: PlanExecutionStatus::Completed,
+                step_results: vec![],
+                duration_ms: start_time.elapsed().as_millis() as u64,
+                rolled_back_steps: vec![],
+                validation,
+            }));
+        }
+
+        Ok(Self {
+            execution_id,
+            plan_name: request.plan.name.clone(),
+            rollback_on_failure: request.plan.rollback_on_failure,
+            validation,
+            sorted_steps: HyperMachineOntology::topological_sort(&request.plan.steps),
+            variables: request.variables.clone().unwrap_or_default(),
+            executed_params: Vec::new(),
+            step_results: Vec::new(),
+            failed: false,
+            start_time,
+        })
+    }
+
+    /// The parameters for `step`, with `${var}` references resolved.
+    fn params_for(&self, step: &PlanStep) -> serde_json::Value {
+        HyperMachineOntology::substitute_variables(&step.parameters, &self.variables)
+    }
+
+    /// Record a step's outcome and say whether the plan should continue.
+    fn record(
+        &mut self,
+        step: &PlanStep,
+        params: serde_json::Value,
+        outcome: StepOutcome,
+    ) -> StepFlow {
+        let step_start = std::time::Instant::now();
+
+        self.executed_params.push(params);
+        self.step_results.push(PlanStepResult {
+            step_id: step.step_id.clone(),
+            operation_id: step.operation_id.clone(),
+            success: outcome.success,
+            duration_ms: step_start.elapsed().as_millis() as u64,
+            output: outcome.output,
+            error: outcome.error,
+            rolled_back: false,
+        });
+
+        if outcome.success {
+            StepFlow::Continue
+        } else {
+            self.failed = true;
+            StepFlow::Break
+        }
+    }
+
+    /// Finish a simulated run, marking successful steps rolled back on failure.
+    fn finish_marking_rollback(mut self) -> PlanExecutionResult {
+        let mut rolled_back_steps = Vec::new();
+
+        let status = if self.failed && self.rollback_on_failure {
+            for result in self.step_results.iter_mut().rev() {
+                if result.success {
+                    result.rolled_back = true;
+                    rolled_back_steps.push(result.step_id.clone());
+                }
+            }
+            PlanExecutionStatus::RolledBack
+        } else if self.failed {
+            PlanExecutionStatus::Failed
+        } else {
+            PlanExecutionStatus::Completed
+        };
+
+        self.into_result(status, rolled_back_steps)
+    }
+
+    /// Finish a real run, actually compensating the steps that succeeded.
+    ///
+    /// Compensation runs in reverse order, so a plan is unwound the way it was
+    /// built up.
+    async fn finish_compensating(
+        mut self,
+        ontology: &HyperMachineOntology,
+        executor: &dyn PlanExecutor,
+    ) -> PlanExecutionResult {
+        if !self.failed {
+            return self.into_result(PlanExecutionStatus::Completed, Vec::new());
+        }
+        if !self.rollback_on_failure {
+            return self.into_result(PlanExecutionStatus::Failed, Vec::new());
+        }
+
+        let mut rolled_back_steps = Vec::new();
+        let mut compensation_failed = false;
+
+        for (idx, result) in self.step_results.iter_mut().enumerate().rev() {
+            if !result.success {
+                continue;
+            }
+
+            let Some(op) = ontology.operation(&result.operation_id) else {
+                result.error = Some(format!(
+                    "cannot roll back: operation '{}' is no longer defined",
+                    result.operation_id
+                ));
+                compensation_failed = true;
+                continue;
+            };
+
+            let params = self
+                .executed_params
+                .get(idx)
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+
+            match executor
+                .compensate(op, &params, result.output.as_ref())
+                .await
+            {
+                Ok(()) => {
+                    result.rolled_back = true;
+                    rolled_back_steps.push(result.step_id.clone());
+                }
+                Err(e) => {
+                    // Leave `rolled_back` false: this resource is still there,
+                    // and saying otherwise would hide a leak.
+                    result.error = Some(match result.error.take() {
+                        Some(existing) => format!("{existing}; rollback failed: {e}"),
+                        None => format!("rollback failed: {e}"),
+                    });
+                    compensation_failed = true;
+                }
+            }
+        }
+
+        // A rollback that could not finish is not a clean unwind, and the
+        // status has to say so.
+        let status = if compensation_failed {
+            PlanExecutionStatus::Failed
+        } else {
+            PlanExecutionStatus::RolledBack
+        };
+
+        self.into_result(status, rolled_back_steps)
+    }
+
+    fn into_result(
+        self,
+        status: PlanExecutionStatus,
+        rolled_back_steps: Vec<String>,
+    ) -> PlanExecutionResult {
+        PlanExecutionResult {
+            execution_id: self.execution_id,
+            plan_name: self.plan_name,
+            status,
+            step_results: self.step_results,
+            duration_ms: self.start_time.elapsed().as_millis() as u64,
+            rolled_back_steps,
+            validation: self.validation,
+        }
+    }
+}
+
+/// A [`PlanExecutor`] that fabricates plausible results without touching
+/// anything.
+///
+/// This is what [`HyperMachineOntology::execute_plan`] uses. It exists so a
+/// plan's shape can be exercised — ordering, substitution, failure handling —
+/// on a machine with no hypervisor. Its outputs carry `"simulated": true` so a
+/// caller can never mistake them for real ones.
+pub struct SimulatingExecutor;
+
+#[async_trait::async_trait]
+impl PlanExecutor for SimulatingExecutor {
+    async fn execute(
+        &self,
+        operation: &Operation,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        match HyperMachineOntology::simulate_operation(operation, params) {
+            (true, output, _) => Ok(output.unwrap_or(serde_json::Value::Null)),
+            (false, _, error) => Err(error.unwrap_or_else(|| "simulated failure".to_string())),
+        }
+    }
+}
+
+/// A [`PlanExecutor`] that runs VM operations against a real
+/// [`VmHost`](hv2_agent::VmHost).
+///
+/// This is what makes `/agentic/plans/execute` a control plane rather than a
+/// rehearsal: `create_vm` allocates a VM, `start_vm` boots it, and a failed
+/// plan's rollback destroys what it created.
+pub struct VmHostExecutor {
+    host: std::sync::Arc<dyn hv2_agent::VmHost>,
+}
+
+impl VmHostExecutor {
+    /// Execute plans against `host`.
+    pub fn new(host: std::sync::Arc<dyn hv2_agent::VmHost>) -> Self {
+        Self { host }
+    }
+
+    /// Read the VM id a step operates on, from its parameters.
+    fn vm_id(params: &serde_json::Value) -> Result<&str, String> {
+        params
+            .get("id")
+            .or_else(|| params.get("vm_id"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "missing required parameter: id".to_string())
+    }
+
+    /// Read the VM id a `create_vm` step produced, from its output.
+    fn created_vm_id(output: Option<&serde_json::Value>) -> Result<&str, String> {
+        output
+            .and_then(|o| o.get("vm_id").or_else(|| o.get("id")))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "the create step recorded no VM id to roll back".to_string())
+    }
+
+    fn describe(descriptor: &hv2_agent::VmDescriptor) -> serde_json::Value {
+        serde_json::to_value(descriptor).unwrap_or(serde_json::Value::Null)
+    }
+}
+
+#[async_trait::async_trait]
+impl PlanExecutor for VmHostExecutor {
+    async fn execute(
+        &self,
+        operation: &Operation,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        match operation.id.as_str() {
+            "create_vm" => {
+                let name = params
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .ok_or("missing required parameter: name")?;
+
+                let mut spec = hv2_agent::VmSpec::new(name);
+                if let Some(cores) = params.get("vcpu_count").and_then(|v| v.as_u64()) {
+                    spec.cpu_cores = cores as u32;
+                }
+                if let Some(memory) = params.get("memory_gb").and_then(|v| v.as_u64()) {
+                    spec.memory_gb = memory;
+                }
+                if let Some(boot) = params.get("boot") {
+                    spec.boot = serde_json::from_value(boot.clone())
+                        .map_err(|e| format!("invalid boot source: {e}"))?;
+                }
+
+                self.host.create(spec).await.map(|d| Self::describe(&d))
+            }
+
+            "start_vm" => self
+                .host
+                .start(Self::vm_id(params)?)
+                .await
+                .map(|d| Self::describe(&d)),
+
+            "stop_vm" => {
+                let force = params
+                    .get("force")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                self.host
+                    .stop(Self::vm_id(params)?, force)
+                    .await
+                    .map(|d| Self::describe(&d))
+            }
+
+            "pause_vm" => self
+                .host
+                .pause(Self::vm_id(params)?)
+                .await
+                .map(|d| Self::describe(&d)),
+
+            "resume_vm" => self
+                .host
+                .resume(Self::vm_id(params)?)
+                .await
+                .map(|d| Self::describe(&d)),
+
+            "delete_vm" => {
+                let id = Self::vm_id(params)?;
+                self.host.delete(id).await?;
+                Ok(serde_json::json!({ "vm_id": id, "deleted": true }))
+            }
+
+            "get_vm" => self
+                .host
+                .status(Self::vm_id(params)?)
+                .await
+                .map(|d| Self::describe(&d)),
+
+            "list_vms" => {
+                let vms = self.host.list().await?;
+                let total = vms.len();
+                Ok(serde_json::json!({ "vms": vms, "total": total }))
+            }
+
+            "get_metrics" => {
+                let metrics = self.host.metrics(Self::vm_id(params)?).await?;
+                serde_json::to_value(metrics).map_err(|e| e.to_string())
+            }
+
+            // The host models VM lifecycle, not guest execution. Refusing is
+            // the honest answer: a step that silently returned fabricated
+            // output here would make a plan look like it did work it did not
+            // do.
+            other => Err(format!(
+                "operation '{other}' has no VM-host implementation; \
+                 it is available only in simulated execution"
+            )),
+        }
+    }
+
+    async fn compensate(
+        &self,
+        operation: &Operation,
+        params: &serde_json::Value,
+        output: Option<&serde_json::Value>,
+    ) -> Result<(), String> {
+        match operation.id.as_str() {
+            // Undo a creation by destroying what it made — using the id the
+            // host assigned, not one the caller guessed.
+            "create_vm" => self.host.delete(Self::created_vm_id(output)?).await,
+
+            "start_vm" => self.host.stop(Self::vm_id(params)?, false).await.map(drop),
+            "stop_vm" => self.host.start(Self::vm_id(params)?).await.map(drop),
+            "pause_vm" => self.host.resume(Self::vm_id(params)?).await.map(drop),
+            "resume_vm" => self.host.pause(Self::vm_id(params)?).await.map(drop),
+
+            // A destroyed VM cannot be brought back. Say so rather than
+            // reporting a clean rollback that did not happen.
+            "delete_vm" => Err("a deleted VM cannot be restored".to_string()),
+
+            // Read-only operations need no compensation.
+            _ => Ok(()),
+        }
+    }
 }
 
 // ============================================================================
@@ -1344,8 +1812,10 @@ impl HyperMachineOntology {
             Operation {
                 id: "execute_script".to_string(),
                 name: "Execute Agent Script".to_string(),
-                description: "Execute a Rhai or WASM script in the VM's sandboxed agent environment. \
-                    Scripts have access to VM control operations based on granted capabilities.".to_string(),
+                description: "Execute a Rhai script on the host, against a read-only view of \
+                    the VM (state, name, vCPU count, memory size). This does NOT run anything \
+                    inside the guest operating system — there is no in-guest agent — and it \
+                    cannot control the VM. Requires the VmRead capability.".to_string(),
                 http_method: "POST".to_string(),
                 path: "/api/v1/vms/{id}/script".to_string(),
                 parameters: vec![
@@ -2395,133 +2865,121 @@ impl HyperMachineOntology {
         ]
     }
 
-    /// Execute an action plan.
+    /// Execute an action plan against simulated operations.
     ///
-    /// Steps are executed in dependency order. Each step invokes a simulated
-    /// operation handler and records the result. If `rollback_on_failure` is
-    /// true and a step fails, all completed steps are marked as rolled back.
+    /// Steps run in dependency order and each records a synthetic result. This
+    /// is the right entry point for validating a plan's shape — dependency
+    /// ordering, variable substitution, rollback bookkeeping — without touching
+    /// any real resource.
+    ///
+    /// To run a plan for real, use [`Self::execute_plan_with`] with an executor
+    /// such as [`VmHostExecutor`].
     ///
     /// Variable substitution: if `variables` are provided in the request,
     /// any `${var_name}` in step parameters is replaced with the variable value.
     pub fn execute_plan(&self, request: &PlanExecutionRequest) -> PlanExecutionResult {
-        let execution_id = format!("exec-{:08x}", {
+        let mut run = match PlanRun::begin(self, request) {
+            Ok(run) => run,
+            Err(early) => return *early,
+        };
+
+        for step in run.sorted_steps.clone() {
+            let params = run.params_for(&step);
+            let outcome = match self.operation(&step.operation_id) {
+                Some(op) => {
+                    let (success, output, error) = Self::simulate_operation(op, &params);
+                    StepOutcome {
+                        success,
+                        output,
+                        error,
+                    }
+                }
+                None => StepOutcome::missing_operation(&step.operation_id),
+            };
+
+            if run.record(&step, params, outcome).is_break() {
+                break;
+            }
+        }
+
+        // Simulated steps have no side effects, so "rolling back" is only a
+        // bookkeeping claim — mark them without pretending anything was undone.
+        run.finish_marking_rollback()
+    }
+
+    /// Execute an action plan for real, dispatching every step through
+    /// `executor`.
+    ///
+    /// The orchestration is identical to [`Self::execute_plan`] — the same
+    /// validation, the same dependency ordering, the same variable
+    /// substitution — but each step reaches a live resource, and rollback runs
+    /// the executor's compensating action rather than merely claiming to.
+    ///
+    /// A step whose compensation fails is reported as *not* rolled back, with
+    /// the reason appended to its error, so an operator can see exactly what
+    /// was left behind.
+    pub async fn execute_plan_with(
+        &self,
+        request: &PlanExecutionRequest,
+        executor: &dyn PlanExecutor,
+    ) -> PlanExecutionResult {
+        let mut run = match PlanRun::begin(self, request) {
+            Ok(run) => run,
+            Err(early) => return *early,
+        };
+
+        for step in run.sorted_steps.clone() {
+            let params = run.params_for(&step);
+            let outcome = match self.operation(&step.operation_id) {
+                Some(op) => match executor.execute(op, &params).await {
+                    Ok(output) => StepOutcome {
+                        success: true,
+                        output: Some(output),
+                        error: None,
+                    },
+                    Err(error) => StepOutcome {
+                        success: false,
+                        output: None,
+                        error: Some(error),
+                    },
+                },
+                None => StepOutcome::missing_operation(&step.operation_id),
+            };
+
+            if run.record(&step, params, outcome).is_break() {
+                break;
+            }
+        }
+
+        run.finish_compensating(self, executor).await
+    }
+
+    /// Look up an operation definition by id.
+    fn operation(&self, operation_id: &str) -> Option<&Operation> {
+        self.operations.iter().find(|o| o.id == operation_id)
+    }
+
+    /// Deterministic-ish execution id: the plan name plus the current instant.
+    fn execution_id(plan_name: &str) -> String {
+        format!("exec-{:08x}", {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
-            request.plan.name.hash(&mut h);
+            plan_name.hash(&mut h);
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_nanos()
                 .hash(&mut h);
             h.finish() as u32
-        });
-
-        let start_time = std::time::Instant::now();
-
-        // Step 1: Validate
-        let validation = self.validate_plan(&request.plan);
-        if !validation.valid {
-            return PlanExecutionResult {
-                execution_id,
-                plan_name: request.plan.name.clone(),
-                status: PlanExecutionStatus::ValidationFailed,
-                step_results: vec![],
-                duration_ms: start_time.elapsed().as_millis() as u64,
-                rolled_back_steps: vec![],
-                validation,
-            };
-        }
-
-        // Step 2: Dry-run returns validation only
-        if request.dry_run.unwrap_or(false) {
-            return PlanExecutionResult {
-                execution_id,
-                plan_name: request.plan.name.clone(),
-                status: PlanExecutionStatus::Completed,
-                step_results: vec![],
-                duration_ms: start_time.elapsed().as_millis() as u64,
-                rolled_back_steps: vec![],
-                validation,
-            };
-        }
-
-        // Step 3: Topological sort by dependencies
-        let sorted_steps = Self::topological_sort(&request.plan.steps);
-
-        // Step 4: Execute each step
-        let mut step_results = Vec::new();
-        let mut failed = false;
-        let variables = request.variables.clone().unwrap_or_default();
-
-        for step in &sorted_steps {
-            if failed {
-                break;
-            }
-
-            let step_start = std::time::Instant::now();
-
-            // Substitute variables in parameters
-            let params = Self::substitute_variables(&step.parameters, &variables);
-
-            // Find the operation definition
-            let op = self.operations.iter().find(|o| o.id == step.operation_id);
-
-            // Simulate execution based on operation type
-            let (success, output, error) = match op {
-                Some(op) => Self::simulate_operation(op, &params),
-                None => (
-                    false,
-                    None,
-                    Some(format!("Operation '{}' not found", step.operation_id)),
-                ),
-            };
-
-            step_results.push(PlanStepResult {
-                step_id: step.step_id.clone(),
-                operation_id: step.operation_id.clone(),
-                success,
-                duration_ms: step_start.elapsed().as_millis() as u64,
-                output,
-                error,
-                rolled_back: false,
-            });
-
-            if !success {
-                failed = true;
-            }
-        }
-
-        // Step 5: Rollback if needed
-        let mut rolled_back_steps = Vec::new();
-        let status = if failed && request.plan.rollback_on_failure {
-            for result in step_results.iter_mut().rev() {
-                if result.success {
-                    result.rolled_back = true;
-                    rolled_back_steps.push(result.step_id.clone());
-                }
-            }
-            PlanExecutionStatus::RolledBack
-        } else if failed {
-            PlanExecutionStatus::Failed
-        } else {
-            PlanExecutionStatus::Completed
-        };
-
-        PlanExecutionResult {
-            execution_id,
-            plan_name: request.plan.name.clone(),
-            status,
-            step_results,
-            duration_ms: start_time.elapsed().as_millis() as u64,
-            rolled_back_steps,
-            validation,
-        }
+        })
     }
 
     /// Topological sort of plan steps by dependencies.
     ///
     /// Steps with no dependencies come first, then steps whose
     /// dependencies have already been placed. Uses Kahn's algorithm.
+    /// Independent steps keep their declared order, so a plan executes the
+    /// same way on every run.
     fn topological_sort(steps: &[PlanStep]) -> Vec<PlanStep> {
         if steps.is_empty() {
             return vec![];
@@ -2530,29 +2988,29 @@ impl HyperMachineOntology {
         let step_map: std::collections::HashMap<&str, &PlanStep> =
             steps.iter().map(|s| (s.step_id.as_str(), s)).collect();
 
-        // Count in-degree for each step
-        let mut in_degree: std::collections::HashMap<&str, usize> =
-            steps.iter().map(|s| (s.step_id.as_str(), 0usize)).collect();
-        for step in steps {
-            for dep in &step.depends_on {
-                if let Some(count) = in_degree.get_mut(dep.as_str()) {
-                    // dep has a dependent, but we count in-degree of the dependent step
-                    let _ = count; // in_degree of dep is unaffected
-                }
-            }
-            // In-degree of this step = number of its dependencies that exist as steps
-            let valid_deps = step
-                .depends_on
-                .iter()
-                .filter(|d| step_map.contains_key(d.as_str()))
-                .count();
-            in_degree.insert(step.step_id.as_str(), valid_deps);
-        }
-
-        let mut queue: std::collections::VecDeque<&str> = in_degree
+        // In-degree of a step = how many of its dependencies are real steps in
+        // this plan. A `depends_on` naming something that isn't here can't be
+        // waited on, so it doesn't count (validation reports it separately).
+        let mut in_degree: std::collections::HashMap<&str, usize> = steps
             .iter()
-            .filter(|(_, &deg)| deg == 0)
-            .map(|(&id, _)| id)
+            .map(|step| {
+                let valid_deps = step
+                    .depends_on
+                    .iter()
+                    .filter(|d| step_map.contains_key(d.as_str()))
+                    .count();
+                (step.step_id.as_str(), valid_deps)
+            })
+            .collect();
+
+        // Seed the queue in declaration order, not hash order. Steps that are
+        // independent of each other are equally valid in any order
+        // topologically, but a plan must execute the same way every time it
+        // runs — so ties break toward the order the author wrote.
+        let mut queue: std::collections::VecDeque<&str> = steps
+            .iter()
+            .filter(|step| in_degree.get(step.step_id.as_str()) == Some(&0))
+            .map(|step| step.step_id.as_str())
             .collect();
 
         let mut sorted = Vec::new();
@@ -3261,6 +3719,20 @@ where
         .route("/agentic/templates/{id}", get(get_template_handler))
 }
 
+/// Create an ontology router whose plan execution reaches real resources.
+///
+/// Without this, `/agentic/plans/execute` simulates — useful for validating a
+/// plan, useless for running one. Pass a [`VmHostExecutor`] to make the
+/// endpoint a control plane.
+pub fn create_ontology_router_with_executor<S>(
+    executor: std::sync::Arc<dyn PlanExecutor>,
+) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    create_ontology_router().layer(axum::Extension(PlanExecutorLayer(executor)))
+}
+
 async fn get_ontology(Query(query): Query<OntologyQuery>) -> Response {
     let ontology = HyperMachineOntology::build();
     let format = query.format.as_deref().unwrap_or("json-ld");
@@ -3399,11 +3871,29 @@ async fn get_agent_card() -> Json<AgentCard> {
     Json(ontology.build_agent_card())
 }
 
+/// The executor `/agentic/plans/execute` dispatches through.
+///
+/// Installed by [`create_ontology_router_with_executor`]. When it is absent the
+/// endpoint falls back to simulation, so a server that has not been given a
+/// hypervisor still answers — with clearly-marked synthetic results — instead
+/// of failing.
+#[derive(Clone)]
+pub struct PlanExecutorLayer(pub std::sync::Arc<dyn PlanExecutor>);
+
 async fn execute_plan_handler(
+    executor: Option<axum::Extension<PlanExecutorLayer>>,
     Json(request): Json<PlanExecutionRequest>,
 ) -> Json<PlanExecutionResult> {
     let ontology = HyperMachineOntology::build();
-    Json(ontology.execute_plan(&request))
+
+    match executor {
+        Some(axum::Extension(PlanExecutorLayer(executor))) => Json(
+            ontology
+                .execute_plan_with(&request, executor.as_ref())
+                .await,
+        ),
+        None => Json(ontology.execute_plan(&request)),
+    }
 }
 
 /// Query parameters for template listing

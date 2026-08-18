@@ -29,6 +29,9 @@ fn test_config() -> ServerConfig {
         middleware: MiddlewareConfig::none(),
         shutdown_timeout_secs: 30,
         tls: None,
+        // Struct-update syntax so a new field does not break every
+        // test helper that builds a config.
+        ..ServerConfig::default()
     }
 }
 
