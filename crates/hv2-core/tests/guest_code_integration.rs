@@ -6,6 +6,28 @@
 // NOTE: Full VM execution tests will be added once VM API is stabilized.
 // For now, we validate binary format and structure only.
 
+/// Read a generated disk image, or `None` when it has not been built.
+///
+/// The `*.img` files are build outputs of `examples/guest_code/build.sh` and
+/// are gitignored (`.gitignore`: `*.img`), so they exist only on a machine
+/// where that script has run. `include_bytes!` on them fails to *compile* on a
+/// clean checkout, which took this whole test binary down in CI and cascaded
+/// into every job that depends on `cargo check` — the `.bin` files beside them
+/// are tracked, so only these four were affected. Reading at run time lets the
+/// test skip where the image is absent and still assert where it is present.
+fn optional_image(name: &str) -> Option<Vec<u8>> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/guest_code")
+        .join(name);
+    match std::fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(_) => {
+            eprintln!("skipping: {name} not built (run examples/guest_code/build.sh)");
+            None
+        }
+    }
+}
+
 #[tokio::test]
 async fn test_binary_sizes() {
     // Verify all binaries are exactly 512 bytes (boot sector size)
@@ -78,7 +100,9 @@ async fn test_boot_signature() {
 #[tokio::test]
 async fn test_multistage_bootloader() {
     // Test multi-stage bootloader structure
-    let multiboot = include_bytes!("../../../examples/guest_code/multiboot.img");
+    let Some(multiboot) = optional_image("multiboot.img") else {
+        return;
+    };
 
     // Verify Stage 1 boot signature
     let stage1_signature = u16::from_le_bytes([multiboot[510], multiboot[511]]);
@@ -142,7 +166,9 @@ async fn test_stage2_binary() {
 #[tokio::test]
 async fn test_protected_mode_bootloader() {
     // Test protected mode multi-stage bootloader
-    let pmode = include_bytes!("../../../examples/guest_code/pmode.img");
+    let Some(pmode) = optional_image("pmode.img") else {
+        return;
+    };
 
     // Verify Stage 1 boot signature
     let stage1_signature = u16::from_le_bytes([pmode[510], pmode[511]]);
@@ -220,7 +246,9 @@ async fn test_protected_mode_gdt() {
 #[tokio::test]
 async fn test_interrupt_demo_extended() {
     // Test interrupt demo multi-stage bootloader
-    let interrupt_img = include_bytes!("../../../examples/guest_code/interrupt_demo.img");
+    let Some(interrupt_img) = optional_image("interrupt_demo.img") else {
+        return;
+    };
 
     // Verify Stage 1 boot signature
     let stage1_signature = u16::from_le_bytes([interrupt_img[510], interrupt_img[511]]);
@@ -271,7 +299,9 @@ async fn test_interrupt_demo_stage2() {
 #[tokio::test]
 async fn test_mmio_test_extended() {
     // Test MMIO test multi-stage bootloader
-    let mmio_img = include_bytes!("../../../examples/guest_code/mmio_test.img");
+    let Some(mmio_img) = optional_image("mmio_test.img") else {
+        return;
+    };
 
     // Verify Stage 1 boot signature
     let stage1_signature = u16::from_le_bytes([mmio_img[510], mmio_img[511]]);

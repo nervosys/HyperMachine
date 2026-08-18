@@ -48,13 +48,17 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Generate coverage report
+        # One instrumented run, then two reports from it. Passing --codecov
+        # and --html to a single invocation is rejected ("--html may not be
+        # used together with --codecov"), which failed this job on every
+        # push since June while uploading nothing.
         run: |
           cargo llvm-cov --workspace \
             --exclude hv1-boot \
             --exclude hv1-core \
-            --codecov \
-            --output-path codecov.json \
-            --html
+            --no-report
+          cargo llvm-cov report --codecov --output-path codecov.json
+          cargo llvm-cov report --html
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
