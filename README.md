@@ -101,9 +101,18 @@ The REST API ships with 28 composable middleware layers out of the box: rate lim
 git clone https://github.com/nervosys/HyperMachine && cd HyperMachine
 cargo build --release --workspace --exclude hv1-core --exclude hv1-boot
 
-# Create and run a VM (Type-2 hosted mode)
-hm t2 create --name myvm --cpu 4 --memory 8G --gpu
+# Create and boot a VM (Type-2 hosted mode)
+hm t2 create --name myvm --cpu 4 --memory 8 \
+    --kernel /boot/vmlinuz --initrd /boot/initrd.img \
+    --cmdline "console=ttyS0 root=/dev/vda"
 hm t2 start myvm
+
+# Or boot a raw image (boot sector, unikernel) at 0x7C00
+hm t2 create --name unikernel --cpu 1 --memory 1 --image ./kernel.bin
+
+# Without --kernel or --image a VM is created with vCPUs and empty guest
+# memory: it can be started, but there is no guest code to execute.
+hm t2 create --name empty --cpu 2 --memory 4
 
 # Start MCP server for AI agents
 hm mcp serve --api-key "your-key"

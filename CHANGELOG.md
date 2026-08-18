@@ -7,6 +7,196 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Boot sources — a VM can now be told what to boot** (`hv2-core`): the new
+  `BootSource` (`boot::source`) describes a Linux bzImage (with optional initrd
+  and command line), a Multiboot kernel, or a raw image, and resolves to a
+  validated `LoadedBoot` with every image read off disk. `VMConfig` gained a
+  `boot` field, so a boot source is part of a VM's configuration and survives
+  serialization.
+- **`VM::provision` and `VM::launch`** (`hv2-core`): `provision()` creates the
+  backend VM — the WHPX partition or KVM VM fd, which nothing previously did —
+  loads the boot images into guest physical memory, and leaves vCPU 0 at the
+  entry point. `launch()` provisions, starts, and runs the guest on a background
+  task; `stop()` reaps that task and reports any error from it. Together these
+  close the gap between "a VM exists" and "a guest is executing".
+- **`HypervisorBackend::load_boot`** (`hv2-core`): backends load a boot source
+  into their own guest memory and set up the architectural state the protocol
+  needs. Implemented for WHPX (delegating to the existing `WhpxVcpu::boot_linux`
+  / `boot_multiboot` sequences, previously unreachable from `VM`), for KVM
+  (flat 32-bit protected mode with a boot GDT for Linux, real mode for raw
+  images), and for TCG. The default reports `NotSupported`, so a backend that
+  cannot boot a guest says so instead of starting a VM that will never execute.
+- **`KvmVm::write_guest_memory`** (`hv2-core`, Linux): bounds-checked host-side
+  writes into the KVM slot-0 guest allocation.
+- **Boot flags on `hm t2 create`** (`hm-cli`): `--kernel`, `--initrd`,
+  `--cmdline`, and `--image`. The boot source is validated at create time — a
+  bad path fails immediately rather than registering a VM that cannot start —
+  persisted in the VM registry, and used by `hm t2 start`, which now launches
+  the guest instead of only flipping state. A VM created without a boot image
+  says so, at create time and in the logs at start time.
+- **`boot` on the REST and MCP VM-creation payloads** (`hv2-api`, `hm-cli`):
+  `POST /api/v1/vms` accepts a boot source (rejecting a malformed one with 400
+  rather than 500) and `POST /api/v1/vms/{id}/start` launches a VM that has one.
+- **`VmHost`: the MCP `vm.*` tools now drive real VMs** (`hv2-agent`): a new
+  `vm_host` module defines the `VmHost` trait and an in-process `LocalVmHost`
+  backed by `AgentVM`. `McpServer::set_vm_host` installs one; without it the
+  server keeps its previous session-state behaviour, so tool schemas and agent
+  logic stay testable with no hypervisor present. The server enforces session
+  ownership before dispatching, and a non-owner's probe is indistinguishable
+  from a VM that does not exist.
+- **Multiboot boot on the KVM backend** (`hv2-core`): previously
+  `NotSupported`. Enters 32-bit protected mode with `EAX` holding the
+  bootloader magic and `EBX` the `multiboot_info` address.
+- **`load_boot` on the HVF backend** (`hv2-core`, macOS): previously the
+  `NotSupported` default. HVF's `create_vm` now also allocates and maps guest
+  RAM at GPA 0 — it never had any — and `HvfBackend::write_guest_memory` writes
+  into it. Linux, Multiboot, and raw images are all supported, entered through
+  VMCS guest-state fields.
+- **`MultibootProtocol::prepare_guest_memory` and `MultibootLayout`**
+  (`hv2-core`): one shared Multiboot memory layout that every backend writes,
+  so their guest images cannot drift apart.
+- **`PlanExecutor`, `SimulatingExecutor`, and `VmHostExecutor`** (`hv2-api`):
+  ontology plans now execute for real. `HyperMachineOntology::execute_plan_with`
+  dispatches each step through an executor and, on failure, runs a genuine
+  compensating action — a rolled-back plan destroys the VM it created. A step
+  whose compensation fails is reported as *not* rolled back, with the reason, so
+  a leaked resource is visible rather than hidden.
+- **`GpuHost`, `InMemoryGpuHost` (`hv2-agent`) and `AgentGpuHost`
+  (`hv2-runtime`)**: the `gpu.*` agent tools now reach the real
+  `GpuTopologyMap`. Attaching a GPU removes it from the placement pool
+  fleet-wide, so the scheduler stops offering a device an agent already took —
+  something per-session bookkeeping could not model. Same trait-in-the-caller
+  inversion as `VmHost`, which is what avoids the `hv2-runtime` → `hv2-agent`
+  dependency cycle.
+- **`GpuTopologyMap::devices` / `device` / `contains_device`** (`hv2-runtime`):
+  enumerate the full inventory, including allocated devices.
+- **Image admission control on the provisioning path** (`hv2-core`):
+  `VM::set_image_registry` installs an `ImageRegistry` that `VM::provision`
+  consults before loading a boot image, so denying or revoking an image now
+  stops a VM booting it rather than only being reportable through
+  `POST /api/v1/images/check-admission`. Admission is by SHA-256 of the bytes
+  about to be loaded — `LoadedBoot::primary_image_digest`, matched by the new
+  `ImageRegistry::check_admission_by_digest` — so renaming or moving a kernel
+  cannot change the answer. Initrds and Multiboot modules are excluded from the
+  digest; they are separate artifacts with their own registry entries. Opt-in:
+  with no registry installed, any readable image boots exactly as before. A
+  digest that cannot be computed (the `ring` feature is off) is a denial, never
+  a pass.
+- **`enforce_image_admission` on the API server** (`hv2-api`): the
+  `/api/v1/images` routes and the VMs the API creates now share **one**
+  `ImageRegistry`, so approving, denying, or revoking an image there decides
+  whether a VM can boot it. `AppState::with_image_registry` installs it, and
+  `ApiVmHost` carries the same registry so a plan-created VM is gated
+  identically. Off by default and settable from TOML: `RegistryConfig::default`
+  enforces, so enabling this against an empty catalogue refuses every boot image
+  until images are registered and approved.
+- **Policy governance over the MCP tool surface** (`hv2-agent`):
+  `McpServer::set_policy_set` installs a `PolicySet` that is evaluated before
+  every tool call — the questions capabilities cannot express, such as denying a
+  destructive action on one named VM, or outside a maintenance window. A denial
+  is refused *and* written to the audit log, since an unrecorded denial is the
+  one an incident review most needs. Opt-in: with no set installed, the gate
+  stays capabilities plus VM ownership, exactly as before. `PolicySet::new`
+  denies by default, so an installed set must name everything agents may do,
+  including tools added after it was written.
+- **`VmMetrics` and `VmHost::metrics`** (`hv2-agent`): telemetry reaches the
+  host. The `get_metrics` plan step and the `vm.metrics` agent tool now report
+  a VM's real status, vCPU count, allocated memory, and uptime. Quantities the
+  host cannot observe — `cpu_usage_percent`, `memory_used_bytes` — are `null`,
+  never a placeholder number, so an agent can distinguish an idle guest from an
+  uninstrumented one. `ApiVmHost` serves the same figures as
+  `GET /api/v1/vms/{id}/metrics`, so a plan step and a direct request cannot
+  disagree about a VM.
+
+### Changed
+- **Documented the agent enforcement boundary** (`hv2-agent`, `hv2-api`). An
+  audit of the security-shaped types found several that decide but never
+  intercept, described as though they were active. `limits` claimed "real-time
+  enforcement to prevent runaway agents"; `policies` claimed to control "what AI
+  agents can and cannot do". Both are toolkits that take effect only where a
+  caller consults them, and neither had a caller. `policies` has since been
+  given an opt-in enforcement point on the MCP tool surface (see Added);
+  `limits` remains consult-only, and its `RateLimiter` is *not* the limiter the
+  MCP server uses — that is `McpConfig::rate_limit`, which was always enforced.
+  `permissions` is wired into a request path by `hv2-api`'s permission
+  middleware. `Operation.rate_limit`, published to agents through
+  `GET /agentic/ontology`, is advisory: nothing reads it back to reject a
+  request.
+- The `vm.create` MCP schema advertises a structured `boot` object in place of
+  the `boot_image` string, which no handler read.
+- `/agentic/plans/execute`, as served by `create_router_with_state`, executes
+  plans against the server's own VM inventory instead of simulating. Simulation
+  remains available through `execute_plan` and is still tagged
+  `"simulated": true`, so the two can never be confused.
+
+### Fixed
+- **Boot admission was decided after the backend had already been asked for a
+  partition** (`hv2-core`). `VM::provision` called `backend.create_vm` first, so
+  a refused image had still cost hypervisor resources — and on a host where
+  `create_vm` fails the refusal was masked by the backend's error entirely.
+  Resolution, admission, and the memory-fit check now all happen before the
+  backend is touched.
+- **A flaky PIT timer test** (`hv2-core`) asserted a background task's
+  wall-clock throughput. The timer uses `MissedTickBehavior::Skip`, so under a
+  loaded machine ticks are dropped rather than queued and the count falls short.
+  It now drives `tokio::time::pause`/`advance` against virtual time, bounded so
+  a timer that never ticks still fails. Adds `tokio`'s `test-util` feature as a
+  dev-dependency.
+- **The image allowlist was never consulted before booting an image**
+  (`hv2-core`). `ImageRegistry`'s own doc comment claimed admission checks that
+  "the scheduler and VM provisioning path call before launching workloads";
+  neither did. `check_admission` was reachable only from an advisory REST
+  endpoint and tests, so an image could be denied or revoked in the registry and
+  still boot. There is now a real enforcement point (see Added), and the doc
+  states what is and is not on it.
+- **`AgentVMBuilder` had no setter for `capabilities` or `sandbox_config`**
+  (`hv2-agent`). Both fields existed, were passed to `ScriptEngine` and
+  `Sandbox`, and were unreachable from any caller — so every `AgentVM` ran with
+  the defaults and neither control could be tightened. Added
+  `AgentVMBuilder::capabilities` and `AgentVMBuilder::sandbox`.
+- **`SandboxConfig::max_cpu_time` bounded nothing** (`hv2-agent`). Script
+  execution was bounded only by the builder's `script_timeout`, so a caller who
+  tightened the sandbox limit got no effect. `AgentVM::effective_script_timeout`
+  now takes the stricter of the two.
+- **A flaky `hv2-runtime` health test** raced a 1 ms `check_interval`: it
+  recorded a probe and immediately asserted no check was due, which fails if the
+  thread is descheduled for a millisecond. It now uses a long interval, which a
+  never-checked VM is due under regardless.
+- **Two rustdoc warnings** (`hv2-agent`, `hv2-core`) — a redundant explicit link
+  target and an unresolved link to `LoadedBoot::entry_point` — restoring the
+  0-warning rustdoc build.
+- **`ScriptEngine` never enforced its capability set** (`hv2-agent`). The engine
+  was constructed with a `CapabilitySet` and then never consulted it, so an
+  engine deliberately built with no capabilities handed scripts the same VM view
+  as a fully privileged one. `execute` now requires `Capability::VmRead`.
+- **`execute_script` was described to agents as running inside the guest**
+  (`hv2-api`, `hm-cli`). It evaluates a Rhai script *on the host* against a
+  read-only view of the VM — there is no in-guest agent — and the scope holds
+  four scalars, not the "VM control operations" the ontology advertised. Four
+  descriptions across the REST ontology, the CLI ontology, the CLI MCP server,
+  and the LLM adapter prompt were corrected, and the documented example was
+  changed from `echo 'Hello'` (a shell command Rhai cannot parse) to Rhai.
+- **`vm.metrics` returned hard-coded zeros for every counter** (`hv2-agent`).
+  Zero is a measurement; an agent reading 0% CPU on a busy VM would draw the
+  wrong conclusion. Unmeasured fields are now `null`.
+- **Multiboot `mods_addr` pointed at the module data rather than the module
+  descriptor array** (`hv2-core`, WHPX). A Multiboot kernel walking that pointer
+  read its module's contents as if they were addresses, so it would silently
+  fail to find its initrd. Module command-line strings were never written at
+  all.
+- **Ontology plan steps with no dependencies executed in nondeterministic
+  order** (`hv2-api`): `topological_sort` seeded its queue from a `HashMap`, so
+  independent steps ran in hash order and a plan that happened to work was a
+  coin flip. Ties now break toward declaration order.
+- **A `stop()` racing a `launch()`** reported the resulting `InvalidState` as a
+  VM failure (`hv2-core`).
+- `GpuTopologyMap::devices_on_host` excludes allocated devices; its doc comment
+  said otherwise.
+- Clippy lints introduced by a newer toolchain (`float_literal_f32_fallback` in
+  `hm-gui`, `for_kv_map` and an unused macOS import in `hv2-core`), restoring a
+  `-D warnings` clean build on every supported target.
+
 ## [1.1.0] - 2026-06-04
 
 ### Added
