@@ -596,7 +596,8 @@ fn full_vm_setup_without_hardware() {
         assert!(vm.device_manager_mut().handle_pio(&mut req).is_ok());
 
         // 8. Init frame allocator
-        vm.init_frame_allocator(0x100_0000, 0x200_0000);
+        vm.init_frame_allocator(0x100_0000, 0x200_0000)
+            .expect("frame allocator should initialise over a valid range");
 
         // 9. Stop (always succeeds)
         vm.stop().unwrap();

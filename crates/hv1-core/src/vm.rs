@@ -721,7 +721,8 @@ mod tests {
     fn vm_init_frame_allocator() {
         with_big_stack(|| {
             let mut vm = Vm::new(CpuVendor::Intel, VmConfig::default()).unwrap();
-            vm.init_frame_allocator(0x100_0000, 0x200_0000);
+            vm.init_frame_allocator(0x100_0000, 0x200_0000)
+                .expect("frame allocator should initialise over a valid range");
         });
     }
 
