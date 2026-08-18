@@ -2919,7 +2919,7 @@ dependencies = [
  "aarch64-cpu",
  "bitflags 2.10.0",
  "log",
- "spin 0.9.8",
+ "spin 0.12.0",
  "static_assertions",
  "tock-registers 0.9.0",
 ]
@@ -2946,7 +2946,7 @@ dependencies = [
  "linked_list_allocator",
  "log",
  "raw-cpuid 11.6.0",
- "spin 0.9.8",
+ "spin 0.12.0",
  "static_assertions",
  "x86",
  "x86_64",
@@ -6180,6 +6180,12 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+
+[[package]]
+name = "spin"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1527984ca054dfca79333baec451042863f485fbee01b7bf6d911de915cac865"
 dependencies = [
  "lock_api",
 ]
