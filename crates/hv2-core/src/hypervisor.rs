@@ -46,7 +46,10 @@ impl HypervisorPlatform {
             }
         }
 
-        #[cfg(target_os = "macos")]
+        // x86_64 only -- the HVF backend cannot be built on Apple Silicon,
+        // so reporting Hvf there would name a platform we then fall back
+        // out of. Apple Silicon detects as Tcg, which is what it gets.
+        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
         {
             if Self::is_hvf_available() {
                 return Self::Hvf;
@@ -96,7 +99,9 @@ impl HypervisorPlatform {
         hr == 0 && result != 0
     }
 
-    #[cfg(target_os = "macos")]
+    // Only `detect` calls this, and only on x86_64 macOS, so gating it the same
+    // way keeps it from becoming dead code on Apple Silicon.
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     fn is_hvf_available() -> bool {
         // Check if HVF is available by calling hv_vm_create and immediately destroying
         // On modern macOS (10.15+), HVF is generally available on Apple Silicon
@@ -569,7 +574,10 @@ pub fn create_backend() -> Result<Box<dyn HypervisorBackend>> {
             use crate::backends::whpx::WhpxBackend;
             Ok(Box::new(WhpxBackend::new()?))
         }
-        #[cfg(target_os = "macos")]
+        // x86_64 only: the HVF backend uses Hypervisor.framework's VMX API,
+        // which does not exist on Apple Silicon. On aarch64 macOS this arm is
+        // absent and `Hvf` falls through to TCG below.
+        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
         HypervisorPlatform::Hvf => {
             use crate::backends::hvf::HvfBackend;
             Ok(Box::new(HvfBackend::new()?))

@@ -39,12 +39,20 @@ pub mod whpx;
 #[cfg(target_os = "windows")]
 pub use whpx::WhpxBackend;
 
-// macOS HVF backend
-#[cfg(target_os = "macos")]
+// macOS HVF backend.
+//
+// x86_64 only. This backend is built on Hypervisor.framework's VMX surface --
+// hv_vmx_vcpu_read_vmcs / hv_vmx_vcpu_write_vmcs / hv_vcpu_read_register /
+// hv_vcpu_write_register / hv_vcpu_interrupt -- none of which exist on Apple
+// Silicon, where the framework exposes a different ARM API entirely. Gated only
+// on target_os, it compiled on aarch64-apple-darwin (cargo check does not link)
+// and then failed at link time with "symbol(s) not found for architecture
+// arm64". Selecting a backend on Apple Silicon now falls through to TCG.
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 pub mod hvf_ffi;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 pub mod hvf;
 
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
 pub use hvf::HvfBackend;
