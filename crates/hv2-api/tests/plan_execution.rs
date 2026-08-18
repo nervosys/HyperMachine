@@ -488,6 +488,17 @@ async fn a_plan_executed_over_http_creates_a_vm_the_rest_api_can_see() {
         .await
         .unwrap();
     let result: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+
+    // Creating a VM needs a hypervisor. A runner with /dev/kvm present but not
+    // accessible reports a permission error here, which says nothing about the
+    // plan machinery under test -- skip rather than fail, as the hv2-core
+    // tests already do when no backend is available.
+    let first_error = result["step_results"][0]["error"].as_str().unwrap_or("");
+    if first_error.contains("/dev/kvm") || first_error.contains("Hypervisor error") {
+        eprintln!("skipping: no usable hypervisor backend ({first_error})");
+        return;
+    }
+
     assert_eq!(result["status"], "completed", "plan result: {result}");
     assert!(
         result["step_results"][0]["output"]
