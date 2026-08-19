@@ -12,6 +12,13 @@ const RBR_OFFSET: u64 = 0; // Receiver Buffer Register
 const IER_OFFSET: u64 = 1; // Interrupt Enable Register
 const IIR_OFFSET: u64 = 2; // Interrupt Identification Register (read)
 const FCR_OFFSET: u64 = 2; // FIFO Control Register (write)
+
+/// Ceiling on buffered guest output, in bytes.
+///
+/// The transmit buffer is drained only when a caller reads it, so a chatty
+/// guest on an unattended VM would otherwise grow it without limit. 1 MiB is
+/// far more than a boot log and small enough to be irrelevant per VM.
+const MAX_TX_BUFFER_BYTES: usize = 1024 * 1024;
 const LCR_OFFSET: u64 = 3; // Line Control Register
 const MCR_OFFSET: u64 = 4; // Modem Control Register
 const LSR_OFFSET: u64 = 5; // Line Status Register
@@ -173,10 +180,27 @@ impl SerialDevice {
         data
     }
 
-    /// Get pending output as a string (if valid UTF-8)
+    /// Get pending output as a string (if valid UTF-8).
+    ///
+    /// Consumes the buffer, like [`Self::output`].
     pub fn output_string(&self) -> String {
         let data = self.output();
         String::from_utf8_lossy(&data).into_owned()
+    }
+
+    /// Copy buffered output without consuming it.
+    ///
+    /// [`Self::output`] drains, which is right for a consumer that forwards
+    /// bytes onward but wrong for anything that polls: two readers cannot both
+    /// see the console, and a status check would silently eat the boot log it
+    /// was trying to report.
+    pub fn peek_output(&self) -> Vec<u8> {
+        self.tx_buffer.lock().iter().copied().collect()
+    }
+
+    /// Buffered output as a string, without consuming it.
+    pub fn peek_output_string(&self) -> String {
+        String::from_utf8_lossy(&self.peek_output()).into_owned()
     }
 }
 
@@ -286,6 +310,15 @@ impl Device for SerialDevice {
                 // DLAB=0: Write to transmit buffer
                 let mut tx = self.tx_buffer.lock();
                 tx.push_back(data[0]);
+                // A guest printing in a loop must not be able to exhaust host
+                // memory. Nothing drains this buffer unless a caller asks for
+                // output, so without a cap an unattended VM grows it forever.
+                // Drop the oldest bytes: for a console, recent output is what
+                // anyone wants, and losing the start of a boot log beats
+                // losing the host.
+                while tx.len() > MAX_TX_BUFFER_BYTES {
+                    tx.pop_front();
+                }
                 *self.thr_empty.lock() = false;
             }
             IER_OFFSET if dlab => {
@@ -346,6 +379,42 @@ impl Device for SerialDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn guest_output_cannot_exhaust_host_memory() {
+        // Nothing drains the transmit buffer unless a caller reads it, so a
+        // guest printing in a loop on an unattended VM would grow it forever.
+        let mut device = SerialDevice::new("com1".to_string(), 0x3F8);
+        device.init().await.unwrap();
+
+        for _ in 0..(MAX_TX_BUFFER_BYTES + 4096) {
+            device.write(THR_OFFSET, &[b'x']).await.unwrap();
+        }
+
+        assert!(
+            device.peek_output().len() <= MAX_TX_BUFFER_BYTES,
+            "buffered output must stay under the cap"
+        );
+    }
+
+    #[tokio::test]
+    async fn peeking_does_not_consume_the_console() {
+        // output() drains, which is right for a consumer forwarding bytes on
+        // and wrong for anything that polls: a status check must not eat the
+        // boot log it is reporting.
+        let mut device = SerialDevice::new("com1".to_string(), 0x3F8);
+        device.init().await.unwrap();
+
+        for byte in b"boot" {
+            device.write(THR_OFFSET, &[*byte]).await.unwrap();
+        }
+
+        assert_eq!(device.peek_output_string(), "boot");
+        assert_eq!(device.peek_output_string(), "boot", "peek is repeatable");
+
+        assert_eq!(device.output_string(), "boot", "output still drains");
+        assert_eq!(device.peek_output_string(), "", "and the drain was real");
+    }
 
     #[tokio::test]
     async fn test_serial_device() {
