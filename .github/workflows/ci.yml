@@ -324,11 +324,11 @@ jobs:
     # Bump this date deliberately and watch these jobs when you do; that is
     # the tradeoff for them no longer failing at random.
     #
-    # The steps below call plain `cargo`, not `cargo +nightly`. The action
-    # makes the pinned toolchain the default; `+nightly` would select the
-    # generic nightly instead -- a different toolchain, without the
-    # components installed here, which is how the first attempt at this pin
-    # failed with "cargo-clippy is not installed".
+    # The steps below name the toolchain explicitly: `cargo +nightly-2026-08-17`.
+    # rust-toolchain.toml pins channel = "stable" for the repo, and that file
+    # overrides whatever default the action sets -- a bare `cargo` here runs
+    # stable and dies on "-Z is only accepted on the nightly channel". Keep
+    # the date in the `with:` blocks and in these commands in step.
     hv1-check:
         name: HV1 Check (nightly, bare-metal)
         runs-on: ubuntu-latest
@@ -355,7 +355,7 @@ jobs:
 
             - name: Check hv1-core (x86_64-unknown-none)
               run: >
-                  cargo check -p hv1-core
+                  cargo +nightly-2026-08-17 check -p hv1-core
                   --target x86_64-unknown-none
                   -Zbuild-std=core,alloc
                   -Zbuild-std-features=compiler-builtins-mem
@@ -370,7 +370,7 @@ jobs:
             - name: Check hv1-boot (x86_64-unknown-none)
               continue-on-error: true
               run: >
-                  cargo check -p hv1-boot
+                  cargo +nightly-2026-08-17 check -p hv1-boot
                   --target x86_64-unknown-none
                   -Zbuild-std=core,alloc
                   -Zbuild-std-features=compiler-builtins-mem
@@ -401,7 +401,7 @@ jobs:
 
             - name: Check hv1-arm (aarch64-unknown-none)
               run: >
-                  cargo check -p hv1-arm
+                  cargo +nightly-2026-08-17 check -p hv1-arm
                   --target aarch64-unknown-none
                   -Zbuild-std=core,alloc
                   -Zbuild-std-features=compiler-builtins-mem
@@ -462,7 +462,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Run hv1-core tests
-              run: cargo test -p hv1-core
+              run: cargo +nightly-2026-08-17 test -p hv1-core
 
     hv1-clippy:
         name: HV1 Clippy (nightly)
@@ -490,7 +490,7 @@ jobs:
 
             - name: Run clippy on hv1-core
               run: >
-                  cargo clippy -p hv1-core
+                  cargo +nightly-2026-08-17 clippy -p hv1-core
                   --target x86_64-unknown-none
                   -Zbuild-std=core,alloc
                   -Zbuild-std-features=compiler-builtins-mem
