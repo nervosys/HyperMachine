@@ -1,0 +1,285 @@
+{
+  "ironstack": "1",
+  "id": "hypermachine",
+  "product": "HyperMachine",
+  "layer": "substrate",
+  "role": "Agentic hypervisors and sandboxes for autonomous AI systems.",
+  "ontology": {
+    "command": "GET /agentic/ontology",
+    "api": "hv2_agent::mcp::McpServer::list_tools(&AgentCapabilities) \u2014 the tool surface, filtered by the capabilities the caller holds",
+    "schema": 1
+  },
+  "capabilities": [
+    {
+      "name": "vm.create",
+      "description": "Create a new virtual machine. Requires: VmManage.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.start",
+      "description": "Start a virtual machine. Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.stop",
+      "description": "Stop a virtual machine (graceful shutdown). Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.pause",
+      "description": "Pause a running virtual machine, freezing its vCPUs while retaining memory state. Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.resume",
+      "description": "Resume a paused virtual machine, restoring vCPU execution from frozen memory state. Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.delete",
+      "description": "Delete a virtual machine and its resources. Requires: VmManage.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.list",
+      "description": "List all virtual machines. Requires: VmRead.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.status",
+      "description": "Get detailed status of a virtual machine. Requires: VmRead.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.resize",
+      "description": "Resize VM resources (CPU, memory). Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "vm.metrics",
+      "description": "Get resource usage metrics for a VM. Requires: MetricsRead.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "snapshot.create",
+      "description": "Create a VM snapshot. Requires: SnapshotManage.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "snapshot.restore",
+      "description": "Restore a VM from snapshot. Requires: SnapshotManage.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "snapshot.list",
+      "description": "List snapshots for a VM. Requires: VmRead.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "network.attach",
+      "description": "Attach a network interface to a VM. Requires: NetworkAdmin.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "network.detach",
+      "description": "Detach a network interface from a VM. Requires: NetworkAdmin.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "gpu.register",
+      "description": "Register a GPU device into the fabric inventory so it can be allocated to VMs. Requires: Admin.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "gpu.list",
+      "description": "List GPU devices in the fabric and their allocation status. Requires: MetricsRead.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "gpu.attach",
+      "description": "Attach a free GPU device to a VM, reserving it for that VM. Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "gpu.detach",
+      "description": "Detach a GPU device from a VM and return it to the available pool. Requires: VmWrite.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "guest.exec",
+      "description": "Execute a command inside the VM guest. Requires: GuestExec.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "guest.exec.status",
+      "description": "Poll the result of a submitted guest request (guest.exec / guest.file.*). Requires: GuestExec.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "guest.file.read",
+      "description": "Read a file from inside the VM. Requires: GuestExec.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "guest.file.write",
+      "description": "Write a file inside the VM. Requires: GuestExec.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "agent.broadcast",
+      "description": "Broadcast a message to other agents. Requires: Coordination.",
+      "requires_grant": true,
+      "budgeted": true,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "agent.send",
+      "description": "Send a message to a specific agent. Requires: Coordination.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "agent.list",
+      "description": "List connected agents. Requires: Coordination.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "agent.claim",
+      "description": "Claim exclusive access to a VM (prevents other agents from modifying). Requires: VmWrite, Coordination.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "agent.release",
+      "description": "Release a previously claimed VM. Requires: Coordination.",
+      "requires_grant": true,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "system.info",
+      "description": "Get HyperMachine system information. Declared with no required capability.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    },
+    {
+      "name": "system.health",
+      "description": "Get system health status. Requires: MetricsRead.",
+      "requires_grant": false,
+      "budgeted": false,
+      "surfaces": [
+        "mcp"
+      ]
+    }
+  ],
+  "note": "requires_grant is derived from the required_capabilities HyperMachine already declares per tool, against its own AgentCapabilities::read_only() set (VmRead, MetricsRead, StorageRead). A tool needing nothing outside that set needs no grant, which leaves seven: vm.list, vm.status, snapshot.list, vm.metrics, gpu.list, system.health and system.info. The classification is enforced rather than merely declared -- list_tools filters by the caller's capabilities, so a read-only agent cannot see the other twenty-three, and a test asserts vm.create and vm.delete are absent from that view. budgeted is the one axis HyperMachine does not declare, so it is judged here and stated rather than implied: a tool is budgeted when the caller supplies a quantity that determines its cost, or when it draws from a finite shared pool. vm.create and vm.resize take cpu_cores and memory_gb with declared maxima of 128 and 1024; snapshot.create consumes storage proportional to the VM; gpu.attach reserves a device from the fabric inventory; guest.exec runs an arbitrary command inside the guest; guest.file.write scales with content; agent.broadcast fans out across every connected agent. The remaining sixteen granted tools are single decisions, where the danger is that one was unauthorised rather than that many were made. system.info is declared with no required capability at all. That is HyperMachine's stated position, not an omission this manifest corrects, but it is the one entry worth a second look, since it is the only tool on a hypervisor reachable by an agent holding nothing."
+}
