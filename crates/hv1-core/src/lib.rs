@@ -50,25 +50,48 @@
 // #![feature(abi_x86_interrupt)]
 // #![feature(allocator_api)]
 
+// hv1-core is the x86_64 Type-1 hypervisor: its VM, vCPU and boot paths are
+// built on Intel VMX and AMD SVM throughout, and its dependencies (x86_64,
+// x86, raw-cpuid) are declared only for cfg(target_arch = "x86_64"). Building
+// it elsewhere previously produced ~75 unresolved-name errors across eight
+// modules, which reads like a porting bug rather than a design boundary.
+#[cfg(not(target_arch = "x86_64"))]
+compile_error!(
+    "hv1-core is the x86_64 (Intel VMX / AMD SVM) Type-1 hypervisor and does not build for other architectures. The ARM64 EL2 hypervisor is the separate `hv1-arm` crate; depend on that instead."
+);
+
 extern crate alloc;
 
+#[cfg(target_arch = "x86_64")]
 pub mod arch;
+#[cfg(target_arch = "x86_64")]
 pub mod boot;
+#[cfg(target_arch = "x86_64")]
 pub mod cpu;
+#[cfg(target_arch = "x86_64")]
 pub mod device;
+#[cfg(target_arch = "x86_64")]
 pub mod error;
+#[cfg(target_arch = "x86_64")]
 pub mod interrupt;
+#[cfg(target_arch = "x86_64")]
 pub mod memory;
+#[cfg(target_arch = "x86_64")]
 pub mod serial;
+#[cfg(target_arch = "x86_64")]
 pub mod svm;
+#[cfg(target_arch = "x86_64")]
 pub mod vcpu;
+#[cfg(target_arch = "x86_64")]
 pub mod vm;
+#[cfg(target_arch = "x86_64")]
 pub mod vmx;
 
 /// ARM64/EL2 backend (available when compiled with `arm64` feature on AArch64)
 #[cfg(all(target_arch = "aarch64", feature = "arm64"))]
 pub use hv1_arm as arm;
 
+#[cfg(target_arch = "x86_64")]
 pub use error::{Error, Result};
 
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -179,6 +202,7 @@ impl HypervisorCapabilities {
 ///
 /// This is called early in boot before any guests are created.
 /// It sets up VMX/SVM, memory management, and interrupt handling.
+#[cfg(target_arch = "x86_64")]
 pub fn initialize() -> Result<()> {
     if HYPERVISOR_INITIALIZED.load(Ordering::SeqCst) {
         return Err(Error::AlreadyInitialized);
