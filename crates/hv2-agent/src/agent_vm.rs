@@ -238,9 +238,41 @@ impl AgentVM {
                 .await
                 .map(|s| s.elapsed().as_secs())
                 .unwrap_or(0),
-            cpu_usage_percent: None,
+            cpu_usage_percent: self.cpu_usage_percent().await,
+            // Still unmeasured: knowing how much guest memory is actually in
+            // use needs cooperation from inside the guest (virtio-balloon or a
+            // guest agent), which does not exist yet.
             memory_used_bytes: None,
         })
+    }
+
+    /// Share of available vCPU time this VM has spent executing guest code.
+    ///
+    /// `VM`'s run loop already times every `run_vcpu` call, so this is measured
+    /// rather than estimated: total guest time across all vCPUs, over the
+    /// wall-clock time the VM has been started, times the vCPU count.
+    ///
+    /// Returns `None` when no vCPU has ever exited. That distinguishes a VM
+    /// that is idle from one whose run loop never started at all -- `start()`
+    /// without a boot source moves a VM to `Running` but never executes it, and
+    /// reporting 0% there would claim an idle guest where there is no guest.
+    pub async fn cpu_usage_percent(&self) -> Option<f64> {
+        let stats = self.vm.all_vcpu_stats();
+        if stats.iter().all(|s| s.exits() == 0) {
+            return None;
+        }
+
+        let elapsed = self.started_at.read().await.map(|s| s.elapsed())?;
+        let available_ns = elapsed.as_nanos().checked_mul(stats.len() as u128)?;
+        if available_ns == 0 {
+            return None;
+        }
+
+        let busy_ns: u128 = stats.iter().map(|s| s.run_time_ns() as u128).sum();
+
+        // Clamp: the two clocks are sampled independently, so a vCPU that was
+        // executing when we read them can total marginally over 100%.
+        Some(((busy_ns as f64 / available_ns as f64) * 100.0).clamp(0.0, 100.0))
     }
 
     /// Get the underlying VM
@@ -283,6 +315,30 @@ mod tests {
         };
 
         assert_eq!(vm.state(), VMState::Created);
+    }
+
+    #[tokio::test]
+    async fn cpu_usage_is_none_until_a_vcpu_has_executed() {
+        // A VM started without a boot source reaches Running but never
+        // enters the run loop. 0% there would read as an idle guest; there
+        // is no guest.
+        let Ok(vm) = AgentVM::builder().name("never-ran").build().await else {
+            eprintln!("skipping: no hypervisor backend available");
+            return;
+        };
+
+        assert_eq!(vm.cpu_usage_percent().await, None, "before start");
+
+        vm.start().await.unwrap();
+        assert_eq!(
+            vm.cpu_usage_percent().await,
+            None,
+            "started but never executed is not the same as idle"
+        );
+
+        let metrics = vm.get_metrics().await.unwrap();
+        assert_eq!(metrics.cpu_usage_percent, None);
+        vm.stop().await.unwrap();
     }
 
     #[tokio::test]

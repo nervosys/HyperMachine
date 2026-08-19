@@ -98,9 +98,11 @@ pub struct VmDescriptor {
 /// Every measured quantity is an [`Option`] on purpose. A host that cannot
 /// observe a value reports `None`, never a plausible-looking number: an agent
 /// deciding whether to scale a workload has to be able to tell "idle" from
-/// "not instrumented". `cpu_usage_percent` needs per-vCPU run accounting from
-/// the backend, and `memory_used_bytes` needs guest cooperation (virtio-balloon
-/// or a guest agent) — neither is available from the outside.
+/// "not instrumented". A host backed by [`AgentVM`] measures
+/// `cpu_usage_percent` from the run loop’s own vCPU timings; one that only
+/// tracks VMs reports `None`. `memory_used_bytes` stays `None` everywhere:
+/// it needs cooperation from inside the guest (virtio-balloon or a guest
+/// agent), which does not exist yet.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VmMetrics {
     /// The VM these metrics describe.
