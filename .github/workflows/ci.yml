@@ -330,8 +330,9 @@ jobs:
             - uses: actions/checkout@v4
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@nightly-2026-08-17
+              uses: dtolnay/rust-toolchain@master
               with:
+                  toolchain: nightly-2026-08-17
                   components: rust-src
 
             - name: Cache cargo registry
@@ -375,8 +376,9 @@ jobs:
             - uses: actions/checkout@v4
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@nightly-2026-08-17
+              uses: dtolnay/rust-toolchain@master
               with:
+                  toolchain: nightly-2026-08-17
                   components: rust-src
 
             - name: Cache cargo registry
@@ -437,7 +439,9 @@ jobs:
             - uses: actions/checkout@v4
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@nightly-2026-08-17
+              uses: dtolnay/rust-toolchain@master
+              with:
+                  toolchain: nightly-2026-08-17
 
             - name: Cache cargo registry
               uses: actions/cache@v4
@@ -461,8 +465,9 @@ jobs:
             - uses: actions/checkout@v4
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@nightly-2026-08-17
+              uses: dtolnay/rust-toolchain@master
               with:
+                  toolchain: nightly-2026-08-17
                   components: clippy, rust-src
 
             - name: Cache cargo registry
