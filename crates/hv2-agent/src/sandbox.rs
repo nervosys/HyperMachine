@@ -22,9 +22,27 @@ use serde::{Deserialize, Serialize};
 /// Sandbox configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxConfig {
-    /// Maximum memory usage in bytes. Declarative only — nothing measures a
-    /// script's memory today.
+    /// Maximum memory usage in bytes.
+    ///
+    /// Declarative. Scripts run in-process, so there is no allocator
+    /// boundary to enforce this against; use [`Self::max_operations`] and
+    /// [`Self::max_string_size`], which are enforced, or run the whole
+    /// process under the container module for a real memory limit.
     pub max_memory: u64,
+
+    /// Maximum Rhai operations a single script may execute.
+    ///
+    /// Enforced. This is the practical bound on a runaway script: an
+    /// infinite loop terminates here rather than running until the
+    /// wall-clock timeout.
+    pub max_operations: u64,
+
+    /// Maximum size of any single string a script may build, in bytes.
+    ///
+    /// Enforced. The closest thing to a memory bound available in-process,
+    /// since string building is how a script would most easily allocate
+    /// without limit.
+    pub max_string_size: usize,
 
     /// Maximum CPU time in seconds. Enforced as a wall-clock bound on script
     /// execution, alongside `AgentVM`'s `script_timeout`; the stricter wins.
@@ -47,7 +65,9 @@ impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
             max_memory: 512 * 1024 * 1024, // 512MB
-            max_cpu_time: 300,             // 5 minutes
+            max_operations: 100_000,
+            max_string_size: 1024 * 1024, // 1 MiB
+            max_cpu_time: 300,            // 5 minutes
             allow_network: false,
             allow_filesystem: false,
             allowed_syscalls: vec!["read".to_string(), "write".to_string(), "exit".to_string()],

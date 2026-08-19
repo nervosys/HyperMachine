@@ -32,14 +32,25 @@ pub struct ScriptEngine {
 }
 
 impl ScriptEngine {
-    /// Create a new script engine
+    /// Create a script engine with the default limits.
     pub fn new(capabilities: CapabilitySet) -> Self {
+        Self::with_limits(capabilities, &crate::SandboxConfig::default())
+    }
+
+    /// Create a script engine bounded by `limits`.
+    ///
+    /// `max_operations` and `max_string_size` are applied to the Rhai engine
+    /// and are the two limits that actually bind in-process: an infinite loop
+    /// terminates on the operation count rather than running until the
+    /// wall-clock timeout, and unbounded string building fails on the size
+    /// cap. `max_memory` and `allowed_syscalls` have no in-process equivalent
+    /// and are documented as declarative on [`SandboxConfig`].
+    pub fn with_limits(capabilities: CapabilitySet, limits: &crate::SandboxConfig) -> Self {
         let mut engine = Engine::new();
 
-        // Configure engine for safety
         engine.set_max_expr_depths(50, 25);
-        engine.set_max_operations(100_000);
-        engine.set_max_string_size(1024 * 1024); // 1MB
+        engine.set_max_operations(limits.max_operations);
+        engine.set_max_string_size(limits.max_string_size);
 
         Self {
             engine: Arc::new(RwLock::new(engine)),
@@ -152,6 +163,48 @@ mod tests {
             .expect_err("an uncapable engine must refuse");
 
         assert!(err.to_string().contains("VmRead"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn the_operation_limit_stops_a_runaway_script() {
+        let Some(vm) = vm_or_skip() else {
+            return;
+        };
+        // A tight loop is the case the wall-clock timeout handles badly: it
+        // would burn the full script_timeout before failing. The operation
+        // count catches it immediately.
+        let limits = crate::SandboxConfig {
+            max_operations: 1_000,
+            ..Default::default()
+        };
+        let engine = ScriptEngine::with_limits(CapabilitySet::default(), &limits);
+
+        let err = engine
+            .execute("let i = 0; loop { i += 1; }", vm)
+            .await
+            .expect_err("a runaway script must be stopped");
+        assert!(
+            err.to_string().to_lowercase().contains("operation"),
+            "got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_string_limit_bounds_allocation() {
+        let Some(vm) = vm_or_skip() else {
+            return;
+        };
+        let limits = crate::SandboxConfig {
+            max_string_size: 64,
+            ..Default::default()
+        };
+        let engine = ScriptEngine::with_limits(CapabilitySet::default(), &limits);
+
+        let err = engine
+            .execute(r#"let s = "x"; loop { s += s; }"#, vm)
+            .await
+            .expect_err("unbounded string building must be stopped");
+        assert!(!err.to_string().is_empty());
     }
 
     #[tokio::test]

@@ -106,7 +106,7 @@ impl AgentVMBuilder {
 
     pub async fn build(self) -> Result<AgentVM> {
         let vm = VM::new(self.config)?;
-        let script_engine = ScriptEngine::new(self.capabilities);
+        let script_engine = ScriptEngine::with_limits(self.capabilities, &self.sandbox_config);
         let sandbox = Sandbox::new(self.sandbox_config);
 
         Ok(AgentVM {
