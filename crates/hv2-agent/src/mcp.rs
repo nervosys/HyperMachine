@@ -78,6 +78,12 @@ pub struct McpServer {
     vm_host: RwLock<Option<Arc<dyn crate::vm_host::VmHost>>>,
     /// Where the `gpu.*` tools dispatch, on the same terms as `vm_host`.
     gpu_host: RwLock<Option<Arc<dyn crate::gpu_host::GpuHost>>>,
+    /// Where the `image.*` tools read the fleet allowlist.
+    ///
+    /// `None` leaves those tools reporting that no registry is installed,
+    /// rather than inventing an empty one — an agent must be able to tell "no
+    /// images are approved" from "nobody is tracking images".
+    image_host: RwLock<Option<Arc<dyn crate::image_host::ImageHost>>>,
     /// Governance evaluated before every tool call.
     ///
     /// `None` — the default — leaves capabilities and VM ownership as the only
@@ -362,6 +368,7 @@ impl McpServer {
             teardown_hook: RwLock::new(None),
             vm_host: RwLock::new(None),
             gpu_host: RwLock::new(None),
+            image_host: RwLock::new(None),
             policies: RwLock::new(None),
             concurrency: RwLock::new(None),
         };
@@ -405,6 +412,24 @@ impl McpServer {
     /// The installed GPU host, if any.
     pub fn gpu_host(&self) -> Option<Arc<dyn crate::gpu_host::GpuHost>> {
         self.gpu_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Let agents read the fleet image allowlist.
+    ///
+    /// Admission is enforced at `VM::provision` regardless; this exists so an
+    /// agent can ask what it may boot *before* composing a plan, instead of
+    /// discovering the answer when the VM refuses to start. Share the same
+    /// registry the API server uses so the two cannot disagree.
+    pub fn set_image_host(&self, host: Arc<dyn crate::image_host::ImageHost>) {
+        *self.image_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed image host, if any.
+    pub fn image_host(&self) -> Option<Arc<dyn crate::image_host::ImageHost>> {
+        self.image_host
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -1383,6 +1408,56 @@ impl McpServer {
             },
         );
 
+        // Image allowlist. Read-only on purpose: an agent may ask what it is
+        // permitted to boot, but approving an image is a human review step and
+        // is not reachable from here.
+        tools.insert(
+            "image.list".to_string(),
+            McpTool {
+                name: "image.list".to_string(),
+                description: "List images in the fleet allowlist with their approval status. Requires an image host; without one the registry is not visible to agents.".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+                category: ToolCategory::Storage,
+                required_capabilities: vec![],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "image.get".to_string(),
+            McpTool {
+                name: "image.get".to_string(),
+                description: "Look up one image in the allowlist by its registry reference.".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {"reference": {"type": "string", "description": "Registry reference, e.g. registry.internal/kernels/ubuntu:6.8"}},
+                    "required": ["reference"]
+                }),
+                category: ToolCategory::Storage,
+                required_capabilities: vec![],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "image.check".to_string(),
+            McpTool {
+                name: "image.check".to_string(),
+                description: "Ask whether an image would be admitted, by SHA-256 digest. This is the question VM::provision asks, so a VM whose image fails this check will refuse to start.".to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {"sha256": {"type": "string", "description": "Lower-case hex SHA-256 of the image bytes"}},
+                    "required": ["sha256"]
+                }),
+                category: ToolCategory::Storage,
+                required_capabilities: vec![],
+                enabled: true,
+            },
+        );
+
         // System tools
         tools.insert(
             "system.info".to_string(),
@@ -1947,6 +2022,62 @@ impl McpServer {
         }
     }
 
+    /// Answer an `image.*` tool from an installed
+    /// [`ImageHost`](crate::image_host::ImageHost).
+    ///
+    /// Takes no session: the allowlist is fleet-wide, not per-agent, and there
+    /// is nothing here an agent could own. Returns `None` for tools this does
+    /// not handle, so the caller falls through.
+    async fn dispatch_to_image_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+    ) -> Option<Result<JsonValue, String>> {
+        if !matches!(tool_name, "image.list" | "image.get" | "image.check") {
+            return None;
+        }
+
+        // Say plainly that nothing is tracking images, rather than returning an
+        // empty list that reads as "nothing is approved".
+        let Some(host) = self.image_host() else {
+            return Some(Err(
+                "No image registry is installed; this server does not track image admission"
+                    .to_string(),
+            ));
+        };
+
+        fn required<'a>(params: &'a JsonValue, key: &str) -> Result<&'a str, String> {
+            params
+                .get(key)
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| format!("Missing required parameter: {key}"))
+        }
+
+        Some(match tool_name {
+            "image.list" => host.list().await.and_then(|images| {
+                let total = images.len();
+                serde_json::to_value(images)
+                    .map(|images| json!({ "images": images, "total": total }))
+                    .map_err(|e| e.to_string())
+            }),
+            "image.get" => match required(params, "reference") {
+                Ok(reference) => host
+                    .get(reference)
+                    .await
+                    .and_then(|image| serde_json::to_value(image).map_err(|e| e.to_string())),
+                Err(e) => Err(e),
+            },
+            "image.check" => match required(params, "sha256") {
+                Ok(digest) => host
+                    .check_digest(digest)
+                    .await
+                    .and_then(|v| serde_json::to_value(v).map_err(|e| e.to_string())),
+                Err(e) => Err(e),
+            },
+            other => Err(format!("Tool has no image-host implementation: {other}")),
+        })
+    }
+
     /// Run a GPU tool against an installed [`GpuHost`](crate::gpu_host::GpuHost).
     ///
     /// Returns `None` when there is no host or the tool has no host equivalent,
@@ -2099,6 +2230,9 @@ impl McpServer {
         // is installed — falls through to the server's own session-state
         // implementation below.
         if let Some(result) = self.dispatch_to_vm_host(tool_name, params, session).await {
+            return result;
+        }
+        if let Some(result) = self.dispatch_to_image_host(tool_name, params).await {
             return result;
         }
         if let Some(result) = self.dispatch_to_gpu_host(tool_name, params, session).await {
