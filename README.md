@@ -19,6 +19,7 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 | **AI-First**    | MCP server, scriptable API, WASM plugins, LLM tool formats                   |
 | **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
 | **Security**    | FIPS-approved + post-quantum crypto, capability-based access, audit logging |
+| **Governance**  | Optional policy evaluation per agent tool call, digest-keyed image admission |
 
 ## Benchmarks
 
@@ -60,7 +61,9 @@ Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
-~238,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,600+ tests and `cargo clippy -D warnings` clean. Security advisories in the active dependency graph are triaged in [`deny.toml`](deny.toml) (one accepted with justification: the `rsa` crate's Marvin-attack timing advisory, for which no fixed release exists).
+~240,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,700+ tests and `cargo clippy -D warnings` clean, on Linux, macOS and Windows.
+
+Every advisory in the dependency graph is triaged in [`deny.toml`](deny.toml), and `cargo deny check` passes on advisories, bans, licenses and sources. Five are accepted with written justification because no upgrade path exists: the `rsa` crate's Marvin-attack timing advisory (no fixed release upstream), two `quick-xml` parser advisories reachable only through the Linux GUI accessibility stack, and two unmaintained-crate notices (`smartstring` via the scripting engine, `ttf-parser` via the desktop GUI's font layer). `wasmtime` is deliberately optional and off by default, which keeps its advisories out of normal builds.
 
 ### 6. Semantic GUI Automation
 
@@ -241,6 +244,40 @@ not a FIPS 140-3 _validated module_.
 
 [^p521]: ECDSA P-521 keys can be represented but key generation and signing
     require a backend other than `ring`, which does not support that curve.
+
+## Agent Governance
+
+An agent driving VMs is gated by two things out of the box: the capabilities on
+its session, and VM ownership — a session cannot touch a VM it did not create,
+and a probe for someone else’s VM is indistinguishable from one that does not
+exist. Two further controls are available and off by default.
+
+**Policy evaluation.** `McpServer::set_policy_set` installs a `PolicySet` that is
+evaluated before every tool call. Capabilities say what kind of tool an agent may
+use; a policy says whether *this* action, on *this* resource, is allowed right
+now — denying deletion of one named VM, or destructive actions outside a
+maintenance window. A denial is refused and written to the audit log, because an
+unrecorded denial is the one an incident review needs. Note that `PolicySet`
+denies by default: an installed set must name everything agents may do,
+including tools added after it was written.
+
+**Image admission.** `VM::set_image_registry` makes `VM::provision` refuse a boot
+image the allowlist does not admit, keyed on the SHA-256 of the bytes about to be
+loaded — so renaming or moving a kernel cannot change the verdict. The check runs
+before the backend is asked for a partition, so a refusal costs no hypervisor
+resources, and a digest that cannot be computed is a denial rather than a pass.
+The API server shares one registry between `/api/v1/images` and the VMs it
+creates when `enforce_image_admission` is set; that flag is off by default
+because the registry enforces by default, so enabling it against an empty
+catalogue refuses every boot image until images are registered and approved.
+
+What is *not* enforced is worth stating plainly. `hv2-agent`’s `limits` module is
+a toolkit that takes effect only where a caller consults it, and the MCP tool
+path does not — per-session rate limiting comes from `McpConfig::rate_limit`
+instead. `Sandbox` is a policy object, not OS-level containment: what keeps an
+agent script off the network and filesystem is that the Rhai engine registers no
+I/O at all. And `execute_script` evaluates on the host against a read-only view
+of a VM; it does not run anything inside the guest.
 
 ## Deployment
 
