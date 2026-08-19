@@ -13,20 +13,9 @@ ignore = [
     # We only use it in build-time dependencies
     "RUSTSEC-2025-0141",
 
-    # fxhash is unmaintained but has no known vulnerabilities
-    # Used for fast, non-cryptographic hashing only (transitive dep)
-    "RUSTSEC-2025-0057",
-
     # paste is archived but has no known vulnerabilities
     # Used as transitive dep by wasmtime/cranelift
     "RUSTSEC-2024-0436",
-
-    # core2 unmaintained (all versions yanked). Pulled in transitively via:
-    #   image -> ravif -> rav1e -> bitstream-io -> core2
-    # which arrives through `arboard` (clipboard support in hm-gui).
-    # No safe upgrade exists; no upstream fix is possible. The crate has no
-    # known vulnerabilities, only an unmaintained advisory.
-    "RUSTSEC-2026-0105",
 
     # Marvin Attack: timing sidechannel in the pure-Rust `rsa` crate.
     # `rsa` is the only pure-Rust RSA implementation that supports key
@@ -37,6 +26,29 @@ ignore = [
     # as an online decryption oracle. Tracked for migration once a constant-time
     # release ships.
     "RUSTSEC-2023-0071",
+
+    # quick-xml 0.30.0: quadratic parse time on duplicate attributes, and
+    # unbounded namespace-declaration allocation. Fixed in >=0.41.0, and 0.41
+    # is already in the tree -- the vulnerable 0.30 arrives through the Linux
+    # GUI accessibility stack:
+    #   egui-winit -> accesskit_winit -> accesskit_unix
+    #     -> accesskit_atspi_common -> atspi-common -> zbus-lockstep
+    #     -> zbus_xml -> quick-xml 0.30
+    # No version of that chain currently resolves to a fixed quick-xml, so
+    # there is nothing to bump here. Only reachable when hm-gui runs on Linux
+    # with an AT-SPI screen reader attached, parsing D-Bus introspection XML
+    # from the local session bus.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+
+    # smartstring is unmaintained. Transitive via rhai, which is the agent
+    # scripting engine. No known vulnerability; rhai has not migrated off it.
+    "RUSTSEC-2026-0249",
+
+    # ttf-parser is unmaintained. Transitive via egui -> epaint -> ab_glyph
+    # -> owned_ttf_parser. Font parsing for the desktop GUI only; no known
+    # vulnerability.
+    "RUSTSEC-2026-0192",
 ]
 
 # ============================================================================
