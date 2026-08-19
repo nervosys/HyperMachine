@@ -197,6 +197,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `hm-gui`, `for_kv_map` and an unused macOS import in `hv2-core`), restoring a
   `-D warnings` clean build on every supported target.
 
+### CI
+
+Master had been red since June, for reasons predating this work. Six
+failures were stacked behind one another, each hidden by the one in front:
+
+- **Tests `include_bytes!`d gitignored build artifacts.**
+  `examples/guest_code/*.img` are `build.sh` outputs excluded by
+  `.gitignore`, so a clean checkout failed to *compile*, which took down
+  `cargo check` for `hv2-core` and cascaded into most jobs.
+  `guest_code_integration.rs` and `guest_execution.rs` now skip when an
+  image is absent, the way `exit_handling.rs` already skips without a
+  hypervisor.
+- **The HVF backend could never link on Apple Silicon.** It is built on
+  Hypervisor.framework’s VMX API, which exists only on Intel Macs, but was
+  gated on `target_os` alone. `cargo check` does not link, so this passed
+  every cross-target check for months. Now gated
+  `all(target_os = "macos", target_arch = "x86_64")`; Apple Silicon falls
+  through to TCG.
+- **`hv2-net` used `libc` on macOS without depending on it** — declared
+  only under `cfg(target_os = "linux")`.
+- **The ARM64 job asked an x86-only crate to build for ARM.** `hv1-core`’s
+  own manifest says ARM belongs to `hv1-arm`; the step was removed rather
+  than papered over. If `hv1-core` gains an ARM mode, it should return.
+- **`coverage.yml` passed `--codecov` and `--html` to one `cargo llvm-cov`
+  invocation**, which rejects the combination outright. Now one
+  instrumented run plus two reports.
+- **Four tests assumed the host had a working hypervisor** and failed on
+  runners where `/dev/kvm` exists but is not accessible. The skip lives in
+  the shared helper so later tests inherit it.
+
+The HV1 jobs now pin an exact nightly (`nightly-2026-08-17`, the toolchain
+that produced the first all-green run). Unpinned, they broke four times in
+a day for reasons unrelated to any commit here: a new required method on
+`core::iter::Step`, a renamed `rustc-abi` value, `unused_must_use` becoming
+an error, and a yanked `spin` release. Note that `rust-toolchain.toml` pins
+`channel = "stable"` and overrides the installed default, so those steps
+name the toolchain explicitly; keep the date in the `with:` blocks and the
+commands in step. `coverage.yml` and `security.yml` remain unpinned — they
+did not break and use nightly for different tooling.
+
+### Dependencies
+
+- `x86_64` 0.15.4 → 0.15.5 — a recent nightly added required methods to
+  `core::iter::Step`. The two are mutually exclusive by toolchain vintage.
+- `bootloader` 0.11.15 → 0.11.17 — 0.11.15’s vendored target specs carry
+  `"rustc-abi": "x86-softfloat"`, which current nightly rejects; 0.11.17
+  ships `"softfloat"`. Its build script still fails to build its UEFI
+  stage (`lock_api` 0.4.10, `can’t find crate for std`), reproducible on
+  other nightlies and for the host target, so that step is
+  `continue-on-error` pending an upstream fix.
+- `spin` 0.9.8 → 0.9.9 — 0.9.8 is yanked.
+
 ## [1.1.0] - 2026-06-04
 
 ### Added
