@@ -417,6 +417,18 @@ impl VM {
             None => None,
         };
 
+        // A boot source on a backend that cannot execute is the one case where
+        // everything below succeeds and the guest still never runs. Say so here
+        // rather than leaving it to be inferred from a Running VM that produces
+        // no output.
+        if boot.is_some() && !self.backend.executes_guest_code() {
+            tracing::warn!(
+                "VM {} on the {} backend: guest code will not execute, so the loaded image will not run. Use KVM, WHPX or HVF to boot it.",
+                self.config.name,
+                self.backend.platform(),
+            );
+        }
+
         let hv_vm = self
             .backend
             .create_vm(self.config.vcpu_count, self.config.memory_size)
@@ -497,6 +509,15 @@ impl VM {
     /// The installed image registry, if any.
     pub fn image_registry(&self) -> Option<Arc<crate::security::image_registry::ImageRegistry>> {
         self.image_registry.read().clone()
+    }
+
+    /// Whether this VM backend actually executes guest instructions.
+    ///
+    /// `false` on the TCG fallback. A VM can still be created, provisioned
+    /// and started there; it simply will not run a guest, which is worth
+    /// being able to report rather than discover.
+    pub fn executes_guest_code(&self) -> bool {
+        self.backend.executes_guest_code()
     }
 
     /// Whether this VM has been provisioned on its backend.

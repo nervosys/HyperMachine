@@ -529,3 +529,24 @@ fn a_config_with_no_boot_key_deserializes_to_no_boot_source() {
 
     assert!(config.boot.is_none());
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  Backends that cannot execute
+// ═══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn a_backend_reports_whether_it_executes_guest_code() {
+    // The recording backend stands in for hardware, so it claims execution;
+    // TCG is the one that does not, and a caller should be able to ask rather
+    // than infer it from a Running VM that produces nothing.
+    let record = Arc::new(RwLock::new(BootRecord::default()));
+    let vm = vm_with(
+        config_with("asks", None),
+        RecordingBackend::new(record.clone()),
+    );
+
+    assert!(
+        vm.executes_guest_code(),
+        "the default is true, so only a backend that cannot execute has to say so"
+    );
+}

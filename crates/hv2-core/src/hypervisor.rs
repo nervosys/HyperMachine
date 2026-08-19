@@ -149,6 +149,19 @@ pub trait HypervisorBackend: Send + Sync {
     /// Get hypervisor capabilities
     fn capabilities(&self) -> HypervisorCapabilities;
 
+    /// Whether this backend actually executes guest instructions.
+    ///
+    /// `true` for every hardware backend. The TCG fallback returns `false`:
+    /// it interprets a handful of opcodes, so a VM reaches `Running` and its
+    /// run loop turns over without the guest making progress.
+    ///
+    /// Callers that care whether a guest is genuinely running should ask,
+    /// rather than infer it from a VM that starts successfully and then does
+    /// nothing observable.
+    fn executes_guest_code(&self) -> bool {
+        true
+    }
+
     /// Initialize the hypervisor
     async fn init(&mut self) -> Result<()>;
 
@@ -357,6 +370,10 @@ impl Default for TcgBackend {
 
 #[async_trait]
 impl HypervisorBackend for TcgBackend {
+    fn executes_guest_code(&self) -> bool {
+        false
+    }
+
     fn platform(&self) -> HypervisorPlatform {
         HypervisorPlatform::Tcg
     }
