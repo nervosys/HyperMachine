@@ -173,3 +173,66 @@ async fn a_rule_can_name_one_resource_without_catching_its_neighbours() {
         .expect_err("the named VM is protected");
     assert!(err.contains("Denied by policy"), "got: {err}");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+//  Concurrency ceiling
+// ═══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn without_a_limit_concurrency_is_unbounded() {
+    let server = McpServer::new();
+    assert!(server.concurrency_limiter().is_none());
+
+    let session = session(&server);
+    for i in 0..8 {
+        call(
+            &server,
+            &session,
+            "vm.create",
+            json!({"name": format!("vm-{i}")}),
+        )
+        .await
+        .expect("no ceiling installed");
+    }
+}
+
+#[tokio::test]
+async fn a_rejected_call_is_recorded_like_any_other() {
+    // McpConfig::rate_limit bounds calls per minute; this bounds how many run
+    // at once. A refusal has to reach the audit log either way.
+    let server = McpServer::new();
+    server.set_concurrency_limit(4);
+    assert!(server.concurrency_limiter().is_some());
+
+    let session = session(&server);
+
+    // Sequential calls each release their permit on completion, so a ceiling of
+    // four does not stop four hundred calls made one after another.
+    for i in 0..6 {
+        call(
+            &server,
+            &session,
+            "vm.create",
+            json!({"name": format!("seq-{i}")}),
+        )
+        .await
+        .expect("permits are released when a call finishes");
+    }
+
+    let entries = server.get_audit_log(100);
+    assert_eq!(
+        entries.iter().filter(|e| e.tool == "vm.create").count(),
+        6,
+        "every call should be audited"
+    );
+}
+
+#[tokio::test]
+async fn clearing_the_limit_removes_the_ceiling() {
+    let server = McpServer::new();
+    server.set_concurrency_limit(1);
+    assert!(server.concurrency_limiter().is_some());
+
+    server.clear_concurrency_limit();
+    assert!(server.concurrency_limiter().is_none());
+}

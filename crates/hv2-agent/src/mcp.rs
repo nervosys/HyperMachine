@@ -87,6 +87,12 @@ pub struct McpServer {
     /// default, so an installed set must explicitly allow what agents may do —
     /// including any tool added later, which a set written today cannot name.
     policies: RwLock<Option<Arc<crate::policies::PolicySet>>>,
+    /// Ceiling on tool calls executing at once, if one is installed.
+    ///
+    /// Distinct from `McpConfig::rate_limit`, which bounds calls per minute
+    /// per session: an agent can sit under that and still have many long calls
+    /// in flight at once. `None` — the default — places no ceiling.
+    concurrency: RwLock<Option<Arc<crate::limits::ConcurrencyLimiter>>>,
 }
 
 /// MCP Server configuration
@@ -357,6 +363,7 @@ impl McpServer {
             vm_host: RwLock::new(None),
             gpu_host: RwLock::new(None),
             policies: RwLock::new(None),
+            concurrency: RwLock::new(None),
         };
 
         // Register default tools
@@ -424,6 +431,32 @@ impl McpServer {
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+
+    /// Cap how many tool calls may execute at once.
+    ///
+    /// `McpConfig::rate_limit` already bounds calls per minute per session,
+    /// which is a different question: a well-behaved agent can stay under a
+    /// rate limit while holding dozens of slow calls open simultaneously. This
+    /// bounds that. Off by default, because the right ceiling depends on what
+    /// the installed hosts do.
+    pub fn set_concurrency_limit(&self, max_in_flight: u32) {
+        *self.concurrency.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(
+            crate::limits::ConcurrencyLimiter::new(max_in_flight),
+        ));
+    }
+
+    /// The installed concurrency limiter, if any.
+    pub fn concurrency_limiter(&self) -> Option<Arc<crate::limits::ConcurrencyLimiter>> {
+        self.concurrency
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Remove the concurrency ceiling.
+    pub fn clear_concurrency_limit(&self) {
+        *self.concurrency.write().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Stop governing tool calls, returning to capabilities and ownership only.
@@ -1629,6 +1662,27 @@ impl McpServer {
             }
         }
 
+        // Hold a concurrency permit for the duration of the call, if a ceiling
+        // is installed. The guard releases on drop, so an early return below
+        // frees the slot too. Rejection flows through the same result path as a
+        // policy denial so that it is audited rather than silently dropped.
+        let limiter = self.concurrency_limiter();
+        let _permit = match limiter.as_deref().map(|l| l.try_acquire()) {
+            Some(Ok(permit)) => Some(permit),
+            Some(Err(err)) => {
+                let response = ToolCallResponse {
+                    id: request.id.clone(),
+                    success: false,
+                    result: None,
+                    error: Some(err.to_string()),
+                    execution_time_ms: start.elapsed().as_millis() as u64,
+                };
+                self.audit(&request.tool, &request.parameters, session, &response);
+                return response;
+            }
+            None => None,
+        };
+
         // Governance, when an operator installed a policy set. A denial flows
         // through the same result path as a failed call rather than returning
         // early, so it lands in the audit log — an unrecorded denial is the one
@@ -1670,29 +1724,46 @@ impl McpServer {
             },
         };
 
-        // Audit log
-        if self.config.audit_enabled {
-            let entry = AuditEntry {
-                timestamp: SystemTime::now(),
-                session_id: session.id.clone(),
-                agent_id: session.agent_id.clone(),
-                tool: request.tool,
-                parameters: request.parameters,
-                success: response.success,
-                error: response.error.clone(),
-                execution_time_ms: response.execution_time_ms,
-            };
-            let mut log = self.audit_log.write().unwrap_or_else(|e| e.into_inner());
-            log.push_back(entry);
-            // Bound memory: drop the oldest entries beyond the configured cap.
-            // A fixed-size ring also avoids reallocation under the lock at
-            // steady state, shortening the hold time on this shared path.
-            while log.len() > self.config.max_audit_entries {
-                log.pop_front();
-            }
-        }
+        self.audit(&request.tool, &request.parameters, session, &response);
 
         response
+    }
+
+    /// Record one tool call in the audit log.
+    ///
+    /// Shared by the normal path and by every early refusal, so a call that
+    /// was rejected before dispatch is recorded exactly like one that ran. A
+    /// refusal nobody can see afterwards is the one an incident review needs.
+    fn audit(
+        &self,
+        tool: &str,
+        parameters: &JsonValue,
+        session: &AgentSession,
+        response: &ToolCallResponse,
+    ) {
+        if !self.config.audit_enabled {
+            return;
+        }
+
+        let entry = AuditEntry {
+            timestamp: SystemTime::now(),
+            session_id: session.id.clone(),
+            agent_id: session.agent_id.clone(),
+            tool: tool.to_string(),
+            parameters: parameters.clone(),
+            success: response.success,
+            error: response.error.clone(),
+            execution_time_ms: response.execution_time_ms,
+        };
+
+        let mut log = self.audit_log.write().unwrap_or_else(|e| e.into_inner());
+        log.push_back(entry);
+        // Bound memory: drop the oldest entries beyond the configured cap. A
+        // fixed-size ring also avoids reallocation under the lock at steady
+        // state, shortening the hold time on this shared path.
+        while log.len() > self.config.max_audit_entries {
+            log.pop_front();
+        }
     }
 
     /// Run a VM lifecycle tool against an installed [`VmHost`](crate::vm_host::VmHost).
