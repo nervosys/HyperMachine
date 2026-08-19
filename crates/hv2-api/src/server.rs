@@ -49,6 +49,7 @@ use crate::snapshot_routes::{self, SnapshotAppState};
 use crate::ws_routes;
 use crate::Result;
 use axum::Router;
+use hv2_core::security::image_registry::{EnforcementMode, RegistryConfig};
 use hv2_runtime::{Runtime, RuntimeConfig};
 use std::sync::Arc;
 use std::time::Instant;
@@ -60,6 +61,29 @@ const AGENT_BASELINE_BYTES: usize = 1024 * 1024;
 // ============================================================================
 // Server Configuration
 // ============================================================================
+
+/// How the image allowlist behaves when admission is enabled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ImageAdmissionMode {
+    /// Log what would be refused, refuse nothing. The default, so that
+    /// enabling admission is observable before it is load-bearing.
+    #[default]
+    Audit,
+    /// Refuse any image the registry does not admit.
+    Enforce,
+    /// Admit everything; the registry answers questions but gates nothing.
+    Disabled,
+}
+
+impl ImageAdmissionMode {
+    fn to_registry(self) -> EnforcementMode {
+        match self {
+            Self::Audit => EnforcementMode::Audit,
+            Self::Enforce => EnforcementMode::Enforce,
+            Self::Disabled => EnforcementMode::Disabled,
+        }
+    }
+}
 
 /// Configuration for the unified API server
 #[derive(Debug, Clone)]
@@ -92,6 +116,14 @@ pub struct ServerConfig {
     /// Enable it once the catalogue is populated, or start the registry in
     /// `EnforcementMode::Audit` to see what would be blocked first.
     pub enforce_image_admission: bool,
+    /// How the shared image registry behaves once admission is enabled.
+    ///
+    /// Defaults to [`ImageAdmissionMode::Audit`]: turning admission on logs
+    /// what *would* be refused without refusing it, so an operator can see the
+    /// blast radius against a real workload before committing. Promote to
+    /// `Enforce` once the catalogue is populated — doing it the other way round
+    /// refuses every boot image until each one is registered and approved.
+    pub image_admission_mode: ImageAdmissionMode,
 }
 
 impl Default for ServerConfig {
@@ -108,6 +140,7 @@ impl Default for ServerConfig {
             shutdown_timeout_secs: 30,
             tls: None,
             enforce_image_admission: false,
+            image_admission_mode: ImageAdmissionMode::Audit,
         }
     }
 }
@@ -279,7 +312,10 @@ impl Server {
         // One registry instance, shared by the `/api/v1/images` routes and the
         // VMs this API creates — otherwise approving an image over REST would
         // have no bearing on whether a VM could boot it.
-        let image_state = Arc::new(ImageRegistryAppState::new());
+        let image_state = Arc::new(ImageRegistryAppState::with_config(RegistryConfig {
+            mode: self.config.image_admission_mode.to_registry(),
+            ..RegistryConfig::default()
+        }));
 
         // Build application state with component awareness
         let mut app_state = rest::AppState::new()
@@ -628,6 +664,33 @@ mod tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
+
+    #[test]
+    fn image_admission_defaults_to_audit() {
+        // Enabling admission must not brick every boot. The registry denies by
+        // default, so an operator flipping enforce_image_admission on an empty
+        // catalogue would refuse every image; audit reports instead.
+        let config = ServerConfig::default();
+        assert!(!config.enforce_image_admission, "admission is opt-in");
+        assert_eq!(config.image_admission_mode, ImageAdmissionMode::Audit);
+    }
+
+    #[test]
+    fn admission_mode_maps_onto_the_registry() {
+        use hv2_core::security::image_registry::EnforcementMode;
+        assert_eq!(
+            ImageAdmissionMode::Audit.to_registry(),
+            EnforcementMode::Audit
+        );
+        assert_eq!(
+            ImageAdmissionMode::Enforce.to_registry(),
+            EnforcementMode::Enforce
+        );
+        assert_eq!(
+            ImageAdmissionMode::Disabled.to_registry(),
+            EnforcementMode::Disabled
+        );
+    }
 
     fn test_config() -> ServerConfig {
         ServerConfig {

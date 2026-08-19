@@ -104,6 +104,29 @@ pub struct ConfigFile {
     pub middleware: MiddlewareSection,
 }
 
+/// TOML spelling of the image admission mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageAdmissionModeSection {
+    /// Report what would be refused; refuse nothing.
+    #[default]
+    Audit,
+    /// Refuse images the registry does not admit.
+    Enforce,
+    /// Admit everything.
+    Disabled,
+}
+
+impl From<ImageAdmissionModeSection> for crate::server::ImageAdmissionMode {
+    fn from(mode: ImageAdmissionModeSection) -> Self {
+        match mode {
+            ImageAdmissionModeSection::Audit => Self::Audit,
+            ImageAdmissionModeSection::Enforce => Self::Enforce,
+            ImageAdmissionModeSection::Disabled => Self::Disabled,
+        }
+    }
+}
+
 /// `[server]` section
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -129,11 +152,18 @@ pub struct ServerSection {
     /// Refuse to boot a VM whose image the `/api/v1/images` allowlist does not
     /// admit.
     ///
-    /// Off by default. The registry enforces by default, so turning this on
-    /// with an empty catalogue refuses every boot image until images are
-    /// registered and approved.
+    /// Off by default. When enabled, `image_admission_mode` decides whether
+    /// the registry refuses images or only reports what it would refuse.
     #[serde(default)]
     pub enforce_image_admission: bool,
+
+    /// `audit` (default), `enforce`, or `disabled`.
+    ///
+    /// Audit logs what would be refused without refusing it, so admission
+    /// can be switched on and observed before it is load-bearing. Move to
+    /// `enforce` once the catalogue is populated.
+    #[serde(default)]
+    pub image_admission_mode: ImageAdmissionModeSection,
 }
 
 impl Default for ServerSection {
@@ -147,6 +177,7 @@ impl Default for ServerSection {
             pre_warm_count: 2,
             shutdown_timeout_secs: 30,
             enforce_image_admission: false,
+            image_admission_mode: ImageAdmissionModeSection::default(),
             tls_cert_path: None,
             tls_key_path: None,
         }
@@ -1106,6 +1137,7 @@ impl ConfigFile {
             middleware,
             shutdown_timeout_secs: self.server.shutdown_timeout_secs,
             enforce_image_admission: self.server.enforce_image_admission,
+            image_admission_mode: self.server.image_admission_mode.into(),
             tls: match (self.server.tls_cert_path, self.server.tls_key_path) {
                 (Some(cert), Some(key)) => Some(crate::tls::TlsConfig {
                     cert_path: cert,
