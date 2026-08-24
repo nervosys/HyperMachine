@@ -738,6 +738,33 @@ impl VM {
         Arc::clone(&self.devices)
     }
 
+    /// Console output the guest has written, without consuming it.
+    ///
+    /// Concatenates every registered console device in name order. This is
+    /// empty when no console device has been registered with the VM's
+    /// [`DeviceManager`] — nothing registers one automatically, so a caller
+    /// that wants a boot log must attach a [`SerialDevice`](crate::SerialDevice)
+    /// itself.
+    ///
+    /// Output is capped per device (1 MiB, oldest bytes dropped first), so a
+    /// guest printing in a loop cannot grow this without bound. Bytes are
+    /// decoded lossily: a guest is free to write things that are not UTF-8.
+    pub async fn console_output(&self) -> String {
+        let mut out = String::new();
+        for (_, bytes) in self.devices.console_output().await {
+            out.push_str(&String::from_utf8_lossy(&bytes));
+        }
+        out
+    }
+
+    /// Console output per device, as raw bytes, without consuming it.
+    ///
+    /// The structured form of [`Self::console_output`], for a caller that
+    /// needs to tell COM1 from COM2 or that must not lose non-UTF-8 bytes.
+    pub async fn console_output_by_device(&self) -> Vec<(String, Vec<u8>)> {
+        self.devices.console_output().await
+    }
+
     /// Get PIC (interrupt controller)
     pub fn pic(&self) -> Arc<Pic8259> {
         Arc::clone(&self.pic)

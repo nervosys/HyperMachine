@@ -509,8 +509,10 @@ impl McpServer {
             "vm.resume" => PolicyAction::VmResume,
             "vm.delete" => PolicyAction::VmDelete,
             "vm.resize" => PolicyAction::ResourceModify,
-            "vm.list" | "vm.status" | "vm.metrics" | "gpu.list" | "snapshot.list"
-            | "agent.list" | "system.info" | "system.health" => PolicyAction::ResourceRead,
+            "vm.list" | "vm.status" | "vm.metrics" | "vm.console" | "gpu.list"
+            | "snapshot.list" | "agent.list" | "system.info" | "system.health" => {
+                PolicyAction::ResourceRead
+            }
             "snapshot.create" => PolicyAction::SnapshotCreate,
             "snapshot.restore" => PolicyAction::SnapshotRestore,
             "network.attach" => PolicyAction::NetworkAttach,
@@ -889,6 +891,28 @@ impl McpServer {
                 }),
                 category: ToolCategory::Monitoring,
                 required_capabilities: vec![AgentCapability::MetricsRead],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "vm.console".to_string(),
+            McpTool {
+                name: "vm.console".to_string(),
+                description: "Read what a VM's guest has written to its serial console.                               Does not consume the buffer, so repeated calls return the                               whole log rather than only what is new. Reports                               `attached: false` when the VM has no console device, which                               is different from a guest that has printed nothing."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM"
+                        }
+                    },
+                    "required": ["vm_id"]
+                }),
+                category: ToolCategory::Monitoring,
+                required_capabilities: vec![AgentCapability::VmRead],
                 enabled: true,
             },
         );
@@ -1869,6 +1893,7 @@ impl McpServer {
                 | "vm.status"
                 | "vm.list"
                 | "vm.metrics"
+                | "vm.console"
         ) {
             return None;
         }
@@ -2020,6 +2045,12 @@ impl McpServer {
                 let vm_id = owned_vm_id(params, session)?;
                 let metrics = host.metrics(vm_id).await?;
                 serde_json::to_value(metrics).map_err(|e| e.to_string())
+            }
+
+            "vm.console" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let console = host.console(vm_id).await?;
+                serde_json::to_value(console).map_err(|e| e.to_string())
             }
 
             other => Err(format!("Tool has no VM-host implementation: {other}")),
@@ -2450,6 +2481,23 @@ impl McpServer {
                     "cpu_usage_percent": JsonValue::Null,
                     "memory_used_bytes": JsonValue::Null
                 }))
+            }
+
+            "vm.console" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let key = format!("vm:{}", vm_id);
+                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
+                state
+                    .get(&key)
+                    .ok_or_else(|| format!("VM not found: {}", vm_id))?;
+
+                // No host means no guest, so there is no console to read. Say
+                // that outright rather than returning an empty log, which an
+                // agent would read as a guest that booted silently.
+                Ok(json!({ "vm_id": vm_id, "attached": false, "output": "" }))
             }
 
             // ── Snapshots ────────────────────────────────────────────

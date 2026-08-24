@@ -138,6 +138,22 @@ impl VmMetrics {
     }
 }
 
+/// What a guest has written to its console, as the tool surface reports it.
+///
+/// `attached` is the field that carries the information: an agent debugging a
+/// guest that appears to be silent needs to know whether it is looking at a
+/// quiet guest or at a VM with no console wired up at all. `output` is empty
+/// in both cases, so on its own it cannot say which.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VmConsole {
+    /// The VM this console belongs to.
+    pub vm_id: String,
+    /// Whether the host can observe a console for this VM at all.
+    pub attached: bool,
+    /// Console bytes so far, decoded lossily. Empty when nothing is attached.
+    pub output: String,
+}
+
 /// Something that can run VMs on an agent's behalf.
 ///
 /// Every method takes a host-assigned `vm_id`. The MCP server checks that the
@@ -180,6 +196,24 @@ pub trait VmHost: Send + Sync {
     /// observing them. Override it when the host can measure more.
     async fn metrics(&self, vm_id: &str) -> Result<VmMetrics, String> {
         Ok(VmMetrics::from_descriptor(&self.status(vm_id).await?))
+    }
+
+    /// Console output for one VM, without consuming it.
+    ///
+    /// The default reports no console attached — correct for a host that
+    /// tracks VMs without running them. It still resolves `vm_id` first, so an
+    /// unknown VM is an error rather than an empty console.
+    ///
+    /// Implementations must not drain the buffer: an agent polling a boot log
+    /// should see the whole log each time, not the slice that arrived since it
+    /// last asked.
+    async fn console(&self, vm_id: &str) -> Result<VmConsole, String> {
+        let descriptor = self.status(vm_id).await?;
+        Ok(VmConsole {
+            vm_id: descriptor.vm_id,
+            attached: false,
+            output: String::new(),
+        })
     }
 }
 
@@ -402,6 +436,23 @@ impl VmHost for LocalVmHost {
             memory_used_bytes: measured.memory_used_bytes,
         })
     }
+
+    async fn console(&self, vm_id: &str) -> Result<VmConsole, String> {
+        let descriptor = self.status(vm_id).await?;
+
+        // A VM that was created but never started has no `AgentVM` behind it,
+        // and therefore no devices — not even an unattached console.
+        let output = match self.live(vm_id) {
+            Ok(vm) => vm.console_output().await,
+            Err(_) => None,
+        };
+
+        Ok(VmConsole {
+            vm_id: descriptor.vm_id,
+            attached: output.is_some(),
+            output: output.unwrap_or_default(),
+        })
+    }
 }
 
 #[cfg(test)]
@@ -533,6 +584,91 @@ mod tests {
         let host = LocalVmHost::new();
         assert!(host
             .metrics("nope")
+            .await
+            .unwrap_err()
+            .contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn console_for_a_vm_that_never_started_reports_nothing_attached() {
+        let host = LocalVmHost::new();
+        let vm = host.create(VmSpec::new("unstarted")).await.unwrap();
+
+        let console = host.console(&vm.vm_id).await.unwrap();
+
+        assert_eq!(console.vm_id, vm.vm_id);
+        assert!(
+            !console.attached,
+            "there is no VM behind this yet, so there is no console"
+        );
+        assert!(console.output.is_empty());
+    }
+
+    #[tokio::test]
+    async fn console_for_an_unknown_vm_says_so() {
+        let host = LocalVmHost::new();
+        // Not an empty console: an agent that mistyped a VM id must find out.
+        assert!(host
+            .console("nope")
+            .await
+            .unwrap_err()
+            .contains("not found"));
+    }
+
+    /// A host that tracks VMs without running them, to exercise the trait's
+    /// default `console`.
+    struct BookkeepingHost;
+
+    #[async_trait]
+    impl VmHost for BookkeepingHost {
+        async fn create(&self, _spec: VmSpec) -> Result<VmDescriptor, String> {
+            unimplemented!()
+        }
+        async fn start(&self, _vm_id: &str) -> Result<VmDescriptor, String> {
+            unimplemented!()
+        }
+        async fn stop(&self, _vm_id: &str, _force: bool) -> Result<VmDescriptor, String> {
+            unimplemented!()
+        }
+        async fn pause(&self, _vm_id: &str) -> Result<VmDescriptor, String> {
+            unimplemented!()
+        }
+        async fn resume(&self, _vm_id: &str) -> Result<VmDescriptor, String> {
+            unimplemented!()
+        }
+        async fn delete(&self, _vm_id: &str) -> Result<(), String> {
+            unimplemented!()
+        }
+        async fn status(&self, vm_id: &str) -> Result<VmDescriptor, String> {
+            if vm_id != "known" {
+                return Err(format!("VM not found: {vm_id}"));
+            }
+            Ok(VmDescriptor {
+                vm_id: vm_id.to_string(),
+                name: "known".to_string(),
+                cpu_cores: 1,
+                memory_gb: 1,
+                status: "running".to_string(),
+                boot_protocol: None,
+            })
+        }
+        async fn list(&self) -> Result<Vec<VmDescriptor>, String> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn the_default_console_resolves_the_vm_before_answering() {
+        let host = BookkeepingHost;
+
+        let console = host.console("known").await.unwrap();
+        assert!(!console.attached);
+        assert!(console.output.is_empty());
+
+        // The default must not report an empty console for a VM that does not
+        // exist -- that would turn a typo into a silent guest.
+        assert!(host
+            .console("ghost")
             .await
             .unwrap_err()
             .contains("not found"));

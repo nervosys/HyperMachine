@@ -302,6 +302,20 @@ impl hv2_agent::VmHost for ApiVmHost {
             memory_used_bytes: measured.memory_used_bytes,
         })
     }
+
+    async fn console(&self, vm_id: &str) -> std::result::Result<hv2_agent::VmConsole, String> {
+        // Same buffer `GET /api/v1/vms/{id}/console` serves, for the same
+        // reason: an agent following a plan and an operator watching the boot
+        // log must not see different consoles.
+        let descriptor = self.describe(vm_id).await?;
+        let output = self.get(vm_id).await?.console_output().await;
+
+        Ok(hv2_agent::VmConsole {
+            vm_id: descriptor.vm_id,
+            attached: output.is_some(),
+            output: output.unwrap_or_default(),
+        })
+    }
 }
 
 /// Create REST API router with the given application state
@@ -330,6 +344,7 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/api/v1/vms/{id}/pause", post(pause_vm))
         .route("/api/v1/vms/{id}/resume", post(resume_vm))
         .route("/api/v1/vms/{id}/metrics", get(get_metrics))
+        .route("/api/v1/vms/{id}/console", get(get_console))
         .route("/api/v1/vms/{id}/script", post(execute_script))
         // Agentic ontology routes for AI agent discovery
         .merge(crate::ontology::create_ontology_router_with_executor(
@@ -969,6 +984,48 @@ async fn get_metrics(
         vcpu_count: metrics.vcpu_count,
         memory_size: metrics.memory_size,
         uptime_seconds: metrics.uptime_seconds,
+    }))
+}
+
+/// Guest console output.
+///
+/// `attached` distinguishes a VM with no console device from one whose guest
+/// has printed nothing — both have an empty `output`, and a caller debugging a
+/// silent boot needs to know which it is looking at.
+#[derive(Serialize)]
+struct ConsoleResponse {
+    id: String,
+    attached: bool,
+    output: String,
+}
+
+/// Read a guest's console output without consuming it.
+///
+/// Polling is the expected access pattern, so this does not drain: each call
+/// returns the whole buffer, which is capped at 1 MiB per device with the
+/// oldest bytes dropped first.
+async fn get_console(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let vms = state.vms.read().await;
+    let vm = vms.get(&id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("VM not found: {}", id),
+                code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
+            }),
+        )
+    })?;
+
+    let output = vm.console_output().await;
+
+    Ok(Json(ConsoleResponse {
+        id,
+        attached: output.is_some(),
+        output: output.unwrap_or_default(),
     }))
 }
 

@@ -275,6 +275,27 @@ impl AgentVM {
         Some(((busy_ns as f64 / available_ns as f64) * 100.0).clamp(0.0, 100.0))
     }
 
+    /// What the guest has written to its console, without consuming it.
+    ///
+    /// `None` means no console device is attached, which is not the same as a
+    /// guest that has printed nothing: nothing registers a serial device
+    /// automatically, so a caller wanting a boot log must attach one to
+    /// [`Self::vm`]'s device manager. Returning `Some("")` for an unattached
+    /// console would read as a silent guest and send an agent looking for a
+    /// bug that is not there.
+    pub async fn console_output(&self) -> Option<String> {
+        let per_device = self.vm.console_output_by_device().await;
+        if per_device.is_empty() {
+            return None;
+        }
+        Some(
+            per_device
+                .iter()
+                .map(|(_, bytes)| String::from_utf8_lossy(bytes))
+                .collect(),
+        )
+    }
+
     /// Get the underlying VM
     pub fn vm(&self) -> Arc<VM> {
         Arc::clone(&self.vm)
@@ -407,5 +428,51 @@ mod tests {
 
         vm.stop().await.unwrap();
         assert_eq!(vm.state(), VMState::Stopped);
+    }
+
+    #[tokio::test]
+    async fn console_output_is_none_until_a_console_is_attached() {
+        let Ok(vm) = AgentVM::builder().name("no-console").build().await else {
+            eprintln!("skipping: no hypervisor backend available");
+            return;
+        };
+
+        // Not `Some("")`: an agent debugging a silent boot has to be able to
+        // tell a quiet guest from a VM with nowhere to print.
+        assert_eq!(vm.console_output().await, None);
+    }
+
+    #[tokio::test]
+    async fn console_output_returns_what_the_guest_wrote() {
+        use hv2_core::{Device, SerialDevice};
+        use tokio::sync::RwLock as AsyncRwLock;
+
+        let Ok(vm) = AgentVM::builder().name("with-console").build().await else {
+            eprintln!("skipping: no hypervisor backend available");
+            return;
+        };
+
+        let device = Arc::new(AsyncRwLock::new(SerialDevice::new(
+            "COM1".to_string(),
+            0x3F8,
+        )));
+        {
+            let mut guard = device.write().await;
+            for byte in b"hello" {
+                guard.write(0, &[*byte]).await.unwrap();
+            }
+        }
+        vm.vm()
+            .devices()
+            .register_device("COM1", device)
+            .await
+            .unwrap();
+
+        assert_eq!(vm.console_output().await.as_deref(), Some("hello"));
+        assert_eq!(
+            vm.console_output().await.as_deref(),
+            Some("hello"),
+            "reading must not drain"
+        );
     }
 }

@@ -214,6 +214,10 @@ impl Device for SerialDevice {
         &self.name
     }
 
+    fn console_output(&self) -> Option<Vec<u8>> {
+        Some(self.peek_output())
+    }
+
     async fn init(&mut self) -> Result<()> {
         tracing::info!(
             "Initializing serial device '{}' at 0x{:X}",
@@ -388,7 +392,7 @@ mod tests {
         device.init().await.unwrap();
 
         for _ in 0..(MAX_TX_BUFFER_BYTES + 4096) {
-            device.write(THR_OFFSET, &[b'x']).await.unwrap();
+            device.write(THR_OFFSET, b"x").await.unwrap();
         }
 
         assert!(

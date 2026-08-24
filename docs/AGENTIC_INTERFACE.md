@@ -118,7 +118,7 @@ Agents can discover available tools with their JSON Schema definitions:
 | Network      | Network configuration       | `network.attach`, `network.detach`                  |
 | System       | Guest execution             | `guest.exec`, `guest.file.read`, `guest.file.write` |
 | Coordination | Multi-agent ops             | `agent.broadcast`, `agent.claim`, `agent.release`   |
-| Monitoring   | Observability               | `system.health`, `system.info`                      |
+| Monitoring   | Observability               | `vm.metrics`, `vm.console`, `system.health`         |
 
 ## Multi-Agent Orchestration
 

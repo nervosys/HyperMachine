@@ -46,6 +46,17 @@ pub trait Device: Send + Sync {
 
     /// Shutdown the device
     async fn shutdown(&mut self) -> Result<()>;
+
+    /// Console bytes this device has buffered for the host to read, if it is
+    /// the kind of device a guest writes a console to.
+    ///
+    /// Defaults to `None`, which means "not a console" and is distinct from
+    /// `Some(vec![])`, "a console that has said nothing yet". Implementations
+    /// must **not** consume the buffer: this exists so a caller can poll a
+    /// guest's output without racing whatever else is draining it.
+    fn console_output(&self) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 /// MMIO region mapping
@@ -278,6 +289,34 @@ impl DeviceManager {
 
         None
     }
+
+    /// Console output buffered by every registered console device.
+    ///
+    /// Returns `(device_name, bytes)` pairs sorted by name, so the order is
+    /// stable across calls rather than following `HashMap` iteration. Devices
+    /// that are not consoles are omitted entirely; a registered console that
+    /// has produced nothing yet appears with an empty `Vec`, which is what
+    /// lets a caller distinguish "no console attached" from "console is quiet".
+    ///
+    /// Reading does not consume: see [`Device::console_output`].
+    pub async fn console_output(&self) -> Vec<(String, Vec<u8>)> {
+        let devices: Vec<_> = self
+            .devices
+            .read()
+            .await
+            .iter()
+            .map(|(name, device)| (name.clone(), device.clone()))
+            .collect();
+
+        let mut out = Vec::new();
+        for (name, device) in devices {
+            if let Some(bytes) = device.read().await.console_output() {
+                out.push((name, bytes));
+            }
+        }
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
 }
 
 /// Handle for MMIO device access
@@ -405,5 +444,81 @@ mod tests {
             .await
             .unwrap();
         assert!(manager.get_device("test").await.is_some());
+    }
+
+    /// Register a serial device and write `text` to its transmit buffer the
+    /// way a guest would: one byte at a time through the THR.
+    async fn register_console(manager: &DeviceManager, name: &str, text: &str) {
+        let device = Arc::new(RwLock::new(crate::SerialDevice::new(
+            name.to_string(),
+            0x3F8,
+        )));
+        {
+            let mut guard = device.write().await;
+            for byte in text.as_bytes() {
+                guard.write(0, &[*byte]).await.unwrap();
+            }
+        }
+        manager.register_device(name, device).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn console_output_omits_devices_that_are_not_consoles() {
+        let manager = DeviceManager::new();
+        manager
+            .register_device(
+                "dummy",
+                Arc::new(RwLock::new(DummyDevice {
+                    name: "dummy".to_string(),
+                })),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            manager.console_output().await.is_empty(),
+            "a device with nothing to say about consoles must not appear as a silent one"
+        );
+    }
+
+    #[tokio::test]
+    async fn console_output_reports_each_console_in_name_order() {
+        let manager = DeviceManager::new();
+        register_console(&manager, "COM2", "second").await;
+        register_console(&manager, "COM1", "first").await;
+
+        let out = manager.console_output().await;
+
+        // Sorted, not HashMap order: a caller concatenating these would
+        // otherwise get a different boot log on every call.
+        assert_eq!(
+            out.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>(),
+            vec!["COM1", "COM2"]
+        );
+        assert_eq!(out[0].1, b"first");
+        assert_eq!(out[1].1, b"second");
+    }
+
+    #[tokio::test]
+    async fn console_output_does_not_consume() {
+        let manager = DeviceManager::new();
+        register_console(&manager, "COM1", "boot").await;
+
+        assert_eq!(manager.console_output().await[0].1, b"boot");
+        assert_eq!(
+            manager.console_output().await[0].1,
+            b"boot",
+            "polling the console must not eat the log it is reporting"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_registered_console_that_said_nothing_still_appears() {
+        let manager = DeviceManager::new();
+        register_console(&manager, "COM1", "").await;
+
+        let out = manager.console_output().await;
+        assert_eq!(out.len(), 1, "an attached-but-quiet console is not absent");
+        assert!(out[0].1.is_empty());
     }
 }

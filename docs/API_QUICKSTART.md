@@ -150,7 +150,14 @@ curl http://localhost:8080/agentic/ontology
 | POST   | `/api/v1/vms/{id}/pause`   | Pause a VM         |
 | POST   | `/api/v1/vms/{id}/resume`  | Resume a paused VM |
 | GET    | `/api/v1/vms/{id}/metrics` | Get VM metrics     |
+| GET    | `/api/v1/vms/{id}/console` | Read guest console |
 | POST   | `/api/v1/vms/{id}/script`  | Execute a script   |
+
+`GET /api/v1/vms/{id}/console` returns `{ "id", "attached", "output" }`. It
+does not consume the buffer, so polling returns the whole log each time rather
+than only what is new. `attached` is `false` when the VM has no console device
+registered — distinct from a guest that has printed nothing, which both report
+an empty `output`.
 
 ### Agent Discovery
 

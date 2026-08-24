@@ -137,7 +137,7 @@ pub use tools::{
     ToolCategory, ToolChain, ToolChainStep, ToolDefinition, ToolError, ToolHandler, ToolParameter,
     ToolRegistry, ToolResult,
 };
-pub use vm_host::{LocalVmHost, VmDescriptor, VmHost, VmMetrics, VmSpec};
+pub use vm_host::{LocalVmHost, VmConsole, VmDescriptor, VmHost, VmMetrics, VmSpec};
 
 // MCP interface for AI agent tool-use
 pub use mcp::{
