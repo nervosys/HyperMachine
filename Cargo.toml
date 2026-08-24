@@ -117,7 +117,7 @@ flate2 = "1.0"
 # Utilities
 uuid = { version = "1.10", features = ["v4", "serde"] }
 bitflags = "2.4"
-rand = "0.8"
+rand = "0.10"
 
 [workspace.lints.rust]
 # Note: unsafe_code intentionally not warned — unsafe is inherent to hypervisor code.

@@ -3023,7 +3023,7 @@ dependencies = [
  "ml-kem",
  "parking_lot",
  "proptest",
- "rand 0.8.7",
+ "rand 0.10.2",
  "reqwest",
  "ring",
  "rsa",
