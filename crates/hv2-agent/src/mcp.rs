@@ -1421,7 +1421,7 @@ impl McpServer {
                     "properties": {}
                 }),
                 category: ToolCategory::Storage,
-                required_capabilities: vec![],
+                required_capabilities: vec![AgentCapability::StorageRead],
                 enabled: true,
             },
         );
@@ -1437,7 +1437,7 @@ impl McpServer {
                     "required": ["reference"]
                 }),
                 category: ToolCategory::Storage,
-                required_capabilities: vec![],
+                required_capabilities: vec![AgentCapability::StorageRead],
                 enabled: true,
             },
         );
@@ -1453,7 +1453,7 @@ impl McpServer {
                     "required": ["sha256"]
                 }),
                 category: ToolCategory::Storage,
-                required_capabilities: vec![],
+                required_capabilities: vec![AgentCapability::StorageRead],
                 enabled: true,
             },
         );
@@ -1469,7 +1469,11 @@ impl McpServer {
                     "properties": {}
                 }),
                 category: ToolCategory::System,
-                required_capabilities: vec![],
+                // Same class of disclosure as system.health, which has always
+                // required this: host OS and architecture, which hypervisor
+                // backends this build can reach, and how many agent sessions
+                // are live. Gated for the same reason.
+                required_capabilities: vec![AgentCapability::MetricsRead],
                 enabled: true,
             },
         );
@@ -3206,6 +3210,52 @@ mod tests {
         assert!(tool_names.contains(&"vm.status"));
         assert!(!tool_names.contains(&"vm.create"));
         assert!(!tool_names.contains(&"vm.delete"));
+    }
+
+    /// No tool is reachable by a session holding nothing.
+    ///
+    /// list_tools and call_tool both check required_capabilities with `all`,
+    /// so an empty vec is not "unclassified" -- it is a grant to every caller,
+    /// including AgentCapabilities::none(). system.info and the three image
+    /// allowlist readers were in that state; this is here so the next tool
+    /// added without a capability fails a build instead of shipping open.
+    #[test]
+    fn every_tool_declares_a_capability() {
+        let server = McpServer::new();
+        let open: Vec<String> = server
+            .list_tools(&AgentCapabilities::none())
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        assert!(
+            open.is_empty(),
+            "reachable with no capability at all: {open:?}"
+        );
+    }
+
+    /// A read-only agent still sees the read surface. The guard against
+    /// satisfying the test above by gating everything behind Admin, which
+    /// would leave the capability set carrying no information.
+    #[test]
+    fn read_only_agents_keep_the_read_surface() {
+        let server = McpServer::new();
+        let names: Vec<String> = server
+            .list_tools(&AgentCapabilities::read_only())
+            .into_iter()
+            .map(|t| t.name)
+            .collect();
+        for expected in [
+            "system.info",
+            "system.health",
+            "image.list",
+            "image.get",
+            "image.check",
+        ] {
+            assert!(
+                names.iter().any(|n| n == expected),
+                "`{expected}` is a read and should be visible to a read-only agent"
+            );
+        }
     }
 
     #[tokio::test]
