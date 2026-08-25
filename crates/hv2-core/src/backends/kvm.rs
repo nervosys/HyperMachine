@@ -137,9 +137,19 @@ pub struct KvmBackend {
     capabilities: HypervisorCapabilities,
     /// Size of kvm_run mmap region
     run_mmap_size: usize,
-    /// Active VMs (for cleanup on drop)
-    vms: Arc<RwLock<Vec<Arc<KvmVm>>>>,
-    /// vCPU lookup: maps VCpu::id() → KvmVcpu
+    /// The one VM this backend owns, if `create_vm` has run.
+    ///
+    /// At most one. The `HypervisorBackend` trait identifies a vCPU by its
+    /// bare id, so a second VM would bring its own vCPU 0 and every lookup
+    /// here — `run_vcpu`, `load_boot`, interrupt injection — would silently
+    /// resolve to whichever VM was created last. `create_vm` refuses the
+    /// second VM rather than allow that. A caller who wants two VMs builds
+    /// two backends, which is what `VM::new` does.
+    vm: Arc<RwLock<Option<Arc<KvmVm>>>>,
+    /// vCPU lookup: maps VCpu::id() → KvmVcpu.
+    ///
+    /// Keyed by bare vCPU id, which is unambiguous only because of the
+    /// one-VM invariant documented on `vm`.
     vcpu_map: RwLock<HashMap<u32, Arc<KvmVcpu>>>,
 }
 
@@ -189,7 +199,7 @@ impl KvmBackend {
                 kvm_fd,
                 capabilities,
                 run_mmap_size,
-                vms: Arc::new(RwLock::new(Vec::new())),
+                vm: Arc::new(RwLock::new(None)),
                 vcpu_map: RwLock::new(HashMap::new()),
             })
         }
@@ -278,6 +288,19 @@ impl HypervisorBackend for KvmBackend {
             )));
         }
 
+        // Hold the slot for the whole of creation so two concurrent callers
+        // cannot both pass the check. Lock order is `vm` then `vcpu_map`;
+        // every other path releases `vcpu_map` before touching `vm`.
+        let mut slot = self.vm.write().unwrap_or_else(|e| e.into_inner());
+        if slot.is_some() {
+            return Err(Error::Hypervisor(
+                "this KVM backend already owns a VM. A backend owns at most one: vCPUs \
+                 are looked up by bare id, so a second VM's vCPU 0 would collide with the \
+                 first's. Build a second backend for a second VM."
+                    .into(),
+            ));
+        }
+
         // Create KVM VM instance
         let kvm_vm = Arc::new(KvmVm::new(
             self.kvm_fd,
@@ -285,12 +308,6 @@ impl HypervisorBackend for KvmBackend {
             memory_size,
             self.run_mmap_size,
         )?);
-
-        // Track VM for cleanup
-        self.vms
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(kvm_vm.clone());
 
         // Create vCPUs and register them in the lookup map
         for i in 0..vcpu_count {
@@ -300,6 +317,9 @@ impl HypervisorBackend for KvmBackend {
                 .unwrap_or_else(|e| e.into_inner())
                 .insert(i, kvm_vcpu);
         }
+
+        *slot = Some(kvm_vm);
+        drop(slot);
 
         Ok(HypervisorVm::new(
             HypervisorPlatform::Kvm,
@@ -355,11 +375,10 @@ impl HypervisorBackend for KvmBackend {
                 .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
         };
         let kvm_vm = self
-            .vms
+            .vm
             .read()
             .unwrap_or_else(|e| e.into_inner())
-            .last()
-            .cloned()
+            .clone()
             .ok_or_else(|| {
                 Error::Hypervisor("no KVM VM — create_vm must run before load_boot".into())
             })?;
@@ -485,8 +504,8 @@ impl HypervisorBackend for KvmBackend {
             .unwrap_or_else(|e| e.into_inner())
             .clear();
 
-        // VMs will be automatically closed when dropped
-        self.vms.write().unwrap_or_else(|e| e.into_inner()).clear();
+        // The VM is automatically closed when dropped
+        *self.vm.write().unwrap_or_else(|e| e.into_inner()) = None;
 
         Ok(())
     }
@@ -1582,3 +1601,53 @@ impl Drop for KvmVcpu {
 // safe to transfer between threads. No thread-local or non-Send state.
 unsafe impl Send for KvmVcpu {}
 unsafe impl Sync for KvmVcpu {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hypervisor::HypervisorBackend;
+
+    /// A backend hands out one VM. The second request must fail loudly:
+    /// before this check it succeeded and quietly aliased the first, because
+    /// both VMs' vCPU 0 land on the same `vcpu_map` key and `load_boot` then
+    /// resolved whichever VM was created last.
+    #[tokio::test]
+    async fn a_second_vm_on_one_backend_is_refused() {
+        let Ok(backend) = KvmBackend::new() else {
+            eprintln!("KVM not available — skipping");
+            return;
+        };
+        if backend.create_vm(1, 1024 * 1024).await.is_err() {
+            eprintln!("KVM VM creation unavailable (check /dev/kvm permissions) — skipping");
+            return;
+        }
+
+        let err = match backend.create_vm(1, 1024 * 1024).await {
+            Ok(_) => panic!("the second VM must be refused, not aliased"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("already owns a VM"),
+            "the error should say why one backend owns one VM, got: {err}"
+        );
+    }
+
+    /// `shutdown` releases the VM, so the backend can be reused.
+    #[tokio::test]
+    async fn shutdown_frees_the_backend_to_own_a_vm_again() {
+        let Ok(mut backend) = KvmBackend::new() else {
+            eprintln!("KVM not available — skipping");
+            return;
+        };
+        if backend.create_vm(1, 1024 * 1024).await.is_err() {
+            eprintln!("KVM VM creation unavailable (check /dev/kvm permissions) — skipping");
+            return;
+        }
+
+        backend.shutdown().await.expect("shutdown should succeed");
+        backend
+            .create_vm(1, 1024 * 1024)
+            .await
+            .expect("after shutdown the backend owns no VM, so this must succeed");
+    }
+}

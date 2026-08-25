@@ -86,9 +86,19 @@ use parking_lot::RwLock;
 pub struct WhpxBackend {
     /// Detected capabilities
     capabilities: HypervisorCapabilities,
-    /// Active VMs (for cleanup on drop)
-    vms: Arc<RwLock<Vec<Arc<WhpxVm>>>>,
-    /// vCPU map: VCpu ID -> WhpxVcpu for trait method delegation
+    /// The one partition this backend owns, if `create_vm` has run.
+    ///
+    /// At most one. The `HypervisorBackend` trait identifies a vCPU by its
+    /// bare id, so a second partition would bring its own vCPU 0 and every
+    /// lookup here — `run_vcpu`, `load_boot`, interrupt injection — would
+    /// silently resolve to whichever partition was created last. `create_vm`
+    /// refuses the second partition rather than allow that. A caller who
+    /// wants two VMs builds two backends, which is what `VM::new` does.
+    vm: Arc<RwLock<Option<Arc<WhpxVm>>>>,
+    /// vCPU map: VCpu ID -> WhpxVcpu for trait method delegation.
+    ///
+    /// Keyed by bare vCPU id, which is unambiguous only because of the
+    /// one-partition invariant documented on `vm`.
     vcpu_map: Arc<RwLock<std::collections::HashMap<u32, Arc<WhpxVcpu>>>>,
 }
 
@@ -139,7 +149,7 @@ impl WhpxBackend {
 
             Ok(Self {
                 capabilities,
-                vms: Arc::new(RwLock::new(Vec::new())),
+                vm: Arc::new(RwLock::new(None)),
                 vcpu_map: Arc::new(RwLock::new(std::collections::HashMap::new())),
             })
         }
@@ -245,6 +255,19 @@ impl HypervisorBackend for WhpxBackend {
             )));
         }
 
+        // Hold the slot for the whole of creation so two concurrent callers
+        // cannot both pass the check. Lock order is `vm` then `vcpu_map`;
+        // every other path releases `vcpu_map` before touching `vm`.
+        let mut slot = self.vm.write();
+        if slot.is_some() {
+            return Err(Error::VM(
+                "this WHPX backend already owns a partition. A backend owns at most one: \
+                 vCPUs are looked up by bare id, so a second partition's vCPU 0 would \
+                 collide with the first's. Build a second backend for a second VM."
+                    .into(),
+            ));
+        }
+
         // Create WHPX VM instance
         let whpx_vm = Arc::new(WhpxVm::new(vcpu_count, memory_size)?);
 
@@ -257,8 +280,8 @@ impl HypervisorBackend for WhpxBackend {
             }
         }
 
-        // Track VM for cleanup
-        self.vms.write().push(whpx_vm.clone());
+        *slot = Some(whpx_vm);
+        drop(slot);
 
         Ok(HypervisorVm::new(
             HypervisorPlatform::Whpx,
@@ -337,7 +360,7 @@ impl HypervisorBackend for WhpxBackend {
                 .cloned()
                 .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
         };
-        let whpx_vm = self.vms.read().last().cloned().ok_or_else(|| {
+        let whpx_vm = self.vm.read().clone().ok_or_else(|| {
             Error::VM("no WHPX partition — create_vm must run before load_boot".into())
         })?;
 
@@ -367,7 +390,7 @@ impl HypervisorBackend for WhpxBackend {
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down WHPX backend");
         self.vcpu_map.write().clear();
-        self.vms.write().clear();
+        *self.vm.write() = None;
         Ok(())
     }
 
@@ -4885,6 +4908,50 @@ mod tests {
                 eprintln!("WHPX not available (expected on some systems): {}", e);
             }
         }
+    }
+
+    /// A backend hands out one partition. The second request must fail
+    /// loudly: before this check it succeeded and quietly aliased the first,
+    /// because both partitions' vCPU 0 land on the same `vcpu_map` key and
+    /// `load_boot` then resolved whichever partition was created last.
+    #[tokio::test]
+    async fn a_second_partition_on_one_backend_is_refused() {
+        let Ok(backend) = WhpxBackend::new() else {
+            eprintln!("WHPX not available — skipping");
+            return;
+        };
+        if backend.create_vm(1, 1024 * 1024).await.is_err() {
+            eprintln!("WHPX partition creation unavailable (may require admin) — skipping");
+            return;
+        }
+
+        let err = match backend.create_vm(1, 1024 * 1024).await {
+            Ok(_) => panic!("the second partition must be refused, not aliased"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("already owns a partition"),
+            "the error should say why one backend owns one partition, got: {err}"
+        );
+    }
+
+    /// `shutdown` releases the partition, so the backend can be reused.
+    #[tokio::test]
+    async fn shutdown_frees_the_backend_to_own_a_partition_again() {
+        let Ok(mut backend) = WhpxBackend::new() else {
+            eprintln!("WHPX not available — skipping");
+            return;
+        };
+        if backend.create_vm(1, 1024 * 1024).await.is_err() {
+            eprintln!("WHPX partition creation unavailable (may require admin) — skipping");
+            return;
+        }
+
+        backend.shutdown().await.expect("shutdown should succeed");
+        backend
+            .create_vm(1, 1024 * 1024)
+            .await
+            .expect("after shutdown the backend owns no partition, so this must succeed");
     }
 
     #[tokio::test]

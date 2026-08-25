@@ -152,6 +152,14 @@ const VMX_EXIT_REASON_EPT_MISCONFIG: u64 = 49;
 pub struct HvfBackend {
     capabilities: HypervisorCapabilities,
     vm_created: AtomicBool,
+    /// Whether `create_vm` has already handed out this backend's one VM.
+    ///
+    /// Hypervisor.framework allows a single VM per process, and every piece
+    /// of state here — `vcpu_states`, `guest_memory`, `memory_mappings` — is
+    /// backend-global rather than per-VM. A second `create_vm` would hand
+    /// back a `HypervisorVm` that silently aliases the first, so it is
+    /// refused instead. A caller who wants two VMs needs two processes.
+    vm_handed_out: AtomicBool,
     vcpu_states: RwLock<HashMap<u32, VCpuState>>,
     memory_mappings: RwLock<Vec<MemoryMapping>>,
     /// Host allocation backing guest RAM, created by `create_vm`.
@@ -212,6 +220,7 @@ impl HvfBackend {
             vm_created: AtomicBool::new(false),
             vcpu_states: RwLock::new(HashMap::new()),
             memory_mappings: RwLock::new(Vec::new()),
+            vm_handed_out: AtomicBool::new(false),
             guest_memory: RwLock::new(None),
             initialized: AtomicBool::new(false),
         })
@@ -352,6 +361,50 @@ impl HvfBackend {
     }
 
     // -- Internal helpers --
+
+    /// Allocate guest RAM and create vCPUs for this backend's one VM.
+    ///
+    /// Split out of `create_vm` so a failure part-way through can release the
+    /// `vm_handed_out` claim on a single path.
+    fn set_up_vm(&self, vcpu_count: u32, memory_size: u64) -> Result<HypervisorVm> {
+        // Allocate and map guest RAM at GPA 0. Without this the VM has no
+        // memory at all, so there is nowhere to put a guest.
+        if memory_size > 0 && self.guest_memory.read().is_none() {
+            let layout = std::alloc::Layout::from_size_align(memory_size as usize, 4096)
+                .map_err(|e| Error::Memory(format!("Invalid memory layout: {}", e)))?;
+
+            // SAFETY: `layout` has a non-zero size (checked above) and a valid
+            // 4 KB alignment. The allocation is owned by this backend and freed
+            // in `Drop`.
+            let ptr = unsafe { std::alloc::alloc_zeroed(layout) };
+            if ptr.is_null() {
+                return Err(Error::Memory("Failed to allocate guest memory".into()));
+            }
+
+            if let Err(e) = self.map_memory(0, memory_size, ptr) {
+                // SAFETY: `ptr` came from `alloc_zeroed` with this same layout
+                // and has not been freed or handed out.
+                unsafe { std::alloc::dealloc(ptr, layout) };
+                return Err(e);
+            }
+
+            *self.guest_memory.write() = Some(GuestAllocation {
+                ptr,
+                size: memory_size,
+            });
+        }
+
+        // Create vCPUs
+        for i in 0..vcpu_count {
+            self.create_vcpu(i)?;
+        }
+
+        Ok(HypervisorVm::new(
+            HypervisorPlatform::Hvf,
+            vcpu_count,
+            memory_size,
+        ))
+    }
 
     /// Create the HVF VM (idempotent).
     fn create_vm_internal(&self) -> Result<()> {
@@ -535,43 +588,22 @@ impl HypervisorBackend for HvfBackend {
             )));
         }
 
-        // Allocate and map guest RAM at GPA 0. Without this the VM has no
-        // memory at all, so there is nowhere to put a guest.
-        if memory_size > 0 && self.guest_memory.read().is_none() {
-            let layout = std::alloc::Layout::from_size_align(memory_size as usize, 4096)
-                .map_err(|e| Error::Memory(format!("Invalid memory layout: {}", e)))?;
-
-            // SAFETY: `layout` has a non-zero size (checked above) and a valid
-            // 4 KB alignment. The allocation is owned by this backend and freed
-            // in `Drop`.
-            let ptr = unsafe { std::alloc::alloc_zeroed(layout) };
-            if ptr.is_null() {
-                return Err(Error::Memory("Failed to allocate guest memory".into()));
-            }
-
-            if let Err(e) = self.map_memory(0, memory_size, ptr) {
-                // SAFETY: `ptr` came from `alloc_zeroed` with this same layout
-                // and has not been freed or handed out.
-                unsafe { std::alloc::dealloc(ptr, layout) };
-                return Err(e);
-            }
-
-            *self.guest_memory.write() = Some(GuestAllocation {
-                ptr,
-                size: memory_size,
-            });
+        if self.vm_handed_out.swap(true, Ordering::SeqCst) {
+            return Err(Error::Hypervisor(
+                "this HVF backend already owns a VM. Hypervisor.framework allows one VM \
+                 per process, and a second handle would alias the first rather than \
+                 isolate from it."
+                    .into(),
+            ));
         }
 
-        // Create vCPUs
-        for i in 0..vcpu_count {
-            self.create_vcpu(i)?;
+        // Nothing was handed out if setup fails, so release the claim and let
+        // the caller try again, the same way `create_vm_internal` does.
+        let vm = self.set_up_vm(vcpu_count, memory_size);
+        if vm.is_err() {
+            self.vm_handed_out.store(false, Ordering::SeqCst);
         }
-
-        Ok(HypervisorVm::new(
-            HypervisorPlatform::Hvf,
-            vcpu_count,
-            memory_size,
-        ))
+        vm
     }
 
     async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
@@ -965,6 +997,9 @@ impl HypervisorBackend for HvfBackend {
             unsafe { hv_vm_destroy() };
             tracing::info!("HVF VM destroyed");
         }
+
+        // The backend owns nothing now, so it may hand out a VM again.
+        self.vm_handed_out.store(false, Ordering::SeqCst);
 
         Ok(())
     }
