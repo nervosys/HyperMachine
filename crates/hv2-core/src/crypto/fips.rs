@@ -33,6 +33,7 @@
 //! ```
 
 use std::fmt;
+use zeroize::Zeroize;
 
 // ============================================================================
 // FIPS Configuration
@@ -228,9 +229,7 @@ impl SymmetricKey {
 impl Drop for SymmetricKey {
     fn drop(&mut self) {
         // Zeroize key material
-        for byte in &mut self.key {
-            *byte = 0;
-        }
+        self.key.zeroize();
     }
 }
 
@@ -283,9 +282,7 @@ impl KeyPair {
 impl Drop for KeyPair {
     fn drop(&mut self) {
         // Zeroize private key material
-        for byte in &mut self.private_key {
-            *byte = 0;
-        }
+        self.private_key.zeroize();
     }
 }
 

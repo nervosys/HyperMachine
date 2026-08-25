@@ -266,9 +266,7 @@ impl Histogram {
 
     /// Reset the histogram
     pub fn reset(&mut self) {
-        for count in &mut self.counts {
-            *count = 0;
-        }
+        self.counts.fill(0);
         self.sum = 0.0;
         self.count = 0;
         self.min = f64::MAX;

@@ -31,6 +31,10 @@ reqwest = { workspace = true, optional = true }
 # Pure-Rust RSA (RustCrypto) — provides RSA key generation and signing, which
 # `ring` does not support. Used by the asymmetric crypto module.
 rsa = { version = "0.9.10", features = ["sha2"] }
+# Zeroization of key material on drop. A plain loop or `fill(0)` writes to
+# memory that is never read again, which the optimizer is free to delete;
+# `zeroize` uses volatile writes so the erasure actually happens.
+zeroize = "1.9.0"
 # Post-quantum cryptography (pure-Rust RustCrypto implementations).
 # ml-kem: FIPS 203 (ML-KEM), ml-dsa: FIPS 204 (ML-DSA), slh-dsa: FIPS 205 (SLH-DSA).
 ml-kem = { version = "0.3.2", features = ["getrandom"], optional = true }
