@@ -2940,6 +2940,7 @@ dependencies = [
  "criterion",
  "hv2-core",
  "hv2-guest-agent",
+ "hv2-sandbox",
  "parking_lot",
  "proptest",
  "rhai",
@@ -3107,6 +3108,17 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "hv2-sandbox"
+version = "1.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "thiserror 2.0.20",
+ "tracing",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

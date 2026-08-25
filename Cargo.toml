@@ -9,6 +9,7 @@ members = [
     "crates/hv2-net",
     "crates/hv2-agent",
     "crates/hv2-guest-agent",
+    "crates/hv2-sandbox",
     "crates/hv2-runtime",
     "crates/hv2-api",
     "crates/hv2-cli",

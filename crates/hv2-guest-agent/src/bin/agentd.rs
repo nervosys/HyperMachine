@@ -1,9 +1,9 @@
 //! `hv2-guest-agentd` — the half of the agent that runs inside the guest.
 //!
-//! It listens on `AF_VSOCK` port [`GUEST_AGENT_PORT`] and answers the requests
-//! in [`hv2_guest_agent`]. This is the program that makes "run a command in
-//! the VM" true: without it, the host has a channel and nothing on the other
-//! end of it.
+//! It listens on the `AF_VSOCK` port named by `hv2_guest_agent::GUEST_AGENT_PORT`
+//! and answers the requests that crate defines. This is the program that makes
+//! "run a command in the VM" true: without it, the host has a channel and
+//! nothing on the other end of it.
 //!
 //! # Running it
 //!

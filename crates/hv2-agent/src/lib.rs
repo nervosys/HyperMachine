@@ -49,6 +49,7 @@ pub mod learning;
 pub mod limits;
 pub mod mcp;
 pub mod memory;
+pub mod microvm_sandbox;
 pub mod orchestration;
 pub mod perception;
 pub mod permissions;
@@ -97,6 +98,7 @@ pub use memory::{
     MemorySystem, MemoryType, RetrievalConfig, RetrievalResult, SemanticFact, SemanticMemory,
     SharedMemory, WorkingItem, WorkingMemory,
 };
+pub use microvm_sandbox::MicroVmSandbox;
 pub use perception::{
     Observable, Observation, ObservationQuality, ObservationValue, PerceptionError,
     PerceptionFilter, PerceptionResult, PerceptionSystem, Sensor, SensorConfig, SensorDefinition,

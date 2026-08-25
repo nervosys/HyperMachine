@@ -14,6 +14,7 @@ description = "HyperMachine AI agent interface with MCP server"
 [dependencies]
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
 hv2-guest-agent = { path = "../hv2-guest-agent", version = "1.1.0" }
+hv2-sandbox = { path = "../hv2-sandbox", version = "1.1.0" }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
