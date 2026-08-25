@@ -316,6 +316,37 @@ impl hv2_agent::VmHost for ApiVmHost {
             output: output.unwrap_or_default(),
         })
     }
+
+    async fn exec(
+        &self,
+        vm_id: &str,
+        command: hv2_agent::vm_host::GuestCommand,
+    ) -> std::result::Result<hv2_agent::vm_host::VmExec, String> {
+        // The same guest `POST /api/v1/vms/{id}/exec` reaches, for the same
+        // reason console is shared: an agent following a plan and an operator
+        // with curl must not be running commands in different places.
+        let descriptor = self.describe(vm_id).await?;
+        let out = self
+            .get(vm_id)
+            .await?
+            .exec_in_guest(
+                &command.program,
+                &command.args,
+                std::time::Duration::from_secs(command.timeout_seconds),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(hv2_agent::vm_host::VmExec {
+            vm_id: descriptor.vm_id,
+            exit_code: out.exit_code,
+            signal: out.signal,
+            stdout: out.stdout,
+            stderr: out.stderr,
+            truncated: out.truncated,
+            timed_out: out.timed_out,
+        })
+    }
 }
 
 /// Create REST API router with the given application state
@@ -346,6 +377,7 @@ pub fn create_router_with_state(state: AppState) -> Router {
         .route("/api/v1/vms/{id}/metrics", get(get_metrics))
         .route("/api/v1/vms/{id}/console", get(get_console))
         .route("/api/v1/vms/{id}/script", post(execute_script))
+        .route("/api/v1/vms/{id}/exec", post(exec_in_guest))
         // Agentic ontology routes for AI agent discovery
         .merge(crate::ontology::create_ontology_router_with_executor(
             plan_executor,
@@ -1095,6 +1127,101 @@ async fn execute_script(
             )),
             execution_time_ms: start.elapsed().as_millis() as u64,
         })),
+    }
+}
+
+/// A program to run inside a guest.
+#[derive(Deserialize)]
+struct ExecRequest {
+    /// Program to execute, run directly rather than through a shell.
+    program: String,
+    /// Arguments, already split. Nothing here parses a command line.
+    #[serde(default)]
+    args: Vec<String>,
+    #[serde(default)]
+    timeout_seconds: Option<u64>,
+}
+
+/// What a program did inside a guest.
+///
+/// `exit_code` and `signal` are separate fields on purpose: a program killed
+/// by a signal did not exit 0, and a response that carried one number for both
+/// would report a crash as a success.
+#[derive(Serialize)]
+struct ExecResponse {
+    id: String,
+    exit_code: Option<i32>,
+    signal: Option<i32>,
+    stdout: String,
+    stderr: String,
+    /// Whether output was cut short at the guest agent's per-stream ceiling.
+    truncated: bool,
+    /// Whether the guest agent killed the program for overrunning.
+    timed_out: bool,
+}
+
+/// `POST /api/v1/vms/{id}/exec` — run a program inside the guest.
+///
+/// The counterpart to `/script`, and the difference between them is the whole
+/// point: `/script` evaluates a Rhai script on the host against a read-only
+/// view of the VM, and this runs a program inside the guest operating system
+/// through `hv2-guest-agentd` over vsock.
+///
+/// A non-zero exit code is a 200 with that code, not an HTTP error: the
+/// program ran, and its output is what explains the failure. A 4xx or 5xx here
+/// means the command could not be run at all — no guest channel attached, or
+/// nothing answering inside the guest.
+async fn exec_in_guest(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(req): Json<ExecRequest>,
+) -> std::result::Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    if req.program.trim().is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "program must not be empty".to_string(),
+                code: "INVALID_REQUEST".to_string(),
+                request_id: None,
+            }),
+        ));
+    }
+
+    let vms = state.vms.read().await;
+    let vm = vms.get(&id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: format!("VM not found: {}", id),
+                code: "VM_NOT_FOUND".to_string(),
+                request_id: None,
+            }),
+        )
+    })?;
+
+    let timeout = std::time::Duration::from_secs(req.timeout_seconds.unwrap_or(30).max(1));
+
+    match vm.exec_in_guest(&req.program, &req.args, timeout).await {
+        Ok(out) => Ok(Json(ExecResponse {
+            id,
+            exit_code: out.exit_code,
+            signal: out.signal,
+            stdout: out.stdout,
+            stderr: out.stderr,
+            truncated: out.truncated,
+            timed_out: out.timed_out,
+        })),
+        // Not being able to reach a guest is a server-side condition, not a
+        // malformed request. The message names which of the several ways it
+        // failed, because they send an operator to different places.
+        Err(e) => Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: e.to_string(),
+                code: "GUEST_UNAVAILABLE".to_string(),
+                request_id: None,
+            }),
+        )),
     }
 }
 

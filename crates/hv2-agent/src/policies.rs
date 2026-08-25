@@ -100,6 +100,13 @@ pub enum PolicyAction {
     StorageDetach,
     StorageResize,
 
+    /// Run a program inside a guest.
+    ///
+    /// Its own action rather than a resource read or modify: running a command
+    /// in a guest is neither, and folding it into either would let a policy
+    /// that meant to allow reading a VM allow running anything inside it.
+    GuestExec,
+
     /// Debug actions
     DebugAttach,
     DebugInspect,

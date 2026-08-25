@@ -176,6 +176,12 @@ pub enum ToolCategory {
     System,
     /// GPU fabric: device inventory and VM accelerator allocation
     GpuFabric,
+    /// Running programs inside a guest operating system.
+    ///
+    /// Distinct from `System`, which is host administration: an agent looking
+    /// for "run this in the VM" should not find it filed under operations on
+    /// the machine the VM is running on.
+    GuestExecution,
 }
 
 /// Agent capabilities (permissions)
@@ -509,6 +515,7 @@ impl McpServer {
             "vm.resume" => PolicyAction::VmResume,
             "vm.delete" => PolicyAction::VmDelete,
             "vm.resize" => PolicyAction::ResourceModify,
+            "vm.exec" => PolicyAction::GuestExec,
             "vm.list" | "vm.status" | "vm.metrics" | "vm.console" | "gpu.list"
             | "snapshot.list" | "agent.list" | "system.info" | "system.health" => {
                 PolicyAction::ResourceRead
@@ -913,6 +920,41 @@ impl McpServer {
                 }),
                 category: ToolCategory::Monitoring,
                 required_capabilities: vec![AgentCapability::VmRead],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "vm.exec".to_string(),
+            McpTool {
+                name: "vm.exec".to_string(),
+                description: "Run a program inside a VM's guest operating system and                               return what it printed. Requires a guest channel attached                               before boot and hv2-guest-agentd running in the guest;                               without both this reports why rather than timing out. The                               program runs directly, not through a shell, so shell syntax                               such as redirection is not interpreted. A non-zero exit code                               is a result, not an error. Unlike vm.execute_script, which                               evaluates a Rhai script on the host, this runs in the guest."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM"
+                        },
+                        "program": {
+                            "type": "string",
+                            "description": "Program to execute, run directly rather than through a shell"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Arguments, already split; nothing here parses a command line"
+                        },
+                        "timeout_seconds": {
+                            "type": "integer",
+                            "description": "How long to wait before giving up (default 30)"
+                        }
+                    },
+                    "required": ["vm_id", "program"]
+                }),
+                category: ToolCategory::GuestExecution,
+                required_capabilities: vec![AgentCapability::GuestExec],
                 enabled: true,
             },
         );
@@ -1894,6 +1936,7 @@ impl McpServer {
                 | "vm.list"
                 | "vm.metrics"
                 | "vm.console"
+                | "vm.exec"
         ) {
             return None;
         }
@@ -1929,6 +1972,47 @@ impl McpServer {
                 return Err(format!("VM not found: {vm_id}"));
             }
             Ok(vm_id)
+        }
+
+        /// Read a `vm.exec` request out of the tool parameters.
+        fn guest_command(params: &JsonValue) -> Result<crate::vm_host::GuestCommand, String> {
+            let program = params
+                .get("program")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing required parameter: program")?;
+            if program.trim().is_empty() {
+                return Err("program must not be empty".to_string());
+            }
+
+            // Arguments arrive already split. A single string would have to be
+            // parsed, and there is no shell here to parse it the way a caller
+            // writing one would expect.
+            let args = match params.get("args") {
+                None | Some(JsonValue::Null) => Vec::new(),
+                Some(JsonValue::Array(items)) => items
+                    .iter()
+                    .map(|item| {
+                        item.as_str()
+                            .map(str::to_string)
+                            .ok_or_else(|| "args must be an array of strings".to_string())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                Some(_) => return Err("args must be an array of strings".to_string()),
+            };
+
+            let timeout_seconds = match params.get("timeout_seconds") {
+                None | Some(JsonValue::Null) => 30,
+                Some(value) => value
+                    .as_u64()
+                    .filter(|secs| *secs > 0)
+                    .ok_or("timeout_seconds must be a positive integer")?,
+            };
+
+            Ok(crate::vm_host::GuestCommand {
+                program: program.to_string(),
+                args,
+                timeout_seconds,
+            })
         }
 
         /// Keep the session's mirror of a VM in step with the host's view, so
@@ -2051,6 +2135,13 @@ impl McpServer {
                 let vm_id = owned_vm_id(params, session)?;
                 let console = host.console(vm_id).await?;
                 serde_json::to_value(console).map_err(|e| e.to_string())
+            }
+
+            "vm.exec" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let command = guest_command(params)?;
+                let result = host.exec(vm_id, command).await?;
+                serde_json::to_value(result).map_err(|e| e.to_string())
             }
 
             other => Err(format!("Tool has no VM-host implementation: {other}")),
@@ -2498,6 +2589,26 @@ impl McpServer {
                 // that outright rather than returning an empty log, which an
                 // agent would read as a guest that booted silently.
                 Ok(json!({ "vm_id": vm_id, "attached": false, "output": "" }))
+            }
+
+            "vm.exec" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let key = format!("vm:{}", vm_id);
+                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
+                state
+                    .get(&key)
+                    .ok_or_else(|| format!("VM not found: {}", vm_id))?;
+
+                // Without a host there is no guest, so there is nothing to run
+                // a program in. Returning an empty successful result would be
+                // a fabricated measurement -- the exact defect execute_plan
+                // had -- so refuse and name the reason.
+                Err(format!(
+                    "no VM host is installed, so there is no guest in {vm_id} to run a command in"
+                ))
             }
 
             // ── Snapshots ────────────────────────────────────────────

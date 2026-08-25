@@ -30,13 +30,14 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use hv2_core::BootSource;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
-use crate::AgentVM;
+use crate::{AgentVM, Capability, CapabilitySet};
 
 /// What an agent asked for when it called `vm.create`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -154,6 +155,52 @@ pub struct VmConsole {
     pub output: String,
 }
 
+/// A program to run inside a VM's guest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GuestCommand {
+    /// Program to execute. Run directly, not through a shell — `ls > out`
+    /// redirects nothing. A caller wanting shell semantics names a shell.
+    pub program: String,
+    /// Arguments, already split. Nothing here parses a command line.
+    #[serde(default)]
+    pub args: Vec<String>,
+    /// How long to wait before giving up.
+    pub timeout_seconds: u64,
+}
+
+impl GuestCommand {
+    /// A command with the default timeout.
+    pub fn new(program: impl Into<String>, args: Vec<String>) -> Self {
+        Self {
+            program: program.into(),
+            args,
+            timeout_seconds: 30,
+        }
+    }
+}
+
+/// What a program did inside a guest, as the tool surface reports it.
+///
+/// A non-zero `exit_code` is a result, not an error: the program ran, and its
+/// output is what explains the failure. `exit_code` and `signal` stay apart
+/// because a program killed by SIGKILL did not exit 0, and one field for both
+/// would report a crash as a success.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VmExec {
+    /// The VM the program ran in.
+    pub vm_id: String,
+    /// Exit status, or `None` when a signal ended the program.
+    pub exit_code: Option<i32>,
+    /// Signal that ended the program, if one did.
+    pub signal: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+    /// Whether output was cut short at the agent's per-stream ceiling.
+    pub truncated: bool,
+    /// Whether the guest agent killed the program for overrunning.
+    pub timed_out: bool,
+}
+
 /// Something that can run VMs on an agent's behalf.
 ///
 /// Every method takes a host-assigned `vm_id`. The MCP server checks that the
@@ -214,6 +261,21 @@ pub trait VmHost: Send + Sync {
             attached: false,
             output: String::new(),
         })
+    }
+
+    /// Run a program inside one VM's guest.
+    ///
+    /// The default refuses, because a host that tracks VMs without running
+    /// them has no guest to run anything in. Returning a fabricated success
+    /// here is the shape of defect `execute_plan` had — a result that reads
+    /// like a measurement and is not one — so this says no instead. It still
+    /// resolves `vm_id` first, so an unknown VM is an unknown VM.
+    async fn exec(&self, vm_id: &str, command: GuestCommand) -> Result<VmExec, String> {
+        let _ = self.status(vm_id).await?;
+        Err(format!(
+            "this host does not run guests, so it cannot run {} in one",
+            command.program
+        ))
     }
 }
 
@@ -330,12 +392,23 @@ impl VmHost for LocalVmHost {
         let vm = match already_live {
             Some(vm) => vm,
             None => {
+                // Authorization for this host lives one layer up: the MCP
+                // server checks that the caller holds GuestExec and owns this
+                // VM before dispatching. The AgentVM-level check is for an
+                // embedder holding one directly with no session behind it, so
+                // a VM created here is given the capability its callers have
+                // already been checked for -- otherwise the two gates
+                // disagree and the outer one silently means nothing.
+                let mut capabilities = CapabilitySet::default();
+                capabilities.add(Capability::GuestExec);
+
                 let mut builder = AgentVM::builder()
                     .name(&spec.name)
                     .cpu_cores(spec.cpu_cores)
                     .memory_gb(spec.memory_gb)
                     .enable_gpu(spec.enable_gpu)
-                    .enable_networking(spec.enable_networking);
+                    .enable_networking(spec.enable_networking)
+                    .capabilities(capabilities);
                 if let Some(source) = spec.boot.clone() {
                     builder = builder.boot(source);
                 }
@@ -451,6 +524,32 @@ impl VmHost for LocalVmHost {
             vm_id: descriptor.vm_id,
             attached: output.is_some(),
             output: output.unwrap_or_default(),
+        })
+    }
+
+    async fn exec(&self, vm_id: &str, command: GuestCommand) -> Result<VmExec, String> {
+        let descriptor = self.status(vm_id).await?;
+        let vm = self.live(vm_id).map_err(|_| {
+            format!("VM {vm_id} has not been started, so there is no guest to run a command in")
+        })?;
+
+        let out = vm
+            .exec_in_guest(
+                &command.program,
+                &command.args,
+                Duration::from_secs(command.timeout_seconds),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(VmExec {
+            vm_id: descriptor.vm_id,
+            exit_code: out.exit_code,
+            signal: out.signal,
+            stdout: out.stdout,
+            stderr: out.stderr,
+            truncated: out.truncated,
+            timed_out: out.timed_out,
         })
     }
 }
