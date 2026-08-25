@@ -287,6 +287,31 @@ impl SandboxSpec {
             .collect()
     }
 
+    /// A copy of this spec with `dropped` controls removed.
+    ///
+    /// Backends are handed this rather than the caller's spec, so a backend
+    /// never attempts a control its own probe said was unavailable. Without
+    /// it, [`Self::best_effort`] is broken in the worst way: it promises to
+    /// run with whatever the host can enforce and then fails trying to apply
+    /// something the host already said it could not — which is what running
+    /// this on a kernel with no cgroup delegation showed.
+    pub fn without_controls(&self, dropped: &[Control]) -> Self {
+        let mut spec = self.clone();
+        for control in dropped {
+            match control {
+                Control::Memory => spec.memory_bytes = None,
+                Control::ProcessCount => spec.max_processes = None,
+                Control::CpuTime => spec.cpu_time = None,
+                Control::WallClock => spec.wall_clock = None,
+                Control::NetworkIsolation => spec.network = NetworkPolicy::Host,
+                Control::FilesystemIsolation => spec.filesystem = FilesystemPolicy::Host,
+                Control::ProcessIsolation => spec.isolate_processes = false,
+                Control::NoNewPrivileges => spec.no_new_privileges = false,
+            }
+        }
+        spec
+    }
+
     /// Check this spec against what a backend can do.
     ///
     /// Returns the controls that will not be enforced. Errors unless

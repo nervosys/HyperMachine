@@ -89,7 +89,13 @@ impl Sandbox for ProcessSandbox {
         // than promised afterwards is too late to matter.
         let unenforced = spec.reconcile(&self.controls)?;
 
-        let mut output = run_confined(command, spec)?;
+        // Hand the backend only what this host said it enforces. Passing the
+        // caller's spec through would have the backend try to apply a control
+        // its own probe reported unavailable, which turns best-effort from
+        // "run with what we have" into "fail anyway, later and less clearly".
+        let effective = spec.without_controls(&unenforced);
+
+        let mut output = run_confined(command, &effective)?;
         output.unenforced = unenforced;
         Ok(output)
     }
@@ -416,6 +422,119 @@ mod tests {
             "the nested process ran, so the limit did not bind: {output:?}"
         );
         assert!(!output.succeeded(), "got: {output:?}");
+    }
+
+    /// Run `sh -c script` confined, returning trimmed stdout.
+    ///
+    /// These ask the workload what it can see, which is the only question that
+    /// settles whether an isolation claim is true. A test that read
+    /// `controls()` back would pass on a backend that reported the set and
+    /// applied none of it.
+    #[cfg(target_os = "linux")]
+    fn confined_shell(sandbox: &ProcessSandbox, script: &str, spec: &SandboxSpec) -> String {
+        let command = SandboxCommand::new("/bin/sh").args(["-c", script]);
+        let output = sandbox.run(&command, spec).expect("run");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_isolated_workload_is_pid_1_and_cannot_see_the_host() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::ProcessIsolation) {
+            eprintln!(
+                "skipping: {}",
+                sandbox
+                    .controls()
+                    .reason(Control::ProcessIsolation)
+                    .unwrap_or("process isolation unavailable")
+            );
+            return;
+        }
+
+        let mut spec = SandboxSpec::untrusted(64 * 1024 * 1024, Duration::from_secs(10));
+        spec.best_effort = true;
+
+        // unshare(CLONE_NEWPID) moves the *next* child into the namespace, not
+        // the caller. Without the second fork this reads as the host's pid,
+        // and the isolation claim would be false in a way nothing else shows.
+        assert_eq!(
+            confined_shell(&sandbox, "echo $$", &spec),
+            "1",
+            "the workload should be PID 1 in its own namespace"
+        );
+
+        // A PID namespace alone does not hide the process table: /proc is
+        // inherited from the host's namespace unless it is remounted. Before
+        // that remount this counted 48 on the machine it was first run on.
+        let visible: usize = confined_shell(&sandbox, "ls /proc | grep -c '^[0-9]'", &spec)
+            .parse()
+            .expect("a count");
+        let on_host = std::fs::read_dir("/proc")
+            .expect("/proc")
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .chars()
+                    .all(|c| c.is_ascii_digit())
+            })
+            .count();
+
+        assert!(
+            visible <= 5,
+            "the workload can see {visible} processes; the host has {on_host}"
+        );
+        assert!(
+            on_host > visible,
+            "the host should have more processes than the sandbox, or this proves nothing"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_network_isolated_workload_has_only_loopback() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::NetworkIsolation) {
+            eprintln!("skipping: this host cannot isolate the network");
+            return;
+        }
+
+        let mut spec = SandboxSpec::untrusted(64 * 1024 * 1024, Duration::from_secs(10));
+        spec.best_effort = true;
+
+        // An empty network namespace has loopback and nothing else, and
+        // loopback comes up down. Anything more means the workload kept the
+        // host's interfaces.
+        let interfaces = confined_shell(&sandbox, "ls /sys/class/net | wc -l", &spec);
+        assert_eq!(
+            interfaces, "1",
+            "a network-isolated workload should see only loopback"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn best_effort_does_not_attempt_a_control_the_probe_rejected() {
+        // Found by running on a real kernel: `untrusted` asks for a memory
+        // ceiling, this host has no writable cgroup, and the backend tried to
+        // create one anyway — so best-effort failed rather than running with
+        // what was available. The backend must be handed only what the probe
+        // said it enforces.
+        let sandbox = ProcessSandbox::new();
+        let mut spec = SandboxSpec::untrusted(64 * 1024 * 1024, Duration::from_secs(10));
+        spec.best_effort = true;
+
+        let command = SandboxCommand::new("/bin/echo").args(["ok"]);
+        let output = sandbox.run(&command, &spec).expect("best effort must run");
+        assert!(output.succeeded(), "got: {output:?}");
+
+        for control in &output.unenforced {
+            assert!(
+                !sandbox.controls().enforces(*control),
+                "{control} was reported unenforced but the host does enforce it"
+            );
+        }
     }
 
     #[test]

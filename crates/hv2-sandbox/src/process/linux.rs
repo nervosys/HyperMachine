@@ -78,19 +78,19 @@ pub(super) fn probe() -> Controls {
              the microVM sandbox",
         );
 
-    controls = match can_unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWNET) {
+    controls = match can_isolate_network() {
         Ok(()) => controls.with(Control::NetworkIsolation),
         Err(e) => controls.without(
             Control::NetworkIsolation,
-            format!("a network namespace could not be created: {e}"),
+            format!("the network could not be isolated: {e}"),
         ),
     };
 
-    controls = match can_unshare(libc::CLONE_NEWUSER | libc::CLONE_NEWPID | libc::CLONE_NEWIPC) {
+    controls = match can_isolate_processes() {
         Ok(()) => controls.with(Control::ProcessIsolation),
         Err(e) => controls.without(
             Control::ProcessIsolation,
-            format!("a PID namespace could not be created: {e}"),
+            format!("processes could not be isolated: {e}"),
         ),
     };
 
@@ -134,30 +134,153 @@ pub(super) fn probe() -> Controls {
     controls
 }
 
-/// Fork a child that tries `flags` and report whether it worked.
+/// Whether the full process-isolation sequence works here.
 ///
-/// Testing in a child rather than in this process: `unshare` cannot be undone,
-/// and a probe that changed the caller's namespaces would be a side effect
-/// nobody asked for.
-fn can_unshare(flags: libc::c_int) -> std::io::Result<()> {
-    // SAFETY: the child does nothing but call unshare and _exit, neither of
-    // which allocates or touches shared state.
+/// A PID namespace alone is not what [`Control::ProcessIsolation`] claims.
+/// Running this on a real kernel showed why: the workload was correctly PID 1
+/// in its own namespace and `/proc` still listed 48 host processes, because
+/// `/proc` was mounted in the *host's* PID namespace and inherited. "Cannot
+/// signal" was true and "cannot see" was not.
+///
+/// So the probe rehearses the whole thing — namespaces, the second fork that
+/// actually enters the PID namespace, and the `/proc` remount — and reports
+/// the control only if all of it worked.
+fn can_isolate_processes() -> std::io::Result<()> {
+    // SAFETY: the child only makes syscalls and _exit; it never allocates or
+    // touches state shared with this process.
     let pid = unsafe { libc::fork() };
     match pid {
         -1 => Err(std::io::Error::last_os_error()),
         0 => {
-            let rc = unsafe { libc::unshare(flags) };
-            unsafe { libc::_exit(if rc == 0 { 0 } else { 1 }) };
+            let flags =
+                libc::CLONE_NEWUSER | libc::CLONE_NEWPID | libc::CLONE_NEWIPC | libc::CLONE_NEWNS;
+            if unsafe { libc::unshare(flags) } != 0 {
+                unsafe { libc::_exit(1) };
+            }
+            // The PID namespace only takes effect for the next child.
+            let inner = unsafe { libc::fork() };
+            if inner < 0 {
+                unsafe { libc::_exit(1) };
+            }
+            if inner > 0 {
+                let mut status = 0;
+                unsafe { libc::waitpid(inner, &mut status, 0) };
+                let code = if libc::WIFEXITED(status) {
+                    libc::WEXITSTATUS(status)
+                } else {
+                    1
+                };
+                unsafe { libc::_exit(code) };
+            }
+            let ok = remount_namespaced_filesystems(true, false).is_ok();
+            unsafe { libc::_exit(if ok { 0 } else { 1 }) };
         }
         _ => {
             let mut status = 0;
-            // SAFETY: `pid` is our child and `status` is a valid out-pointer.
             unsafe { libc::waitpid(pid, &mut status, 0) };
             if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
                 Ok(())
             } else {
                 Err(std::io::Error::other(
-                    "unprivileged namespaces appear to be unavailable",
+                    "a PID namespace with its own /proc could not be created",
+                ))
+            }
+        }
+    }
+}
+
+/// Give the new namespaces the pseudo-filesystems that describe them.
+///
+/// `/proc` and `/sys` are not ordinary directories: each is a view of the
+/// namespace it was *mounted in*. Inherit them and a workload reads the host
+/// process table and the host network interfaces while being genuinely unable
+/// to signal or reach either. Both halves of this were found by running on a
+/// real kernel: `/proc` listed 48 host processes and `/sys/class/net` listed
+/// the host interfaces, while `$$` was 1 and netlink showed only loopback.
+/// Half an isolation claim is the kind this crate refuses to make.
+fn remount_namespaced_filesystems(new_pid_ns: bool, new_net_ns: bool) -> std::io::Result<()> {
+    if !new_pid_ns && !new_net_ns {
+        return Ok(());
+    }
+
+    // Detach propagation first, or these mounts would be visible to the host
+    // mount namespace.
+    // SAFETY: every pointer is a NUL-terminated literal that outlives the call.
+    if unsafe {
+        libc::mount(
+            c"none".as_ptr(),
+            c"/".as_ptr(),
+            std::ptr::null(),
+            libc::MS_REC | libc::MS_PRIVATE,
+            std::ptr::null(),
+        )
+    } != 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    if new_pid_ns {
+        // SAFETY: as above.
+        if unsafe {
+            libc::mount(
+                c"proc".as_ptr(),
+                c"/proc".as_ptr(),
+                c"proc".as_ptr(),
+                0,
+                std::ptr::null(),
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+
+    if new_net_ns {
+        // sysfs is bound to the network namespace it is mounted in, which is
+        // what makes /sys/class/net show the host interfaces otherwise.
+        // SAFETY: as above.
+        if unsafe {
+            libc::mount(
+                c"sysfs".as_ptr(),
+                c"/sys".as_ptr(),
+                c"sysfs".as_ptr(),
+                0,
+                std::ptr::null(),
+            )
+        } != 0
+        {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+/// Whether the full network-isolation sequence works here.
+///
+/// Rehearses the sysfs remount as well as the namespace, for the same reason
+/// [`can_isolate_processes`] rehearses `/proc`.
+fn can_isolate_network() -> std::io::Result<()> {
+    // SAFETY: the child only makes syscalls and _exit.
+    let pid = unsafe { libc::fork() };
+    match pid {
+        -1 => Err(std::io::Error::last_os_error()),
+        0 => {
+            let flags = libc::CLONE_NEWUSER | libc::CLONE_NEWNET | libc::CLONE_NEWNS;
+            if unsafe { libc::unshare(flags) } != 0 {
+                unsafe { libc::_exit(1) };
+            }
+            let ok = remount_namespaced_filesystems(false, true).is_ok();
+            unsafe { libc::_exit(if ok { 0 } else { 1 }) };
+        }
+        _ => {
+            let mut status = 0;
+            unsafe { libc::waitpid(pid, &mut status, 0) };
+            if libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0 {
+                Ok(())
+            } else {
+                Err(std::io::Error::other(
+                    "a network namespace with its own sysfs could not be created",
                 ))
             }
         }
@@ -314,12 +437,19 @@ pub(super) fn run(
 
     let mut clone_flags = 0;
     if spec.network == NetworkPolicy::Denied {
-        clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWNET;
+        // CLONE_NEWNS so the workload can be given a sysfs that belongs to its
+        // own network namespace rather than the host one.
+        clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWNET | libc::CLONE_NEWNS;
     }
     if spec.isolate_processes {
-        clone_flags |= libc::CLONE_NEWUSER | libc::CLONE_NEWPID | libc::CLONE_NEWIPC;
+        // CLONE_NEWNS comes along so the workload can be given its own /proc.
+        // Without it the process table of the whole host stays readable through
+        // a /proc that belongs to the host's PID namespace.
+        clone_flags |=
+            libc::CLONE_NEWUSER | libc::CLONE_NEWPID | libc::CLONE_NEWIPC | libc::CLONE_NEWNS;
     }
     let new_pid_ns = clone_flags & libc::CLONE_NEWPID != 0;
+    let new_net_ns = clone_flags & libc::CLONE_NEWNET != 0;
     let new_user_ns = clone_flags & libc::CLONE_NEWUSER != 0;
 
     // SAFETY: getuid and getgid have no preconditions and cannot fail.
@@ -355,6 +485,7 @@ pub(super) fn run(
                 clone_flags,
                 new_user_ns,
                 new_pid_ns,
+                new_net_ns,
                 &uid_map,
                 &gid_map,
             )
@@ -397,6 +528,7 @@ fn confine(
     clone_flags: libc::c_int,
     new_user_ns: bool,
     new_pid_ns: bool,
+    new_net_ns: bool,
     uid_map: &[u8],
     gid_map: &[u8],
 ) -> std::io::Result<()> {
@@ -471,6 +603,12 @@ fn confine(
             }
         }
     }
+
+    // 6. Now that this process really is in the new PID namespace, give it a
+    //    /proc that reflects it. Doing this before the fork would mount a
+    //    /proc belonging to the old namespace, which is the state that made
+    //    the host's whole process table readable from inside.
+    remount_namespaced_filesystems(new_pid_ns, new_net_ns)?;
 
     // Become a process group leader so the deadline can kill the whole group.
     // SAFETY: setpgid on self with group 0 has no preconditions.

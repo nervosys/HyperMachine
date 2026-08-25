@@ -56,9 +56,9 @@ caller asks for it.
 | Process count | `pids.max` + `RLIMIT_NPROC` | job `ActiveProcessLimit` | `RLIMIT_NPROC` | the guest |
 | CPU time | `RLIMIT_CPU` | job `PerJobUserTimeLimit` | `RLIMIT_CPU` | guest agent |
 | Wall clock | kill the process group | terminate the job | kill the process group | guest agent |
-| Network isolation | `CLONE_NEWNET` | ✗ | ✗ | no network device |
+| Network isolation | `CLONE_NEWNET` + its own sysfs | ✗ | ✗ | no network device |
 | Filesystem isolation | ✗ (see below) | ✗ | ✗ | the guest's own |
-| Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` | ✗ | ✗ | a separate kernel |
+| Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` + its own `/proc` | ✗ | ✗ | a separate kernel |
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
 
 Every ✗ is reported at runtime with a reason, not discovered by a caller when
@@ -81,6 +81,16 @@ something escapes.
 
 Everything between `fork` and `exec` allocates nothing and calls only
 async-signal-safe functions; every string it needs is built in the parent.
+
+**`/proc` and `/sys` are remounted, and that is not optional.** Neither is an
+ordinary directory: each is a view of the namespace it was *mounted in*.
+Inherit them and a workload reads the host's process table and the host's
+network interfaces while being genuinely unable to signal or reach either.
+Both halves of this were found by running on a real kernel — `$$` was already
+`1` and netlink already showed only loopback, while `/proc` listed 48 host
+processes and `/sys/class/net` listed the host's interfaces. Half an isolation
+claim is worse than none, so the probe now rehearses the remounts and reports
+the control only if they worked.
 
 **Filesystem isolation is deliberately not implemented here.** Doing it
 properly means `pivot_root` with a prepared root. A `chroot` that a retained
@@ -115,14 +125,28 @@ environment, which is not a limit anyone asked to remove. A workload that needs
 - **microVM**: the control reporting and every refusal path are tested. Actually
   running a workload in a guest needs a booted guest, which is blocked on the
   same hardware gate as the rest of the boot path.
-- **Linux**: type-checked with `--target x86_64-unknown-linux-gnu` under
-  `clippy -D warnings`, and **not run on a Linux kernel**. The probe design
-  limits the damage — it attempts each operation and reports what worked, so on
-  a machine where something fails, the sandbox says so rather than claiming it —
-  but "the probe passes" is not the same as "the isolation holds". Treat this
-  backend as unverified until it has run somewhere real, and see
-  `docs/handoff.html` for why no machine here can.
+- **Linux**: **run on a real kernel** (6.18, WSL2 Debian, as an unprivileged
+  user). 20 tests, and the isolation assertions ask the *workload* what it can
+  see rather than reading `controls()` back — a test that only did the latter
+  would pass on a backend that reported the set and applied none of it. On that
+  kernel the workload is PID 1 in its own namespace, sees 3 processes where the
+  host has hundreds, and has one network interface.
 - **macOS**: type-checked with `--target aarch64-apple-darwin`, not run.
+
+Running it on a kernel found two defects that type-checking could not, both of
+the same shape — a claim that was true in the mechanism and false in what the
+workload could observe:
+
+1. `best_effort` was broken on any host without cgroup delegation. It promised
+   to run with whatever the host could enforce, then had the backend attempt a
+   cgroup the probe had already reported unavailable, and failed. Backends are
+   now handed a spec filtered to what the probe said they enforce.
+2. `/proc` and `/sys` were inherited, so "cannot see processes outside" and
+   "no network" were half-true in the way described above.
+
+`cargo run -p hv2-sandbox --example probe` prints what the machine you are on
+can enforce, and asks a confined workload what it can see. Run it on any host
+before trusting a limit there.
 
 ## Reaching it as an agent
 
