@@ -58,6 +58,7 @@ pub mod policies;
 pub mod reasoning;
 pub mod runtime;
 pub mod sandbox;
+pub mod sandbox_host;
 pub mod script;
 pub mod state;
 pub mod tasks;
@@ -123,6 +124,9 @@ pub use reasoning::{
 };
 pub use runtime::{AgentHandle, AgentRuntime};
 pub use sandbox::{Sandbox, SandboxConfig};
+pub use sandbox_host::{
+    LocalSandboxHost, SandboxCapabilities, SandboxHost, SandboxRequest, SandboxRun,
+};
 pub use script::{ScriptEngine, ScriptResult};
 pub use state::{
     CheckpointManager, ConflictStrategy, SharedStateStore, StateCheckpoint, StateError,

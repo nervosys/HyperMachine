@@ -124,6 +124,36 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   `docs/handoff.html` for why no machine here can.
 - **macOS**: type-checked with `--target aarch64-apple-darwin`, not run.
 
+## Reaching it as an agent
+
+Two tools, dispatched against a `SandboxHost` the way `vm.*` dispatches against
+a `VmHost`:
+
+- **`sandbox.capabilities`** — what this host can confine, and why it cannot
+  confine the rest. Worth asking before `sandbox.run` if a limit matters:
+  a request for confinement this host cannot provide is refused, not downgraded.
+- **`sandbox.run`** — run a program on the host under confinement.
+
+Three things about that surface are deliberate:
+
+**With no host installed, the tools refuse.** The alternative to confinement is
+not running the program unconfined; it is not running it.
+
+**The defaults are the strict ones.** A request naming no limits gets 512 MiB,
+30 seconds, no network, no new privileges, processes isolated. A field nobody
+set can never mean "unconfined", so the first careless caller does not get the
+server's own privileges.
+
+**`Admin` does not imply `HostExec`.** Every other capability is implied by
+`Admin`; this one has to be granted by name. Every other tool acts on VMs the
+server manages, and this one acts on the machine the server runs on — folding
+it into the existing wildcard would have handed host execution to every session
+already holding `Admin` the moment the tool shipped, which is a privilege
+expansion nobody would have written down.
+
+Unknown request fields are rejected rather than ignored, because a misspelled
+`allow_network` should not silently become the default in either direction.
+
 ## What this does not replace
 
 `hv2-agent`'s `Sandbox` still bounds Rhai scripts in-process, and that is a

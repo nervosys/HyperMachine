@@ -107,6 +107,13 @@ pub enum PolicyAction {
     /// that meant to allow reading a VM allow running anything inside it.
     GuestExec,
 
+    /// Run a confined program on the host itself.
+    ///
+    /// Separate from [`Self::GuestExec`] because the blast radius is: a
+    /// program in a guest cannot reach the host, and one on the host can,
+    /// however well confined.
+    HostExec,
+
     /// Debug actions
     DebugAttach,
     DebugInspect,

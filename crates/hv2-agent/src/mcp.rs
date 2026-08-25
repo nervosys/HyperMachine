@@ -78,6 +78,12 @@ pub struct McpServer {
     vm_host: RwLock<Option<Arc<dyn crate::vm_host::VmHost>>>,
     /// Where the `gpu.*` tools dispatch, on the same terms as `vm_host`.
     gpu_host: RwLock<Option<Arc<dyn crate::gpu_host::GpuHost>>>,
+    /// Where the `sandbox.*` tools dispatch.
+    ///
+    /// `None` — the default — leaves those tools reporting that no sandbox is
+    /// installed. That refusal is deliberate: the alternative to confinement
+    /// is not "run it anyway", it is "do not run it".
+    sandbox_host: RwLock<Option<Arc<dyn crate::sandbox_host::SandboxHost>>>,
     /// Where the `image.*` tools read the fleet allowlist.
     ///
     /// `None` leaves those tools reporting that no registry is installed,
@@ -207,6 +213,13 @@ pub enum AgentCapability {
     MetricsRead,
     /// Execute commands in VM
     GuestExec,
+    /// Run a confined program on the host itself.
+    ///
+    /// Deliberately separate from `GuestExec`: a program in a guest cannot
+    /// touch the host, and one on the host can, however well confined. A
+    /// capability that covered both would let an agent granted the safer power
+    /// take the more dangerous one.
+    HostExec,
     /// Debug/introspect VM
     Debug,
     /// Coordinate with other agents
@@ -267,6 +280,9 @@ impl AgentCapabilities {
                 AgentCapability::SnapshotManage,
                 AgentCapability::MetricsRead,
                 AgentCapability::GuestExec,
+                // Named explicitly because Admin no longer implies it. "Full"
+                // still means full; what changed is that it has to say so.
+                AgentCapability::HostExec,
                 AgentCapability::Debug,
                 AgentCapability::Coordination,
                 AgentCapability::Admin,
@@ -274,8 +290,19 @@ impl AgentCapabilities {
         }
     }
 
-    /// Check if a capability is present
+    /// Check if a capability is present.
+    ///
+    /// [`AgentCapability::Admin`] implies every other capability, with one
+    /// exception: [`AgentCapability::HostExec`] must be granted by name.
+    /// Running a program on the host is the widest power here — everything
+    /// else acts on VMs the server manages, and this acts on the machine the
+    /// server runs on. Folding it into the existing wildcard would have handed
+    /// it to every session already holding `Admin` the moment the tool shipped,
+    /// which is a privilege expansion nobody would have written down.
     pub fn has(&self, cap: AgentCapability) -> bool {
+        if cap == AgentCapability::HostExec {
+            return self.capabilities.contains(&cap);
+        }
         self.capabilities.contains(&cap) || self.capabilities.contains(&AgentCapability::Admin)
     }
 
@@ -374,6 +401,7 @@ impl McpServer {
             teardown_hook: RwLock::new(None),
             vm_host: RwLock::new(None),
             gpu_host: RwLock::new(None),
+            sandbox_host: RwLock::new(None),
             image_host: RwLock::new(None),
             policies: RwLock::new(None),
             concurrency: RwLock::new(None),
@@ -418,6 +446,19 @@ impl McpServer {
     /// The installed GPU host, if any.
     pub fn gpu_host(&self) -> Option<Arc<dyn crate::gpu_host::GpuHost>> {
         self.gpu_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Let agents run confined workloads through `host`.
+    pub fn set_sandbox_host(&self, host: Arc<dyn crate::sandbox_host::SandboxHost>) {
+        *self.sandbox_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed sandbox host, if any.
+    pub fn sandbox_host(&self) -> Option<Arc<dyn crate::sandbox_host::SandboxHost>> {
+        self.sandbox_host
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -516,6 +557,8 @@ impl McpServer {
             "vm.delete" => PolicyAction::VmDelete,
             "vm.resize" => PolicyAction::ResourceModify,
             "vm.exec" => PolicyAction::GuestExec,
+            "sandbox.run" => PolicyAction::HostExec,
+            "sandbox.capabilities" => PolicyAction::ResourceRead,
             "vm.list" | "vm.status" | "vm.metrics" | "vm.console" | "gpu.list"
             | "snapshot.list" | "agent.list" | "system.info" | "system.health" => {
                 PolicyAction::ResourceRead
@@ -955,6 +998,75 @@ impl McpServer {
                 }),
                 category: ToolCategory::GuestExecution,
                 required_capabilities: vec![AgentCapability::GuestExec],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "sandbox.capabilities".to_string(),
+            McpTool {
+                name: "sandbox.capabilities".to_string(),
+                description: "Report what confinement this host can actually enforce, and                               why it cannot enforce the rest. Ask before sandbox.run if you                               need to know whether a limit will be honoured: a request for                               confinement this host cannot provide is refused, not quietly                               downgraded."
+                    .to_string(),
+                parameters: json!({ "type": "object", "properties": {} }),
+                category: ToolCategory::Security,
+                required_capabilities: vec![AgentCapability::HostExec],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "sandbox.run".to_string(),
+            McpTool {
+                name: "sandbox.run".to_string(),
+                description: "Run a program on the host under operating-system confinement                               and return what it printed. The program runs directly, not                               through a shell, with an empty environment and no network                               unless asked for. Limits default to strict: 512 MiB, 30                               seconds, no network, no new privileges. A request this host                               cannot confine as asked is refused; set best_effort to run                               anyway and read `unenforced` for what was dropped. A non-zero                               exit code is a result, not an error. This runs on the host,                               not in a guest: use vm.exec for that."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Program to execute, run directly rather than through a shell"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Arguments, already split; nothing here parses a command line"
+                        },
+                        "env": {
+                            "type": "object",
+                            "additionalProperties": { "type": "string" },
+                            "description": "The whole environment for the workload; nothing is inherited"
+                        },
+                        "working_dir": {
+                            "type": "string",
+                            "description": "Directory to run in; defaults to the server's own"
+                        },
+                        "stdin": {
+                            "type": "string",
+                            "description": "Text written to the program's standard input; when absent, stdin is closed so a program that reads it does not wait for a write that never comes"
+                        },
+                        "memory_bytes": {
+                            "type": "integer",
+                            "description": "Memory ceiling; defaults to 512 MiB"
+                        },
+                        "timeout_seconds": {
+                            "type": "integer",
+                            "description": "Deadline; defaults to 30, capped at 600"
+                        },
+                        "allow_network": {
+                            "type": "boolean",
+                            "description": "Give the workload the host network. Defaults to false, which requires a host that can isolate it"
+                        },
+                        "best_effort": {
+                            "type": "boolean",
+                            "description": "Run with whatever confinement this host can enforce instead of refusing"
+                        }
+                    },
+                    "required": ["program"]
+                }),
+                category: ToolCategory::Security,
+                required_capabilities: vec![AgentCapability::HostExec],
                 enabled: true,
             },
         );
@@ -2204,6 +2316,53 @@ impl McpServer {
         })
     }
 
+    /// Answer a `sandbox.*` tool from an installed
+    /// [`SandboxHost`](crate::sandbox_host::SandboxHost).
+    ///
+    /// Takes no session: a confined workload belongs to whoever asked for it
+    /// and to nothing else, so there is no ownership to check the way a VM has.
+    /// The capability check has already happened by the time this runs.
+    ///
+    /// With no host installed these tools refuse. That is the whole posture of
+    /// this surface in one place: the alternative to confinement is not
+    /// running the program unconfined, it is not running it.
+    async fn dispatch_to_sandbox_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+    ) -> Option<Result<JsonValue, String>> {
+        if !matches!(tool_name, "sandbox.run" | "sandbox.capabilities") {
+            return None;
+        }
+
+        let Some(host) = self.sandbox_host() else {
+            return Some(Err(
+                "no sandbox host is installed, so there is nothing that could confine a                  workload. Install one with McpServer::set_sandbox_host; running the program                  unconfined is not the fallback"
+                    .to_string(),
+            ));
+        };
+
+        Some(match tool_name {
+            "sandbox.capabilities" => {
+                serde_json::to_value(host.capabilities().await).map_err(|e| e.to_string())
+            }
+            _ => {
+                // Deserialize rather than pick fields out by hand: an unknown
+                // field is then a request this surface does not understand,
+                // and silently ignoring one that looked like a limit is how a
+                // caller comes to believe it asked for something it did not.
+                match serde_json::from_value::<crate::sandbox_host::SandboxRequest>(params.clone())
+                {
+                    Err(e) => Err(format!("invalid sandbox request: {e}")),
+                    Ok(request) => host
+                        .run(request)
+                        .await
+                        .and_then(|run| serde_json::to_value(run).map_err(|e| e.to_string())),
+                }
+            }
+        })
+    }
+
     /// Run a GPU tool against an installed [`GpuHost`](crate::gpu_host::GpuHost).
     ///
     /// Returns `None` when there is no host or the tool has no host equivalent,
@@ -2362,6 +2521,9 @@ impl McpServer {
             return result;
         }
         if let Some(result) = self.dispatch_to_gpu_host(tool_name, params, session).await {
+            return result;
+        }
+        if let Some(result) = self.dispatch_to_sandbox_host(tool_name, params).await {
             return result;
         }
 
