@@ -470,13 +470,16 @@ mod tests {
                 .insert("SystemRoot".to_string(), r"C:\Windows".to_string());
             r
         };
+        // Not /bin/false: macOS keeps it in /usr/bin, which CI found. /bin/sh
+        // is in the same place on every Unix, and naming the code makes the
+        // assertion below about a specific status rather than about "nonzero".
         #[cfg(not(windows))]
-        let mut request = SandboxRequest::new("/bin/false");
+        let mut request = SandboxRequest::new("/bin/sh").args(["-c", "exit 3"]);
         request.best_effort = true;
 
         // Exiting non-zero is what the program did, not a failure to run it.
         // An Err here would throw away the output that explains it.
         let run = host.run(request).await.expect("the program ran");
-        assert_ne!(run.exit_code, Some(0));
+        assert_eq!(run.exit_code, Some(3));
     }
 }
