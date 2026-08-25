@@ -1,0 +1,483 @@
+<title>AetherVM Boot Path Handoff</title>
+<style>
+  :root {
+    --ground:      #FAFBFC;
+    --surface:     #FFFFFF;
+    --sunk:        #F1F3F6;
+    --ink:         #171A20;
+    --ink-soft:    #454C59;
+    --ink-faint:   #6E7783;
+    --rule:        #DDE2E9;
+    --rule-soft:   #E9EDF2;
+    --accent:      #2C5D8F;
+    --ok:          #2C6A4C;
+    --ok-soft:     #E4F1EA;
+    --warn:        #8A6115;
+    --warn-soft:   #F7EEDC;
+    --stop:        #8B382C;
+    --stop-soft:   #F8E8E5;
+
+    --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+    --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #101216;
+      --surface:     #171A20;
+      --sunk:        #1D2128;
+      --ink:         #E7EAEF;
+      --ink-soft:    #AAB2BF;
+      --ink-faint:   #7C8593;
+      --rule:        #2A2F38;
+      --rule-soft:   #21252C;
+      --accent:      #77AADC;
+      --ok:          #74C39A;
+      --ok-soft:     #16281F;
+      --warn:        #D7A544;
+      --warn-soft:   #2B2313;
+      --stop:        #DB8A7C;
+      --stop-soft:   #2C1B18;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #101216;
+    --surface:     #171A20;
+    --sunk:        #1D2128;
+    --ink:         #E7EAEF;
+    --ink-soft:    #AAB2BF;
+    --ink-faint:   #7C8593;
+    --rule:        #2A2F38;
+    --rule-soft:   #21252C;
+    --accent:      #77AADC;
+    --ok:          #74C39A;
+    --ok-soft:     #16281F;
+    --warn:        #D7A544;
+    --warn-soft:   #2B2313;
+    --stop:        #DB8A7C;
+    --stop-soft:   #2C1B18;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.62;
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 60rem; margin: 0 auto; }
+
+  header.mast {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 3.5rem 0 1.75rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(2.1rem, 5vw, 3.05rem);
+    line-height: 1.1;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .standfirst {
+    font-size: 1.08rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 2rem 0 0;
+  }
+  .fact { background: var(--surface); padding: .95rem 1.1rem; }
+  .fact dt {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .3rem;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 1.02rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+
+  section { margin: 3.5rem 0 0; }
+  h2 {
+    font-family: var(--display);
+    font-size: 1.6rem;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    text-wrap: balance;
+    margin: 0 0 .35rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-family: var(--body);
+    font-size: .82rem;
+    font-weight: 650;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 2rem 0 .6rem;
+  }
+  p { max-width: 68ch; margin: 1rem 0; }
+  .lede { color: var(--ink-soft); margin-top: .8rem; }
+  code {
+    font-family: var(--mono);
+    font-size: .88em;
+    background: var(--sunk);
+    padding: .1em .35em;
+    border-radius: 2px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    padding: .18rem .5rem;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .chip::before {
+    content: "";
+    width: .45rem; height: .45rem;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .chip.ok   { color: var(--ok);   background: var(--ok-soft); }
+  .chip.warn { color: var(--warn); background: var(--warn-soft); }
+  .chip.stop { color: var(--stop); background: var(--stop-soft); }
+
+  .scroll { overflow-x: auto; margin: 1.2rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    padding: 0 .9rem .5rem 0;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td {
+    padding: .6rem .9rem .6rem 0;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  td.mono { font-family: var(--mono); font-size: .84rem; }
+
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    padding: 1.1rem 1.3rem;
+    margin: 1.2rem 0;
+  }
+  .finding.stop { border-left-color: var(--stop); }
+  .finding.warn { border-left-color: var(--warn); }
+  .finding.ok   { border-left-color: var(--ok); }
+  .finding h4 {
+    font-family: var(--body);
+    font-size: 1rem;
+    font-weight: 650;
+    margin: 0 0 .5rem;
+  }
+  .finding p { margin: .5rem 0; font-size: .95rem; }
+  .finding p:last-child { margin-bottom: 0; }
+
+  ul { max-width: 68ch; padding-left: 1.15rem; }
+  li { margin: .45rem 0; }
+  li::marker { color: var(--ink-faint); }
+
+  .callout {
+    background: var(--stop-soft);
+    border: 1px solid var(--stop);
+    padding: 1.2rem 1.4rem;
+    margin: 1.5rem 0;
+  }
+  .callout p { margin: .6rem 0; }
+  .callout p:first-child { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout strong { color: var(--stop); }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: .75rem;
+    color: var(--ink-faint);
+  }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <div class="eyebrow">Engineering handoff &middot; nervosys/HyperMachine</div>
+  <h1>Boot path, enforcement, and the CI that was already broken</h1>
+  <p class="standfirst">A long run of commits took VMs from &ldquo;configured&rdquo; to &ldquo;able to execute a guest,&rdquo; wired security controls that existed only as types, gave the guest a way to speak back, and repaired a pipeline that had been red since June. What follows is what shipped, what is actually proven, and what remains genuinely unverified.</p>
+</header>
+
+<dl class="facts">
+  <div class="fact"><dt>Head</dt><dd>c283883</dd></div>
+  <div class="fact"><dt>Since</dt><dd>367db1f</dd></div>
+  <div class="fact"><dt>hv2-core</dt><dd>2,294 pass</dd></div>
+  <div class="fact"><dt>Workspace</dt><dd>4,816 pass</dd></div>
+  <div class="fact"><dt>Last CI seen</dt><dd>green at f67dac1</dd></div>
+</dl>
+
+<section>
+  <h2>The one thing to read first</h2>
+  <div class="callout">
+    <p><strong>No real distro kernel has booted on any backend.</strong></p>
+    <p>Every test asserts what a backend was <em>asked</em> to do &mdash; which images landed at which guest physical addresses, what architectural state vCPU&nbsp;0 was left in &mdash; not that a guest executed. The KVM and HVF boot paths have never run at all; they are type-checked only.</p>
+    <p>This host reports <code>HypervisorPresent=True</code> with <code>VMMonitorModeExtensions=False</code>: Hyper-V owns VT-x, so WHPX partition setup fails with <code>0x80370302</code>. Closing this needs hardware where a hypervisor is actually available.</p>
+    <p>One clarification, because the newest tests are easy to misread: constructing a <code>VM</code> succeeds on this machine, so the console tests run in full rather than skipping. That is evidence about the device and VM layers and nothing more. <code>VM::new</code> only selects a backend; the partition is created later, in <code>provision()</code>, which those tests never reach. &ldquo;The tests ran&rdquo; does not mean WHPX works.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What shipped</h2>
+  <p class="lede">Capabilities that previously existed as API surface with nothing behind them.</p>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Area</th><th>Before</th><th>Now</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Boot path</strong></td>
+        <td>Nothing outside tests called <code>VM::run</code>; <code>create_vm</code> was never reached by any product path</td>
+        <td><code>BootSource</code> &rarr; <code>provision</code> &rarr; <code>load_boot</code> &rarr; <code>launch</code>, for Linux, Multiboot and raw images</td>
+      </tr>
+      <tr>
+        <td><strong>Backends</strong></td>
+        <td>WHPX had complete but unreachable boot code; KVM lacked Multiboot; HVF had no <code>load_boot</code> and no guest RAM at all</td>
+        <td>All three implement <code>load_boot</code>; HVF now allocates and maps guest RAM at GPA&nbsp;0</td>
+      </tr>
+      <tr>
+        <td><strong>Guest console</strong></td>
+        <td>Serial bytes buffered where nothing above the device could reach them</td>
+        <td><code>Device::console_output</code> seam &rarr; <code>vm.console</code> tool and <code>GET /api/v1/vms/{id}/console</code></td>
+      </tr>
+      <tr>
+        <td><strong>Agent tools</strong></td>
+        <td><code>vm.*</code> and <code>gpu.*</code> mutated session JSON</td>
+        <td>Dispatch to <code>VmHost</code> / <code>GpuHost</code>; an attached GPU leaves the placement pool fleet-wide</td>
+      </tr>
+      <tr>
+        <td><strong>Plans</strong></td>
+        <td><code>execute_plan</code> fabricated results and set <code>rolled_back = true</code> without undoing anything</td>
+        <td><code>PlanExecutor</code> runs steps against a real host; rollback destroys what it created and reports failures to compensate</td>
+      </tr>
+      <tr>
+        <td><strong>Telemetry</strong></td>
+        <td><code>vm.metrics</code> returned hard-coded zeros</td>
+        <td>Real status, vCPU count, memory, uptime; unmeasurable fields are <code>null</code>, never <code>0</code></td>
+      </tr>
+      <tr>
+        <td><strong>Governance</strong></td>
+        <td>&mdash;</td>
+        <td>Opt-in <code>PolicySet</code> per tool call; digest-keyed image admission at <code>VM::provision</code>; the sandbox enforces the limits it can</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>The console, and why <code>attached</code> exists</h2>
+  <p class="lede">The most recent work, and the one place where an API shape is load-bearing rather than plumbing.</p>
+
+  <div class="finding ok">
+    <h4>An empty log means two different things</h4>
+    <p>A VM with no serial device registered and a guest that booted silently both produce an empty console. The log alone cannot separate them, and the cheap version of this API &mdash; return a string &mdash; would send an operator hunting a boot failure that was really a missing device.</p>
+    <p>So the seam is <code>Device::console_output() -&gt; Option&lt;Vec&lt;u8&gt;&gt;</code>, defaulting to <code>None</code>. <code>None</code> is &ldquo;not a console&rdquo;; <code>Some(vec![])</code> is &ldquo;a console that has said nothing yet.&rdquo; That distinction is carried up unchanged as <code>attached</code> on <code>VmConsole</code> and on the REST response. Nothing registers a serial device automatically, so <code>attached: false</code> is the common case today and needs to be legible.</p>
+  </div>
+
+  <div class="finding">
+    <h4>Two defects the console work uncovered on the way</h4>
+    <p><code>SerialDevice</code>&rsquo;s transmit buffer was unbounded and drained only when someone read it, so a guest printing in a loop could exhaust host memory &mdash; the same shape as the snapshot-chain OOM below. It is now capped at 1&nbsp;MiB, oldest bytes dropped first.</p>
+    <p><code>output()</code> was also destructive, which made polling lossy: a status check ate the boot log it was reporting, and two watchers were impossible. <code>peek_output()</code> reads without consuming, and every layer above it &mdash; <code>DeviceManager</code>, <code>VM</code>, <code>AgentVM</code>, <code>VmHost</code>, the tool, the route &mdash; is non-destructive by construction. <code>DeviceManager::console_output</code> also sorts by device name rather than following <code>HashMap</code> order, so concatenating COM1 and COM2 yields the same log on every call.</p>
+  </div>
+</section>
+
+<section>
+  <h2>Defects found, by shape</h2>
+  <p class="lede">Nearly every bug this session was one of two kinds: a control declared but never consulted, or a value that reads as a measurement but is not one.</p>
+
+  <h3>Controls that never fired</h3>
+
+  <div class="finding">
+    <h4>Image admission was never on the admission path</h4>
+    <p><code>ImageRegistry</code>&rsquo;s own doc claimed admission checks that &ldquo;the scheduler and VM provisioning path call.&rdquo; Neither did &mdash; <code>check_admission</code> was reachable only from an advisory REST endpoint and from tests. An image could be denied or revoked and still boot.</p>
+    <p>It is now enforced at <code>VM::provision</code>, keyed on SHA-256 of the bytes about to be loaded, so renaming a kernel cannot change the verdict. It also ran <em>after</em> <code>backend.create_vm</code> at first, meaning a refusal had already cost a partition; resolution and admission now precede the backend entirely.</p>
+  </div>
+
+  <div class="finding">
+    <h4><code>ScriptEngine</code> held a <code>CapabilitySet</code> and never read it</h4>
+    <p>An engine built with no capabilities handed scripts the same VM view as a fully privileged one. The root cause sat one level up: <code>AgentVMBuilder</code> had no setter for <code>capabilities</code> or <code>sandbox_config</code>, so both were pinned at their defaults and unreachable from any caller. <code>SandboxConfig::max_cpu_time</code> likewise bounded nothing.</p>
+  </div>
+
+  <div class="finding">
+    <h4><code>execute_script</code> was advertised as running inside the guest</h4>
+    <p>It evaluates a Rhai script <em>on the host</em> against four read-only scalars. There is no in-guest agent. Four separate descriptions claimed otherwise, and the documented example was <code>echo &lsquo;Hello&rsquo;</code> &mdash; a shell command Rhai cannot parse, which taught agents a mental model the engine does not support.</p>
+  </div>
+
+  <h3>Values that lied</h3>
+
+  <div class="finding stop">
+    <h4>Multiboot <code>mods_addr</code> pointed at module data</h4>
+    <p>Not at the 16-byte descriptor array. A kernel walking that pointer reads its module&rsquo;s contents as addresses and silently finds no initrd; module command-line strings were never written at all. One shared <code>prepare_guest_memory</code> now serves every backend, so their guest images cannot drift.</p>
+  </div>
+
+  <div class="finding stop">
+    <h4>Plan steps executed in <code>HashMap</code> order</h4>
+    <p><code>topological_sort</code> seeded its queue from a hash map, so independent steps ran in arbitrary order &mdash; a plan that happened to work was a coin flip, and rollback would unwind a different sequence than the one that ran. Ties now break toward declaration order, pinned by a 25-iteration test, because a hash-ordered implementation passes a single run by luck.</p>
+  </div>
+
+  <div class="finding stop">
+    <h4><code>SnapshotId::generate()</code> returned a bare timestamp</h4>
+    <p>Two snapshots created inside one clock tick received the same ID. Because a parent is referenced by ID, an incremental snapshot could become its own parent, and <code>get_chain</code> then walked parent links forever, allocating until the process died &mdash; which is why macOS reported <code>SIGKILL</code> rather than a timeout. IDs are now strictly increasing via an atomic CAS, and <code>get_chain</code> separately refuses to follow a cycle.</p>
+  </div>
+  <h3>Lookups that meant something narrower than they read</h3>
+
+  <div class="finding">
+    <h4>A backend resolved &ldquo;the&rdquo; partition by recency</h4>
+    <p><code>WhpxBackend</code> keyed <code>vcpu_map</code> by bare vCPU id and resolved <code>load_boot</code>&rsquo;s partition with <code>vms.last()</code>. <code>KvmBackend</code> was identical. Two VMs on one backend therefore shared a vCPU&nbsp;0, and a boot image went into whichever partition was newest. HVF had the same defect in a different shape &mdash; Hypervisor.framework allows one VM per process and every field is backend-global, so a second <code>create_vm</code> aliased the first outright.</p>
+    <p>Nothing was observed to be broken, because <code>VM::new</code> builds a backend per VM and the invariant held by accident. But <code>VM::new_with_backend</code> is public, so the aliasing path was expressible with no warning.</p>
+    <p>The invariant is now in the type rather than in the reader&rsquo;s head: <code>vms: Vec&lt;_&gt;</code> became <code>vm: Option&lt;_&gt;</code>, and <code>create_vm</code> refuses a second with an error saying why. <strong>Caveat:</strong> the four new tests skip on any host without a usable hypervisor, which includes this machine and CI. The wiring is verified; the runtime refusal is not.</p>
+  </div>
+</section>
+
+<section>
+  <h2>CI state</h2>
+  <p class="lede">Master had been red since June. Six defects were stacked behind one another &mdash; each fix revealed the next, and fail-fast kept the queue from showing them all at once. Run 32192729164 is the first fully green run.</p>
+
+  <div class="finding warn">
+    <h4>Read the table as of <code>f67dac1</code>, not as of head</h4>
+    <p>Nineteen of nineteen jobs were green at <code>f67dac1</code>, and that is the last run anyone has watched. Several commits have landed since, up to <code>d420538</code>. Each was verified locally &mdash; the full workspace suite, <code>cargo test -p hv2-core</code>, doc tests, and clippy under CI&rsquo;s exact invocation (<code>--workspace --all-targets --exclude hv1-core --exclude hv1-boot -- -D warnings</code>) &mdash; but <strong>no CI run has been observed for them.</strong> Given how many of this session&rsquo;s defects were things a green local sweep could not see, check the runs before trusting the chips below.</p>
+  </div>
+
+  <div class="finding stop">
+    <h4>Stable moved to 1.98 and its new lints break the build &mdash; on any branch</h4>
+    <p>Every job installs <code>dtolnay/rust-toolchain@stable</code> <em>unpinned</em>. Stable became 1.98.0 on 2026-08-20, bringing <code>manual_slice_fill</code>, <code>large_const_arrays</code>-adjacent chunking lints and <code>result_unit_err</code>. Four sites in this repo fail <code>-D warnings</code> under it, none of them related to any recent commit. They are fixed here, but the exposure is structural: <strong>an unpinned stable means a Rust release can turn master red without anyone pushing anything.</strong> Worth deciding whether that is the intended trade &mdash; the HV1 jobs already pin a nightly date for exactly this reason.</p>
+  </div>
+
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Job</th><th>Status at f67dac1</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">Check &middot; Clippy &middot; Rustfmt &middot; MSRV</td><td><span class="chip ok">pass</span></td><td>All four were failing</td></tr>
+      <tr><td class="mono">Test Core (Windows / Linux / macOS)</td><td><span class="chip ok">pass</span></td><td>macOS had never run &mdash; the binary did not link</td></tr>
+      <tr><td class="mono">Documentation</td><td><span class="chip ok">pass</span></td><td>A public doc linked a private item</td></tr>
+      <tr><td class="mono">Build CLI (all three)</td><td><span class="chip ok">pass</span></td><td>macOS fixed by the HVF arch gate</td></tr>
+      <tr><td class="mono">HV1 Clippy &middot; HV1 ARM64 Test</td><td><span class="chip ok">pass</span></td><td>Fixed by the <code>x86_64</code> 0.15.5 bump</td></tr>
+      <tr><td class="mono">Test (macos-latest)</td><td><span class="chip ok">pass</span></td><td><code>hv2-net</code> declared <code>libc</code> for Linux only</td></tr>
+      <tr><td class="mono">HV1 ARM64 Check</td><td><span class="chip ok">pass</span></td><td>Asked an x86-only crate to build for ARM</td></tr>
+      <tr><td class="mono">HV1 Check (bare-metal)</td><td><span class="chip warn">non-blocking</span></td><td><code>bootloader</code>&rsquo;s build script is broken upstream</td></tr>
+      <tr><td class="mono">HV1 Clippy &middot; HV1 Test (nightly)</td><td><span class="chip ok">pass</span></td><td>On the pinned <code>nightly-2026-08-17</code></td></tr>
+      <tr><td class="mono">HV1 Test (nightly, host)</td><td><span class="chip ok">pass</span></td><td>Discarded <code>Result</code> under <code>-D warnings</code></td></tr>
+      <tr><td class="mono">Test (ubuntu-latest)</td><td><span class="chip ok">pass</span></td><td>My tests assumed a working <code>/dev/kvm</code></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>Open, with diagnosis</h2>
+
+  <div class="finding">
+    <h4>HV1 ARM64 &mdash; the job asked an x86-only crate to build for ARM</h4>
+    <p>It ran <code>cargo check -p hv1-core --features arm64 --target aarch64-unknown-none</code>, which fails with ~75 unresolved references to <code>x86_64</code>, <code>x86</code> and <code>raw_cpuid</code> across eight files. That is not a defect: <code>hv1-core</code>&rsquo;s own manifest states it is &ldquo;the x86_64 Intel-VMX / AMD-SVM Type-1 hypervisor; ARM is the separate hv1-arm crate,&rdquo; and <code>vm</code>/<code>vcpu</code>/<code>boot</code> are built on VMX/SVM throughout.</p>
+    <p>Making the step pass would mean <em>implementing</em> ARM support in <code>hv1-core</code>, not fixing a bug, so the step was removed &mdash; ARM coverage is the <code>hv1-arm</code> check in the same job, verified clean for <code>aarch64-unknown-none</code>. <strong>If hv1-core is meant to have an ARM mode, this step should return alongside that work.</strong> That is a reversible judgment call, flagged here rather than buried.</p>
+  </div>
+
+  <div class="finding warn">
+    <h4>HV1 bare-metal &mdash; <code>bootloader</code>&rsquo;s build script is broken upstream</h4>
+    <p>Two layers deep. The first was real and is fixed: <code>bootloader</code> 0.11.15 shipped target specs with <code>"rustc-abi": "x86-softfloat"</code>, which current nightly rejects; 0.11.17 ships <code>"softfloat"</code>. Verified by reading both versions&rsquo; JSON out of the cargo registry.</p>
+    <p>Underneath, 0.11.17&rsquo;s build script shells out to <code>cargo install</code> for its BIOS/UEFI stages, and that nested build cannot compile <code>lock_api</code> 0.4.10 (<code>can&rsquo;t find crate for `std`</code>). Reproduced locally on a June nightly, with and without <code>-Zbuild-std</code>, and for the host target too &mdash; so it is neither our configuration nor nightly drift. The step is <code>continue-on-error</code> so it still runs and stays visible without blocking.</p>
+  </div>
+
+  <div class="finding">
+    <h4>The nightly pin, and what it cost to land</h4>
+    <p>The HV1 jobs now pin <code>nightly-2026-08-17</code> &mdash; the toolchain that produced the first all-green run. Unpinned, they broke four times in a day for reasons unrelated to any commit here: a new required method on <code>core::iter::Step</code>, a renamed <code>rustc-abi</code> value, <code>unused_must_use</code> becoming an error, and a yanked <code>spin</code>.</p>
+    <p><strong>Note for whoever bumps the date:</strong> <code>rust-toolchain.toml</code> pins <code>channel = "stable"</code> for the repo and overrides whatever default the action installs, so those five steps name the toolchain explicitly as <code>cargo +nightly-2026-08-17</code>. The date therefore appears in both the <code>with:</code> blocks and the commands, and both must move together. Bump deliberately and watch these jobs when you do &mdash; not warning you about upstream churn is precisely the tradeoff.</p>
+    <p>It took three attempts. The first invented an action tag that does not exist (the working idiom was twelve lines up, in the MSRV job); the second dropped <code>+nightly</code> without checking what selects the toolchain. Workflow edits have no local test, which is exactly when reading the surrounding file matters most.</p>
+  </div>
+
+  <div class="finding warn">
+    <h4>Left open deliberately</h4>
+    <p><code>limits.rs</code> stays unwired &mdash; wiring it would duplicate <code>McpConfig::rate_limit</code>, which already works. <code>Operation.rate_limit</code> remains advisory metadata, per your call. <code>execute_script</code> refuses as a plan step rather than fabricating guest output. HVF on Apple Silicon falls through to TCG; a real ARM implementation is a separate project, not a gap in this one. <code>hm-cli</code>&rsquo;s separate agentic ontology did not get a <code>vm.console</code> tool &mdash; it tracks its own VMs, and the tool would have been a stub there.</p>
+  </div>
+</section>
+
+<section>
+  <h2>What to do next</h2>
+  <p class="lede">In dependency order. The first item unblocks most of the rest, and it needs hardware rather than code.</p>
+  <ul>
+    <li><strong>Boot a real kernel.</strong> A Linux host with <code>/dev/kvm</code> accessible, an Intel Mac for HVF, or a Windows host with Hyper-V disabled so WHPX can take VT-x. Gate: a distro kernel prints to serial and halts. Until then treat every boot-path claim as untested &mdash; and note the console is now in place to <em>see</em> that output when it happens.</li>
+    <li><strong>Confirm the one-VM-per-backend refusal on real hardware.</strong> The guard is written and the tests are wired, but they skip wherever no hypervisor is available &mdash; so this rides along with the item above rather than standing on its own.</li>
+    <li><strong>Make <code>execute_script</code> mean what it says.</strong> Either a serial-console command protocol on top of the console work (no guest install, limited) or a real in-guest agent over virtio-vsock (richer, needs a guest-side binary and a build story).</li>
+    <li><strong><code>memory_used_bytes</code> stays <code>null</code> everywhere</strong> until virtio-balloon or a guest agent exists. That is correct today; do not let anyone &ldquo;fix&rdquo; it with a plausible number.</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Environment notes</h2>
+  <p class="lede">Four defects reached master despite a green local sweep. All shared one shape: verification ran on Windows, against files this machine happens to have. The last two entries are new, and are about the machine rather than the code.</p>
+  <ul>
+    <li><strong><code>cargo check</code> does not link.</strong> The HVF backend used Intel-only Hypervisor.framework VMX symbols and type-checked cleanly on <code>aarch64-apple-darwin</code> for months. Only CI&rsquo;s linker caught it.</li>
+    <li><strong>Gitignored build artifacts.</strong> <code>examples/guest_code/*.img</code> are <code>build.sh</code> outputs excluded by <code>.gitignore</code>. Tests <code>include_bytes!</code>&rsquo;d them, so a clean checkout failed to <em>compile</em>. Reproduce by moving them aside, not by re-running tests.</li>
+    <li><strong>rustdoc lints are platform- and flag-dependent.</strong> Use <code>RUSTDOCFLAGS="-D warnings" cargo doc --target x86_64-unknown-linux-gnu</code>; a Windows run reports zero warnings regardless.</li>
+    <li><strong>Local nightly is gone</strong>, along with most other toolchains &mdash; casualties of the rollbacks above. Only <code>1.98.0</code> and a metadata-less <code>stable</code> survive, so <code>hv1-core</code> and <code>hv1-boot</code> cannot be built here at all until <code>rustup</code> works again.</li>
+    <li><strong>Build resources, and what a full disk actually looks like.</strong> <code>target/debug</code> reached 132&nbsp;GB and took the volume to 100&nbsp;% (3.7&nbsp;TB, 31&nbsp;GB free). The symptoms did not look like a disk problem: <code>mkdir</code> failed <code>EEXIST</code>, temp writes failed <code>EPERM</code>, directory listings returned different contents on consecutive calls, and <code>rustup</code> quietly rolled back every install &mdash; leaving <code>stable</code> without a component manifest, so bare <code>cargo</code>, <code>rustc</code> and <code>clippy</code> all stopped working. <strong>Check <code>df</code> before believing any of those errors.</strong> Deleting <code>target/debug</code> reclaimed 194&nbsp;GB and restored normal behaviour.</li>
+    <li><strong><code>rustup</code> is still broken on this host</strong> and reinstalling <code>stable</code> fails even with space free &mdash; freshly extracted files under <code>~/.rustup</code> become unreadable immediately, which points at antivirus or a sync client on the profile directory rather than at Rust. The workaround, and how this session&rsquo;s verification was run, is to invoke the toolchain directly and skip the shim: <code>PATH=&quot;$TB:$PATH&quot; RUSTUP_TOOLCHAIN=1.98.0-x86_64-pc-windows-msvc &quot;$TB/cargo.exe&quot; &hellip;</code> where <code>$TB</code> is <code>~/.rustup/toolchains/1.98.0-x86_64-pc-windows-msvc/bin</code>. Note this bypasses <code>rust-toolchain.toml</code>, so the version is whatever you name.</li>
+    <li><strong>Fail-fast hides failures behind failures.</strong> <code>Test (ubuntu-latest)</code> was cancelled in every earlier run and only ran to completion once the jobs ahead of it went green &mdash; then failed, because a test I wrote assumed <code>/dev/kvm</code> was usable. Expect the queue to keep producing &ldquo;new&rdquo; failures as it drains.</li>
+    <li><strong>Three tests asserted wall-clock behaviour</strong> a platform is not obliged to provide &mdash; a 1&nbsp;ms health interval, PIT tick counts, and a strictly-increasing span timestamp. All passed locally; all failed elsewhere.</li>
+  </ul>
+</section>
+
+<footer>
+  master &middot; head c283883, <strong>not yet pushed</strong> &middot; last observed CI green at f67dac1 &middot; this page is also checked in at docs/handoff.html
+</footer>
+
+</div>
