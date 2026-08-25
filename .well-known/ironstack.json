@@ -2,7 +2,7 @@
   "ironstack": "1",
   "id": "hypermachine",
   "product": "HyperMachine",
-  "layer": "substrate",
+  "layer": "substrates",
   "role": "Agentic hypervisors and sandboxes for autonomous AI systems.",
   "ontology": {
     "command": "GET /agentic/ontology",
