@@ -2939,6 +2939,7 @@ dependencies = [
  "async-trait",
  "criterion",
  "hv2-core",
+ "hv2-guest-agent",
  "parking_lot",
  "proptest",
  "rhai",
@@ -3063,6 +3064,15 @@ dependencies = [
  "tokio",
  "tracing",
  "wgpu 22.1.0",
+]
+
+[[package]]
+name = "hv2-guest-agent"
+version = "1.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

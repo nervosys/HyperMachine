@@ -43,6 +43,7 @@ pub mod capabilities;
 pub mod communication;
 pub mod events;
 pub mod gpu_host;
+pub mod guest_agent;
 pub mod image_host;
 pub mod learning;
 pub mod limits;
@@ -80,6 +81,7 @@ pub use events::{
     EventReceiver, EventResult, EventSeverity, VmEvent,
 };
 pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
+pub use guest_agent::{GuestAgent, GuestChannel, GuestExec, VsockChannel};
 pub use image_host::{AdmissionVerdict, ImageDescriptor, ImageHost, RegistryImageHost};
 pub use learning::{
     ActionValue, Experience, ExperienceBuffer, LearningConfig, LearningError, LearningRateSchedule,

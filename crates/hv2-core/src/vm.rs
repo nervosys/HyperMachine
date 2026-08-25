@@ -269,6 +269,24 @@ pub struct VM {
     /// [`VM::set_image_registry`] to make a denied or revoked image fail to
     /// provision rather than merely be queryable.
     image_registry: RwLock<Option<Arc<crate::security::image_registry::ImageRegistry>>>,
+    /// The vsock device attached by [`VM::attach_vsock`], if any.
+    ///
+    /// Held here because the host side of a vsock connection is reached from
+    /// outside the device manager — an agent opening a channel to a program in
+    /// the guest needs the device itself, not an MMIO handle.
+    vsock: RwLock<Option<AttachedVsock>>,
+}
+
+/// A vsock device and where the guest will find it.
+///
+/// The address travels with the device because the kernel arguments have to
+/// name the window that was actually mapped; a VM attached at a non-default
+/// address would otherwise tell its guest to probe the default one.
+#[derive(Clone)]
+struct AttachedVsock {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>,
+    base_address: u64,
+    irq: u8,
 }
 
 impl VM {
@@ -359,6 +377,7 @@ impl VM {
             hv_vm: RwLock::new(None),
             run_task: RwLock::new(None),
             image_registry: RwLock::new(None),
+            vsock: RwLock::new(None),
         })
     }
 
@@ -768,6 +787,128 @@ impl VM {
     /// Get PIC (interrupt controller)
     pub fn pic(&self) -> Arc<Pic8259> {
         Arc::clone(&self.pic)
+    }
+
+    /// Attach a virtio-vsock device, giving the guest CID `guest_cid`.
+    ///
+    /// This is what a host process needs in order to talk to a program running
+    /// inside the guest: it registers a
+    /// [`VirtioMmioTransport`](crate::devices::VirtioMmioTransport) in guest
+    /// physical address space at [`Self::VSOCK_MMIO_BASE`], so a guest driver
+    /// can find it, and keeps the device so [`Self::vsock`] can hand it back.
+    ///
+    /// Attaching a device is not the same as a guest using it. The guest kernel
+    /// must be told the window exists — see [`Self::vsock_kernel_args`] — and
+    /// something in the guest must be listening. Neither is knowable from here.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a vsock device is already attached, if `guest_cid`
+    /// is one of the reserved context IDs, or if the register window would
+    /// overlap guest RAM.
+    pub async fn attach_vsock(
+        &self,
+        guest_cid: u64,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.attach_vsock_at(guest_cid, Self::VSOCK_MMIO_BASE, Self::VSOCK_IRQ)
+            .await
+    }
+
+    /// Guest physical address of the vsock register window, by default.
+    ///
+    /// 3.25 GiB: above any conventional low-memory layout and below the 4 GiB
+    /// line, which is where a guest expects MMIO to live.
+    pub const VSOCK_MMIO_BASE: u64 = 0xd000_0000;
+
+    /// Interrupt line the vsock device raises, by default.
+    pub const VSOCK_IRQ: u8 = 5;
+
+    /// Attach a vsock device at an explicit address and interrupt line.
+    ///
+    /// The general form of [`Self::attach_vsock`], for a guest whose memory
+    /// map does not leave the default window free.
+    pub async fn attach_vsock_at(
+        &self,
+        guest_cid: u64,
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+        use crate::devices::virtio_vsock::VsockDevice;
+
+        if self.vsock.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a vsock device; a second would give the guest two \
+                 devices claiming the same context ID"
+                    .to_string(),
+            ));
+        }
+
+        // The register window is not RAM. Placing it inside the guest's memory
+        // would give two different meanings to one address, and the failure
+        // would surface as memory corruption rather than as a bad address.
+        if base_address < self.memory.total_size() {
+            return Err(Error::Device(format!(
+                "vsock register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
+        let transport =
+            VirtioMmioTransport::new("virtio-vsock", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq);
+
+        self.devices
+            .register_device(
+                "virtio-vsock",
+                Arc::new(tokio::sync::RwLock::new(transport)),
+            )
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-vsock".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+
+        *self.vsock.write() = Some(AttachedVsock {
+            device: device.clone(),
+            base_address,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': vsock device attached at {:#x} (guest CID {guest_cid}, IRQ {irq})",
+            self.config.name,
+            base_address
+        );
+        Ok(device)
+    }
+
+    /// The vsock device attached to this VM, if any.
+    ///
+    /// `None` means no channel to the guest exists — which is distinct from a
+    /// channel with nothing listening on the other end. A caller reporting on
+    /// guest connectivity needs to keep the two apart, for the same reason the
+    /// console reports `attached` separately from its contents.
+    pub fn vsock(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.vsock.read().as_ref().map(|v| v.device.clone())
+    }
+
+    /// Kernel command-line arguments that make a Linux guest probe the vsock
+    /// device attached by [`Self::attach_vsock`].
+    ///
+    /// Returns `None` when no device is attached. Without this the window is
+    /// mapped and no driver ever looks at it: virtio-mmio has no enumeration,
+    /// so a guest is told where to look or it does not look.
+    pub fn vsock_kernel_args(&self) -> Option<String> {
+        self.vsock
+            .read()
+            .as_ref()
+            .map(|v| format!("virtio_mmio.device=4K@{:#x}:{}", v.base_address, v.irq))
     }
 
     /// Wait for VM exit
@@ -1769,6 +1910,122 @@ mod tests {
                 None
             }
         }
+    }
+
+    /// A small VM for the vsock attachment tests.
+    fn vsock_vm() -> Option<VM> {
+        vm_or_skip(VMConfig {
+            name: "vsock-vm".to_string(),
+            vcpu_count: 1,
+            memory_size: 64 * 1024 * 1024,
+            ..Default::default()
+        })
+    }
+
+    #[tokio::test]
+    async fn a_vm_has_no_vsock_device_until_one_is_attached() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        // Nothing attaches a channel to the guest automatically, and a caller
+        // must be able to tell "no channel" from "a channel with nothing
+        // listening".
+        assert!(vm.vsock().is_none());
+        assert!(vm.vsock_kernel_args().is_none());
+
+        let device = vm.attach_vsock(3).await.expect("attach");
+        assert_eq!(device.lock().guest_cid(), 3);
+        assert!(vm.vsock().is_some());
+    }
+
+    #[tokio::test]
+    async fn attaching_a_vsock_device_maps_it_where_the_guest_will_look() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("attach");
+
+        // virtio-mmio has no enumeration: the window is mapped and the kernel
+        // arguments name it, or no driver ever probes it.
+        let args = vm.vsock_kernel_args().expect("kernel args");
+        assert_eq!(args, "virtio_mmio.device=4K@0xd0000000:5");
+
+        // The MMIO exit path has to find it, or the mapping is decoration.
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::VSOCK_MMIO_BASE)
+            .await
+            .expect("the window should be registered");
+        assert_eq!(handle.device_name(), "virtio-vsock");
+        assert_eq!(
+            handle.read_register(0).await.expect("magic"),
+            crate::devices::virtio_mmio::VIRTIO_MMIO_MAGIC
+        );
+    }
+
+    #[tokio::test]
+    async fn a_custom_window_is_the_one_the_guest_is_told_about() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock_at(7, 0xe000_0000, 9).await.expect("attach");
+
+        // Reporting the default window here would send the guest driver to an
+        // address nothing is mapped at.
+        assert_eq!(
+            vm.vsock_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xe0000000:9")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_vsock_device_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("attach");
+
+        // Two devices would give the guest two claims on one context ID, and
+        // the host two channels it cannot tell apart.
+        let err = vm.attach_vsock(4).await.expect_err("a second must refuse");
+        assert!(
+            err.to_string().contains("already has a vsock device"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_register_window_inside_guest_ram_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        // One address would mean two things, and the symptom would be memory
+        // corruption rather than a bad address.
+        let err = vm
+            .attach_vsock_at(3, 0x1000, 5)
+            .await
+            .expect_err("an overlapping window must refuse");
+        assert!(
+            err.to_string().contains("overlaps"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            vm.vsock().is_none(),
+            "a refused attach leaves nothing behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reserved_guest_context_id_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        assert!(vm.attach_vsock(2).await.is_err(), "CID 2 is the host");
+        assert!(vm.vsock().is_none());
+        assert!(vm.attach_vsock(3).await.is_ok());
     }
 
     #[tokio::test]

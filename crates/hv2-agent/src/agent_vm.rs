@@ -1,6 +1,9 @@
 //! AI-scriptable VM with enhanced capabilities for autonomous agents
 
-use crate::{AgentError, CapabilitySet, Result, Sandbox, SandboxConfig, ScriptEngine};
+use crate::{
+    AgentError, Capability, CapabilitySet, GuestAgent, GuestExec, Result, Sandbox, SandboxConfig,
+    ScriptEngine,
+};
 use hv2_core::{BootSource, VMConfig, VMState, VM};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -106,7 +109,8 @@ impl AgentVMBuilder {
 
     pub async fn build(self) -> Result<AgentVM> {
         let vm = VM::new(self.config)?;
-        let script_engine = ScriptEngine::with_limits(self.capabilities, &self.sandbox_config);
+        let script_engine =
+            ScriptEngine::with_limits(self.capabilities.clone(), &self.sandbox_config);
         let sandbox = Sandbox::new(self.sandbox_config);
 
         Ok(AgentVM {
@@ -115,6 +119,7 @@ impl AgentVMBuilder {
             sandbox: Arc::new(sandbox),
             script_timeout: self.script_timeout,
             started_at: RwLock::new(None),
+            capabilities: self.capabilities,
         })
     }
 }
@@ -132,6 +137,13 @@ pub struct AgentVM {
     sandbox: Arc<Sandbox>,
     script_timeout: Duration,
     started_at: RwLock<Option<Instant>>,
+    /// What this VM's callers are allowed to do.
+    ///
+    /// The script engine holds its own copy, but the guest-exec path needs to
+    /// consult the set directly: running a command inside the guest is a
+    /// different power from reading a VM, and gating it on the same capability
+    /// would make `VmRead` mean "may run anything in there".
+    capabilities: CapabilitySet,
 }
 
 impl AgentVM {
@@ -296,6 +308,98 @@ impl AgentVM {
         )
     }
 
+    /// Attach the vsock channel a guest agent will connect over.
+    ///
+    /// Call this before the guest boots, and put [`Self::guest_kernel_args`]
+    /// on its command line: virtio-mmio has no enumeration, so a guest that is
+    /// not told the window exists will never probe it.
+    pub async fn attach_guest_channel(&self, guest_cid: u64) -> Result<()> {
+        self.vm.attach_vsock(guest_cid).await?;
+        Ok(())
+    }
+
+    /// Kernel arguments that make a Linux guest find the channel attached by
+    /// [`Self::attach_guest_channel`], or `None` if none is attached.
+    pub fn guest_kernel_args(&self) -> Option<String> {
+        self.vm.vsock_kernel_args()
+    }
+
+    /// Run a program inside the guest and wait for it to finish.
+    ///
+    /// This is the operation `execute_script` was described as being and never
+    /// was. It runs `program` directly — not through a shell — inside the
+    /// guest operating system, through `hv2-guest-agentd` over vsock.
+    ///
+    /// A non-zero exit is a [`GuestExec`] with that exit code, not an error:
+    /// the program ran, and its output is what explains the failure. An error
+    /// here means the command could not be run at all.
+    ///
+    /// # Errors
+    ///
+    /// - [`AgentError::PermissionDenied`] without [`Capability::GuestExec`].
+    /// - [`AgentError::Script`] when no channel is attached — which is a
+    ///   different problem from a guest that does not answer, and is reported
+    ///   differently so an operator is not sent looking in the guest for a
+    ///   device the host never gave it.
+    /// - [`AgentError::Timeout`] when nothing in the guest answers.
+    pub async fn exec_in_guest(
+        &self,
+        program: &str,
+        args: &[String],
+        timeout: Duration,
+    ) -> Result<GuestExec> {
+        if !self.capabilities.has(Capability::GuestExec) {
+            return Err(AgentError::PermissionDenied(
+                "running a command inside the guest requires the GuestExec capability".to_string(),
+            ));
+        }
+
+        let Some(device) = self.vm.vsock() else {
+            return Err(AgentError::Script(
+                "this VM has no guest channel: call attach_guest_channel() before the guest \
+                 boots, and put guest_kernel_args() on its kernel command line"
+                    .to_string(),
+            ));
+        };
+
+        // The client polls a device that only moves bytes when the guest kicks
+        // a queue, so it blocks. Keeping that off the async runtime is what
+        // stops one slow guest from stalling every other task.
+        let program = program.to_string();
+        let args = args.to_vec();
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.exec(&program, &args, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?
+    }
+
+    /// Ask the guest agent to identify itself, returning its version.
+    ///
+    /// The cheapest honest answer to "is this VM ready to be given work": a
+    /// running guest with no agent in it looks exactly like a running guest
+    /// with one, until something asks.
+    pub async fn ping_guest(&self, timeout: Duration) -> Result<String> {
+        if !self.capabilities.has(Capability::GuestExec) {
+            return Err(AgentError::PermissionDenied(
+                "talking to the guest agent requires the GuestExec capability".to_string(),
+            ));
+        }
+        let Some(device) = self.vm.vsock() else {
+            return Err(AgentError::Script(
+                "this VM has no guest channel: call attach_guest_channel() first".to_string(),
+            ));
+        };
+
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.ping(timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest ping task failed: {e}")))?
+    }
+
     /// Get the underlying VM
     pub fn vm(&self) -> Arc<VM> {
         Arc::clone(&self.vm)
@@ -318,6 +422,94 @@ pub struct VMMetrics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build an AgentVM with `capabilities`, skipping when this host has no
+    /// hypervisor backend.
+    async fn agent_vm(capabilities: CapabilitySet) -> Option<AgentVM> {
+        match AgentVM::builder()
+            .name("guest-exec-vm")
+            .cpu_cores(1)
+            .memory_gb(1)
+            .capabilities(capabilities)
+            .build()
+            .await
+        {
+            Ok(vm) => Some(vm),
+            Err(e) => {
+                eprintln!("skipping: no hypervisor backend available ({e})");
+                None
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn running_a_command_in_the_guest_requires_the_guest_exec_capability() {
+        // The default set is VmRead + Metrics. Reading a VM and running
+        // arbitrary programs inside it are not the same power, and a set that
+        // conflated them would grant the second to every caller of the first.
+        let Some(vm) = agent_vm(CapabilitySet::default()).await else {
+            return;
+        };
+
+        let err = vm
+            .exec_in_guest("uname", &[], Duration::from_secs(1))
+            .await
+            .expect_err("the default set must not run commands in the guest");
+        assert!(matches!(err, AgentError::PermissionDenied(_)), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn a_vm_with_no_guest_channel_says_so_rather_than_timing_out() {
+        let Some(vm) = agent_vm(CapabilitySet::all()).await else {
+            return;
+        };
+
+        // "No device was ever attached" and "the guest never answered" send an
+        // operator to entirely different places. Reporting the first as a
+        // timeout would have them looking inside a guest for a device the host
+        // never gave it.
+        assert!(vm.guest_kernel_args().is_none());
+        let err = vm
+            .exec_in_guest("uname", &[], Duration::from_millis(50))
+            .await
+            .expect_err("no channel is not a slow guest");
+        assert!(err.to_string().contains("no guest channel"), "got: {err}");
+        assert!(!matches!(err, AgentError::Timeout(_)));
+    }
+
+    #[tokio::test]
+    async fn attaching_a_channel_gives_the_guest_something_to_be_told_about() {
+        let Some(vm) = agent_vm(CapabilitySet::all()).await else {
+            return;
+        };
+
+        vm.attach_guest_channel(3).await.expect("attach");
+
+        // virtio-mmio has no enumeration, so these arguments are the whole of
+        // how a guest learns the channel exists.
+        let args = vm.guest_kernel_args().expect("kernel args");
+        assert!(args.starts_with("virtio_mmio.device="), "got: {args}");
+    }
+
+    #[tokio::test]
+    async fn a_channel_with_nothing_listening_times_out_and_says_why() {
+        let Some(vm) = agent_vm(CapabilitySet::all()).await else {
+            return;
+        };
+        vm.attach_guest_channel(3).await.expect("attach");
+
+        // The device is attached but no guest is running, so nothing services
+        // the queues. This is the case that must not hang.
+        let err = vm
+            .exec_in_guest("uname", &[], Duration::from_millis(200))
+            .await
+            .expect_err("an unanswered channel is a timeout");
+        assert!(matches!(err, AgentError::Timeout(_)), "got: {err}");
+        assert!(
+            err.to_string().contains("hv2-guest-agentd"),
+            "the message should name what might be missing: {err}"
+        );
+    }
 
     #[tokio::test]
     async fn test_agent_vm_builder() {

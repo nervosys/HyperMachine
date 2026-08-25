@@ -250,6 +250,7 @@ impl Connection {
 }
 
 /// A virtio socket device serving one guest.
+#[derive(Debug)]
 pub struct VsockDevice {
     guest_cid: u64,
     queues: Vec<GuestQueue>,
