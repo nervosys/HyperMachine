@@ -17,6 +17,9 @@ pub mod timer;
 pub mod vga;
 pub mod virtio;
 pub mod virtio_blk;
+pub mod virtio_mmio;
+pub mod virtio_queue;
+pub mod virtio_vsock;
 
 #[cfg(test)]
 mod integration_tests;
@@ -69,6 +72,15 @@ pub use virtio::{VirtQueue, VirtioDevice, VirtioNet, VIRTIO_NET_F_MAC, VIRTIO_NE
 pub use virtio_blk::{
     BlockConfig, BlockRequestHeader, RequestType, VirtioBlock, VIRTIO_BLK_DEVICE_ID,
     VIRTIO_BLK_SECTOR_SIZE,
+};
+pub use virtio_mmio::{
+    VirtioMmioDevice, VirtioMmioTransport, CONFIG_OFFSET, VIRTIO_F_VERSION_1, VIRTIO_MMIO_MAGIC,
+    VIRTIO_MMIO_REGION_SIZE, VIRTIO_MMIO_VERSION,
+};
+pub use virtio_queue::{Descriptor, DescriptorChain, GuestQueue, MAX_CHAIN_BYTES, MAX_QUEUE_SIZE};
+pub use virtio_vsock::{
+    VsockConnectionId, VsockConnectionState, VsockDevice, VsockHeader, VsockPacket,
+    VIRTIO_ID_VSOCK, VSOCK_HEADER_SIZE, VSOCK_HOST_CID, VSOCK_RX_BUF_SIZE,
 };
 // virtio_gpu lives in `crate::gpu` (the crate-root `VirtioGpu`); the former
 // parallel `devices::virtio_gpu` implementation was removed as an unused
