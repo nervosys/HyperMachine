@@ -220,6 +220,8 @@ impl BootSource {
                     cmdline: cmdline.clone(),
                     setup_addr: *setup_addr,
                     kernel_addr: *kernel_addr,
+                    // Filled in by `set_memory_size` once a VM exists.
+                    memory_size: 0,
                 };
                 // Fail here — with the path in hand — rather than deep inside a
                 // backend where the error has lost its context.
@@ -302,6 +304,21 @@ impl LoadedBoot {
             // the backend refines this from the ELF header when present.
             Self::Multiboot(_) => DEFAULT_KERNEL_ADDR,
             Self::Raw { entry, .. } => *entry,
+        }
+    }
+
+    /// Tell a Linux boot how much RAM the guest has.
+    ///
+    /// Separate from [`BootSource::load`] because that reads and validates
+    /// images, which callers do before a VM exists — an API server checking an
+    /// image is admissible has no memory size to give. The kernel's `e820` map
+    /// is built from this and it has no other source of one, so a VM must set
+    /// it before asking for the memory regions.
+    ///
+    /// Does nothing for protocols that do not carry a memory map.
+    pub fn set_memory_size(&mut self, bytes: u64) {
+        if let Self::Linux(params) = self {
+            params.memory_size = bytes;
         }
     }
 
@@ -528,10 +545,19 @@ mod tests {
     #[test]
     fn linux_regions_cover_kernel_boot_params_and_cmdline() {
         let kernel = temp_file("kernel-regions.bin", &valid_bzimage());
-        let loaded = BootSource::linux(&kernel)
+        let mut loaded = BootSource::linux(&kernel)
             .with_cmdline("quiet")
             .load()
             .unwrap();
+
+        // Loading reads and validates the images; the memory map needs a size
+        // that only a VM has, and asking for the regions without one is
+        // refused rather than answered with an empty map.
+        assert!(
+            loaded.memory_regions().is_err(),
+            "regions without a memory size would carry an empty e820 map"
+        );
+        loaded.set_memory_size(256 * 1024 * 1024);
 
         let regions = loaded.memory_regions().unwrap();
         let addrs: Vec<u64> = regions.iter().map(|(a, _)| *a).collect();

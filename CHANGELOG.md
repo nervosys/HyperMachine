@@ -196,6 +196,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"simulated": true`, so the two can never be confused.
 
 ### Fixed
+- **A Linux kernel was handed no memory map and no CPU** (`hv2-core`).
+  `BootSource::Linux` has always described itself as implementing the Linux
+  boot protocol. Running one found two pieces of it missing. `boot_params`
+  carried no `e820` map: the byte at `0x1e8` was zero and the table at `0x2d0`
+  was empty, and a guest booted this way runs no BIOS, so there is no
+  `INT 15h` for the kernel to fall back on -- it finds no RAM at all and stops
+  before it has a console to say so on. The map is built now from the guest's
+  memory size, which `LoadedBoot::set_memory_size` threads in from the VM
+  (separate from `load`, because callers validate images before a VM exists),
+  and asking for the memory regions without one is refused rather than
+  answered with an empty map. Separately, no KVM vCPU was ever given a CPUID
+  configuration: `set_cpuid` and `get_supported_cpuid` were both written and
+  neither was ever called, so the guest's `CPUID` reported no vendor, no
+  features and a maximum leaf of zero. A Linux kernel asks within its first
+  few dozen instructions. `KvmVm::create_vcpu` now applies the host's
+  supported set. The visible effect is a guest that executes instead of
+  spinning: it now runs and triple-faults, which is a failure that can be
+  worked on. `examples/linux_boot_probe.rs` is the program that reports it.
+  The 32-bit protected-mode entry state itself was verified separately and is
+  correct -- a hand-assembled 32-bit image entered at 1 MB executes and drives
+  COM1 -- so what remains is specific to the Linux path. The kernel still does
+  not boot; nothing here claims otherwise.
 - **`HypervisorPlatform::detect` reported KVM on hosts that could not use it**
   (`hv2-core`). It tested `Path::new("/dev/kvm").exists()`, which is true
   wherever the module is loaded -- including the very common case of a user not

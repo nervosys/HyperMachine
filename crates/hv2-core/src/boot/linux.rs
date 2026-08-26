@@ -46,6 +46,15 @@ pub struct LinuxBootParams {
 
     /// Address to load kernel (typically 0x100000)
     pub kernel_addr: u64,
+
+    /// Size of the guest's RAM, in bytes.
+    ///
+    /// Not decoration: the kernel gets its memory map from `boot_params` and
+    /// from nowhere else, because a guest booted this way never runs a BIOS to
+    /// ask. Zero here means no map can be built, and
+    /// [`LinuxBootProtocol::prepare_guest_memory`] refuses rather than handing
+    /// the kernel an empty one.
+    pub memory_size: u64,
 }
 
 impl Default for LinuxBootParams {
@@ -56,9 +65,28 @@ impl Default for LinuxBootParams {
             cmdline: String::new(),
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
+            memory_size: 0,
         }
     }
 }
+
+/// Usable RAM, in the ACPI address range descriptor's numbering.
+const E820_RAM: u32 = 1;
+
+/// Number of `e820` entries, as a byte in `boot_params`.
+const E820_ENTRIES_OFFSET: usize = 0x1E8;
+
+/// Start of the `e820` table in `boot_params`.
+const E820_TABLE_OFFSET: usize = 0x2D0;
+
+/// Bytes per entry: a 64-bit address, a 64-bit size, and a 32-bit type.
+const E820_ENTRY_SIZE: usize = 20;
+
+/// Top of conventional memory, below the extended BIOS data area.
+const EBDA_START: u64 = 0x9_FC00;
+
+/// Where memory above the legacy hole resumes, and where the kernel loads.
+const HIGH_MEMORY_START: u64 = 0x10_0000;
 
 /// Linux boot protocol implementation
 pub struct LinuxBootProtocol;
@@ -180,7 +208,34 @@ impl LinuxBootProtocol {
         // Set loadflags (offset 0x211)
         boot_params[0x211] = 0x81; // LOADED_HIGH | CAN_USE_HEAP
 
+        // The memory map. A guest booted this way runs no BIOS, so there is no
+        // INT 15h/E820 for the kernel to call: what is written here is the
+        // only account of memory it will ever get. Without it the kernel finds
+        // no usable RAM and never reaches the point of being able to say so.
+        Self::write_e820_map(&mut boot_params, params.memory_size);
+
         boot_params
+    }
+
+    /// Write the `e820` memory map into `boot_params`.
+    ///
+    /// Two entries, which is what a machine with no devices below 4 GB needs:
+    /// conventional memory below the EBDA, and everything from 1 MB up. The
+    /// legacy hole between them is left out of the map, which is how a region
+    /// is reported absent.
+    fn write_e820_map(boot_params: &mut [u8], memory_size: u64) {
+        let mut entries: Vec<(u64, u64, u32)> = vec![(0, EBDA_START, E820_RAM)];
+        if memory_size > HIGH_MEMORY_START {
+            entries.push((HIGH_MEMORY_START, memory_size - HIGH_MEMORY_START, E820_RAM));
+        }
+
+        for (index, (addr, size, kind)) in entries.iter().enumerate() {
+            let at = E820_TABLE_OFFSET + index * E820_ENTRY_SIZE;
+            boot_params[at..at + 8].copy_from_slice(&addr.to_le_bytes());
+            boot_params[at + 8..at + 16].copy_from_slice(&size.to_le_bytes());
+            boot_params[at + 16..at + 20].copy_from_slice(&kind.to_le_bytes());
+        }
+        boot_params[E820_ENTRIES_OFFSET] = entries.len() as u8;
     }
 
     /// Boot a Linux kernel
@@ -207,6 +262,18 @@ impl LinuxBootProtocol {
     pub fn prepare_guest_memory(params: &LinuxBootParams) -> Result<Vec<(u64, Vec<u8>)>> {
         // 1. Validate everything first
         Self::validate_params(params)?;
+
+        // The memory map is written from this, and a kernel handed an empty
+        // one does not report the problem: it finds no RAM and stops before it
+        // has a console to say so on. `validate_params` cannot check it,
+        // because a caller validating an image before a VM exists has no size
+        // to give; by here one is required.
+        if params.memory_size <= HIGH_MEMORY_START {
+            return Err(Error::VM(format!(
+                "guest memory size {:#x} leaves no RAM above 1 MB; the e820 map in boot_params would describe nowhere for the kernel to run",
+                params.memory_size
+            )));
+        }
 
         // 2. Parse header to determine setup vs kernel split
         let header = Self::parse_header(&params.kernel_image)?;
@@ -384,6 +451,7 @@ mod tests {
             cmdline: "console=ttyS0".to_string(),
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
+            memory_size: 256 * 1024 * 1024,
         };
 
         let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
@@ -436,6 +504,7 @@ mod tests {
             cmdline: "console=ttyS0".to_string(),
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
+            memory_size: 256 * 1024 * 1024,
         };
 
         assert!(LinuxBootProtocol::validate_params(&params).is_ok());
@@ -470,6 +539,7 @@ mod tests {
             cmdline: "console=ttyS0".to_string(),
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
+            memory_size: 256 * 1024 * 1024,
         };
 
         let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
@@ -498,6 +568,7 @@ mod tests {
             cmdline: String::new(),
             setup_addr: 0x90000,
             kernel_addr: 0x100000,
+            memory_size: 256 * 1024 * 1024,
         };
 
         let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
@@ -528,5 +599,75 @@ mod tests {
             ..Default::default()
         };
         assert!(LinuxBootProtocol::prepare_guest_memory(&params).is_err());
+    }
+    /// Read one `e820` entry out of `boot_params`.
+    fn e820_entry(boot_params: &[u8], index: usize) -> (u64, u64, u32) {
+        let at = E820_TABLE_OFFSET + index * E820_ENTRY_SIZE;
+        let addr = u64::from_le_bytes(boot_params[at..at + 8].try_into().unwrap());
+        let size = u64::from_le_bytes(boot_params[at + 8..at + 16].try_into().unwrap());
+        let kind = u32::from_le_bytes(boot_params[at + 16..at + 20].try_into().unwrap());
+        (addr, size, kind)
+    }
+
+    #[test]
+    fn boot_params_carry_a_memory_map_the_kernel_can_read() {
+        // The field this asserts on was zero for the life of the module. A
+        // kernel handed a zero here finds no RAM and stops before it has a
+        // console to say so on, so the symptom is a guest that produces
+        // nothing -- indistinguishable from one that never started.
+        let params = LinuxBootParams {
+            kernel_image: create_minimal_bzimage(),
+            memory_size: 512 * 1024 * 1024,
+            ..LinuxBootParams::default()
+        };
+
+        let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
+
+        assert_eq!(
+            boot_params[E820_ENTRIES_OFFSET], 2,
+            "the kernel reads the entry count from this byte and believes it"
+        );
+        assert_eq!(
+            e820_entry(&boot_params, 0),
+            (0, EBDA_START, E820_RAM),
+            "conventional memory, ending below the EBDA"
+        );
+        assert_eq!(
+            e820_entry(&boot_params, 1),
+            (
+                HIGH_MEMORY_START,
+                512 * 1024 * 1024 - HIGH_MEMORY_START,
+                E820_RAM
+            ),
+            "everything from 1 MB up, which is where the kernel is loaded"
+        );
+    }
+
+    #[test]
+    fn the_memory_map_stops_where_the_guest_memory_does() {
+        // Reporting RAM a guest does not have is worse than reporting less
+        // than it has: the kernel will use it.
+        let params = LinuxBootParams {
+            kernel_image: create_minimal_bzimage(),
+            memory_size: 64 * 1024 * 1024,
+            ..LinuxBootParams::default()
+        };
+        let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
+        let (addr, size, _) = e820_entry(&boot_params, 1);
+        assert_eq!(addr + size, 64 * 1024 * 1024);
+    }
+
+    #[test]
+    fn a_guest_with_no_memory_above_1mb_is_refused() {
+        // There is nowhere to load the kernel, and no e820 map that could say
+        // otherwise. Refusing here beats handing over an empty map.
+        let params = LinuxBootParams {
+            kernel_image: create_minimal_bzimage(),
+            memory_size: 512 * 1024,
+            ..LinuxBootParams::default()
+        };
+        let err = LinuxBootProtocol::prepare_guest_memory(&params)
+            .expect_err("512 KiB of guest RAM cannot hold a kernel");
+        assert!(err.to_string().contains("e820"), "got: {err}");
     }
 }

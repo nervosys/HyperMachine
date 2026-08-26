@@ -416,7 +416,15 @@ impl HypervisorBackend for KvmBackend {
                 regs.rip = params.kernel_addr;
                 regs.rsi = params.setup_addr; // boot_params, per the protocol
                 regs.rsp = stack_pointer;
-                regs.rbp = stack_pointer;
+                // The 32-bit boot protocol requires these three to be zero
+                // (Documentation/x86/boot.rst). The kernel overwrites all of
+                // them within its first few instructions, so this is not what
+                // makes a boot work — but leaving a stack pointer in %ebp was
+                // a documented requirement quietly unmet, and those are worth
+                // fixing before the ones that are only suspected.
+                regs.rbp = 0;
+                regs.rdi = 0;
+                regs.rbx = 0;
                 regs.rflags = RFLAGS_RESERVED;
                 kvm_vcpu.set_regs(&regs)?;
 
@@ -522,6 +530,10 @@ impl HypervisorBackend for KvmBackend {
 pub struct KvmVm {
     /// VM file descriptor
     vm_fd: RawFd,
+    /// `/dev/kvm`, kept because the supported CPUID set is queried from it.
+    ///
+    /// Owned by [`KvmBackend`] and not closed here.
+    kvm_fd: RawFd,
     /// Number of vCPUs
     vcpu_count: u32,
     /// Memory size in bytes
@@ -624,6 +636,7 @@ impl KvmVm {
 
             Ok(Self {
                 vm_fd,
+                kvm_fd,
                 vcpu_count,
                 memory_size,
                 guest_memory,
@@ -643,6 +656,19 @@ impl KvmVm {
         }
 
         let vcpu = Arc::new(KvmVcpu::new(self.vm_fd, vcpu_id, self.run_mmap_size)?);
+
+        // A freshly created vCPU has no CPUID configuration at all, and KVM
+        // does not supply one: the guest's CPUID instruction reports a CPU with
+        // no features, no vendor and no leaves. Anything that asks what it is
+        // running on -- which a Linux kernel does within its first few dozen
+        // instructions -- gets an answer that is not merely wrong but
+        // impossible. `set_cpuid` and `get_supported_cpuid` were both written
+        // and neither was ever called.
+        //
+        // Handing the guest the host's supported set is the same choice the
+        // established VMMs make for a VM with no CPU model configured.
+        vcpu.apply_supported_cpuid(self.kvm_fd)?;
+
         self.vcpus
             .write()
             .unwrap_or_else(|e| e.into_inner())
@@ -1029,6 +1055,11 @@ impl KvmVcpu {
         match exit_reason {
             KVM_EXIT_HLT => Ok(VmExit::Hlt),
 
+            // A triple fault on x86, almost always. Do not read the registers
+            // here hoping to find where it happened: on SVM, KVM resets the
+            // vCPU before returning this exit, so `KVM_GET_REGS` reports the
+            // reset vector (`rip=0xfff0`, `rflags=0x2`) no matter what the
+            // guest was doing. Single-stepping is the way to locate one.
             KVM_EXIT_SHUTDOWN => Ok(VmExit::Shutdown),
 
             KVM_EXIT_IO => {
@@ -1545,6 +1576,54 @@ impl KvmVcpu {
                 ))
             })
         }
+    }
+
+    /// Give this vCPU the CPUID leaves the host's KVM supports.
+    ///
+    /// Must happen before the first `KVM_RUN`: KVM starts a vCPU with an empty
+    /// CPUID configuration, so until this runs the guest sees a CPU that
+    /// reports no vendor, no features and a maximum leaf of zero.
+    ///
+    /// `kvm_fd` is `/dev/kvm` -- `KVM_GET_SUPPORTED_CPUID` is a system ioctl,
+    /// not a vCPU one, so the answer is the same for every vCPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Hypervisor`] if either ioctl fails.
+    pub fn apply_supported_cpuid(&self, kvm_fd: RawFd) -> Result<()> {
+        // KVM_GET_SUPPORTED_CPUID and KVM_SET_CPUID2 take the same layout: a
+        // header whose `nent` counts the entries that follow it. Filling one
+        // buffer and handing it straight back avoids rebuilding the tail.
+        const MAX_ENTRIES: usize = 256;
+        let header_size = std::mem::size_of::<kvm_cpuid2>();
+        let entry_size = std::mem::size_of::<kvm_cpuid_entry2>();
+        let mut buf = vec![0u8; header_size + entry_size * MAX_ENTRIES];
+
+        // SAFETY: `buf` holds a `kvm_cpuid2` header followed by room for
+        // MAX_ENTRIES entries, which is the layout both ioctls expect. `nent`
+        // is set to the capacity before the get, and KVM lowers it to the
+        // number it wrote.
+        unsafe {
+            let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
+            header.nent = MAX_ENTRIES as u32;
+
+            kvm_get_supported_cpuid(kvm_fd, header)
+                .map_err(|e| Error::Hypervisor(format!("Failed to get supported CPUID: {e}")))?;
+
+            let entries = header.nent;
+            kvm_set_cpuid2(self.vcpu_fd, header).map_err(|e| {
+                Error::Hypervisor(format!(
+                    "Failed to set CPUID for vCPU {}: {e}",
+                    self.vcpu_id
+                ))
+            })?;
+
+            tracing::debug!(
+                "KVM: vCPU {} configured with {entries} CPUID leaves",
+                self.vcpu_id
+            );
+        }
+        Ok(())
     }
 
     /// Get vCPU ID

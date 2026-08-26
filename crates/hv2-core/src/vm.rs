@@ -420,7 +420,11 @@ impl VM {
         // happened to say first.
         let boot = match &self.config.boot {
             Some(source) => {
-                let loaded = source.load()?;
+                let mut loaded = source.load()?;
+
+                // The kernel's memory map is built from this and has no other
+                // source: a guest booted this way runs no BIOS to ask.
+                loaded.set_memory_size(self.config.memory_size);
 
                 self.admit_boot_image(&loaded)?;
 
