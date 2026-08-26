@@ -394,6 +394,58 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn a_memory_limit_stops_the_workload_allocating_past_it() {
+        // The process-count test proves the kernel refuses a second process.
+        // This proves the other half of the job object: the workload asks for
+        // memory past the cap and Windows refuses that too. Without it,
+        // Control::Memory was reported as enforced on the strength of
+        // SetInformationJobObject returning success.
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::Memory) {
+            eprintln!("skipping: this host has no usable job objects");
+            return;
+        }
+
+        let command = SandboxCommand::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-Command",
+                // Well past the 256 MiB cap below, and far enough past it that
+                // PowerShell's own footprint cannot explain the outcome.
+                "$a = New-Object byte[] 1073741824; $a.Length",
+            ])
+            .env("SystemRoot", r"C:\Windows")
+            .env(
+                "PATH",
+                r"C:\Windows\System32;C:\Windows\System32\WindowsPowerShell1.0",
+            );
+        let spec = SandboxSpec {
+            memory_bytes: Some(256 * 1024 * 1024),
+            wall_clock: Some(Duration::from_secs(30)),
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+
+        let output = sandbox.run(&command, &spec).expect("run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        // The exit code is not the evidence here, and assuming it was is how
+        // this test failed the first time: PowerShell catches the allocation
+        // failure, reports it, and still exits 0. What the kernel did is
+        // visible in the refusal itself.
+        assert!(
+            stderr.contains("OutOfMemoryException"),
+            "the allocation should have been refused by the job limit: {output:?}"
+        );
+        assert!(
+            !stdout.contains("1073741824"),
+            "the allocation reported its length, so the cap did not bind: {output:?}"
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn a_process_limit_stops_the_workload_spawning_past_it() {
         // The evidence that this is a kernel limit and not a policy object:
         // the workload asks Windows for a second process and Windows refuses.

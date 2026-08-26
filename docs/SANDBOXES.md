@@ -119,9 +119,12 @@ environment, which is not a limit anyone asked to remove. A workload that needs
 
 ## What is verified, and where
 
-- **Windows**: verified on this host, including a test that gives a workload a
-  one-process job and confirms the kernel refuses the process it tries to spawn,
-  and one that confirms an overrunning workload is killed. 18 tests.
+- **Windows**: verified on this host. Three tests assert enforcement rather
+  than configuration: a one-process job where the kernel refuses the process the
+  workload tries to spawn, a 256 MiB job where a 1 GiB allocation comes back as
+  `OutOfMemoryException`, and an overrunning workload that gets killed. 19 tests.
+  Note the memory one does not check the exit code — PowerShell catches the
+  allocation failure and still exits 0, so the refusal itself is the evidence.
 - **microVM**: the control reporting and every refusal path are tested. Actually
   running a workload in a guest needs a booted guest, which is blocked on the
   same hardware gate as the rest of the boot path.
