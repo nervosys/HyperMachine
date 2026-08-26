@@ -70,6 +70,22 @@ impl Default for LinuxBootParams {
     }
 }
 
+/// First byte of the setup header inside a bzImage.
+const SETUP_HEADER_START: usize = 0x1F1;
+
+/// Where the setup header ended before the protocol started growing.
+///
+/// Used as a floor: an image whose self-reported end is below this is either
+/// truncated or lying, and copying less than protocol 2.09 defined would leave
+/// fields zero that every kernel reads.
+const SETUP_HEADER_MIN_END: usize = 0x250;
+
+/// The furthest the setup header can reach.
+///
+/// `boot_params` is one page and the `e820` table starts at 0x2D0, so a header
+/// claiming to extend past this is not one this loader can honour.
+const SETUP_HEADER_MAX_END: usize = 0x2D0;
+
 /// Usable RAM, in the ACPI address range descriptor's numbering.
 const E820_RAM: u32 = 1;
 
@@ -185,9 +201,26 @@ impl LinuxBootProtocol {
         // Allocate boot_params structure (4KB)
         let mut boot_params = vec![0u8; 4096];
 
-        // Copy setup header from kernel image (if available)
-        if params.kernel_image.len() >= 0x250 {
-            boot_params[0x1F1..0x250].copy_from_slice(&params.kernel_image[0x1F1..0x250]);
+        // Copy the setup header out of the image.
+        //
+        // The header does not have a fixed length: it has grown with the boot
+        // protocol, and the image says where it ends -- `0x202 + the byte at
+        // 0x201`, which is the second half of the `jump` instruction sitting
+        // in front of it. Copying a fixed 0x1f1..0x250 was right for protocol
+        // 2.09 and silently truncates every version since, which is not a
+        // parse error but a set of zeroed fields.
+        //
+        // `init_size` at 0x260 is the one that bites: the kernel computes its
+        // stack pointer from it, so zero puts `%rsp` somewhere unmapped and the
+        // guest triple-faults on the first push -- with no console, no
+        // exception, and nothing to read but a reset vCPU.
+        let header_end = Self::setup_header_end(&params.kernel_image);
+        // An image too short to hold a header at all copies nothing rather
+        // than slicing backwards. `prepare_guest_memory` rejects those, but
+        // this is also called directly.
+        if header_end > SETUP_HEADER_START {
+            boot_params[SETUP_HEADER_START..header_end]
+                .copy_from_slice(&params.kernel_image[SETUP_HEADER_START..header_end]);
         }
 
         // Set command line pointer (offset 0x228, 4 bytes)
@@ -215,6 +248,22 @@ impl LinuxBootProtocol {
         Self::write_e820_map(&mut boot_params, params.memory_size);
 
         boot_params
+    }
+
+    /// Where this image's setup header ends.
+    ///
+    /// Read from the image rather than assumed: the boot protocol puts the
+    /// answer at 0x201, as the displacement of the `jump` that skips the
+    /// header. Clamped at both ends, because this is a guest-supplied number
+    /// deciding how much gets copied.
+    fn setup_header_end(kernel_image: &[u8]) -> usize {
+        let claimed = kernel_image
+            .get(0x201)
+            .map_or(0, |offset| 0x202 + usize::from(*offset));
+
+        claimed
+            .clamp(SETUP_HEADER_MIN_END, SETUP_HEADER_MAX_END)
+            .min(kernel_image.len())
     }
 
     /// Write the `e820` memory map into `boot_params`.
@@ -669,5 +718,58 @@ mod tests {
         let err = LinuxBootProtocol::prepare_guest_memory(&params)
             .expect_err("512 KiB of guest RAM cannot hold a kernel");
         assert!(err.to_string().contains("e820"), "got: {err}");
+    }
+    #[test]
+    fn the_whole_setup_header_is_copied_not_the_first_version_of_it() {
+        // The header has grown with the protocol and the image says where it
+        // ends. Copying a fixed 0x250 truncates every version since 2.09 --
+        // not as a parse error, but as fields that read back zero. init_size
+        // at 0x260 is the one that matters: the kernel computes its stack
+        // pointer from it, and zero puts %rsp somewhere unmapped.
+        let mut kernel = create_minimal_bzimage();
+        kernel.resize(0x400, 0);
+        kernel[0x201] = 0x6A; // header ends at 0x26c, as a modern kernel says
+        kernel[0x260..0x264].copy_from_slice(&0x03BE_2000u32.to_le_bytes());
+
+        let params = LinuxBootParams {
+            kernel_image: kernel,
+            memory_size: 256 * 1024 * 1024,
+            ..LinuxBootParams::default()
+        };
+        let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
+
+        let init_size = u32::from_le_bytes(boot_params[0x260..0x264].try_into().unwrap());
+        assert_eq!(
+            init_size, 0x03BE_2000,
+            "init_size reached the guest as {init_size:#x}"
+        );
+    }
+
+    #[test]
+    fn a_header_extent_the_image_invents_is_clamped() {
+        // The byte at 0x201 is guest-supplied and decides how much gets
+        // copied, so it is bounded at both ends rather than trusted.
+        let mut kernel = create_minimal_bzimage();
+        kernel.resize(0x400, 0);
+
+        kernel[0x201] = 0xFF; // claims the header runs to 0x301
+        assert_eq!(
+            LinuxBootProtocol::setup_header_end(&kernel),
+            SETUP_HEADER_MAX_END
+        );
+
+        kernel[0x201] = 0x00; // claims it ends before it starts
+        assert_eq!(
+            LinuxBootProtocol::setup_header_end(&kernel),
+            SETUP_HEADER_MIN_END
+        );
+    }
+
+    #[test]
+    fn a_short_image_is_not_read_past_its_end() {
+        let mut kernel = create_minimal_bzimage();
+        kernel.truncate(0x220);
+        kernel[0x201] = 0x6A;
+        assert_eq!(LinuxBootProtocol::setup_header_end(&kernel), 0x220);
     }
 }

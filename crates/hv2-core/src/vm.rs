@@ -587,6 +587,34 @@ impl VM {
         Ok(())
     }
 
+    /// Step the guest one instruction at a time and report where it went.
+    ///
+    /// For a guest that produces nothing: it either faulted before it could,
+    /// or it is looping without ever exiting, and neither says anything on its
+    /// own. The trace ends at the first exit that is not a debug exit, and
+    /// `tail` holds the addresses leading up to it.
+    ///
+    /// Requires a provisioned VM and does not start the run loop -- this drives
+    /// the vCPU directly, so nothing else may be running it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidState`] if the VM has not been provisioned, and
+    /// [`Error::NotSupported`] on a backend that cannot single-step.
+    pub async fn single_step_trace(
+        &self,
+        max_steps: u64,
+    ) -> Result<crate::hypervisor::SingleStepTrace> {
+        if self.hv_vm.read().is_none() {
+            return Err(Error::InvalidState(
+                "provision the VM before tracing it; there is no vCPU to step yet".into(),
+            ));
+        }
+        self.backend
+            .single_step_trace(&self.vcpus[0], max_steps)
+            .await
+    }
+
     /// Start the VM
     pub async fn start(&self) -> Result<()> {
         let old_state = {

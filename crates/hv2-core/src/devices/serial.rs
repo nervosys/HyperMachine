@@ -1,6 +1,6 @@
 //! Serial console device emulation
 
-use crate::{Device, DeviceType, Error, Pic8259, Result};
+use crate::{Device, DeviceType, Pic8259, Result};
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::collections::VecDeque;
@@ -202,41 +202,16 @@ impl SerialDevice {
     pub fn peek_output_string(&self) -> String {
         String::from_utf8_lossy(&self.peek_output()).into_owned()
     }
-}
-
-#[async_trait]
-impl Device for SerialDevice {
-    fn device_type(&self) -> DeviceType {
-        DeviceType::Serial
-    }
-
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn console_output(&self) -> Option<Vec<u8>> {
-        Some(self.peek_output())
-    }
-
-    async fn init(&mut self) -> Result<()> {
-        tracing::info!(
-            "Initializing serial device '{}' at 0x{:X}",
-            self.name,
-            self.base_address
-        );
-        Ok(())
-    }
-
-    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Serial device only supports single-byte reads".to_string(),
-            ));
-        }
-
+    /// Read one byte-wide register.
+    ///
+    /// Separate from [`Device::read`] so that a wide access can walk
+    /// consecutive registers the way the hardware does. `dlab` is re-read per
+    /// register rather than latched for the whole access, because a write
+    /// inside the same access can change it.
+    fn read_register(&self, offset: u64) -> u8 {
         let dlab = (*self.lcr.lock() & LCR_DLAB) != 0;
 
-        let value = match offset {
+        match offset {
             RBR_OFFSET if dlab => {
                 // DLAB=1: Divisor Latch Low byte
                 *self.dll.lock()
@@ -292,28 +267,22 @@ impl Device for SerialDevice {
             }
             SCR_OFFSET => *self.scr.lock(),
             _ => 0,
-        };
-
-        data[0] = value;
-        Ok(())
+        }
     }
 
-    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
-        if data.is_empty() {
-            return Ok(());
-        }
-
+    /// Write one byte-wide register.
+    fn write_register(&self, offset: u64, value: u8) {
         let dlab = (*self.lcr.lock() & LCR_DLAB) != 0;
 
         match offset {
             THR_OFFSET if dlab => {
                 // DLAB=1: Divisor Latch Low byte
-                *self.dll.lock() = data[0];
+                *self.dll.lock() = value;
             }
             THR_OFFSET => {
                 // DLAB=0: Write to transmit buffer
                 let mut tx = self.tx_buffer.lock();
-                tx.push_back(data[0]);
+                tx.push_back(value);
                 // A guest printing in a loop must not be able to exhaust host
                 // memory. Nothing drains this buffer unless a caller asks for
                 // output, so without a cap an unattended VM grows it forever.
@@ -327,14 +296,14 @@ impl Device for SerialDevice {
             }
             IER_OFFSET if dlab => {
                 // DLAB=1: Divisor Latch High byte
-                *self.dlm.lock() = data[0];
+                *self.dlm.lock() = value;
             }
             IER_OFFSET => {
-                *self.ier.lock() = data[0];
+                *self.ier.lock() = value;
             }
             FCR_OFFSET => {
                 // FIFO Control Register (write-only)
-                let byte = data[0];
+                let byte = value;
                 *self.fcr.lock() = byte & FCR_FIFO_ENABLE; // Only persist the enable bit
 
                 if (byte & FCR_RX_FIFO_RESET) != 0 {
@@ -346,17 +315,65 @@ impl Device for SerialDevice {
                 }
             }
             LCR_OFFSET => {
-                *self.lcr.lock() = data[0];
+                *self.lcr.lock() = value;
             }
             MCR_OFFSET => {
-                *self.mcr.lock() = data[0];
+                *self.mcr.lock() = value;
             }
             SCR_OFFSET => {
-                *self.scr.lock() = data[0];
+                *self.scr.lock() = value;
             }
             _ => {}
         }
+    }
+}
 
+#[async_trait]
+impl Device for SerialDevice {
+    fn device_type(&self) -> DeviceType {
+        DeviceType::Serial
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn console_output(&self) -> Option<Vec<u8>> {
+        Some(self.peek_output())
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        tracing::info!(
+            "Initializing serial device '{}' at 0x{:X}",
+            self.name,
+            self.base_address
+        );
+        Ok(())
+    }
+
+    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        // A wide access reads consecutive registers, which is what the
+        // hardware does: a 16550 register file is byte-wide, and an `inw` at
+        // 0x3f8 returns RBR in the low byte and IER in the high one.
+        //
+        // This used to refuse anything but a single byte, and the refusal
+        // reached `handle_exit` as a device error that stopped the VM. A Linux
+        // kernel probing the port with a word read therefore killed the guest
+        // outright -- the exact opposite of what real hardware does, which is
+        // answer.
+        for (index, byte) in data.iter_mut().enumerate() {
+            *byte = self.read_register(offset + index as u64);
+        }
+        Ok(())
+    }
+
+    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+        // Likewise, and for the same reason: a two-byte write to THR sends two
+        // characters. Writing only `data[0]` dropped the rest silently, which
+        // is how a console loses output nobody can account for.
+        for (index, byte) in data.iter().enumerate() {
+            self.write_register(offset + index as u64, *byte);
+        }
         Ok(())
     }
 
@@ -680,5 +697,45 @@ mod tests {
         let _ = device.output();
         device.read(IIR_OFFSET, &mut buf).await.unwrap();
         assert_eq!(buf[0] & 0x0F, IIR_THRE);
+    }
+    #[tokio::test]
+    async fn a_wide_read_walks_consecutive_registers() {
+        // A 16550 register file is byte-wide, so an `inw` at the base returns
+        // RBR in the low byte and IER in the high one. Refusing the access
+        // instead reached handle_exit as a device error and stopped the VM,
+        // which is how a Linux kernel probing the port killed its own guest.
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        serial.write(IER_OFFSET, &[0x5A]).await.unwrap();
+
+        let mut data = [0u8; 2];
+        serial.read(RBR_OFFSET, &mut data).await.unwrap();
+        assert_eq!(data[1], 0x5A, "the second byte should be IER");
+    }
+
+    #[tokio::test]
+    async fn a_four_byte_read_is_answered_rather_than_refused() {
+        let serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        let mut data = [0u8; 4];
+        serial
+            .read(RBR_OFFSET, &mut data)
+            .await
+            .expect("real hardware answers a dword read; refusing it stops the guest");
+    }
+
+    #[tokio::test]
+    async fn a_wide_write_reaches_consecutive_registers() {
+        // Not two characters: an `outw` at the base writes THR and then IER,
+        // because the register file is byte-wide. Writing only data[0] dropped
+        // the second byte silently, which is a register that quietly never got
+        // set -- and this is what a guest configuring the port in one access
+        // actually expects to happen.
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        serial.write(THR_OFFSET, &[b'h', 0x0F]).await.unwrap();
+
+        assert_eq!(serial.peek_output(), b"h", "THR took the first byte");
+
+        let mut ier = [0u8; 1];
+        serial.read(IER_OFFSET, &mut ier).await.unwrap();
+        assert_eq!(ier[0], 0x0F, "IER took the second");
     }
 }

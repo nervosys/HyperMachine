@@ -11,7 +11,7 @@
 //! - 0x64: Status register (read) / Command register (write)
 
 use crate::interrupt::Pic8259;
-use crate::{Device, DeviceType, Error, Result};
+use crate::{Device, DeviceType, Result};
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -27,6 +27,15 @@ const STATUS_UNLOCKED: u8 = 0x10; // Keyboard Unlocked
 const STATUS_AUX_OBF: u8 = 0x20; // Auxiliary Output Buffer Full
 const STATUS_TIMEOUT: u8 = 0x40; // Timeout Error
 const STATUS_PARITY: u8 = 0x80; // Parity Error
+
+/// Data port, relative to the base port the device is registered at.
+///
+/// Relative, not absolute: `DeviceManager` subtracts the base port before
+/// calling, so a device decoding 0x60 directly never matches a real access.
+pub const KEYBOARD_DATA_OFFSET: u64 = 0;
+
+/// Status (read) and command (write) port, relative to the base port.
+pub const KEYBOARD_STATUS_OFFSET: u64 = 4;
 
 /// Controller commands (written to port 0x64)
 const CMD_READ_CCB: u8 = 0x20; // Read Controller Command Byte
@@ -356,45 +365,33 @@ impl Device for KeyboardDevice {
     }
 
     async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Keyboard only supports single-byte reads".into(),
-            ));
+        // Offsets are relative to the base port, as everywhere else on the I/O
+        // path: registered at 0x60, the data port arrives as 0 and the status
+        // port as 4. Decoding the absolute 0x60 and 0x64 meant every real
+        // access fell through to an error, and an error here stops the VM --
+        // so a guest probing the keyboard controller killed itself.
+        //
+        // The ports in between (0x61 to 0x63) belong to other parts of the
+        // chipset and read as an absent device rather than as a failure.
+        // Erroring on them would be the same mistake in a different place.
+        for (index, byte) in data.iter_mut().enumerate() {
+            *byte = match offset + index as u64 {
+                KEYBOARD_DATA_OFFSET => self.read_data(),
+                KEYBOARD_STATUS_OFFSET => self.read_status(),
+                _ => 0xFF,
+            };
         }
-
-        let value = match offset {
-            0x60 => self.read_data(),
-            0x64 => self.read_status(),
-            _ => {
-                return Err(Error::Device(format!(
-                    "Invalid keyboard port: {:#x}",
-                    offset
-                )))
-            }
-        };
-
-        data[0] = value;
         Ok(())
     }
 
     async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Keyboard only supports single-byte writes".into(),
-            ));
-        }
-
-        match offset {
-            0x60 => self.write_data(data[0]),
-            0x64 => self.write_command(data[0]),
-            _ => {
-                return Err(Error::Device(format!(
-                    "Invalid keyboard port: {:#x}",
-                    offset
-                )))
+        for (index, byte) in data.iter().enumerate() {
+            match offset + index as u64 {
+                KEYBOARD_DATA_OFFSET => self.write_data(*byte),
+                KEYBOARD_STATUS_OFFSET => self.write_command(*byte),
+                _ => {}
             }
         }
-
         Ok(())
     }
 
@@ -543,10 +540,12 @@ mod tests {
         kbd.init().await.unwrap();
 
         let mut buf = [0u8; 1];
-        kbd.read(0x64, &mut buf).await.unwrap();
+        kbd.read(KEYBOARD_STATUS_OFFSET, &mut buf).await.unwrap();
 
-        kbd.write(0x64, &[CMD_SELF_TEST]).await.unwrap();
-        kbd.read(0x60, &mut buf).await.unwrap();
+        kbd.write(KEYBOARD_STATUS_OFFSET, &[CMD_SELF_TEST])
+            .await
+            .unwrap();
+        kbd.read(KEYBOARD_DATA_OFFSET, &mut buf).await.unwrap();
 
         kbd.reset().await.unwrap();
         kbd.shutdown().await.unwrap();
@@ -638,5 +637,32 @@ mod tests {
 
         // Buffer should be empty now
         assert_eq!(kbd.read_data(), 0);
+    }
+    #[tokio::test]
+    async fn the_controller_decodes_offsets_relative_to_its_base_port() {
+        // Registered at 0x60, the status port arrives as offset 4. Decoding
+        // the absolute 0x64 meant a guest polling the controller got a device
+        // error, and a device error on the I/O path stops the VM.
+        let keyboard = KeyboardDevice::new();
+        let mut status = [0u8; 1];
+        keyboard
+            .read(KEYBOARD_STATUS_OFFSET, &mut status)
+            .await
+            .expect("the status port has to answer");
+        assert_ne!(
+            status[0], 0xFF,
+            "0xff is what an absent device reads as, and a kernel polling for a \
+             bit to clear in it waits forever"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_ports_between_read_as_absent_rather_than_failing() {
+        // 0x61 to 0x63 belong to other parts of the chipset. Erroring on them
+        // would stop the VM for an access that hardware simply ignores.
+        let keyboard = KeyboardDevice::new();
+        let mut byte = [0u8; 1];
+        keyboard.read(1, &mut byte).await.expect("no error");
+        assert_eq!(byte[0], 0xFF);
     }
 }

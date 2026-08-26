@@ -150,6 +150,37 @@ pub struct HypervisorCapabilities {
     pub supports_gpu_passthrough: bool,
 }
 
+/// How many instruction addresses a trace keeps.
+///
+/// A guest can execute millions of instructions before it fails, and the
+/// interesting part is always the end. Keeping a bounded tail rather than the
+/// whole run is the difference between a diagnostic and an out-of-memory.
+pub const TRACE_TAIL: usize = 64;
+
+/// What a single-step trace saw.
+#[derive(Debug, Clone)]
+pub struct SingleStepTrace {
+    /// How many instructions were stepped before the trace ended.
+    pub steps: u64,
+    /// Addresses of the last [`TRACE_TAIL`] instructions, oldest first.
+    ///
+    /// Each is the address of an instruction that was *about to* execute, read
+    /// before the step. That ordering is deliberate: on a triple fault KVM
+    /// resets the vCPU before returning the exit, so a register read afterwards
+    /// reports the reset vector and nothing else. Recorded beforehand, the last
+    /// entry here is the instruction that faulted.
+    pub tail: Vec<u64>,
+    /// The exit that ended the trace, or `None` if the step limit did.
+    pub final_exit: Option<VmExit>,
+}
+
+impl SingleStepTrace {
+    /// The address of the last instruction that was about to execute.
+    pub fn last_rip(&self) -> Option<u64> {
+        self.tail.last().copied()
+    }
+}
+
 /// Hypervisor backend trait
 #[async_trait]
 pub trait HypervisorBackend: Send + Sync {
@@ -227,6 +258,32 @@ pub trait HypervisorBackend: Send + Sync {
             "{} backend cannot boot a {} guest",
             self.platform(),
             boot.protocol()
+        )))
+    }
+
+    /// Step the guest one instruction at a time, recording where it went.
+    ///
+    /// The tool for a guest that fails before it can say anything. A triple
+    /// fault arrives as [`VmExit::Shutdown`] and on AMD KVM resets the vCPU
+    /// before returning it, so the registers afterwards describe the reset
+    /// vector rather than the fault; a guest stuck in a tight loop never exits
+    /// at all. Both are silent, and both are visible here.
+    ///
+    /// Stops at `max_steps`, or earlier on any exit that is not a debug exit --
+    /// including I/O, which this does not emulate. An I/O exit in the result is
+    /// therefore not a failure: it means the guest got far enough to talk to a
+    /// device, and the trace ends where the ordinary run loop should take over.
+    ///
+    /// # Errors
+    ///
+    /// The default implementation reports [`Error::NotSupported`], because a
+    /// backend that cannot single-step should say so rather than return an
+    /// empty trace that reads as "the guest executed nothing".
+    async fn single_step_trace(&self, vcpu: &VCpu, max_steps: u64) -> Result<SingleStepTrace> {
+        let _ = (vcpu, max_steps);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot single-step a guest",
+            self.platform()
         )))
     }
 

@@ -8,6 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A Linux kernel boots** (`hv2-core`). It decompresses itself, enters the
+  kernel proper, reads the `e820` map this loader writes, sets up its zones and
+  prints ~20 lines of kernel log through `SerialDevice` to `VM::console_output`
+  -- the memory ranges it reports back (`0x1000-0x9efff` and
+  `0x100000-0x7fffffff`) are exactly the two entries handed to it. It does not
+  reach userspace: it currently stops polling the DMA controller, which is the
+  next legacy device to bring up. `examples/linux_boot_probe.rs` runs it and
+  says how far it got.
+- **Single-step tracing** (`hv2-core`). `VM::single_step_trace` steps a guest
+  one instruction at a time and reports where it went, which is the only way to
+  see either of the two ways a guest goes quiet: a triple fault arrives as
+  `VmExit::Shutdown` and KVM resets the vCPU on AMD before returning it, so the
+  registers afterwards describe the reset vector and not the fault; and a guest
+  spinning in a tight loop never exits at all. Addresses are recorded *before*
+  each step for that reason, and only a bounded tail is kept, because a guest
+  can execute millions of instructions before it fails and the interesting part
+  is always the end. It found the setup-header truncation below in one run,
+  after an afternoon of reasoning had not.
 - **Context as an environment** (`hv2-context`, `hv2-agent`). An agent's history
   is normally kept by putting it back in the prompt, which forces the decision
   about what matters to be made at *write* time: when a tool returns 40 MB,
@@ -226,6 +244,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"simulated": true`, so the two can never be confused.
 
 ### Fixed
+- **The setup header was truncated at the length it had in 2009** (`hv2-core`).
+  `create_boot_params` copied a fixed `0x1f1..0x250` out of the bzImage, which
+  was the whole header under boot protocol 2.09 and has not been since. The
+  header does not have a fixed length -- the image says where it ends, at
+  `0x202 + the byte at 0x201` -- so everything past 0x250 reached the guest as
+  zero. `init_size` at 0x260 is the field that bites: the kernel computes its
+  stack pointer from it, so zero put `%rsp` somewhere unmapped and the guest
+  triple-faulted on the first `push`, with no console, no exception, and a
+  vCPU that KVM had already reset. The header extent is read from the image now
+  and clamped at both ends, since it is a guest-supplied number deciding how
+  much gets copied.
+- **Three devices that could not work behind the device manager** (`hv2-core`).
+  All three shared a shape: correct when a unit test called them directly, and
+  broken the moment a guest did. `SerialDevice::read` refused anything but a
+  single byte, and the refusal reached `handle_exit` as a device error that
+  stopped the VM -- so a kernel probing the port with a word read killed its own
+  guest, where hardware would simply have answered; its `write` silently dropped
+  every byte after the first. `RtcDevice` and `KeyboardDevice` decoded the
+  absolute ports 0x70/0x71 and 0x60/0x64, but `DeviceManager` passes
+  `port - base_port`, so every real access arrived as a small offset, fell
+  through to an error arm, and stopped the VM. A 16550 and an i8042 are
+  byte-wide register files: a wide access now walks consecutive registers, and
+  a port the device does not implement reads as absent rather than as a
+  failure. Found by booting a kernel against them, one after the next.
 - **A search hit returned the whole payload when it happened to be small**
   (`hv2-context`, found by its own integration test). Previews were bounded in
   the payload store and nowhere else, so an inline payload -- anything under the

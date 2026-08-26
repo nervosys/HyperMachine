@@ -439,9 +439,14 @@
         <td class="where">needs a guest kernel with virtio-vsock, not hardware</td>
       </tr>
       <tr>
-        <td class="claim">The Linux boot protocol is implemented</td>
-        <td><span class="tag none">not verified</span> e820 map and vCPU CPUID were both missing and are now present; a real bzImage reaches the kernel and triple-faults, so something further is still wrong</td>
+        <td class="claim">A Linux kernel boots</td>
+        <td><span class="tag ran">ran</span> decompresses, enters the kernel, reads our e820 map back verbatim, prints ~20 lines of kernel log to COM1</td>
         <td class="where">WSL2 + KVM, <code>examples/linux_boot_probe.rs</code></td>
+      </tr>
+      <tr>
+        <td class="claim">A Linux kernel reaches userspace</td>
+        <td><span class="tag none">not verified</span> stops polling the DMA controller at 0x0f; the legacy device set is incomplete</td>
+        <td class="where">next device to bring up</td>
       </tr>
       <tr>
         <td class="claim">32-bit protected-mode entry state is correct</td>

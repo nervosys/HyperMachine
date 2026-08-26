@@ -503,6 +503,67 @@ impl HypervisorBackend for KvmBackend {
         }
     }
 
+    async fn single_step_trace(
+        &self,
+        vcpu: &VCpu,
+        max_steps: u64,
+    ) -> Result<crate::hypervisor::SingleStepTrace> {
+        use crate::hypervisor::{SingleStepTrace, TRACE_TAIL};
+
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+            map.get(&vcpu.id())
+                .cloned()
+                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
+        };
+
+        kvm_vcpu.set_guest_debug(KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP)?;
+
+        let mut tail: std::collections::VecDeque<u64> = std::collections::VecDeque::new();
+        let mut steps = 0u64;
+        let mut final_exit = None;
+
+        while steps < max_steps {
+            // Read the address before stepping, not after: a triple fault
+            // resets the vCPU on the way out, and a read afterwards reports the
+            // reset vector for every guest that ever fails.
+            let rip = match kvm_vcpu.get_regs() {
+                Ok(regs) => regs.rip,
+                Err(e) => {
+                    let _ = kvm_vcpu.set_guest_debug(0);
+                    return Err(e);
+                }
+            };
+            if tail.len() == TRACE_TAIL {
+                tail.pop_front();
+            }
+            tail.push_back(rip);
+            steps += 1;
+
+            match kvm_vcpu.run() {
+                Ok(VmExit::Debug { .. }) => {}
+                Ok(other) => {
+                    final_exit = Some(other);
+                    break;
+                }
+                Err(e) => {
+                    let _ = kvm_vcpu.set_guest_debug(0);
+                    return Err(e);
+                }
+            }
+        }
+
+        // Leave the vCPU as it was found, so a caller can trace and then run
+        // normally without every instruction trapping.
+        kvm_vcpu.set_guest_debug(0)?;
+
+        Ok(SingleStepTrace {
+            steps,
+            tail: tail.into_iter().collect(),
+            final_exit,
+        })
+    }
+
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down KVM backend");
 
