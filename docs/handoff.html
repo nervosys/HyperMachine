@@ -429,9 +429,14 @@
         <td class="where">Linux 6.18, real AF_VSOCK socket</td>
       </tr>
       <tr>
+        <td class="claim">A guest executes</td>
+        <td><span class="tag ran">ran</span> KVM VM and vCPUs created, image loaded, guest ran and printed to COM1</td>
+        <td class="where">WSL2, <code>/dev/kvm</code>, nested virt</td>
+      </tr>
+      <tr>
         <td class="claim">A Linux guest driver talks to the device</td>
-        <td><span class="tag none">not verified</span> no kernel has booted on it; the two halves have never met</td>
-        <td class="where">needs hardware</td>
+        <td><span class="tag none">not verified</span> the two halves have never met: the agent was proven over the kernel's own vsock stack, the device against tests</td>
+        <td class="where">needs a guest kernel with virtio-vsock, not hardware</td>
       </tr>
       <tr>
         <td class="claim">Filesystem isolation (process backend)</td>

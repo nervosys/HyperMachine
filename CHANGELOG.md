@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A guest executed** (`hv2-core`). The boot path had only ever been
+  type-checked: `VM::provision`, `load_boot` and `launch` were described as
+  creating a hypervisor VM, writing an image into guest physical memory and
+  running it, and no kernel had ever been asked to do any of it. Two new
+  examples do. `kvm_probe` reports the platform, `VM::new` and `provision`
+  separately, because a host can pass one and fail the next -- Windows does,
+  when Hyper-V owns VT-x. `boot_probe` runs the whole path against a 512-byte
+  real-mode image and prints what came back: a KVM VM and its vCPUs exist, the
+  image is in guest memory, the guest runs, and `Hello, World!` arrives through
+  `SerialDevice` and `DeviceManager` into `VM::console_output` -- which
+  independently confirms the console plumbing as well. The gate on this was an
+  inherited assumption rather than hardware: WSL2 here has nested
+  virtualisation, `kvm_amd` loaded and an accessible `/dev/kvm`.
 - **A guest can be reached, and a command can be run inside it** (`hv2-core`,
   `hv2-guest-agent`, `hv2-agent`, `hv2-api`). `execute_script` was described in
   four places as running inside the guest and always evaluated a Rhai script on
@@ -183,6 +196,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"simulated": true`, so the two can never be confused.
 
 ### Fixed
+- **`HypervisorPlatform::detect` reported KVM on hosts that could not use it**
+  (`hv2-core`). It tested `Path::new("/dev/kvm").exists()`, which is true
+  wherever the module is loaded -- including the very common case of a user not
+  in the `kvm` group. `detect` then returned `Kvm` and every call after it
+  failed with a permission error naming none of this. It opens the device now,
+  which is the question it was always asking. Verified both ways on one
+  machine: as root `Kvm`, unprivileged `Tcg`. Same shape as
+  `SetInformationJobObject` succeeding not meaning memory is capped.
 - **A container runtime that reported success for things that never happened**
   (`hv2-core`). `ContainerRuntime::start` invented a PID — `1000 + n` — and
   marked the container `Running`, so a caller could not tell it from a working

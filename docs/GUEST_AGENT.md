@@ -140,5 +140,11 @@ tests lay rings out in guest memory and publish descriptors exactly as a driver
 would, so what they support is "the device implements the protocol", not "a
 Linux guest driver talked to it". Note that the two halves have never met: the
 agent was proven over the kernel's own vsock stack, and the device was proven
-against tests. Joining them is the first real boot, which needs a machine with a
-usable hypervisor — see the handoff.
+against tests.
+
+Joining them was described as needing hardware. It does not: `/dev/kvm` is
+available under WSL2 with nested virtualisation, and `examples/boot_probe.rs`
+now creates a KVM VM and vCPUs, loads an image into guest physical memory, runs
+it, and reads back what the guest wrote to COM1. What remains is a guest kernel
+built with `CONFIG_VIRTIO_VSOCKETS` and an initramfs carrying `agentd`, driven
+against `VsockDevice` on the MMIO exit path.
