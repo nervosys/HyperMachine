@@ -193,9 +193,17 @@ async fn the_answer_can_be_computed_without_reading_the_data() {
     .unwrap();
 
     let (program, args) = if cfg!(windows) {
-        ("findstr.exe", vec!["/C:failed"])
+        ("findstr.exe".to_string(), vec!["/C:failed"])
     } else {
-        ("/bin/grep", vec!["-c", "failed"])
+        // Not hardcoded: grep lives in /usr/bin on macOS and /bin on most
+        // Linux distributions, and the sandbox runs a program directly rather
+        // than through a shell, so nothing is going to search a PATH on our
+        // behalf.
+        let grep = ["/bin/grep", "/usr/bin/grep"]
+            .into_iter()
+            .find(|path| std::path::Path::new(path).exists())
+            .expect("a host with no grep anywhere is not one these tests can run on");
+        (grep.to_string(), vec!["-c", "failed"])
     };
 
     let result = call(
@@ -391,6 +399,8 @@ async fn computing_needs_host_execution_as_well_as_context_access() {
         &server,
         &reader,
         "context.exec",
+        // Refused on the capability check, before anything looks for this
+        // program, so the path only has to be plausible.
         json!({ "program": "/bin/echo", "args": ["hi"], "best_effort": true }),
     )
     .await
