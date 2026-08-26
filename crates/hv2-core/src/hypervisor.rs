@@ -62,7 +62,17 @@ impl HypervisorPlatform {
 
     #[cfg(target_os = "linux")]
     fn is_kvm_available() -> bool {
-        std::path::Path::new("/dev/kvm").exists()
+        // Opened, not merely present. `/dev/kvm` exists on any host with the
+        // module loaded, including the common case where the calling user is
+        // not in the `kvm` group -- and there, `exists()` reported Kvm and
+        // every later call failed with a permission error that named none of
+        // this. Falling back to TCG is the honest answer to "can this process
+        // use KVM", which is the question `detect` is actually asking.
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/kvm")
+            .is_ok()
     }
 
     #[cfg(target_os = "windows")]
