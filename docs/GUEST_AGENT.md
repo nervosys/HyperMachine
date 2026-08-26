@@ -112,11 +112,33 @@ A response also keeps an exit code and a terminating signal apart. A program
 killed by SIGKILL did not exit 0, and an API that flattened the two would
 report a crash as a success.
 
-## What has not been verified
+## Checking a guest image
 
-Every test in this stack drives the device the way a driver would — rings laid
-out in guest memory, descriptors published, packets encoded — but no test boots
-a kernel, because no machine in this project has a usable hypervisor yet. What
-the tests support is "the device implements the protocol", not "a Linux guest
-connected to it". The first real boot is the gate; see the handoff for what
-that needs.
+`tools/vsock_probe.py` speaks the protocol to a running agent over a real
+`AF_VSOCK` socket and tells the three failure modes apart — no agent, a version
+mismatch, or an agent that is not answering:
+
+```sh
+sudo modprobe vsock_loopback      # only for a local run
+./hv2-guest-agentd &
+python3 tools/vsock_probe.py 1
+```
+
+It pings, runs a command, checks the output and exit code come back intact, and
+confirms a mismatched protocol version is refused rather than misread.
+
+## What is and is not verified
+
+**The agent half works.** Built and run on Linux 6.18, it binds `AF_VSOCK` port
+1024 (confirmed with `ss --vsock`), accepts a connection, answers a ping,
+executes `/bin/sh -c` and returns stdout with the program's real exit code, and
+refuses a mismatched protocol version. That is the daemon exercised through the
+kernel, not through a test double.
+
+**The device half is not.** No kernel has booted against `VsockDevice`. Its
+tests lay rings out in guest memory and publish descriptors exactly as a driver
+would, so what they support is "the device implements the protocol", not "a
+Linux guest driver talked to it". Note that the two halves have never met: the
+agent was proven over the kernel's own vsock stack, and the device was proven
+against tests. Joining them is the first real boot, which needs a machine with a
+usable hypervisor — see the handoff.

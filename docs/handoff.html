@@ -424,8 +424,13 @@
         <td class="where">Windows host + CI</td>
       </tr>
       <tr>
-        <td class="claim">A Linux guest connects over vsock</td>
-        <td><span class="tag none">not verified</span> no kernel has booted on it</td>
+        <td class="claim">The guest agent answers over vsock</td>
+        <td><span class="tag ran">ran</span> binds port 1024, pings, execs, reports exit 7</td>
+        <td class="where">Linux 6.18, real AF_VSOCK socket</td>
+      </tr>
+      <tr>
+        <td class="claim">A Linux guest driver talks to the device</td>
+        <td><span class="tag none">not verified</span> no kernel has booted on it; the two halves have never met</td>
         <td class="where">needs hardware</td>
       </tr>
       <tr>
@@ -590,7 +595,7 @@ backend: process
   <h2>What to do next</h2>
   <ul>
     <li><strong>Merge #70, then #71.</strong> Order matters — #71 inherits master's Rust 1.98 breakage until #70 lands. Both need one approving review; the admin bypass exists if you want it.</li>
-    <li><strong>Boot a real kernel on the vsock device.</strong> Still the gate on every boot-path claim. WSL2 has no <code>/dev/kvm</code> by default, so this needs a Linux host with KVM, an Intel Mac, or Windows with Hyper-V disabled.</li>
+    <li><strong>Join the two halves.</strong> The agent has been proven over the kernel's own vsock stack and the device against tests; nothing has yet driven one from the other. That is the first real boot, and it still needs a Linux host with KVM, an Intel Mac, or Windows with Hyper-V disabled — WSL2 has a kernel but no <code>/dev/kvm</code>.</li>
     <li><strong>Decide the benchmark question</strong> above, or turn that workflow off rather than leaving a permanently red mark nobody reads.</li>
     <li><strong>Decide on commit signing</strong> as a standing practice, or drop the ruleset requirement that nothing satisfies.</li>
   </ul>
