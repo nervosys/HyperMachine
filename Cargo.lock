@@ -2938,6 +2938,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "criterion",
+ "hv2-context",
  "hv2-core",
  "hv2-guest-agent",
  "hv2-sandbox",
@@ -2946,6 +2947,7 @@ dependencies = [
  "rhai",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -3007,6 +3009,18 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "hv2-context"
+version = "1.1.0"
+dependencies = [
+ "hv2-sandbox",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.20",
+ "tracing",
 ]
 
 [[package]]

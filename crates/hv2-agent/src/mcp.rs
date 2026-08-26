@@ -84,6 +84,7 @@ pub struct McpServer {
     /// installed. That refusal is deliberate: the alternative to confinement
     /// is not "run it anyway", it is "do not run it".
     sandbox_host: RwLock<Option<Arc<dyn crate::sandbox_host::SandboxHost>>>,
+    context_host: RwLock<Option<Arc<dyn crate::context_host::ContextHost>>>,
     /// Where the `image.*` tools read the fleet allowlist.
     ///
     /// `None` leaves those tools reporting that no registry is installed,
@@ -182,6 +183,12 @@ pub enum ToolCategory {
     System,
     /// GPU fabric: device inventory and VM accelerator allocation
     GpuFabric,
+    /// The session record: search, expansion, and what stays in the view.
+    ///
+    /// Filed apart from `System` because none of it touches the machine. An
+    /// agent looking for "what did I already find out" should not have to look
+    /// under host administration.
+    ContextMemory,
     /// Running programs inside a guest operating system.
     ///
     /// Distinct from `System`, which is host administration: an agent looking
@@ -220,6 +227,15 @@ pub enum AgentCapability {
     /// capability that covered both would let an agent granted the safer power
     /// take the more dangerous one.
     HostExec,
+    /// Read and write the session record: search it, expand an address, append
+    /// to it, and decide what stays in the working view.
+    ///
+    /// Gated because a shared log holds everything every session on this
+    /// machine has recorded, and an agent that can search it can read another
+    /// agent's history. `context.exec` needs `HostExec` as well as this one:
+    /// it runs a program on the host, and being able to read the record is not
+    /// a reason to be able to run code.
+    ContextMemory,
     /// Debug/introspect VM
     Debug,
     /// Coordinate with other agents
@@ -283,6 +299,7 @@ impl AgentCapabilities {
                 // Named explicitly because Admin no longer implies it. "Full"
                 // still means full; what changed is that it has to say so.
                 AgentCapability::HostExec,
+                AgentCapability::ContextMemory,
                 AgentCapability::Debug,
                 AgentCapability::Coordination,
                 AgentCapability::Admin,
@@ -402,6 +419,7 @@ impl McpServer {
             vm_host: RwLock::new(None),
             gpu_host: RwLock::new(None),
             sandbox_host: RwLock::new(None),
+            context_host: RwLock::new(None),
             image_host: RwLock::new(None),
             policies: RwLock::new(None),
             concurrency: RwLock::new(None),
@@ -452,6 +470,23 @@ impl McpServer {
     }
 
     /// Let agents run confined workloads through `host`.
+    /// Install the session record the `context.*` tools act on.
+    ///
+    /// Without one those tools refuse. There is no in-memory fallback on
+    /// purpose: a record that accepts every write and loses it is worse than
+    /// none, because an agent recording something important gets a success.
+    pub fn set_context_host(&self, host: Arc<dyn crate::context_host::ContextHost>) {
+        *self.context_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed session record, if there is one.
+    pub fn context_host(&self) -> Option<Arc<dyn crate::context_host::ContextHost>> {
+        self.context_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     pub fn set_sandbox_host(&self, host: Arc<dyn crate::sandbox_host::SandboxHost>) {
         *self.sandbox_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
     }
@@ -559,6 +594,11 @@ impl McpServer {
             "vm.exec" => PolicyAction::GuestExec,
             "sandbox.run" => PolicyAction::HostExec,
             "sandbox.capabilities" => PolicyAction::ResourceRead,
+            "context.exec" => PolicyAction::HostExec,
+            "context.search" | "context.expand" | "context.view" | "context.status" => {
+                PolicyAction::ResourceRead
+            }
+            "context.record" | "context.compact" => PolicyAction::ResourceModify,
             "vm.list" | "vm.status" | "vm.metrics" | "vm.console" | "gpu.list"
             | "snapshot.list" | "agent.list" | "system.info" | "system.health" => {
                 PolicyAction::ResourceRead
@@ -1067,6 +1107,232 @@ impl McpServer {
                 }),
                 category: ToolCategory::Security,
                 required_capabilities: vec![AgentCapability::HostExec],
+                enabled: true,
+            },
+        );
+
+        // Context as an environment: the session record, as something the
+        // agent queries rather than re-reads. See hv2-context.
+        tools.insert(
+            "context.search".to_string(),
+            McpTool {
+                name: "context.search".to_string(),
+                description: "Find where something is recorded in the session log, ranked by \
+                              relevance. Returns addresses and previews, never full content, \
+                              so a search cannot itself fill the context. Use it before \
+                              assuming something is lost: everything evicted from the view is \
+                              still here, word for word, at the address it always had."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Words to look for; an identifier you can spell exactly works best, since nothing here is stemmed"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "How many hits to return, best first; defaults to 8"
+                        },
+                        "session": {
+                            "type": "string",
+                            "description": "Restrict to one session; omit to search every session in this log, including earlier ones"
+                        },
+                        "kind": {
+                            "type": "string",
+                            "description": "Restrict to one kind of event, such as tool_result or plan"
+                        }
+                    },
+                    "required": ["query"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.expand".to_string(),
+            McpTool {
+                name: "context.expand".to_string(),
+                description: "Read a span of the log back exactly as it was recorded, \
+                              externalized payloads included. This is the opposite of a \
+                              summary: what comes back is the original text, not a \
+                              description of it. Set into_view false to read something you \
+                              intend to compute over with context.exec rather than keep."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "from": {
+                            "type": "integer",
+                            "description": "First address, inclusive; the number context.search returns"
+                        },
+                        "to": {
+                            "type": "integer",
+                            "description": "Last address, inclusive; defaults to the same event as from"
+                        },
+                        "into_view": {
+                            "type": "boolean",
+                            "description": "Also put the span back in the working view; defaults to true. False reads without spending context"
+                        }
+                    },
+                    "required": ["from"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.record".to_string(),
+            McpTool {
+                name: "context.record".to_string(),
+                description: "Append something to the session record without putting it in \
+                              the view. For results worth keeping but not worth reading now: \
+                              the whole of a long output you only skimmed, a decision and why, \
+                              a note for a later session. Large text is stored outside the log \
+                              and stays searchable in full. Nothing recorded can later be \
+                              edited or deleted."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "role": {
+                            "type": "string",
+                            "description": "Who this is from: user, assistant, tool or system"
+                        },
+                        "kind": {
+                            "type": "string",
+                            "description": "A short type used to filter later, such as tool_result, plan or note"
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "The content, recorded whole however long it is"
+                        }
+                    },
+                    "required": ["role", "kind", "text"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.exec".to_string(),
+            McpTool {
+                name: "context.exec".to_string(),
+                description: "Run a program over what you retrieved, confined, and get back \
+                              only what it printed. This is how to answer a question about a \
+                              large result without reading the result: expand it with \
+                              into_view false, write it to the workspace, and compute. The \
+                              workspace survives between calls; nothing else does, since every \
+                              call is a fresh process. Needs the host-execution capability as \
+                              well as context access, because this runs on the host."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Program to run, directly rather than through a shell"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Arguments, already split; nothing here parses a command line"
+                        },
+                        "stdin": {
+                            "type": "string",
+                            "description": "Text written to the program standard input, which is how to hand it retrieved content without a file"
+                        },
+                        "best_effort": {
+                            "type": "boolean",
+                            "description": "Run with whatever confinement this host can enforce instead of refusing; read `unenforced` in the result for what was dropped. Needed where a default cannot be met, such as network isolation on Windows"
+                        }
+                    },
+                    "required": ["program"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![
+                    AgentCapability::ContextMemory,
+                    AgentCapability::HostExec,
+                ],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.compact".to_string(),
+            McpTool {
+                name: "context.compact".to_string(),
+                description: "Bring the working view back inside its budget: persist \
+                              everything, replace old tool payloads with their addresses, and \
+                              evict the oldest span, leaving behind the headline you supply. \
+                              Write that headline for whoever arrives next with none of your \
+                              context. Nothing is deleted; the evicted span keeps its \
+                              addresses and context.expand still returns it in full. If \
+                              within_budget comes back false the view could not be shrunk \
+                              further without dropping the current turn."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "task": {
+                            "type": "string",
+                            "description": "What the span being evicted was about, in a line"
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "What is known to be true afterwards: what was checked, not what was hoped"
+                        },
+                        "next_action": {
+                            "type": "string",
+                            "description": "What the next step was going to be"
+                        },
+                        "status": {
+                            "type": "string",
+                            "description": "done, failed, abandoned or in_progress; defaults to in_progress, because unfinished work recorded as done is the one error reading cannot catch"
+                        }
+                    },
+                    "required": ["task", "state", "next_action"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.view".to_string(),
+            McpTool {
+                name: "context.view".to_string(),
+                description: "Show the working view as it stands, with the index of \
+                              everything that has left it. The index comes first and lists \
+                              the addresses of evicted spans, so what is missing is visible \
+                              rather than merely absent."
+                    .to_string(),
+                parameters: json!({ "type": "object", "properties": {} }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.status".to_string(),
+            McpTool {
+                name: "context.status".to_string(),
+                description: "How large the record is, how much of the budget the view is \
+                              using, and whether a confined runtime is installed for \
+                              context.exec. Ask before planning around exec: if runtime is \
+                              absent, there is nowhere to compute and the call will refuse."
+                    .to_string(),
+                parameters: json!({ "type": "object", "properties": {} }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
                 enabled: true,
             },
         );
@@ -2363,6 +2629,87 @@ impl McpServer {
         })
     }
 
+    /// Run a `context.*` tool against an installed
+    /// [`ContextHost`](crate::context_host::ContextHost).
+    ///
+    /// Returns `None` for tools this host has nothing to do with, so the
+    /// caller falls through to the rest of the surface unchanged.
+    ///
+    /// The capability check has already happened by the time this runs.
+    async fn dispatch_to_context_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+    ) -> Option<Result<JsonValue, String>> {
+        if !tool_name.starts_with("context.") {
+            return None;
+        }
+
+        let Some(host) = self.context_host() else {
+            return Some(Err(
+                "no context host is installed, so there is no session record to search, \
+                 expand or append to. Install one with McpServer::set_context_host"
+                    .to_string(),
+            ));
+        };
+
+        // Deserialize rather than pick fields out by hand: an unknown field is
+        // then a request this surface does not understand, and quietly
+        // ignoring one that looked like a filter is how a search comes back
+        // scoped to more than the caller asked for.
+        Some(match tool_name {
+            "context.search" => {
+                match serde_json::from_value::<crate::context_host::SearchRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.search request: {e}")),
+                    Ok(request) => host
+                        .search(request)
+                        .await
+                        .and_then(|hits| serde_json::to_value(hits).map_err(|e| e.to_string())),
+                }
+            }
+            "context.expand" => {
+                match serde_json::from_value::<crate::context_host::ExpandRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.expand request: {e}")),
+                    Ok(request) => host
+                        .expand(request)
+                        .await
+                        .and_then(|events| serde_json::to_value(events).map_err(|e| e.to_string())),
+                }
+            }
+            "context.record" => {
+                match serde_json::from_value::<crate::context_host::RecordRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.record request: {e}")),
+                    Ok(request) => host.record(request).await.map(|seq| json!({ "seq": seq })),
+                }
+            }
+            "context.exec" => {
+                match serde_json::from_value::<crate::context_host::ExecRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.exec request: {e}")),
+                    Ok(request) => host
+                        .exec(request)
+                        .await
+                        .and_then(|result| serde_json::to_value(result).map_err(|e| e.to_string())),
+                }
+            }
+            "context.compact" => {
+                match serde_json::from_value::<crate::context_host::CompactRequest>(params.clone())
+                {
+                    Err(e) => Err(format!("invalid context.compact request: {e}")),
+                    Ok(request) => host
+                        .compact(request)
+                        .await
+                        .and_then(|result| serde_json::to_value(result).map_err(|e| e.to_string())),
+                }
+            }
+            "context.view" => host.render().await.map(|text| json!({ "view": text })),
+            "context.status" => host
+                .status()
+                .await
+                .and_then(|status| serde_json::to_value(status).map_err(|e| e.to_string())),
+            other => Err(format!("unknown context tool {other}")),
+        })
+    }
+
     /// Run a GPU tool against an installed [`GpuHost`](crate::gpu_host::GpuHost).
     ///
     /// Returns `None` when there is no host or the tool has no host equivalent,
@@ -2524,6 +2871,9 @@ impl McpServer {
             return result;
         }
         if let Some(result) = self.dispatch_to_sandbox_host(tool_name, params).await {
+            return result;
+        }
+        if let Some(result) = self.dispatch_to_context_host(tool_name, params).await {
             return result;
         }
 

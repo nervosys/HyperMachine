@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Context as an environment** (`hv2-context`, `hv2-agent`). An agent's history
+  is normally kept by putting it back in the prompt, which forces the decision
+  about what matters to be made at *write* time: when a tool returns 40 MB,
+  something has to choose what to keep before anyone knows what the next
+  question will be, and whatever it discards is gone. The new crate implements
+  the alternative from Scroll (arXiv:2608.21690) -- keep the history outside the
+  context, as something the agent queries -- built on one invariant: **eviction
+  changes the view and never the record**. `EventLog` is append-only and offers
+  no operation that edits or removes an event, not as discipline but as absent
+  API; every event has a `Seq` that never changes and never repeats. Payloads
+  over 8 KiB move to a `PayloadStore` behind a handle, and are still indexed and
+  searchable by their whole content rather than by the preview the log keeps.
+  `SearchIndex` ranks with BM25 and returns addresses and previews, never
+  content. `WorkingView::evict` persists before it selects -- so nothing can
+  leave before it is addressable -- then protects the active turn and the recent
+  tail, folds unprotected tool payloads down to their addresses, and only then
+  evicts, leaving a `Headline` in a tiered `EvictionIndex` that keeps recent
+  history detailed, coarsens distant history, and carries the exact span at
+  every tier. `ContextRuntime` is somewhere to compute over what was retrieved
+  under `hv2-sandbox`, so the answer comes back instead of the data. Exposed as
+  seven MCP tools -- `context.search`, `expand`, `record`, `exec`, `compact`,
+  `view`, `status` -- dispatched against a `ContextHost` the way `sandbox.*`
+  dispatches against a `SandboxHost`; with none installed they refuse, because a
+  record that accepts every write and loses it is worse than none. `context.exec`
+  needs `HostExec` as well as the new `ContextMemory` capability: being able to
+  read the record is not a reason to run code on the machine holding it. The
+  runtime is a confined process with a durable workspace and not a resident
+  namespace -- files persist between calls, variables do not -- and
+  `docs/CONTEXT_AS_ENVIRONMENT.md` says so alongside the rest of what is not
+  built.
 - **A guest executed** (`hv2-core`). The boot path had only ever been
   type-checked: `VM::provision`, `load_boot` and `launch` were described as
   creating a hypervisor VM, writing an image into guest physical memory and
@@ -196,6 +226,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"simulated": true`, so the two can never be confused.
 
 ### Fixed
+- **A search hit returned the whole payload when it happened to be small**
+  (`hv2-context`, found by its own integration test). Previews were bounded in
+  the payload store and nowhere else, so an inline payload -- anything under the
+  8 KiB externalization threshold -- came back from `search` in full, once per
+  hit. A search over a long session was then as expensive as re-reading it,
+  which is the exact cost the crate exists to avoid. The index bounds previews
+  itself now, whatever the storage decided.
 - **A Linux kernel was handed no memory map and no CPU** (`hv2-core`).
   `BootSource::Linux` has always described itself as implementing the Linux
   boot protocol. Running one found two pieces of it missing. `boot_params`

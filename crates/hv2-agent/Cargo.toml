@@ -15,6 +15,7 @@ description = "HyperMachine AI agent interface with MCP server"
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
 hv2-guest-agent = { path = "../hv2-guest-agent", version = "1.1.0" }
 hv2-sandbox = { path = "../hv2-sandbox", version = "1.1.0" }
+hv2-context = { path = "../hv2-context", version = "1.1.0" }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
@@ -41,6 +42,7 @@ wasm-scripts = ["dep:wasmtime", "dep:wasmtime-wasi"]
 # seccompiler = "0.4"
 
 [dev-dependencies]
+tempfile = "3.10"
 proptest = { workspace = true }
 tracing-subscriber = { workspace = true }
 criterion = { workspace = true }

@@ -41,6 +41,7 @@ pub mod actions;
 pub mod agent_vm;
 pub mod capabilities;
 pub mod communication;
+pub mod context_host;
 pub mod events;
 pub mod gpu_host;
 pub mod guest_agent;
