@@ -392,6 +392,53 @@ mod tests {
         ));
     }
 
+    /// Turns this test binary into an allocator when the memory-limit test
+    /// re-executes it.
+    ///
+    /// The workload has to fit under the cap it is testing. PowerShell, which
+    /// this used to run, spends most of a 256 MiB budget starting up, and on a
+    /// cold CI runner it spent the whole wall-clock deadline doing so -- a
+    /// timeout that said nothing either way about the memory limit.
+    #[cfg(windows)]
+    const ALLOC_HELPER_BYTES: &str = "HV2_SANDBOX_ALLOC_HELPER_BYTES";
+
+    #[cfg(windows)]
+    #[test]
+    fn alloc_helper() {
+        // Does nothing when run as an ordinary test. Under the variable it is
+        // the workload: ask Windows to commit the requested bytes and say
+        // which answer came back. `try_reserve_exact` rather than a plain
+        // allocation, so a refusal is a value this process can print instead
+        // of an abort with nothing in it to assert on.
+        let Ok(requested) = std::env::var(ALLOC_HELPER_BYTES) else {
+            return;
+        };
+        let bytes: usize = requested.parse().expect("a byte count");
+        let mut buffer: Vec<u8> = Vec::new();
+        match buffer.try_reserve_exact(bytes) {
+            Ok(()) => println!("COMMITTED {bytes}"),
+            Err(err) => eprintln!("REFUSED {bytes}: {err}"),
+        }
+    }
+
+    /// Run [`alloc_helper`] confined to `cap` bytes, asking it for `ask`.
+    #[cfg(windows)]
+    fn allocate_confined(sandbox: &ProcessSandbox, cap: u64, ask: usize) -> SandboxOutput {
+        let exe = std::env::current_exe().expect("this test binary's own path");
+        let command = SandboxCommand::new(exe.to_string_lossy())
+            .args(["--exact", "process::tests::alloc_helper", "--nocapture"])
+            .env(ALLOC_HELPER_BYTES, ask.to_string())
+            .env("SystemRoot", r"C:\Windows")
+            .env("PATH", r"C:\Windows\System32");
+        let spec = SandboxSpec {
+            memory_bytes: Some(cap),
+            wall_clock: Some(Duration::from_secs(60)),
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+        sandbox.run(&command, &spec).expect("run")
+    }
+
     #[cfg(windows)]
     #[test]
     fn a_memory_limit_stops_the_workload_allocating_past_it() {
@@ -406,41 +453,22 @@ mod tests {
             return;
         }
 
-        let command = SandboxCommand::new("powershell.exe")
-            .args([
-                "-NoProfile",
-                "-Command",
-                // Well past the 256 MiB cap below, and far enough past it that
-                // PowerShell's own footprint cannot explain the outcome.
-                "$a = New-Object byte[] 1073741824; $a.Length",
-            ])
-            .env("SystemRoot", r"C:\Windows")
-            .env(
-                "PATH",
-                r"C:\Windows\System32;C:\Windows\System32\WindowsPowerShell1.0",
-            );
-        let spec = SandboxSpec {
-            memory_bytes: Some(256 * 1024 * 1024),
-            wall_clock: Some(Duration::from_secs(30)),
-            network: NetworkPolicy::Host,
-            ..SandboxSpec::default()
-        };
+        const ASK: usize = 512 * 1024 * 1024;
 
-        let output = sandbox.run(&command, &spec).expect("run");
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        // The exit code is not the evidence here, and assuming it was is how
-        // this test failed the first time: PowerShell catches the allocation
-        // failure, reports it, and still exits 0. What the kernel did is
-        // visible in the refusal itself.
+        let capped = allocate_confined(&sandbox, 128 * 1024 * 1024, ASK);
         assert!(
-            stderr.contains("OutOfMemoryException"),
-            "the allocation should have been refused by the job limit: {output:?}"
+            String::from_utf8_lossy(&capped.stderr).contains("REFUSED"),
+            "the allocation should have been refused by the job limit: {capped:?}"
         );
+
+        // The other direction, and the reason this is evidence rather than a
+        // coincidence: the same request under a cap above it is granted. A
+        // one-sided test also passes on a machine that simply had no memory to
+        // spare, which would say nothing about whether the cap did anything.
+        let roomy = allocate_confined(&sandbox, 2 * 1024 * 1024 * 1024, ASK);
         assert!(
-            !stdout.contains("1073741824"),
-            "the allocation reported its length, so the cap did not bind: {output:?}"
+            String::from_utf8_lossy(&roomy.stdout).contains("COMMITTED"),
+            "the same request under a larger cap should have been granted: {roomy:?}"
         );
     }
 
