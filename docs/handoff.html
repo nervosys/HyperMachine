@@ -439,6 +439,26 @@
         <td class="where">needs a guest kernel with virtio-vsock, not hardware</td>
       </tr>
       <tr>
+        <td class="claim">The Linux boot protocol is implemented</td>
+        <td><span class="tag none">not verified</span> e820 map and vCPU CPUID were both missing and are now present; a real bzImage reaches the kernel and triple-faults, so something further is still wrong</td>
+        <td class="where">WSL2 + KVM, <code>examples/linux_boot_probe.rs</code></td>
+      </tr>
+      <tr>
+        <td class="claim">32-bit protected-mode entry state is correct</td>
+        <td><span class="tag ran">ran</span> a hand-assembled image entered at 1 MB executes and drives COM1</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">Evicted context is recoverable word for word</td>
+        <td><span class="tag ran">ran</span> 49 unit tests + 11 through the MCP surface; search finds it, expand returns the original</td>
+        <td class="where">Windows host + WSL2 Debian</td>
+      </tr>
+      <tr>
+        <td class="claim">Context runtime is a resident namespace</td>
+        <td><span class="tag none">not built</span> a confined process with a durable workspace; files persist between calls, variables do not</td>
+        <td class="where">trait, so a kernel backend can slot in</td>
+      </tr>
+      <tr>
         <td class="claim">Filesystem isolation (process backend)</td>
         <td><span class="tag none">not built</span> deliberately unimplemented</td>
         <td class="where">use the microVM backend</td>
