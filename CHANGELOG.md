@@ -8,6 +8,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A guest can be reached, and a command can be run inside it** (`hv2-core`,
+  `hv2-guest-agent`, `hv2-agent`, `hv2-api`). `execute_script` was described in
+  four places as running inside the guest and always evaluated a Rhai script on
+  the host; the engine was never the problem, because nothing in the repo could
+  reach a guest at all. Every virtio device kept its descriptor table in host
+  `Vec`s a test filled in, and no virtio register file was ever mapped into
+  guest physical address space. Three pieces close that: `GuestQueue` reads the
+  descriptor, available and used rings out of guest memory, bounding every
+  guest-written field (a chain that cycles is refused, an index past the table
+  errors, indirect tables may not nest, a chain may not claim more than 64 MiB);
+  `VirtioMmioTransport` is a virtio-mmio v2 register file implementing `Device`,
+  so `register_mmio_region` puts it on the MMIO exit path `VM::run` already
+  takes; and `VsockDevice` carries the connection state machine and credit
+  accounting, both bounded. The new `hv2-guest-agent` crate holds the wire
+  protocol and the in-guest binary that answers it, `GuestAgent` is the host
+  client, and `AgentVM::exec_in_guest` is the operation an agent calls —
+  surfaced as the `vm.exec` MCP tool and `POST /api/v1/vms/{id}/exec`. Four
+  ways of having no guest to run in each fail as themselves rather than as a
+  timeout, because an agent that receives a timeout when the real problem is a
+  missing device retries forever. Gated on `Capability::GuestExec`, which
+  existed and had never been consulted.
+- **Confinement the operating system enforces** (`hv2-sandbox`, `hv2-agent`).
+  Two things here were named like sandboxes and confined nothing: `hv2-agent`'s
+  `Sandbox` says so in its own docs, and `hv2-core::container` was 3,866 lines
+  of namespace, cgroup and seccomp types whose `start` fabricated a PID. A
+  repo-wide search for `seccomp|setrlimit|unshare|prctl|CreateJobObject` found
+  prose and struct fields, and not one confinement syscall. The new crate is
+  built on one rule: silently dropping a control is worse than no sandbox,
+  because a caller who asked for no network and got one believes the opposite
+  of the truth. `Sandbox::controls()` reports what *this host* enforces, probed
+  by attempting each control rather than assumed; a spec asking for something
+  the backend lacks is refused, naming the control and why it is unavailable;
+  and `best_effort()` is an explicit opt-in whose result reports what was
+  dropped. Two backends behind one trait — `ProcessSandbox` (cgroup v2,
+  namespaces, `RLIMIT_*` and `no_new_privs` on Linux; job objects on Windows;
+  resource limits and an honest refusal elsewhere) and `MicroVmSandbox`, which
+  gets the controls no host kernel gives an unprivileged process by having a
+  different kernel. Exposed to agents as `sandbox.run` and
+  `sandbox.capabilities`, dispatched against a `SandboxHost` the way `vm.*`
+  dispatches against a `VmHost`; with no host installed the tools refuse,
+  because the alternative to confinement is not running the program unconfined.
+  See `docs/SANDBOXES.md` and `docs/GUEST_AGENT.md`.
 - **Boot sources — a VM can now be told what to boot** (`hv2-core`): the new
   `BootSource` (`boot::source`) describes a Linux bzImage (with optional initrd
   and command line), a Multiboot kernel, or a raw image, and resolves to a
@@ -110,6 +152,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **`Admin` no longer implies `HostExec`** (`hv2-agent`). Every other capability
+  is implied by the `Admin` wildcard, and every other tool acts on VMs the
+  server manages; `sandbox.run` acts on the machine the server runs on. Leaving
+  it in the wildcard would have granted host execution to every session already
+  holding `Admin` the moment the tool shipped — a privilege expansion nobody
+  would have written down. `AgentCapabilities::full()` now names it explicitly,
+  so "full" still means full. `PolicyAction::HostExec` and
+  `ToolCategory::GuestExecution` are likewise separate from their guest-side
+  counterparts: a program in a guest cannot reach the host, and one on the host
+  can, however well confined.
 - **Documented the agent enforcement boundary** (`hv2-agent`, `hv2-api`). An
   audit of the security-shaped types found several that decide but never
   intercept, described as though they were active. `limits` claimed "real-time
@@ -131,6 +183,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"simulated": true`, so the two can never be confused.
 
 ### Fixed
+- **A container runtime that reported success for things that never happened**
+  (`hv2-core`). `ContainerRuntime::start` invented a PID — `1000 + n` — and
+  marked the container `Running`, so a caller could not tell it from a working
+  runtime: the state was right, the PID was plausible, and nothing was confined
+  or even executing. Writing the test for that turned up the same defect beside
+  it: `kill()` returned `Ok(())` for a container in any state other than
+  `Running`, reporting a signal delivered to a process that did not exist. Both
+  refuse now, and the module says plainly that it models the OCI spec without
+  implementing it. `Container::start` is unchanged and stays honest — it takes a
+  PID from its caller, so whoever supplies one is the party that knows it is
+  real.
+- **The Linux sandbox claimed isolation the workload could see through**
+  (`hv2-sandbox`). Found by running it on a real kernel rather than
+  cross-compiling for one. `/proc` and `/sys` are not ordinary directories —
+  each is a view of the namespace it was *mounted in* — so an inherited pair
+  left a workload correctly PID 1 in its own namespace while it enumerated 48
+  host processes, and showed only loopback on netlink while `/sys/class/net`
+  listed the host's interfaces. "Cannot signal" was true and "cannot see" was
+  not. Both namespaces now carry `CLONE_NEWNS` and remount the filesystem that
+  describes them, and both probes rehearse the remount rather than only the
+  `unshare`.
+- **`best_effort` attempted controls the probe had already refused**
+  (`hv2-sandbox`). On a host without cgroup delegation it promised to run with
+  whatever was available and then failed trying to create a cgroup its own
+  probe had reported unavailable. `Sandbox::run` now filters the spec through
+  `SandboxSpec::without_controls` before handing it to a backend, so no backend
+  can attempt a control its probe rejected.
 - **Boot admission was decided after the backend had already been asked for a
   partition** (`hv2-core`). `VM::provision` called `backend.create_vm` first, so
   a refused image had still cost hypervisor resources — and on a host where
@@ -198,6 +277,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `-D warnings` clean build on every supported target.
 
 ### CI
+- **Three workflow steps that had never run once** were repaired. `Miri` asked
+  for the `miri` component on the *stable* toolchain: the job installs nightly,
+  but `rust-toolchain.toml` pins `channel = "stable"` and overrides whatever the
+  action installed, so bare `cargo miri` ran on a toolchain that never ships it
+  — the same fix the HV1 jobs already carry. `Coverage` and `Benchmarks` both
+  died before doing any work because `hv2-api`'s build script runs `prost-build`
+  and neither workflow installed `protoc`, which every building job in `ci.yml`
+  does. The `CLA` check pinned `contributor-assistant/github-action@v2`, a tag
+  that does not exist — the action publishes only `vX.Y.Z` — so it failed to
+  resolve on every pull request; note that repairing it makes an inert check
+  enforce again. `Benchmarks` remains red for a separate reason: the action is
+  configured with `tool: 'cargo'`, which parses libtest format, and the repo's
+  benches are criterion, which does not emit it — `--output-format bencher` is
+  not the fix, as it prints no `test <name>` prefix.
+
 
 Master had been red since June, for reasons predating this work. Six
 failures were stacked behind one another, each hidden by the one in front:
