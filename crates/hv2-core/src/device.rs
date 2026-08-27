@@ -47,6 +47,18 @@ pub trait Device: Send + Sync {
     /// Shutdown the device
     async fn shutdown(&mut self) -> Result<()>;
 
+    /// The interrupt line this device is asserting right now, if any.
+    ///
+    /// Polled after every access, because that is when a device's interrupt
+    /// condition changes: a UART becomes ready to send the moment the guest
+    /// writes a byte, and has something to report the moment one arrives.
+    ///
+    /// `None` -- the default -- means this device never interrupts, which is
+    /// true of most of them and is why this is not a required method.
+    fn pending_interrupt(&self) -> Option<u8> {
+        None
+    }
+
     /// Console bytes this device has buffered for the host to read, if it is
     /// the kind of device a guest writes a console to.
     ///
@@ -366,6 +378,10 @@ impl MmioDeviceHandle {
         let data = value.to_le_bytes();
         device.write(offset, &data[..width]).await
     }
+    /// The interrupt line this device is asserting, if any.
+    pub async fn pending_interrupt(&self) -> Option<u8> {
+        self.device.read().await.pending_interrupt()
+    }
 }
 
 /// Handle for I/O port device access
@@ -414,6 +430,11 @@ impl IoDeviceHandle {
         let mut device = self.device.write().await;
         let data = value.to_le_bytes();
         device.write(offset, &data[..width]).await
+    }
+
+    /// The interrupt line this device is asserting, if any.
+    pub async fn pending_interrupt(&self) -> Option<u8> {
+        self.device.read().await.pending_interrupt()
     }
 }
 

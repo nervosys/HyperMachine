@@ -366,6 +366,28 @@ impl Device for SerialDevice {
         Ok(())
     }
 
+    fn pending_interrupt(&self) -> Option<u8> {
+        // A 16550 asserts its line while an enabled source is active, and the
+        // guest's driver reads IIR to find out which. Two matter here:
+        //
+        // - THRE, "ready to send". This device transmits the instant the guest
+        //   writes THR, so it is *always* ready -- and that is exactly why the
+        //   interrupt is needed. The tty layer sends one byte, then waits to be
+        //   told it may send the next. Without this, a guest's kernel messages
+        //   appear (printk polls the line-status register) and everything from
+        //   userspace, which goes through the tty layer, silently does not.
+        // - RDA, "data to read", when input is waiting.
+        let ier = *self.ier.lock();
+
+        if (ier & IER_RDA) != 0 && !self.rx_buffer.lock().is_empty() {
+            return Some(self.irq_number);
+        }
+        if (ier & IER_THRE) != 0 {
+            return Some(self.irq_number);
+        }
+        None
+    }
+
     async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
         // A wide access reads consecutive registers, which is what the
         // hardware does: a 16550 register file is byte-wide, and an `inw` at
@@ -799,5 +821,44 @@ mod tests {
         let mut byte = [0u8; 1];
         serial.read(RBR_OFFSET, &mut byte).await.unwrap();
         assert_eq!(byte[0], 0, "the receive FIFO should be empty");
+    }
+    #[tokio::test]
+    async fn a_quiet_uart_asserts_no_interrupt_line() {
+        // The guest decides. Asserting a line it never enabled would deliver
+        // interrupts to a driver that is not expecting them.
+        let serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        assert_eq!(serial.pending_interrupt(), None);
+    }
+
+    #[tokio::test]
+    async fn enabling_the_transmit_interrupt_asserts_the_line() {
+        // This device transmits the instant the guest writes THR, so it is
+        // always ready to send -- which is exactly why the interrupt matters.
+        // The tty layer sends one byte and then waits to be told it may send
+        // the next; without this it waits forever, which is why a guest's
+        // printk output appears (printk polls) and its userspace output does
+        // not.
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        serial.write(IER_OFFSET, &[IER_THRE]).await.unwrap();
+        assert_eq!(serial.pending_interrupt(), Some(4), "COM1 is IRQ 4");
+    }
+
+    #[tokio::test]
+    async fn the_receive_interrupt_waits_for_actual_input() {
+        // Enabled but idle must not assert: a line held high with nothing to
+        // report is an interrupt storm.
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        serial.write(IER_OFFSET, &[IER_RDA]).await.unwrap();
+        assert_eq!(serial.pending_interrupt(), None, "no input yet");
+
+        serial.input(b"x").unwrap();
+        assert_eq!(serial.pending_interrupt(), Some(4));
+    }
+
+    #[tokio::test]
+    async fn com2_asserts_its_own_line() {
+        let mut serial = SerialDevice::new("COM2".to_string(), 0x2F8);
+        serial.write(IER_OFFSET, &[IER_THRE]).await.unwrap();
+        assert_eq!(serial.pending_interrupt(), Some(3), "COM2 is IRQ 3");
     }
 }

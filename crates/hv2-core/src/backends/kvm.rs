@@ -564,6 +564,21 @@ impl HypervisorBackend for KvmBackend {
         })
     }
 
+    async fn set_irq_line(&self, irq: u32, level: bool) -> Result<()> {
+        let kvm_vm = self
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| {
+                Error::Hypervisor(
+                    "no KVM VM — create_vm must run before an IRQ can be raised".into(),
+                )
+            })?;
+
+        kvm_vm.irq_line(irq, u32::from(level))
+    }
+
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down KVM backend");
 

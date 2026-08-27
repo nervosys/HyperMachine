@@ -450,8 +450,13 @@
       </tr>
       <tr>
         <td class="claim">Userspace output reaches the console</td>
-        <td><span class="tag none">not verified</span> the tty layer needs a transmit interrupt, and with an in-kernel irqchip that needs KVM_IRQ_LINE; neither half is built</td>
-        <td class="where">next step</td>
+        <td><span class="tag none">not verified</span> init's write to /dev/console returns the full count and the bytes never arrive; the guest writes IER=0 and never sets MCR OUT2, so it runs the port without interrupts</td>
+        <td class="where">still open</td>
+      </tr>
+      <tr>
+        <td class="claim">A device interrupt reaches a guest</td>
+        <td><span class="tag none">not verified</span> KVM_IRQ_LINE is wired and unit-tested, but no guest has enabled a source, so nothing has delivered one</td>
+        <td class="where">plumbing built, delivery unproven</td>
       </tr>
       <tr>
         <td class="claim">Filesystem isolation (process backend)</td>

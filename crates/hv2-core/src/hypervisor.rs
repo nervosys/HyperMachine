@@ -287,6 +287,31 @@ pub trait HypervisorBackend: Send + Sync {
         )))
     }
 
+    /// Assert or deassert a device interrupt line.
+    ///
+    /// `irq` is the line number as the guest's interrupt controller sees it --
+    /// 4 for COM1, and so on. `level` true asserts, false deasserts.
+    ///
+    /// This is how a device interrupt reaches a guest whose interrupt
+    /// controller lives inside the hypervisor. It is emphatically *not* the
+    /// same as [`Self::inject_interrupt`], which hands a vector straight to the
+    /// vCPU: that bypasses the controller entirely, so it ignores masking and
+    /// priority and is wrong whenever an in-kernel irqchip exists.
+    ///
+    /// # Errors
+    ///
+    /// The default implementation reports [`Error::NotSupported`], because a
+    /// backend that cannot deliver a device interrupt should say so rather
+    /// than accept the call and drop it -- a dropped interrupt looks like a
+    /// device that never raised one.
+    async fn set_irq_line(&self, irq: u32, level: bool) -> Result<()> {
+        let _ = (irq, level);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot drive an interrupt line",
+            self.platform()
+        )))
+    }
+
     /// Shutdown the hypervisor
     async fn shutdown(&mut self) -> Result<()>;
 

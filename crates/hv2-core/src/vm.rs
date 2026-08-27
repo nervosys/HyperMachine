@@ -238,6 +238,19 @@ struct VCpuTaskState {
     handle: JoinHandle<Result<()>>,
 }
 
+/// What one I/O access produced.
+///
+/// Two separate things, and conflating them is how a device interrupt gets
+/// dropped: the data an `IN` read, and the interrupt line the device is
+/// asserting as a result of the access.
+#[derive(Debug, Default)]
+pub struct IoOutcome {
+    /// Data and width to write back to the guest, for an `IN`.
+    pub input: Option<(u32, u8)>,
+    /// The interrupt line the device is asserting, if any.
+    pub interrupt: Option<u8>,
+}
+
 /// Virtual Machine
 pub struct VM {
     config: VMConfig,
@@ -1317,8 +1330,12 @@ impl VM {
                 .await?;
 
                 // Write IO IN data back to guest RAX
-                if let Some((in_data, in_size)) = io_result {
+                if let Some((in_data, in_size)) = io_result.input {
                     backend.set_io_result(vcpu, in_data, in_size).await?;
+                }
+
+                if let Some(irq) = io_result.interrupt {
+                    Self::pulse_irq(backend, irq).await;
                 }
 
                 Ok(true)
@@ -1508,6 +1525,28 @@ impl VM {
     ///
     /// Returns `Some((data, size))` for IO IN operations so the caller can
     /// write the result back to guest RAX via `set_io_result()`.
+    /// Assert an interrupt line and release it again.
+    ///
+    /// A pulse rather than a level, because the conditions this is called for
+    /// are edges in practice: a UART that transmits instantly is *always*
+    /// ready to send, so holding the line high would assert it forever and the
+    /// guest would take the same interrupt until it masked the source.
+    ///
+    /// A backend that cannot drive a line is not an error worth stopping a VM
+    /// for -- it means this guest gets no device interrupts, which is the
+    /// situation that already existed -- so it is logged once per access at
+    /// debug level and the guest runs on.
+    async fn pulse_irq(backend: &dyn HypervisorBackend, irq: u8) {
+        let line = u32::from(irq);
+        if let Err(e) = backend.set_irq_line(line, true).await {
+            tracing::debug!("IRQ {line} could not be asserted: {e}");
+            return;
+        }
+        if let Err(e) = backend.set_irq_line(line, false).await {
+            tracing::debug!("IRQ {line} could not be released: {e}");
+        }
+    }
+
     async fn handle_io_static(
         port: u16,
         direction: IoDirection,
@@ -1517,32 +1556,42 @@ impl VM {
         devices: &DeviceManager,
         pic: &Pic8259,
         event_bus: &EventBus,
-    ) -> Result<Option<(u32, u8)>> {
+    ) -> Result<IoOutcome> {
         match direction {
             IoDirection::Out => {
                 tracing::debug!("IO OUT: port={:#x} data={:#x}", port, data);
 
+                let mut interrupt = None;
                 if pic.handles_port(port) {
                     pic.write_port(port, data as u8).await?;
                 } else if let Some(device) = devices.find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
                     device.write_register(offset, data, size).await?;
+                    // Asked immediately after the access, because that is when
+                    // the condition changes: writing a byte to a UART makes it
+                    // ready to send the next one.
+                    interrupt = device.pending_interrupt().await;
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
                 }
 
                 event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, true));
-                Ok(None)
+                Ok(IoOutcome {
+                    input: None,
+                    interrupt,
+                })
             }
 
             IoDirection::In => {
                 tracing::debug!("IO IN: port={:#x}", port);
 
+                let mut interrupt = None;
                 if pic.handles_port(port) {
                     data = pic.read_port(port).await? as u32;
                 } else if let Some(device) = devices.find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
                     data = device.read_register(offset, size).await?;
+                    interrupt = device.pending_interrupt().await;
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
                     data = 0xFF;
@@ -1550,7 +1599,10 @@ impl VM {
 
                 event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, false));
                 tracing::debug!("IO IN result: {:#x}", data);
-                Ok(Some((data, size)))
+                Ok(IoOutcome {
+                    input: Some((data, size)),
+                    interrupt,
+                })
             }
         }
     }

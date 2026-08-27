@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Device interrupts have a path to the guest** (`hv2-core`).
+  `HypervisorBackend::set_irq_line` asserts and releases a line through the
+  interrupt controller, which for KVM means `KVM_IRQ_LINE` on a
+  `KvmVm::irq_line` that had been written and never called. It is deliberately
+  not `inject_interrupt`: that hands a vector straight to the vCPU, bypassing
+  the controller's masking and priority, and is wrong whenever an in-kernel
+  irqchip exists. `Device::pending_interrupt` lets a device report the line it
+  is asserting, polled after every access because that is when the condition
+  changes, and `SerialDevice` implements the 16550's two sources. A backend
+  that cannot drive a line says so rather than accepting the call and dropping
+  it.
 - **A guest reaches userspace** (`hv2-core`). The kernel boots, unpacks an
   initramfs, and executes a statically linked binary as PID 1 inside the guest.
   The proof is the kernel's own: an init that returns 42 produces
@@ -260,6 +271,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the interrupt would go to a `Pic8259` the guest never reads: with KVM's
   in-kernel irqchip the guest's PIC lives in the kernel, so injection has to go
   through `KVM_IRQ_LINE`. Both halves are needed and neither is built.
+
+### Known gaps
+- **Userspace output still does not reach the console, and the interrupt path
+  above is not why.** What is now established: a guest reaches userspace, its
+  init opens `/dev/console` and its `write` returns the full byte count -- the
+  tty layer accepts the data. It never reaches the device, and it does not
+  arrive after eight seconds of waiting either, so nothing is merely slow. The
+  guest writes `IER = 0` every time and never sets the `OUT2` bit in `MCR`,
+  which is the gate that gets a UART's interrupt onto the line at all -- so it
+  is running the port unattended by interrupts and the new injection path is
+  never exercised. Whether that is the driver's IRQ autoconfiguration having
+  already failed, or something about how the port is registered, is not yet
+  known. The interrupt plumbing is unit-tested and has **not** been shown to
+  deliver an interrupt to a guest; it is a prerequisite that was missing, not
+  a fix that was verified.
 
 ### Fixed
 - **The initrd was placed where the kernel unpacks itself** (`hv2-core`). It
