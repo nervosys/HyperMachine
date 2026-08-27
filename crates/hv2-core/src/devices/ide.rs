@@ -21,7 +21,7 @@
 //!   but the manager passes `port - base_port`, so every real access would
 //!   fall through to the default arm.
 //! - `read` and `write` return `Err` for any access that is not one byte. A
-//!   device error on the I/O path reaches [`crate::VM::handle_exit`] and stops
+//!   device error on the I/O path reaches the VM's exit handler and stops
 //!   the VM, and the IDE data port at 0x1F0 is conventionally read 16 or 32
 //!   bits at a time -- so the first real transfer would kill the guest.
 //!
