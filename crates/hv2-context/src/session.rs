@@ -107,11 +107,18 @@ impl SessionEnvironment {
         Ok(env)
     }
 
-    /// Install the confined runtime `exec` will use.
+    /// Install the runtime `exec` will use.
     ///
     /// Without one, [`Self::exec`] refuses. The alternative -- falling back to
     /// running the program unconfined on the host -- would turn a missing
     /// capability into an unannounced privilege.
+    ///
+    /// *How* confined the installed runtime is belongs to the runtime, and the
+    /// two backends differ: [`crate::SandboxRuntime`] confines every call,
+    /// [`crate::ResidentRuntime`] is confined once at spawn and keeps a
+    /// namespace between calls. Whichever is installed reports what it could
+    /// not enforce in [`RuntimeOutput::unenforced`] on every call, so a caller
+    /// reading results never has to know which one this is to find out.
     pub fn set_runtime(&mut self, runtime: Box<dyn ContextRuntime>) {
         self.runtime = Some(runtime);
     }

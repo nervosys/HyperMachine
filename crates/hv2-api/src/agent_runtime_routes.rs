@@ -22,8 +22,16 @@
 //!
 //! If the state is built with auth tokens, every request must carry a matching
 //! `Authorization: Bearer <token>`; otherwise the endpoints are open.
+//!
+//! ## Session record (`context.*`)
+//!
+//! The MCP server behind this runtime dispatches its `context.*` tools against
+//! an installed host and refuses when there is none. A deployment gets one
+//! here, from the environment, so that running the server is enough --
+//! see [`ContextConfig`].
 
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -36,7 +44,132 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use hv2_agent::context_host::LocalContextHost;
 use hv2_agent::{AgentCapabilities, AgentRuntime};
+use hv2_context::{Budget, SandboxRuntime};
+use hv2_sandbox::ProcessSandbox;
+
+/// Where a deployment keeps its session record, and where computation over it
+/// is allowed to write.
+///
+/// Read from the environment by [`ContextConfig::from_env`], which is what
+/// [`AgentRuntimeAppState::new`] uses:
+///
+/// | Variable                | Meaning                                                                  |
+/// |-------------------------|--------------------------------------------------------------------------|
+/// | `HV2_CONTEXT_ROOT`      | directory holding the append-only event log. Set it to the empty string to run with no record at all, in which case the `context.*` tools refuse. Defaults to `<platform data dir>/hypermachine/context`. |
+/// | `HV2_CONTEXT_SESSION`   | session id the log is opened under. Defaults to `default`.               |
+/// | `HV2_CONTEXT_WORKSPACE` | working directory for the confined runtime `context.exec` computes in. Defaults to `<root>/workspace`. |
+#[derive(Debug, Clone)]
+pub struct ContextConfig {
+    /// Root of the session record. `None` means keep no record.
+    pub root: Option<PathBuf>,
+    /// Session id the record is opened under.
+    pub session: String,
+    /// Workspace for the confined runtime; `None` means `<root>/workspace`.
+    pub workspace: Option<PathBuf>,
+}
+
+impl Default for ContextConfig {
+    fn default() -> Self {
+        Self {
+            root: Some(default_context_root()),
+            session: "default".to_string(),
+            workspace: None,
+        }
+    }
+}
+
+impl ContextConfig {
+    /// Read the record's location from the `HV2_CONTEXT_*` environment.
+    pub fn from_env() -> Self {
+        let mut config = Self::default();
+        if let Ok(val) = std::env::var("HV2_CONTEXT_ROOT") {
+            // An empty value is the opt-out, not a path: a deployment that
+            // wants no record on disk should get tools that refuse, not a log
+            // written to the process's working directory.
+            config.root = if val.trim().is_empty() {
+                None
+            } else {
+                Some(PathBuf::from(val))
+            };
+        }
+        if let Ok(val) = std::env::var("HV2_CONTEXT_SESSION") {
+            if !val.trim().is_empty() {
+                config.session = val;
+            }
+        }
+        if let Ok(val) = std::env::var("HV2_CONTEXT_WORKSPACE") {
+            if !val.trim().is_empty() {
+                config.workspace = Some(PathBuf::from(val));
+            }
+        }
+        config
+    }
+}
+
+/// Per-platform data directory for a record that has to outlive a reboot.
+///
+/// Deliberately not the temp directory: the whole arrangement depends on an
+/// address meaning the same thing forever, and a record the OS may sweep
+/// breaks that in a way no error ever reports.
+fn default_context_root() -> PathBuf {
+    let base = if cfg!(windows) {
+        std::env::var("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("C:\\ProgramData"))
+    } else {
+        std::env::var("XDG_DATA_HOME")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".local/share")))
+            .unwrap_or_else(|_| PathBuf::from("/var/lib"))
+    };
+    base.join("hypermachine").join("context")
+}
+
+/// Install a session record on `runtime`'s MCP server, per `config`.
+///
+/// Failures are logged and leave the tools refusing rather than escalating to
+/// a panic: an API server that cannot open its record is still able to serve
+/// every other route, and a refusal tells the agent the truth.
+fn install_context_host(runtime: &AgentRuntime, config: &ContextConfig) {
+    let Some(root) = config.root.as_ref() else {
+        tracing::info!("no session record configured (HV2_CONTEXT_ROOT is empty)");
+        return;
+    };
+
+    let host = match LocalContextHost::open(root, config.session.clone(), Budget::default()) {
+        Ok(host) => host,
+        Err(e) => {
+            tracing::error!(
+                "session record at {} could not be opened ({e}); context.* tools will refuse",
+                root.display()
+            );
+            return;
+        }
+    };
+
+    // The runtime is built separately from the host rather than through
+    // `with_sandbox_runtime`, which consumes the host on failure: an
+    // unusable workspace must not also cost the deployment its record, since
+    // search and record work perfectly well without anywhere to compute.
+    let workspace = config
+        .workspace
+        .clone()
+        .unwrap_or_else(|| root.join("workspace"));
+    let host = match SandboxRuntime::new(Box::new(ProcessSandbox::new()), &workspace) {
+        Ok(rt) => host.with_runtime(Box::new(rt)),
+        Err(e) => {
+            tracing::warn!(
+                "confined runtime workspace {} is unusable ({e}); context.exec will refuse",
+                workspace.display()
+            );
+            host
+        }
+    };
+
+    runtime.server().set_context_host(Arc::new(host));
+}
 
 /// Shared state for the agent-runtime routes.
 pub struct AgentRuntimeAppState {
@@ -49,10 +182,21 @@ pub struct AgentRuntimeAppState {
 }
 
 impl AgentRuntimeAppState {
-    /// Build state over a warm baseline image (auth disabled).
+    /// Build state over a warm baseline image (auth disabled), with the
+    /// session record configured from the environment.
     pub fn new(baseline: &[u8]) -> Self {
+        Self::with_context_config(baseline, &ContextConfig::from_env())
+    }
+
+    /// Build state over a warm baseline image with an explicit record location.
+    pub fn with_context_config(baseline: &[u8], context: &ContextConfig) -> Self {
+        let runtime = Arc::new(AgentRuntime::new(baseline));
+        // Without this the seven `context.*` tools are advertised and then
+        // refuse every call, because nothing else in a deployment ever
+        // installs a host.
+        install_context_host(&runtime, context);
         Self {
-            runtime: Arc::new(AgentRuntime::new(baseline)),
+            runtime,
             tenants: Mutex::new(HashMap::new()),
             auth_tokens: Vec::new(),
         }
@@ -303,8 +447,21 @@ mod tests {
         create_agent_runtime_router(Arc::new(state))
     }
 
+    /// These routes are about tenancy and auth, so they run with no record:
+    /// otherwise every `cargo test` would append to the developer's real
+    /// append-only log, which is by design never truncated.
+    fn no_record() -> ContextConfig {
+        ContextConfig {
+            root: None,
+            ..ContextConfig::default()
+        }
+    }
+
     fn test_app() -> Router {
-        app_with(AgentRuntimeAppState::new(&vec![0u8; 4096]))
+        app_with(AgentRuntimeAppState::with_context_config(
+            &vec![0u8; 4096],
+            &no_record(),
+        ))
     }
 
     async fn send(app: &Router, req: Request<Body>) -> (StatusCode, Vec<u8>) {
@@ -430,10 +587,9 @@ mod tests {
 
     #[tokio::test]
     async fn auth_is_enforced_when_configured() {
-        let app = app_with(AgentRuntimeAppState::with_auth_tokens(
-            &vec![0u8; 4096],
-            vec!["secret".to_string()],
-        ));
+        let mut state = AgentRuntimeAppState::with_context_config(&vec![0u8; 4096], &no_record());
+        state.auth_tokens = vec!["secret".to_string()];
+        let app = app_with(state);
         // No token -> 401.
         let (s_no, _) = send(
             &app,

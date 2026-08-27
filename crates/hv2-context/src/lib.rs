@@ -23,7 +23,11 @@
 //!   scan. The log keeps a preview and the handle.
 //! - A confined runtime -- see [`runtime`]. The agent computes over what it
 //!   retrieves inside a sandbox rather than in its own context, and only what
-//!   it prints comes back.
+//!   it prints comes back. Two backends: [`SandboxRuntime`] confines every
+//!   call and keeps only files between them, and [`ResidentRuntime`] keeps a
+//!   Python namespace alive so a retrieved result stays an object a later call
+//!   can operate on. What each can and cannot confine differs, and each says
+//!   which.
 //!
 //! [`WorkingView`] is what the model actually sees, and it is bounded. When it
 //! exceeds its budget, [`WorkingView::evict`] moves the oldest completed spans
@@ -44,6 +48,7 @@
 pub mod index;
 pub mod log;
 pub mod payload;
+pub mod resident;
 pub mod runtime;
 pub mod search;
 pub mod session;
@@ -52,6 +57,7 @@ pub mod view;
 pub use index::{EvictionIndex, Headline, IndexBlock, IndexEntry, Status};
 pub use log::{Event, EventDraft, EventLog, Role, Seq};
 pub use payload::{Handle, Payload, PayloadStore};
+pub use resident::{ResidentRuntime, ResidentSpec};
 pub use runtime::{ContextRuntime, RuntimeCall, RuntimeOutput, SandboxRuntime};
 pub use search::{Filter, Hit, SearchIndex};
 pub use session::{SessionEnvironment, SessionId};

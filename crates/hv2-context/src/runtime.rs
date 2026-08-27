@@ -10,18 +10,23 @@
 //!
 //! # What it is, and what it is not
 //!
-//! It is a confined runtime: a program run under [`hv2_sandbox`], with a
-//! workspace directory that survives between calls, so a script can write a
-//! file in one call and read it in the next.
+//! [`ContextRuntime`] is the interface; there are two backends, and they trade
+//! against each other rather than one superseding the other.
 //!
-//! It is **not** a resident namespace. The paper this follows keeps a Python
-//! kernel alive across model calls, so a tool result stays a live object and a
-//! later cell can operate on it without re-fetching. Here, every call is a
-//! fresh process: files persist, variables do not. Said plainly because the
-//! difference decides how an agent should use it -- state that must survive
-//! goes to the workspace or the log, and anything else is gone when the
-//! process exits. [`ContextRuntime`] is a trait so a resident-kernel backend
-//! can be added behind it without changing anything above.
+//! [`SandboxRuntime`], here, is a program run under [`hv2_sandbox`] with a
+//! workspace directory that survives between calls, so a script can write a
+//! file in one call and read it in the next. It is **not** a resident
+//! namespace: every call is a fresh process, so files persist and variables do
+//! not. That is the cost of the thing it buys -- because each call is its own
+//! process, each call is confined afresh, under a spec the caller can change
+//! per call.
+//!
+//! [`crate::resident::ResidentRuntime`] is the other side of that trade. It
+//! keeps a Python interpreter alive across calls, as the paper this follows
+//! does, so a tool result stays a live object a later call can operate on
+//! without re-fetching -- and it can only be confined once, when it starts,
+//! because a process already running cannot be re-confined. Which controls
+//! that leaves out is documented there and reported on every call.
 //!
 //! # Fail-closed
 //!
@@ -272,7 +277,10 @@ impl ContextRuntime for SandboxRuntime {
 }
 
 /// Cut output to [`MAX_OUTPUT_BYTES`], reporting whether anything was lost.
-fn clamp(bytes: &[u8]) -> (String, bool) {
+///
+/// Shared with [`crate::resident`] rather than written twice: two copies of a
+/// ceiling drift, and this one is what keeps a result out of the context.
+pub(crate) fn clamp(bytes: &[u8]) -> (String, bool) {
     let text = String::from_utf8_lossy(bytes);
     if text.len() <= MAX_OUTPUT_BYTES {
         return (text.into_owned(), false);
