@@ -34,7 +34,7 @@ at are still exact.
 |---|---|---|
 | Event log | `EventLog` | Append-only ground truth. Every event has a `Seq` — an address that never changes and never repeats. |
 | Payload store | `PayloadStore` | Payloads over 8 KiB, held outside the log behind a handle so a scan stays cheap. The log keeps a 240-byte preview. |
-| Confined runtime | `ContextRuntime` | Somewhere to compute over what was retrieved, so the answer comes back instead of the data. |
+| Runtime | `ContextRuntime` | Somewhere to compute over what was retrieved, so the answer comes back instead of the data. Two backends: `SandboxRuntime` confines every call, `ResidentRuntime` keeps a namespace alive across them. |
 
 `WorkingView` is what the model actually sees, and it is bounded. `SessionEnvironment` ties
 the three together and is what a caller uses.
@@ -49,8 +49,8 @@ Everything an agent does with its own history is one of these:
   around.
 - **materialize** — `expand(from, to)` returns exactly what was recorded,
   externalized payloads included.
-- **compute** — `exec(call)` runs a program under `hv2-sandbox` and returns only
-  what it printed.
+- **compute** — `exec(call)` runs a program under `hv2-sandbox`, or code in a
+  resident interpreter, and returns only what it printed.
 - **expose** — `observe` puts something in the view; `compact` takes it out
   again when the budget says so.
 
@@ -125,28 +125,96 @@ context.compact task=... state=... status= -> 30 entries evicted, index entry le
 
 Every number in the middle column is an address, and every address still works.
 
+## Two runtimes, and what each trades away
+
+`ContextRuntime` has two backends. Neither supersedes the other; they trade
+against each other, and the trade is the same one either way — **per-call
+confinement or a namespace that survives, not both.**
+
+| | `SandboxRuntime` | `ResidentRuntime` |
+|---|---|---|
+| Process | one per call | one, alive across calls |
+| Survives a call | files in the workspace | files **and variables** |
+| Confined | every call, under `hv2-sandbox`, with a spec the caller may change per call | once, at spawn — a running process cannot be re-confined |
+| Runs | any program | Python code, in the namespace it already holds |
+
+`ResidentRuntime` is the shape Scroll describes: a kernel stays up, so a result
+computed once is still an object later.
+
+```
+exec  rows = [json.loads(l) for l in open("result.jsonl")]    -> (nothing printed)
+exec  print(sum(1 for r in rows if r["status"] == "FAILED"))  -> 58
+```
+
+The second call re-read nothing and neither call put a row in the context.
+
+**Protocol.** The framing this repository already uses between a host and
+something it drives (see `hv2-guest-agent`): a four-byte little-endian length,
+then that many bytes of JSON, over the child's stdin and stdout. Both ends
+refuse a length past the 4 MiB frame cap *before* allocating for it, because
+the length is written by the other end. The kernel sends one `ready` frame
+saying which limits it managed to apply to itself, then one `result` frame per
+call.
+
+**What is confined, and what is not.** Only two controls survive the move to a
+resident process:
+
+| Control | Resident kernel | How |
+|---|---|---|
+| Wall clock | enforced, per call | The host kills the kernel when a call overruns its deadline. |
+| Memory | enforced where the interpreter can | The kernel lowers its own `RLIMIT_AS`, soft *and* hard, before reading its first frame; an unprivileged process cannot raise a hard limit back. No `resource` module (Windows) means not enforced, and it says so. |
+| Network, filesystem, process isolation, no-new-privileges | **not enforced** | Applying these means starting the process inside a namespace or a job object, and `Sandbox::run` runs a program *to completion* — there is no way through it to start a long-lived confined child. This backend starts the interpreter itself and gets none of them. |
+
+That is not hidden anywhere. `ResidentRuntime::spawn` **refuses** unless the
+confinement asked for can actually be applied — the default spec asks for what
+`SandboxRuntime` asks for, so the default refuses on every host and the refusal
+names what is missing. A caller who wants it anyway sets
+`ResidentSpec::best_effort`, and every `RuntimeOutput` then carries the
+given-up controls in `unenforced` — on every call, not once at startup where it
+can be missed.
+
+**When the deadline fires, the namespace dies.** A resident interpreter cannot
+have one call interrupted without interrupting the interpreter. So the call
+returns an error, every later call says the namespace is gone, and the runtime
+does *not* quietly start a new kernel: a fresh empty namespace handed back to an
+agent still holding names is a worse failure than the one it hides.
+
 ## What is *not* built
 
-The runtime is a **confined process with a durable workspace**, not a resident
-namespace. Scroll keeps a Python kernel alive across model calls so a tool
-result stays a live object a later cell can operate on. Here every call is a
-fresh process: **files persist, variables do not**.
+`ResidentRuntime` is the paper's shape, not all of it. What still differs:
 
-That decides how an agent should use it — state that must survive goes to the
-workspace or the log, and everything else is gone when the process exits.
-`ContextRuntime` is a trait so a resident-kernel backend can be added behind it
-without changing anything above.
+- **The interpreter is Python, and only Python.** `SandboxRuntime` runs any
+  program; the resident backend runs code in the namespace it holds, and a call
+  naming another program is refused rather than silently interpreted.
+- **The confinement gap above.** Scroll's kernel and this one both keep state;
+  a one-shot sandboxed call is the only thing here that gets network and
+  filesystem isolation. Choosing the resident backend is choosing to give those
+  up, which is why it has to be said out loud rather than defaulted into.
+- **The namespace is not durable.** It lives in one process. A deadline, a
+  crash or a restart ends it, and nothing is checkpointed or restored — the log
+  and the workspace are the only things that outlive it.
+- **A host with no Python 3 has no resident runtime.** `ResidentRuntime::available()`
+  answers that before a session plans around it, naming every interpreter it
+  tried and what each one did. `python3` is *run* and asked its version rather
+  than merely found on `PATH`, because on Windows that name is usually a Store
+  stub that prints an advertisement.
+- **No streaming.** A call's output arrives when the call finishes, as with the
+  guest agent, and for the same reason: this is the right shape for "compute
+  this and tell me the answer" and the wrong one for an interactive session.
 
-Two smaller ones, said plainly for the same reason:
+Two more, said plainly for the same reason:
 
 - **The log is flushed, not fsynced.** A power loss can lose the tail. "Durable
   append-only record" invites the assumption that it cannot, and a log that
   quietly loses its last few entries is worse than one that says it might.
-- **The event log is not reachable from inside the sandbox** — not by policy,
-  by not being there. The runtime is handed its workspace and nothing else, and
-  the memory surface is mediated outside. Exposing the log to arbitrary code
-  inside would need a filesystem policy the process backend does not implement,
-  and a control that is not enforced must not be described as one.
+- **The event log is not reachable from inside either runtime** — not by
+  policy, by not being there. A runtime is handed its workspace and nothing
+  else, and the memory surface is mediated outside; a retrieved result gets in
+  through the workspace or through the code of a call, and neither backend can
+  call `search` or `expand` itself. Scroll's kernel can. Exposing the log to
+  arbitrary code inside would need a filesystem policy the process backend does
+  not implement, and a control that is not enforced must not be described as
+  one.
 
 ## Confinement on Windows
 
