@@ -1349,17 +1349,29 @@ impl VM {
                     error_code
                 );
 
-                // Fatal exceptions (double fault, triple fault) should stop the VM
-                if vector == 8 {
-                    tracing::error!("Double fault — stopping VM");
-                    *state.write() = VMState::Stopped;
-                    exit_notify.notify_waiters();
-                    return Ok(false);
-                }
-
-                // Re-inject the exception into the guest so its IDT handler runs
-                backend.inject_exception(vcpu, vector, error_code).await?;
-                Ok(true)
+                // Any exception that reaches userspace is fatal to this VM,
+                // not just a double fault.
+                //
+                // There is an injection path below and it is the wrong one:
+                // `inject_exception` defaults to `inject_interrupt`, which
+                // delivers a *hardware interrupt* carrying the exception's
+                // vector number. That is not the same as delivering the
+                // exception -- the faulting instruction is not re-run and the
+                // guest's fault handler never sees a fault. So the vCPU
+                // resumed, re-executed the same instruction, took the same
+                // exception, and did it again: roughly 60,000 exits a second,
+                // the VM still reported as Running, and nothing saying why.
+                //
+                // Stopping loses nothing that resuming would have recovered
+                // and it names the vector. Real injection needs
+                // KVM_SET_VCPU_EVENTS with the exception fields set; when that
+                // exists, this becomes the fallback for when it fails.
+                tracing::error!(
+                    "Guest exception vector={vector} error_code={error_code:?}: it cannot be emulated, and the only injection path here delivers an interrupt rather than a fault, so stopping instead of re-executing it forever"
+                );
+                *state.write() = VMState::Stopped;
+                exit_notify.notify_waiters();
+                Ok(false)
             }
 
             VmExit::Debug { info } => {
@@ -1432,15 +1444,15 @@ impl VM {
                     4 => u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
                     8 => {
                         let low = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-                        device.write_register(offset, low).await?;
+                        device.write_register(offset, low, 4).await?;
                         let high = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-                        device.write_register(offset + 4, high).await?;
+                        device.write_register(offset + 4, high, 4).await?;
                         return Ok(());
                     }
                     _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
                 };
 
-                device.write_register(offset, value).await?;
+                device.write_register(offset, value, len as u8).await?;
 
                 event_bus.publish(VmEvent::memory_access(
                     vm_name.to_string(),
@@ -1456,7 +1468,7 @@ impl VM {
 
             if let Some(device) = devices.find_mmio_device(phys_addr).await {
                 let offset = phys_addr - device.base_address();
-                let value = device.read_register(offset).await?;
+                let value = device.read_register(offset, len as u8).await?;
 
                 match len {
                     1 => data[0] = value as u8,
@@ -1469,8 +1481,8 @@ impl VM {
                         data[..4].copy_from_slice(&bytes);
                     }
                     8 => {
-                        let low = device.read_register(offset).await?;
-                        let high = device.read_register(offset + 4).await?;
+                        let low = device.read_register(offset, 4).await?;
+                        let high = device.read_register(offset + 4, 4).await?;
                         data[..4].copy_from_slice(&low.to_le_bytes());
                         data[4..8].copy_from_slice(&high.to_le_bytes());
                     }
@@ -1514,7 +1526,7 @@ impl VM {
                     pic.write_port(port, data as u8).await?;
                 } else if let Some(device) = devices.find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await?;
+                    device.write_register(offset, data, size).await?;
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
                 }
@@ -1530,7 +1542,7 @@ impl VM {
                     data = pic.read_port(port).await? as u32;
                 } else if let Some(device) = devices.find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    data = device.read_register(offset).await?;
+                    data = device.read_register(offset, size).await?;
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
                     data = 0xFF;
@@ -1649,17 +1661,27 @@ impl VM {
                     error_code
                 );
 
-                // Fatal exceptions (double fault) should stop the VM
-                if vector == 8 {
-                    tracing::error!("Double fault — stopping VM");
-                    return Ok(false);
-                }
-
-                // Re-inject the exception into the guest so its IDT handler runs
-                self.backend
-                    .inject_exception(vcpu, vector, error_code)
-                    .await?;
-                Ok(true)
+                // Any exception that reaches userspace is fatal to this VM,
+                // not just a double fault.
+                //
+                // There is an injection path below and it is the wrong one:
+                // `inject_exception` defaults to `inject_interrupt`, which
+                // delivers a *hardware interrupt* carrying the exception's
+                // vector number. That is not the same as delivering the
+                // exception -- the faulting instruction is not re-run and the
+                // guest's fault handler never sees a fault. So the vCPU
+                // resumed, re-executed the same instruction, took the same
+                // exception, and did it again: roughly 60,000 exits a second,
+                // the VM still reported as Running, and nothing saying why.
+                //
+                // Stopping loses nothing that resuming would have recovered
+                // and it names the vector. Real injection needs
+                // KVM_SET_VCPU_EVENTS with the exception fields set; when that
+                // exists, this becomes the fallback for when it fails.
+                tracing::error!(
+                    "Guest exception vector={vector} error_code={error_code:?}: it cannot be emulated, and the only injection path here delivers an interrupt rather than a fault, so stopping instead of re-executing it forever"
+                );
+                Ok(false)
             }
 
             VmExit::Debug { info } => {
@@ -1733,15 +1755,15 @@ impl VM {
                     8 => {
                         // For 8-byte writes, we'll do two 4-byte writes
                         let low = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-                        device.write_register(offset, low).await?;
+                        device.write_register(offset, low, 4).await?;
                         let high = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-                        device.write_register(offset + 4, high).await?;
+                        device.write_register(offset + 4, high, 4).await?;
                         return Ok(());
                     }
                     _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
                 };
 
-                device.write_register(offset, value).await?;
+                device.write_register(offset, value, len as u8).await?;
 
                 // Publish event
                 self.event_bus.publish(VmEvent::memory_access(
@@ -1759,7 +1781,7 @@ impl VM {
 
             if let Some(device) = self.devices.find_mmio_device(phys_addr).await {
                 let offset = phys_addr - device.base_address();
-                let value = device.read_register(offset).await?;
+                let value = device.read_register(offset, len as u8).await?;
 
                 // Write value into data buffer
                 match len {
@@ -1774,8 +1796,8 @@ impl VM {
                     }
                     8 => {
                         // For 8-byte reads, we'll do two 4-byte reads
-                        let low = device.read_register(offset).await?;
-                        let high = device.read_register(offset + 4).await?;
+                        let low = device.read_register(offset, 4).await?;
+                        let high = device.read_register(offset + 4, 4).await?;
                         data[..4].copy_from_slice(&low.to_le_bytes());
                         data[4..8].copy_from_slice(&high.to_le_bytes());
                     }
@@ -1818,7 +1840,7 @@ impl VM {
                 } else if let Some(device) = self.devices.find_io_device(port).await {
                     // Device I/O write
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await?;
+                    device.write_register(offset, data, size).await?;
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
                 }
@@ -1837,7 +1859,7 @@ impl VM {
                 } else if let Some(device) = self.devices.find_io_device(port).await {
                     // Device I/O read
                     let offset = (port - device.base_port()) as u64;
-                    data = device.read_register(offset).await?;
+                    data = device.read_register(offset, size).await?;
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
                     data = 0xFF; // Return 0xFF for unmapped ports
@@ -1991,7 +2013,7 @@ mod tests {
             .expect("the window should be registered");
         assert_eq!(handle.device_name(), "virtio-vsock");
         assert_eq!(
-            handle.read_register(0).await.expect("magic"),
+            handle.read_register(0, 4).await.expect("magic"),
             crate::devices::virtio_mmio::VIRTIO_MMIO_MAGIC
         );
     }

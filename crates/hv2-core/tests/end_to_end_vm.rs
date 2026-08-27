@@ -223,7 +223,7 @@ async fn test_vm_single_io_exit() {
         if direction == IoDirection::Out {
             if let Some(device) = vm.devices().find_io_device(port).await {
                 let offset = (port - device.base_port()) as u64;
-                device.write_register(offset, data).await.unwrap();
+                device.write_register(offset, data, 1).await.unwrap();
             }
         }
     }
@@ -266,7 +266,7 @@ async fn test_vm_sequential_io_exits() {
             if direction == IoDirection::Out {
                 if let Some(device) = vm.devices().find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await.unwrap();
+                    device.write_register(offset, data, 1).await.unwrap();
                 }
             }
         }
@@ -323,7 +323,7 @@ async fn test_vm_mmio_exit() {
             if let Some(device) = vm.devices().find_mmio_device(phys_addr).await {
                 let offset = phys_addr - device.base_address();
                 let value = data[0] as u32;
-                device.write_register(offset, value).await.unwrap();
+                device.write_register(offset, value, 1).await.unwrap();
             }
         }
     }
@@ -404,7 +404,7 @@ async fn test_vm_mixed_io_mmio_exits() {
             } => {
                 if let Some(device) = vm.devices().find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await.unwrap();
+                    device.write_register(offset, data, 1).await.unwrap();
                 }
             }
             VmExit::Mmio {
@@ -416,7 +416,7 @@ async fn test_vm_mixed_io_mmio_exits() {
                 if let Some(device) = vm.devices().find_mmio_device(phys_addr).await {
                     let offset = phys_addr - device.base_address();
                     let value = data[0] as u32;
-                    device.write_register(offset, value).await.unwrap();
+                    device.write_register(offset, value, 1).await.unwrap();
                 }
             }
             _ => {}
@@ -476,7 +476,7 @@ async fn test_vm_timer_programming() {
             if direction == IoDirection::Out {
                 if let Some(device) = vm.devices().find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await.unwrap();
+                    device.write_register(offset, data, 1).await.unwrap();
                 }
             }
         }
@@ -525,7 +525,7 @@ async fn test_vm_io_read_operations() {
 
     // Write test: ensure write path works
     if let Some(device) = vm.devices().find_io_device(0x3F8).await {
-        device.write_register(0, b'R' as u32).await.unwrap();
+        device.write_register(0, b'R' as u32, 1).await.unwrap();
     }
 
     // Verify the write succeeded
@@ -661,7 +661,7 @@ async fn test_complete_vm_execution_sequence() {
             } => {
                 if let Some(device) = vm.devices().find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await.unwrap();
+                    device.write_register(offset, data, 1).await.unwrap();
                 }
             }
             VmExit::Hlt => {

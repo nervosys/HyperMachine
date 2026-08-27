@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  ✓ Found device at port 0x3F8: {}", handle.device_name());
 
         // Write to serial port
-        handle.write_register(0, 0x48).await?; // 'H'
+        handle.write_register(0, 0x48, 1).await?; // 'H'
         println!("  ✓ Wrote byte to serial port");
     }
 
@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  ✓ Found device at port 0x40: {}", handle.device_name());
 
         // Write to timer control register
-        handle.write_register(3, 0x34).await?; // Control word
+        handle.write_register(3, 0x34, 1).await?; // Control word
         println!("  ✓ Wrote control word to timer");
     }
 

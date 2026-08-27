@@ -1158,6 +1158,17 @@ impl KvmVcpu {
 
             KVM_EXIT_EXCEPTION => {
                 let ex = &run.exit_data.ex;
+                // Where it faulted, which unlike a shutdown exit is still
+                // readable here: KVM does not reset the vCPU on the way out of
+                // an exception, so the registers still describe the guest.
+                let rip = self.get_regs().map(|regs| regs.rip).unwrap_or_default();
+                tracing::debug!(
+                    "KVM: vCPU {} exception vector={} error_code={:#x} at rip={:#x}",
+                    self.vcpu_id,
+                    ex.exception,
+                    ex.error_code,
+                    rip
+                );
                 Ok(VmExit::Exception {
                     vector: ex.exception as u8,
                     error_code: Some(ex.error_code),

@@ -445,8 +445,18 @@
       </tr>
       <tr>
         <td class="claim">A Linux kernel reaches userspace</td>
-        <td><span class="tag none">not verified</span> stops polling the DMA controller at 0x0f; the legacy device set is incomplete</td>
-        <td class="where">next device to bring up</td>
+        <td><span class="tag ran">ran</span> initramfs unpacked, init executed as PID 1; proved by <code>Attempted to kill init! exitcode=0x00002a00</code></td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">Userspace output reaches the console</td>
+        <td><span class="tag none">not verified</span> the tty layer needs a transmit interrupt, and with an in-kernel irqchip that needs KVM_IRQ_LINE; neither half is built</td>
+        <td class="where">next step</td>
+      </tr>
+      <tr>
+        <td class="claim">Filesystem isolation (process backend)</td>
+        <td><span class="tag ran">ran</span> pivot_root + mount namespace; a workload cannot see a file outside its root, and a read-only bind refuses writes recursively</td>
+        <td class="where">WSL2 Debian 6.18, unprivileged</td>
       </tr>
       <tr>
         <td class="claim">32-bit protected-mode entry state is correct</td>
@@ -462,11 +472,6 @@
         <td class="claim">Context runtime is a resident namespace</td>
         <td><span class="tag none">not built</span> a confined process with a durable workspace; files persist between calls, variables do not</td>
         <td class="where">trait, so a kernel backend can slot in</td>
-      </tr>
-      <tr>
-        <td class="claim">Filesystem isolation (process backend)</td>
-        <td><span class="tag none">not built</span> deliberately unimplemented</td>
-        <td class="where">use the microVM backend</td>
       </tr>
       <tr>
         <td class="claim">CLA workflow repaired</td>

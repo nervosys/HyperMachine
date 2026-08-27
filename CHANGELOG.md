@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A guest reaches userspace** (`hv2-core`). The kernel boots, unpacks an
+  initramfs, and executes a statically linked binary as PID 1 inside the guest.
+  The proof is the kernel's own: an init that returns 42 produces
+  `Attempted to kill init! exitcode=0x00002a00`, which only happens if that
+  binary ran. Before it, the full boot -- RCU, the scheduler, SLUB, ftrace, the
+  8250 driver finding COM1 at `0x3f8 (irq = 4) is a 16550A`, every filesystem
+  registered, `Freeing unused kernel image (initmem) memory`. Userspace
+  *output* does not come back yet; see below.
 - **A Linux kernel boots** (`hv2-core`). It decompresses itself, enters the
   kernel proper, reads the `e820` map this loader writes, sets up its zones and
   prints ~20 lines of kernel log through `SerialDevice` to `VM::console_output`
@@ -243,7 +251,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains available through `execute_plan` and is still tagged
   `"simulated": true`, so the two can never be confused.
 
+### Known gaps
+- **Userspace output does not reach the console.** The kernel's own messages do
+  -- printk polls the line-status register -- but a write from userspace goes
+  through the tty layer, which waits for a transmit interrupt before sending
+  anything. `SerialDevice` raises its transmit interrupt only when the *host*
+  drains the buffer, which is backwards for a UART that transmits instantly,
+  and the interrupt would go to a `Pic8259` the guest never reads: with KVM's
+  in-kernel irqchip the guest's PIC lives in the kernel, so injection has to go
+  through `KVM_IRQ_LINE`. Both halves are needed and neither is built.
+
 ### Fixed
+- **The initrd was placed where the kernel unpacks itself** (`hv2-core`). It
+  went to a fixed 32 MB. A compressed kernel unpacks into `init_size` bytes
+  starting from where it will run -- 62 MB from 16 MB for the kernel tested
+  here -- so 32 MB is *inside* that region for any kernel of ordinary size, and
+  decompression wrote straight over the initrd. The kernel then reported
+  `invalid magic at start of compressed archive` about bytes it had destroyed
+  itself, fell back to treating it as a block device, and panicked with
+  `Unable to mount root fs`. The initrd is now placed as high as it will go,
+  under the header's `initrd_addr_max`, clamped to the guest's memory, page
+  aligned, and refused with "give the guest more memory" if it cannot be
+  placed clear of the unpack region. Two tests that asserted the fixed address
+  now assert the property instead, since the constant is what hid the
+  collision.
+- **A FIFO reset erased the console transcript** (`hv2-core`). Linux resets
+  both FIFOs when its 8250 driver takes the port over from earlyprintk, and
+  `SerialDevice` responded by clearing the transmit buffer -- so every guest
+  that got far enough to initialise its serial driver properly wiped its own
+  boot log on the way past, and the VM looked as though it had never printed at
+  all. On real hardware a transmit-FIFO reset discards bytes that have not gone
+  out yet; here a THR write *is* the transmission, so there is nothing unsent
+  to discard and the buffer is the transcript. The receive direction still
+  discards, because unread input is exactly what that reset is for.
+- **Every device access was four bytes wide, whatever the guest asked for**
+  (`hv2-core`). `IoDeviceHandle`/`MmioDeviceHandle` built a `[u8; 4]` and
+  handed the whole thing to the device, discarding the access size the exit
+  had reported. Register files are byte-wide and their reads have side
+  effects, so a one-byte `inb` of a UART made the device pop its receive
+  buffer *and* clear its interrupt-identification register; a one-byte `outb`
+  of a character wrote the three registers after the target with the padding
+  bytes, clearing interrupt-enable, FIFO-control and line-control on every
+  character printed. It looked like it worked, which is why it survived a
+  kernel boot. The width now travels with the access and a device is handed
+  exactly the bytes the guest asked for.
+- **An unhandled guest exception livelocked the VM** (`hv2-core`). Only a
+  double fault stopped the VM; every other exception was logged at warn level
+  and the vCPU resumed, which re-executed the faulting instruction and took the
+  same exception again, forever. A guest that hit one stopped making progress
+  while the VM stayed `Running` and nothing said why -- observed as roughly
+  60,000 exits a second, all identical. An exception reaches userspace only
+  because the backend could neither handle nor emulate it, and this VMM does
+  neither and cannot yet inject one back into the guest, so it stops and
+  reports the vector. `KVM_SET_VCPU_EVENTS` would make injection possible and
+  turn this into the fallback rather than the whole answer.
+- **The PIT refused wide reads and dropped wide writes** (`hv2-core`, found by
+  an audit prompted by the three device defects a kernel boot turned up).
+  `TimerDevice::read` returned `Err` for any access that was not exactly one
+  byte -- and an error there stops the VM -- while `write` consumed `data[0]`
+  and silently ignored the rest. Both now walk consecutive registers a byte at
+  a time, which is also what the channel latch semantics require. The same
+  audit found the same shape in `IdeController` and `VgaDevice`; neither is
+  registered with the device manager, and both now say so in their module
+  docs, along with what wiring them up would require.
 - **The setup header was truncated at the length it had in 2009** (`hv2-core`).
   `create_boot_params` copied a fixed `0x1f1..0x250` out of the bzImage, which
   was the whole header under boot protocol 2.09 and has not been since. The
@@ -399,6 +469,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `-D warnings` clean build on every supported target.
 
 ### CI
+- **The release workflow never ran because of a billing block, not a defect.**
+  All four build jobs at tag `v1.1.0` reported `steps: []` and no runner, and
+  the check annotation reads "The job was not started because recent account
+  payments have failed or your spending limit needs to be increased." No
+  amount of workflow repair fixes that. Real defects behind it were fixed
+  anyway, so the first run after billing is resolved has a chance: `protoc` was
+  never installed although `hv2-cli` pulls in `hv2-api`, whose build script
+  needs it; the aarch64 Linux target was built through `cross` in a container
+  the host's `protoc` could not reach, and is now cross-compiled directly with
+  `gcc-aarch64-linux-gnu` and an explicit linker.
 - **Three workflow steps that had never run once** were repaired. `Miri` asked
   for the `miri` component on the *stable* toolchain: the job installs nightly,
   but `rust-toolchain.toml` pins `channel = "stable"` and overrides whatever the

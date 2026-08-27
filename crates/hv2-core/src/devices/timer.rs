@@ -1,6 +1,6 @@
 //! Programmable Interval Timer (PIT) device emulation
 
-use crate::{Device, DeviceType, Error, Pic8259, Result};
+use crate::{Device, DeviceType, Pic8259, Result};
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -308,37 +308,16 @@ impl TimerDevice {
 
         Ok(())
     }
-}
-
-#[async_trait]
-impl Device for TimerDevice {
-    fn device_type(&self) -> DeviceType {
-        DeviceType::Timer
-    }
-
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    async fn init(&mut self) -> Result<()> {
-        tracing::info!(
-            "Initializing timer device '{}' at 0x{:X}",
-            self.name,
-            self.base_address
-        );
-        Ok(())
-    }
-
-    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Timer device only supports single-byte reads".to_string(),
-            ));
-        }
-
+    /// Read one byte-wide register.
+    ///
+    /// Split out so a wider access can walk consecutive registers the way the
+    /// hardware does. Reading a channel is stateful -- the LSB/MSB latch
+    /// advances on each read -- so this has to happen a byte at a time rather
+    /// than as one wide read.
+    fn read_register(&self, offset: u64) -> u8 {
         let mut channels = self.channels.lock();
 
-        let value = match offset {
+        match offset {
             0..=2 => {
                 // Channel data ports
                 let channel = &mut channels[offset as usize];
@@ -365,18 +344,11 @@ impl Device for TimerDevice {
                 0
             }
             _ => 0,
-        };
-
-        data[0] = value;
-        Ok(())
+        }
     }
 
-    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
-        if data.is_empty() {
-            return Ok(());
-        }
-
-        let byte = data[0];
+    /// Write one byte-wide register.
+    fn write_register(&self, offset: u64, byte: u8) {
         let mut channels = self.channels.lock();
 
         match offset {
@@ -448,7 +420,7 @@ impl Device for TimerDevice {
                             }
                         }
                     }
-                    return Ok(());
+                    return;
                 }
 
                 let channel = &mut channels[channel_select as usize];
@@ -467,7 +439,44 @@ impl Device for TimerDevice {
             }
             _ => {}
         }
+    }
+}
 
+#[async_trait]
+impl Device for TimerDevice {
+    fn device_type(&self) -> DeviceType {
+        DeviceType::Timer
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        tracing::info!(
+            "Initializing timer device '{}' at 0x{:X}",
+            self.name,
+            self.base_address
+        );
+        Ok(())
+    }
+
+    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        // Never an error. A device error on the I/O path reaches
+        // `VM::handle_exit` and stops the VM, so refusing a wide access would
+        // kill a guest for doing something hardware simply answers.
+        for (index, byte) in data.iter_mut().enumerate() {
+            *byte = self.read_register(offset + index as u64);
+        }
+        Ok(())
+    }
+
+    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+        // And every byte is written, rather than the first one and silence
+        // about the rest.
+        for (index, byte) in data.iter().enumerate() {
+            self.write_register(offset + index as u64, *byte);
+        }
         Ok(())
     }
 

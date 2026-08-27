@@ -74,7 +74,18 @@ async fn main() {
             .unwrap_or(1024)
             * 1024
             * 1024,
-        boot: Some(BootSource::linux(&kernel).with_cmdline(cmdline.clone())),
+        boot: Some({
+            let mut source = BootSource::linux(&kernel).with_cmdline(cmdline.clone());
+            // An initrd is what turns "the kernel booted" into "userspace
+            // ran": without a root filesystem the kernel reaches
+            // prepare_namespace and panics, which is a complete boot and not
+            // a running system.
+            if let Ok(initrd) = std::env::var("HV2_INITRD") {
+                println!("initrd        : {initrd}");
+                source = source.with_initrd(initrd);
+            }
+            source
+        }),
         ..Default::default()
     };
 
@@ -178,22 +189,21 @@ async fn main() {
     // `launch()` spawns the run loop and drops whatever it returns, so a vCPU
     // that fails on its first KVM_RUN is indistinguishable from one that is
     // still going. Driving `run()` directly is the only way to see the error.
-    if let Err(e) = vm.start().await {
-        println!("start         : FAILED — {e}");
-        return;
-    }
-    println!("start         : OK — driving the vCPU loop directly");
-
     let settle = std::env::var("HV2_SETTLE_SECS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
         .map_or(SETTLE, Duration::from_secs);
 
-    match tokio::time::timeout(settle, vm.run()).await {
-        Ok(Ok(())) => println!("run           : the loop exited cleanly"),
-        Ok(Err(e)) => println!("run           : FAILED — {e}"),
-        Err(_) => println!("run           : still running after {settle:?}"),
+    // Spawned rather than awaited. A guest that reaches userspace and idles
+    // sits in KVM_RUN waiting for an interrupt, and that blocks the thread
+    // inside a poll -- a timeout around `run()` can never fire, so the probe
+    // would hang exactly when the boot had gone furthest.
+    if let Err(e) = vm.launch().await {
+        println!("launch        : FAILED — {e}");
+        return;
     }
+    println!("launch        : OK — the loop is running in the background");
+    tokio::time::sleep(settle).await;
 
     // Exits distinguish the two ways a guest goes quiet: a spinning guest
     // keeps exiting, and one blocked in KVM_RUN waiting for an interrupt that

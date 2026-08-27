@@ -338,18 +338,33 @@ impl MmioDeviceHandle {
     }
 
     /// Read a register at the given offset
-    pub async fn read_register(&self, offset: u64) -> Result<u32> {
+    pub async fn read_register(&self, offset: u64, width: u8) -> Result<u32> {
+        // `width` is the width the guest actually asked for, and handing the
+        // device anything else is not a rounding error. Register files are
+        // byte-wide and reads have side effects -- reading a UART receive
+        // buffer pops a byte, reading its interrupt identification register
+        // clears a pending interrupt -- so asking for four bytes when the
+        // guest asked for one silently disturbs three registers it never
+        // touched.
+        let width = width.clamp(1, 4) as usize;
         let device = self.device.read().await;
         let mut data = [0u8; 4];
-        device.read(offset, &mut data).await?;
+        device.read(offset, &mut data[..width]).await?;
         Ok(u32::from_le_bytes(data))
     }
 
     /// Write a register at the given offset
-    pub async fn write_register(&self, offset: u64, value: u32) -> Result<()> {
+    pub async fn write_register(&self, offset: u64, value: u32, width: u8) -> Result<()> {
+        // Same reason as the read, and worse: a one-byte OUT expanded to four
+        // wrote the three registers after the target with the zero bytes of
+        // the padding. On a serial port that meant every character printed
+        // also cleared the interrupt-enable, FIFO-control and line-control
+        // registers -- which looks like it works, right up until something
+        // depends on one of them.
+        let width = width.clamp(1, 4) as usize;
         let mut device = self.device.write().await;
         let data = value.to_le_bytes();
-        device.write(offset, &data).await
+        device.write(offset, &data[..width]).await
     }
 }
 
@@ -372,18 +387,33 @@ impl IoDeviceHandle {
     }
 
     /// Read a register at the given offset
-    pub async fn read_register(&self, offset: u64) -> Result<u32> {
+    pub async fn read_register(&self, offset: u64, width: u8) -> Result<u32> {
+        // `width` is the width the guest actually asked for, and handing the
+        // device anything else is not a rounding error. Register files are
+        // byte-wide and reads have side effects -- reading a UART receive
+        // buffer pops a byte, reading its interrupt identification register
+        // clears a pending interrupt -- so asking for four bytes when the
+        // guest asked for one silently disturbs three registers it never
+        // touched.
+        let width = width.clamp(1, 4) as usize;
         let device = self.device.read().await;
         let mut data = [0u8; 4];
-        device.read(offset, &mut data).await?;
+        device.read(offset, &mut data[..width]).await?;
         Ok(u32::from_le_bytes(data))
     }
 
     /// Write a register at the given offset
-    pub async fn write_register(&self, offset: u64, value: u32) -> Result<()> {
+    pub async fn write_register(&self, offset: u64, value: u32, width: u8) -> Result<()> {
+        // Same reason as the read, and worse: a one-byte OUT expanded to four
+        // wrote the three registers after the target with the zero bytes of
+        // the padding. On a serial port that meant every character printed
+        // also cleared the interrupt-enable, FIFO-control and line-control
+        // registers -- which looks like it works, right up until something
+        // depends on one of them.
+        let width = width.clamp(1, 4) as usize;
         let mut device = self.device.write().await;
         let data = value.to_le_bytes();
-        device.write(offset, &data).await
+        device.write(offset, &data[..width]).await
     }
 }
 
@@ -520,5 +550,41 @@ mod tests {
         let out = manager.console_output().await;
         assert_eq!(out.len(), 1, "an attached-but-quiet console is not absent");
         assert!(out[0].1.is_empty());
+    }
+    #[tokio::test]
+    async fn a_one_byte_port_write_reaches_exactly_one_register() {
+        // The dispatch layer used to hand every device a four-byte buffer
+        // whatever the guest asked for, so a one-byte OUT of a character also
+        // wrote the three registers after it with the padding. On a serial
+        // port that cleared interrupt-enable, FIFO-control and line-control on
+        // every character printed -- which looks like it works.
+        use crate::devices::serial::SerialDevice;
+
+        let manager = DeviceManager::new();
+        let serial = Arc::new(RwLock::new(SerialDevice::new("COM1".to_string(), 0x3F8)));
+        manager.register_device("COM1", serial).await.unwrap();
+        manager
+            .register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF)
+            .await
+            .unwrap();
+
+        let handle = manager.find_io_device(0x3F8).await.expect("COM1");
+
+        // Set the interrupt-enable register, then print a character.
+        handle.write_register(1, 0x0F, 1).await.unwrap();
+        handle.write_register(0, u32::from(b'h'), 1).await.unwrap();
+
+        assert_eq!(
+            handle.read_register(1, 1).await.unwrap(),
+            0x0F,
+            "printing a character must not disturb the register beside it"
+        );
+
+        let console = manager.console_output().await;
+        assert_eq!(
+            console.first().map(|(_, bytes)| bytes.as_slice()),
+            Some(b"h".as_slice()),
+            "the character has to reach the transmit buffer: {console:?}"
+        );
     }
 }

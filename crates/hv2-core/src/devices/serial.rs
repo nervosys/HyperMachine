@@ -310,7 +310,22 @@ impl SerialDevice {
                     self.rx_buffer.lock().clear();
                 }
                 if (byte & FCR_TX_FIFO_RESET) != 0 {
-                    self.tx_buffer.lock().clear();
+                    // Deliberately does NOT clear `tx_buffer`.
+                    //
+                    // On real hardware the transmit FIFO holds bytes that have
+                    // not gone out on the wire yet, and resetting it discards
+                    // exactly those. Here a write to THR *is* the
+                    // transmission -- the byte is already in the host's hands
+                    // the moment it lands in this buffer -- so there is never
+                    // anything unsent to discard, and `tx_buffer` is the
+                    // transcript of what the guest already said.
+                    //
+                    // Clearing it erased the boot log. Linux's 8250 driver
+                    // resets both FIFOs when it takes the port over from
+                    // earlyprintk, so every kernel that got far enough to
+                    // initialise its serial driver properly wiped its own
+                    // console history on the way past, and the VM looked as
+                    // though it had never printed at all.
                     *self.thr_empty.lock() = true;
                 }
             }
@@ -636,9 +651,12 @@ mod tests {
         device.read(RBR_OFFSET, &mut buf).await.unwrap();
         assert_eq!(buf[0], 0);
 
-        // TX buffer should be cleared
-        let output = device.output();
-        assert!(output.is_empty());
+        // The transcript survives, and this is the corrected expectation:
+        // a transmit-FIFO reset discards bytes that have not gone out yet,
+        // and here a THR write is the transmission. This used to assert the
+        // buffer was cleared, which is what erased a guest's boot log the
+        // moment its 8250 driver took the port over from earlyprintk.
+        assert_eq!(device.peek_output(), b"D");
 
         // IIR should show FIFOs enabled (bits 6-7)
         device.read(IIR_OFFSET, &mut buf).await.unwrap();
@@ -737,5 +755,49 @@ mod tests {
         let mut ier = [0u8; 1];
         serial.read(IER_OFFSET, &mut ier).await.unwrap();
         assert_eq!(ier[0], 0x0F, "IER took the second");
+    }
+    #[tokio::test]
+    async fn resetting_the_transmit_fifo_does_not_erase_what_was_already_printed() {
+        // Linux resets both FIFOs when its 8250 driver takes the port over
+        // from earlyprintk. A transmit-FIFO reset discards bytes not yet sent;
+        // here a THR write is the transmission, so there are none -- and
+        // clearing the buffer threw away the whole boot log instead.
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        // One byte per access: a wide write walks consecutive registers, so
+        // handing eight bytes to THR would write the seven registers after it.
+        for byte in b"boot log" {
+            serial.write(THR_OFFSET, &[*byte]).await.unwrap();
+        }
+
+        serial
+            .write(
+                FCR_OFFSET,
+                &[FCR_FIFO_ENABLE | FCR_TX_FIFO_RESET | FCR_RX_FIFO_RESET],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            serial.peek_output(),
+            b"boot log",
+            "a FIFO reset must not erase the transcript"
+        );
+    }
+
+    #[tokio::test]
+    async fn resetting_the_receive_fifo_does_discard_pending_input() {
+        // The other direction is genuinely pending and must be discarded:
+        // input the guest has not read yet is exactly what the reset is for.
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        serial.input(b"typed but unread").unwrap();
+
+        serial
+            .write(FCR_OFFSET, &[FCR_FIFO_ENABLE | FCR_RX_FIFO_RESET])
+            .await
+            .unwrap();
+
+        let mut byte = [0u8; 1];
+        serial.read(RBR_OFFSET, &mut byte).await.unwrap();
+        assert_eq!(byte[0], 0, "the receive FIFO should be empty");
     }
 }

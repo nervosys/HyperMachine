@@ -86,6 +86,24 @@ const SETUP_HEADER_MIN_END: usize = 0x250;
 /// claiming to extend past this is not one this loader can honour.
 const SETUP_HEADER_MAX_END: usize = 0x2D0;
 
+/// `initrd_addr_max` in the setup header: the highest address the initrd may
+/// occupy.
+const INITRD_ADDR_MAX_OFFSET: usize = 0x22C;
+
+/// What the boot protocol says to assume when the header predates the field.
+const DEFAULT_INITRD_ADDR_MAX: u64 = 0x37FF_FFFF;
+
+/// `init_size` in the setup header: how much room the kernel needs to unpack
+/// itself into, starting from where it ends up running.
+const INIT_SIZE_OFFSET: usize = 0x260;
+
+/// `pref_address` in the setup header: where a relocatable kernel would rather
+/// be placed.
+const PREF_ADDRESS_OFFSET: usize = 0x258;
+
+/// Initrd placement is page aligned, as every loader does it.
+const INITRD_ALIGN: u64 = 4096;
+
 /// Usable RAM, in the ACPI address range descriptor's numbering.
 const E820_RAM: u32 = 1;
 
@@ -250,6 +268,68 @@ impl LinuxBootProtocol {
         boot_params
     }
 
+    /// Read a little-endian `u32` out of the setup header.
+    fn header_u32(kernel_image: &[u8], offset: usize) -> u64 {
+        kernel_image
+            .get(offset..offset + 4)
+            .and_then(|bytes| bytes.try_into().ok())
+            .map_or(0, |bytes: [u8; 4]| u64::from(u32::from_le_bytes(bytes)))
+    }
+
+    /// Where to put the initrd.
+    ///
+    /// As high in guest memory as it will go, which is what every real
+    /// bootloader does and for a concrete reason: a compressed kernel unpacks
+    /// itself into `init_size` bytes starting from where it will run, and that
+    /// region is far larger than the compressed image. This used to place the
+    /// initrd at a fixed 32 MB, which sits *inside* that region for any kernel
+    /// of ordinary size -- decompression then wrote straight over the initrd,
+    /// and the kernel reported "invalid magic at start of compressed archive"
+    /// about bytes it had overwritten itself.
+    ///
+    /// The ceiling is the header's `initrd_addr_max` (some kernels cannot
+    /// address an initrd anywhere in RAM), clamped to the memory the guest
+    /// actually has.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::VM`] if the initrd cannot be placed clear of the
+    /// kernel's unpack region -- which is a guest that needs more memory, and
+    /// is worth saying rather than discovering as a corrupted archive.
+    fn initrd_address(params: &LinuxBootParams, initrd_len: u64) -> Result<u64> {
+        let image = &params.kernel_image;
+
+        let addr_max = match Self::header_u32(image, INITRD_ADDR_MAX_OFFSET) {
+            0 => DEFAULT_INITRD_ADDR_MAX,
+            max => max,
+        };
+        let ceiling = addr_max.min(params.memory_size.saturating_sub(1));
+
+        let addr = (ceiling + 1).checked_sub(initrd_len).ok_or_else(|| {
+            Error::VM(format!(
+                "an initrd of {initrd_len:#x} bytes does not fit below {ceiling:#x}"
+            ))
+        })? & !(INITRD_ALIGN - 1);
+
+        // The kernel unpacks itself into init_size bytes from where it runs.
+        // Anything landing inside that is overwritten before it is read.
+        let unpack_from = match Self::header_u32(image, PREF_ADDRESS_OFFSET) {
+            0 => params.kernel_addr,
+            pref => pref.min(params.kernel_addr),
+        };
+        let unpack_end = unpack_from + Self::header_u32(image, INIT_SIZE_OFFSET);
+
+        if addr < unpack_end {
+            return Err(Error::VM(format!(
+                "an initrd of {initrd_len:#x} bytes has nowhere to go: the kernel unpacks \
+                 itself through {unpack_end:#x} and the initrd must end by {ceiling:#x}. \
+                 Give the guest more memory"
+            )));
+        }
+
+        Ok(addr)
+    }
+
     /// Where this image's setup header ends.
     ///
     /// Read from the image rather than assumed: the boot protocol puts the
@@ -331,7 +411,7 @@ impl LinuxBootProtocol {
 
         // 3. Initrd (optional) — place at 32 MB (above kernel)
         let (initrd_addr, initrd_size) = if let Some(ref initrd) = params.initrd {
-            let addr: u64 = 0x200_0000; // 32 MB
+            let addr = Self::initrd_address(params, initrd.len() as u64)?;
             regions.push((addr, initrd.clone()));
             (Some(addr), Some(initrd.len()))
         } else {
@@ -625,20 +705,31 @@ mod tests {
         // Should have: initrd, boot_params, cmdline, kernel
         assert!(regions.len() >= 3);
 
-        // Initrd at 32 MB
+        // High in guest memory, not at a fixed address. The address itself is
+        // not the contract -- being clear of where the kernel unpacks itself
+        // is, and a constant here was what hid the collision that overwrote
+        // the initrd.
         let (addr, data) = &regions[0];
-        assert_eq!(*addr, 0x200_0000);
         assert_eq!(data, &initrd_data);
+        assert!(
+            *addr + initrd_data.len() as u64 <= params.memory_size,
+            "initrd at {addr:#x} runs past the guest's memory"
+        );
+        assert_eq!(*addr % 4096, 0, "page aligned");
 
-        // Boot params should reference the initrd
+        // ...and boot_params points at wherever it actually went.
         let (_, boot_params) = &regions[1];
-        let initrd_addr = u32::from_le_bytes([
+        let recorded = u32::from_le_bytes([
             boot_params[0x218],
             boot_params[0x219],
             boot_params[0x21A],
             boot_params[0x21B],
         ]);
-        assert_eq!(initrd_addr, 0x200_0000);
+        assert_eq!(
+            u64::from(recorded),
+            *addr,
+            "the kernel looks for the initrd where this field says it is"
+        );
     }
 
     #[test]
@@ -771,5 +862,81 @@ mod tests {
         kernel.truncate(0x220);
         kernel[0x201] = 0x6A;
         assert_eq!(LinuxBootProtocol::setup_header_end(&kernel), 0x220);
+    }
+    #[test]
+    fn an_initrd_is_placed_clear_of_where_the_kernel_unpacks_itself() {
+        // The defect this replaces: a fixed 32 MB address that sits inside the
+        // unpack region of any ordinary kernel, so decompression overwrote the
+        // initrd and the kernel reported invalid magic about bytes it had
+        // destroyed itself.
+        let mut kernel = create_minimal_bzimage();
+        kernel.resize(0x400, 0);
+        kernel[0x201] = 0x6A;
+        kernel[PREF_ADDRESS_OFFSET..PREF_ADDRESS_OFFSET + 4]
+            .copy_from_slice(&0x0100_0000u32.to_le_bytes()); // runs at 16 MB
+        kernel[INIT_SIZE_OFFSET..INIT_SIZE_OFFSET + 4]
+            .copy_from_slice(&0x03BE_2000u32.to_le_bytes()); // needs 62 MB
+
+        let params = LinuxBootParams {
+            kernel_image: kernel,
+            initrd: Some(vec![0xAB; 4096]),
+            memory_size: 512 * 1024 * 1024,
+            ..LinuxBootParams::default()
+        };
+
+        let addr = LinuxBootProtocol::initrd_address(&params, 4096).unwrap();
+        assert!(
+            addr >= 0x0100_0000 + 0x03BE_2000,
+            "{addr:#x} lands inside the unpack region"
+        );
+        assert_eq!(addr % INITRD_ALIGN, 0, "initrd placement is page aligned");
+        assert!(
+            addr + 4096 <= 512 * 1024 * 1024,
+            "{addr:#x} runs past guest RAM"
+        );
+    }
+
+    #[test]
+    fn an_initrd_with_nowhere_to_go_is_refused_rather_than_overwritten() {
+        // Silently placing it somewhere it will be destroyed is how this
+        // failed before; the caller needs to hear "give the guest more
+        // memory", not debug a corrupted archive.
+        let mut kernel = create_minimal_bzimage();
+        kernel.resize(0x400, 0);
+        kernel[0x201] = 0x6A;
+        kernel[INIT_SIZE_OFFSET..INIT_SIZE_OFFSET + 4]
+            .copy_from_slice(&0x0400_0000u32.to_le_bytes()); // needs 64 MB
+
+        let params = LinuxBootParams {
+            kernel_image: kernel,
+            initrd: Some(vec![0xAB; 1024]),
+            memory_size: 32 * 1024 * 1024,
+            ..LinuxBootParams::default()
+        };
+
+        let err = LinuxBootProtocol::initrd_address(&params, 1024).unwrap_err();
+        assert!(err.to_string().contains("more memory"), "got: {err}");
+    }
+
+    #[test]
+    fn the_initrd_ceiling_honours_what_the_kernel_can_address() {
+        // A kernel that cannot address an initrd across all of RAM says so in
+        // its header, and ignoring that puts the initrd where it will never be
+        // found.
+        let mut kernel = create_minimal_bzimage();
+        kernel.resize(0x400, 0);
+        kernel[0x201] = 0x6A;
+        kernel[INITRD_ADDR_MAX_OFFSET..INITRD_ADDR_MAX_OFFSET + 4]
+            .copy_from_slice(&0x0FFF_FFFFu32.to_le_bytes()); // 256 MB ceiling
+
+        let params = LinuxBootParams {
+            kernel_image: kernel,
+            initrd: Some(vec![0xAB; 4096]),
+            memory_size: 2 * 1024 * 1024 * 1024,
+            ..LinuxBootParams::default()
+        };
+
+        let addr = LinuxBootProtocol::initrd_address(&params, 4096).unwrap();
+        assert!(addr + 4096 <= 0x1000_0000, "{addr:#x} is above the ceiling");
     }
 }
