@@ -31,7 +31,7 @@
 //!
 //! | Backend | Where | Enforces |
 //! | --- | --- | --- |
-//! | [`ProcessSandbox`] on Linux | this crate | user/PID/mount/net/IPC/UTS namespaces, cgroup v2 memory and PID caps, `RLIMIT_*`, `no_new_privs` |
+//! | [`ProcessSandbox`] on Linux | this crate | user/PID/mount/net/IPC namespaces, `pivot_root` onto a named root, cgroup v2 memory and PID caps, `RLIMIT_*`, `no_new_privs` |
 //! | [`ProcessSandbox`] on Windows | this crate | job object memory, process count, and CPU-time caps, kill-on-close |
 //! | [`ProcessSandbox`] on macOS | this crate | `RLIMIT_*` only, and it says so |
 //! | microVM | `hv2-agent` | a whole guest, reached over vsock |
@@ -177,10 +177,29 @@ pub enum FilesystemPolicy {
     Host,
     /// Only `root` and whatever is mounted into it. Requires
     /// [`Control::FilesystemIsolation`].
+    ///
+    /// A backend mounts this root; it does not build one. A root that does not
+    /// exist is refused rather than created, because a sandbox that invented an
+    /// empty directory would run a workload that could find none of its own
+    /// tools and report that as the workload's failure.
+    ///
+    /// Nothing is mounted on the caller's behalf beyond `read_only` — `/dev`
+    /// included, which a shell wants the moment anything redirects to
+    /// `/dev/null`. List it if the workload needs it.
     Isolated {
         /// Directory that becomes the workload's root.
+        ///
+        /// Absolute. Writable from inside unless the host says otherwise, so a
+        /// caller that wants nothing written puts nothing writable in it.
         root: PathBuf,
-        /// Host paths mounted read-only inside it.
+        /// Host paths mounted read-only inside it, each at the same path it has
+        /// on the host — `/usr` becomes `/usr` — so a workload finds its tools
+        /// where they expect to be and no mapping has to be kept in step.
+        ///
+        /// Mount points are created inside `root` where they are missing. Each
+        /// path must exist on the host, or the run is refused. Read-only here
+        /// means the whole subtree, including anything the host has mounted
+        /// under the path, and `nosuid` with it.
         read_only: Vec<PathBuf>,
     },
 }

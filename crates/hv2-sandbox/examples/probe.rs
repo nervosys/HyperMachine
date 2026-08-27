@@ -49,4 +49,58 @@ fn main() {
             Err(e) => println!("  {what}: FAILED {e}"),
         }
     }
+
+    filesystem_check(&sandbox);
 }
+
+/// Ask a confined workload whether it can still reach a file outside its root.
+///
+/// Needs a root to pivot into, which no default can choose for the caller, so
+/// it makes a throwaway one rather than being left out of the report.
+#[cfg(target_os = "linux")]
+fn filesystem_check(sandbox: &ProcessSandbox) {
+    use hv2_sandbox::{FilesystemPolicy, NetworkPolicy};
+
+    let base = std::env::temp_dir().join(format!("hv2-sandbox-probe-{}", std::process::id()));
+    let root = base.join("root");
+    let outside = base.join("host-only");
+    if std::fs::create_dir_all(&root)
+        .and_then(|()| std::fs::write(&outside, b"host\n"))
+        .is_err()
+    {
+        println!("  filesystem: FAILED could not make a scratch root");
+        return;
+    }
+
+    let spec = SandboxSpec {
+        filesystem: FilesystemPolicy::Isolated {
+            root: root.clone(),
+            read_only: ["/bin", "/usr", "/lib", "/lib64", "/sbin"]
+                .iter()
+                .map(std::path::PathBuf::from)
+                .filter(|path| path.exists())
+                .collect(),
+        },
+        network: NetworkPolicy::Host,
+        wall_clock: Some(std::time::Duration::from_secs(20)),
+        ..SandboxSpec::default()
+    };
+    let script = format!(
+        "if [ -e '{}' ]; then echo 'STILL VISIBLE'; else echo 'gone'; fi",
+        outside.display()
+    );
+    let command = SandboxCommand::new("/bin/sh").args(["-c", &script]);
+
+    match sandbox.run(&command, &spec) {
+        Ok(out) => println!(
+            "  a host file outside the root: {}",
+            String::from_utf8_lossy(&out.stdout).trim()
+        ),
+        Err(e) => println!("  a host file outside the root: FAILED {e}"),
+    }
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+/// Nothing to report where no backend isolates a filesystem.
+#[cfg(not(target_os = "linux"))]
+fn filesystem_check(_sandbox: &ProcessSandbox) {}

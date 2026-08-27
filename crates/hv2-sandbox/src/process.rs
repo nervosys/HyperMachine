@@ -593,6 +593,296 @@ mod tests {
         );
     }
 
+    /// A scratch directory holding a root to pivot into and a file outside it.
+    ///
+    /// Both halves matter: the file outside is the one the workload must not be
+    /// able to reach, and it has to be a real file on the host or its absence
+    /// inside proves nothing.
+    #[cfg(target_os = "linux")]
+    struct ScratchRoot {
+        base: std::path::PathBuf,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl ScratchRoot {
+        fn new(label: &str) -> Self {
+            let unique = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("a clock after 1970")
+                .as_nanos();
+            let base = std::env::temp_dir().join(format!(
+                "hv2-sandbox-{label}-{}-{unique}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(base.join("root")).expect("a scratch root");
+            let scratch = Self { base };
+            std::fs::write(scratch.outside(), b"host-only\n").expect("a file outside the root");
+            scratch
+        }
+
+        fn root(&self) -> std::path::PathBuf {
+            self.base.join("root")
+        }
+
+        /// A file that exists on the host and is not under the root.
+        fn outside(&self) -> std::path::PathBuf {
+            self.base.join("host-only-secret")
+        }
+
+        /// The policy that gives the workload this root, with enough of the
+        /// host mounted read-only for `/bin/sh` to run inside it.
+        fn policy(&self) -> crate::FilesystemPolicy {
+            let read_only = ["/bin", "/usr", "/lib", "/lib64", "/sbin"]
+                .iter()
+                .map(std::path::PathBuf::from)
+                .filter(|path| path.exists())
+                .collect();
+            crate::FilesystemPolicy::Isolated {
+                root: self.root(),
+                read_only,
+            }
+        }
+
+        /// A spec asking for the filesystem control and nothing else that could
+        /// be unavailable here and turn a failure into a different story.
+        fn spec(&self) -> SandboxSpec {
+            SandboxSpec {
+                filesystem: self.policy(),
+                network: NetworkPolicy::Host,
+                wall_clock: Some(Duration::from_secs(20)),
+                ..SandboxSpec::default()
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for ScratchRoot {
+        fn drop(&mut self) {
+            // The mounts lived in the workload's own mount namespace and died
+            // with it, so nothing here is still mounted in ours.
+            let _ = std::fs::remove_dir_all(&self.base);
+        }
+    }
+
+    /// The reason to skip, or `None` when this host can isolate a filesystem.
+    #[cfg(target_os = "linux")]
+    fn filesystem_isolation_unavailable(sandbox: &ProcessSandbox) -> Option<String> {
+        let controls = sandbox.controls();
+        if controls.enforces(Control::FilesystemIsolation) {
+            return None;
+        }
+        Some(
+            controls
+                .reason(Control::FilesystemIsolation)
+                .unwrap_or("filesystem isolation unavailable")
+                .to_string(),
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_filesystem_isolated_workload_cannot_see_a_file_outside_its_root() {
+        // The claim, stated as the workload's own view: this is the assertion
+        // that would fail if `pivot_root` were swapped for a `chroot` that left
+        // the old root mounted, or if the pivot silently did nothing. Reading
+        // `controls()` back would pass in both of those cases.
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+
+        let scratch = ScratchRoot::new("outside");
+        assert!(
+            scratch.outside().exists(),
+            "the file has to exist on the host, or its absence inside proves nothing"
+        );
+
+        let script = format!(
+            "if [ -e '{}' ]; then echo VISIBLE; else echo HIDDEN; fi",
+            scratch.outside().display()
+        );
+        assert_eq!(
+            confined_shell(&sandbox, &script, &scratch.spec()),
+            "HIDDEN",
+            "the workload reached a host file outside the root it was given"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_filesystem_isolated_workload_can_read_a_file_inside_its_root() {
+        // The other direction, and the reason the test above is evidence rather
+        // than a coincidence: a sandbox that showed the workload an empty or
+        // broken filesystem would also hide the outside file, and would be
+        // useless. The root has to be the one the spec named.
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+
+        let scratch = ScratchRoot::new("inside");
+        std::fs::write(scratch.root().join("inside-marker"), b"sandbox\n").expect("a file inside");
+
+        assert_eq!(
+            confined_shell(&sandbox, "cat /inside-marker", &scratch.spec()),
+            "sandbox",
+            "the directory the spec named should be the workload's root"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_read_only_mount_refuses_writes_while_the_root_itself_accepts_them() {
+        // A bind mount is created read-write whatever flags the first mount
+        // call carried; making it read-only is a second call that can fail. If
+        // its failure were ignored the workload would get a writable /usr while
+        // `FilesystemPolicy::read_only` said otherwise. The writable half is
+        // here so a workload that simply could not write anything — a wrong
+        // uid, say — cannot pass this by failing twice.
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+
+        let scratch = ScratchRoot::new("readonly");
+        // No `2>/dev/null` on these redirects. An isolated root has no /dev
+        // unless the caller mounts one, so suppressing stderr that way makes
+        // *both* writes fail on the redirect and the test passes for a reason
+        // that has nothing to do with the mount — which is what it did.
+        let script = "if echo x > /usr/hv2-write-probe; then echo WROTE; else echo REFUSED; fi; \
+                      if echo y > /writable-probe; then echo WROTE; else echo REFUSED; fi";
+
+        assert_eq!(
+            confined_shell(&sandbox, script, &scratch.spec()),
+            "REFUSED\nWROTE",
+            "a read-only bind should refuse the write and the root itself should not"
+        );
+        assert!(
+            !std::path::Path::new("/usr/hv2-write-probe").exists(),
+            "the write escaped into the host's /usr"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_new_root_and_a_new_pid_namespace_hold_at_the_same_time() {
+        // The ordering is load-bearing and only this combination exercises it:
+        // /proc has to be mounted after the pivot or it lands in the root that
+        // is thrown away, and the pivot has to come after the id maps are
+        // written or /proc/self/uid_map has no name any more. Each control
+        // tested alone passes with the order wrong.
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+        if !sandbox.controls().enforces(Control::ProcessIsolation) {
+            eprintln!("skipping: this host cannot isolate processes");
+            return;
+        }
+
+        let scratch = ScratchRoot::new("both");
+        std::fs::write(scratch.root().join("inside-marker"), b"sandbox\n").expect("a file inside");
+        let mut spec = scratch.spec();
+        spec.isolate_processes = true;
+
+        assert_eq!(
+            confined_shell(&sandbox, "echo $$; cat /inside-marker", &spec),
+            "1\nsandbox",
+            "the workload should be PID 1 and in the root it was given, at the same time"
+        );
+
+        // A /proc mounted before the pivot would have been discarded with the
+        // old root, and the shell would report the host's process table or
+        // nothing at all.
+        let visible: usize = confined_shell(&sandbox, "ls /proc | grep -c '^[0-9]'", &spec)
+            .parse()
+            .expect("a count");
+        assert!(
+            (1..=5).contains(&visible),
+            "the workload sees {visible} processes through a /proc inside its own root"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_working_directory_is_resolved_inside_the_new_root() {
+        // `std` applies `Command::current_dir` before the `pre_exec` closure
+        // runs, so a working directory left to it would be resolved against the
+        // host and then thrown away by the pivot — the workload would start
+        // somewhere it did not ask for and nothing would say so.
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+
+        let scratch = ScratchRoot::new("workdir");
+        std::fs::create_dir_all(scratch.root().join("work")).expect("a directory inside the root");
+        let command = SandboxCommand::new("/bin/sh")
+            .args(["-c", "pwd"])
+            .working_dir("/work");
+        let output = sandbox.run(&command, &scratch.spec()).expect("run");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "/work",
+            "got: {output:?}"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_isolated_root_that_does_not_exist_is_refused_before_anything_runs() {
+        // The failure has to land in the parent, where it is a refusal. A root
+        // checked only in the child would surface as an opaque spawn failure
+        // after the workload had already been committed to.
+        let sandbox = ProcessSandbox::new();
+        if let Some(why) = filesystem_isolation_unavailable(&sandbox) {
+            eprintln!("skipping: {why}");
+            return;
+        }
+
+        let spec = SandboxSpec {
+            filesystem: crate::FilesystemPolicy::Isolated {
+                root: std::path::PathBuf::from("/no/such/sandbox/root"),
+                read_only: Vec::new(),
+            },
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+        let err = sandbox
+            .run(&SandboxCommand::new("/bin/echo"), &spec)
+            .expect_err("a root that is not there cannot be pivoted into");
+        assert!(matches!(err, SandboxError::InvalidSpec(_)), "got: {err}");
+    }
+
+    #[test]
+    fn a_host_that_cannot_isolate_the_filesystem_refuses_to_pretend_it_did() {
+        // Runs everywhere, including the platforms where this control is never
+        // available: asking for a root on a backend that cannot give one is a
+        // refusal naming the control, not a workload quietly seeing the host.
+        let sandbox = ProcessSandbox::with_controls(Controls::none());
+        let spec = SandboxSpec {
+            filesystem: crate::FilesystemPolicy::Isolated {
+                root: std::env::temp_dir(),
+                read_only: Vec::new(),
+            },
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+
+        let err = sandbox
+            .run(&SandboxCommand::new("/bin/echo"), &spec)
+            .expect_err("a backend enforcing nothing must refuse");
+        assert!(
+            err.to_string().contains("filesystem isolation"),
+            "got: {err}"
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn best_effort_does_not_attempt_a_control_the_probe_rejected() {

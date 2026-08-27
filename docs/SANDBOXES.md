@@ -57,7 +57,7 @@ caller asks for it.
 | CPU time | `RLIMIT_CPU` | job `PerJobUserTimeLimit` | `RLIMIT_CPU` | guest agent |
 | Wall clock | kill the process group | terminate the job | kill the process group | guest agent |
 | Network isolation | `CLONE_NEWNET` + its own sysfs | ✗ | ✗ | no network device |
-| Filesystem isolation | ✗ (see below) | ✗ | ✗ | the guest's own |
+| Filesystem isolation | `CLONE_NEWNS` + `pivot_root` | ✗ | ✗ | the guest's own |
 | Process isolation | `CLONE_NEWPID` + `CLONE_NEWIPC` + its own `/proc` | ✗ | ✗ | a separate kernel |
 | No new privileges | `PR_SET_NO_NEW_PRIVS` | ✗ | ✗ | a separate kernel |
 
@@ -78,6 +78,11 @@ something escapes.
 5. **Fork again** if a PID namespace was created. `unshare(CLONE_NEWPID)` puts
    the *next* child in the new namespace, not the caller — without this step the
    workload runs in the host's PID namespace while the code claims otherwise.
+6. **`pivot_root`** if a root was named. It has to come after everything that
+   reads a host path — `/proc/self/uid_map` at step 4, the cgroup file at step
+   1 — because after it the host filesystem has no name at all.
+7. **Mount `/proc` and `/sys` last**, so they land inside the new root instead
+   of the one that is about to be discarded.
 
 Everything between `fork` and `exec` allocates nothing and calls only
 async-signal-safe functions; every string it needs is built in the parent.
@@ -92,11 +97,49 @@ processes and `/sys/class/net` listed the host's interfaces. Half an isolation
 claim is worse than none, so the probe now rehearses the remounts and reports
 the control only if they worked.
 
-**Filesystem isolation is deliberately not implemented here.** Doing it
-properly means `pivot_root` with a prepared root. A `chroot` that a retained
-directory descriptor can walk out of would look like isolation and not be one,
-which is the exact failure this crate exists to stop repeating. A caller who
-needs it uses the microVM sandbox, which gets it from having a different kernel.
+**Filesystem isolation is `pivot_root`, not `chroot`.** `chroot` moves where a
+path walk starts and leaves the old root mounted: a retained directory
+descriptor plus `fchdir` walks straight out of it. `pivot_root` moves the root
+*mount*, and the two-step `pivot_root(".", ".")` followed by
+`umount2(".", MNT_DETACH)` leaves the old root mounted nowhere — no path to it,
+and no mount for a stale descriptor to resolve against. The descriptors are
+closed anyway: everything this crate and `std` open is `O_CLOEXEC`, so the
+workload starts holding nothing but its three standard streams.
+
+`FilesystemPolicy::Isolated` names a root and a list of host paths to expose
+read-only. The backend does not build a root — it mounts the one it is given, and
+a root that does not exist is a refusal before anything is spawned. Read-only
+paths appear at the same path inside the root (`/usr` → `/usr`), and their mount
+points are created inside the root because a bind onto a path that is not there
+fails and `mkdir` after the pivot would be too late.
+
+**An isolated root contains only what the spec put in it**, and that includes
+`/dev`. A workload that needs `/dev/null` — which a shell does, the moment
+anything redirects to it — gets one by listing `/dev` in `read_only`. Nothing
+is mounted on the caller's behalf except `/proc` and `/sys`, and only when the
+matching namespace was created.
+
+**Read-only binds are recursive, and both halves of that were forced by the
+kernel.** A plain `MS_BIND` of a directory with anything mounted underneath it
+is refused outright inside a user namespace (`EINVAL`): the kernel will not let
+you create a mount that hides a mount you cannot unmount, and `/usr` on the
+kernel this was written against has three submounts under `/usr/lib`. So the
+bind is `MS_REC`. But then `mount(MS_REMOUNT | MS_RDONLY)` is not enough either
+— it changes the top mount only, and would leave `/usr/lib/wsl/lib` writable
+inside a mount the caller was told is read-only. `mount_setattr` with
+`AT_RECURSIVE` covers the whole subtree, and sets `nosuid` with it. A kernel
+older than 5.12 has no `mount_setattr`, and is reported as unable to isolate the
+filesystem rather than quietly given the weaker version.
+
+The probe rehearses all of it in a throwaway child — pivot into a scratch root
+with a read-only bind — and then asks the three questions that decide whether
+the claim is true: is a file inside the root still visible, is a file outside it
+gone, and does the read-only mount refuse a write. A probe that stopped at
+"`pivot_root` returned 0" would report the control on a host where the old root
+was still reachable.
+
+A caller who wants a boundary stronger than the host kernel's still uses the
+microVM sandbox.
 
 ## Notes on the Windows backend
 
@@ -129,11 +172,15 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   running a workload in a guest needs a booted guest, which is blocked on the
   same hardware gate as the rest of the boot path.
 - **Linux**: **run on a real kernel** (6.18, WSL2 Debian, as an unprivileged
-  user). 20 tests, and the isolation assertions ask the *workload* what it can
+  user). 27 tests, and the isolation assertions ask the *workload* what it can
   see rather than reading `controls()` back — a test that only did the latter
   would pass on a backend that reported the set and applied none of it. On that
   kernel the workload is PID 1 in its own namespace, sees 3 processes where the
-  host has hundreds, and has one network interface.
+  host has hundreds, has one network interface, cannot see a host file outside
+  the root it was given, can read one inside it, and gets `EROFS` writing to a
+  mount the spec asked to be read-only. Memory and process-count limits are
+  *not* enforced there — the cgroup hierarchy is not writable — and the probe
+  says so.
 - **macOS**: type-checked with `--target aarch64-apple-darwin`, not run.
 
 Running it on a kernel found two defects that type-checking could not, both of
@@ -146,6 +193,18 @@ workload could observe:
    now handed a spec filtered to what the probe said they enforce.
 2. `/proc` and `/sys` were inherited, so "cannot see processes outside" and
    "no network" were half-true in the way described above.
+
+Adding filesystem isolation found two more of the same shape, and neither is
+visible to a compiler:
+
+3. A non-recursive read-only bind of `/usr` fails with `EINVAL` inside a user
+   namespace when `/usr` has submounts, and a recursive one that is then
+   remounted read-only leaves those submounts writable. Only `mount_setattr`
+   with `AT_RECURSIVE` makes the claim true.
+4. The first read-only test passed for the wrong reason: it wrote
+   `2>/dev/null`, and an isolated root has no `/dev`, so *both* redirections
+   failed and the "refused" it asserted said nothing about the mount. The test
+   now checks the writable direction too, which is what caught it.
 
 `cargo run -p hv2-sandbox --example probe` prints what the machine you are on
 can enforce, and asks a confined workload what it can see. Run it on any host
