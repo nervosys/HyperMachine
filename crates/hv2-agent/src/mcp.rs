@@ -730,6 +730,19 @@ impl McpServer {
                                 }
                             },
                             "required": ["type"]
+                        },
+                        "guest_cid": {
+                            "type": "integer",
+                            "description": "Context ID for a guest channel, which is what \
+                                            vm.exec runs commands over. Give one to a VM whose \
+                                            guest you intend to run programs in: the channel is \
+                                            attached and named on the kernel command line before \
+                                            the guest boots, and cannot be added afterwards. \
+                                            Omit it for a VM you only boot and watch — that VM \
+                                            works normally, and vm.exec on it reports that it \
+                                            has no guest channel. Any number from 3 up; 0-2 are \
+                                            reserved.",
+                            "minimum": 3
                         }
                     },
                     "required": ["name"]
@@ -2422,6 +2435,20 @@ impl McpServer {
                 if let Some(boot) = params.get("boot") {
                     spec.boot = serde_json::from_value(boot.clone())
                         .map_err(|e| format!("Invalid boot source: {e}"))?;
+                }
+                // A CID that is not a number is a mistake, not an absent
+                // channel: a VM created without the channel its caller asked
+                // for fails much later, at vm.exec, with nothing pointing back
+                // to here.
+                match params.get("guest_cid") {
+                    None | Some(JsonValue::Null) => {}
+                    Some(value) => {
+                        spec.guest_cid = Some(
+                            value
+                                .as_u64()
+                                .ok_or("guest_cid must be a non-negative integer")?,
+                        );
+                    }
                 }
 
                 let descriptor = host.create(spec).await?;

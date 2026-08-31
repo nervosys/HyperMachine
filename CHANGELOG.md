@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A guest channel can be asked for through the tool surface** (`hv2-agent`).
+  `vm.create` takes an optional `guest_cid`; `LocalVmHost` attaches the channel
+  before launching and merges `virtio_mmio.device=` into the guest's command
+  line first, because virtio-mmio has no enumeration and the address has to be
+  on the command line before `VM::new` freezes it. After attaching it checks
+  the rendered argument against what the device reports and fails the start on
+  a disagreement -- a guest that probes the wrong address finds nothing and
+  says nothing, so a warning would be useless.
 - **A host can publish to the guest and signal it** (`hv2-core`).
   `VM::notify_vsock` moves packets the host queued into the receive buffers a
   driver posted and then raises the used-queue interrupt -- two steps that have
@@ -348,6 +356,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second call collides with the first.
 
 ### Fixed
+- **A timer test measured the host's scheduler rather than the timer**
+  (`hv2-core`). It counted PIT ticks across a real wall-clock second and
+  allowed 15 to 21. The interval uses `MissedTickBehavior::Skip`, which is
+  right for a timer and means a loaded machine genuinely loses ticks, so the
+  test failed under parallel builds for a reason unrelated to the code -- it
+  had done so repeatedly. It runs on paused time now, where the count is exact
+  (19) and the assertion fails only if the configured period changes.
 - **The transmit interrupt was never delivered, for three separate reasons**
   (`hv2-core`). Each one hid the next.
   1. `IIR` gated the transmit interrupt on a `thr_empty` flag that was set

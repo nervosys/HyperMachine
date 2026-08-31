@@ -340,7 +340,14 @@ impl VirtioMmioTransport {
             }
             reg::QUEUE_SEL => regs.queue_sel = value,
             reg::QUEUE_NUM => self.with_selected_queue(&regs, |q| q.set_size(value as u16)),
-            reg::QUEUE_READY => self.with_selected_queue(&regs, |q| q.set_ready(value != 0)),
+            reg::QUEUE_READY => {
+                tracing::debug!(
+                    "virtio-mmio '{}': queue {} ready={value}",
+                    self.name,
+                    regs.queue_sel
+                );
+                self.with_selected_queue(&regs, |q| q.set_ready(value != 0));
+            }
             reg::QUEUE_DESC_LOW => {
                 self.with_selected_queue(&regs, |q| {
                     q.set_desc_addr(set_low(q.desc_addr(), value));
@@ -384,6 +391,17 @@ impl VirtioMmioTransport {
                     return Ok(());
                 }
                 let used = self.device.lock().notify(value as u16, &self.memory)?;
+                {
+                    let mut device = self.device.lock();
+                    let idx = device
+                        .queues()
+                        .get(value as usize)
+                        .map(|q| q.avail_idx(&self.memory));
+                    tracing::debug!(
+                        "virtio-mmio '{}': notify queue {value}, used={used}, avail_idx={idx:?}",
+                        self.name
+                    );
+                }
                 if used {
                     self.raise(interrupt::VRING)?;
                 }

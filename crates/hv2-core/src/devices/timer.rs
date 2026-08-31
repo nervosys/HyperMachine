@@ -543,9 +543,18 @@ mod tests {
         // Cleanup
         timer.stop_timer_task();
     }
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_timer_frequency() {
-        // Test that timer runs at approximately 18.2 Hz
+        // Virtual time, because the thing being asserted is the timer's
+        // *configured* rate, not the machine's ability to schedule a task
+        // 18 times in a real second. The interval uses MissedTickBehavior::Skip
+        // -- correct for a timer, and it means a loaded host genuinely loses
+        // ticks, so a wall-clock assertion here fails for a reason that has
+        // nothing to do with the code. It has failed that way repeatedly under
+        // parallel builds.
+        //
+        // Paused time advances only when every task is idle, so the count
+        // below is exact rather than approximate.
         let pic = Arc::new(Pic8259::new());
         let mut timer = TimerDevice::new("PIT".to_string(), 0x40);
 
@@ -562,11 +571,13 @@ mod tests {
         let final_ticks = timer.total_ticks();
         let ticks_per_second = final_ticks - initial_ticks;
 
-        // Should be approximately 18.2 ticks per second (allow ±3 ticks tolerance)
-        assert!(
-            (15..=21).contains(&ticks_per_second),
-            "Expected ~18 ticks/second, got {}",
-            ticks_per_second
+        // 1 s / 54.925 ms = 18.2 periods, and the window catches the boundary
+        // at both ends because `interval`'s first tick fires immediately — so
+        // 19, exactly, every time. An exact number is the point: it fails if
+        // the configured period changes, which a tolerance band would hide.
+        assert_eq!(
+            ticks_per_second, 19,
+            "the PIT should tick 19 times in this virtual second"
         );
 
         timer.stop_timer_task();

@@ -13,13 +13,21 @@ A high-performance hypervisor framework in Rust with first-class AI agent suppor
 
 | Category        | Capabilities                                                                 |
 | --------------- | ---------------------------------------------------------------------------- |
-| **Performance** | Zero-copy memory, JIT compilation, hardware GPU virtualization               |
-| **Networking**  | Full TCP/IP stack, TAP/TUN, gRPC/REST APIs, distributed orchestration        |
-| **GPU**         | Vulkan/WebGPU, passthrough, virtual GPU, CUDA/OpenCL                         |
-| **AI-First**    | MCP server, scriptable API, WASM plugins, LLM tool formats                   |
+| **Performance** | Zero-copy guest memory access, GPU passthrough (VFIO, Linux)                 |
+| **Networking**  | TAP/TUN, gRPC/REST APIs, fleet & multi-agent orchestration                   |
+| **GPU**         | Vulkan/WebGPU (via `wgpu`), passthrough, virtual GPU, GPU-class fleet metadata (labels like `cuda-12.4`, not a CUDA/OpenCL runtime) |
+| **AI-First**    | MCP server, Rhai scriptable API, LLM tool formats (OpenAI/Anthropic/Gemini)  |
 | **GUI**         | Desktop app, AI-driven automation, semantic control API                      |
 | **Security**    | FIPS-approved + post-quantum crypto, capability-based access, audit logging |
 | **Governance**  | Optional policy evaluation per agent tool call, digest-keyed image admission |
+
+A few of these need more context than a table cell gives:
+- **GPU passthrough** is real VFIO/IOMMU code (`crates/hv2-gpu/src/passthrough.rs`) — it opens `/dev/vfio`, binds the device, and maps BARs via real ioctls — but it is Linux-only and has never run against physical GPU/IOMMU hardware in CI (no such hardware exists there), so the ioctl path is exercised by unit tests on parsed structs, not by an end-to-end attach.
+- **Virtual GPU** (`crates/hv2-gpu/src/vgpu.rs`) is a software GPU built on `wgpu`, not a hardware-virtualized GPU (SR-IOV/mediated device). There is no CUDA or OpenCL runtime anywhere in the codebase; the `cuda-12.4`-style strings that appear are fleet scheduling labels, not an implemented API.
+- **Fleet & multi-agent orchestration** (`hv2-agent::orchestration`, `hv2-runtime::fleet`) coordinates VM claims, locks, and per-host rollout state in-process; it does not itself make network calls to remote hosts, so "distributed" only holds in the sense that the data model tracks per-host state, not that a control plane dispatches work across a network.
+- **WASM plugins were removed from this table**: `wasmtime` is an optional dependency behind hv2-agent's `wasm-scripts` feature, which is not in any default feature set, and no source file in the workspace references `wasmtime` — there is no WASM plugin support to advertise today.
+- There is no full guest-facing TCP/IP stack (e.g. a user-mode network stack like slirp/smoltcp); it was removed from this table for the same reason. Guest networking is TAP/TUN bridging to the host's own stack.
+- **JIT compilation was removed**: nothing in the workspace implements a CPU JIT/dynamic-recompilation path.
 
 ## Benchmarks
 
@@ -61,7 +69,7 @@ Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
-~240,000 lines of Rust across 13 crates, in safe Rust, 4,700+ tests and `cargo clippy -D warnings` clean, on Linux, macOS and Windows. That does not mean every module does what its name suggests: `hv2-core`'s `container` module models the OCI runtime spec in types but runs nothing — `ContainerRuntime::start` refuses rather than fabricate a process — and OS-level confinement that is actually enforced lives in `hv2-sandbox` instead (see [Agent Governance](#agent-governance) and `docs/SANDBOXES.md`).
+~240,000 lines of Rust across 13 crates, in safe Rust, and `cargo clippy -D warnings` clean, on Linux, macOS and Windows. The workspace test suite passes across all three in CI (see the `CI` workflow); it is split across dozens of per-crate and per-platform jobs with overlapping binaries, so a single aggregate test count is not reliably computable from CI logs and is not quoted here — treat any specific number you see elsewhere in this repo's local status notes as a stale, moment-in-time snapshot. That does not mean every module does what its name suggests: `hv2-core`'s `container` module models the OCI runtime spec in types but runs nothing — `ContainerRuntime::start` refuses rather than fabricate a process — and OS-level confinement that is actually enforced lives in `hv2-sandbox` instead (see [Agent Governance](#agent-governance) and `docs/SANDBOXES.md`).
 
 Every advisory in the dependency graph is triaged in [`deny.toml`](deny.toml), and `cargo deny check` passes on advisories, bans, licenses and sources. Five are accepted with written justification because no upgrade path exists: the `rsa` crate's Marvin-attack timing advisory (no fixed release upstream), two `quick-xml` parser advisories reachable only through the Linux GUI accessibility stack, and two unmaintained-crate notices (`smartstring` via the scripting engine, `ttf-parser` via the desktop GUI's font layer). `wasmtime` is deliberately optional and off by default, which keeps its advisories out of normal builds.
 
