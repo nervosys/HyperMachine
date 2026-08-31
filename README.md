@@ -61,7 +61,7 @@ Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
-~240,000 lines of Rust across 13 crates with zero `todo!()`, `unimplemented!()`, or placeholder stubs. The full stack — from bare-metal boot sequence to REST middleware to GPU scheduling — is implemented in safe Rust. 4,700+ tests and `cargo clippy -D warnings` clean, on Linux, macOS and Windows.
+~240,000 lines of Rust across 13 crates, in safe Rust, 4,700+ tests and `cargo clippy -D warnings` clean, on Linux, macOS and Windows. That does not mean every module does what its name suggests: `hv2-core`'s `container` module models the OCI runtime spec in types but runs nothing — `ContainerRuntime::start` refuses rather than fabricate a process — and OS-level confinement that is actually enforced lives in `hv2-sandbox` instead (see [Agent Governance](#agent-governance) and `docs/SANDBOXES.md`).
 
 Every advisory in the dependency graph is triaged in [`deny.toml`](deny.toml), and `cargo deny check` passes on advisories, bans, licenses and sources. Five are accepted with written justification because no upgrade path exists: the `rsa` crate's Marvin-attack timing advisory (no fixed release upstream), two `quick-xml` parser advisories reachable only through the Linux GUI accessibility stack, and two unmaintained-crate notices (`smartstring` via the scripting engine, `ttf-parser` via the desktop GUI's font layer). `wasmtime` is deliberately optional and off by default, which keeps its advisories out of normal builds.
 
