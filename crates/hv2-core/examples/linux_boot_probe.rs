@@ -218,6 +218,32 @@ async fn main() {
         }
     }
 
+    // Try one host-to-guest round trip over vsock, when asked. This is the
+    // pair of halves that have never spoken: the device has only ever been
+    // driven by tests that lay out rings by hand, and the agent only ever over
+    // the host kernel's own socket.
+    if std::env::var("HV2_VSOCK_PING").is_ok() {
+        tokio::time::sleep(Duration::from_secs(8)).await;
+        if let Some(device) = vm.vsock() {
+            let mut vsock = device.lock();
+            match vsock.connect(50_000, 1024) {
+                Ok(id) => {
+                    println!("vsock connect : opened {id:?} to guest port 1024");
+                    let request = b"{\"id\":1,\"version\":1,\"op\":{\"kind\":\"ping\"}}";
+                    let mut framed = (request.len() as u32).to_le_bytes().to_vec();
+                    framed.extend_from_slice(request);
+                    match vsock.send(id, &framed) {
+                        Ok(n) => println!("vsock send    : {n} bytes queued for the guest"),
+                        Err(e) => println!("vsock send    : FAILED — {e}"),
+                    }
+                }
+                Err(e) => println!("vsock connect : FAILED — {e}"),
+            }
+        } else {
+            println!("vsock         : no device attached");
+        }
+    }
+
     tokio::time::sleep(settle).await;
 
     // Exits distinguish the two ways a guest goes quiet: a spinning guest

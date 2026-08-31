@@ -434,9 +434,19 @@
         <td class="where">WSL2, <code>/dev/kvm</code>, nested virt</td>
       </tr>
       <tr>
-        <td class="claim">A Linux guest driver talks to the device</td>
-        <td><span class="tag none">not verified</span> the two halves have never met: the agent was proven over the kernel's own vsock stack, the device against tests</td>
-        <td class="where">needs a guest kernel with virtio-vsock, not hardware</td>
+        <td class="claim">A Linux guest driver binds to the vsock device</td>
+        <td><span class="tag ran">ran</span> device 0x0013, status 0x0f (DRIVER_OK|FEATURES_OK), driver vmw_vsock_virtio_transport</td>
+        <td class="where">custom kernel, CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y</td>
+      </tr>
+      <tr>
+        <td class="claim">vsock carries data between host and guest</td>
+        <td><span class="tag none">not verified</span> a host-initiated connection stays Connecting; the guest never answers, so the receive queue is not completing</td>
+        <td class="where">enumeration done, data path not</td>
+      </tr>
+      <tr>
+        <td class="claim">Userspace runs a real program set</td>
+        <td><span class="tag ran">ran</span> busybox: /proc and /sys mounted, applets exec, interactive sh; host-typed commands execute and reply</td>
+        <td class="where">WSL2 + KVM</td>
       </tr>
       <tr>
         <td class="claim">A Linux kernel boots</td>

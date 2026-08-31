@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A Linux guest driver binds to the vsock device** (`hv2-core`). The two
+  halves of this feature had never spoken: the device was proven against tests
+  that lay out virtqueues by hand, the guest agent over the host kernel's own
+  socket. A guest now enumerates it and completes the handshake:
+
+      /sys/bus/virtio/devices/virtio0/device  ->  0x0013   (VIRTIO_ID_VSOCK)
+      /sys/bus/virtio/devices/virtio0/status  ->  0x0000000f
+      /sys/bus/virtio/devices/virtio0/driver  ->  vmw_vsock_virtio_transport
+
+  `0x0f` is ACKNOWLEDGE | DRIVER | DRIVER_OK | FEATURES_OK -- full feature
+  negotiation, by Linux's real driver, against this device. Reaching it needed
+  a kernel built with `CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y`, which the WSL
+  kernel does not set, so `virtio_mmio.device=` enumerated nothing before.
+- **`Machine::legacy_pc()`** (`hv2-core`): the legacy PC device set in one
+  call, replacing three hand-registrations a caller had to get right in order.
+  Each entry records what breaks without it, because each was found the same
+  way -- a guest hung, and the port it was spinning on named the device.
+- **A boot regression test** (`hv2-core`). It asserts the e820 bounds
+  *computed from the VM's configured memory*, so a table describing memory the
+  guest does not have fails, and it skips -- naming what is missing -- where
+  there is no `/dev/kvm` or no kernel image, rather than passing vacuously on a
+  host that cannot execute a guest.
 - **Userspace output reaches the console** (`hv2-core`). A program running as
   PID 1 inside the guest writes to `/dev/console` and the bytes come back out
   of `VM::console_output`. That completes the path: kernel boots, initramfs
@@ -277,6 +299,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   arriving on a serial port, a timer expiring -- has no way to say so until
   the guest happens to ask. That is enough for a UART the guest is actively
   driving and is not enough in general.
+
+### Known gaps
+- **No vsock data has moved yet.** The driver is bound and the guest agent is
+  listening on port 1024 inside, but a host-initiated connection stays in
+  `Connecting`: the guest never answers, so the host-to-guest packet is not
+  completing through the receive queue. Enumeration and negotiation are done;
+  the data path is not, and `vm.exec` remains an API with nothing behind it.
+- **A device interrupt still needs a guest access to be noticed in one case.**
+  `pending_interrupt` is polled after an access; self-raised interrupts go
+  through `InterruptSink` instead. Devices that use neither -- currently the
+  virtio transport -- cannot signal the guest at all.
 
 ### Fixed
 - **The transmit interrupt was never delivered, for three separate reasons**
