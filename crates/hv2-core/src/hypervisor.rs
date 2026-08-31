@@ -347,6 +347,20 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(())
     }
 
+    /// Host address of the guest RAM this backend registered, if it owns any.
+    ///
+    /// The device model needs to read and write the same bytes the guest does.
+    /// A backend that allocates its own pages must report them here, or every
+    /// emulated device will be looking at a different buffer from the guest --
+    /// which is not a subtle failure, but an invisible one, since the boot
+    /// path writes through the backend and guests boot perfectly either way.
+    ///
+    /// `None` means the backend does not own guest RAM separately, and the
+    /// caller's own allocation is already the right one.
+    fn guest_memory_host_addr(&self) -> Option<u64> {
+        None
+    }
+
     /// Allow downcasting to concrete types
     fn as_any(&self) -> &dyn std::any::Any;
 }

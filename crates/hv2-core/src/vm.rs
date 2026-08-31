@@ -509,6 +509,19 @@ impl VM {
             .create_vm(self.config.vcpu_count, self.config.memory_size)
             .await?;
 
+        // The backend allocated the pages the guest actually runs in. Point the
+        // device model at them before anything is loaded or attached: until
+        // this happens every emulated device reads a buffer the guest never
+        // touches, and nothing says so, because the boot path writes through
+        // the backend and the guest boots either way.
+        if let Some(host_addr) = self.backend.guest_memory_host_addr() {
+            self.memory.adopt_backend_pages(host_addr)?;
+            tracing::debug!(
+                "VM '{}': device model now shares the backend's guest pages at {host_addr:#x}",
+                self.config.name
+            );
+        }
+
         tracing::info!(
             "Provisioned VM '{}' on the {} backend ({} vCPUs, {} MiB)",
             self.config.name,

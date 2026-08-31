@@ -149,7 +149,26 @@ async fn main() {
     }
 
     match vm.provision().await {
-        Ok(()) => println!("provision     : OK"),
+        Ok(()) => {
+            println!("provision     : OK");
+            // The kernel image was just written into guest RAM. If the device
+            // model and the guest share memory, it is visible here; if the
+            // backend allocated its own, this reads as zeros and every virtio
+            // device is looking at a buffer the guest never touches.
+            let mut at_load = [0u8; 16];
+            if vm.memory().read_bytes_into(0x10_0000, &mut at_load).is_ok() {
+                let zeros = at_load.iter().all(|b| *b == 0);
+                println!("memory check  : bytes at 0x100000 via GuestMemory = {at_load:02x?}");
+                println!(
+                    "memory check  : {}",
+                    if zeros {
+                        "ZEROS — the device model does not share the guest's memory"
+                    } else {
+                        "kernel image visible — shared"
+                    }
+                );
+            }
+        }
         Err(e) => {
             println!("provision     : FAILED — {e}");
             return;
@@ -241,7 +260,23 @@ async fn main() {
                             Ok(published) => println!("vsock request : published={published}"),
                             Err(e) => println!("vsock request : FAILED — {e}"),
                         }
-                        tokio::time::sleep(Duration::from_secs(2)).await;
+                        // Wait for the guest to answer the request before
+                        // sending anything: a payload queued while the
+                        // connection is still opening has no credit to travel
+                        // on, because credit arrives in the guest's reply.
+                        for _ in 0..20 {
+                            tokio::time::sleep(Duration::from_millis(250)).await;
+                            let up = {
+                                device.lock().connections().iter().any(|(cid, state)| {
+                                    *cid == id && format!("{state:?}") == "Established"
+                                })
+                            };
+                            if up {
+                                break;
+                            }
+                            let _ = vm.notify_vsock().await;
+                        }
+                        println!("vsock state   : {:?}", { device.lock().connections() });
 
                         let request = b"{\"id\":1,\"version\":1,\"op\":{\"kind\":\"ping\"}}";
                         let mut framed = (request.len() as u32).to_le_bytes().to_vec();
@@ -256,6 +291,28 @@ async fn main() {
                             Ok(false) => println!("vsock notify  : nothing to publish"),
                             Err(e) => println!("vsock notify  : FAILED — {e}"),
                         }
+
+                        // Whether the agent answers is the whole question.
+                        let mut reply = Ok(Vec::new());
+                        for _ in 0..24 {
+                            tokio::time::sleep(Duration::from_millis(250)).await;
+                            let _ = vm.notify_vsock().await;
+                            reply = device.lock().recv(id);
+                            if matches!(&reply, Ok(b) if !b.is_empty()) {
+                                break;
+                            }
+                        }
+                        match reply {
+                            Ok(bytes) if bytes.is_empty() => {
+                                println!("vsock reply   : nothing yet");
+                            }
+                            Ok(bytes) => println!(
+                                "vsock reply   : {} bytes — {}",
+                                bytes.len(),
+                                String::from_utf8_lossy(&bytes)
+                            ),
+                            Err(e) => println!("vsock reply   : FAILED — {e}"),
+                        };
                     }
                     Err(e) => println!("vsock connect : FAILED — {e}"),
                 }

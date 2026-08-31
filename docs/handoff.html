@@ -440,8 +440,18 @@
       </tr>
       <tr>
         <td class="claim">vsock carries data between host and guest</td>
-        <td><span class="tag none">not verified</span> publish-and-signal is built; the driver programmed all three ring addresses but avail_idx reads 0 and the rings are zeros in guest memory, so there are no posted buffers to fill</td>
-        <td class="where">enumeration done, data path not</td>
+        <td><span class="tag ran">ran</span> host opens a connection, the guest answers over the transmit queue, state reaches Established — the rings were zeros because the device model was reading a different allocation from the guest</td>
+        <td class="where">WSL2 + KVM, custom kernel</td>
+      </tr>
+      <tr>
+        <td class="claim">The device model shares the guest's memory</td>
+        <td><span class="tag ran">ran</span> the kernel image is visible through GuestMemory at 0x100000; it read as zeros before, so every emulated device was on a separate allocation</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">The guest agent answers over vsock</td>
+        <td><span class="tag none">not verified</span> connection Established and bytes published, but agentd never accepts — the payload is not reaching the listening socket</td>
+        <td class="where">next step</td>
       </tr>
       <tr>
         <td class="claim">Userspace runs a real program set</td>

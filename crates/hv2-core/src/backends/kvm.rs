@@ -365,6 +365,15 @@ impl HypervisorBackend for KvmBackend {
         kvm_vcpu.set_io_data(data, size)
     }
 
+    fn guest_memory_host_addr(&self) -> Option<u64> {
+        self.vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|vm| vm.guest_memory())
+            .map(|ptr| ptr.as_ptr() as u64)
+    }
+
     async fn set_mmio_result(&self, vcpu: &VCpu, data: &[u8]) -> Result<()> {
         let kvm_vcpu = {
             let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());

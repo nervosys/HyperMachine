@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A vsock connection is established between host and guest** (`hv2-core`).
+  The host opens a connection, the packet reaches the guest through the receive
+  queue, Linux's vsock stack answers over the transmit queue, and the
+  connection reports `Established`. Data moves in both directions across the
+  virtqueues for the first time.
 - **A guest channel can be asked for through the tool surface** (`hv2-agent`).
   `vm.create` takes an optional `guest_cid`; `LocalVmHost` attaches the channel
   before launching and merges `virtio_mmio.device=` into the guest's command
@@ -355,7 +360,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constant and `VsockDevice::connect` refuses a duplicate port pair, so a
   second call collides with the first.
 
+### Known gaps
+- **The guest agent does not answer yet.** The connection reaches
+  `Established` and 45 bytes of a framed request are published and signalled,
+  but `hv2-guest-agentd` never logs an accepted connection, so the payload is
+  not reaching the listening socket inside the guest. Transport-level
+  connection: working. Data delivery to a listening vsock socket: not yet.
+- **A hosted VM still gets no legacy devices.** `Machine::legacy_pc()` is used
+  only by the boot probe, so a VM created through `LocalVmHost` has no COM1, no
+  CMOS and no i8042 -- each of which the probe records as a hang. Such a VM
+  cannot reach userspace, so no guest agent runs in it, whatever the vsock path
+  does.
+
 ### Fixed
+- **The device model and the guest were reading different memory**
+  (`hv2-core`). This is the root cause of everything below it. `VM::new`
+  created a `GuestMemory` and the backend separately allocated the pages it
+  registered with the hypervisor -- two buffers. The guest ran in the
+  backend's; every emulated device read and wrote the other one. So a virtio
+  driver published descriptors into memory the device could not see, and the
+  device wrote replies where the guest would never look.
+
+  Nothing caught it, and the reason is worth recording: the boot path writes
+  the kernel image through the *backend*, so guests booted perfectly, printed,
+  ran userspace and took an interactive shell. Only a device that reads guest
+  memory could notice, and until virtio-vsock was driven by a real Linux driver
+  there was none. The symptom was a receive queue whose descriptor table and
+  available ring read as all zeros at the addresses the driver had just
+  programmed -- which reads like a driver that posted no buffers, and was
+  really a device looking at the wrong pages.
+
+  `GuestMemory::adopt_backend_pages` points the regions at the backend's
+  allocation and releases its own, called from `VM::provision` as soon as the
+  backend VM exists. `HypervisorBackend::guest_memory_host_addr` is how a
+  backend reports pages it owns; the default is `None`, meaning the caller's
+  allocation was already the right one.
 - **A timer test measured the host's scheduler rather than the timer**
   (`hv2-core`). It counted PIT ticks across a real wall-clock second and
   allowed 15 to 21. The interval uses `MissedTickBehavior::Skip`, which is
