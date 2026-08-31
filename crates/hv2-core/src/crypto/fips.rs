@@ -347,12 +347,13 @@ impl FipsCrypto {
     /// Generate cryptographically secure random bytes
     /// Generate cryptographically secure random bytes
     pub fn random_bytes(&self, buffer: &mut [u8]) -> CryptoResult<()> {
-        use rand::RngCore;
+        use rand::TryRng;
 
-        // Use rand's thread_rng which uses the OS CSPRNG
-        // On Windows this uses BCryptGenRandom internally
-        // On Linux this uses getrandom(2) or /dev/urandom
-        rand::thread_rng()
+        // `rand::rng()` is the thread-local `ThreadRng`, a CSPRNG (ChaCha12)
+        // periodically reseeded from the OS random source.
+        // On Windows that source is BCryptGenRandom / ProcessPrng.
+        // On Linux it is getrandom(2) or /dev/urandom.
+        rand::rng()
             .try_fill_bytes(buffer)
             .map_err(|e| CryptoError::RngFailed(e.to_string()))?;
 

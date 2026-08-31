@@ -47,6 +47,15 @@ pub trait Device: Send + Sync {
     /// Shutdown the device
     async fn shutdown(&mut self) -> Result<()>;
 
+    /// Accept somewhere to report an interrupt raised outside a guest access.
+    ///
+    /// Called once, when the device is registered. The default ignores it,
+    /// which is right for a device that only ever interrupts in response to
+    /// something the guest just did.
+    fn set_interrupt_sink(&mut self, sink: Arc<dyn InterruptSink>) {
+        let _ = sink;
+    }
+
     /// The interrupt line this device is asserting right now, if any.
     ///
     /// Polled after every access, because that is when a device's interrupt
@@ -57,6 +66,25 @@ pub trait Device: Send + Sync {
     /// true of most of them and is why this is not a required method.
     fn pending_interrupt(&self) -> Option<u8> {
         None
+    }
+
+    /// Deliver input from the host to this device.
+    ///
+    /// The other direction from [`Self::console_output`]: what someone types
+    /// at a guest's console. Defaults to refusing, because a device that
+    /// cannot take input should say so rather than accept the bytes and drop
+    /// them -- a caller whose keystrokes vanish has no way to tell that from a
+    /// guest that ignored them.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] when this device accepts no input.
+    fn console_input(&mut self, data: &[u8]) -> Result<()> {
+        let _ = data;
+        Err(Error::Device(format!(
+            "device '{}' accepts no console input",
+            self.name()
+        )))
     }
 
     /// Console bytes this device has buffered for the host to read, if it is
@@ -89,11 +117,30 @@ struct IoPortMapping {
     device: Arc<RwLock<dyn Device>>,
 }
 
+/// Somewhere a device can report an interrupt it raised on its own.
+///
+/// [`Device::pending_interrupt`] only answers when the guest touches the
+/// device, which covers a UART the guest is actively driving and nothing else.
+/// A byte arriving from the host, a timer expiring, a virtqueue the host
+/// filled -- all of those happen while the guest is idle, and a device with no
+/// way to speak up then simply never gets serviced.
+pub trait InterruptSink: Send + Sync {
+    /// Raise `irq`. Must not block: this is called from device code that may
+    /// hold a lock the interrupt handler will want.
+    fn raise(&self, irq: u8);
+}
+
 /// Device manager
 pub struct DeviceManager {
     devices: Arc<RwLock<HashMap<String, Arc<RwLock<dyn Device>>>>>,
     mmio_regions: Arc<RwLock<Vec<MmioRegionMapping>>>,
     io_ports: Arc<RwLock<Vec<IoPortMapping>>>,
+    /// Handed to each device as it is registered, so a device never has to be
+    /// told about it separately and cannot be left without one by accident.
+    ///
+    /// A synchronous lock because it is installed from `VM::new`, which is not
+    /// async, and read on a path that already holds an async lock.
+    interrupt_sink: parking_lot::RwLock<Option<Arc<dyn InterruptSink>>>,
 }
 
 impl DeviceManager {
@@ -103,6 +150,7 @@ impl DeviceManager {
             devices: Arc::new(RwLock::new(HashMap::new())),
             mmio_regions: Arc::new(RwLock::new(Vec::new())),
             io_ports: Arc::new(RwLock::new(Vec::new())),
+            interrupt_sink: parking_lot::RwLock::new(None),
         }
     }
 
@@ -122,8 +170,25 @@ impl DeviceManager {
             )));
         }
 
+        // Hand it the sink now rather than expecting a caller to remember. A
+        // device registered without one cannot raise an interrupt of its own
+        // and nothing would say so.
+        let sink = self.interrupt_sink.read().clone();
+        if let Some(sink) = sink {
+            device.write().await.set_interrupt_sink(sink);
+        }
+
         devices.insert(name, device);
         Ok(())
+    }
+
+    /// Install the sink devices report self-raised interrupts to.
+    ///
+    /// Applies to every device registered afterwards. Installed by `VM::new`
+    /// before any device can be registered, so in practice that is all of
+    /// them; a caller building a manager by hand has to install it first.
+    pub fn set_interrupt_sink(&self, sink: Arc<dyn InterruptSink>) {
+        *self.interrupt_sink.write() = Some(sink);
     }
 
     /// Unregister a device
@@ -435,6 +500,15 @@ impl IoDeviceHandle {
     /// The interrupt line this device is asserting, if any.
     pub async fn pending_interrupt(&self) -> Option<u8> {
         self.device.read().await.pending_interrupt()
+    }
+
+    /// Deliver host input to this device.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`Error::Device`] if the device accepts no input.
+    pub async fn console_input(&self, data: &[u8]) -> Result<()> {
+        self.device.write().await.console_input(data)
     }
 }
 

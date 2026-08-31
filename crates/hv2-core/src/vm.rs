@@ -238,6 +238,26 @@ struct VCpuTaskState {
     handle: JoinHandle<Result<()>>,
 }
 
+/// The [`InterruptSink`](crate::device::InterruptSink) a VM hands its devices.
+///
+/// A device raises into a queue rather than delivering directly, for two
+/// reasons: raising must not block, because it happens inside device code that
+/// may hold a lock the handler will want; and delivery needs the backend and
+/// an async context, which device code has neither of.
+struct QueuedInterrupts {
+    sender: tokio::sync::mpsc::UnboundedSender<u8>,
+}
+
+impl crate::device::InterruptSink for QueuedInterrupts {
+    fn raise(&self, irq: u8) {
+        // A closed channel means the VM is gone. Nothing useful can be done
+        // about an interrupt for a VM that has stopped, and panicking inside a
+        // device because the machine shut down would be worse than dropping
+        // it, so this is deliberately quiet.
+        let _ = self.sender.send(irq);
+    }
+}
+
 /// What one I/O access produced.
 ///
 /// Two separate things, and conflating them is how a device interrupt gets
@@ -258,6 +278,12 @@ pub struct VM {
     vcpus: Vec<Arc<VCpu>>,
     memory: Arc<GuestMemory>,
     devices: Arc<DeviceManager>,
+    /// Interrupts devices raised on their own, waiting to be delivered.
+    ///
+    /// Taken by [`VM::launch`], which spawns the task that drains it, and
+    /// `None` afterwards so a second launch cannot start a second drainer
+    /// competing for the same queue.
+    interrupt_queue: parking_lot::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<u8>>>,
     pic: Arc<Pic8259>,
     backend: Arc<dyn HypervisorBackend>,
     exit_notify: Arc<Notify>,
@@ -364,6 +390,13 @@ impl VM {
         // Create device manager
         let devices = Arc::new(DeviceManager::new());
 
+        // Installed before any device can be registered, so every device has a
+        // way to raise an interrupt while the guest is not touching it.
+        let (interrupt_tx, interrupt_rx) = tokio::sync::mpsc::unbounded_channel();
+        devices.set_interrupt_sink(Arc::new(QueuedInterrupts {
+            sender: interrupt_tx,
+        }));
+
         // Create PIC (Intel 8259)
         let pic = Arc::new(Pic8259::new());
 
@@ -380,6 +413,7 @@ impl VM {
             vcpus,
             memory,
             devices,
+            interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
             backend,
             exit_notify: Arc::new(Notify::new()),
@@ -578,6 +612,22 @@ impl VM {
     pub async fn launch(self: &Arc<Self>) -> Result<()> {
         self.provision().await?;
         self.start().await?;
+
+        // Drain self-raised device interrupts for as long as the VM runs.
+        //
+        // Separate from the vCPU loop on purpose: that loop spends most of its
+        // time blocked inside KVM_RUN, which is exactly when a device needs to
+        // be able to interrupt. Delivering from there would mean an interrupt
+        // could only arrive once the guest had already exited for some other
+        // reason -- which is the limitation this replaces.
+        if let Some(mut queue) = self.interrupt_queue.lock().take() {
+            let vm = Arc::clone(self);
+            tokio::spawn(async move {
+                while let Some(irq) = queue.recv().await {
+                    Self::pulse_irq(vm.backend.as_ref(), irq).await;
+                }
+            });
+        }
 
         let vm = Arc::clone(self);
         let handle = tokio::spawn(async move {
@@ -1314,6 +1364,18 @@ impl VM {
                     phys_addr, &mut data, len, is_write, vm_name, devices, event_bus,
                 )
                 .await?;
+
+                // `data` is a copy taken out of the exit, so a read that is not
+                // written back is a read the guest never sees. It gets whatever
+                // was already in the shared page instead -- which is how a
+                // virtio driver came to read a stale magic number and refuse
+                // the device.
+                if !is_write {
+                    backend
+                        .set_mmio_result(vcpu, &data[..len.min(data.len() as u32) as usize])
+                        .await?;
+                }
+
                 Ok(true)
             }
 
@@ -1676,6 +1738,15 @@ impl VM {
                 stats.mmio_exits.fetch_add(1, Ordering::Relaxed);
                 self.handle_mmio_exit(vcpu, phys_addr, &mut data, len, is_write)
                     .await?;
+
+                // Same as the static path: without this the guest reads stale
+                // bytes rather than what the device produced.
+                if !is_write {
+                    self.backend
+                        .set_mmio_result(vcpu, &data[..len.min(data.len() as u32) as usize])
+                        .await?;
+                }
+
                 Ok(true)
             }
 

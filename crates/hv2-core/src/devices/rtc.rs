@@ -34,6 +34,9 @@ const RTC_STATUS_C: u8 = 0x0C;
 const RTC_STATUS_D: u8 = 0x0D;
 
 /// Status Register A flags
+/// The RTC's interrupt line on a PC.
+const RTC_IRQ: u8 = 8;
+
 /// Index register, relative to the base port the device is registered at.
 ///
 /// Relative, not absolute: `DeviceManager` subtracts the base port before
@@ -311,7 +314,16 @@ impl Device for RtcDevice {
     }
 
     fn device_type(&self) -> DeviceType {
-        DeviceType::Timer
+        DeviceType::RTC
+    }
+
+    fn pending_interrupt(&self) -> Option<u8> {
+        // IRQ 8 is the RTC's line on a PC. The inherent
+        // `has_pending_interrupt` existed and the trait method did not, so the
+        // dispatch layer could never see this device's interrupt: a guest that
+        // enabled the periodic interrupt would wait for one that had no way to
+        // be delivered.
+        self.has_pending_interrupt().then_some(RTC_IRQ)
     }
 
     async fn init(&mut self) -> Result<()> {
@@ -366,7 +378,7 @@ mod tests {
     async fn test_rtc_creation() {
         let rtc = RtcDevice::new();
         assert_eq!(rtc.name(), "MC146818 RTC");
-        assert_eq!(rtc.device_type(), DeviceType::Timer);
+        assert_eq!(rtc.device_type(), DeviceType::RTC);
     }
 
     #[tokio::test]

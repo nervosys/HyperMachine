@@ -365,6 +365,17 @@ impl HypervisorBackend for KvmBackend {
         kvm_vcpu.set_io_data(data, size)
     }
 
+    async fn set_mmio_result(&self, vcpu: &VCpu, data: &[u8]) -> Result<()> {
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+            map.get(&vcpu.id())
+                .cloned()
+                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
+        };
+
+        kvm_vcpu.set_mmio_data(data)
+    }
+
     async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
         use crate::boot::source::LoadedBoot;
 
@@ -1287,6 +1298,29 @@ impl KvmVcpu {
                 4 => std::ptr::write(data_ptr as *mut u32, data),
                 _ => std::ptr::write(data_ptr as *mut u32, data),
             }
+        }
+        Ok(())
+    }
+
+    /// Size of `kvm_run.mmio.data`, which the API fixes at 8 bytes.
+    const MMIO_DATA_LIMIT: usize = 8;
+
+    /// Write the result of an MMIO read back into the shared `kvm_run` page.
+    ///
+    /// KVM reads the answer out of `kvm_run.mmio.data` when the vCPU is
+    /// resumed, so it has to land in the mapped page rather than in the copy
+    /// the exit handed out.
+    pub fn set_mmio_data(&self, data: &[u8]) -> Result<()> {
+        // SAFETY: `self.run` is the valid mmap'd `kvm_run` page from `KVM_RUN`,
+        // and `mmio.data` is an 8-byte array inside that mapping. Written
+        // through a raw pointer for the same reason `set_io_data` is: the page
+        // is shared with the kernel and this method takes `&self`. The copy is
+        // bounded by both the array and the caller's slice.
+        unsafe {
+            let run = self.run.as_ptr();
+            let dst = (*run).exit_data.mmio.data.as_mut_ptr();
+            let len = data.len().min(Self::MMIO_DATA_LIMIT);
+            std::ptr::copy_nonoverlapping(data.as_ptr(), dst, len);
         }
         Ok(())
     }

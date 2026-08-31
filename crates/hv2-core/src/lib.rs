@@ -53,6 +53,7 @@ pub mod hypervisor;
 pub mod input;
 pub mod interrupt;
 pub mod iommu;
+pub mod machine;
 pub mod memory;
 pub mod memory_cow;
 pub mod migration;
@@ -223,6 +224,7 @@ pub use iommu::{
     PostedInterruptDescriptor, RootEntry, SourceValidation, TranslationType, VtdUnit, PAGE_SIZE_1G,
     PAGE_SIZE_2M, PAGE_SIZE_4K,
 };
+pub use machine::{Machine, MachineDevice};
 pub use memory::{GuestMemory, MemoryMapping, MemoryRegion};
 pub use memory_cow::{CowMemory, MemoryTemplate, Sandbox, SandboxPool};
 pub use migration::{

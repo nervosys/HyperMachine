@@ -377,6 +377,7 @@ deploy/
 | `WHPX not found` (Windows)      | Enable "Windows Hypervisor Platform" in Windows Features                              |
 | `protoc not found`              | Install protobuf compiler: `apt install protobuf-compiler` or `brew install protobuf` |
 | Build fails on nightly crates   | Type-1 crates require nightly; use `--exclude hv1-core --exclude hv1-boot`            |
+| `cargo check --workspace` fails on `bootloader`/`x86_64` with `-Z flag is only accepted on the nightly channel` | Expected on stable: those are `hv1-boot`/`hv1-core` dependencies that need a nightly toolchain and `-Zbuild-std`. Run `cargo check-ws` (an alias defined in `.cargo/config.toml`) or add `--exclude hv1-core --exclude hv1-boot` yourself; see CI's `hv1-check`/`hv1-clippy` jobs for the pinned-nightly invocation |
 | Permission denied on `/dev/kvm` | Add user to kvm group: `sudo usermod -aG kvm $USER`                                   |
 
 ## Contributing

@@ -327,6 +327,26 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(())
     }
 
+    /// Set the result of an MMIO read.
+    ///
+    /// The counterpart to [`Self::set_io_result`], and it was missing. After a
+    /// `VmExit::Mmio` with `is_write` false, the bytes a device produced have
+    /// to be written back where the guest will read them; the `data` carried
+    /// by the exit is a copy, so filling it in changes nothing the guest can
+    /// see.
+    ///
+    /// Without this a guest reads a device register and gets whatever was
+    /// left in the exit structure. It is not a subtle failure -- a virtio
+    /// driver reads the magic number, sees stale bytes, and refuses the device
+    /// -- but it is invisible to any test that calls a device directly, which
+    /// is how it survived a full suite of virtio-mmio tests.
+    ///
+    /// The default is a no-op, matching [`Self::set_io_result`], for backends
+    /// that handle it internally or do not support it yet.
+    async fn set_mmio_result(&self, _vcpu: &VCpu, _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
     /// Allow downcasting to concrete types
     fn as_any(&self) -> &dyn std::any::Any;
 }

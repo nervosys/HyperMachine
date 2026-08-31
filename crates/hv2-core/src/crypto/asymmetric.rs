@@ -233,7 +233,10 @@ impl FipsCrypto {
         use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 
         let bits = size.bytes() * 8;
-        let mut rng = rand::rngs::OsRng;
+        // `rsa` 0.9 takes a `rand_core` 0.6 RNG, so go through its own
+        // re-export rather than `rand` (which is on `rand_core` 0.10).
+        // `OsRng` reads the OS CSPRNG directly on every call.
+        let mut rng = rsa::rand_core::OsRng;
 
         let mut key = rsa::RsaPrivateKey::new(&mut rng, bits)
             .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA keygen: {e}")))?;
@@ -462,7 +465,8 @@ impl FipsCrypto {
         )
         .map_err(|e| CryptoError::InvalidInput(format!("invalid RSA private key: {e}")))?;
 
-        let mut rng = rand::rngs::OsRng;
+        // `rsa` 0.9 takes a `rand_core` 0.6 RNG; see `generate_rsa_keypair`.
+        let mut rng = rsa::rand_core::OsRng;
         let sig = match algorithm {
             SignatureAlgorithm::RsaPkcs1Sha256 => {
                 key.sign(Pkcs1v15Sign::new::<Sha256>(), &Sha256::digest(data))

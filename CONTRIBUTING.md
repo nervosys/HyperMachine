@@ -30,7 +30,22 @@ cargo build --workspace --exclude hv1-core --exclude hv1-boot --release
 
 # Run tests
 cargo test --workspace --exclude hv1-core --exclude hv1-boot
+
+# Quick sanity check (same excludes -- see note below)
+cargo check --workspace --exclude hv1-core --exclude hv1-boot
+# ...or the shorthand alias defined in .cargo/config.toml:
+cargo check-ws
 ```
+
+> **Note:** `hv1-core` and `hv1-boot` are Type-1, bare-metal, nightly-only
+> crates. A bare `cargo check --workspace` (without the excludes above) will
+> fail on stable while building the `bootloader` crate with an error like
+> `` the `-Z` flag is only accepted on the nightly channel of Cargo ``. This
+> is expected -- those two crates are checked separately in CI on a pinned
+> nightly toolchain with `-Zbuild-std` (see the `hv1-check`/`hv1-clippy` jobs
+> in `.github/workflows/ci.yml`). It is not something to fix locally; always
+> pass the `--exclude` flags (or use `cargo check-ws`) when working outside
+> those two crates.
 
 ## Code Style
 

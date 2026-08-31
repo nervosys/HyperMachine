@@ -16,9 +16,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use hv2_core::devices::keyboard::KeyboardDevice;
-use hv2_core::devices::rtc::RtcDevice;
-use hv2_core::{BootSource, HypervisorPlatform, SerialDevice, VMConfig, VM};
+use hv2_core::machine::Machine;
+use hv2_core::{BootSource, HypervisorPlatform, VMConfig, VM};
 
 /// COM1, where `console=ttyS0` sends everything.
 const COM1: u64 = 0x3F8;
@@ -60,8 +59,25 @@ async fn main() {
     // earlyprintk writes to the port directly, before the kernel has a console
     // driver. It is the only thing that reports a failure early enough to be
     // useful, because everything that goes wrong here goes wrong before then.
-    let cmdline = std::env::var("HV2_CMDLINE")
+    let mut cmdline = std::env::var("HV2_CMDLINE")
         .unwrap_or_else(|_| "console=ttyS0,115200 earlyprintk=serial,ttyS0,115200 panic=1".into());
+
+    // A vsock device, when asked for. virtio-mmio has no enumeration, so the
+    // window has to be named on the command line before the kernel is loaded —
+    // which is before a `VM` exists to be asked where it put one. The address
+    // and interrupt line are constants for exactly this reason, and
+    // `VM::vsock_kernel_args()` is checked against what was rendered here once
+    // the device is actually attached.
+    let vsock_cid = std::env::var("HV2_VSOCK_CID")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok());
+    if vsock_cid.is_some() {
+        cmdline.push_str(&format!(
+            " virtio_mmio.device=4K@{:#x}:{}",
+            VM::VSOCK_MMIO_BASE,
+            VM::VSOCK_IRQ
+        ));
+    }
     println!("cmdline       : {cmdline}");
 
     let config = VMConfig {
@@ -100,60 +116,37 @@ async fn main() {
         }
     };
 
-    let serial = Arc::new(tokio::sync::RwLock::new(SerialDevice::new(
-        "COM1".to_string(),
-        COM1,
-    )));
-    if let Err(e) = vm.devices().register_device("COM1", serial).await {
-        println!("serial        : FAILED — {e}");
+    // The legacy PC set in one call: COM1 at 0x3F8 (without it the guest's
+    // console goes nowhere), the CMOS at 0x70-0x71 (without it the kernel spins
+    // on an update-in-progress bit that an absent port reads as permanently
+    // set) and the i8042 at 0x60-0x64 (same failure, keyboard-controller
+    // status port). Each of those was a separate hang before it was a line in
+    // `Machine::legacy_pc`.
+    if let Err(e) = Machine::legacy_pc().attach(&vm.devices()).await {
+        println!("devices       : FAILED — {e}");
         return;
     }
-    if let Err(e) = vm
-        .devices()
-        .register_io_port_range("COM1".to_string(), COM1 as u16, COM1 as u16 + 7)
-        .await
-    {
-        println!("serial        : FAILED to map ports — {e}");
-        return;
-    }
-    println!("serial        : COM1 mapped at {COM1:#x}");
+    println!("devices       : legacy PC set attached (COM1, RTC, i8042)");
 
-    // A kernel asks the CMOS for the time before it can finish setting up, and
-    // waits for the update-in-progress bit to clear. With nothing at 0x70 an
-    // unhandled read returns 0xff, that bit reads as permanently set, and the
-    // guest spins there forever having printed most of a line.
-    let rtc = Arc::new(tokio::sync::RwLock::new(RtcDevice::new()));
-    if let Err(e) = vm.devices().register_device("RTC", rtc).await {
-        println!("rtc           : FAILED — {e}");
-        return;
+    if let Some(cid) = vsock_cid {
+        match vm.attach_vsock(cid).await {
+            Ok(_) => {
+                let args = vm.vsock_kernel_args().unwrap_or_default();
+                println!("vsock         : attached, guest CID {cid}");
+                println!("vsock args    : {args}");
+                if !cmdline.contains(&args) {
+                    println!(
+                        "vsock         : WARNING — the command line says something else, so the \
+                         guest will look at the wrong address"
+                    );
+                }
+            }
+            Err(e) => {
+                println!("vsock         : FAILED — {e}");
+                return;
+            }
+        }
     }
-    if let Err(e) = vm
-        .devices()
-        .register_io_port_range("RTC".to_string(), 0x70, 0x71)
-        .await
-    {
-        println!("rtc           : FAILED to map ports — {e}");
-        return;
-    }
-    println!("rtc           : CMOS mapped at 0x70-0x71");
-
-    // Same again for the keyboard controller: a kernel probing i8042 polls
-    // 0x64 until the status bits settle, and an absent port reads 0xff, which
-    // says "busy" forever.
-    let keyboard = Arc::new(tokio::sync::RwLock::new(KeyboardDevice::new()));
-    if let Err(e) = vm.devices().register_device("i8042", keyboard).await {
-        println!("keyboard      : FAILED — {e}");
-        return;
-    }
-    if let Err(e) = vm
-        .devices()
-        .register_io_port_range("i8042".to_string(), 0x60, 0x64)
-        .await
-    {
-        println!("keyboard      : FAILED to map ports — {e}");
-        return;
-    }
-    println!("keyboard      : i8042 mapped at 0x60-0x64");
 
     match vm.provision().await {
         Ok(()) => println!("provision     : OK"),
@@ -203,6 +196,28 @@ async fn main() {
         return;
     }
     println!("launch        : OK — the loop is running in the background");
+    // Type something at the guest, if asked. This is the direction that has
+    // never worked: input arrives from the host while the guest sits idle
+    // waiting for it, so it can only be delivered by an interrupt the device
+    // raises on its own rather than one polled after a guest access.
+    if let Ok(text) = std::env::var("HV2_INPUT") {
+        // Let the guest finish booting and reach its prompt first.
+        tokio::time::sleep(Duration::from_secs(6)).await;
+        // A shell prompt needs a newline to act on the line, and an
+        // environment variable cannot carry one portably, so a literal
+        // backslash-n in the variable stands in for it.
+        let typed = text.replace("\\n", "\n");
+        println!("input         : sending {typed:?}");
+        match vm.devices().find_io_device(COM1 as u16).await {
+            Some(device) => {
+                if let Err(e) = device.console_input(typed.as_bytes()).await {
+                    println!("input         : FAILED — {e}");
+                }
+            }
+            None => println!("input         : FAILED — COM1 is not registered"),
+        }
+    }
+
     tokio::time::sleep(settle).await;
 
     // Exits distinguish the two ways a guest goes quiet: a spinning guest

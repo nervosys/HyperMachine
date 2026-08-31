@@ -80,6 +80,12 @@ pub struct SerialDevice {
     thr_empty: Mutex<bool>,
     /// PIC for raising interrupts
     pic: Option<Arc<Pic8259>>,
+    /// Where to report an interrupt raised while the guest is not looking.
+    ///
+    /// Input arrives from the host, not from anything the guest just did, so
+    /// polling after a guest access cannot see it: a guest waiting for input
+    /// makes no accesses by definition.
+    interrupt_sink: parking_lot::Mutex<Option<Arc<dyn crate::device::InterruptSink>>>,
 }
 
 impl SerialDevice {
@@ -110,6 +116,7 @@ impl SerialDevice {
             dlm: Mutex::new(0x00),
             thr_empty: Mutex::new(true),
             pic: None,
+            interrupt_sink: parking_lot::Mutex::new(None),
         }
     }
 
@@ -139,20 +146,40 @@ impl SerialDevice {
 
     /// Write data to the receive buffer (data coming from external source)
     pub fn input(&self, data: &[u8]) -> Result<()> {
-        let mut rx = self.rx_buffer.lock();
-        let was_empty = rx.is_empty();
+        // The receive buffer's lock is released before anything else is
+        // touched. `parking_lot::Mutex` is not reentrant, so re-locking it
+        // below to re-check emptiness deadlocks -- and the deadlock is inside
+        // the host's input path, which means a keystroke hangs the caller
+        // rather than failing.
+        let has_data = {
+            let mut rx = self.rx_buffer.lock();
+            for &byte in data {
+                rx.push_back(byte);
+            }
+            !rx.is_empty()
+        };
 
-        for &byte in data {
-            rx.push_back(byte);
-        }
-
-        // Raise IRQ if interrupts enabled and data arrives in empty buffer
-        if was_empty && !data.is_empty() {
+        // Raise whenever there is data to read and the guest asked to be told,
+        // not only when the buffer went from empty to non-empty.
+        //
+        // "Only on the first byte" drops the interrupt for anything that
+        // arrives while earlier input is still unread -- and the guest is not
+        // obliged to be reading. A real 16550 asserts its line for as long as
+        // the receive register has something in it.
+        if has_data {
             let ier = *self.ier.lock();
             if (ier & IER_RDA) != 0 {
                 // Received Data Available Interrupt enabled
                 if let Some(ref pic) = self.pic {
                     pic.raise_irq(self.irq_number)?;
+                }
+                // And through the VM's sink, which is what reaches a guest
+                // whose interrupt controller lives inside the hypervisor. The
+                // Pic8259 above is a userspace model the guest never reads
+                // when an in-kernel irqchip exists.
+                let sink = self.interrupt_sink.lock().clone();
+                if let Some(sink) = sink {
+                    sink.raise(self.irq_number);
                 }
             }
         }
@@ -395,6 +422,14 @@ impl Device for SerialDevice {
             self.base_address
         );
         Ok(())
+    }
+
+    fn console_input(&mut self, data: &[u8]) -> Result<()> {
+        self.input(data)
+    }
+
+    fn set_interrupt_sink(&mut self, sink: Arc<dyn crate::device::InterruptSink>) {
+        *self.interrupt_sink.lock() = Some(sink);
     }
 
     fn pending_interrupt(&self) -> Option<u8> {
@@ -904,5 +939,42 @@ mod tests {
         let mut serial = SerialDevice::new("COM2".to_string(), 0x2F8);
         serial.write(IER_OFFSET, &[IER_THRE]).await.unwrap();
         assert_eq!(serial.pending_interrupt(), Some(3), "COM2 is IRQ 3");
+    }
+    #[tokio::test]
+    async fn input_from_the_host_raises_an_interrupt_the_guest_was_not_asking_for() {
+        // The direction that could not work before. Polling a device after a
+        // guest access cannot deliver input, because a guest waiting at a
+        // prompt makes no accesses -- it is blocked precisely because nothing
+        // has arrived. Without this the characters sit in the buffer and the
+        // shell never wakes.
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        struct Recorder(Arc<AtomicU32>);
+        impl crate::device::InterruptSink for Recorder {
+            fn raise(&self, irq: u8) {
+                self.0.store(u32::from(irq), Ordering::SeqCst);
+            }
+        }
+
+        let raised = Arc::new(AtomicU32::new(0));
+        let mut serial = SerialDevice::new("COM1".to_string(), 0x3F8);
+        serial.set_interrupt_sink(Arc::new(Recorder(Arc::clone(&raised))));
+
+        // Nothing yet: the guest has not asked to be told about input.
+        serial.input(b"x").unwrap();
+        assert_eq!(raised.load(Ordering::SeqCst), 0, "not enabled, not raised");
+
+        serial.write(IER_OFFSET, &[IER_RDA]).await.unwrap();
+        serial.input(b"y").unwrap();
+        assert_eq!(raised.load(Ordering::SeqCst), 4, "COM1 is IRQ 4");
+    }
+
+    #[tokio::test]
+    async fn a_device_that_takes_no_input_says_so() {
+        // Accepting keystrokes and dropping them would leave a caller unable
+        // to tell that from a guest that ignored them.
+        let mut timer = crate::devices::timer::TimerDevice::new("PIT".to_string(), 1000);
+        let err = timer.console_input(b"x").unwrap_err();
+        assert!(err.to_string().contains("no console input"), "got: {err}");
     }
 }
