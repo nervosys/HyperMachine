@@ -8,7 +8,7 @@ use egui::{Color32, CornerRadius, RichText, Ui};
 
 pub fn toolbar(ui: &mut Ui, state: &mut AppState) -> ToolbarAction {
     let mut action = ToolbarAction::None;
-    egui::menu::bar(ui, |ui| {
+    egui::MenuBar::new().ui(ui, |ui| {
         ui.label(RichText::new("HyperMachine").strong().size(18.0));
         ui.separator();
         if ui

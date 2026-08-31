@@ -98,7 +98,10 @@ pub fn configure_dark_theme(ctx: &egui::Context) {
     style.spacing.window_margin = egui::Margin::same(12);
     style.spacing.button_padding = egui::vec2(12.0, 6.0);
 
-    ctx.set_style(style);
+    // egui 0.36 keeps a style per theme; setting only the dark one would leave a
+    // light-mode host window rendering the default palette instead of ours.
+    ctx.set_style_of(egui::Theme::Dark, style.clone());
+    ctx.set_style_of(egui::Theme::Light, style);
 }
 
 pub mod icons {

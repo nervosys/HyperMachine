@@ -373,7 +373,11 @@ impl HyperMachineApp {
 }
 
 impl eframe::App for HyperMachineApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    // eframe 0.36 replaced `update(&Context, ..)` with `ui(&mut Ui, ..)`; panels are now
+    // built inside that root `Ui` rather than against the context.
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let ctx = &ui.ctx().clone();
+
         // Process any pending API responses
         self.process_responses(ctx);
 
@@ -395,7 +399,7 @@ impl eframe::App for HyperMachineApp {
         }
 
         // Top toolbar
-        egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
+        egui::Panel::top("toolbar").show(ui, |ui| {
             let action = toolbar(ui, &mut self.state);
             if action == ToolbarAction::Refresh {
                 self.refresh_vms();
@@ -403,16 +407,16 @@ impl eframe::App for HyperMachineApp {
         });
 
         // Left sidebar with VM list
-        egui::SidePanel::left("vm_list")
-            .min_width(300.0)
-            .default_width(350.0)
-            .show(ctx, |ui| {
+        egui::Panel::left("vm_list")
+            .min_size(300.0)
+            .default_size(350.0)
+            .show(ui, |ui| {
                 let action = vm_list_sidebar(ui, &mut self.state);
                 self.handle_sidebar_action(action);
             });
 
         // Main content area
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             let action = main_content(ui, &mut self.state);
             self.handle_content_action(action);
         });
