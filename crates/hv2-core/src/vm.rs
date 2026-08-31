@@ -1538,6 +1538,7 @@ impl VM {
     /// debug level and the guest runs on.
     async fn pulse_irq(backend: &dyn HypervisorBackend, irq: u8) {
         let line = u32::from(irq);
+        tracing::trace!("pulsing IRQ {line}");
         if let Err(e) = backend.set_irq_line(line, true).await {
             tracing::debug!("IRQ {line} could not be asserted: {e}");
             return;
@@ -1893,6 +1894,9 @@ impl VM {
                     // Device I/O write
                     let offset = (port - device.base_port()) as u64;
                     device.write_register(offset, data, size).await?;
+                    if let Some(irq) = device.pending_interrupt().await {
+                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                    }
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
                 }
@@ -1912,6 +1916,9 @@ impl VM {
                     // Device I/O read
                     let offset = (port - device.base_port()) as u64;
                     data = device.read_register(offset, size).await?;
+                    if let Some(irq) = device.pending_interrupt().await {
+                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                    }
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
                     data = 0xFF; // Return 0xFF for unmapped ports

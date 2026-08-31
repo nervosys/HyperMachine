@@ -450,13 +450,18 @@
       </tr>
       <tr>
         <td class="claim">Userspace output reaches the console</td>
-        <td><span class="tag none">not verified</span> init's write to /dev/console returns the full count and the bytes never arrive; the guest writes IER=0 and never sets MCR OUT2, so it runs the port without interrupts</td>
-        <td class="where">still open</td>
+        <td><span class="tag ran">ran</span> init writes to /dev/console and the bytes come out of VM::console_output; reproduced</td>
+        <td class="where">WSL2 + KVM</td>
       </tr>
       <tr>
         <td class="claim">A device interrupt reaches a guest</td>
-        <td><span class="tag none">not verified</span> KVM_IRQ_LINE is wired and unit-tested, but no guest has enabled a source, so nothing has delivered one</td>
-        <td class="where">plumbing built, delivery unproven</td>
+        <td><span class="tag ran">ran</span> the 8250 driver's transmit interrupt is delivered through KVM_IRQ_LINE and its handler runs</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">A device can interrupt without being asked</td>
+        <td><span class="tag none">not built</span> pending_interrupt is polled after a guest access, so a condition arising while the guest is idle cannot be reported</td>
+        <td class="where">enough for a driven UART, not general</td>
       </tr>
       <tr>
         <td class="claim">Filesystem isolation (process backend)</td>
@@ -530,7 +535,7 @@ backend: process
   <b>ENFORCED</b>    CPU time limit
   <b>ENFORCED</b>    wall-clock deadline
   <b>ENFORCED</b>    network isolation
-  unavailable filesystem isolation <i>— not implemented; use the microVM sandbox</i>
+  <b>ENFORCED</b>    filesystem isolation
   <b>ENFORCED</b>    process isolation
   <b>ENFORCED</b>    no-new-privileges
 

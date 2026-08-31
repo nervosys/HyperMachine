@@ -211,7 +211,7 @@ impl SerialDevice {
     fn read_register(&self, offset: u64) -> u8 {
         let dlab = (*self.lcr.lock() & LCR_DLAB) != 0;
 
-        match offset {
+        let value = match offset {
             RBR_OFFSET if dlab => {
                 // DLAB=1: Divisor Latch Low byte
                 *self.dll.lock()
@@ -228,6 +228,8 @@ impl SerialDevice {
             IER_OFFSET => *self.ier.lock(),
             IIR_OFFSET => {
                 // Dynamic IIR: reflect actual pending interrupt sources
+                // (traced below: the driver decides whether to use interrupts
+                // from what this returns)
                 let ier = *self.ier.lock();
                 let fcr = *self.fcr.lock();
                 let rx_has_data = !self.rx_buffer.lock().is_empty();
@@ -267,12 +269,28 @@ impl SerialDevice {
             }
             SCR_OFFSET => *self.scr.lock(),
             _ => 0,
+        };
+
+        // The interrupt-identification register is what a driver's handler
+        // reads first, so a burst of these is the visible sign that an
+        // interrupt was actually delivered and the handler ran.
+        if offset == IIR_OFFSET {
+            tracing::trace!("serial: IIR read = {value:#04x}");
         }
+        value
     }
 
     /// Write one byte-wide register.
     fn write_register(&self, offset: u64, value: u8) {
         let dlab = (*self.lcr.lock() & LCR_DLAB) != 0;
+
+        // The registers that decide whether this port is driven by interrupts
+        // at all. Logged at trace so a boot can be followed without the volume
+        // of every transmitted character, which is what made the difference
+        // between seeing early console setup and seeing the driver's startup.
+        if matches!(offset, IER_OFFSET | MCR_OFFSET | FCR_OFFSET) && !dlab {
+            tracing::trace!("serial: write reg {offset} = {value:#04x}");
+        }
 
         match offset {
             THR_OFFSET if dlab => {
@@ -292,7 +310,20 @@ impl SerialDevice {
                 while tx.len() > MAX_TX_BUFFER_BYTES {
                     tx.pop_front();
                 }
-                *self.thr_empty.lock() = false;
+
+                // The transmit holding register is empty again *immediately*,
+                // because this device transmits the instant the guest writes:
+                // the byte is in the host's hands before this returns. There
+                // is no interval during which it is still on its way out.
+                //
+                // This used to be set false here and only back to true when
+                // the *host* drained the buffer. IIR gates the transmit
+                // interrupt on it, so after the first byte IIR reported "no
+                // interrupt" forever: the driver's handler ran, found nothing
+                // to do, and every write after the first stalled. Kernel
+                // messages still appeared because printk polls the line-status
+                // register instead, which is why this looked like it worked.
+                *self.thr_empty.lock() = true;
             }
             IER_OFFSET if dlab => {
                 // DLAB=1: Divisor Latch High byte
@@ -728,12 +759,25 @@ mod tests {
         device.read(IIR_OFFSET, &mut buf).await.unwrap();
         assert_eq!(buf[0] & 0x0F, IIR_THRE);
 
-        // Write to THR → THRE clears
+        // Writing to THR does NOT clear it, because this device transmits
+        // instantly: the byte is in the host's hands before the write returns,
+        // so the holding register is empty again immediately.
+        //
+        // This test used to assert the opposite -- THRE clears on write and
+        // returns only when the *host* drained the buffer -- which modelled a
+        // UART where transmission takes time and the drain stands in for the
+        // wire. That is what stalled every transmit after the first: the
+        // driver's handler read IIR, was told there was nothing to do, and
+        // waited forever for an interrupt that could not come.
         device.write(THR_OFFSET, b"A").await.unwrap();
         device.read(IIR_OFFSET, &mut buf).await.unwrap();
-        assert_eq!(buf[0] & 0x0F, IIR_NO_INTERRUPT);
+        assert_eq!(
+            buf[0] & 0x0F,
+            IIR_THRE,
+            "still ready to send: there is nothing in flight to wait for"
+        );
 
-        // Drain TX → THRE again
+        // And a host drain changes nothing, for the same reason.
         let _ = device.output();
         device.read(IIR_OFFSET, &mut buf).await.unwrap();
         assert_eq!(buf[0] & 0x0F, IIR_THRE);

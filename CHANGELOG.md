@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Userspace output reaches the console** (`hv2-core`). A program running as
+  PID 1 inside the guest writes to `/dev/console` and the bytes come back out
+  of `VM::console_output`. That completes the path: kernel boots, initramfs
+  unpacks, init runs, writes through the tty layer, the 8250 driver takes a
+  transmit interrupt, and the device hands the byte to the host.
+- **egui, eframe and egui_extras moved 0.31 → 0.36** (`hm-gui`), which is what
+  dependabot PRs #65, #67 and #69 each needed and none could do alone -- the
+  three move as one ecosystem and CI failed on every one of them separately.
 - **Device interrupts have a path to the guest** (`hv2-core`).
   `HypervisorBackend::set_irq_line` asserts and releases a line through the
   interrupt controller, which for KVM means `KVM_IRQ_LINE` on a
@@ -263,31 +271,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `"simulated": true`, so the two can never be confused.
 
 ### Known gaps
-- **Userspace output does not reach the console.** The kernel's own messages do
-  -- printk polls the line-status register -- but a write from userspace goes
-  through the tty layer, which waits for a transmit interrupt before sending
-  anything. `SerialDevice` raises its transmit interrupt only when the *host*
-  drains the buffer, which is backwards for a UART that transmits instantly,
-  and the interrupt would go to a `Pic8259` the guest never reads: with KVM's
-  in-kernel irqchip the guest's PIC lives in the kernel, so injection has to go
-  through `KVM_IRQ_LINE`. Both halves are needed and neither is built.
-
-### Known gaps
-- **Userspace output still does not reach the console, and the interrupt path
-  above is not why.** What is now established: a guest reaches userspace, its
-  init opens `/dev/console` and its `write` returns the full byte count -- the
-  tty layer accepts the data. It never reaches the device, and it does not
-  arrive after eight seconds of waiting either, so nothing is merely slow. The
-  guest writes `IER = 0` every time and never sets the `OUT2` bit in `MCR`,
-  which is the gate that gets a UART's interrupt onto the line at all -- so it
-  is running the port unattended by interrupts and the new injection path is
-  never exercised. Whether that is the driver's IRQ autoconfiguration having
-  already failed, or something about how the port is registered, is not yet
-  known. The interrupt plumbing is unit-tested and has **not** been shown to
-  deliver an interrupt to a guest; it is a prerequisite that was missing, not
-  a fix that was verified.
+- **A device interrupt is delivered, but only as a side effect of a guest
+  access.** `pending_interrupt` is polled after each I/O access, so a device
+  whose condition becomes true while the guest is *not* touching it -- input
+  arriving on a serial port, a timer expiring -- has no way to say so until
+  the guest happens to ask. That is enough for a UART the guest is actively
+  driving and is not enough in general.
 
 ### Fixed
+- **The transmit interrupt was never delivered, for three separate reasons**
+  (`hv2-core`). Each one hid the next.
+  1. `IIR` gated the transmit interrupt on a `thr_empty` flag that was set
+     false on every write to the transmit register and only set true again
+     when the *host* drained the buffer. So after the first byte, the register
+     that a driver's handler reads to find out why it was interrupted said
+     "nothing to do" -- forever. This device transmits the instant the guest
+     writes, so the holding register is empty again before the write returns.
+  2. The interrupt pulse was wired into `handle_exit_static` only, and a
+     single-vCPU guest takes the instance path. The plumbing was correct and
+     ran zero times; a trace counting pulses reported exactly none.
+  3. A FIFO reset erased the transcript, fixed earlier in this release, which
+     is why the first two were invisible: the boot log looked empty for a
+     reason that had nothing to do with interrupts.
+- **A correction to an earlier diagnosis in this changelog.** An entry here
+  previously said the guest "writes `IER = 0` every time and never sets the
+  `OUT2` bit in `MCR`", concluding it ran the port without interrupts. That
+  was wrong, and wrong in an avoidable way: it was measured from a capture
+  that never reached the tty driver's startup, because the logging needed to
+  see the registers slowed the guest enough that it never got there. Traced
+  properly -- narrow filter, full boot -- the driver writes `IER = 0x07`
+  sixty-seven times and `MCR = 0x0b`, `OUT2` included. It was asking for
+  interrupts all along and not getting them.
 - **The initrd was placed where the kernel unpacks itself** (`hv2-core`). It
   went to a fixed 32 MB. A compressed kernel unpacks into `init_size` bytes
   starting from where it will run -- 62 MB from 16 MB for the kernel tested

@@ -1,7 +1,10 @@
 //! Linux Namespace Isolation
 //!
-//! This module provides namespace management for container isolation,
-//! supporting all Linux namespace types.
+//! This module models the Linux namespace types the container spec names --
+//! it does not call `unshare`, `setns`, or anything else that would create
+//! one. See `container::runtime` for what the container module as a whole
+//! does and does not do; for namespaces the operating system actually
+//! creates, see `hv2-sandbox`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
