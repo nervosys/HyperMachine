@@ -440,7 +440,7 @@
       </tr>
       <tr>
         <td class="claim">vsock carries data between host and guest</td>
-        <td><span class="tag none">not verified</span> a host-initiated connection stays Connecting; the guest never answers, so the receive queue is not completing</td>
+        <td><span class="tag none">not verified</span> publish-and-signal is built; the driver programmed all three ring addresses but avail_idx reads 0 and the rings are zeros in guest memory, so there are no posted buffers to fill</td>
         <td class="where">enumeration done, data path not</td>
       </tr>
       <tr>
@@ -472,6 +472,11 @@
         <td class="claim">A device can interrupt without being asked</td>
         <td><span class="tag none">not built</span> pending_interrupt is polled after a guest access, so a condition arising while the guest is idle cannot be reported</td>
         <td class="where">enough for a driven UART, not general</td>
+      </tr>
+      <tr>
+        <td class="claim">vm.exec reaches a guest through the MCP tools</td>
+        <td><span class="tag none">not built</span> nothing on that path attaches a vsock device or puts the kernel args on the cmdline; only the boot probe does, by hand</td>
+        <td class="where">upstream of the data path</td>
       </tr>
       <tr>
         <td class="claim">Filesystem isolation (process backend)</td>

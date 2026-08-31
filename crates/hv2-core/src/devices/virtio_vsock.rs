@@ -493,6 +493,22 @@ impl VsockDevice {
         self.pending.push_back(packet);
     }
 
+    /// Publish anything the host has queued for the guest, now.
+    ///
+    /// The device only ever moved packets when the *guest* kicked the receive
+    /// queue, which is the wrong trigger for a host-initiated message: the
+    /// guest kicks when it posts buffers and then waits, so a connection
+    /// request queued afterwards sat in `pending` with nobody to move it. The
+    /// host side calls this after queueing, and the caller signals the used
+    /// queue if this returns true.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error from reading the driver's descriptors.
+    pub fn deliver_pending(&mut self, mem: &GuestMemory) -> Result<bool> {
+        self.flush_rx(mem)
+    }
+
     /// Move queued packets into rx buffers the driver supplied.
     ///
     /// Returns whether anything was published.

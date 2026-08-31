@@ -169,6 +169,13 @@ pub struct VirtioMmioTransport {
     /// Interrupt controller and line, when the VM wired one up. `None` means
     /// the driver must poll — which a test does, and a real guest does not.
     interrupt: Option<(Arc<Pic8259>, u8)>,
+    /// Where an interrupt actually reaches a guest.
+    ///
+    /// The `Pic8259` above is a userspace model, and a guest whose interrupt
+    /// controller lives inside the hypervisor never reads it -- so raising
+    /// only there is indistinguishable from raising nothing. Installed by the
+    /// device manager at registration.
+    interrupt_sink: Mutex<Option<Arc<dyn crate::device::InterruptSink>>>,
 }
 
 impl VirtioMmioTransport {
@@ -186,6 +193,7 @@ impl VirtioMmioTransport {
             device,
             regs: Mutex::new(TransportRegs::default()),
             interrupt: None,
+            interrupt_sink: Mutex::new(None),
         }
     }
 
@@ -251,9 +259,18 @@ impl VirtioMmioTransport {
     }
 
     fn raise(&self, bits: u32) -> Result<()> {
+        // The status bits come first and matter either way: a driver's handler
+        // reads InterruptStatus to find out why it was interrupted, and an
+        // interrupt raised without them tells it there is nothing to do.
         self.regs.lock().interrupt_status |= bits;
+
         if let Some((pic, irq)) = &self.interrupt {
             pic.raise_irq(*irq)?;
+
+            let sink = self.interrupt_sink.lock().clone();
+            if let Some(sink) = sink {
+                sink.raise(*irq);
+            }
         }
         Ok(())
     }
@@ -430,6 +447,10 @@ fn set_high(addr: u64, value: u32) -> u64 {
 
 #[async_trait]
 impl Device for VirtioMmioTransport {
+    fn set_interrupt_sink(&mut self, sink: Arc<dyn crate::device::InterruptSink>) {
+        *self.interrupt_sink.lock() = Some(sink);
+    }
+
     fn device_type(&self) -> DeviceType {
         DeviceType::Custom
     }

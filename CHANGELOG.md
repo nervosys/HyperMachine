@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A host can publish to the guest and signal it** (`hv2-core`).
+  `VM::notify_vsock` moves packets the host queued into the receive buffers a
+  driver posted and then raises the used-queue interrupt -- two steps that have
+  to happen together: publishing without signalling leaves data in a ring the
+  guest has no reason to read, and signalling without publishing wakes it to
+  find nothing. `VsockDevice::deliver_pending` exposes the first half, which
+  previously ran only when the *guest* kicked a queue -- the wrong trigger for
+  a host-initiated message, since the guest kicks when it posts buffers and
+  then waits.
+  `VirtioMmioTransport` also routes its interrupt through the VM's
+  `InterruptSink` now. It raised only on the userspace `Pic8259`, which a guest
+  with an in-kernel irqchip never reads, so every virtio interrupt this device
+  raised went nowhere.
 - **A Linux guest driver binds to the vsock device** (`hv2-core`). The two
   halves of this feature had never spoken: the device was proven against tests
   that lay out virtqueues by hand, the guest agent over the host kernel's own
@@ -310,6 +323,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `pending_interrupt` is polled after an access; self-raised interrupts go
   through `InterruptSink` instead. Devices that use neither -- currently the
   virtio transport -- cannot signal the guest at all.
+
+### Known gaps
+- **vsock still moves no data, and the reason is now specific.** With the
+  publish-and-signal path in place, a host-initiated connection still stays in
+  `Connecting`, and the device can see why: the guest's driver has programmed
+  all three ring addresses for the receive queue (`desc`, `avail`, `used`, and
+  `QUEUE_READY` set, size 256) but `avail_idx` reads 0 and the descriptor table
+  and available ring are both **all zeros** in guest memory at the addresses
+  the driver itself supplied. So the device is not failing to find posted
+  buffers -- there are none to find. Whether Linux's `virtio_vsock` driver
+  never filled the queue, or filled it somewhere this VM's view of guest memory
+  does not reach, is the next thing to establish. Writes in the other direction
+  are known good: this is how the kernel image gets into the guest.
+- **`vm.exec` cannot reach a guest through the tool surface at all**, for a
+  reason upstream of the above: nothing on the MCP path ever attaches a vsock
+  device. `LocalVmHost::start` never calls `attach_guest_channel`, `VmSpec` has
+  no field for a guest CID, and nothing merges `vsock_kernel_args()` into the
+  guest's command line -- only the boot probe does that, by hand. The host-side
+  chain from `vm.exec` down to `VsockDevice` is otherwise unbroken and drives
+  the emulated device directly rather than the host's own `AF_VSOCK` stack.
+- **Concurrent `vm.exec` on one VM is not supported**: the host port is a
+  constant and `VsockDevice::connect` refuses a duplicate port pair, so a
+  second call collides with the first.
 
 ### Fixed
 - **The transmit interrupt was never delivered, for three separate reasons**

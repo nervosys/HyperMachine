@@ -324,6 +324,11 @@ pub struct VM {
 #[derive(Clone)]
 struct AttachedVsock {
     device: Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>,
+    /// Kept so the host side can signal the used queue after it publishes.
+    ///
+    /// The device cannot do it itself: the interrupt belongs to the transport,
+    /// which owns the status bits a driver reads to find out why it woke.
+    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
     base_address: u64,
     irq: u8,
 }
@@ -950,15 +955,13 @@ impl VM {
         }
 
         let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
-        let transport =
+        let transport = Arc::new(tokio::sync::RwLock::new(
             VirtioMmioTransport::new("virtio-vsock", base_address, self.memory(), device.clone())
-                .with_interrupt(self.pic(), irq);
+                .with_interrupt(self.pic(), irq),
+        ));
 
         self.devices
-            .register_device(
-                "virtio-vsock",
-                Arc::new(tokio::sync::RwLock::new(transport)),
-            )
+            .register_device("virtio-vsock", transport.clone())
             .await?;
         self.devices
             .register_mmio_region(
@@ -970,6 +973,7 @@ impl VM {
 
         *self.vsock.write() = Some(AttachedVsock {
             device: device.clone(),
+            transport,
             base_address,
             irq,
         });
@@ -979,6 +983,54 @@ impl VM {
             base_address
         );
         Ok(device)
+    }
+
+    /// Publish anything the host has queued for the guest, and tell it.
+    ///
+    /// Two steps that have to happen together and in this order: move pending
+    /// packets into the receive buffers the driver posted, then raise the
+    /// used-queue interrupt so the driver looks. Publishing without signalling
+    /// leaves the data sitting in a ring the guest has no reason to read, and
+    /// signalling without publishing wakes it to find nothing.
+    ///
+    /// Returns whether anything was published.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error, or a failure to raise the interrupt.
+    pub async fn notify_vsock(&self) -> Result<bool> {
+        let attached = {
+            let guard = self.vsock.read();
+            match guard.as_ref() {
+                Some(vsock) => (vsock.device.clone(), vsock.transport.clone()),
+                None => return Ok(false),
+            }
+        };
+
+        let published = {
+            let mut device = attached.0.lock();
+            // Two different reasons nothing moves, and they need telling
+            // apart: no packet queued, or no receive buffer from the driver.
+            let pending = device.has_pending();
+            let queue = &crate::devices::VirtioMmioDevice::queues(&mut *device)[0];
+            tracing::debug!(
+                "vsock: pending={pending} rx_ready={} rx_size={} rx_desc={:#x}",
+                queue.is_ready(),
+                queue.size(),
+                queue.desc_addr()
+            );
+            tracing::debug!(
+                "vsock: rx_avail={:#x} rx_used={:#x} avail_idx={:?}",
+                queue.avail_addr(),
+                queue.used_addr(),
+                queue.avail_idx(&self.memory)
+            );
+            device.deliver_pending(&self.memory)?
+        };
+        if published {
+            attached.1.read().await.signal_used_queue()?;
+        }
+        Ok(published)
     }
 
     /// The vsock device attached to this VM, if any.

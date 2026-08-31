@@ -224,23 +224,43 @@ async fn main() {
     // the host kernel's own socket.
     if std::env::var("HV2_VSOCK_PING").is_ok() {
         tokio::time::sleep(Duration::from_secs(8)).await;
-        if let Some(device) = vm.vsock() {
-            let mut vsock = device.lock();
-            match vsock.connect(50_000, 1024) {
-                Ok(id) => {
-                    println!("vsock connect : opened {id:?} to guest port 1024");
-                    let request = b"{\"id\":1,\"version\":1,\"op\":{\"kind\":\"ping\"}}";
-                    let mut framed = (request.len() as u32).to_le_bytes().to_vec();
-                    framed.extend_from_slice(request);
-                    match vsock.send(id, &framed) {
-                        Ok(n) => println!("vsock send    : {n} bytes queued for the guest"),
-                        Err(e) => println!("vsock send    : FAILED — {e}"),
+        match vm.vsock() {
+            Some(device) => {
+                // Each step takes the device lock and releases it before the
+                // next await: holding it across one would block the vCPU loop,
+                // which needs the same device to serve the guest.
+                let opened = { device.lock().connect(50_000, 1024) };
+                match opened {
+                    Ok(id) => {
+                        println!("vsock connect : opened {id:?} to guest port 1024");
+
+                        // Queueing is not delivering: the request has to be
+                        // moved into a buffer the driver posted, and the guest
+                        // told to look.
+                        match vm.notify_vsock().await {
+                            Ok(published) => println!("vsock request : published={published}"),
+                            Err(e) => println!("vsock request : FAILED — {e}"),
+                        }
+                        tokio::time::sleep(Duration::from_secs(2)).await;
+
+                        let request = b"{\"id\":1,\"version\":1,\"op\":{\"kind\":\"ping\"}}";
+                        let mut framed = (request.len() as u32).to_le_bytes().to_vec();
+                        framed.extend_from_slice(request);
+                        let sent = { device.lock().send(id, &framed) };
+                        match sent {
+                            Ok(n) => println!("vsock send    : {n} bytes queued"),
+                            Err(e) => println!("vsock send    : FAILED — {e}"),
+                        }
+                        match vm.notify_vsock().await {
+                            Ok(true) => println!("vsock notify  : published and signalled"),
+                            Ok(false) => println!("vsock notify  : nothing to publish"),
+                            Err(e) => println!("vsock notify  : FAILED — {e}"),
+                        }
                     }
+                    Err(e) => println!("vsock connect : FAILED — {e}"),
                 }
-                Err(e) => println!("vsock connect : FAILED — {e}"),
             }
-        } else {
-            println!("vsock         : no device attached");
+            None => println!("vsock         : no device attached"),
         }
     }
 
