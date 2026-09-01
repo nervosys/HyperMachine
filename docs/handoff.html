@@ -280,13 +280,14 @@
   <p class="eyebrow">Engineering handoff · nervosys/HyperMachine</p>
   <h1>What Actually Ran</h1>
   <p class="standfirst">
-    Guest command execution over virtio-vsock, and sandboxes that confine rather
-    than describe. Everything here is green and <em>nothing is merged</em> — both
-    pull requests are blocked on a review only a human can give.
+    A guest boots to a shell, an agent runs commands inside it over virtio-vsock
+    through the published API, and the sandboxes confine rather than describe.
+    Everything here is green and <em>nothing is merged</em> — both pull requests
+    are blocked on a review only a human can give.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Branch</dt><dd>8920920</dd></div>
+    <div class="fact"><dt>Branch</dt><dd>5294dd0</dd></div>
     <div class="fact"><dt>PR #70</dt><dd class="good">CI 19/19</dd></div>
     <div class="fact"><dt>PR #71</dt><dd class="hold">3 of 4</dd></div>
     <div class="fact"><dt>Workspace</dt><dd class="good">4,812 pass</dd></div>
@@ -424,7 +425,7 @@
         <td class="where">Windows host + CI</td>
       </tr>
       <tr>
-        <td class="claim">The guest agent answers over vsock</td>
+        <td class="claim">The guest agent answers on a real AF_VSOCK socket</td>
         <td><span class="tag ran">ran</span> binds port 1024, pings, execs, reports exit 7</td>
         <td class="where">Linux 6.18, real AF_VSOCK socket</td>
       </tr>
@@ -449,9 +450,19 @@
         <td class="where">WSL2 + KVM</td>
       </tr>
       <tr>
-        <td class="claim">The guest agent answers over vsock</td>
-        <td><span class="tag none">not verified</span> connection Established and bytes published, but agentd never accepts — the payload is not reaching the listening socket</td>
-        <td class="where">next step</td>
+        <td class="claim">A VM that boots a kernel has the devices to reach userspace</td>
+        <td><span class="tag ran">ran</span> <code>VM::provision</code> attaches COM1, the CMOS and the i8042 whenever a boot source is set. Only the boot probe registered them before, so a VM created through a host had no console at all — not a degraded guest but one that cannot reach userspace</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">An injected keystroke reaches the guest</td>
+        <td><span class="tag ran">ran</span> <code>inject_scancode</code> raises IRQ 1 on a sink, not only on the userspace PIC that a guest with an in-kernel irqchip never reads. Found by sweeping for the class rather than waiting for it to surface as a hang</td>
+        <td class="where">unit test</td>
+      </tr>
+      <tr>
+        <td class="claim">The guest agent answers through the emulated device</td>
+        <td><span class="tag ran">ran</span> host sends a framed request, hv2-guest-agentd reads it and replies: <code>{"kind":"pong","agent_version":"1.1.0"}</code>. It had not, because the operation numbers were each one below the specification — what the host sent as RW arrived as SHUTDOWN with zero flags, which Linux handles by doing nothing at all</td>
+        <td class="where">WSL2 + KVM</td>
       </tr>
       <tr>
         <td class="claim">Userspace runs a real program set</td>
@@ -480,12 +491,12 @@
       </tr>
       <tr>
         <td class="claim">A device can interrupt without being asked</td>
-        <td><span class="tag none">not built</span> pending_interrupt is polled after a guest access, so a condition arising while the guest is idle cannot be reported</td>
+        <td><span class="tag ran">ran</span> a device raises through <code>InterruptSink</code> without waiting for a guest access. Delivery runs on its own OS thread: as a task it shared a runtime with the vCPU loop, which blocks in <code>KVM_RUN</code>, so an idle guest waited on an interrupt queued behind a worker it was itself occupying</td>
         <td class="where">enough for a driven UART, not general</td>
       </tr>
       <tr>
         <td class="claim">vm.exec reaches a guest through the MCP tools</td>
-        <td><span class="tag none">not built</span> nothing on that path attaches a vsock device or puts the kernel args on the cmdline; only the boot probe does, by hand</td>
+        <td><span class="tag ran">ran</span> <code>AgentVM::ping_guest</code> and <code>exec_in_guest</code> answer from a real guest: <code>exit=Some(0)</code>, stdout <code>Linux (none) 6.6.52 … x86_64</code>. The VM attaches the device and puts the argument on the command line itself, so a caller cannot forget either</td>
         <td class="where">upstream of the data path</td>
       </tr>
       <tr>
@@ -601,8 +612,8 @@ backend: process
       </tr>
       <tr>
         <td class="claim">Benchmarks</td>
-        <td>protoc fixed; the remaining failure is a format mismatch — see below</td>
-        <td><span class="tag none">diagnosed only</span></td>
+        <td>protoc installed, and criterion's output converted to the format the tracking action expects</td>
+        <td><span class="tag typed">fixed</span></td>
       </tr>
     </tbody>
   </table>
