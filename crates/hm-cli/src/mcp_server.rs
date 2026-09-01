@@ -469,12 +469,18 @@ async fn call_tool(
             };
             match state
                 .vm_manager
-                .create_vm(
+                // create_bootable_vm, not create_vm: the five-argument form
+                // hardcodes `boot: None`, so an agent that supplied a kernel
+                // got a success record back and then a VM with no guest code in
+                // it. The REST handler on this same request type already calls
+                // this; only the MCP tool path dropped the field.
+                .create_bootable_vm(
                     &args.name,
                     args.cpu_cores,
                     args.memory_gb,
                     args.gpu_enabled,
                     args.network_enabled,
+                    args.boot.clone(),
                 )
                 .await
             {

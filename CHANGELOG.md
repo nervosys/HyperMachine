@@ -478,6 +478,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **`vm.create` over the MCP tool path dropped the kernel** (`hm-cli`). It
+  deserialised a `CreateVmRequest` carrying `boot` and then called the
+  five-argument `create_vm`, which hardcodes `boot: None`. An agent that
+  supplied a kernel got a success record back and a VM with no guest code in
+  it. The REST handler on the same request type already called
+  `create_bootable_vm`; only the tool path dropped the field.
+- **Three of four system prompts told agents that scripts run inside the guest**
+  (`hm-cli`). `vm.execute_script` evaluates a Rhai expression on the *host*
+  against a read-only view of a VM -- four scope variables and no I/O -- and
+  `SystemPrompts::generic` had been corrected to say so, while the OpenAI,
+  Anthropic and Gemini prompts still said "Execute scripts within VMs". A wrong
+  prompt is worse than a wrong schema: it shapes the agent's plan before any
+  schema is read.
+- **The ontology taught that same tool as a shell** (`hm-cli`). Its only
+  example was `echo 'Hello, World!'` returning `{"success": true, "output":
+  "Hello, World!
+", "exit_code": 0, "execution_time_ms": 15}` -- an input the
+  engine cannot run and an output shape it never produces -- and the declared
+  `ScriptResult` type promised the same four fields. Both are served verbatim
+  to agents through `/agentic/schema` and the vendor tool exports, so the wrong
+  shape was taught everywhere. The example is now a Rhai expression over the
+  VM's scope, and `ScriptResult` says what the engine actually returns: the
+  final expression's value, as JSON.
 - **No tool call was bounded in time** (`hv2-agent`).
   `McpConfig::default_timeout` documented itself as the default tool timeout
   and `ToolCallRequest::timeout` as a per-call override; neither was ever read,

@@ -332,7 +332,7 @@ impl SystemPrompts {
 CAPABILITIES:
 - Create, start, stop, and delete virtual machines
 - Monitor VM metrics and performance
-- Execute scripts within VMs
+- Evaluate Rhai scripts on the host against a read-only view of a VM (not inside the guest OS)
 
 GUIDELINES:
 1. Use vm.list to discover existing VMs before operations
@@ -354,7 +354,7 @@ TOOL USAGE:
 <capabilities>
 - Create, start, stop, and delete virtual machines
 - Monitor VM metrics and performance  
-- Execute scripts within VMs
+- Evaluate Rhai scripts on the host against a read-only view of a VM (not inside the guest OS)
 </capabilities>
 
 <guidelines>
@@ -379,7 +379,7 @@ TOOL USAGE:
 **Capabilities:**
 - Create, start, stop, and delete virtual machines
 - Monitor VM metrics and performance
-- Execute scripts within VMs
+- Evaluate Rhai scripts on the host against a read-only view of a VM (not inside the guest OS)
 
 **Guidelines:**
 1. Use vm.list to discover existing VMs before operations
@@ -649,5 +649,32 @@ mod tests {
         let config = ProviderConfig::for_provider(LlmProvider::Generic, &ontology);
         assert!(!config.hints.parallel_tool_calls);
         assert!(config.hints.max_tokens.is_none());
+    }
+
+    /// No system prompt may tell an agent that scripts run inside a guest.
+    ///
+    /// `vm.execute_script` evaluates a Rhai expression on the host against a
+    /// read-only view of a VM: four scope variables and no I/O. Three of these
+    /// four prompts said "Execute scripts within VMs" long after `generic()`
+    /// had been corrected, and a prompt is worse than a wrong schema — it
+    /// shapes the agent's plan before any schema is read.
+    #[test]
+    fn no_system_prompt_claims_scripts_run_inside_a_guest() {
+        for (name, prompt) in [
+            ("openai", SystemPrompts::for_openai()),
+            ("anthropic", SystemPrompts::for_anthropic()),
+            ("gemini", SystemPrompts::for_gemini()),
+            ("generic", SystemPrompts::generic()),
+        ] {
+            let lower = prompt.to_lowercase();
+            assert!(
+                !lower.contains("scripts within vms"),
+                "the {name} prompt still says scripts run within VMs"
+            );
+            assert!(
+                lower.contains("rhai"),
+                "the {name} prompt should name what the engine actually is"
+            );
+        }
     }
 }
