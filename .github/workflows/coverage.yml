@@ -54,8 +54,6 @@ jobs:
         # push since June while uploading nothing.
         run: |
           cargo llvm-cov --workspace \
-            --exclude hv1-boot \
-            --exclude hv1-core \
             --no-report
           cargo llvm-cov report --codecov --output-path codecov.json
           cargo llvm-cov report --html

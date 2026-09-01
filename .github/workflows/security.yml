@@ -100,7 +100,7 @@ jobs:
 
       - name: Run Clippy with security lints
         run: |
-          cargo clippy --workspace --exclude hv1-core --exclude hv1-boot --all-targets -- \
+          cargo clippy --workspace --all-targets -- \
             -D clippy::unwrap_used \
             -D clippy::expect_used \
             -D clippy::panic \
