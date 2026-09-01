@@ -46,6 +46,13 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
+      # hv2-api's build script runs prost-build, which needs protoc, and the
+      # benchmark job builds the workspace to reach hv2-core's benches.
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -151,6 +158,11 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run baseline benchmarks
         working-directory: baseline
