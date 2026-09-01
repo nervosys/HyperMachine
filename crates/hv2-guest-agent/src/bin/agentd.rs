@@ -78,6 +78,13 @@ mod linux {
                 }
                 return Err(err);
             }
+            // Say so on accept. Silence here is ambiguous in exactly the way
+            // that costs the most time: a host that gets no answer cannot tell
+            // an agent that never accepted from one that accepted and is
+            // waiting on a request that never arrived, and those are failures
+            // in different halves of the transport.
+            eprintln!("hv2-guest-agentd: accepted a connection");
+
             // One connection at a time: the protocol is request/response and
             // the host opens one channel. Serving them in sequence keeps the
             // agent to a single thread of control, which is what a guest with
@@ -133,6 +140,10 @@ mod linux {
 
         loop {
             let read = read_fd(fd, &mut chunk)?;
+            // Same reason as the accept log: from the host, a read that never
+            // returns and a read that returns something unparseable are the
+            // same silence.
+            eprintln!("hv2-guest-agentd: read {read} bytes");
             if read == 0 {
                 return Ok(());
             }

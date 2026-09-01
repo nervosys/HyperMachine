@@ -267,12 +267,35 @@ impl VirtioMmioTransport {
         if let Some((pic, irq)) = &self.interrupt {
             pic.raise_irq(*irq)?;
 
+            // Asserted and held, not pulsed. A virtio interrupt is
+            // level-triggered: the driver clears it by writing `InterruptACK`,
+            // and a line released before that acknowledgement can be asserted
+            // and released between one delivery and the next, losing the
+            // interrupt entirely. From the guest that is indistinguishable
+            // from a device that simply stopped answering.
             let sink = self.interrupt_sink.lock().clone();
             if let Some(sink) = sink {
-                sink.raise(*irq);
+                sink.assert_line(*irq);
             }
         }
         Ok(())
+    }
+
+    /// Release the interrupt line once the driver has acknowledged everything.
+    ///
+    /// Called after a write to `InterruptACK`. While any status bit is still
+    /// set there is an interrupt outstanding and the line stays asserted --
+    /// dropping it early would lose the reason the driver has not yet handled.
+    fn settle_interrupt(&self, remaining: u32) {
+        if remaining != 0 {
+            return;
+        }
+        if let Some((_, irq)) = &self.interrupt {
+            let sink = self.interrupt_sink.lock().clone();
+            if let Some(sink) = sink {
+                sink.deassert_line(*irq);
+            }
+        }
     }
 
     /// Read one 32-bit register.
@@ -407,7 +430,13 @@ impl VirtioMmioTransport {
                 }
                 return Ok(());
             }
-            reg::INTERRUPT_ACK => regs.interrupt_status &= !value,
+            reg::INTERRUPT_ACK => {
+                regs.interrupt_status &= !value;
+                let remaining = regs.interrupt_status;
+                drop(regs);
+                self.settle_interrupt(remaining);
+                return Ok(());
+            }
             reg::STATUS => {
                 if value == 0 {
                     // The driver reset the device. Everything negotiated is
@@ -419,6 +448,11 @@ impl VirtioMmioTransport {
                     regs.queue_sel = 0;
                     regs.interrupt_status = 0;
                     drop(regs);
+                    // A reset clears the status bits, so nothing is
+                    // outstanding and the line must not stay held: the driver
+                    // that reset the device is not going to acknowledge an
+                    // interrupt it no longer knows about.
+                    self.settle_interrupt(0);
                     self.device.lock().reset();
                     return Ok(());
                 }

@@ -245,7 +245,18 @@ struct VCpuTaskState {
 /// may hold a lock the handler will want; and delivery needs the backend and
 /// an async context, which device code has neither of.
 struct QueuedInterrupts {
-    sender: tokio::sync::mpsc::UnboundedSender<u8>,
+    sender: tokio::sync::mpsc::UnboundedSender<(u8, IrqLevel)>,
+}
+
+/// What a queued interrupt asks the backend to do with the line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IrqLevel {
+    /// Assert and release, in that order.
+    Pulse,
+    /// Assert and hold, until a `Low` follows.
+    High,
+    /// Release a line held by a `High`.
+    Low,
 }
 
 impl crate::device::InterruptSink for QueuedInterrupts {
@@ -254,7 +265,15 @@ impl crate::device::InterruptSink for QueuedInterrupts {
         // about an interrupt for a VM that has stopped, and panicking inside a
         // device because the machine shut down would be worse than dropping
         // it, so this is deliberately quiet.
-        let _ = self.sender.send(irq);
+        let _ = self.sender.send((irq, IrqLevel::Pulse));
+    }
+
+    fn assert_line(&self, irq: u8) {
+        let _ = self.sender.send((irq, IrqLevel::High));
+    }
+
+    fn deassert_line(&self, irq: u8) {
+        let _ = self.sender.send((irq, IrqLevel::Low));
     }
 }
 
@@ -283,7 +302,8 @@ pub struct VM {
     /// Taken by [`VM::launch`], which spawns the task that drains it, and
     /// `None` afterwards so a second launch cannot start a second drainer
     /// competing for the same queue.
-    interrupt_queue: parking_lot::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<u8>>>,
+    interrupt_queue:
+        parking_lot::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<(u8, IrqLevel)>>>,
     pic: Arc<Pic8259>,
     backend: Arc<dyn HypervisorBackend>,
     exit_notify: Arc<Notify>,
@@ -662,8 +682,12 @@ impl VM {
         if let Some(mut queue) = self.interrupt_queue.lock().take() {
             let vm = Arc::clone(self);
             tokio::spawn(async move {
-                while let Some(irq) = queue.recv().await {
-                    Self::pulse_irq(vm.backend.as_ref(), irq).await;
+                while let Some((irq, level)) = queue.recv().await {
+                    match level {
+                        IrqLevel::Pulse => Self::pulse_irq(vm.backend.as_ref(), irq).await,
+                        IrqLevel::High => Self::set_irq(vm.backend.as_ref(), irq, true).await,
+                        IrqLevel::Low => Self::set_irq(vm.backend.as_ref(), irq, false).await,
+                    }
                 }
             });
         }
@@ -1693,6 +1717,19 @@ impl VM {
         }
         if let Err(e) = backend.set_irq_line(line, false).await {
             tracing::debug!("IRQ {line} could not be released: {e}");
+        }
+    }
+
+    /// Drive an interrupt line to a level and leave it there.
+    ///
+    /// The level-triggered half of the sink. A virtio device holds its line
+    /// until the driver writes `InterruptACK`; releasing it earlier, as a
+    /// pulse does, can drop the interrupt between one delivery and the next.
+    async fn set_irq(backend: &dyn HypervisorBackend, irq: u8, level: bool) {
+        let line = u32::from(irq);
+        tracing::trace!("IRQ {line} -> {}", u8::from(level));
+        if let Err(e) = backend.set_irq_line(line, level).await {
+            tracing::debug!("IRQ {line} could not be driven to {level}: {e}");
         }
     }
 

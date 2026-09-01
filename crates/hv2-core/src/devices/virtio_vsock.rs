@@ -91,21 +91,31 @@ const QUEUE_MAX_SIZE: u16 = 256;
 pub const VSOCK_TYPE_STREAM: u16 = 1;
 
 /// Packet operations.
+///
+/// The values are the virtio specification's, section 5.10.6.1. They were
+/// previously each one lower, which left `REQUEST` and `RESPONSE` correct by
+/// coincidence and everything else wrong -- so a connection handshake worked
+/// perfectly and no data ever moved. What the host sent as `RW` arrived at a
+/// Linux guest as `SHUTDOWN` with flags of zero, which that stack processes by
+/// doing nothing at all: no data, no reply, no reset, and nothing in the guest's
+/// log. Do not renumber these to match anything but the specification.
 pub mod op {
-    /// Reset — the connection is gone.
-    pub const RST: u16 = 0;
+    /// Not a packet. Reserved by the specification and never sent.
+    pub const INVALID: u16 = 0;
     /// Connection request.
     pub const REQUEST: u16 = 1;
     /// Connection accepted.
     pub const RESPONSE: u16 = 2;
+    /// Reset — the connection is gone.
+    pub const RST: u16 = 3;
     /// One or both directions are closing.
-    pub const SHUTDOWN: u16 = 3;
+    pub const SHUTDOWN: u16 = 4;
     /// Payload.
-    pub const RW: u16 = 4;
+    pub const RW: u16 = 5;
     /// Unsolicited credit report.
-    pub const CREDIT_UPDATE: u16 = 5;
+    pub const CREDIT_UPDATE: u16 = 6;
     /// Ask the peer for a credit report.
-    pub const CREDIT_REQUEST: u16 = 6;
+    pub const CREDIT_REQUEST: u16 = 7;
 }
 
 /// Shutdown flags on an [`op::SHUTDOWN`] packet.
@@ -538,6 +548,21 @@ impl VsockDevice {
                 continue;
             }
 
+            tracing::debug!(
+                "vsock: to guest op={} len={} src={}:{} dst={}:{} type={} buf_alloc={} fwd_cnt={}                  encoded={} into {} writable bytes",
+                packet.header.op,
+                packet.header.len,
+                packet.header.src_cid,
+                packet.header.src_port,
+                packet.header.dst_cid,
+                packet.header.dst_port,
+                packet.header.type_,
+                packet.header.buf_alloc,
+                packet.header.fwd_cnt,
+                bytes.len(),
+                chain.writable_len(),
+            );
+
             let written = chain.write_all(mem, &bytes)?;
             self.queues[RX_QUEUE].add_used(mem, chain.head, written as u32)?;
             published = true;
@@ -754,6 +779,24 @@ impl VirtioMmioDevice for VsockDevice {
 
 #[cfg(test)]
 mod tests {
+
+    /// The wire numbers, written out rather than derived from the constants.
+    ///
+    /// A test that says `op::RW == op::RW` passes against any table, which is
+    /// how a table one short of the specification survived: the device agreed
+    /// with itself, and only a real guest disagreed. These are the values in
+    /// section 5.10.6.1, typed in from the specification.
+    #[test]
+    fn the_operation_numbers_are_the_ones_on_the_wire() {
+        assert_eq!(op::INVALID, 0);
+        assert_eq!(op::REQUEST, 1);
+        assert_eq!(op::RESPONSE, 2);
+        assert_eq!(op::RST, 3);
+        assert_eq!(op::SHUTDOWN, 4);
+        assert_eq!(op::RW, 5);
+        assert_eq!(op::CREDIT_UPDATE, 6);
+        assert_eq!(op::CREDIT_REQUEST, 7);
+    }
     use super::*;
     use crate::devices::virtio_queue::desc_flags;
 

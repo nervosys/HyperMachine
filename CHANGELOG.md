@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The host and the guest agent complete a request and a reply over vsock**
+  (`hv2-core`, `hv2-guest-agent`). With the operation numbers corrected, a run
+  against a Linux guest shows the whole exchange: the host publishes a 45-byte
+  framed request, the guest answers with a credit update -- which is a guest
+  saying it consumed the data -- and then a 73-byte reply from
+  `hv2-guest-agentd`. The two halves of this feature have now spoken.
+- **`hv2-guest-agentd` says when it accepts and how much it reads.** Silence
+  was ambiguous in the way that cost the most time here: a host that gets no
+  answer could not tell an agent that never accepted from one that accepted and
+  is waiting on a request that never arrived, and those are failures in
+  different halves of the transport.
 - **A VM with a kernel to boot now gets the devices it needs to reach
   userspace** (`hv2-core`). `VM::provision` attaches `Machine::legacy_pc()`
   when a boot source is configured. Until now the only caller of that model was
@@ -377,22 +388,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second call collides with the first.
 
 ### Known gaps
-- **The guest agent does not answer yet, and the shape of it is narrow.** The
-  handshake works in both directions: the host's connection request is
-  published into a buffer the driver posted, the guest reads it and replies
-  `RESPONSE`, and the connection reaches `Established`. That alone proves the
-  receive ring, the used ring and the interrupt all reach the guest. The
-  payload that follows does not: `send` queues 45 bytes, `notify_vsock`
-  reports them published and signalled into a posted buffer, and the guest
-  then sends **nothing at all** -- no reply, no credit update, no reset. A
-  trace of every packet the guest sends shows exactly one for the whole run:
-  `op=2 len=0 src_port=1024 dst_port=50000`. So the difference is not the
-  transport but something about a packet carrying data: the same path that
-  delivered a zero-length REQUEST does not get a 45-byte RW accepted. Credit
-  is not the explanation -- the device advertises a 256 KiB `buf_alloc` on
-  every packet.
+### Known gaps
+- **The guest consumes a host payload only when it has transmitted first.**
+  With the agent writing a byte before it reads, the full round trip works. With
+  it reading first -- which is what the protocol actually asks for -- the host's
+  packet is published into a buffer the driver posted, twice over, and the guest
+  stays silent: no reply, no credit update, no reset, and nothing in its log.
+  The agent is confirmed to have accepted the connection and to be blocked in
+  `read`. The shape of it -- data becoming visible only once the guest's own
+  transmit path has run -- points at the receive interrupt not being acted on,
+  with the driver draining the receive ring when a transmit completion makes it
+  look. That is the next thing to establish.
+- **The old operation numbers may be recorded elsewhere.** They were only ever
+  used by this device and its tests, but anything that captured a trace or
+  documented a packet before this release describes the wrong numbering.
 
 ### Fixed
+- **The vsock operation numbers were each one below the specification's**
+  (`hv2-core`). This is why no data ever moved over a channel whose handshake
+  worked perfectly. `REQUEST` (1) and `RESPONSE` (2) happened to be correct;
+  everything else was wrong. What the host sent as `RW` arrived at a Linux
+  guest as `SHUTDOWN` with flags of zero -- which that stack handles by doing
+  nothing at all: no data delivered, no reply, no reset, and not one line in
+  the guest's log. In the other direction the guest's real `RW` (5) was read as
+  `CREDIT_UPDATE` and its `CREDIT_UPDATE` (6) as `CREDIT_REQUEST`, so a reply
+  that did arrive was discarded as a bookkeeping packet.
+
+  Twenty tests covered this device and all twenty passed against the wrong
+  table, because each compared the device with itself: a test that asserts
+  `op::RW == op::RW` passes against any numbering. The replacement test writes
+  the eight values out from section 5.10.6.1 of the specification instead.
+
+  Found by having the guest agent write before reading, which made the guest
+  send a packet of its own -- the first packet in the whole project whose
+  operation number came from Linux rather than from this codebase, and it did
+  not match.
+- **A virtio interrupt was pulsed rather than held** (`hv2-core`). A virtio
+  interrupt is level-triggered: the driver clears it by writing `InterruptACK`,
+  and a line asserted and released before that acknowledgement can be dropped
+  between one delivery and the next. `InterruptSink` gained `assert_line` and
+  `deassert_line` for it, defaulting to the old pulse so a sink that predates
+  them is no worse than it was; the transport holds the line while any status
+  bit is outstanding and releases it when the driver has acknowledged them all.
 - **The device model and the guest were reading different memory**
   (`hv2-core`). This is the root cause of everything below it. `VM::new`
   created a `GuestMemory` and the backend separately allocated the pages it

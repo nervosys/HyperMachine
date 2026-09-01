@@ -125,9 +125,37 @@ struct IoPortMapping {
 /// filled -- all of those happen while the guest is idle, and a device with no
 /// way to speak up then simply never gets serviced.
 pub trait InterruptSink: Send + Sync {
-    /// Raise `irq`. Must not block: this is called from device code that may
-    /// hold a lock the interrupt handler will want.
+    /// Raise `irq` as a pulse: asserted and released. Must not block, because
+    /// this is called from device code that may hold a lock the interrupt
+    /// handler will want.
+    ///
+    /// Right for a device whose interrupt the guest discovers by reading a
+    /// status register it was going to read anyway -- a 16550's, say.
     fn raise(&self, irq: u8);
+
+    /// Assert `irq` and leave it asserted.
+    ///
+    /// Right for a level-triggered line, which a virtio device's is: the
+    /// specification has the driver clear the interrupt by writing
+    /// `InterruptACK`, and a device that releases the line before the driver
+    /// has acknowledged it is describing an interrupt rather than holding one.
+    /// A pulse is not a safe stand-in -- it can be asserted and released
+    /// between one delivery and the next, and the interrupt is then simply
+    /// lost, which looks from the guest like a device that went quiet.
+    ///
+    /// Defaults to [`raise`](Self::raise), so a sink that predates this is a
+    /// pulse and no worse than it was.
+    fn assert_line(&self, irq: u8) {
+        self.raise(irq);
+    }
+
+    /// Release `irq`, after the driver has acknowledged it.
+    ///
+    /// Defaults to doing nothing, which is correct for a sink whose
+    /// [`assert_line`](Self::assert_line) is a pulse: there is nothing held.
+    fn deassert_line(&self, irq: u8) {
+        let _ = irq;
+    }
 }
 
 /// Device manager

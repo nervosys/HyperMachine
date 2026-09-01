@@ -278,6 +278,12 @@ async fn main() {
                         }
                         println!("vsock state   : {:?}", { device.lock().connections() });
 
+                        // The guest kernel answers the connection request
+                        // itself, so `Established` says the kernel accepted,
+                        // not that the agent has. Give the listening process
+                        // time to be scheduled and call accept before sending.
+                        tokio::time::sleep(Duration::from_millis(1500)).await;
+
                         let request = b"{\"id\":1,\"version\":1,\"op\":{\"kind\":\"ping\"}}";
                         let mut framed = (request.len() as u32).to_le_bytes().to_vec();
                         framed.extend_from_slice(request);
