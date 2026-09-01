@@ -32,6 +32,15 @@ jobs:
         with:
           components: llvm-tools-preview
 
+      # hv2-api's build script runs prost-build, which needs protoc. Every
+      # building job in ci.yml installs it; this workflow never did, so the
+      # whole run has been failing before a single line of coverage was
+      # measured.
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 

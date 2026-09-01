@@ -46,9 +46,10 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      # hv2-api's build.rs (tonic_prost_build) shells out to protoc. Without
-      # this step the "Run API benchmarks" build fails before a single
-      # benchmark runs; continue-on-error below was masking that.
+      # hv2-api's build script (tonic_prost_build) shells out to protoc, and
+      # this job builds the workspace to reach hv2-core's benches. Without this
+      # step the build fails before a single benchmark runs, and the
+      # continue-on-error below was masking that.
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -171,6 +172,11 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run baseline benchmarks
         working-directory: baseline
