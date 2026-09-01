@@ -2436,6 +2436,19 @@ impl McpServer {
                     spec.boot = serde_json::from_value(boot.clone())
                         .map_err(|e| format!("Invalid boot source: {e}"))?;
                 }
+                // Both were declared by the schema, accepted from the caller
+                // and then dropped -- `VmSpec` has the fields and the host
+                // passes them on, the dispatcher just never read them. The
+                // schema gives network_enabled a default of true, so every VM
+                // made here had networking off while its own documentation
+                // said otherwise.
+                if let Some(gpu) = params.get("gpu_enabled").and_then(|v| v.as_bool()) {
+                    spec.enable_gpu = gpu;
+                }
+                spec.enable_networking = params
+                    .get("network_enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
                 // A CID that is not a number is a mistake, not an absent
                 // channel: a VM created without the channel its caller asked
                 // for fails much later, at vm.exec, with nothing pointing back
@@ -3388,8 +3401,14 @@ impl McpServer {
                             .collect()
                     })
                     .unwrap_or_default();
-                let timeout_secs: u64 =
-                    params.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30);
+                // The schema calls this `timeout_seconds`, and so does the
+                // sibling vm.exec path. Reading `timeout` meant a caller's
+                // deadline was silently replaced by the default, so a long
+                // command failed at 30 seconds having been told it had more.
+                let timeout_secs: u64 = params
+                    .get("timeout_seconds")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(30);
 
                 // Verify the VM exists in session state
                 let state = session.state.read().unwrap_or_else(|e| e.into_inner());
@@ -3718,15 +3737,54 @@ impl McpServer {
                     .get("vm_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: vm_id")?;
-                session
-                    .owned_vms
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .push(vm_id.to_string());
+
+                // Refuse a VM another session already holds.
+                //
+                // Without this the tool was the opposite of what it says. Its
+                // description promises exclusive access and that it "prevents
+                // other agents from modifying" the VM; what it did was append
+                // the id to this session's `owned_vms` with no checks at all.
+                // `session_owns` is the authorisation gate for vm.delete,
+                // vm.exec and the rest, so claiming another agent's VM did not
+                // protect it -- it granted full access to it. A tool that hands
+                // out the permission it advertises as a restriction is worse
+                // than one that does nothing.
+                let taken_by = {
+                    let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
+                    sessions
+                        .values()
+                        .find(|other| {
+                            other.agent_id != session.agent_id
+                                && other
+                                    .owned_vms
+                                    .read()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .iter()
+                                    .any(|id| id == vm_id)
+                        })
+                        .map(|other| other.agent_id.clone())
+                };
+                if let Some(holder) = taken_by {
+                    return Err(format!(
+                        "VM {vm_id} is claimed by agent {holder}. A claim is exclusive, so this \
+                         one is refused rather than silently shared"
+                    ));
+                }
+
+                let mut owned = session.owned_vms.write().unwrap_or_else(|e| e.into_inner());
+                if !owned.iter().any(|id| id == vm_id) {
+                    owned.push(vm_id.to_string());
+                }
+                drop(owned);
+
                 Ok(json!({
                     "vm_id": vm_id,
                     "agent_id": session.agent_id,
-                    "status": "claimed"
+                    "status": "claimed",
+                    // Said plainly because the schema offers duration_seconds
+                    // and nothing expires a claim: reporting a lease this
+                    // server does not keep is the defect above in miniature.
+                    "expires": "never: this server does not implement timed leases",
                 }))
             }
 

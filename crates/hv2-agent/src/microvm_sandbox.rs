@@ -54,6 +54,69 @@ pub struct MicroVmSandbox {
 }
 
 impl MicroVmSandbox {
+    /// What this backend enforces, for a VM with or without networking.
+    ///
+    /// An associated function so it can be checked without building a VM. The
+    /// two defects this had -- claiming a control it discarded, and taking the
+    /// looser of two deadlines -- were both unreachable from a test because
+    /// the only way to ask was to construct a `MicroVmSandbox`, which needs a
+    /// hypervisor. Logic nothing can interrogate is logic nothing checks.
+    #[must_use]
+    pub fn declared_controls(networked: bool) -> Controls {
+        let controls = Controls::none()
+            // A guest process cannot see, signal, or share a filesystem with
+            // anything on the host. This is not a policy the sandbox applies;
+            // it is what a separate kernel means.
+            .with(Control::FilesystemIsolation)
+            .with(Control::ProcessIsolation)
+            .with(Control::NoNewPrivileges)
+            // The VM has a fixed amount of memory, so a ceiling at or below it
+            // is one the hardware keeps.
+            .with(Control::Memory)
+            // Not ProcessCount. `max_processes` never leaves the host: this
+            // backend forwards a program, its arguments and a deadline to the
+            // guest agent and nothing else, so the number a caller sets is
+            // discarded and the guest forks up to whatever its own kernel
+            // allows. Claiming it made `unenforced` come back empty, which this
+            // crate defines as "every requested control was applied", so a
+            // caller asking for one process was told the limit held.
+            .without(
+                Control::ProcessCount,
+                "this backend sends the guest agent a program and a deadline, and has no way \
+                 to bound how many processes it starts; the guest kernel's own limits are all \
+                 that apply",
+            )
+            // Both are the guest agent's, which kills a program that overruns.
+            .with(Control::CpuTime)
+            .with(Control::WallClock);
+
+        if networked {
+            controls.without(
+                Control::NetworkIsolation,
+                "this VM was built with networking enabled; build it without to isolate the \
+                 workload from the network",
+            )
+        } else {
+            controls.with(Control::NetworkIsolation)
+        }
+    }
+
+    /// The deadline to give the guest, from a spec's two time bounds.
+    ///
+    /// The stricter of the two, not whichever was looked at first. This used
+    /// `wall_clock.or(cpu_time)`, so a caller asking for one second of CPU
+    /// inside a ten-minute wall clock got ten minutes -- with both controls
+    /// still reported as enforced. `AgentVM::effective_script_timeout` had the
+    /// same choice and takes the minimum; so does this.
+    #[must_use]
+    pub fn effective_timeout(wall_clock: Option<Duration>, cpu_time: Option<Duration>) -> Duration {
+        match (wall_clock, cpu_time) {
+            (Some(wall), Some(cpu)) => wall.min(cpu),
+            (Some(only), None) | (None, Some(only)) => only,
+            (None, None) => Duration::from_secs(30),
+        }
+    }
+
     /// Wrap a VM that is already running and already has a guest agent.
     ///
     /// Use [`AgentVM::ping_guest`] first if you need to know that before the
@@ -79,31 +142,6 @@ impl Sandbox for MicroVmSandbox {
     }
 
     fn controls(&self) -> Controls {
-        let mut controls = Controls::none()
-            // A guest process cannot see, signal, or share a filesystem with
-            // anything on the host. This is not a policy the sandbox applies;
-            // it is what a separate kernel means.
-            .with(Control::FilesystemIsolation)
-            .with(Control::ProcessIsolation)
-            .with(Control::NoNewPrivileges)
-            // The VM has a fixed amount of memory, so a ceiling at or below it
-            // is one the hardware keeps.
-            .with(Control::Memory)
-            .with(Control::ProcessCount)
-            // Both are the guest agent's, which kills a program that overruns.
-            .with(Control::CpuTime)
-            .with(Control::WallClock);
-
-        controls = if self.networked {
-            controls.without(
-                Control::NetworkIsolation,
-                "this VM was built with networking enabled; build it without to isolate the \
-                 workload from the network",
-            )
-        } else {
-            controls.with(Control::NetworkIsolation)
-        };
-
         if self.vm.guest_kernel_args().is_none() {
             // Without a channel nothing can run at all, so claiming controls
             // would be claiming to confine a workload that cannot start.
@@ -113,7 +151,7 @@ impl Sandbox for MicroVmSandbox {
             );
         }
 
-        controls
+        Self::declared_controls(self.networked)
     }
 
     fn run(
@@ -153,10 +191,7 @@ impl Sandbox for MicroVmSandbox {
         // The guest agent enforces its own deadline and reports a timeout with
         // whatever the program printed, so a wall clock is passed through
         // rather than being layered on out here.
-        let timeout = spec
-            .wall_clock
-            .or(spec.cpu_time)
-            .unwrap_or(Duration::from_secs(30));
+        let timeout = Self::effective_timeout(spec.wall_clock, spec.cpu_time);
 
         let vm = Arc::clone(&self.vm);
         let program = command.program.clone();
@@ -244,17 +279,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_channelled_vm_without_networking_enforces_everything() {
+    async fn a_channelled_vm_without_networking_enforces_all_but_process_count() {
         let Some(vm) = vm(false).await else {
             return;
         };
         vm.attach_guest_channel(3).await.expect("attach");
         let sandbox = MicroVmSandbox::new(vm);
 
-        // The point of this backend: a separate kernel provides the controls
-        // no host kernel would give an unprivileged process.
+        // The point of this backend: a separate kernel provides the controls no
+        // host kernel would give an unprivileged process. All but one -- this
+        // used to assert that every control was enforced, which is what kept
+        // the ProcessCount claim alive: the test asserted the advertisement
+        // rather than the behaviour, so it agreed with the defect.
         let controls = sandbox.controls();
         for control in Control::ALL {
+            if control == Control::ProcessCount {
+                assert!(
+                    !controls.enforces(control),
+                    "max_processes never leaves the host, so this must not be claimed"
+                );
+                continue;
+            }
             assert!(
                 controls.enforces(control),
                 "{control} should be enforced by a VM boundary"
@@ -335,6 +380,57 @@ mod tests {
         assert!(
             err.to_string().contains("hv2-guest-agentd"),
             "the failure should name what is missing: {err}"
+        );
+    }
+
+    /// The backend must not claim a control it discards.
+    ///
+    /// `max_processes` never leaves the host on this path, so reporting
+    /// ProcessCount as enforced made `unenforced` come back empty — which this
+    /// crate defines as "every requested control was applied". A caller asking
+    /// for one process was told the limit held while the guest could fork
+    /// freely.
+    #[test]
+    fn process_count_is_reported_as_unenforced_rather_than_claimed() {
+        let controls = MicroVmSandbox::declared_controls(false);
+
+        assert!(
+            !controls.enforces(Control::ProcessCount),
+            "this backend cannot bound the guest's process count, so it must not say it does"
+        );
+        assert!(
+            controls.reason(Control::ProcessCount).is_some(),
+            "and it must say why, rather than leaving the control silently absent"
+        );
+    }
+
+    /// Two deadlines means the stricter one, not whichever was checked first.
+    #[test]
+    fn the_stricter_of_cpu_time_and_wall_clock_wins() {
+        let strict_cpu = MicroVmSandbox::effective_timeout(
+            Some(Duration::from_secs(600)),
+            Some(Duration::from_secs(1)),
+        );
+        assert_eq!(
+            strict_cpu,
+            Duration::from_secs(1),
+            "a one-second CPU bound inside a ten-minute wall clock must bound at one second"
+        );
+
+        let strict_wall = MicroVmSandbox::effective_timeout(
+            Some(Duration::from_secs(1)),
+            Some(Duration::from_secs(600)),
+        );
+        assert_eq!(strict_wall, Duration::from_secs(1));
+
+        assert_eq!(
+            MicroVmSandbox::effective_timeout(None, Some(Duration::from_secs(5))),
+            Duration::from_secs(5),
+            "one bound on its own still applies"
+        );
+        assert_eq!(
+            MicroVmSandbox::effective_timeout(None, None),
+            Duration::from_secs(30)
         );
     }
 }

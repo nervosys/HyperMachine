@@ -439,6 +439,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   otherwise a reasonable thing to assume from the code.
 
 ### Fixed
+- **`agent.claim` handed out the access it advertised as a restriction**
+  (`hv2-agent`). Its description promises exclusive access and that it
+  "prevents other agents from modifying" a VM. What it did was append the id to
+  the calling session's `owned_vms` with no checks at all -- and `owned_vms` is
+  the authorisation gate (`session_owns`) for `vm.delete`, `vm.exec` and the
+  rest. So claiming another agent's VM did not protect it, it granted full
+  access to it. A claim held by another session is now refused, and the reply
+  says plainly that this server keeps no timed leases rather than implying the
+  `duration_seconds` it accepts means something.
+- **The microVM sandbox claimed a confinement it discarded** (`hv2-agent`).
+  `MicroVmSandbox::controls` reported `Control::ProcessCount` as enforced while
+  `max_processes` never left the host -- the name appears nowhere in the crate.
+  Because `unenforced` came back empty, and this crate defines that as "every
+  requested control was applied", a caller asking for one process was told the
+  limit held while the guest could fork freely. It is now refused with a reason,
+  which is the pattern the sandbox crate already prescribes.
+
+  The test covering it asserted that *every* control was enforced, which is what
+  kept the claim alive: it agreed with the advertisement rather than checking
+  the behaviour.
+- **The looser of two deadlines won** (`hv2-agent`). `wall_clock.or(cpu_time)`
+  returned the wall clock whenever one was set, so one second of CPU inside a
+  ten-minute wall clock bounded at ten minutes, with both controls still
+  reported as enforced. It takes the minimum now, as `AgentVM` already did for
+  the same choice.
+- **Two tool parameters were accepted and dropped** (`hv2-agent`). `guest.exec`
+  read `timeout`, while its schema and the sibling `vm.exec` path both say
+  `timeout_seconds`, so a caller's deadline was silently replaced by the
+  default. `vm.create` never read `gpu_enabled` or `network_enabled` -- `VmSpec`
+  has both fields and the host forwards them, the dispatcher just never looked
+  -- so every VM built through that surface had networking off while the
+  schema documented a default of `true`.
 - **An injected keystroke never reached the guest** (`hv2-core`).
   `KeyboardDevice::inject_scancode` is a public API for "give the guest a
   keystroke", and it raised IRQ 1 only on the userspace `Pic8259` -- which a
