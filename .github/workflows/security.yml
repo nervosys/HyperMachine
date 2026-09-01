@@ -142,7 +142,20 @@ jobs:
 
       - name: Run Miri on hv2-core
         run: |
-          cargo +nightly miri test -p hv2-core --lib 2>&1 | head -500 || true
+          # Keep the whole run, then show the head and the tail of it. Piping
+          # straight into `head -500` truncated the output before the summary
+          # line, so the one thing a reader wants -- how many tests Miri ran
+          # and whether any reported undefined behaviour -- was the one thing
+          # never printed. The step still cannot fail the build; that is a
+          # deliberate choice for a first run on an unsafe-heavy codebase, but
+          # a step that cannot fail should at least be readable.
+          set -o pipefail
+          cargo +nightly miri test -p hv2-core --lib > miri.log 2>&1 || true
+          echo "::group::Miri output (first 300 lines)"
+          head -300 miri.log
+          echo "::endgroup::"
+          echo "--- summary ---"
+          tail -40 miri.log
         continue-on-error: true
 
   # ============================================================================
