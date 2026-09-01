@@ -33,7 +33,19 @@ jobs:
         with:
           path-to-signatures: "signatures/cla.json"
           path-to-document: "https://github.com/${{ github.repository }}/blob/master/CLA.md"
-          branch: "master"
+          # NOT master. This action stores signatures by committing
+          # signatures/cla.json to this branch, and master requires a
+          # pull request, so the commit is refused by the ruleset:
+          #
+          #   Error occurred when creating the signed contributors file:
+          #   Repository rule violations found. Changes must be made
+          #   through a pull request. Make sure the branch where
+          #   signatures are stored is NOT protected.
+          #
+          # No amount of signing could have satisfied this check while it
+          # pointed at a protected branch. `cla-signatures` exists for
+          # this and is deliberately unprotected.
+          branch: "cla-signatures"
           allowlist: "dependabot[bot],github-actions[bot],renovate[bot]"
           custom-notsigned-prcomment: |
             Thank you for your contribution! Before we can merge this PR, you
