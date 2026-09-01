@@ -1233,12 +1233,25 @@ impl VM {
 
     /// The argument a guest needs to find a vsock window at `base_address`.
     ///
-    /// Separate from [`Self::vsock_kernel_args`] because the command line is
-    /// written while the device is being attached, before it is recorded --
-    /// and because one function producing this string means the reported
-    /// argument and the applied one cannot drift apart.
-    fn vsock_kernel_args_for(base_address: u64, irq: u8) -> String {
+    /// Public because it is the only place this string is built. A caller that
+    /// wants to describe a VM before one exists -- a tool surface rendering a
+    /// boot command line, say -- must not format it a second time: two
+    /// producers of one string drift, and the failure is a guest that probes an
+    /// address with nothing at it and reports nothing at all.
+    #[must_use]
+    pub fn vsock_kernel_args_for(base_address: u64, irq: u8) -> String {
         format!("virtio_mmio.device=4K@{base_address:#x}:{irq}")
+    }
+
+    /// Kernel command-line arguments this VM will add when it boots.
+    ///
+    /// Devices attached after the boot source was described add what a guest
+    /// needs in order to find them, and that happens when the image is loaded
+    /// -- so the configured [`BootSource`](crate::boot::BootSource) does not
+    /// show it. A caller reporting what a guest will be booted with needs both.
+    #[must_use]
+    pub fn extra_kernel_args(&self) -> Vec<String> {
+        self.extra_cmdline.lock().clone()
     }
 
     /// Wait for VM exit

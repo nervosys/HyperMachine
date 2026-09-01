@@ -75,40 +75,17 @@ pub struct VmSpec {
 /// The kernel argument that lets a Linux guest find its guest channel.
 ///
 /// virtio-mmio has no enumeration: a guest probes the window only because the
-/// command line names it. That command line is fixed inside a [`BootSource`]
-/// before a VM exists to be asked where it put the device, so this renders the
-/// argument from `hv2-core`'s constants instead — which is exactly why they are
-/// constants. Whatever is built from this is cross-checked against the device's
-/// own [`AgentVM::guest_kernel_args`] once it is attached.
+/// command line names it. A caller does not have to put this anywhere — the VM
+/// applies it when it loads the boot image, which is the only way a caller
+/// cannot forget — but a tool surface describing a VM before it boots needs to
+/// be able to say what the guest will see.
+///
+/// Delegates rather than formatting the string a second time. It used to build
+/// its own, with a cross-check downstream to catch the two drifting apart; one
+/// producer needs no cross-check.
+#[must_use]
 pub fn guest_channel_kernel_arg() -> String {
-    format!(
-        "virtio_mmio.device=4K@{:#x}:{}",
-        hv2_core::VM::VSOCK_MMIO_BASE,
-        hv2_core::VM::VSOCK_IRQ
-    )
-}
-
-/// Put [`guest_channel_kernel_arg`] on a Linux command line and report the
-/// command line the guest will see.
-///
-/// Returns `None` for a boot source with no Linux command line to carry the
-/// argument — a raw image is hand-written guest code that knows where to look,
-/// and there is nowhere to write this for it.
-///
-/// An argument already present is left alone: a caller that spelled the window
-/// out itself gets its own command line back, not a duplicated one.
-fn merge_guest_channel_arg(boot: &mut BootSource) -> Option<String> {
-    let BootSource::Linux { cmdline, .. } = boot else {
-        return None;
-    };
-    let arg = guest_channel_kernel_arg();
-    if !cmdline.split_whitespace().any(|token| token == arg) {
-        if !cmdline.is_empty() {
-            cmdline.push(' ');
-        }
-        cmdline.push_str(&arg);
-    }
-    Some(cmdline.clone())
+    hv2_core::VM::vsock_kernel_args_for(hv2_core::VM::VSOCK_MMIO_BASE, hv2_core::VM::VSOCK_IRQ)
 }
 
 impl VmSpec {
@@ -410,11 +387,7 @@ impl LocalVmHost {
         let mut capabilities = CapabilitySet::default();
         capabilities.add(Capability::GuestExec);
 
-        let mut boot = spec.boot.clone();
-        let guest_cmdline = match (spec.guest_cid, boot.as_mut()) {
-            (Some(_), Some(source)) => merge_guest_channel_arg(source),
-            _ => None,
-        };
+        let boot = spec.boot.clone();
 
         let mut builder = AgentVM::builder()
             .name(&spec.name)
@@ -428,22 +401,16 @@ impl LocalVmHost {
         }
         let vm = Arc::new(builder.build().await.map_err(|e| e.to_string())?);
 
+        // Attaching is the whole of it now. The VM puts the argument a guest
+        // needs onto the command line when it loads the image, so there is
+        // nothing here to merge and nothing to cross-check: this used to render
+        // that argument itself and then compare its own string against the
+        // device's, which is a check that exists only because two things build
+        // one string.
         if let Some(cid) = spec.guest_cid {
             vm.attach_guest_channel(cid)
                 .await
                 .map_err(|e| e.to_string())?;
-            let attached = vm.guest_kernel_args().ok_or_else(|| {
-                "the guest channel reported no kernel arguments after attaching".to_string()
-            })?;
-            if let Some(cmdline) = &guest_cmdline {
-                if !cmdline.split_whitespace().any(|token| token == attached) {
-                    return Err(format!(
-                        "the guest channel is at `{attached}` but the kernel command line says \
-                         `{cmdline}`, so the guest would probe the wrong address and report \
-                         nothing"
-                    ));
-                }
-            }
         }
 
         Ok(vm)
@@ -900,12 +867,32 @@ mod tests {
     }
 
     /// The command line a built VM will hand its guest.
+    /// The command line as the caller configured it.
     fn boot_cmdline(vm: &AgentVM) -> String {
         let core = vm.vm();
         match core.config().boot.as_ref() {
             Some(BootSource::Linux { cmdline, .. }) => cmdline.clone(),
             other => panic!("expected a Linux boot source, got {other:?}"),
         }
+    }
+
+    /// The command line the guest will actually be booted with.
+    ///
+    /// Not the same thing as [`boot_cmdline`]: a device attached after the boot
+    /// source was described adds what a guest needs to find it when the image
+    /// is loaded, so the configured source never shows it. Asserting on the
+    /// configured line would pass while the guest booted without the argument.
+    fn booted_cmdline(vm: &AgentVM) -> String {
+        let mut line = boot_cmdline(vm);
+        for arg in vm.vm().extra_kernel_args() {
+            if !line.split_whitespace().any(|token| token == arg) {
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(&arg);
+            }
+        }
+        line
     }
 
     #[tokio::test]
@@ -927,7 +914,7 @@ mod tests {
             vm.vm().vsock().is_some(),
             "the channel must exist before the guest boots"
         );
-        let cmdline = boot_cmdline(&vm);
+        let cmdline = booted_cmdline(&vm);
         assert!(
             cmdline.contains("console=ttyS0"),
             "the caller's own arguments must survive: {cmdline}"
@@ -957,7 +944,7 @@ mod tests {
         let reported = vm
             .guest_kernel_args()
             .expect("an attached channel reports its window");
-        let cmdline = boot_cmdline(&vm);
+        let cmdline = booted_cmdline(&vm);
         assert!(
             cmdline.split_whitespace().any(|token| token == reported),
             "the device is at `{reported}` but the command line says `{cmdline}`"
@@ -997,7 +984,19 @@ mod tests {
 
         let vm = LocalVmHost::build_vm(&spec).await.expect("build");
 
+        // The caller's own line is untouched, and what the guest boots with
+        // still names the window exactly once. Two identical
+        // virtio_mmio.device entries make the kernel probe the same window
+        // twice.
         assert_eq!(boot_cmdline(&vm), existing);
+        assert_eq!(booted_cmdline(&vm), existing);
+        assert_eq!(
+            booted_cmdline(&vm)
+                .split_whitespace()
+                .filter(|token| token.starts_with("virtio_mmio.device="))
+                .count(),
+            1
+        );
         assert!(vm.vm().vsock().is_some());
     }
 

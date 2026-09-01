@@ -344,6 +344,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **One producer of the guest-channel kernel argument** (`hv2-agent`).
+  `LocalVmHost` rendered `virtio_mmio.device=` itself, merged it into the boot
+  source, and then cross-checked its own string against the device's once the
+  device existed. That check was there to catch the two drifting apart -- which
+  is a thing worth checking only while two things build one string. Now that
+  the VM applies the argument itself when it loads the image, the merge and the
+  check are both gone and `guest_channel_kernel_arg` delegates to
+  `VM::vsock_kernel_args_for`. Sixteen lines removed and one class of drift with
+  them.
+
+  The tests that covered it were asserting on the *configured* boot source,
+  which is no longer where the argument lands -- so they would have passed while
+  a guest booted without it. They now assert on what the guest will actually be
+  booted with, via the new `VM::extra_kernel_args`.
 - **`Admin` no longer implies `HostExec`** (`hv2-agent`). Every other capability
   is implied by the `Admin` wildcard, and every other tool acts on VMs the
   server manages; `sandbox.run` acts on the machine the server runs on. Leaving
