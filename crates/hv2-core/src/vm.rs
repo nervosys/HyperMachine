@@ -279,6 +279,24 @@ impl crate::device::InterruptSink for QueuedInterrupts {
     }
 }
 
+/// Tells the delivery thread that a vsock packet is waiting for the guest.
+///
+/// The same shape and the same reason as [`QueuedInterrupts`]: the device
+/// cannot deliver its own packets, and the thread that can must not be woken
+/// from inside the device lock.
+#[derive(Debug)]
+struct QueuedPackets {
+    sender: std::sync::mpsc::Sender<()>,
+}
+
+impl crate::devices::virtio_vsock::PendingWake for QueuedPackets {
+    fn wake(&self) {
+        // A closed channel means the VM is gone; nothing useful follows from
+        // delivering a packet to a machine that has stopped.
+        let _ = self.sender.send(());
+    }
+}
+
 /// What one I/O access produced.
 ///
 /// Two separate things, and conflating them is how a device interrupt gets
@@ -299,6 +317,13 @@ pub struct VM {
     vcpus: Vec<Arc<VCpu>>,
     memory: Arc<GuestMemory>,
     devices: Arc<DeviceManager>,
+    /// Kernel command-line arguments added by devices attached after the boot
+    /// source was written down.
+    ///
+    /// A vsock window does not exist when a caller describes how to boot, so
+    /// the argument that tells the guest where to find it cannot be there
+    /// either. Applied in `provision`, where the image is loaded.
+    extra_cmdline: parking_lot::Mutex<Vec<String>>,
     /// Interrupts devices raised on their own, waiting to be delivered.
     ///
     /// Taken by [`VM::launch`], which spawns the task that drains it, and
@@ -440,6 +465,7 @@ impl VM {
             vcpus,
             memory,
             devices,
+            extra_cmdline: parking_lot::Mutex::new(Vec::new()),
             interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
             backend,
@@ -499,6 +525,16 @@ impl VM {
                 // The kernel's memory map is built from this and has no other
                 // source: a guest booted this way runs no BIOS to ask.
                 loaded.set_memory_size(self.config.memory_size);
+
+                // Devices attached after the boot source was described get
+                // their arguments on now. Without this a caller has to attach a
+                // device, ask what argument it needs, and go back and rewrite
+                // the command line -- and a caller who forgets gets a guest
+                // that boots perfectly and enumerates nothing, which reads as
+                // a broken device rather than a missing argument.
+                for arg in self.extra_cmdline.lock().iter() {
+                    loaded.append_cmdline(arg);
+                }
 
                 self.admit_boot_image(&loaded)?;
 
@@ -1001,7 +1037,7 @@ impl VM {
     /// is one of the reserved context IDs, or if the register window would
     /// overlap guest RAM.
     pub async fn attach_vsock(
-        &self,
+        self: &Arc<Self>,
         guest_cid: u64,
     ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
         self.attach_vsock_at(guest_cid, Self::VSOCK_MMIO_BASE, Self::VSOCK_IRQ)
@@ -1022,7 +1058,7 @@ impl VM {
     /// The general form of [`Self::attach_vsock`], for a guest whose memory
     /// map does not leave the default window free.
     pub async fn attach_vsock_at(
-        &self,
+        self: &Arc<Self>,
         guest_cid: u64,
         base_address: u64,
         irq: u8,
@@ -1064,6 +1100,48 @@ impl VM {
                 VIRTIO_MMIO_REGION_SIZE,
             )
             .await?;
+
+        // Deliver packets as they are queued, rather than when a caller
+        // remembers to ask.
+        //
+        // Queueing is not delivering: a host-side packet sits in the device
+        // until something moves it into a receive buffer the driver posted and
+        // signals the used queue. The boot probe did that by hand after every
+        // step. Nothing else did -- so `AgentVM::exec_in_guest`, the published
+        // way to run a command in a guest, queued a connection request no guest
+        // ever saw and then timed out saying the guest was not running.
+        //
+        // A dedicated OS thread for the same reason interrupt delivery has one:
+        // the vCPU loop blocks a runtime worker inside `KVM_RUN`, and a
+        // delivery task behind it would be starved exactly when the guest is
+        // idle and waiting to be told something.
+        // Tell the guest where to find this, by putting it on the command
+        // line rather than by reporting it and hoping the caller passes it on.
+        self.extra_cmdline
+            .lock()
+            .push(Self::vsock_kernel_args_for(base_address, irq));
+
+        let (packet_tx, packet_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
+
+        let pump_vm = Arc::clone(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-vsock-{}", self.config.name))
+            .spawn(move || {
+                while packet_rx.recv().is_ok() {
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_vsock().await {
+                            tracing::debug!("vsock: a queued packet could not be delivered: {e}");
+                        }
+                    });
+                }
+            })
+            .map_err(|e| {
+                Error::Config(format!("could not start the vsock delivery thread: {e}"))
+            })?;
 
         *self.vsock.write() = Some(AttachedVsock {
             device: device.clone(),
@@ -1149,7 +1227,17 @@ impl VM {
         self.vsock
             .read()
             .as_ref()
-            .map(|v| format!("virtio_mmio.device=4K@{:#x}:{}", v.base_address, v.irq))
+            .map(|v| Self::vsock_kernel_args_for(v.base_address, v.irq))
+    }
+
+    /// The argument a guest needs to find a vsock window at `base_address`.
+    ///
+    /// Separate from [`Self::vsock_kernel_args`] because the command line is
+    /// written while the device is being attached, before it is recorded --
+    /// and because one function producing this string means the reported
+    /// argument and the applied one cannot drift apart.
+    fn vsock_kernel_args_for(base_address: u64, irq: u8) -> String {
+        format!("virtio_mmio.device=4K@{base_address:#x}:{irq}")
     }
 
     /// Wait for VM exit
@@ -2256,13 +2344,16 @@ mod tests {
     }
 
     /// A small VM for the vsock attachment tests.
-    fn vsock_vm() -> Option<VM> {
+    /// An `Arc` because attaching a device gives the VM a delivery thread that
+    /// outlives the call and has to hold the machine it delivers to.
+    fn vsock_vm() -> Option<Arc<VM>> {
         vm_or_skip(VMConfig {
             name: "vsock-vm".to_string(),
             vcpu_count: 1,
             memory_size: 64 * 1024 * 1024,
             ..Default::default()
         })
+        .map(Arc::new)
     }
 
     #[tokio::test]

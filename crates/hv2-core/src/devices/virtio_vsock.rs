@@ -50,6 +50,7 @@ use crate::devices::virtio_mmio::{VirtioMmioDevice, VIRTIO_F_VERSION_1};
 use crate::devices::virtio_queue::GuestQueue;
 use crate::{Error, GuestMemory, Result};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 
 /// Virtio device ID for a socket device.
 pub const VIRTIO_ID_VSOCK: u32 = 19;
@@ -124,6 +125,30 @@ pub mod shutdown_flags {
     pub const RECEIVE: u32 = 1;
     /// The sender will write no more.
     pub const SEND: u32 = 2;
+}
+
+/// Host ports handed out by [`VsockDevice::connect_ephemeral`].
+///
+/// The same range Linux uses for ephemeral ports, for the same reason: high
+/// enough not to collide with anything a caller would name deliberately.
+const EPHEMERAL_HOST_PORTS: std::ops::Range<u32> = 49152..65536;
+
+/// Somewhere to say that a packet is waiting for the guest.
+///
+/// Queueing a packet is not delivering it: a host-side packet sits in this
+/// device until something moves it into a receive buffer the driver posted and
+/// signals the used queue. Nothing in the device can do that -- it needs guest
+/// memory and the transport -- so it says a packet is waiting and the VM does
+/// the rest.
+///
+/// Without this, delivery happens only when a caller remembers to ask for it,
+/// which is a rule every future caller has to know and the compiler cannot
+/// enforce. The boot probe knew it; the published `vm.exec` path did not, and
+/// queued requests no guest ever saw.
+pub trait PendingWake: Send + Sync + std::fmt::Debug {
+    /// A packet is queued for the guest. Must not block: this is called with
+    /// the device lock held.
+    fn wake(&self);
 }
 
 /// A vsock packet header.
@@ -273,6 +298,17 @@ pub struct VsockDevice {
     accepted: VecDeque<VsockConnectionId>,
     /// Packets waiting for the driver to offer an rx buffer.
     pending: VecDeque<VsockPacket>,
+    /// Told when a packet is queued, so the VM can deliver it. `None` means
+    /// nothing is listening and delivery waits for a caller to ask.
+    pending_wake: Option<Arc<dyn PendingWake>>,
+    /// Where [`Self::connect_ephemeral`] starts looking.
+    ///
+    /// It rotates rather than restarting at the bottom of the range. Forgetting
+    /// a connection frees the port here, but the *guest* may still hold the
+    /// other end for a moment -- an agent has the socket until it finishes
+    /// serving it -- and a new request reusing that same pair lands on a
+    /// four-tuple the guest thinks is already connected, so it goes unanswered.
+    next_host_port: u32,
     /// Packets dropped because [`MAX_PENDING_TX`] was reached, so a caller can
     /// tell "the guest is not reading" from "nothing happened".
     dropped: u64,
@@ -298,6 +334,8 @@ impl VsockDevice {
             listeners: HashSet::new(),
             accepted: VecDeque::new(),
             pending: VecDeque::new(),
+            pending_wake: None,
+            next_host_port: EPHEMERAL_HOST_PORTS.start,
             dropped: 0,
         })
     }
@@ -328,6 +366,41 @@ impl VsockDevice {
             .insert(id, Connection::new(VsockConnectionState::Connecting));
         self.enqueue(id, op::REQUEST, 0, Vec::new());
         Ok(id)
+    }
+
+    /// Open a connection from a host port nothing else is using.
+    ///
+    /// A caller that names its own port has to pick one, and a caller with one
+    /// job to do picks a constant -- which works exactly once. A closed
+    /// connection keeps its port pair until it is forgotten, so the second call
+    /// is refused for colliding with the first, and that is not a concurrency
+    /// limit but a "you may do this once" limit that reads as the guest having
+    /// gone away.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] when every port in the ephemeral range is in use --
+    /// which means connections are being opened and never forgotten, and is
+    /// worth saying rather than papering over by reusing a live port.
+    pub fn connect_ephemeral(&mut self, guest_port: u32) -> Result<VsockConnectionId> {
+        let span = EPHEMERAL_HOST_PORTS.len() as u32;
+        for offset in 0..span {
+            let host_port = EPHEMERAL_HOST_PORTS.start
+                + (self.next_host_port - EPHEMERAL_HOST_PORTS.start + offset) % span;
+            let id = VsockConnectionId {
+                host_port,
+                guest_port,
+            };
+            if !self.connections.contains_key(&id) {
+                self.next_host_port = EPHEMERAL_HOST_PORTS.start
+                    + (host_port - EPHEMERAL_HOST_PORTS.start + 1) % span;
+                return self.connect(host_port, guest_port);
+            }
+        }
+        Err(Error::Device(format!(
+            "no free host port for a connection to guest port {guest_port}: all {} in the              ephemeral range are in use",
+            EPHEMERAL_HOST_PORTS.len()
+        )))
     }
 
     /// Accept guest-initiated connections to `host_port`.
@@ -466,6 +539,14 @@ impl VsockDevice {
     }
 
     /// Whether the device has packets waiting for an rx buffer.
+    /// Install the handle that is told when a packet is queued for the guest.
+    ///
+    /// The VM does this when it attaches the device. A device without one still
+    /// works, but only for a caller that asks for delivery itself.
+    pub fn set_pending_wake(&mut self, wake: Arc<dyn PendingWake>) {
+        self.pending_wake = Some(wake);
+    }
+
     pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()
     }
@@ -501,6 +582,13 @@ impl VsockDevice {
             self.dropped += 1;
         }
         self.pending.push_back(packet);
+
+        // Say so now. A packet that nobody is told about is delivered when
+        // something unrelated happens to ask, which is indistinguishable from
+        // a guest that stopped answering.
+        if let Some(wake) = &self.pending_wake {
+            wake.wake();
+        }
     }
 
     /// Publish anything the host has queued for the guest, now.
@@ -1295,5 +1383,49 @@ mod tests {
         // A guest that reboots should find the same ports open it found the
         // first time: a listener is host-side intent, not negotiated state.
         assert!(device.listeners.contains(&HOST_PORT));
+    }
+
+    /// Successive connections must not reuse a port pair, even when the
+    /// previous one has been forgotten. The host frees the port immediately;
+    /// the guest may still hold the other end for a moment, and a request that
+    /// reuses the pair lands on a four-tuple the guest thinks is connected and
+    /// goes unanswered. This was a real failure: ping worked, and the exec
+    /// after it hung until the caller's timeout.
+    #[test]
+    fn successive_ephemeral_connections_do_not_reuse_a_port() {
+        let mut device = VsockDevice::new(3).expect("device");
+
+        let first = device.connect_ephemeral(1024).expect("first connection");
+        device.forget(first);
+        let second = device.connect_ephemeral(1024).expect("second connection");
+
+        assert_ne!(
+            first.host_port, second.host_port,
+            "a forgotten port must not be handed straight back out"
+        );
+    }
+
+    /// A caller that opens several at once gets several ports, which is what
+    /// makes concurrent use possible at all: a constant host port means the
+    /// second caller collides with the first.
+    #[test]
+    fn concurrent_ephemeral_connections_each_get_their_own_port() {
+        let mut device = VsockDevice::new(3).expect("device");
+
+        let ports: Vec<u32> = (0..8)
+            .map(|_| {
+                device
+                    .connect_ephemeral(1024)
+                    .expect("connection")
+                    .host_port
+            })
+            .collect();
+
+        let unique: std::collections::HashSet<_> = ports.iter().collect();
+        assert_eq!(
+            unique.len(),
+            ports.len(),
+            "ports handed out twice: {ports:?}"
+        );
     }
 }

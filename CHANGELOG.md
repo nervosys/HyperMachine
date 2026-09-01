@@ -8,6 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A command runs inside a guest through the published API** (`hv2-agent`).
+  Not the boot probe, which drives the vsock device by hand because it was
+  written alongside it, but `AgentVM::ping_guest` and `exec_in_guest` -- the
+  surface an embedder actually has:
+
+      ping          : agent 1.1.0
+      exec status   : exit=Some(0) signal=None timed_out=false
+      exec stdout   : Linux (none) 6.6.52 ... x86_64 GNU/Linux
+
+  `examples/guest_exec_probe.rs` is that run, and exits non-zero when the guest
+  does not answer, so it is a check rather than only a thing to read.
+- **`LoadedBoot::append_cmdline` and `LoadedBoot::cmdline`** (`hv2-core`): add
+  an argument to a kernel command line that was written before the device
+  existed, and report what a guest will actually be booted with rather than
+  what the caller typed.
+- **`VsockDevice::connect_ephemeral`** (`hv2-core`): a connection from a host
+  port nothing else is using.
 - **A command crosses the guest channel and is answered** (`hv2-core`,
   `hv2-guest-agent`). The host publishes a framed request into the guest's
   receive queue, `hv2-guest-agentd` inside a Linux guest reads it, and its reply
@@ -395,14 +412,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   guest's command line -- only the boot probe does that, by hand. The host-side
   chain from `vm.exec` down to `VsockDevice` is otherwise unbroken and drives
   the emulated device directly rather than the host's own `AF_VSOCK` stack.
-- **Concurrent `vm.exec` on one VM is not supported**: the host port is a
-  constant and `VsockDevice::connect` refuses a duplicate port pair, so a
-  second call collides with the first.
-
 ### Known gaps
 ### Known gaps
 ### Known gaps
 ### Fixed
+- **Three defects between the guest channel and the API in front of it**
+  (`hv2-core`, `hv2-agent`), each of which made a working transport look like a
+  dead guest, and none of which the boot probe could have found -- it drove the
+  device by hand, so it never used the API the way an embedder must.
+
+  **Queued was not delivered.** A host-side packet sits in the device until
+  something moves it into a receive buffer the driver posted and signals the
+  used queue. The probe did that after every step; nothing else did. So
+  `exec_in_guest` queued a connection request no guest ever saw and then timed
+  out reporting that the guest might not be running. Delivery is now driven by
+  the device itself, through `PendingWake`: queueing a packet says so, and the
+  VM delivers it on a dedicated thread. A rule the caller has to remember is
+  not a design, and this one had exactly one caller who remembered.
+
+  **The kernel argument was reported, not applied.** `attach_guest_channel`
+  returned the `virtio_mmio.device=` argument a guest needs and left putting it
+  on the command line to the caller -- who cannot have written it down, because
+  the device did not exist when the boot source was described. A caller who
+  misses it gets a guest that boots perfectly and enumerates nothing, which
+  reads as a broken device. The VM now records the argument at attach and
+  applies it when the image is loaded.
+
+  **The host port was a constant.** `VsockChannel` always connected from port
+  2048, and a closed connection keeps its port pair until it is forgotten, so
+  the *second* call on a VM was refused for colliding with the first -- worse
+  than the concurrency limit it was recorded as. Ports are now allocated from
+  an ephemeral range that rotates: freeing a port does not hand it straight
+  back out, because the guest may still hold the other end and a reused pair
+  goes unanswered. The client also forgets a connection when it drops, and
+  treats a refusal as retryable within the caller's timeout -- an agent serving
+  one caller at a time is briefly busy rather than absent.
 - **A guest could wait on an interrupt that only its own idleness prevented**
   (`hv2-core`). Interrupts raised by device code were delivered by a task on the
   same tokio runtime as the vCPU loop -- and the vCPU loop calls `KVM_RUN`,

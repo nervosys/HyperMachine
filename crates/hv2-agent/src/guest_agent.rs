@@ -42,9 +42,6 @@ use std::time::{Duration, Instant};
 /// against spinning.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
-/// Host port the client connects from.
-const HOST_PORT: u32 = 2048;
-
 /// A byte channel to a program inside the guest.
 ///
 /// The client is written against this rather than against the vsock device so
@@ -79,33 +76,62 @@ impl VsockChannel {
     /// distinguishable from out here, and the message says so rather than
     /// guessing.
     pub fn connect(device: Arc<Mutex<VsockDevice>>, timeout: Duration) -> Result<Self> {
-        let id = device.lock().connect(HOST_PORT, GUEST_AGENT_PORT)?;
         let deadline = Instant::now() + timeout;
+        let mut refusals = 0u32;
 
         loop {
-            let state = device.lock().state(id);
-            match state {
-                Some(VsockConnectionState::Established) => {
-                    return Ok(Self { device, id });
-                }
-                Some(VsockConnectionState::Connecting) => {}
-                other => {
+            let id = device.lock().connect_ephemeral(GUEST_AGENT_PORT)?;
+
+            match Self::settle(&device, id, deadline) {
+                Settled::Established => return Ok(Self { device, id }),
+                Settled::Refused => {
+                    // A refusal is not necessarily "nothing is listening". An
+                    // agent that serves one caller at a time is still inside
+                    // the previous connection for a moment after the host has
+                    // finished with it, and a request arriving then is reset by
+                    // the guest's kernel because the accept queue is full. That
+                    // is a busy service rather than an absent one, and the
+                    // timeout the caller gave is the right budget to spend on
+                    // it -- failing on the first try turns a sequential second
+                    // call into an error about the guest having gone away.
                     device.lock().forget(id);
-                    return Err(AgentError::Script(format!(
-                        "the guest refused a connection to the agent on port {GUEST_AGENT_PORT} \
-                         (connection is {other:?})"
+                    refusals += 1;
+                }
+                Settled::Deadline => {
+                    device.lock().forget(id);
+                    return Err(AgentError::Timeout(format!(
+                        "no answer from a guest agent on vsock port {GUEST_AGENT_PORT} within \
+                         {timeout:?} ({refusals} refused). The guest may not be running, may \
+                         have no vsock driver, or may not be running hv2-guest-agentd"
                     )));
                 }
             }
 
             if Instant::now() >= deadline {
-                device.lock().forget(id);
                 return Err(AgentError::Timeout(format!(
-                    "no answer from a guest agent on vsock port {GUEST_AGENT_PORT} within {:?}. \
-                     The guest may not be running, may have no vsock driver, or may not be \
-                     running hv2-guest-agentd",
-                    timeout
+                    "a guest agent on vsock port {GUEST_AGENT_PORT} refused {refusals} \
+                     connection(s) in {timeout:?} without accepting one. It is listening but \
+                     never free, most likely still serving a caller that has not finished"
                 )));
+            }
+            std::thread::sleep(POLL_INTERVAL);
+        }
+    }
+
+    /// Wait for one connection attempt to resolve.
+    fn settle(
+        device: &Arc<Mutex<VsockDevice>>,
+        id: VsockConnectionId,
+        deadline: Instant,
+    ) -> Settled {
+        loop {
+            match device.lock().state(id) {
+                Some(VsockConnectionState::Established) => return Settled::Established,
+                Some(VsockConnectionState::Connecting) => {}
+                _ => return Settled::Refused,
+            }
+            if Instant::now() >= deadline {
+                return Settled::Deadline;
             }
             std::thread::sleep(POLL_INTERVAL);
         }
@@ -117,11 +143,27 @@ impl VsockChannel {
     }
 }
 
+/// How one connection attempt ended.
+enum Settled {
+    /// The guest accepted.
+    Established,
+    /// The guest answered, but not with an acceptance.
+    Refused,
+    /// The caller's deadline passed while it was still connecting.
+    Deadline,
+}
+
 impl Drop for VsockChannel {
     fn drop(&mut self) {
-        // Tell the guest, so its agent stops waiting on a peer that is gone.
+        // Tell the guest, so its agent stops waiting on a peer that is gone,
+        // and then release the port pair. The shutdown packet is queued by
+        // `close` before this forgets the connection, so the guest still hears
+        // about it -- and without the forget the port stays taken for the life
+        // of the VM, which makes the second call fail for the first call's
+        // sake.
         let mut device = self.device.lock();
         let _ = device.close(self.id);
+        device.forget(self.id);
     }
 }
 
