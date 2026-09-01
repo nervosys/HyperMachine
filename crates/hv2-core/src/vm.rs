@@ -1247,7 +1247,7 @@ impl VM {
     ///
     /// Devices attached after the boot source was described add what a guest
     /// needs in order to find them, and that happens when the image is loaded
-    /// -- so the configured [`BootSource`](crate::boot::BootSource) does not
+    /// -- so the configured [`BootSource`](crate::BootSource) does not
     /// show it. A caller reporting what a guest will be booted with needs both.
     #[must_use]
     pub fn extra_kernel_args(&self) -> Vec<String> {

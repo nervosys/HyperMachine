@@ -133,12 +133,16 @@ jobs:
         with:
           components: miri
 
+      # rust-toolchain.toml pins channel = "stable" for the repo and overrides
+      # whatever the action above installed, so bare `cargo miri` runs on
+      # stable -- which never ships the miri component. Naming the toolchain
+      # is the same fix the HV1 jobs already carry.
       - name: Setup Miri
-        run: cargo miri setup
+        run: cargo +nightly miri setup
 
       - name: Run Miri on hv2-core
         run: |
-          cargo miri test -p hv2-core --lib 2>&1 | head -500 || true
+          cargo +nightly miri test -p hv2-core --lib 2>&1 | head -500 || true
         continue-on-error: true
 
   # ============================================================================
