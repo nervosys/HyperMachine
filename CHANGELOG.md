@@ -478,6 +478,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **Four more parameters that were accepted and ignored** (`hv2-agent`).
+  - A **disabled tool was hidden, not refused**. `McpTool::enabled` was
+    filtered in `list_tools` and never checked on the call path, so a tool
+    disabled in future would still run for anyone who knew its name. Nothing
+    can disable one today, which is why it was worth closing before something
+    can.
+  - **`agent.send` could not be called as documented.** Its schema names the
+    parameter `target_agent`; the handler read `target_agent_id`, so a
+    schema-conforming call failed on a missing parameter it had supplied under
+    the documented name. Both are accepted now, since the undocumented one has
+    been the only one that worked.
+  - **`guest.file.write` ignored `encoding`.** The schema offers `text` and
+    `base64`; a base64 payload was forwarded as literal base64 text, writing
+    the characters of the encoding rather than the bytes they stand for, with
+    the caller told it succeeded. There is no decoder here, so the encoding is
+    refused rather than mis-delivered.
+  - **`guest.file.read` ignored `max_size_kb`**, so the request reaching the
+    guest agent carried no bound at all. It is carried through now.
 - **`vm.create` over the MCP tool path dropped the kernel** (`hm-cli`). It
   deserialised a `CreateVmRequest` carrying `boot` and then called the
   five-argument `create_vm`, which hardcodes `boot: None`. An agent that

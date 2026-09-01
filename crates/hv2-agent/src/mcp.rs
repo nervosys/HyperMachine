@@ -2185,6 +2185,20 @@ impl McpServer {
                     };
                 }
             };
+            // Hidden from the catalogue is not the same as refused.
+            // `enabled` was filtered in list_tools and never checked here, so
+            // a tool disabled in future would still run for anyone who knew
+            // its name. Nothing can disable one today, which is exactly why
+            // this is worth closing now rather than after something can.
+            if !tool.enabled {
+                return ToolCallResponse {
+                    id: request.id,
+                    success: false,
+                    result: None,
+                    error: Some(format!("Tool is disabled: {}", request.tool)),
+                    execution_time_ms: start.elapsed().as_millis() as u64,
+                };
+            }
             for cap in &tool.required_capabilities {
                 if !session.capabilities.has(*cap) {
                     return ToolCallResponse {
@@ -3579,6 +3593,14 @@ impl McpServer {
                         "request": {
                             "type": "file.read",
                             "path": path,
+                            // Carried through rather than dropped. The schema
+                            // offers max_size_kb with a default of 1024 and
+                            // nothing read it, so the request the guest agent
+                            // received carried no bound at all.
+                            "max_size_kb": params
+                                .get("max_size_kb")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(1024),
                         },
                         "status": "submitted",
                     }),
@@ -3605,6 +3627,26 @@ impl McpServer {
                 let content = params
                     .get("content")
                     .ok_or("Missing required parameter: content")?;
+
+                // The schema offers text and base64 and this read neither, so
+                // a base64 payload was forwarded as literal base64 text and
+                // written to the guest as the characters of the encoding
+                // rather than the bytes it encodes -- silent corruption, and
+                // the caller told it succeeded. There is no decoder here, so
+                // the honest answer is to refuse the encoding this cannot
+                // honour rather than mis-deliver it.
+                match params.get("encoding").and_then(|v| v.as_str()) {
+                    None | Some("text") => {}
+                    Some("base64") => {
+                        return Err("base64 content is not supported by this server: it has no                                     decoder, and forwarding the encoded text would write the                                     characters of the encoding rather than the bytes they                                     stand for. Send the content as text"
+                            .to_string())
+                    }
+                    Some(other) => {
+                        return Err(format!(
+                            "unknown encoding {other:?}; this tool accepts \"text\""
+                        ))
+                    }
+                }
 
                 // Verify the VM exists and is running
                 let state = session.state.read().unwrap_or_else(|e| e.into_inner());
@@ -3708,10 +3750,16 @@ impl McpServer {
             }
 
             "agent.send" => {
+                // The schema calls this `target_agent`, so reading
+                // `target_agent_id` meant a schema-conforming call could never
+                // succeed -- it failed on a missing parameter it had supplied
+                // under the documented name. Both are accepted now, since the
+                // wrong one has been the only one that worked.
                 let target = params
-                    .get("target_agent_id")
+                    .get("target_agent")
+                    .or_else(|| params.get("target_agent_id"))
                     .and_then(|v| v.as_str())
-                    .ok_or("Missing required parameter: target_agent_id")?;
+                    .ok_or("Missing required parameter: target_agent")?;
                 let message = params
                     .get("message")
                     .and_then(|v| v.as_str())
@@ -4279,5 +4327,82 @@ mod tests {
         // Closing the session must invoke the hook with the owned VM.
         assert!(server.close_session(&session.id));
         assert_eq!(torn_down.lock().unwrap().len(), 1);
+    }
+
+    /// A disabled tool is refused, not merely hidden from the catalogue.
+    ///
+    /// `enabled` was filtered in `list_tools` and never checked on the call
+    /// path, so a tool disabled in future would still run for anyone who knew
+    /// its name. Nothing can disable one today, which is why this is worth
+    /// closing before something can.
+    #[tokio::test]
+    async fn a_disabled_tool_is_refused_and_not_only_hidden() {
+        let server = McpServer::new();
+        let session = server
+            .create_session("disabled-tool-agent", AgentCapabilities::full())
+            .expect("session");
+
+        {
+            let mut tools = server.tools.write().unwrap_or_else(|e| e.into_inner());
+            let tool = tools.get_mut("system.info").expect("system.info exists");
+            tool.enabled = false;
+        }
+
+        let listed = server.list_tools(&AgentCapabilities::full());
+        assert!(
+            !listed.iter().any(|t| t.name == "system.info"),
+            "a disabled tool should not be listed"
+        );
+
+        let response = session.call_tool(&server, "system.info", json!({})).await;
+        assert!(
+            !response.success,
+            "and knowing its name should not be enough to run it"
+        );
+        assert!(
+            response
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("disabled")),
+            "the refusal should say why: {:?}",
+            response.error
+        );
+    }
+
+    /// An encoding this server cannot honour is refused, not ignored.
+    ///
+    /// `guest.file.write` offered `text` and `base64` and read neither, so a
+    /// base64 payload was forwarded as literal base64 text: the characters of
+    /// the encoding written to the guest instead of the bytes they stand for,
+    /// with the caller told it succeeded.
+    #[tokio::test]
+    async fn base64_content_is_refused_rather_than_written_as_literal_text() {
+        let server = McpServer::new();
+        let session = server
+            .create_session("encoding-agent", AgentCapabilities::full())
+            .expect("session");
+
+        let response = session
+            .call_tool(
+                &server,
+                "guest.file.write",
+                json!({
+                    "vm_id": "any-vm",
+                    "path": "/tmp/x",
+                    "content": "aGVsbG8=",
+                    "encoding": "base64"
+                }),
+            )
+            .await;
+
+        assert!(!response.success, "base64 must not be silently accepted");
+        assert!(
+            response
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("base64")),
+            "the refusal should name the encoding: {:?}",
+            response.error
+        );
     }
 }
