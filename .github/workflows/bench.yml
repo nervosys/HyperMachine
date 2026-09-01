@@ -94,6 +94,19 @@ jobs:
           tool: 'customSmallerIsBetter'
           output-file-path: bench-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          # This job had never completed a run. The action stores history
+          # by committing to a gh-pages branch, and this repository had none,
+          # so it failed at `git switch gh-pages` before recording a single
+          # measurement -- first on the fetch, and then, with the fetch
+          # skipped, on the switch, because save-data-file still needs the
+          # branch to write to.
+          #
+          # The branch now exists as an orphan carrying only dev/bench data.
+          # GitHub Pages is not enabled for this repository, so nothing there
+          # is published; it exists because this action stores data by
+          # committing to a branch of that name. Do not protect it -- the
+          # action commits directly and a pull-request rule breaks it, which
+          # is the same mistake the CLA workflow made with `master`.
           auto-push: true
           alert-threshold: '150%'
           comment-on-alert: true
