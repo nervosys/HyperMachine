@@ -74,8 +74,14 @@ jobs:
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+            # hv1-core is the x86_64 Type-1 hypervisor and says so itself: its
+            # lib.rs carries a compile_error! refusing any other architecture,
+            # pointing at hv1-arm instead. macos-latest is ARM64, so it has to
+            # be excluded there -- and only there. On the x86_64 runners it is
+            # built and tested like every other crate, which is the point of
+            # having removed the blanket exclusions in #70.
             - name: Run tests
-              run: cargo test --workspace --exclude hv2-core
+              run: cargo test --workspace --exclude hv2-core ${{ runner.arch == 'ARM64' && '--exclude hv1-core' || '' }}
 
     test-core:
         name: Test Core (Linux only)
