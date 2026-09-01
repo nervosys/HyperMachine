@@ -598,6 +598,16 @@ impl VsockDevice {
             conn.peer_fwd_cnt = header.fwd_cnt;
         }
 
+        // Which packets the guest actually sends is the difference between
+        // "it never answered" and "it answered something we discarded".
+        tracing::debug!(
+            "vsock: from guest op={} len={} src_port={} dst_port={}",
+            header.op,
+            header.len,
+            header.src_port,
+            header.dst_port
+        );
+
         match header.op {
             op::REQUEST => self.handle_request(id),
             op::RESPONSE => self.handle_response(id),

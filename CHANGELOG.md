@@ -361,11 +361,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   second call collides with the first.
 
 ### Known gaps
-- **The guest agent does not answer yet.** The connection reaches
-  `Established` and 45 bytes of a framed request are published and signalled,
-  but `hv2-guest-agentd` never logs an accepted connection, so the payload is
-  not reaching the listening socket inside the guest. Transport-level
-  connection: working. Data delivery to a listening vsock socket: not yet.
+- **The guest agent does not answer yet, and the shape of it is narrow.** The
+  handshake works in both directions: the host's connection request is
+  published into a buffer the driver posted, the guest reads it and replies
+  `RESPONSE`, and the connection reaches `Established`. That alone proves the
+  receive ring, the used ring and the interrupt all reach the guest. The
+  payload that follows does not: `send` queues 45 bytes, `notify_vsock`
+  reports them published and signalled into a posted buffer, and the guest
+  then sends **nothing at all** -- no reply, no credit update, no reset. A
+  trace of every packet the guest sends shows exactly one for the whole run:
+  `op=2 len=0 src_port=1024 dst_port=50000`. So the difference is not the
+  transport but something about a packet carrying data: the same path that
+  delivered a zero-length REQUEST does not get a 45-byte RW accepted. Credit
+  is not the explanation -- the device advertises a 256 KiB `buf_alloc` on
+  every packet.
 - **A hosted VM still gets no legacy devices.** `Machine::legacy_pc()` is used
   only by the boot probe, so a VM created through `LocalVmHost` has no COM1, no
   CMOS and no i8042 -- each of which the probe records as a hang. Such a VM
