@@ -299,8 +299,16 @@ async fn main() {
                         }
 
                         // Whether the agent answers is the whole question.
+                        //
+                        // Sixty quarter-seconds, because six seconds was not
+                        // enough and the difference is not academic: a window
+                        // that closes early reports a working channel as
+                        // "nothing yet", which reads exactly like a broken one
+                        // and cost real time here. The guest can take several
+                        // seconds between the kernel accepting the connection
+                        // and the agent being scheduled to read from it.
                         let mut reply = Ok(Vec::new());
-                        for _ in 0..24 {
+                        for _ in 0..60 {
                             tokio::time::sleep(Duration::from_millis(250)).await;
                             let _ = vm.notify_vsock().await;
                             reply = device.lock().recv(id);

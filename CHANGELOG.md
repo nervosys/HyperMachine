@@ -8,6 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A command crosses the guest channel and is answered** (`hv2-core`,
+  `hv2-guest-agent`). The host publishes a framed request into the guest's
+  receive queue, `hv2-guest-agentd` inside a Linux guest reads it, and its reply
+  comes back over the transmit queue:
+
+      vsock reply : 73 bytes -- {"id":1,"version":1,"result":
+                    {"kind":"pong","agent_version":"1.1.0"}}
+
+  This is the experiment the guest channel existed for. The two halves of the
+  feature -- a device proven against hand-built virtqueues, and an agent proven
+  against the host kernel's own `AF_VSOCK` -- have now been proven against each
+  other.
 - **The host and the guest agent complete a request and a reply over vsock**
   (`hv2-core`, `hv2-guest-agent`). With the operation numbers corrected, a run
   against a Linux guest shows the whole exchange: the host publishes a 45-byte
@@ -389,19 +401,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Known gaps
 ### Known gaps
-- **The guest consumes a host payload only when it has transmitted first.**
-  With the agent writing a byte before it reads, the full round trip works. With
-  it reading first -- which is what the protocol actually asks for -- the host's
-  packet is published into a buffer the driver posted, twice over, and the guest
-  stays silent: no reply, no credit update, no reset, and nothing in its log.
-  The agent is confirmed to have accepted the connection and to be blocked in
-  `read`. The shape of it -- data becoming visible only once the guest's own
-  transmit path has run -- points at the receive interrupt not being acted on,
-  with the driver draining the receive ring when a transmit completion makes it
-  look. That is the next thing to establish.
-- **The old operation numbers may be recorded elsewhere.** They were only ever
-  used by this device and its tests, but anything that captured a trace or
-  documented a packet before this release describes the wrong numbering.
+### Known gaps
+- **The round trip is intermittent, and the remaining variable is latency.**
+  Repeated runs answer some of the time and report nothing the rest, with the
+  same build and the same guest. A timeline sampling the guest's interrupt count
+  each second shows the shape of it: IRQ 5 stays at zero for several seconds
+  after the host has published and signalled, then the agent accepts, then it
+  reads. So the packet is delivered and acted on, several seconds late, and a
+  probe that stops waiting first reports a working channel as a dead one. What
+  makes the guest take those seconds is the next thing to establish; neither an
+  edge pulse nor a held level line changed it, so it is not the interrupt's
+  trigger mode.
 
 ### Fixed
 - **The vsock operation numbers were each one below the specification's**
