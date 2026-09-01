@@ -4405,4 +4405,59 @@ mod tests {
             response.error
         );
     }
+
+    /// One agent cannot claim another's VM, and so cannot reach it.
+    ///
+    /// This is the security property, not a message check. `agent.claim`
+    /// appended the VM id to the calling session's `owned_vms` with no
+    /// validation, and `owned_vms` is what `session_owns` authorises against —
+    /// so the tool documented as *preventing* other agents from modifying a VM
+    /// was the way to gain the right to modify it. The assertion that matters
+    /// is the second one: after a refused claim, the intruder still cannot act.
+    #[tokio::test]
+    async fn a_claim_cannot_take_a_vm_another_agent_holds() {
+        let server = McpServer::new();
+        let owner = server
+            .create_session("owner-agent", AgentCapabilities::full())
+            .expect("owner session");
+        let intruder = server
+            .create_session("intruder-agent", AgentCapabilities::full())
+            .expect("intruder session");
+
+        let created = owner
+            .call_tool(&server, "vm.create", json!({ "name": "owned-vm" }))
+            .await;
+        assert!(created.success, "vm.create: {:?}", created.error);
+        let vm_id = created.result.expect("record")["vm_id"]
+            .as_str()
+            .expect("vm_id")
+            .to_string();
+
+        let stolen = intruder
+            .call_tool(&server, "agent.claim", json!({ "vm_id": vm_id }))
+            .await;
+        assert!(
+            !stolen.success,
+            "a VM another agent holds must not be claimable"
+        );
+
+        // The point of the whole fix: the ownership gate still refuses.
+        let deleted = intruder
+            .call_tool(&server, "vm.delete", json!({ "vm_id": vm_id }))
+            .await;
+        assert!(
+            !deleted.success,
+            "a refused claim must not leave the intruder able to delete the VM"
+        );
+
+        // And the owner is unaffected.
+        let owner_status = owner
+            .call_tool(&server, "vm.status", json!({ "vm_id": vm_id }))
+            .await;
+        assert!(
+            owner_status.success,
+            "the owner still owns it: {:?}",
+            owner_status.error
+        );
+    }
 }
