@@ -402,18 +402,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Known gaps
 ### Known gaps
 ### Known gaps
-- **The round trip is intermittent, and the remaining variable is latency.**
-  Repeated runs answer some of the time and report nothing the rest, with the
-  same build and the same guest. A timeline sampling the guest's interrupt count
-  each second shows the shape of it: IRQ 5 stays at zero for several seconds
-  after the host has published and signalled, then the agent accepts, then it
-  reads. So the packet is delivered and acted on, several seconds late, and a
-  probe that stops waiting first reports a working channel as a dead one. What
-  makes the guest take those seconds is the next thing to establish; neither an
-  edge pulse nor a held level line changed it, so it is not the interrupt's
-  trigger mode.
-
 ### Fixed
+- **A guest could wait on an interrupt that only its own idleness prevented**
+  (`hv2-core`). Interrupts raised by device code were delivered by a task on the
+  same tokio runtime as the vCPU loop -- and the vCPU loop calls `KVM_RUN`,
+  which is a blocking ioctl. While the guest runs it does not return, and while
+  the guest is *idle* it does not return for a long time, because KVM halts the
+  vCPU in the kernel and waits there for an interrupt. Either way it occupies a
+  runtime worker.
+
+  So the two could meet in the middle: a halted guest waiting for an interrupt,
+  and the interrupt that would wake it queued behind a worker the guest itself
+  was occupying. Nothing deadlocked outright -- the guest woke on the next timer
+  tick or console byte and found data that had been there all along -- so it
+  presented as seconds of latency, intermittently, which is far harder to see
+  than a hang. A trace makes it plain: the delivery thread logs its last line,
+  then two interrupts are queued with `sent=true` and neither is ever acted on.
+
+  Delivery now runs on a dedicated OS thread. Measured on the configuration that
+  showed it worst -- an idle guest with a quiet console -- the agent round trip
+  went from 0 of 1 runs answering to 4 of 4.
+
+  This is also why the vsock round trip had been intermittent, and why neither
+  an edge pulse nor a held level line changed anything: the trigger mode never
+  mattered, because the line was not being driven at all.
 - **The vsock operation numbers were each one below the specification's**
   (`hv2-core`). This is why no data ever moved over a channel whose handshake
   worked perfectly. `REQUEST` (1) and `RESPONSE` (2) happened to be correct;

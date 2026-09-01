@@ -269,11 +269,13 @@ impl crate::device::InterruptSink for QueuedInterrupts {
     }
 
     fn assert_line(&self, irq: u8) {
-        let _ = self.sender.send((irq, IrqLevel::High));
+        let sent = self.sender.send((irq, IrqLevel::High)).is_ok();
+        tracing::trace!("queued IRQ {irq} high, sent={sent}");
     }
 
     fn deassert_line(&self, irq: u8) {
-        let _ = self.sender.send((irq, IrqLevel::Low));
+        let sent = self.sender.send((irq, IrqLevel::Low)).is_ok();
+        tracing::trace!("queued IRQ {irq} low, sent={sent}");
     }
 }
 
@@ -681,15 +683,49 @@ impl VM {
         // reason -- which is the limitation this replaces.
         if let Some(mut queue) = self.interrupt_queue.lock().take() {
             let vm = Arc::clone(self);
-            tokio::spawn(async move {
-                while let Some((irq, level)) = queue.recv().await {
-                    match level {
-                        IrqLevel::Pulse => Self::pulse_irq(vm.backend.as_ref(), irq).await,
-                        IrqLevel::High => Self::set_irq(vm.backend.as_ref(), irq, true).await,
-                        IrqLevel::Low => Self::set_irq(vm.backend.as_ref(), irq, false).await,
+            let handle = tokio::runtime::Handle::current();
+
+            // A dedicated OS thread, not a task on this runtime, and the
+            // reason is a deadlock rather than a preference.
+            //
+            // The vCPU loop calls `KVM_RUN`, which is a blocking ioctl: while
+            // the guest is running it does not return, and while the guest is
+            // *idle* it does not return for a long time, because KVM halts the
+            // vCPU in the kernel and waits there for an interrupt. As a task,
+            // that occupies a runtime worker for the whole of it.
+            //
+            // Deliver interrupts from another task on the same runtime and the
+            // two can meet in the middle: the guest is halted waiting for an
+            // interrupt, and the interrupt that would wake it is sitting in a
+            // queue behind a worker the guest itself is occupying. Nothing
+            // breaks -- the guest wakes on the next timer tick or console byte
+            // and finds the data that was there all along -- so it presents as
+            // latency of seconds, intermittently, which is a much harder thing
+            // to see than a hang.
+            std::thread::Builder::new()
+                .name(format!("hv2-irq-{}", vm.config.name))
+                .spawn(move || {
+                    while let Some((irq, level)) = queue.blocking_recv() {
+                        handle.block_on(async {
+                            match level {
+                                IrqLevel::Pulse => {
+                                    Self::pulse_irq(vm.backend.as_ref(), irq).await;
+                                }
+                                IrqLevel::High => {
+                                    Self::set_irq(vm.backend.as_ref(), irq, true).await;
+                                }
+                                IrqLevel::Low => {
+                                    Self::set_irq(vm.backend.as_ref(), irq, false).await;
+                                }
+                            }
+                        });
                     }
-                }
-            });
+                })
+                .map_err(|e| {
+                    Error::Config(format!(
+                        "could not start the interrupt delivery thread: {e}"
+                    ))
+                })?;
         }
 
         let vm = Arc::clone(self);
