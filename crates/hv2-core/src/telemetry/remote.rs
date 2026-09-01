@@ -472,7 +472,7 @@ mod tests {
         let exporter = RemoteMetricExporter::new(cfg).unwrap();
 
         let mut family = MetricFamily::new("test", MetricType::Gauge, "Test");
-        family.add_sample(MetricSample::gauge_float("test", 3.14));
+        family.add_sample(MetricSample::gauge_float("test", 42.5));
 
         let result = exporter.export(&[family]);
         assert!(result.is_ok());

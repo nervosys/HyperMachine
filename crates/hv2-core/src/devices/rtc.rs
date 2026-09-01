@@ -10,7 +10,7 @@
 //! - 0x70: Index register (write only)
 //! - 0x71: Data register (read/write)
 
-use crate::{Device, DeviceType, Error, Result};
+use crate::{Device, DeviceType, Result};
 use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -34,6 +34,18 @@ const RTC_STATUS_C: u8 = 0x0C;
 const RTC_STATUS_D: u8 = 0x0D;
 
 /// Status Register A flags
+/// The RTC's interrupt line on a PC.
+const RTC_IRQ: u8 = 8;
+
+/// Index register, relative to the base port the device is registered at.
+///
+/// Relative, not absolute: `DeviceManager` subtracts the base port before
+/// calling, so a device that decodes 0x70 directly never matches.
+pub const RTC_INDEX_OFFSET: u64 = 0;
+
+/// Data register, relative to the base port.
+pub const RTC_DATA_OFFSET: u64 = 1;
+
 const STATUS_A_UIP: u8 = 0x80; // Update in progress
 
 /// Status Register B flags
@@ -302,7 +314,16 @@ impl Device for RtcDevice {
     }
 
     fn device_type(&self) -> DeviceType {
-        DeviceType::Timer
+        DeviceType::RTC
+    }
+
+    fn pending_interrupt(&self) -> Option<u8> {
+        // IRQ 8 is the RTC's line on a PC. The inherent
+        // `has_pending_interrupt` existed and the trait method did not, so the
+        // dispatch layer could never see this device's interrupt: a guest that
+        // enabled the periodic interrupt would wait for one that had no way to
+        // be delivered.
+        self.has_pending_interrupt().then_some(RTC_IRQ)
     }
 
     async fn init(&mut self) -> Result<()> {
@@ -312,31 +333,28 @@ impl Device for RtcDevice {
     }
 
     async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device("RTC only supports single-byte reads".into()));
+        // Offsets are relative to the registered base port -- `DeviceManager`
+        // hands over `port - base_port`, the same as every other device on the
+        // I/O path. This used to decode the absolute 0x70 and 0x71 and error on
+        // anything else, which meant it worked when a test called it directly
+        // and never once behind the device manager: every access arrived as 0
+        // or 1, hit the fallback, and returned an error that stopped the VM.
+        for (index, byte) in data.iter_mut().enumerate() {
+            *byte = match (offset + index as u64) & 1 {
+                0 => self.read_index(),
+                _ => self.read_data(),
+            };
         }
-
-        let value = match offset {
-            0x70 => self.read_index(),
-            0x71 => self.read_data(),
-            _ => return Err(Error::Device(format!("Invalid RTC port: {:#x}", offset))),
-        };
-
-        data[0] = value;
         Ok(())
     }
 
     async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device("RTC only supports single-byte writes".into()));
+        for (index, byte) in data.iter().enumerate() {
+            match (offset + index as u64) & 1 {
+                0 => self.write_index(*byte),
+                _ => self.write_data(*byte),
+            }
         }
-
-        match offset {
-            0x70 => self.write_index(data[0]),
-            0x71 => self.write_data(data[0]),
-            _ => return Err(Error::Device(format!("Invalid RTC port: {:#x}", offset))),
-        }
-
         Ok(())
     }
 
@@ -360,7 +378,7 @@ mod tests {
     async fn test_rtc_creation() {
         let rtc = RtcDevice::new();
         assert_eq!(rtc.name(), "MC146818 RTC");
-        assert_eq!(rtc.device_type(), DeviceType::Timer);
+        assert_eq!(rtc.device_type(), DeviceType::RTC);
     }
 
     #[tokio::test]
@@ -447,10 +465,10 @@ mod tests {
         rtc.init().await.unwrap();
 
         let mut buf = [0u8; 1];
-        rtc.read(0x70, &mut buf).await.unwrap();
+        rtc.read(RTC_INDEX_OFFSET, &mut buf).await.unwrap();
 
-        rtc.write(0x70, &[RTC_SECONDS]).await.unwrap();
-        rtc.read(0x71, &mut buf).await.unwrap();
+        rtc.write(RTC_INDEX_OFFSET, &[RTC_SECONDS]).await.unwrap();
+        rtc.read(RTC_DATA_OFFSET, &mut buf).await.unwrap();
 
         rtc.reset().await.unwrap();
         rtc.shutdown().await.unwrap();
@@ -561,5 +579,33 @@ mod tests {
 
         let fired = rtc.check_alarm();
         assert!(!fired, "alarm should not fire when AIE is disabled");
+    }
+    #[tokio::test]
+    async fn the_rtc_decodes_offsets_relative_to_its_base_port() {
+        // The convention the whole I/O path uses. Decoding absolute ports here
+        // meant a guest reading the RTC got a device error instead of a
+        // register, and a device error on the I/O path stops the VM -- so the
+        // symptom was a guest that died the first time it asked the time.
+        let mut rtc = RtcDevice::new();
+
+        rtc.write(RTC_INDEX_OFFSET, &[RTC_STATUS_A]).await.unwrap();
+        let mut status = [0u8; 1];
+        rtc.read(RTC_DATA_OFFSET, &mut status).await.unwrap();
+
+        assert_eq!(
+            status[0] & STATUS_A_UIP,
+            0,
+            "update-in-progress must read clear, or a kernel waiting for it to \
+             clear waits forever"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_wide_access_walks_the_two_registers() {
+        let rtc = RtcDevice::new();
+        let mut both = [0u8; 2];
+        rtc.read(RTC_INDEX_OFFSET, &mut both)
+            .await
+            .expect("hardware answers a word read rather than refusing it");
     }
 }

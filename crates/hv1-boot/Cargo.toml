@@ -1,7 +1,8 @@
 [package]
 name = "hv1-boot"
 version.workspace = true
-edition = "2024"  # Requires nightly Rust
+edition = "2024"  # stable since Rust 1.85; the nightly requirement here is
+                  # the `bootloader` build script, which passes -Z flags
 rust-version.workspace = true
 publish = false
 authors.workspace = true
@@ -19,7 +20,12 @@ path = "src/main.rs"
 [dependencies]
 hv1-core = { path = "../hv1-core", features = ["intel", "amd", "serial"] }
 bootloader_api = "0.11"
-x86_64 = "0.15"
+# default-features = false drops the crate's "nightly" feature, which gates
+# abi_x86_interrupt and so cannot build on the stable toolchain this repo
+# pins. "instructions" is the half we actually use: CPU intrinsics and MSR
+# access. Reported as issue #57 -- a clean clone could not run
+# `cargo check --workspace` at all, and CI hid it by excluding this crate.
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 linked_list_allocator = "0.10"
 log = "0.4"
 

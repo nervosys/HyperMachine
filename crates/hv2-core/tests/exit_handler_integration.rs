@@ -54,7 +54,7 @@ async fn test_io_exit_to_serial_device() {
 
         // Simulate exit handler writing to device
         let offset = (port - handle.base_port()) as u64;
-        handle.write_register(offset, data).await.unwrap();
+        handle.write_register(offset, data, 1).await.unwrap();
 
         // Verify the write succeeded by checking device state
         let output = serial.read().await.output_string();
@@ -78,7 +78,10 @@ async fn test_io_exit_to_timer_device() {
 
         // Simulate exit handler writing to device
         let offset = (port - handle.base_port()) as u64;
-        handle.write_register(offset, control_word).await.unwrap();
+        handle
+            .write_register(offset, control_word, 1)
+            .await
+            .unwrap();
 
         // Write succeeded - timer is now configured
     } else {
@@ -103,12 +106,12 @@ async fn test_io_exit_multiple_devices() {
 
     // Write to serial device
     if let Some(handle) = manager.find_io_device(0x3F8).await {
-        handle.write_register(0, 0x41).await.unwrap(); // 'A'
+        handle.write_register(0, 0x41, 1).await.unwrap(); // 'A'
     }
 
     // Write to timer device
     if let Some(handle) = manager.find_io_device(0x40).await {
-        handle.write_register(0, 0xFF).await.unwrap(); // LSB of count
+        handle.write_register(0, 0xFF, 1).await.unwrap(); // LSB of count
     }
 
     // Verify both devices received their writes
@@ -145,7 +148,7 @@ async fn test_mmio_exit_to_device() {
 
         // Simulate exit handler writing to MMIO
         let offset = addr - handle.base_address();
-        handle.write_register(offset, 0x42).await.unwrap(); // 'B'
+        handle.write_register(offset, 0x42, 1).await.unwrap(); // 'B'
 
         // Verify write
         let output = mmio_serial.read().await.output_string();
@@ -177,7 +180,7 @@ async fn test_mmio_exit_read_write() {
 
     if let Some(handle) = manager.find_mmio_device(0x2000_0000).await {
         // Write to MMIO
-        handle.write_register(0, 0x43).await.unwrap(); // 'C'
+        handle.write_register(0, 0x43, 1).await.unwrap(); // 'C'
 
         // Verify the write succeeded by checking device output
         let output = mmio_serial.read().await.output_string();
@@ -219,7 +222,7 @@ async fn test_vm_exit_routing_serial() {
             if direction == IoDirection::Out {
                 if let Some(handle) = manager.find_io_device(port).await {
                     let offset = (port - handle.base_port()) as u64;
-                    handle.write_register(offset, data).await.unwrap();
+                    handle.write_register(offset, data, 1).await.unwrap();
                 }
             }
         }
@@ -253,7 +256,7 @@ async fn test_vm_exit_routing_timer() {
             if direction == IoDirection::Out {
                 if let Some(handle) = manager.find_io_device(port).await {
                     let offset = (port - handle.base_port()) as u64;
-                    handle.write_register(offset, data).await.unwrap();
+                    handle.write_register(offset, data, 1).await.unwrap();
                 }
             }
         }
@@ -314,7 +317,7 @@ async fn test_vm_exit_routing_sequence() {
                 if direction == IoDirection::Out {
                     if let Some(handle) = manager.find_io_device(port).await {
                         let offset = (port - handle.base_port()) as u64;
-                        handle.write_register(offset, data).await.unwrap();
+                        handle.write_register(offset, data, 1).await.unwrap();
                     }
                 }
             }

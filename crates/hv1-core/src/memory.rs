@@ -684,7 +684,7 @@ mod tests {
         // Only bits 51:12 survive
         assert_eq!(
             e.addr(),
-            0x000D_EADB_EEF1_2345_000u64 & 0x000F_FFFF_FFFF_F000
+            0x0000_DEAD_BEEF_1234_5000_u64 & 0x000F_FFFF_FFFF_F000
         );
     }
 

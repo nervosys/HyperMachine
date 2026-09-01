@@ -41,9 +41,10 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([800.0, 600.0])
             .with_title("HyperMachine")
             .with_icon(load_icon()),
-        vsync: true,
         multisampling: 4,
-        hardware_acceleration: eframe::HardwareAcceleration::Preferred,
+        // eframe 0.36 moved `vsync` and `hardware_acceleration` out of NativeOptions:
+        // they were glow/EGL knobs. This build uses the wgpu renderer, whose default
+        // present mode is already AutoVsync, so there is nothing to carry over.
         ..Default::default()
     };
 

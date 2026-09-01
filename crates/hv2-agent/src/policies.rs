@@ -100,6 +100,20 @@ pub enum PolicyAction {
     StorageDetach,
     StorageResize,
 
+    /// Run a program inside a guest.
+    ///
+    /// Its own action rather than a resource read or modify: running a command
+    /// in a guest is neither, and folding it into either would let a policy
+    /// that meant to allow reading a VM allow running anything inside it.
+    GuestExec,
+
+    /// Run a confined program on the host itself.
+    ///
+    /// Separate from [`Self::GuestExec`] because the blast radius is: a
+    /// program in a guest cannot reach the host, and one on the host can,
+    /// however well confined.
+    HostExec,
+
     /// Debug actions
     DebugAttach,
     DebugInspect,
@@ -625,9 +639,29 @@ pub struct AgentPolicy {
     pub version: u32,
     /// Permission policies
     pub permissions: PolicySet,
-    /// Resource quotas
+    /// Resource quotas.
+    ///
+    /// **Recorded, not enforced.** [`AgentPolicy::allows`] consults `enabled`
+    /// and `permissions` and nothing else, so a quota set here does not stop a
+    /// sixth VM being created under a `max_vms` of five. Nothing in this crate
+    /// constructs [`PolicyError::QuotaExceeded`].
+    ///
+    /// Said here because the sibling field is wired up and the module
+    /// documentation explains that it is -- which makes silence about this one
+    /// read as endorsement. Enforcing it needs usage counters that do not
+    /// exist: [`PolicyContext`] carries an agent id and a clock, not a tally,
+    /// and where such a tally should live (per session, per agent, across
+    /// restarts) is a design decision rather than an oversight.
     pub quotas: QuotaSpec,
-    /// Rate limits by action
+    /// Rate limits by action.
+    ///
+    /// **Recorded, not enforced**, for the same reason as
+    /// [`quotas`](Self::quotas) and with the same requirement: rate limiting
+    /// needs a count of recent actions, and nothing here keeps one.
+    ///
+    /// Note that [`McpConfig::rate_limit`](crate::mcp::McpConfig) *is* enforced
+    /// -- it bounds calls per session on the tool surface. This field is a
+    /// different thing that looks like it.
     pub rate_limits: HashMap<PolicyAction, RateLimitSpec>,
     /// Enabled state
     pub enabled: bool,

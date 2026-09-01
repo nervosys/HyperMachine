@@ -116,6 +116,8 @@ fn linux_bzimage_validates_and_prepares_memory_regions() {
         cmdline: "console=ttyS0 iommu=pt isolcpus=1-7".to_string(),
         setup_addr: 0x90000,
         kernel_addr: 0x100000,
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
     };
 
     LinuxBootProtocol::validate_params(&params).unwrap();
@@ -142,10 +144,23 @@ fn linux_bzimage_validates_and_prepares_memory_regions() {
         "cmdline must be null-terminated"
     );
 
-    // Verify initrd at 32MB
-    let rd = regions.iter().find(|(a, _)| *a == 0x200_0000);
-    assert!(rd.is_some(), "initrd must be at 32MB");
-    assert_eq!(rd.unwrap().1.len(), 4096);
+    // The initrd goes high in guest memory, not to a fixed 32 MB. A constant
+    // here is what hid the collision that mattered: a compressed kernel
+    // unpacks itself into init_size bytes from where it runs, and 32 MB sits
+    // inside that region for any kernel of ordinary size -- decompression
+    // overwrote the initrd and the kernel reported invalid magic about bytes
+    // it had destroyed itself. What matters is that it is placed, page
+    // aligned, and inside the guest's memory.
+    let rd = regions
+        .iter()
+        .find(|(_, data)| data.len() == 4096)
+        .expect("the initrd must be placed somewhere");
+    assert_eq!(rd.0 % 4096, 0, "initrd placement is page aligned");
+    assert!(
+        rd.0 + 4096 <= params.memory_size,
+        "initrd at {:#x} runs past the guest's memory",
+        rd.0
+    );
 }
 
 #[test]
@@ -209,6 +224,8 @@ fn guest_memory_holds_linux_boot_regions() {
         cmdline: "console=ttyS0".to_string(),
         setup_addr: 0x90000,
         kernel_addr: 0x100000,
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
     };
 
     let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
@@ -310,6 +327,8 @@ fn unikernel_admitted_then_served_via_pool() {
         kernel_image: create_valid_bzimage(),
         initrd: None,
         cmdline: "console=ttyS0 inference_mode=continuous".to_string(),
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
         ..Default::default()
     };
     LinuxBootProtocol::validate_params(&params).unwrap();
@@ -413,6 +432,8 @@ fn gpu_placement_feeds_into_boot_cmdline() {
         cmdline: format!(
             "console=ttyS0 gpu_device={gpu_id} iommu=pt nvidia.NVreg_EnableGpuFirmware=1"
         ),
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
         ..Default::default()
     };
 
@@ -569,6 +590,8 @@ fn full_unikernel_lifecycle_e2e() {
         ),
         setup_addr: 0x90000,
         kernel_addr: 0x100000,
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
     };
     LinuxBootProtocol::validate_params(&params).unwrap();
 
@@ -660,6 +683,8 @@ fn reject_invalid_kernel_image() {
     let params = LinuxBootParams {
         kernel_image: vec![0u8; 1024], // no valid header
         cmdline: "console=ttyS0".to_string(),
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
         ..Default::default()
     };
     assert!(LinuxBootProtocol::validate_params(&params).is_err());

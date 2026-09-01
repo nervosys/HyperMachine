@@ -246,6 +246,8 @@ async fn test_linux_boot_validation() -> Result<()> {
         cmdline: "console=ttyS0 root=/dev/vda".to_string(),
         setup_addr: 0x90000,
         kernel_addr: 0x100000,
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
     };
 
     // Validate parameters

@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("    • Writing 'Hello, VM!' to serial port...");
 
         for &byte in b"Hello, VM!\n" {
-            handle.write_register(0, byte as u32).await?;
+            handle.write_register(0, byte as u32, 1).await?;
         }
 
         let output = serial.read().await.output_string();
@@ -76,14 +76,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("\n  Timer Device (PIT):");
         println!("    • Configuring timer for 1ms interrupts...");
 
-        handle.write_register(3, 0x34).await?;
+        handle.write_register(3, 0x34, 1).await?;
         println!("    ✓ Control word written: 0x34");
 
         let reload_value: u16 = 1193;
         handle
-            .write_register(0, (reload_value & 0xFF) as u32)
+            .write_register(0, (reload_value & 0xFF) as u32, 1)
             .await?;
-        handle.write_register(0, (reload_value >> 8) as u32).await?;
+        handle
+            .write_register(0, (reload_value >> 8) as u32, 1)
+            .await?;
         println!("    ✓ Reload value set: {} (1ms period)", reload_value);
     }
 
@@ -121,7 +123,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(handle) = device_manager.find_mmio_device(0x1000_0000).await {
         println!("  ✓ Device found via MMIO lookup");
-        handle.write_register(0, 0x41).await?;
+        handle.write_register(0, 0x41, 1).await?;
         println!("  ✓ Wrote byte via MMIO handle");
     }
 

@@ -191,19 +191,19 @@ async fn test_rate_limiter_multiple_ips_isolated() {
     let limiter = RateLimiter::new(3, Duration::from_secs(60));
 
     // First IP uses 3 requests
-    assert!(limiter.check("ip-1").await.is_ok());
-    assert!(limiter.check("ip-1").await.is_ok());
-    assert!(limiter.check("ip-1").await.is_ok());
-    assert!(limiter.check("ip-1").await.is_err()); // Exhausted
+    assert!(limiter.check("ip-1").await.is_some());
+    assert!(limiter.check("ip-1").await.is_some());
+    assert!(limiter.check("ip-1").await.is_some());
+    assert!(limiter.check("ip-1").await.is_none()); // Exhausted
 
     // Second IP should still have full quota
-    assert!(limiter.check("ip-2").await.is_ok());
-    assert!(limiter.check("ip-2").await.is_ok());
-    assert!(limiter.check("ip-2").await.is_ok());
-    assert!(limiter.check("ip-2").await.is_err()); // Exhausted
+    assert!(limiter.check("ip-2").await.is_some());
+    assert!(limiter.check("ip-2").await.is_some());
+    assert!(limiter.check("ip-2").await.is_some());
+    assert!(limiter.check("ip-2").await.is_none()); // Exhausted
 
     // Third IP unaffected
-    assert!(limiter.check("ip-3").await.is_ok());
+    assert!(limiter.check("ip-3").await.is_some());
 }
 
 // =============================================================================

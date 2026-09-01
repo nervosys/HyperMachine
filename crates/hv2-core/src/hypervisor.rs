@@ -62,7 +62,17 @@ impl HypervisorPlatform {
 
     #[cfg(target_os = "linux")]
     fn is_kvm_available() -> bool {
-        std::path::Path::new("/dev/kvm").exists()
+        // Opened, not merely present. `/dev/kvm` exists on any host with the
+        // module loaded, including the common case where the calling user is
+        // not in the `kvm` group -- and there, `exists()` reported Kvm and
+        // every later call failed with a permission error that named none of
+        // this. Falling back to TCG is the honest answer to "can this process
+        // use KVM", which is the question `detect` is actually asking.
+        std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/kvm")
+            .is_ok()
     }
 
     #[cfg(target_os = "windows")]
@@ -138,6 +148,37 @@ pub struct HypervisorCapabilities {
     pub supports_x2apic: bool,
     pub supports_iommu: bool,
     pub supports_gpu_passthrough: bool,
+}
+
+/// How many instruction addresses a trace keeps.
+///
+/// A guest can execute millions of instructions before it fails, and the
+/// interesting part is always the end. Keeping a bounded tail rather than the
+/// whole run is the difference between a diagnostic and an out-of-memory.
+pub const TRACE_TAIL: usize = 64;
+
+/// What a single-step trace saw.
+#[derive(Debug, Clone)]
+pub struct SingleStepTrace {
+    /// How many instructions were stepped before the trace ended.
+    pub steps: u64,
+    /// Addresses of the last [`TRACE_TAIL`] instructions, oldest first.
+    ///
+    /// Each is the address of an instruction that was *about to* execute, read
+    /// before the step. That ordering is deliberate: on a triple fault KVM
+    /// resets the vCPU before returning the exit, so a register read afterwards
+    /// reports the reset vector and nothing else. Recorded beforehand, the last
+    /// entry here is the instruction that faulted.
+    pub tail: Vec<u64>,
+    /// The exit that ended the trace, or `None` if the step limit did.
+    pub final_exit: Option<VmExit>,
+}
+
+impl SingleStepTrace {
+    /// The address of the last instruction that was about to execute.
+    pub fn last_rip(&self) -> Option<u64> {
+        self.tail.last().copied()
+    }
 }
 
 /// Hypervisor backend trait
@@ -220,6 +261,57 @@ pub trait HypervisorBackend: Send + Sync {
         )))
     }
 
+    /// Step the guest one instruction at a time, recording where it went.
+    ///
+    /// The tool for a guest that fails before it can say anything. A triple
+    /// fault arrives as [`VmExit::Shutdown`] and on AMD KVM resets the vCPU
+    /// before returning it, so the registers afterwards describe the reset
+    /// vector rather than the fault; a guest stuck in a tight loop never exits
+    /// at all. Both are silent, and both are visible here.
+    ///
+    /// Stops at `max_steps`, or earlier on any exit that is not a debug exit --
+    /// including I/O, which this does not emulate. An I/O exit in the result is
+    /// therefore not a failure: it means the guest got far enough to talk to a
+    /// device, and the trace ends where the ordinary run loop should take over.
+    ///
+    /// # Errors
+    ///
+    /// The default implementation reports [`Error::NotSupported`], because a
+    /// backend that cannot single-step should say so rather than return an
+    /// empty trace that reads as "the guest executed nothing".
+    async fn single_step_trace(&self, vcpu: &VCpu, max_steps: u64) -> Result<SingleStepTrace> {
+        let _ = (vcpu, max_steps);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot single-step a guest",
+            self.platform()
+        )))
+    }
+
+    /// Assert or deassert a device interrupt line.
+    ///
+    /// `irq` is the line number as the guest's interrupt controller sees it --
+    /// 4 for COM1, and so on. `level` true asserts, false deasserts.
+    ///
+    /// This is how a device interrupt reaches a guest whose interrupt
+    /// controller lives inside the hypervisor. It is emphatically *not* the
+    /// same as [`Self::inject_interrupt`], which hands a vector straight to the
+    /// vCPU: that bypasses the controller entirely, so it ignores masking and
+    /// priority and is wrong whenever an in-kernel irqchip exists.
+    ///
+    /// # Errors
+    ///
+    /// The default implementation reports [`Error::NotSupported`], because a
+    /// backend that cannot deliver a device interrupt should say so rather
+    /// than accept the call and drop it -- a dropped interrupt looks like a
+    /// device that never raised one.
+    async fn set_irq_line(&self, irq: u32, level: bool) -> Result<()> {
+        let _ = (irq, level);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot drive an interrupt line",
+            self.platform()
+        )))
+    }
+
     /// Shutdown the hypervisor
     async fn shutdown(&mut self) -> Result<()>;
 
@@ -233,6 +325,40 @@ pub trait HypervisorBackend: Send + Sync {
     /// internally or don't yet support it.
     async fn set_io_result(&self, _vcpu: &VCpu, _data: u32, _size: u8) -> Result<()> {
         Ok(())
+    }
+
+    /// Set the result of an MMIO read.
+    ///
+    /// The counterpart to [`Self::set_io_result`], and it was missing. After a
+    /// `VmExit::Mmio` with `is_write` false, the bytes a device produced have
+    /// to be written back where the guest will read them; the `data` carried
+    /// by the exit is a copy, so filling it in changes nothing the guest can
+    /// see.
+    ///
+    /// Without this a guest reads a device register and gets whatever was
+    /// left in the exit structure. It is not a subtle failure -- a virtio
+    /// driver reads the magic number, sees stale bytes, and refuses the device
+    /// -- but it is invisible to any test that calls a device directly, which
+    /// is how it survived a full suite of virtio-mmio tests.
+    ///
+    /// The default is a no-op, matching [`Self::set_io_result`], for backends
+    /// that handle it internally or do not support it yet.
+    async fn set_mmio_result(&self, _vcpu: &VCpu, _data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    /// Host address of the guest RAM this backend registered, if it owns any.
+    ///
+    /// The device model needs to read and write the same bytes the guest does.
+    /// A backend that allocates its own pages must report them here, or every
+    /// emulated device will be looking at a different buffer from the guest --
+    /// which is not a subtle failure, but an invisible one, since the boot
+    /// path writes through the backend and guests boot perfectly either way.
+    ///
+    /// `None` means the backend does not own guest RAM separately, and the
+    /// caller's own allocation is already the right one.
+    fn guest_memory_host_addr(&self) -> Option<u64> {
+        None
     }
 
     /// Allow downcasting to concrete types

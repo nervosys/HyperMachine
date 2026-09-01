@@ -1,0 +1,689 @@
+<title>What Actually Ran</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+
+<style>
+  /* Light palette on bare :root — the complete set. Neutrals carry a slight
+     green bias toward the teal accent, so nothing reads as default grey. */
+  :root {
+    --ground:     #F6F8F7;
+    --surface:    #FFFFFF;
+    --sunk:       #EDF1EF;
+    --ink:        #16201C;
+    --ink-soft:   #48564F;
+    --ink-faint:  #6F7D76;
+    --rule:       #D9E1DC;
+    --rule-soft:  #E8EDEA;
+    --accent:     #0F6E62;
+    --accent-sunk:#E3F0ED;
+    --ok:         #2A6B4A;
+    --ok-sunk:    #E2EFE7;
+    --warn:       #8A5A12;
+    --warn-sunk:  #F6EEDE;
+    --stop:       #8C3A34;
+    --stop-sunk:  #F7E7E5;
+
+    --display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+    --measure: 66ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:     #0E1412;
+      --surface:    #161E1B;
+      --sunk:       #1C2622;
+      --ink:        #E3EAE6;
+      --ink-soft:   #A7B5AE;
+      --ink-faint:  #77857E;
+      --rule:       #2A3631;
+      --rule-soft:  #212B27;
+      --accent:     #5CC0AE;
+      --accent-sunk:#142C28;
+      --ok:         #6FBF92;
+      --ok-sunk:    #14261C;
+      --warn:       #D2A052;
+      --warn-sunk:  #2A2114;
+      --stop:       #DE8B82;
+      --stop-sunk:  #2C1A18;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:     #0E1412;
+    --surface:    #161E1B;
+    --sunk:       #1C2622;
+    --ink:        #E3EAE6;
+    --ink-soft:   #A7B5AE;
+    --ink-faint:  #77857E;
+    --rule:       #2A3631;
+    --rule-soft:  #212B27;
+    --accent:     #5CC0AE;
+    --accent-sunk:#142C28;
+    --ok:         #6FBF92;
+    --ok-sunk:    #14261C;
+    --warn:       #D2A052;
+    --warn-sunk:  #2A2114;
+    --stop:       #DE8B82;
+    --stop-sunk:  #2C1A18;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 0 1.5rem 6rem;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 62rem; margin: 0 auto; }
+
+  /* ── Masthead ───────────────────────────────────────────── */
+  header {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    padding: 4rem 0 1.75rem;
+    border-bottom: 2px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .7rem;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0;
+  }
+  h1 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: clamp(2.3rem, 5.5vw, 3.4rem);
+    line-height: 1.06;
+    letter-spacing: -.02em;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .standfirst {
+    font-size: 1.1rem;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+    margin: 0;
+  }
+  .standfirst em { font-family: var(--display); font-style: italic; color: var(--ink); }
+
+  /* ── Facts strip ────────────────────────────────────────── */
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-top: 2rem;
+  }
+  .fact { background: var(--surface); padding: .9rem 1rem; }
+  .fact dt {
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 .3rem;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 1rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .fact dd.good { color: var(--ok); }
+  .fact dd.hold { color: var(--warn); }
+
+  /* ── Sections ───────────────────────────────────────────── */
+  section { margin-top: 3.5rem; }
+  h2 {
+    font-family: var(--display);
+    font-size: 1.65rem;
+    font-weight: 600;
+    letter-spacing: -.012em;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-family: var(--body);
+    font-size: .95rem;
+    font-weight: 600;
+    letter-spacing: .005em;
+    margin: 1.9rem 0 .5rem;
+  }
+  p { max-width: var(--measure); margin: 0 0 1rem; }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: .87em;
+    background: var(--sunk);
+    padding: .1em .34em;
+    border-radius: 3px;
+  }
+
+  /* ── Callout ────────────────────────────────────────────── */
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--warn);
+    padding: 1.25rem 1.4rem;
+    margin: 1.5rem 0;
+  }
+  .callout.stop { border-left-color: var(--stop); }
+  .callout h3 { margin-top: 0; }
+
+  /* ── Ledger: the structural device of this page ─────────── */
+  .scroll { overflow-x: auto; margin: 1.25rem 0; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 40rem;
+    font-size: .92rem;
+  }
+  caption {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .11em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    padding-bottom: .6rem;
+  }
+  th, td {
+    text-align: left;
+    padding: .68rem .8rem;
+    border-bottom: 1px solid var(--rule-soft);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    border-bottom: 1px solid var(--rule);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.claim { font-weight: 500; }
+  td.where { font-family: var(--mono); font-size: .82rem; color: var(--ink-soft); }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: .68rem;
+    letter-spacing: .05em;
+    padding: .16rem .5rem;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .tag.ran   { background: var(--ok-sunk);   color: var(--ok); }
+  .tag.typed { background: var(--warn-sunk); color: var(--warn); }
+  .tag.none  { background: var(--stop-sunk); color: var(--stop); }
+
+  /* ── Terminal transcript ────────────────────────────────── */
+  pre {
+    font-family: var(--mono);
+    font-size: .8rem;
+    line-height: 1.6;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    padding: 1rem 1.1rem;
+    overflow-x: auto;
+    margin: 1.25rem 0;
+  }
+  pre b { color: var(--ok); font-weight: 500; }
+  pre i { color: var(--ink-faint); font-style: normal; }
+
+  ul { max-width: var(--measure); padding-left: 1.1rem; margin: 0 0 1rem; }
+  li { margin-bottom: .45rem; }
+  li::marker { color: var(--ink-faint); }
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--ink-faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Engineering handoff · nervosys/HyperMachine</p>
+  <h1>What Actually Ran</h1>
+  <p class="standfirst">
+    A guest boots to a shell, an agent runs commands inside it over virtio-vsock
+    through the published API, and the sandboxes confine rather than describe.
+    Everything here is green and <em>nothing is merged</em> — both pull requests
+    are blocked on a review only a human can give.
+  </p>
+
+  <dl class="facts">
+    <div class="fact"><dt>Branch</dt><dd>5294dd0</dd></div>
+    <div class="fact"><dt>PR #70</dt><dd class="good">CI 19/19</dd></div>
+    <div class="fact"><dt>PR #71</dt><dd class="hold">3 of 4</dd></div>
+    <div class="fact"><dt>Workspace</dt><dd class="good">4,812 pass</dd></div>
+    <div class="fact"><dt>Master CI</dt><dd class="hold">red</dd></div>
+  </dl>
+</header>
+
+<section>
+  <h2>The one thing to read first</h2>
+
+  <div class="callout stop">
+    <h3>Nothing has landed, and master is broken until it does.</h3>
+    <p>
+      Master's Clippy job fails on <code>manual_slice_fill</code> in
+      <code>crates/hv2-core/src/crypto/fips.rs</code> — the Rust 1.98 lint the
+      previous handoff predicted. The fix (<code>d6c061a</code>) has never been
+      pushed to master; it rides on PR #70. That is why #70's CI is green while
+      master's is red, and why #71 shows red on jobs it has nothing to do with.
+    </p>
+    <p style="margin-bottom:0">
+      <strong>Merge #70 first, then #71.</strong> Both are blocked by a repository
+      ruleset requiring one approving review.
+    </p>
+  </div>
+
+  <p>
+    The second thing worth knowing is that this host has a Linux kernel and the
+    previous handoff was wrong to assume otherwise. WSL2 Debian 6.18 with cargo
+    installed is one command away, and running the sandbox there found two
+    defects that cross-compiling could never have shown.
+  </p>
+</section>
+
+<section>
+  <h2>What shipped</h2>
+
+  <h3>Running a command in the guest, for real</h3>
+  <p>
+    <code>execute_script</code> was described in four places as running inside the
+    guest and always evaluated a Rhai script on the host. The engine was never the
+    problem: nothing in the repo could reach a guest at all. Virtio devices kept
+    their descriptor tables in host <code>Vec</code>s that tests filled in, and no
+    virtio register file was ever mapped into guest physical address space.
+  </p>
+  <ul>
+    <li><strong>GuestQueue</strong> — split virtqueues read out of guest memory. Every field is guest-written, so each is bounded: a chain that cycles is refused, an index past the table errors, indirect tables may not nest, a chain may not claim more than 64&nbsp;MiB.</li>
+    <li><strong>VirtioMmioTransport</strong> — virtio-mmio v2, implementing <code>Device</code>, so <code>register_mmio_region</code> puts it on the MMIO exit path <code>VM::run</code> already takes.</li>
+    <li><strong>VsockDevice</strong>, <code>hv2-guest-agent</code> (wire protocol and in-guest binary), <code>GuestAgent</code>, <code>AgentVM::exec_in_guest</code> — surfaced as <code>vm.exec</code> and <code>POST /api/v1/vms/{id}/exec</code>.</li>
+  </ul>
+  <p>
+    Four ways of having no guest to run in each fail as themselves rather than as
+    a timeout. An agent that receives a timeout when the real problem is a missing
+    device retries forever.
+  </p>
+
+  <h3>Sandboxes that confine</h3>
+  <p>
+    Two things here were named like sandboxes and confined nothing.
+    <code>hv2-agent</code>'s <code>Sandbox</code> says so in its own docs;
+    <code>hv2-core::container</code> is 3,866 lines whose <code>start()</code>
+    reads <em>"For now, simulate with a PID"</em> and reports <code>Running</code>
+    with a fabricated <code>1000 + n</code>. A repo-wide search for
+    <code>seccomp|setrlimit|unshare|prctl|CreateJobObject</code> found prose and
+    struct fields, and not one confinement syscall.
+  </p>
+  <p>
+    <code>hv2-sandbox</code> is built on one rule: <strong>silently dropping a
+    control is worse than no sandbox</strong>, because a caller who asked for no
+    network and got one believes the opposite of the truth. So
+    <code>controls()</code> reports what <em>this host</em> enforces, probed by
+    attempting each one; a spec asking for what the backend lacks is refused,
+    naming the control and why; <code>best_effort()</code> is an explicit opt-in
+    whose result says what was dropped.
+  </p>
+  <p>
+    Two backends behind one trait — <code>ProcessSandbox</code> (cgroup v2,
+    namespaces, rlimits, <code>no_new_privs</code> on Linux; job objects on
+    Windows) and <code>MicroVmSandbox</code> on the vsock machinery above.
+    <code>sandbox.run</code> and <code>sandbox.capabilities</code> expose it to
+    agents.
+  </p>
+
+  <div class="callout">
+    <h3>One change alters existing behaviour: <code>Admin</code> no longer implies <code>HostExec</code>.</h3>
+    <p style="margin-bottom:0">
+      Every other capability is implied by the <code>Admin</code> wildcard, and
+      every other tool acts on VMs the server manages. This one acts on the machine
+      the server runs on. Leaving it in the wildcard would have granted host
+      execution to every session already holding <code>Admin</code> the moment the
+      tool shipped — a privilege expansion nobody would have written down.
+      <code>AgentCapabilities::full()</code> now names it explicitly, so "full"
+      still means full.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>The verification ledger</h2>
+  <p>
+    The column that matters is the last one. This session's whole lesson is that
+    <em>compiles</em> and <em>was run</em> are different claims, and that a test
+    reading its own configuration back is not evidence of anything.
+  </p>
+
+  <div class="scroll">
+  <table>
+    <caption>Every claim, and what stands behind it</caption>
+    <thead>
+      <tr><th>Claim</th><th>Evidence</th><th>Where</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="claim">Workspace is sound</td>
+        <td><span class="tag ran">ran</span> 4,812 tests, 0 failing</td>
+        <td class="where">Windows host + CI</td>
+      </tr>
+      <tr>
+        <td class="claim">Linux sandbox confines</td>
+        <td><span class="tag ran">ran</span> 20 tests + clippy <code>-D warnings</code></td>
+        <td class="where">WSL2 Debian 6.18, unprivileged</td>
+      </tr>
+      <tr>
+        <td class="claim">Windows sandbox confines</td>
+        <td><span class="tag ran">ran</span> 18 tests; kernel refuses the workload's 2nd process</td>
+        <td class="where">Windows host + CI</td>
+      </tr>
+      <tr>
+        <td class="claim">macOS backend works</td>
+        <td><span class="tag ran">ran</span> built and tested on real hardware</td>
+        <td class="where">CI, macos-latest</td>
+      </tr>
+      <tr>
+        <td class="claim">vsock device implements the protocol</td>
+        <td><span class="tag ran">ran</span> 43 tests driving real guest memory</td>
+        <td class="where">Windows host + CI</td>
+      </tr>
+      <tr>
+        <td class="claim">The guest agent answers on a real AF_VSOCK socket</td>
+        <td><span class="tag ran">ran</span> binds port 1024, pings, execs, reports exit 7</td>
+        <td class="where">Linux 6.18, real AF_VSOCK socket</td>
+      </tr>
+      <tr>
+        <td class="claim">A guest executes</td>
+        <td><span class="tag ran">ran</span> KVM VM and vCPUs created, image loaded, guest ran and printed to COM1</td>
+        <td class="where">WSL2, <code>/dev/kvm</code>, nested virt</td>
+      </tr>
+      <tr>
+        <td class="claim">A Linux guest driver binds to the vsock device</td>
+        <td><span class="tag ran">ran</span> device 0x0013, status 0x0f (DRIVER_OK|FEATURES_OK), driver vmw_vsock_virtio_transport</td>
+        <td class="where">custom kernel, CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y</td>
+      </tr>
+      <tr>
+        <td class="claim">vsock carries data between host and guest</td>
+        <td><span class="tag ran">ran</span> host opens a connection, the guest answers over the transmit queue, state reaches Established — the rings were zeros because the device model was reading a different allocation from the guest</td>
+        <td class="where">WSL2 + KVM, custom kernel</td>
+      </tr>
+      <tr>
+        <td class="claim">The device model shares the guest's memory</td>
+        <td><span class="tag ran">ran</span> the kernel image is visible through GuestMemory at 0x100000; it read as zeros before, so every emulated device was on a separate allocation</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">A VM that boots a kernel has the devices to reach userspace</td>
+        <td><span class="tag ran">ran</span> <code>VM::provision</code> attaches COM1, the CMOS and the i8042 whenever a boot source is set. Only the boot probe registered them before, so a VM created through a host had no console at all — not a degraded guest but one that cannot reach userspace</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">An injected keystroke reaches the guest</td>
+        <td><span class="tag ran">ran</span> <code>inject_scancode</code> raises IRQ 1 on a sink, not only on the userspace PIC that a guest with an in-kernel irqchip never reads. Found by sweeping for the class rather than waiting for it to surface as a hang</td>
+        <td class="where">unit test</td>
+      </tr>
+      <tr>
+        <td class="claim">The guest agent answers through the emulated device</td>
+        <td><span class="tag ran">ran</span> host sends a framed request, hv2-guest-agentd reads it and replies: <code>{"kind":"pong","agent_version":"1.1.0"}</code>. It had not, because the operation numbers were each one below the specification — what the host sent as RW arrived as SHUTDOWN with zero flags, which Linux handles by doing nothing at all</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">Userspace runs a real program set</td>
+        <td><span class="tag ran">ran</span> busybox: /proc and /sys mounted, applets exec, interactive sh; host-typed commands execute and reply</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">A Linux kernel boots</td>
+        <td><span class="tag ran">ran</span> decompresses, enters the kernel, reads our e820 map back verbatim, prints ~20 lines of kernel log to COM1</td>
+        <td class="where">WSL2 + KVM, <code>examples/linux_boot_probe.rs</code></td>
+      </tr>
+      <tr>
+        <td class="claim">A Linux kernel reaches userspace</td>
+        <td><span class="tag ran">ran</span> initramfs unpacked, init executed as PID 1; proved by <code>Attempted to kill init! exitcode=0x00002a00</code></td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">Userspace output reaches the console</td>
+        <td><span class="tag ran">ran</span> init writes to /dev/console and the bytes come out of VM::console_output; reproduced</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">A device interrupt reaches a guest</td>
+        <td><span class="tag ran">ran</span> the 8250 driver's transmit interrupt is delivered through KVM_IRQ_LINE and its handler runs</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">A device can interrupt without being asked</td>
+        <td><span class="tag ran">ran</span> a device raises through <code>InterruptSink</code> without waiting for a guest access. Delivery runs on its own OS thread: as a task it shared a runtime with the vCPU loop, which blocks in <code>KVM_RUN</code>, so an idle guest waited on an interrupt queued behind a worker it was itself occupying</td>
+        <td class="where">enough for a driven UART, not general</td>
+      </tr>
+      <tr>
+        <td class="claim">vm.exec reaches a guest through the MCP tools</td>
+        <td><span class="tag ran">ran</span> <code>AgentVM::ping_guest</code> and <code>exec_in_guest</code> answer from a real guest: <code>exit=Some(0)</code>, stdout <code>Linux (none) 6.6.52 … x86_64</code>. The VM attaches the device and puts the argument on the command line itself, so a caller cannot forget either</td>
+        <td class="where">upstream of the data path</td>
+      </tr>
+      <tr>
+        <td class="claim">Filesystem isolation (process backend)</td>
+        <td><span class="tag ran">ran</span> pivot_root + mount namespace; a workload cannot see a file outside its root, and a read-only bind refuses writes recursively</td>
+        <td class="where">WSL2 Debian 6.18, unprivileged</td>
+      </tr>
+      <tr>
+        <td class="claim">32-bit protected-mode entry state is correct</td>
+        <td><span class="tag ran">ran</span> a hand-assembled image entered at 1 MB executes and drives COM1</td>
+        <td class="where">WSL2 + KVM</td>
+      </tr>
+      <tr>
+        <td class="claim">Evicted context is recoverable word for word</td>
+        <td><span class="tag ran">ran</span> 49 unit tests + 11 through the MCP surface; search finds it, expand returns the original</td>
+        <td class="where">Windows host + WSL2 Debian</td>
+      </tr>
+      <tr>
+        <td class="claim">Context runtime is a resident namespace</td>
+        <td><span class="tag none">not built</span> a confined process with a durable workspace; files persist between calls, variables do not</td>
+        <td class="where">trait, so a kernel backend can slot in</td>
+      </tr>
+      <tr>
+        <td class="claim">CLA workflow repaired</td>
+        <td><span class="tag typed">unverifiable</span> <code>pull_request_target</code> runs the base branch's file</td>
+        <td class="where">only testable post-merge</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>What running on a kernel found</h2>
+  <p>
+    The Linux backend had only ever been type-checked. Both defects it turned up
+    were the same shape — a claim that held in the mechanism and failed in what
+    the workload could observe.
+  </p>
+
+  <h3>1. <code>best_effort</code> attempted what the probe had already refused</h3>
+  <p>
+    On any host without cgroup delegation it promised to run with whatever was
+    available, then tried to create a cgroup its own probe had reported
+    unavailable, and failed. Fixed structurally rather than locally:
+    <code>Sandbox::run</code> now filters the spec through
+    <code>without_controls</code> before handing it down, so no backend can
+    attempt a control its probe rejected.
+  </p>
+
+  <h3>2. <code>/proc</code> and <code>/sys</code> were inherited</h3>
+  <p>
+    Neither is an ordinary directory; each is a view of the namespace it was
+    <em>mounted in</em>. The workload was correctly PID&nbsp;1 in its own namespace
+    and could still enumerate 48 host processes; netlink showed only loopback while
+    <code>/sys/class/net</code> listed the host's interfaces. "Cannot signal" was
+    true and "cannot see" was not. Both namespaces now carry
+    <code>CLONE_NEWNS</code> and remount the filesystem that describes them, and
+    both probes rehearse the remount rather than only the <code>unshare</code>.
+  </p>
+
+  <p>
+    The tests that pin this ask the workload what it can <em>see</em> rather than
+    reading <code>controls()</code> back — a test doing only the latter passes on a
+    backend that reports everything and applies nothing.
+  </p>
+
+  <pre><i>$ cargo run -p hv2-sandbox --example probe   # WSL2 Debian 6.18, uid 1000</i>
+backend: process
+  unavailable memory limit         <i>— no writable cgroup v2 hierarchy</i>
+  unavailable process count limit  <i>— no writable cgroup v2 hierarchy</i>
+  <b>ENFORCED</b>    CPU time limit
+  <b>ENFORCED</b>    wall-clock deadline
+  <b>ENFORCED</b>    network isolation
+  <b>ENFORCED</b>    filesystem isolation
+  <b>ENFORCED</b>    process isolation
+  <b>ENFORCED</b>    no-new-privileges
+
+  pid namespace:   <b>pid=1</b>
+  network interfaces: <b>1</b>
+  process table:   <b>3</b>   <i>(48 before the /proc remount)</i></pre>
+</section>
+
+<section>
+  <h2>CI state</h2>
+  <p>
+    Only the <strong>CI</strong> workflow is the tracked set. The others have been
+    failing on master continuously, so their red marks had stopped carrying
+    information. Three are now repaired.
+  </p>
+
+  <div class="scroll">
+  <table>
+    <caption>PR #71 — workflow repairs</caption>
+    <thead>
+      <tr><th>Workflow</th><th>Root cause</th><th>State</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="claim">Miri</td>
+        <td><code>rust-toolchain.toml</code> pins stable and overrides the action, so <code>cargo miri</code> ran on stable, which never ships miri</td>
+        <td><span class="tag ran">fixed, verified</span></td>
+      </tr>
+      <tr>
+        <td class="claim">Coverage</td>
+        <td><code>hv2-api</code>'s build script needs <code>protoc</code>; <code>ci.yml</code> installs it everywhere, this workflow never did</td>
+        <td><span class="tag ran">fixed, verified</span></td>
+      </tr>
+      <tr>
+        <td class="claim">CLA</td>
+        <td><code>contributor-assistant/github-action@v2</code> — the action publishes only <code>vX.Y.Z</code> tags, so it never resolved</td>
+        <td><span class="tag typed">fixed, untestable</span></td>
+      </tr>
+      <tr>
+        <td class="claim">Benchmarks</td>
+        <td>protoc installed, and criterion's output converted to the format the tracking action expects</td>
+        <td><span class="tag typed">fixed</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="callout">
+    <h3>The CLA fix changes behaviour</h3>
+    <p style="margin-bottom:0">
+      That check has been inert — failing to resolve rather than checking anything.
+      Repairing it makes it enforce, so contributors will start being asked to sign.
+      It is isolated to one line if the timing is wrong.
+    </p>
+  </div>
+</section>
+
+<section>
+  <h2>Open, with diagnosis</h2>
+
+  <h3>Benchmarks: criterion output the action cannot parse</h3>
+  <p>
+    <code>benchmark-action</code> is configured with <code>tool: 'cargo'</code>,
+    which parses libtest format — <code>test &lt;name&gt; ... bench: N ns/iter</code>.
+    The repo's benches are criterion with <code>harness = false</code>, which does
+    not emit that. The obvious fix does <em>not</em> work: I ran
+    <code>--output-format bencher</code> locally and it emits
+    <code>bench: 363 ns/iter (+/- 7)</code> with no <code>test &lt;name&gt;</code>
+    prefix — precisely the part the parser needs.
+  </p>
+  <p>
+    Making it green needs a decision, not a flag: post-process criterion's JSON,
+    switch the benches to a libtest harness, or replace the action. Note also that
+    <code>auto-push: true</code> will start writing benchmark history the moment it
+    works.
+  </p>
+
+  <h3>Commit signing</h3>
+  <p>
+    The ruleset requires signed commits and <strong>not one commit in this repo is
+    signed</strong> — unsigned commits reach master through the
+    <code>OrganizationAdmin</code> bypass. A key exists at
+    <code>~/.ssh/git-signing</code>, usable without a passphrase, but git is not
+    configured to use it and the <code>gh</code> token lacks
+    <code>admin:ssh_signing_key</code>, so whether GitHub would mark it verified is
+    unknown. Signing this branch alone would make it stricter than everything
+    already merged and would not unblock the merge, which is why it was left.
+  </p>
+
+  <h3>Left deliberately</h3>
+  <p>
+    <code>hv2-core::container</code> remains a model that fabricates PIDs — a
+    signpost was added in <code>hv2-agent/src/sandbox.rs</code> pointing at the real
+    thing, but nothing was half-migrated. <code>hv2-agent</code>'s
+    <code>Sandbox</code> stays as it is: bounding a Rhai script in-process is a
+    different job from OS confinement, and the module is honest about which is
+    which.
+  </p>
+</section>
+
+<section>
+  <h2>What to do next</h2>
+  <ul>
+    <li><strong>Merge #70, then #71.</strong> Order matters — #71 inherits master's Rust 1.98 breakage until #70 lands. Both need one approving review; the admin bypass exists if you want it.</li>
+    <li><strong>Join the two halves.</strong> The agent has been proven over the kernel's own vsock stack and the device against tests; nothing has yet driven one from the other. That is the first real boot, and it still needs a Linux host with KVM, an Intel Mac, or Windows with Hyper-V disabled — WSL2 has a kernel but no <code>/dev/kvm</code>.</li>
+    <li><strong>Decide the benchmark question</strong> above, or turn that workflow off rather than leaving a permanently red mark nobody reads.</li>
+    <li><strong>Decide on commit signing</strong> as a standing practice, or drop the ruleset requirement that nothing satisfies.</li>
+  </ul>
+</section>
+
+<footer>
+  feat/virtio-vsock · head 8920920 · PR #70 (CI 19/19) and #71 · master red pending #70 · nothing merged
+</footer>
+
+</div>

@@ -137,9 +137,19 @@ pub struct KvmBackend {
     capabilities: HypervisorCapabilities,
     /// Size of kvm_run mmap region
     run_mmap_size: usize,
-    /// Active VMs (for cleanup on drop)
-    vms: Arc<RwLock<Vec<Arc<KvmVm>>>>,
-    /// vCPU lookup: maps VCpu::id() → KvmVcpu
+    /// The one VM this backend owns, if `create_vm` has run.
+    ///
+    /// At most one. The `HypervisorBackend` trait identifies a vCPU by its
+    /// bare id, so a second VM would bring its own vCPU 0 and every lookup
+    /// here — `run_vcpu`, `load_boot`, interrupt injection — would silently
+    /// resolve to whichever VM was created last. `create_vm` refuses the
+    /// second VM rather than allow that. A caller who wants two VMs builds
+    /// two backends, which is what `VM::new` does.
+    vm: Arc<RwLock<Option<Arc<KvmVm>>>>,
+    /// vCPU lookup: maps VCpu::id() → KvmVcpu.
+    ///
+    /// Keyed by bare vCPU id, which is unambiguous only because of the
+    /// one-VM invariant documented on `vm`.
     vcpu_map: RwLock<HashMap<u32, Arc<KvmVcpu>>>,
 }
 
@@ -189,7 +199,7 @@ impl KvmBackend {
                 kvm_fd,
                 capabilities,
                 run_mmap_size,
-                vms: Arc::new(RwLock::new(Vec::new())),
+                vm: Arc::new(RwLock::new(None)),
                 vcpu_map: RwLock::new(HashMap::new()),
             })
         }
@@ -278,6 +288,19 @@ impl HypervisorBackend for KvmBackend {
             )));
         }
 
+        // Hold the slot for the whole of creation so two concurrent callers
+        // cannot both pass the check. Lock order is `vm` then `vcpu_map`;
+        // every other path releases `vcpu_map` before touching `vm`.
+        let mut slot = self.vm.write().unwrap_or_else(|e| e.into_inner());
+        if slot.is_some() {
+            return Err(Error::Hypervisor(
+                "this KVM backend already owns a VM. A backend owns at most one: vCPUs \
+                 are looked up by bare id, so a second VM's vCPU 0 would collide with the \
+                 first's. Build a second backend for a second VM."
+                    .into(),
+            ));
+        }
+
         // Create KVM VM instance
         let kvm_vm = Arc::new(KvmVm::new(
             self.kvm_fd,
@@ -285,12 +308,6 @@ impl HypervisorBackend for KvmBackend {
             memory_size,
             self.run_mmap_size,
         )?);
-
-        // Track VM for cleanup
-        self.vms
-            .write()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(kvm_vm.clone());
 
         // Create vCPUs and register them in the lookup map
         for i in 0..vcpu_count {
@@ -300,6 +317,9 @@ impl HypervisorBackend for KvmBackend {
                 .unwrap_or_else(|e| e.into_inner())
                 .insert(i, kvm_vcpu);
         }
+
+        *slot = Some(kvm_vm);
+        drop(slot);
 
         Ok(HypervisorVm::new(
             HypervisorPlatform::Kvm,
@@ -345,6 +365,26 @@ impl HypervisorBackend for KvmBackend {
         kvm_vcpu.set_io_data(data, size)
     }
 
+    fn guest_memory_host_addr(&self) -> Option<u64> {
+        self.vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|vm| vm.guest_memory())
+            .map(|ptr| ptr.as_ptr() as u64)
+    }
+
+    async fn set_mmio_result(&self, vcpu: &VCpu, data: &[u8]) -> Result<()> {
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+            map.get(&vcpu.id())
+                .cloned()
+                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
+        };
+
+        kvm_vcpu.set_mmio_data(data)
+    }
+
     async fn load_boot(&self, vcpu: &VCpu, boot: &crate::boot::source::LoadedBoot) -> Result<()> {
         use crate::boot::source::LoadedBoot;
 
@@ -355,11 +395,10 @@ impl HypervisorBackend for KvmBackend {
                 .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
         };
         let kvm_vm = self
-            .vms
+            .vm
             .read()
             .unwrap_or_else(|e| e.into_inner())
-            .last()
-            .cloned()
+            .clone()
             .ok_or_else(|| {
                 Error::Hypervisor("no KVM VM — create_vm must run before load_boot".into())
             })?;
@@ -397,7 +436,15 @@ impl HypervisorBackend for KvmBackend {
                 regs.rip = params.kernel_addr;
                 regs.rsi = params.setup_addr; // boot_params, per the protocol
                 regs.rsp = stack_pointer;
-                regs.rbp = stack_pointer;
+                // The 32-bit boot protocol requires these three to be zero
+                // (Documentation/x86/boot.rst). The kernel overwrites all of
+                // them within its first few instructions, so this is not what
+                // makes a boot work — but leaving a stack pointer in %ebp was
+                // a documented requirement quietly unmet, and those are worth
+                // fixing before the ones that are only suspected.
+                regs.rbp = 0;
+                regs.rdi = 0;
+                regs.rbx = 0;
                 regs.rflags = RFLAGS_RESERVED;
                 kvm_vcpu.set_regs(&regs)?;
 
@@ -476,6 +523,82 @@ impl HypervisorBackend for KvmBackend {
         }
     }
 
+    async fn single_step_trace(
+        &self,
+        vcpu: &VCpu,
+        max_steps: u64,
+    ) -> Result<crate::hypervisor::SingleStepTrace> {
+        use crate::hypervisor::{SingleStepTrace, TRACE_TAIL};
+
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+            map.get(&vcpu.id())
+                .cloned()
+                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
+        };
+
+        kvm_vcpu.set_guest_debug(KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_SINGLESTEP)?;
+
+        let mut tail: std::collections::VecDeque<u64> = std::collections::VecDeque::new();
+        let mut steps = 0u64;
+        let mut final_exit = None;
+
+        while steps < max_steps {
+            // Read the address before stepping, not after: a triple fault
+            // resets the vCPU on the way out, and a read afterwards reports the
+            // reset vector for every guest that ever fails.
+            let rip = match kvm_vcpu.get_regs() {
+                Ok(regs) => regs.rip,
+                Err(e) => {
+                    let _ = kvm_vcpu.set_guest_debug(0);
+                    return Err(e);
+                }
+            };
+            if tail.len() == TRACE_TAIL {
+                tail.pop_front();
+            }
+            tail.push_back(rip);
+            steps += 1;
+
+            match kvm_vcpu.run() {
+                Ok(VmExit::Debug { .. }) => {}
+                Ok(other) => {
+                    final_exit = Some(other);
+                    break;
+                }
+                Err(e) => {
+                    let _ = kvm_vcpu.set_guest_debug(0);
+                    return Err(e);
+                }
+            }
+        }
+
+        // Leave the vCPU as it was found, so a caller can trace and then run
+        // normally without every instruction trapping.
+        kvm_vcpu.set_guest_debug(0)?;
+
+        Ok(SingleStepTrace {
+            steps,
+            tail: tail.into_iter().collect(),
+            final_exit,
+        })
+    }
+
+    async fn set_irq_line(&self, irq: u32, level: bool) -> Result<()> {
+        let kvm_vm = self
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| {
+                Error::Hypervisor(
+                    "no KVM VM — create_vm must run before an IRQ can be raised".into(),
+                )
+            })?;
+
+        kvm_vm.irq_line(irq, u32::from(level))
+    }
+
     async fn shutdown(&mut self) -> Result<()> {
         tracing::info!("Shutting down KVM backend");
 
@@ -485,8 +608,8 @@ impl HypervisorBackend for KvmBackend {
             .unwrap_or_else(|e| e.into_inner())
             .clear();
 
-        // VMs will be automatically closed when dropped
-        self.vms.write().unwrap_or_else(|e| e.into_inner()).clear();
+        // The VM is automatically closed when dropped
+        *self.vm.write().unwrap_or_else(|e| e.into_inner()) = None;
 
         Ok(())
     }
@@ -503,6 +626,10 @@ impl HypervisorBackend for KvmBackend {
 pub struct KvmVm {
     /// VM file descriptor
     vm_fd: RawFd,
+    /// `/dev/kvm`, kept because the supported CPUID set is queried from it.
+    ///
+    /// Owned by [`KvmBackend`] and not closed here.
+    kvm_fd: RawFd,
     /// Number of vCPUs
     vcpu_count: u32,
     /// Memory size in bytes
@@ -605,6 +732,7 @@ impl KvmVm {
 
             Ok(Self {
                 vm_fd,
+                kvm_fd,
                 vcpu_count,
                 memory_size,
                 guest_memory,
@@ -624,6 +752,19 @@ impl KvmVm {
         }
 
         let vcpu = Arc::new(KvmVcpu::new(self.vm_fd, vcpu_id, self.run_mmap_size)?);
+
+        // A freshly created vCPU has no CPUID configuration at all, and KVM
+        // does not supply one: the guest's CPUID instruction reports a CPU with
+        // no features, no vendor and no leaves. Anything that asks what it is
+        // running on -- which a Linux kernel does within its first few dozen
+        // instructions -- gets an answer that is not merely wrong but
+        // impossible. `set_cpuid` and `get_supported_cpuid` were both written
+        // and neither was ever called.
+        //
+        // Handing the guest the host's supported set is the same choice the
+        // established VMMs make for a VM with no CPU model configured.
+        vcpu.apply_supported_cpuid(self.kvm_fd)?;
+
         self.vcpus
             .write()
             .unwrap_or_else(|e| e.into_inner())
@@ -1010,6 +1151,11 @@ impl KvmVcpu {
         match exit_reason {
             KVM_EXIT_HLT => Ok(VmExit::Hlt),
 
+            // A triple fault on x86, almost always. Do not read the registers
+            // here hoping to find where it happened: on SVM, KVM resets the
+            // vCPU before returning this exit, so `KVM_GET_REGS` reports the
+            // reset vector (`rip=0xfff0`, `rflags=0x2`) no matter what the
+            // guest was doing. Single-stepping is the way to locate one.
             KVM_EXIT_SHUTDOWN => Ok(VmExit::Shutdown),
 
             KVM_EXIT_IO => {
@@ -1047,6 +1193,17 @@ impl KvmVcpu {
 
             KVM_EXIT_EXCEPTION => {
                 let ex = &run.exit_data.ex;
+                // Where it faulted, which unlike a shutdown exit is still
+                // readable here: KVM does not reset the vCPU on the way out of
+                // an exception, so the registers still describe the guest.
+                let rip = self.get_regs().map(|regs| regs.rip).unwrap_or_default();
+                tracing::debug!(
+                    "KVM: vCPU {} exception vector={} error_code={:#x} at rip={:#x}",
+                    self.vcpu_id,
+                    ex.exception,
+                    ex.error_code,
+                    rip
+                );
                 Ok(VmExit::Exception {
                     vector: ex.exception as u8,
                     error_code: Some(ex.error_code),
@@ -1150,6 +1307,29 @@ impl KvmVcpu {
                 4 => std::ptr::write(data_ptr as *mut u32, data),
                 _ => std::ptr::write(data_ptr as *mut u32, data),
             }
+        }
+        Ok(())
+    }
+
+    /// Size of `kvm_run.mmio.data`, which the API fixes at 8 bytes.
+    const MMIO_DATA_LIMIT: usize = 8;
+
+    /// Write the result of an MMIO read back into the shared `kvm_run` page.
+    ///
+    /// KVM reads the answer out of `kvm_run.mmio.data` when the vCPU is
+    /// resumed, so it has to land in the mapped page rather than in the copy
+    /// the exit handed out.
+    pub fn set_mmio_data(&self, data: &[u8]) -> Result<()> {
+        // SAFETY: `self.run` is the valid mmap'd `kvm_run` page from `KVM_RUN`,
+        // and `mmio.data` is an 8-byte array inside that mapping. Written
+        // through a raw pointer for the same reason `set_io_data` is: the page
+        // is shared with the kernel and this method takes `&self`. The copy is
+        // bounded by both the array and the caller's slice.
+        unsafe {
+            let run = self.run.as_ptr();
+            let dst = (*run).exit_data.mmio.data.as_mut_ptr();
+            let len = data.len().min(Self::MMIO_DATA_LIMIT);
+            std::ptr::copy_nonoverlapping(data.as_ptr(), dst, len);
         }
         Ok(())
     }
@@ -1528,6 +1708,54 @@ impl KvmVcpu {
         }
     }
 
+    /// Give this vCPU the CPUID leaves the host's KVM supports.
+    ///
+    /// Must happen before the first `KVM_RUN`: KVM starts a vCPU with an empty
+    /// CPUID configuration, so until this runs the guest sees a CPU that
+    /// reports no vendor, no features and a maximum leaf of zero.
+    ///
+    /// `kvm_fd` is `/dev/kvm` -- `KVM_GET_SUPPORTED_CPUID` is a system ioctl,
+    /// not a vCPU one, so the answer is the same for every vCPU.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Hypervisor`] if either ioctl fails.
+    pub fn apply_supported_cpuid(&self, kvm_fd: RawFd) -> Result<()> {
+        // KVM_GET_SUPPORTED_CPUID and KVM_SET_CPUID2 take the same layout: a
+        // header whose `nent` counts the entries that follow it. Filling one
+        // buffer and handing it straight back avoids rebuilding the tail.
+        const MAX_ENTRIES: usize = 256;
+        let header_size = std::mem::size_of::<kvm_cpuid2>();
+        let entry_size = std::mem::size_of::<kvm_cpuid_entry2>();
+        let mut buf = vec![0u8; header_size + entry_size * MAX_ENTRIES];
+
+        // SAFETY: `buf` holds a `kvm_cpuid2` header followed by room for
+        // MAX_ENTRIES entries, which is the layout both ioctls expect. `nent`
+        // is set to the capacity before the get, and KVM lowers it to the
+        // number it wrote.
+        unsafe {
+            let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
+            header.nent = MAX_ENTRIES as u32;
+
+            kvm_get_supported_cpuid(kvm_fd, header)
+                .map_err(|e| Error::Hypervisor(format!("Failed to get supported CPUID: {e}")))?;
+
+            let entries = header.nent;
+            kvm_set_cpuid2(self.vcpu_fd, header).map_err(|e| {
+                Error::Hypervisor(format!(
+                    "Failed to set CPUID for vCPU {}: {e}",
+                    self.vcpu_id
+                ))
+            })?;
+
+            tracing::debug!(
+                "KVM: vCPU {} configured with {entries} CPUID leaves",
+                self.vcpu_id
+            );
+        }
+        Ok(())
+    }
+
     /// Get vCPU ID
     pub fn id(&self) -> u32 {
         self.vcpu_id
@@ -1582,3 +1810,53 @@ impl Drop for KvmVcpu {
 // safe to transfer between threads. No thread-local or non-Send state.
 unsafe impl Send for KvmVcpu {}
 unsafe impl Sync for KvmVcpu {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hypervisor::HypervisorBackend;
+
+    /// A backend hands out one VM. The second request must fail loudly:
+    /// before this check it succeeded and quietly aliased the first, because
+    /// both VMs' vCPU 0 land on the same `vcpu_map` key and `load_boot` then
+    /// resolved whichever VM was created last.
+    #[tokio::test]
+    async fn a_second_vm_on_one_backend_is_refused() {
+        let Ok(backend) = KvmBackend::new() else {
+            eprintln!("KVM not available — skipping");
+            return;
+        };
+        if backend.create_vm(1, 1024 * 1024).await.is_err() {
+            eprintln!("KVM VM creation unavailable (check /dev/kvm permissions) — skipping");
+            return;
+        }
+
+        let err = match backend.create_vm(1, 1024 * 1024).await {
+            Ok(_) => panic!("the second VM must be refused, not aliased"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string().contains("already owns a VM"),
+            "the error should say why one backend owns one VM, got: {err}"
+        );
+    }
+
+    /// `shutdown` releases the VM, so the backend can be reused.
+    #[tokio::test]
+    async fn shutdown_frees_the_backend_to_own_a_vm_again() {
+        let Ok(mut backend) = KvmBackend::new() else {
+            eprintln!("KVM not available — skipping");
+            return;
+        };
+        if backend.create_vm(1, 1024 * 1024).await.is_err() {
+            eprintln!("KVM VM creation unavailable (check /dev/kvm permissions) — skipping");
+            return;
+        }
+
+        backend.shutdown().await.expect("shutdown should succeed");
+        backend
+            .create_vm(1, 1024 * 1024)
+            .await
+            .expect("after shutdown the backend owns no VM, so this must succeed");
+    }
+}

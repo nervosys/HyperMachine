@@ -1,9 +1,15 @@
 //! Container and isolation infrastructure
 //!
-//! This module provides container support for the hypervisor:
-//! - OCI-compatible runtime interface
-//! - Linux namespace isolation
-//! - Cgroup resource controllers
+//! This module models container types for the hypervisor -- it does not run
+//! anything. See [`runtime`] for what that means in practice:
+//! [`runtime::ContainerRuntime::start`] refuses rather than fabricate a PID.
+//! What it models:
+//! - An OCI-compatible runtime *interface* (types and a state machine, not an implementation)
+//! - Linux namespace types
+//! - Cgroup resource controller types
+//!
+//! For confinement the operating system actually enforces, use `hv2-sandbox`
+//! (see `docs/SANDBOXES.md`).
 
 pub mod cgroup;
 pub mod namespace;

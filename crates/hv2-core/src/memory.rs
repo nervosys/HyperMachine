@@ -77,6 +77,57 @@ impl GuestMemory {
         Ok(guest_addr)
     }
 
+    /// Point this guest's memory at pages the hypervisor backend owns.
+    ///
+    /// # Why this exists
+    ///
+    /// The backend allocates the pages it registers with the hypervisor, and
+    /// those are the ones the guest actually runs in. This type allocated its
+    /// own as well, so the device model and the guest were reading two
+    /// different buffers: a virtio driver would publish descriptors the device
+    /// could not see, and the device would write replies into memory the guest
+    /// never read. Nothing detected it, because the boot path writes the kernel
+    /// image through the *backend*, so guests booted perfectly while every
+    /// virtio device saw nothing but zeros.
+    ///
+    /// After this call the regions describe the backend's pages and this
+    /// object's own allocation is released -- keeping a second copy of the
+    /// whole of a guest's RAM would be pure waste.
+    ///
+    /// # Safety of the pointer
+    ///
+    /// `host_addr` must be the base of a mapping of at least
+    /// [`Self::total_size`] bytes that outlives every use of this memory. The
+    /// backend owns it for the life of the VM, which is the only caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::Memory`] unless this memory is a single region, which
+    /// is the shape every VM is built with; anything else needs a per-region
+    /// mapping the backend does not currently describe.
+    pub fn adopt_backend_pages(&self, host_addr: u64) -> Result<()> {
+        let mut regions = self.regions.write();
+        if regions.len() != 1 {
+            return Err(Error::Memory(format!(
+                "expected one guest memory region to rebind, found {}",
+                regions.len()
+            )));
+        }
+
+        let region = &mut regions[0];
+        if region.guest_addr != 0 {
+            return Err(Error::Memory(format!(
+                "the main guest region should start at 0, not {:#x}",
+                region.guest_addr
+            )));
+        }
+        region.host_addr = host_addr;
+        drop(regions);
+
+        self.mappings.write().clear();
+        Ok(())
+    }
+
     /// Translate guest address to host address
     pub fn translate(&self, guest_addr: GuestAddress) -> Result<HostAddress> {
         let regions = self.regions.read();

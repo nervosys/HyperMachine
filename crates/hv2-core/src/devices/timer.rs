@@ -1,6 +1,6 @@
 //! Programmable Interval Timer (PIT) device emulation
 
-use crate::{Device, DeviceType, Error, Pic8259, Result};
+use crate::{Device, DeviceType, Pic8259, Result};
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -188,6 +188,22 @@ impl PitChannel {
 }
 
 /// Programmable Interval Timer device
+///
+/// # What its interrupt does, and does not, reach
+///
+/// This raises IRQ 0 on the userspace [`Pic8259`] only. A guest whose interrupt
+/// controller lives inside the hypervisor never reads that, so a tick raised
+/// here does not reach such a guest -- and unlike the keyboard and the serial
+/// port, which were given a path to one, that is deliberate: KVM is asked for
+/// an in-kernel PIT (`KVM_CREATE_PIT2`), the guest's clock comes from there,
+/// and delivering this device's tick as well would give the guest two
+/// interrupts per period and a clock that runs fast.
+///
+/// So on a KVM guest this device models the programming interface -- the mode
+/// and reload values a guest writes, and the counts it reads back -- while the
+/// interrupts belong to the hypervisor. It is stated here because "raises IRQ
+/// 0" is otherwise a reasonable thing to assume from the code, and a caller who
+/// assumed it would be wrong in a way nothing reports.
 pub struct TimerDevice {
     name: String,
     base_address: u64,
@@ -308,37 +324,16 @@ impl TimerDevice {
 
         Ok(())
     }
-}
-
-#[async_trait]
-impl Device for TimerDevice {
-    fn device_type(&self) -> DeviceType {
-        DeviceType::Timer
-    }
-
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    async fn init(&mut self) -> Result<()> {
-        tracing::info!(
-            "Initializing timer device '{}' at 0x{:X}",
-            self.name,
-            self.base_address
-        );
-        Ok(())
-    }
-
-    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Timer device only supports single-byte reads".to_string(),
-            ));
-        }
-
+    /// Read one byte-wide register.
+    ///
+    /// Split out so a wider access can walk consecutive registers the way the
+    /// hardware does. Reading a channel is stateful -- the LSB/MSB latch
+    /// advances on each read -- so this has to happen a byte at a time rather
+    /// than as one wide read.
+    fn read_register(&self, offset: u64) -> u8 {
         let mut channels = self.channels.lock();
 
-        let value = match offset {
+        match offset {
             0..=2 => {
                 // Channel data ports
                 let channel = &mut channels[offset as usize];
@@ -365,18 +360,11 @@ impl Device for TimerDevice {
                 0
             }
             _ => 0,
-        };
-
-        data[0] = value;
-        Ok(())
+        }
     }
 
-    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
-        if data.is_empty() {
-            return Ok(());
-        }
-
-        let byte = data[0];
+    /// Write one byte-wide register.
+    fn write_register(&self, offset: u64, byte: u8) {
         let mut channels = self.channels.lock();
 
         match offset {
@@ -448,7 +436,7 @@ impl Device for TimerDevice {
                             }
                         }
                     }
-                    return Ok(());
+                    return;
                 }
 
                 let channel = &mut channels[channel_select as usize];
@@ -467,7 +455,44 @@ impl Device for TimerDevice {
             }
             _ => {}
         }
+    }
+}
 
+#[async_trait]
+impl Device for TimerDevice {
+    fn device_type(&self) -> DeviceType {
+        DeviceType::Timer
+    }
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn init(&mut self) -> Result<()> {
+        tracing::info!(
+            "Initializing timer device '{}' at 0x{:X}",
+            self.name,
+            self.base_address
+        );
+        Ok(())
+    }
+
+    async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
+        // Never an error. A device error on the I/O path reaches
+        // `VM::handle_exit` and stops the VM, so refusing a wide access would
+        // kill a guest for doing something hardware simply answers.
+        for (index, byte) in data.iter_mut().enumerate() {
+            *byte = self.read_register(offset + index as u64);
+        }
+        Ok(())
+    }
+
+    async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+        // And every byte is written, rather than the first one and silence
+        // about the rest.
+        for (index, byte) in data.iter().enumerate() {
+            self.write_register(offset + index as u64, *byte);
+        }
         Ok(())
     }
 
@@ -534,9 +559,18 @@ mod tests {
         // Cleanup
         timer.stop_timer_task();
     }
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_timer_frequency() {
-        // Test that timer runs at approximately 18.2 Hz
+        // Virtual time, because the thing being asserted is the timer's
+        // *configured* rate, not the machine's ability to schedule a task
+        // 18 times in a real second. The interval uses MissedTickBehavior::Skip
+        // -- correct for a timer, and it means a loaded host genuinely loses
+        // ticks, so a wall-clock assertion here fails for a reason that has
+        // nothing to do with the code. It has failed that way repeatedly under
+        // parallel builds.
+        //
+        // Paused time advances only when every task is idle, so the count
+        // below is exact rather than approximate.
         let pic = Arc::new(Pic8259::new());
         let mut timer = TimerDevice::new("PIT".to_string(), 0x40);
 
@@ -553,11 +587,13 @@ mod tests {
         let final_ticks = timer.total_ticks();
         let ticks_per_second = final_ticks - initial_ticks;
 
-        // Should be approximately 18.2 ticks per second (allow ±3 ticks tolerance)
-        assert!(
-            (15..=21).contains(&ticks_per_second),
-            "Expected ~18 ticks/second, got {}",
-            ticks_per_second
+        // 1 s / 54.925 ms = 18.2 periods, and the window catches the boundary
+        // at both ends because `interval`'s first tick fires immediately — so
+        // 19, exactly, every time. An exact number is the point: it fails if
+        // the configured period changes, which a tolerance band would hide.
+        assert_eq!(
+            ticks_per_second, 19,
+            "the PIT should tick 19 times in this virtual second"
         );
 
         timer.stop_timer_task();

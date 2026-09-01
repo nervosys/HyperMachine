@@ -1,13 +1,15 @@
 [workspace]
 members = [
     "crates/hv1-core",
-    "crates/hv1-boot",
     "crates/hv1-arm",
     "crates/hv2-core",
     "crates/hv2-cpu",
     "crates/hv2-gpu",
     "crates/hv2-net",
     "crates/hv2-agent",
+    "crates/hv2-guest-agent",
+    "crates/hv2-sandbox",
+    "crates/hv2-context",
     "crates/hv2-runtime",
     "crates/hv2-api",
     "crates/hv2-cli",
@@ -15,6 +17,19 @@ members = [
     "crates/hm-gui",
     "crates/hypermachine",
 ]
+# hv1-boot is not a member, and that is deliberate.
+#
+# It builds a bootable image, and the `bootloader` build script it needs
+# invokes cargo with `-Z` flags that only nightly accepts. While it was a
+# member, `cargo check --workspace` failed on a clean clone against the
+# toolchain this repo itself pins -- reported as issue #57. CI never saw it,
+# because every stable lane passed `--exclude hv1-boot`; only contributors did.
+#
+# A member cannot be skipped by `--workspace`, so excluding it is what makes
+# the obvious command work. It is still built and checked on nightly, by name,
+# in the HV1 jobs in ci.yml.
+exclude = ["crates/hv1-boot"]
+
 resolver = "2"
 
 [workspace.package]
@@ -117,7 +132,7 @@ flate2 = "1.0"
 # Utilities
 uuid = { version = "1.10", features = ["v4", "serde"] }
 bitflags = "2.4"
-rand = "0.8"
+rand = "0.10"
 
 [workspace.lints.rust]
 # Note: unsafe_code intentionally not warned — unsafe is inherent to hypervisor code.

@@ -315,10 +315,12 @@ async fn provision_fails_before_touching_the_backend_when_an_image_is_missing() 
 
 #[tokio::test]
 async fn provision_rejects_a_boot_image_larger_than_guest_memory() {
-    // 1 MB of RAM cannot hold a kernel that loads *at* 1 MB.
+    // A kernel loads at 1 MB, so it needs RAM past wherever it ends. Sized
+    // just over 1 MB rather than at it: below that the boot is refused for
+    // having no memory map to build, which is true but a different complaint.
     let kernel = temp_image("too-big-kernel.bin", &valid_bzimage());
     let mut config = config_with("cramped", Some(BootSource::linux(&kernel)));
-    config.memory_size = 1024 * 1024;
+    config.memory_size = 1024 * 1024 + 4096;
 
     let record = Arc::new(RwLock::new(BootRecord::default()));
     let vm = vm_with(config, RecordingBackend::new(record.clone()));

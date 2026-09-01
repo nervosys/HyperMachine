@@ -341,18 +341,22 @@ pub enum HybridSignatureScheme {
 // ============================================================================
 
 /// A `rand_core` 0.10 CSPRNG adapter sourcing entropy from the OS via `rand`'s
-/// `OsRng` (BCryptGenRandom on Windows, getrandom(2)/`/dev/urandom` on Linux).
+/// `SysRng` (BCryptGenRandom on Windows, getrandom(2)/`/dev/urandom` on Linux).
 ///
 /// `slh-dsa` requires a `CryptoRng` from `rand_core` 0.10; the `Rng`/`CryptoRng`
 /// traits are blanket-derived from the infallible `TryRng`/`TryCryptoRng` impls.
+/// `SysRng` is itself fallible, so a failure of the OS random source panics
+/// here, matching the behaviour of the infallible `fill_bytes` it replaces.
 #[cfg(feature = "pqc")]
 struct PqcOsRng;
 
 #[cfg(feature = "pqc")]
 impl PqcOsRng {
     fn fill(dst: &mut [u8]) {
-        use rand::RngCore as _;
-        rand::rngs::OsRng.fill_bytes(dst);
+        use rand::TryRng as _;
+        rand::rngs::SysRng
+            .try_fill_bytes(dst)
+            .expect("OS random source failure");
     }
 }
 

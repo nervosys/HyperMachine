@@ -21,11 +21,19 @@ use serde_json::json;
 struct RecordingHost {
     calls: Mutex<Vec<String>>,
     vms: Mutex<Vec<VmDescriptor>>,
+    /// The last spec `vm.create` handed over. A descriptor does not report
+    /// everything a spec carries, so this is the only way to see what the tool
+    /// surface actually asked for.
+    specs: Mutex<Vec<VmSpec>>,
 }
 
 impl RecordingHost {
     fn calls(&self) -> Vec<String> {
         self.calls.lock().clone()
+    }
+
+    fn last_spec(&self) -> VmSpec {
+        self.specs.lock().last().cloned().expect("a spec")
     }
 
     fn find(&self, vm_id: &str) -> Result<VmDescriptor, String> {
@@ -52,6 +60,7 @@ impl RecordingHost {
 impl VmHost for RecordingHost {
     async fn create(&self, spec: VmSpec) -> Result<VmDescriptor, String> {
         self.calls.lock().push(format!("create:{}", spec.name));
+        self.specs.lock().push(spec.clone());
         let descriptor = VmDescriptor {
             vm_id: format!("host-vm-{}", self.vms.lock().len()),
             name: spec.name,
@@ -149,6 +158,49 @@ async fn without_a_host_the_tools_keep_their_own_records() {
         .await
         .expect("vm.start");
     assert_eq!(started["status"], "running");
+}
+
+#[tokio::test]
+async fn a_guest_cid_asked_for_at_create_reaches_the_host() {
+    // Until this parameter existed there was no way to get a guest channel onto
+    // a VM through the tool surface at all, which made vm.exec unreachable no
+    // matter what was running inside the guest.
+    let host = Arc::new(RecordingHost::default());
+    let server = McpServer::new();
+    server.set_vm_host(host.clone());
+
+    let session = server
+        .create_session("agent", AgentCapabilities::full())
+        .unwrap();
+
+    call(
+        &server,
+        &session,
+        "vm.create",
+        json!({"name": "talkative", "guest_cid": 42}),
+    )
+    .await
+    .expect("vm.create");
+    assert_eq!(host.last_spec().guest_cid, Some(42));
+
+    // And a VM asked for without one still gets none: a channel nobody
+    // requested is a device an agent cannot account for.
+    call(&server, &session, "vm.create", json!({"name": "quiet"}))
+        .await
+        .expect("vm.create");
+    assert_eq!(host.last_spec().guest_cid, None);
+
+    // A CID that is not a number is a mistake. Dropping it would create the VM
+    // without the channel and fail much later, at vm.exec.
+    let err = call(
+        &server,
+        &session,
+        "vm.create",
+        json!({"name": "bad", "guest_cid": "three"}),
+    )
+    .await
+    .expect_err("a string is not a CID");
+    assert!(err.contains("guest_cid"), "got: {err}");
 }
 
 #[tokio::test]
@@ -404,15 +456,24 @@ async fn tools_with_no_host_equivalent_still_work() {
         .unwrap();
     let vm_id = created["vm_id"].as_str().unwrap().to_string();
 
-    let snapshot = call(
+    // snapshot.create used to fall through to the session mirror and return a
+    // receipt: an id, a name and a timestamp, with no VM state captured. This
+    // test asserted that it succeeded, which is what kept it alive -- the tool
+    // was checked for returning something rather than for doing something. A
+    // VM host does not change this, because there is no snapshot host for it
+    // to be, so the refusal is unconditional and says so.
+    let refused = call(
         &server,
         &session,
         "snapshot.create",
         json!({"vm_id": vm_id, "snapshot_name": "s1"}),
     )
     .await
-    .expect("snapshot.create falls through to the session mirror");
-    assert_eq!(snapshot["vm_id"], vm_id);
+    .expect_err("nothing here can capture VM state, so this must not report success");
+    assert!(
+        refused.contains("no snapshot host is installed"),
+        "the refusal should name what is missing: {refused}"
+    );
 }
 
 #[tokio::test]

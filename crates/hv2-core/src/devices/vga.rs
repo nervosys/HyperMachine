@@ -7,6 +7,21 @@
 //! - Cursor position tracking
 //! - CRTC register emulation
 //!
+//!
+//! # Not wired to the device manager
+//!
+//! Nothing registers this device with [`crate::DeviceManager`]. Its `Device`
+//! implementation decodes **absolute** ports (0x3C0..=0x3D5) while the manager
+//! passes `port - base_port`, and it returns `Err` for any access that is not
+//! one byte -- an error there stops the VM. Registered as-is it would decode
+//! nothing and kill the guest on the first wide access.
+//!
+//! Unlike the IDE controller this is a single contiguous range, so the fix is
+//! mechanical: decode relative to a `VGA_BASE` of 0x3C0, walk consecutive
+//! ports for a wide access, and read an unimplemented port as an absent device
+//! rather than as a failure. It has not been done because nothing needs it
+//! yet, and untested changes to a device no guest touches are not worth the
+//! risk they carry.
 //! Memory Map:
 //! - 0xB8000-0xBFFFF: Text buffer (32KB, 4KB used for 80x25 mode)
 //!

@@ -37,7 +37,12 @@ bootloader_api = { version = "0.11", optional = true }
 # x86-only crates (CPU structures/intrinsics, MSR access, CPUID). hv1-core is
 # the x86_64 Intel-VMX / AMD-SVM Type-1 hypervisor; ARM is the separate
 # hv1-arm crate, so these must not be pulled into non-x86 builds.
-x86_64 = "0.15"
+# default-features = false drops the crate's "nightly" feature, which gates
+# abi_x86_interrupt and so cannot build on the stable toolchain this repo
+# pins. "instructions" is the half we actually use: CPU intrinsics and MSR
+# access. Reported as issue #57 -- a clean clone could not run
+# `cargo check --workspace` at all, and CI hid it by excluding this crate.
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 x86 = "0.52"
 raw-cpuid = "11.0"
 

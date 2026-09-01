@@ -78,6 +78,13 @@ pub struct McpServer {
     vm_host: RwLock<Option<Arc<dyn crate::vm_host::VmHost>>>,
     /// Where the `gpu.*` tools dispatch, on the same terms as `vm_host`.
     gpu_host: RwLock<Option<Arc<dyn crate::gpu_host::GpuHost>>>,
+    /// Where the `sandbox.*` tools dispatch.
+    ///
+    /// `None` — the default — leaves those tools reporting that no sandbox is
+    /// installed. That refusal is deliberate: the alternative to confinement
+    /// is not "run it anyway", it is "do not run it".
+    sandbox_host: RwLock<Option<Arc<dyn crate::sandbox_host::SandboxHost>>>,
+    context_host: RwLock<Option<Arc<dyn crate::context_host::ContextHost>>>,
     /// Where the `image.*` tools read the fleet allowlist.
     ///
     /// `None` leaves those tools reporting that no registry is installed,
@@ -176,6 +183,18 @@ pub enum ToolCategory {
     System,
     /// GPU fabric: device inventory and VM accelerator allocation
     GpuFabric,
+    /// The session record: search, expansion, and what stays in the view.
+    ///
+    /// Filed apart from `System` because none of it touches the machine. An
+    /// agent looking for "what did I already find out" should not have to look
+    /// under host administration.
+    ContextMemory,
+    /// Running programs inside a guest operating system.
+    ///
+    /// Distinct from `System`, which is host administration: an agent looking
+    /// for "run this in the VM" should not find it filed under operations on
+    /// the machine the VM is running on.
+    GuestExecution,
 }
 
 /// Agent capabilities (permissions)
@@ -201,6 +220,22 @@ pub enum AgentCapability {
     MetricsRead,
     /// Execute commands in VM
     GuestExec,
+    /// Run a confined program on the host itself.
+    ///
+    /// Deliberately separate from `GuestExec`: a program in a guest cannot
+    /// touch the host, and one on the host can, however well confined. A
+    /// capability that covered both would let an agent granted the safer power
+    /// take the more dangerous one.
+    HostExec,
+    /// Read and write the session record: search it, expand an address, append
+    /// to it, and decide what stays in the working view.
+    ///
+    /// Gated because a shared log holds everything every session on this
+    /// machine has recorded, and an agent that can search it can read another
+    /// agent's history. `context.exec` needs `HostExec` as well as this one:
+    /// it runs a program on the host, and being able to read the record is not
+    /// a reason to be able to run code.
+    ContextMemory,
     /// Debug/introspect VM
     Debug,
     /// Coordinate with other agents
@@ -261,6 +296,10 @@ impl AgentCapabilities {
                 AgentCapability::SnapshotManage,
                 AgentCapability::MetricsRead,
                 AgentCapability::GuestExec,
+                // Named explicitly because Admin no longer implies it. "Full"
+                // still means full; what changed is that it has to say so.
+                AgentCapability::HostExec,
+                AgentCapability::ContextMemory,
                 AgentCapability::Debug,
                 AgentCapability::Coordination,
                 AgentCapability::Admin,
@@ -268,8 +307,19 @@ impl AgentCapabilities {
         }
     }
 
-    /// Check if a capability is present
+    /// Check if a capability is present.
+    ///
+    /// [`AgentCapability::Admin`] implies every other capability, with one
+    /// exception: [`AgentCapability::HostExec`] must be granted by name.
+    /// Running a program on the host is the widest power here — everything
+    /// else acts on VMs the server manages, and this acts on the machine the
+    /// server runs on. Folding it into the existing wildcard would have handed
+    /// it to every session already holding `Admin` the moment the tool shipped,
+    /// which is a privilege expansion nobody would have written down.
     pub fn has(&self, cap: AgentCapability) -> bool {
+        if cap == AgentCapability::HostExec {
+            return self.capabilities.contains(&cap);
+        }
         self.capabilities.contains(&cap) || self.capabilities.contains(&AgentCapability::Admin)
     }
 
@@ -368,6 +418,8 @@ impl McpServer {
             teardown_hook: RwLock::new(None),
             vm_host: RwLock::new(None),
             gpu_host: RwLock::new(None),
+            sandbox_host: RwLock::new(None),
+            context_host: RwLock::new(None),
             image_host: RwLock::new(None),
             policies: RwLock::new(None),
             concurrency: RwLock::new(None),
@@ -412,6 +464,36 @@ impl McpServer {
     /// The installed GPU host, if any.
     pub fn gpu_host(&self) -> Option<Arc<dyn crate::gpu_host::GpuHost>> {
         self.gpu_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Let agents run confined workloads through `host`.
+    /// Install the session record the `context.*` tools act on.
+    ///
+    /// Without one those tools refuse. There is no in-memory fallback on
+    /// purpose: a record that accepts every write and loses it is worse than
+    /// none, because an agent recording something important gets a success.
+    pub fn set_context_host(&self, host: Arc<dyn crate::context_host::ContextHost>) {
+        *self.context_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed session record, if there is one.
+    pub fn context_host(&self) -> Option<Arc<dyn crate::context_host::ContextHost>> {
+        self.context_host
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    pub fn set_sandbox_host(&self, host: Arc<dyn crate::sandbox_host::SandboxHost>) {
+        *self.sandbox_host.write().unwrap_or_else(|e| e.into_inner()) = Some(host);
+    }
+
+    /// The installed sandbox host, if any.
+    pub fn sandbox_host(&self) -> Option<Arc<dyn crate::sandbox_host::SandboxHost>> {
+        self.sandbox_host
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
@@ -509,6 +591,14 @@ impl McpServer {
             "vm.resume" => PolicyAction::VmResume,
             "vm.delete" => PolicyAction::VmDelete,
             "vm.resize" => PolicyAction::ResourceModify,
+            "vm.exec" => PolicyAction::GuestExec,
+            "sandbox.run" => PolicyAction::HostExec,
+            "sandbox.capabilities" => PolicyAction::ResourceRead,
+            "context.exec" => PolicyAction::HostExec,
+            "context.search" | "context.expand" | "context.view" | "context.status" => {
+                PolicyAction::ResourceRead
+            }
+            "context.record" | "context.compact" => PolicyAction::ResourceModify,
             "vm.list" | "vm.status" | "vm.metrics" | "vm.console" | "gpu.list"
             | "snapshot.list" | "agent.list" | "system.info" | "system.health" => {
                 PolicyAction::ResourceRead
@@ -640,6 +730,19 @@ impl McpServer {
                                 }
                             },
                             "required": ["type"]
+                        },
+                        "guest_cid": {
+                            "type": "integer",
+                            "description": "Context ID for a guest channel, which is what \
+                                            vm.exec runs commands over. Give one to a VM whose \
+                                            guest you intend to run programs in: the channel is \
+                                            attached and named on the kernel command line before \
+                                            the guest boots, and cannot be added afterwards. \
+                                            Omit it for a VM you only boot and watch — that VM \
+                                            works normally, and vm.exec on it reports that it \
+                                            has no guest channel. Any number from 3 up; 0-2 are \
+                                            reserved.",
+                            "minimum": 3
                         }
                     },
                     "required": ["name"]
@@ -913,6 +1016,336 @@ impl McpServer {
                 }),
                 category: ToolCategory::Monitoring,
                 required_capabilities: vec![AgentCapability::VmRead],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "vm.exec".to_string(),
+            McpTool {
+                name: "vm.exec".to_string(),
+                description: "Run a program inside a VM's guest operating system and                               return what it printed. Requires a guest channel attached                               before boot and hv2-guest-agentd running in the guest;                               without both this reports why rather than timing out. The                               program runs directly, not through a shell, so shell syntax                               such as redirection is not interpreted. A non-zero exit code                               is a result, not an error. Unlike vm.execute_script, which                               evaluates a Rhai script on the host, this runs in the guest."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "vm_id": {
+                            "type": "string",
+                            "description": "Name of the VM"
+                        },
+                        "program": {
+                            "type": "string",
+                            "description": "Program to execute, run directly rather than through a shell"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Arguments, already split; nothing here parses a command line"
+                        },
+                        "timeout_seconds": {
+                            "type": "integer",
+                            "description": "How long to wait before giving up (default 30)"
+                        }
+                    },
+                    "required": ["vm_id", "program"]
+                }),
+                category: ToolCategory::GuestExecution,
+                required_capabilities: vec![AgentCapability::GuestExec],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "sandbox.capabilities".to_string(),
+            McpTool {
+                name: "sandbox.capabilities".to_string(),
+                description: "Report what confinement this host can actually enforce, and                               why it cannot enforce the rest. Ask before sandbox.run if you                               need to know whether a limit will be honoured: a request for                               confinement this host cannot provide is refused, not quietly                               downgraded."
+                    .to_string(),
+                parameters: json!({ "type": "object", "properties": {} }),
+                category: ToolCategory::Security,
+                required_capabilities: vec![AgentCapability::HostExec],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "sandbox.run".to_string(),
+            McpTool {
+                name: "sandbox.run".to_string(),
+                description: "Run a program on the host under operating-system confinement                               and return what it printed. The program runs directly, not                               through a shell, with an empty environment and no network                               unless asked for. Limits default to strict: 512 MiB, 30                               seconds, no network, no new privileges. A request this host                               cannot confine as asked is refused; set best_effort to run                               anyway and read `unenforced` for what was dropped. A non-zero                               exit code is a result, not an error. This runs on the host,                               not in a guest: use vm.exec for that."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Program to execute, run directly rather than through a shell"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Arguments, already split; nothing here parses a command line"
+                        },
+                        "env": {
+                            "type": "object",
+                            "additionalProperties": { "type": "string" },
+                            "description": "The whole environment for the workload; nothing is inherited"
+                        },
+                        "working_dir": {
+                            "type": "string",
+                            "description": "Directory to run in; defaults to the server's own"
+                        },
+                        "stdin": {
+                            "type": "string",
+                            "description": "Text written to the program's standard input; when absent, stdin is closed so a program that reads it does not wait for a write that never comes"
+                        },
+                        "memory_bytes": {
+                            "type": "integer",
+                            "description": "Memory ceiling; defaults to 512 MiB"
+                        },
+                        "timeout_seconds": {
+                            "type": "integer",
+                            "description": "Deadline; defaults to 30, capped at 600"
+                        },
+                        "allow_network": {
+                            "type": "boolean",
+                            "description": "Give the workload the host network. Defaults to false, which requires a host that can isolate it"
+                        },
+                        "best_effort": {
+                            "type": "boolean",
+                            "description": "Run with whatever confinement this host can enforce instead of refusing"
+                        }
+                    },
+                    "required": ["program"]
+                }),
+                category: ToolCategory::Security,
+                required_capabilities: vec![AgentCapability::HostExec],
+                enabled: true,
+            },
+        );
+
+        // Context as an environment: the session record, as something the
+        // agent queries rather than re-reads. See hv2-context.
+        tools.insert(
+            "context.search".to_string(),
+            McpTool {
+                name: "context.search".to_string(),
+                description: "Find where something is recorded in the session log, ranked by \
+                              relevance. Returns addresses and previews, never full content, \
+                              so a search cannot itself fill the context. Use it before \
+                              assuming something is lost: everything evicted from the view is \
+                              still here, word for word, at the address it always had."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Words to look for; an identifier you can spell exactly works best, since nothing here is stemmed"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "How many hits to return, best first; defaults to 8"
+                        },
+                        "session": {
+                            "type": "string",
+                            "description": "Restrict to one session; omit to search every session in this log, including earlier ones"
+                        },
+                        "kind": {
+                            "type": "string",
+                            "description": "Restrict to one kind of event, such as tool_result or plan"
+                        }
+                    },
+                    "required": ["query"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.expand".to_string(),
+            McpTool {
+                name: "context.expand".to_string(),
+                description: "Read a span of the log back exactly as it was recorded, \
+                              externalized payloads included. This is the opposite of a \
+                              summary: what comes back is the original text, not a \
+                              description of it. Set into_view false to read something you \
+                              intend to compute over with context.exec rather than keep."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "from": {
+                            "type": "integer",
+                            "description": "First address, inclusive; the number context.search returns"
+                        },
+                        "to": {
+                            "type": "integer",
+                            "description": "Last address, inclusive; defaults to the same event as from"
+                        },
+                        "into_view": {
+                            "type": "boolean",
+                            "description": "Also put the span back in the working view; defaults to true. False reads without spending context"
+                        }
+                    },
+                    "required": ["from"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.record".to_string(),
+            McpTool {
+                name: "context.record".to_string(),
+                description: "Append something to the session record without putting it in \
+                              the view. For results worth keeping but not worth reading now: \
+                              the whole of a long output you only skimmed, a decision and why, \
+                              a note for a later session. Large text is stored outside the log \
+                              and stays searchable in full. Nothing recorded can later be \
+                              edited or deleted."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "role": {
+                            "type": "string",
+                            "description": "Who this is from: user, assistant, tool or system"
+                        },
+                        "kind": {
+                            "type": "string",
+                            "description": "A short type used to filter later, such as tool_result, plan or note"
+                        },
+                        "text": {
+                            "type": "string",
+                            "description": "The content, recorded whole however long it is"
+                        }
+                    },
+                    "required": ["role", "kind", "text"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.exec".to_string(),
+            McpTool {
+                name: "context.exec".to_string(),
+                description: "Run a program over what you retrieved, confined, and get back \
+                              only what it printed. This is how to answer a question about a \
+                              large result without reading the result: expand it with \
+                              into_view false, write it to the workspace, and compute. The \
+                              workspace survives between calls; nothing else does, since every \
+                              call is a fresh process. Needs the host-execution capability as \
+                              well as context access, because this runs on the host."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "program": {
+                            "type": "string",
+                            "description": "Program to run, directly rather than through a shell"
+                        },
+                        "args": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Arguments, already split; nothing here parses a command line"
+                        },
+                        "stdin": {
+                            "type": "string",
+                            "description": "Text written to the program standard input, which is how to hand it retrieved content without a file"
+                        },
+                        "best_effort": {
+                            "type": "boolean",
+                            "description": "Run with whatever confinement this host can enforce instead of refusing; read `unenforced` in the result for what was dropped. Needed where a default cannot be met, such as network isolation on Windows"
+                        }
+                    },
+                    "required": ["program"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![
+                    AgentCapability::ContextMemory,
+                    AgentCapability::HostExec,
+                ],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.compact".to_string(),
+            McpTool {
+                name: "context.compact".to_string(),
+                description: "Bring the working view back inside its budget: persist \
+                              everything, replace old tool payloads with their addresses, and \
+                              evict the oldest span, leaving behind the headline you supply. \
+                              Write that headline for whoever arrives next with none of your \
+                              context. Nothing is deleted; the evicted span keeps its \
+                              addresses and context.expand still returns it in full. If \
+                              within_budget comes back false the view could not be shrunk \
+                              further without dropping the current turn."
+                    .to_string(),
+                parameters: json!({
+                    "type": "object",
+                    "properties": {
+                        "task": {
+                            "type": "string",
+                            "description": "What the span being evicted was about, in a line"
+                        },
+                        "state": {
+                            "type": "string",
+                            "description": "What is known to be true afterwards: what was checked, not what was hoped"
+                        },
+                        "next_action": {
+                            "type": "string",
+                            "description": "What the next step was going to be"
+                        },
+                        "status": {
+                            "type": "string",
+                            "description": "done, failed, abandoned or in_progress; defaults to in_progress, because unfinished work recorded as done is the one error reading cannot catch"
+                        }
+                    },
+                    "required": ["task", "state", "next_action"]
+                }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.view".to_string(),
+            McpTool {
+                name: "context.view".to_string(),
+                description: "Show the working view as it stands, with the index of \
+                              everything that has left it. The index comes first and lists \
+                              the addresses of evicted spans, so what is missing is visible \
+                              rather than merely absent."
+                    .to_string(),
+                parameters: json!({ "type": "object", "properties": {} }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
+                enabled: true,
+            },
+        );
+
+        tools.insert(
+            "context.status".to_string(),
+            McpTool {
+                name: "context.status".to_string(),
+                description: "How large the record is, how much of the budget the view is \
+                              using, and whether a confined runtime is installed for \
+                              context.exec. Ask before planning around exec: if runtime is \
+                              absent, there is nowhere to compute and the call will refuse."
+                    .to_string(),
+                parameters: json!({ "type": "object", "properties": {} }),
+                category: ToolCategory::ContextMemory,
+                required_capabilities: vec![AgentCapability::ContextMemory],
                 enabled: true,
             },
         );
@@ -1752,6 +2185,20 @@ impl McpServer {
                     };
                 }
             };
+            // Hidden from the catalogue is not the same as refused.
+            // `enabled` was filtered in list_tools and never checked here, so
+            // a tool disabled in future would still run for anyone who knew
+            // its name. Nothing can disable one today, which is exactly why
+            // this is worth closing now rather than after something can.
+            if !tool.enabled {
+                return ToolCallResponse {
+                    id: request.id,
+                    success: false,
+                    result: None,
+                    error: Some(format!("Tool is disabled: {}", request.tool)),
+                    execution_time_ms: start.elapsed().as_millis() as u64,
+                };
+            }
             for cap in &tool.required_capabilities {
                 if !session.capabilities.has(*cap) {
                     return ToolCallResponse {
@@ -1802,11 +2249,20 @@ impl McpServer {
         });
 
         // Execute tool via the dispatch table in execute_tool_impl
+        // Bound the call. `McpConfig::default_timeout` was documented as the
+        // default tool timeout and `ToolCallRequest::timeout` as a per-call
+        // override, and neither was ever read: the call awaited without limit,
+        // so a hung vm.exec held the request forever and held its concurrency
+        // permit with it.
+        let budget = request.timeout.unwrap_or(self.config.default_timeout);
         let result = match denial {
             Some(error) => Err(error),
             None => {
-                self.execute_tool_impl(&request.tool, &request.parameters, session)
-                    .await
+                let call = self.execute_tool_impl(&request.tool, &request.parameters, session);
+                match tokio::time::timeout(budget, call).await {
+                    Ok(result) => result,
+                    Err(_) => Err(format!("{} did not finish within {budget:?}; the call was abandoned and whatever it started may still be running", request.tool)),
+                }
             }
         };
 
@@ -1894,6 +2350,7 @@ impl McpServer {
                 | "vm.list"
                 | "vm.metrics"
                 | "vm.console"
+                | "vm.exec"
         ) {
             return None;
         }
@@ -1931,6 +2388,47 @@ impl McpServer {
             Ok(vm_id)
         }
 
+        /// Read a `vm.exec` request out of the tool parameters.
+        fn guest_command(params: &JsonValue) -> Result<crate::vm_host::GuestCommand, String> {
+            let program = params
+                .get("program")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing required parameter: program")?;
+            if program.trim().is_empty() {
+                return Err("program must not be empty".to_string());
+            }
+
+            // Arguments arrive already split. A single string would have to be
+            // parsed, and there is no shell here to parse it the way a caller
+            // writing one would expect.
+            let args = match params.get("args") {
+                None | Some(JsonValue::Null) => Vec::new(),
+                Some(JsonValue::Array(items)) => items
+                    .iter()
+                    .map(|item| {
+                        item.as_str()
+                            .map(str::to_string)
+                            .ok_or_else(|| "args must be an array of strings".to_string())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+                Some(_) => return Err("args must be an array of strings".to_string()),
+            };
+
+            let timeout_seconds = match params.get("timeout_seconds") {
+                None | Some(JsonValue::Null) => 30,
+                Some(value) => value
+                    .as_u64()
+                    .filter(|secs| *secs > 0)
+                    .ok_or("timeout_seconds must be a positive integer")?,
+            };
+
+            Ok(crate::vm_host::GuestCommand {
+                program: program.to_string(),
+                args,
+                timeout_seconds,
+            })
+        }
+
         /// Keep the session's mirror of a VM in step with the host's view, so
         /// tools that read session state (`vm.metrics`, snapshots) still work.
         fn mirror(session: &AgentSession, descriptor: &crate::vm_host::VmDescriptor) -> JsonValue {
@@ -1960,6 +2458,33 @@ impl McpServer {
                 if let Some(boot) = params.get("boot") {
                     spec.boot = serde_json::from_value(boot.clone())
                         .map_err(|e| format!("Invalid boot source: {e}"))?;
+                }
+                // Both were declared by the schema, accepted from the caller
+                // and then dropped -- `VmSpec` has the fields and the host
+                // passes them on, the dispatcher just never read them. The
+                // schema gives network_enabled a default of true, so every VM
+                // made here had networking off while its own documentation
+                // said otherwise.
+                if let Some(gpu) = params.get("gpu_enabled").and_then(|v| v.as_bool()) {
+                    spec.enable_gpu = gpu;
+                }
+                spec.enable_networking = params
+                    .get("network_enabled")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                // A CID that is not a number is a mistake, not an absent
+                // channel: a VM created without the channel its caller asked
+                // for fails much later, at vm.exec, with nothing pointing back
+                // to here.
+                match params.get("guest_cid") {
+                    None | Some(JsonValue::Null) => {}
+                    Some(value) => {
+                        spec.guest_cid = Some(
+                            value
+                                .as_u64()
+                                .ok_or("guest_cid must be a non-negative integer")?,
+                        );
+                    }
                 }
 
                 let descriptor = host.create(spec).await?;
@@ -2053,6 +2578,13 @@ impl McpServer {
                 serde_json::to_value(console).map_err(|e| e.to_string())
             }
 
+            "vm.exec" => {
+                let vm_id = owned_vm_id(params, session)?;
+                let command = guest_command(params)?;
+                let result = host.exec(vm_id, command).await?;
+                serde_json::to_value(result).map_err(|e| e.to_string())
+            }
+
             other => Err(format!("Tool has no VM-host implementation: {other}")),
         }
     }
@@ -2110,6 +2642,134 @@ impl McpServer {
                 Err(e) => Err(e),
             },
             other => Err(format!("Tool has no image-host implementation: {other}")),
+        })
+    }
+
+    /// Answer a `sandbox.*` tool from an installed
+    /// [`SandboxHost`](crate::sandbox_host::SandboxHost).
+    ///
+    /// Takes no session: a confined workload belongs to whoever asked for it
+    /// and to nothing else, so there is no ownership to check the way a VM has.
+    /// The capability check has already happened by the time this runs.
+    ///
+    /// With no host installed these tools refuse. That is the whole posture of
+    /// this surface in one place: the alternative to confinement is not
+    /// running the program unconfined, it is not running it.
+    async fn dispatch_to_sandbox_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+    ) -> Option<Result<JsonValue, String>> {
+        if !matches!(tool_name, "sandbox.run" | "sandbox.capabilities") {
+            return None;
+        }
+
+        let Some(host) = self.sandbox_host() else {
+            return Some(Err(
+                "no sandbox host is installed, so there is nothing that could confine a                  workload. Install one with McpServer::set_sandbox_host; running the program                  unconfined is not the fallback"
+                    .to_string(),
+            ));
+        };
+
+        Some(match tool_name {
+            "sandbox.capabilities" => {
+                serde_json::to_value(host.capabilities().await).map_err(|e| e.to_string())
+            }
+            _ => {
+                // Deserialize rather than pick fields out by hand: an unknown
+                // field is then a request this surface does not understand,
+                // and silently ignoring one that looked like a limit is how a
+                // caller comes to believe it asked for something it did not.
+                match serde_json::from_value::<crate::sandbox_host::SandboxRequest>(params.clone())
+                {
+                    Err(e) => Err(format!("invalid sandbox request: {e}")),
+                    Ok(request) => host
+                        .run(request)
+                        .await
+                        .and_then(|run| serde_json::to_value(run).map_err(|e| e.to_string())),
+                }
+            }
+        })
+    }
+
+    /// Run a `context.*` tool against an installed
+    /// [`ContextHost`](crate::context_host::ContextHost).
+    ///
+    /// Returns `None` for tools this host has nothing to do with, so the
+    /// caller falls through to the rest of the surface unchanged.
+    ///
+    /// The capability check has already happened by the time this runs.
+    async fn dispatch_to_context_host(
+        &self,
+        tool_name: &str,
+        params: &JsonValue,
+    ) -> Option<Result<JsonValue, String>> {
+        if !tool_name.starts_with("context.") {
+            return None;
+        }
+
+        let Some(host) = self.context_host() else {
+            return Some(Err(
+                "no context host is installed, so there is no session record to search, \
+                 expand or append to. Install one with McpServer::set_context_host"
+                    .to_string(),
+            ));
+        };
+
+        // Deserialize rather than pick fields out by hand: an unknown field is
+        // then a request this surface does not understand, and quietly
+        // ignoring one that looked like a filter is how a search comes back
+        // scoped to more than the caller asked for.
+        Some(match tool_name {
+            "context.search" => {
+                match serde_json::from_value::<crate::context_host::SearchRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.search request: {e}")),
+                    Ok(request) => host
+                        .search(request)
+                        .await
+                        .and_then(|hits| serde_json::to_value(hits).map_err(|e| e.to_string())),
+                }
+            }
+            "context.expand" => {
+                match serde_json::from_value::<crate::context_host::ExpandRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.expand request: {e}")),
+                    Ok(request) => host
+                        .expand(request)
+                        .await
+                        .and_then(|events| serde_json::to_value(events).map_err(|e| e.to_string())),
+                }
+            }
+            "context.record" => {
+                match serde_json::from_value::<crate::context_host::RecordRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.record request: {e}")),
+                    Ok(request) => host.record(request).await.map(|seq| json!({ "seq": seq })),
+                }
+            }
+            "context.exec" => {
+                match serde_json::from_value::<crate::context_host::ExecRequest>(params.clone()) {
+                    Err(e) => Err(format!("invalid context.exec request: {e}")),
+                    Ok(request) => host
+                        .exec(request)
+                        .await
+                        .and_then(|result| serde_json::to_value(result).map_err(|e| e.to_string())),
+                }
+            }
+            "context.compact" => {
+                match serde_json::from_value::<crate::context_host::CompactRequest>(params.clone())
+                {
+                    Err(e) => Err(format!("invalid context.compact request: {e}")),
+                    Ok(request) => host
+                        .compact(request)
+                        .await
+                        .and_then(|result| serde_json::to_value(result).map_err(|e| e.to_string())),
+                }
+            }
+            "context.view" => host.render().await.map(|text| json!({ "view": text })),
+            "context.status" => host
+                .status()
+                .await
+                .and_then(|status| serde_json::to_value(status).map_err(|e| e.to_string())),
+            other => Err(format!("unknown context tool {other}")),
         })
     }
 
@@ -2271,6 +2931,12 @@ impl McpServer {
             return result;
         }
         if let Some(result) = self.dispatch_to_gpu_host(tool_name, params, session).await {
+            return result;
+        }
+        if let Some(result) = self.dispatch_to_sandbox_host(tool_name, params).await {
+            return result;
+        }
+        if let Some(result) = self.dispatch_to_context_host(tool_name, params).await {
             return result;
         }
 
@@ -2500,6 +3166,26 @@ impl McpServer {
                 Ok(json!({ "vm_id": vm_id, "attached": false, "output": "" }))
             }
 
+            "vm.exec" => {
+                let vm_id = params
+                    .get("vm_id")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing required parameter: vm_id")?;
+                let key = format!("vm:{}", vm_id);
+                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
+                state
+                    .get(&key)
+                    .ok_or_else(|| format!("VM not found: {}", vm_id))?;
+
+                // Without a host there is no guest, so there is nothing to run
+                // a program in. Returning an empty successful result would be
+                // a fabricated measurement -- the exact defect execute_plan
+                // had -- so refuse and name the reason.
+                Err(format!(
+                    "no VM host is installed, so there is no guest in {vm_id} to run a command in"
+                ))
+            }
+
             // ── Snapshots ────────────────────────────────────────────
             "snapshot.create" => {
                 let vm_id = params
@@ -2510,22 +3196,15 @@ impl McpServer {
                     .get("snapshot_name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("snapshot");
-                let snapshot_id = uuid_v4();
-                let snap = json!({
-                    "snapshot_id": snapshot_id,
-                    "vm_id": vm_id,
-                    "name": snapshot_name,
-                    "created_at_epoch_ms": SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64,
-                });
-                session
-                    .state
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(format!("snap:{}", snapshot_id), snap.clone());
-                Ok(snap)
+                // A receipt is not a snapshot. This minted an id, recorded a
+                // name and a timestamp, and captured no memory, no disk and no
+                // device state -- there is no snapshot host in this project to
+                // capture any. The id looked real enough to hand to
+                // snapshot.restore, which is what made it dangerous: an agent's
+                // recovery plan ("snapshot, try the risky thing, restore if it
+                // fails") became a no-op reporting success at every step.
+                let _ = snapshot_name;
+                Err(format!("no snapshot host is installed, so the state of {vm_id} cannot be captured; an identifier handed back here would refer to nothing"))
             }
 
             "snapshot.restore" => {
@@ -2533,12 +3212,11 @@ impl McpServer {
                     .get("snapshot_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: snapshot_id")?;
-                let key = format!("snap:{}", snapshot_id);
-                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
-                if !state.contains_key(&key) {
-                    return Err(format!("Snapshot not found: {}", snapshot_id));
-                }
-                Ok(json!({ "snapshot_id": snapshot_id, "status": "restored" }))
+                // Nothing was ever captured, so there is nothing to put back.
+                // This checked that a bookkeeping key existed and reported
+                // "restored" without touching the VM: memory, disk and device
+                // state all left exactly as they were.
+                Err(format!("no snapshot host is installed, so {snapshot_id} cannot be restored; reporting success would tell an agent its VM had been rolled back when nothing changed"))
             }
 
             "snapshot.list" => {
@@ -2567,13 +3245,11 @@ impl McpServer {
                     .get("network")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: network")?;
-                let interface_id = uuid_v4();
-                Ok(json!({
-                    "vm_id": vm_id,
-                    "network": network,
-                    "interface_id": interface_id,
-                    "status": "attached"
-                }))
+                // No interface is created. This minted an identifier and
+                // returned "attached" without writing anywhere -- not even to
+                // session state -- so the VM never showed the interface and the
+                // mac_address the schema accepts was discarded.
+                Err(format!("no network host is installed, so no interface can be attached to {vm_id} on {network}; an identifier for an interface that does not exist is worse than an error, because network.detach would accept it"))
             }
 
             "network.detach" => {
@@ -2585,11 +3261,9 @@ impl McpServer {
                     .get("interface_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: interface_id")?;
-                Ok(json!({
-                    "vm_id": vm_id,
-                    "interface_id": interface_id,
-                    "status": "detached"
-                }))
+                // This performed no lookup of any kind: any vm_id and any
+                // invented interface_id came back "detached".
+                Err(format!("no network host is installed, so interface {interface_id} cannot be detached from {vm_id}; nothing here has ever attached one"))
             }
 
             // ── GPU fabric ───────────────────────────────────────────
@@ -2738,8 +3412,14 @@ impl McpServer {
                             .collect()
                     })
                     .unwrap_or_default();
-                let timeout_secs: u64 =
-                    params.get("timeout").and_then(|v| v.as_u64()).unwrap_or(30);
+                // The schema calls this `timeout_seconds`, and so does the
+                // sibling vm.exec path. Reading `timeout` meant a caller's
+                // deadline was silently replaced by the default, so a long
+                // command failed at 30 seconds having been told it had more.
+                let timeout_secs: u64 = params
+                    .get("timeout_seconds")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(30);
 
                 // Verify the VM exists in session state
                 let state = session.state.read().unwrap_or_else(|e| e.into_inner());
@@ -2913,6 +3593,14 @@ impl McpServer {
                         "request": {
                             "type": "file.read",
                             "path": path,
+                            // Carried through rather than dropped. The schema
+                            // offers max_size_kb with a default of 1024 and
+                            // nothing read it, so the request the guest agent
+                            // received carried no bound at all.
+                            "max_size_kb": params
+                                .get("max_size_kb")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(1024),
                         },
                         "status": "submitted",
                     }),
@@ -2939,6 +3627,26 @@ impl McpServer {
                 let content = params
                     .get("content")
                     .ok_or("Missing required parameter: content")?;
+
+                // The schema offers text and base64 and this read neither, so
+                // a base64 payload was forwarded as literal base64 text and
+                // written to the guest as the characters of the encoding
+                // rather than the bytes it encodes -- silent corruption, and
+                // the caller told it succeeded. There is no decoder here, so
+                // the honest answer is to refuse the encoding this cannot
+                // honour rather than mis-deliver it.
+                match params.get("encoding").and_then(|v| v.as_str()) {
+                    None | Some("text") => {}
+                    Some("base64") => {
+                        return Err("base64 content is not supported by this server: it has no                                     decoder, and forwarding the encoded text would write the                                     characters of the encoding rather than the bytes they                                     stand for. Send the content as text"
+                            .to_string())
+                    }
+                    Some(other) => {
+                        return Err(format!(
+                            "unknown encoding {other:?}; this tool accepts \"text\""
+                        ))
+                    }
+                }
 
                 // Verify the VM exists and is running
                 let state = session.state.read().unwrap_or_else(|e| e.into_inner());
@@ -3033,34 +3741,44 @@ impl McpServer {
                     .get("message")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: message")?;
-                let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
-                let recipient_count = sessions.len().saturating_sub(1); // exclude sender
-                Ok(json!({
-                    "message": message,
-                    "recipients": recipient_count,
-                    "status": "broadcast_sent"
-                }))
+                // "recipients" counted the sessions that exist and presented
+                // it as the number that received something. There is no inbox,
+                // no queue and no channel: AgentSession holds state and
+                // owned_vms and nothing else, so the message was dropped.
+                let _ = message;
+                Err("this server has no agent-to-agent message channel, so a broadcast would be counted and discarded; AgentSession carries no inbox to deliver one to".to_string())
             }
 
             "agent.send" => {
+                // The schema calls this `target_agent`, so reading
+                // `target_agent_id` meant a schema-conforming call could never
+                // succeed -- it failed on a missing parameter it had supplied
+                // under the documented name. Both are accepted now, since the
+                // wrong one has been the only one that worked.
                 let target = params
-                    .get("target_agent_id")
+                    .get("target_agent")
+                    .or_else(|| params.get("target_agent_id"))
                     .and_then(|v| v.as_str())
-                    .ok_or("Missing required parameter: target_agent_id")?;
+                    .ok_or("Missing required parameter: target_agent")?;
                 let message = params
                     .get("message")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: message")?;
-                let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
-                let found = sessions.values().any(|s| s.agent_id == target);
+                let found = {
+                    let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
+                    sessions.values().any(|s| s.agent_id == target)
+                };
                 if !found {
                     return Err(format!("Target agent not found: {}", target));
                 }
-                Ok(json!({
-                    "target": target,
-                    "message": message,
-                    "status": "delivered"
-                }))
+
+                // The target existed and the message went nowhere. "delivered"
+                // was returned after finding a session with a matching id and
+                // writing nothing to it -- there is no inbox to write to. Two
+                // agents told to coordinate through this would each be told
+                // delivery succeeded and would wait for a reply that cannot come.
+                let _ = message;
+                Err(format!("agent {target} exists, but this server has no message channel to deliver to it: AgentSession carries no inbox"))
             }
 
             "agent.claim" => {
@@ -3068,15 +3786,54 @@ impl McpServer {
                     .get("vm_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: vm_id")?;
-                session
-                    .owned_vms
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .push(vm_id.to_string());
+
+                // Refuse a VM another session already holds.
+                //
+                // Without this the tool was the opposite of what it says. Its
+                // description promises exclusive access and that it "prevents
+                // other agents from modifying" the VM; what it did was append
+                // the id to this session's `owned_vms` with no checks at all.
+                // `session_owns` is the authorisation gate for vm.delete,
+                // vm.exec and the rest, so claiming another agent's VM did not
+                // protect it -- it granted full access to it. A tool that hands
+                // out the permission it advertises as a restriction is worse
+                // than one that does nothing.
+                let taken_by = {
+                    let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
+                    sessions
+                        .values()
+                        .find(|other| {
+                            other.agent_id != session.agent_id
+                                && other
+                                    .owned_vms
+                                    .read()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .iter()
+                                    .any(|id| id == vm_id)
+                        })
+                        .map(|other| other.agent_id.clone())
+                };
+                if let Some(holder) = taken_by {
+                    return Err(format!(
+                        "VM {vm_id} is claimed by agent {holder}. A claim is exclusive, so this \
+                         one is refused rather than silently shared"
+                    ));
+                }
+
+                let mut owned = session.owned_vms.write().unwrap_or_else(|e| e.into_inner());
+                if !owned.iter().any(|id| id == vm_id) {
+                    owned.push(vm_id.to_string());
+                }
+                drop(owned);
+
                 Ok(json!({
                     "vm_id": vm_id,
                     "agent_id": session.agent_id,
-                    "status": "claimed"
+                    "status": "claimed",
+                    // Said plainly because the schema offers duration_seconds
+                    // and nothing expires a claim: reporting a lease this
+                    // server does not keep is the defect above in miniature.
+                    "expires": "never: this server does not implement timed leases",
                 }))
             }
 
@@ -3570,5 +4327,137 @@ mod tests {
         // Closing the session must invoke the hook with the owned VM.
         assert!(server.close_session(&session.id));
         assert_eq!(torn_down.lock().unwrap().len(), 1);
+    }
+
+    /// A disabled tool is refused, not merely hidden from the catalogue.
+    ///
+    /// `enabled` was filtered in `list_tools` and never checked on the call
+    /// path, so a tool disabled in future would still run for anyone who knew
+    /// its name. Nothing can disable one today, which is why this is worth
+    /// closing before something can.
+    #[tokio::test]
+    async fn a_disabled_tool_is_refused_and_not_only_hidden() {
+        let server = McpServer::new();
+        let session = server
+            .create_session("disabled-tool-agent", AgentCapabilities::full())
+            .expect("session");
+
+        {
+            let mut tools = server.tools.write().unwrap_or_else(|e| e.into_inner());
+            let tool = tools.get_mut("system.info").expect("system.info exists");
+            tool.enabled = false;
+        }
+
+        let listed = server.list_tools(&AgentCapabilities::full());
+        assert!(
+            !listed.iter().any(|t| t.name == "system.info"),
+            "a disabled tool should not be listed"
+        );
+
+        let response = session.call_tool(&server, "system.info", json!({})).await;
+        assert!(
+            !response.success,
+            "and knowing its name should not be enough to run it"
+        );
+        assert!(
+            response
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("disabled")),
+            "the refusal should say why: {:?}",
+            response.error
+        );
+    }
+
+    /// An encoding this server cannot honour is refused, not ignored.
+    ///
+    /// `guest.file.write` offered `text` and `base64` and read neither, so a
+    /// base64 payload was forwarded as literal base64 text: the characters of
+    /// the encoding written to the guest instead of the bytes they stand for,
+    /// with the caller told it succeeded.
+    #[tokio::test]
+    async fn base64_content_is_refused_rather_than_written_as_literal_text() {
+        let server = McpServer::new();
+        let session = server
+            .create_session("encoding-agent", AgentCapabilities::full())
+            .expect("session");
+
+        let response = session
+            .call_tool(
+                &server,
+                "guest.file.write",
+                json!({
+                    "vm_id": "any-vm",
+                    "path": "/tmp/x",
+                    "content": "aGVsbG8=",
+                    "encoding": "base64"
+                }),
+            )
+            .await;
+
+        assert!(!response.success, "base64 must not be silently accepted");
+        assert!(
+            response
+                .error
+                .as_deref()
+                .is_some_and(|e| e.contains("base64")),
+            "the refusal should name the encoding: {:?}",
+            response.error
+        );
+    }
+
+    /// One agent cannot claim another's VM, and so cannot reach it.
+    ///
+    /// This is the security property, not a message check. `agent.claim`
+    /// appended the VM id to the calling session's `owned_vms` with no
+    /// validation, and `owned_vms` is what `session_owns` authorises against —
+    /// so the tool documented as *preventing* other agents from modifying a VM
+    /// was the way to gain the right to modify it. The assertion that matters
+    /// is the second one: after a refused claim, the intruder still cannot act.
+    #[tokio::test]
+    async fn a_claim_cannot_take_a_vm_another_agent_holds() {
+        let server = McpServer::new();
+        let owner = server
+            .create_session("owner-agent", AgentCapabilities::full())
+            .expect("owner session");
+        let intruder = server
+            .create_session("intruder-agent", AgentCapabilities::full())
+            .expect("intruder session");
+
+        let created = owner
+            .call_tool(&server, "vm.create", json!({ "name": "owned-vm" }))
+            .await;
+        assert!(created.success, "vm.create: {:?}", created.error);
+        let vm_id = created.result.expect("record")["vm_id"]
+            .as_str()
+            .expect("vm_id")
+            .to_string();
+
+        let stolen = intruder
+            .call_tool(&server, "agent.claim", json!({ "vm_id": vm_id }))
+            .await;
+        assert!(
+            !stolen.success,
+            "a VM another agent holds must not be claimable"
+        );
+
+        // The point of the whole fix: the ownership gate still refuses.
+        let deleted = intruder
+            .call_tool(&server, "vm.delete", json!({ "vm_id": vm_id }))
+            .await;
+        assert!(
+            !deleted.success,
+            "a refused claim must not leave the intruder able to delete the VM"
+        );
+
+        // And the owner is unaffected.
+        let owner_status = owner
+            .call_tool(&server, "vm.status", json!({ "vm_id": vm_id }))
+            .await;
+        assert!(
+            owner_status.success,
+            "the owner still owns it: {:?}",
+            owner_status.error
+        );
     }
 }

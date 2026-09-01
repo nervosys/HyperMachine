@@ -104,6 +104,8 @@ async fn test_linux_boot_complete() {
         initrd: Some(initrd),
         setup_addr: 0x90000,
         kernel_addr: 0x100000,
+        // The e820 map the kernel reads is built from this.
+        memory_size: 64 * 1024 * 1024,
     };
 
     // Validate parameters
@@ -271,6 +273,8 @@ async fn test_boot_state_validation() {
                     initrd: None,
                     setup_addr: 0x90000,
                     kernel_addr: 0x100000,
+                    // The e820 map the kernel reads is built from this.
+                    memory_size: 64 * 1024 * 1024,
                 };
 
                 if vcpu.boot_linux(&vm, &params, 0x100000).is_ok() {
@@ -314,6 +318,8 @@ async fn test_memory_layout_validation() {
                     initrd: Some(initrd),
                     setup_addr: 0x90000,
                     kernel_addr: 0x100000,
+                    // The e820 map the kernel reads is built from this.
+                    memory_size: 64 * 1024 * 1024,
                 };
 
                 if vcpu.boot_linux(&vm, &params, 0x100000).is_ok() {
@@ -365,6 +371,8 @@ async fn test_segment_configuration() {
                     initrd: None,
                     setup_addr: 0x90000,
                     kernel_addr: 0x100000,
+                    // The e820 map the kernel reads is built from this.
+                    memory_size: 64 * 1024 * 1024,
                 };
 
                 if vcpu.boot_linux(&vm, &params, 0x100000).is_ok() {
@@ -421,6 +429,8 @@ async fn test_boot_error_handling() {
                     initrd: None,
                     setup_addr: 0x90000,
                     kernel_addr: 0x100000,
+                    // The e820 map the kernel reads is built from this.
+                    memory_size: 64 * 1024 * 1024,
                 };
 
                 match LinuxBootProtocol::validate_params(&params) {
@@ -485,6 +495,8 @@ async fn test_boot_performance() {
                     initrd: None,
                     setup_addr: 0x90000,
                     kernel_addr: 0x100000,
+                    // The e820 map the kernel reads is built from this.
+                    memory_size: 64 * 1024 * 1024,
                 };
 
                 let start = Instant::now();

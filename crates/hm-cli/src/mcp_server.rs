@@ -69,8 +69,11 @@ impl RateLimiter {
         }
     }
 
-    /// Check if request is allowed, returns remaining quota
-    pub async fn check(&self, key: &str) -> Result<u64, ()> {
+    /// Record a request against `key`'s quota.
+    ///
+    /// Returns the quota remaining after this request, or `None` if the
+    /// request exceeded the limit and should be refused.
+    pub async fn check(&self, key: &str) -> Option<u64> {
         let now = Instant::now();
         let mut buckets = self.buckets.write().await;
 
@@ -89,9 +92,9 @@ impl RateLimiter {
 
         let current = bucket.count.fetch_add(1, Ordering::SeqCst);
         if current >= self.max_requests {
-            Err(())
+            None
         } else {
-            Ok(self.max_requests - current - 1)
+            Some(self.max_requests - current - 1)
         }
     }
 }
@@ -222,8 +225,8 @@ async fn rate_limit_middleware(
         .unwrap_or_else(|| "unknown".to_string());
 
     match state.rate_limiter.check(&ip).await {
-        Ok(_remaining) => Ok(next.run(request).await),
-        Err(_) => Err(StatusCode::TOO_MANY_REQUESTS),
+        Some(_remaining) => Ok(next.run(request).await),
+        None => Err(StatusCode::TOO_MANY_REQUESTS),
     }
 }
 
@@ -466,12 +469,18 @@ async fn call_tool(
             };
             match state
                 .vm_manager
-                .create_vm(
+                // create_bootable_vm, not create_vm: the five-argument form
+                // hardcodes `boot: None`, so an agent that supplied a kernel
+                // got a success record back and then a VM with no guest code in
+                // it. The REST handler on this same request type already calls
+                // this; only the MCP tool path dropped the field.
+                .create_bootable_vm(
                     &args.name,
                     args.cpu_cores,
                     args.memory_gb,
                     args.gpu_enabled,
                     args.network_enabled,
+                    args.boot.clone(),
                 )
                 .await
             {
@@ -804,15 +813,15 @@ mod tests {
         let limiter = RateLimiter::new(2, Duration::from_millis(50));
 
         // Exhaust the limit
-        assert!(limiter.check("test").await.is_ok());
-        assert!(limiter.check("test").await.is_ok());
-        assert!(limiter.check("test").await.is_err());
+        assert!(limiter.check("test").await.is_some());
+        assert!(limiter.check("test").await.is_some());
+        assert!(limiter.check("test").await.is_none());
 
         // Wait for window to reset
         tokio::time::sleep(Duration::from_millis(60)).await;
 
         // Should be able to make requests again
-        assert!(limiter.check("test").await.is_ok());
+        assert!(limiter.check("test").await.is_some());
     }
 
     #[tokio::test]
@@ -951,12 +960,12 @@ mod tests {
         // First 5 requests should succeed
         for i in 0..5 {
             let result = limiter.check("test-ip").await;
-            assert!(result.is_ok(), "Request {} should be allowed", i);
+            assert!(result.is_some(), "Request {} should be allowed", i);
         }
 
         // 6th request should fail
         let result = limiter.check("test-ip").await;
-        assert!(result.is_err(), "Request 6 should be rate limited");
+        assert!(result.is_none(), "Request 6 should be rate limited");
     }
 
     #[tokio::test]
@@ -964,26 +973,26 @@ mod tests {
         let limiter = RateLimiter::new(2, Duration::from_secs(60));
 
         // Each key has its own limit
-        assert!(limiter.check("ip-1").await.is_ok());
-        assert!(limiter.check("ip-1").await.is_ok());
-        assert!(limiter.check("ip-1").await.is_err()); // ip-1 exhausted
+        assert!(limiter.check("ip-1").await.is_some());
+        assert!(limiter.check("ip-1").await.is_some());
+        assert!(limiter.check("ip-1").await.is_none()); // ip-1 exhausted
 
         // ip-2 should still have quota
-        assert!(limiter.check("ip-2").await.is_ok());
-        assert!(limiter.check("ip-2").await.is_ok());
-        assert!(limiter.check("ip-2").await.is_err()); // ip-2 exhausted
+        assert!(limiter.check("ip-2").await.is_some());
+        assert!(limiter.check("ip-2").await.is_some());
+        assert!(limiter.check("ip-2").await.is_none()); // ip-2 exhausted
     }
 
     #[tokio::test]
     async fn test_rate_limiter_returns_remaining() {
         let limiter = RateLimiter::new(5, Duration::from_secs(60));
 
-        assert_eq!(limiter.check("test").await, Ok(4)); // 5-1=4 remaining
-        assert_eq!(limiter.check("test").await, Ok(3)); // 5-2=3 remaining
-        assert_eq!(limiter.check("test").await, Ok(2));
-        assert_eq!(limiter.check("test").await, Ok(1));
-        assert_eq!(limiter.check("test").await, Ok(0)); // Last allowed request
-        assert!(limiter.check("test").await.is_err()); // Rate limited
+        assert_eq!(limiter.check("test").await, Some(4)); // 5-1=4 remaining
+        assert_eq!(limiter.check("test").await, Some(3)); // 5-2=3 remaining
+        assert_eq!(limiter.check("test").await, Some(2));
+        assert_eq!(limiter.check("test").await, Some(1));
+        assert_eq!(limiter.check("test").await, Some(0)); // Last allowed request
+        assert!(limiter.check("test").await.is_none()); // Rate limited
     }
 
     #[test]

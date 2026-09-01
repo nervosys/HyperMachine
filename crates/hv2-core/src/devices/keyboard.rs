@@ -11,7 +11,7 @@
 //! - 0x64: Status register (read) / Command register (write)
 
 use crate::interrupt::Pic8259;
-use crate::{Device, DeviceType, Error, Result};
+use crate::{Device, DeviceType, Result};
 use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -27,6 +27,15 @@ const STATUS_UNLOCKED: u8 = 0x10; // Keyboard Unlocked
 const STATUS_AUX_OBF: u8 = 0x20; // Auxiliary Output Buffer Full
 const STATUS_TIMEOUT: u8 = 0x40; // Timeout Error
 const STATUS_PARITY: u8 = 0x80; // Parity Error
+
+/// Data port, relative to the base port the device is registered at.
+///
+/// Relative, not absolute: `DeviceManager` subtracts the base port before
+/// calling, so a device decoding 0x60 directly never matches a real access.
+pub const KEYBOARD_DATA_OFFSET: u64 = 0;
+
+/// Status (read) and command (write) port, relative to the base port.
+pub const KEYBOARD_STATUS_OFFSET: u64 = 4;
 
 /// Controller commands (written to port 0x64)
 const CMD_READ_CCB: u8 = 0x20; // Read Controller Command Byte
@@ -70,6 +79,9 @@ const CCB_DISABLE_AUX: u8 = 0x20; // Auxiliary disable
 const CCB_TRANSLATE: u8 = 0x40; // Translate scancodes to Set 1
 
 /// Internal keyboard state
+/// The keyboard controller's line on a PC.
+const KBD_IRQ: u8 = 1;
+
 #[derive(Debug)]
 struct KeyboardState {
     /// Output buffer (keyboard to CPU)
@@ -90,6 +102,14 @@ struct KeyboardState {
     led_state: u8,
     /// PIC for raising IRQ 1
     pic: Option<Arc<Pic8259>>,
+    /// Where an interrupt actually reaches a guest.
+    ///
+    /// The `Pic8259` above is a userspace model, and a guest whose interrupt
+    /// controller lives inside the hypervisor never reads it. Without this,
+    /// [`KeyboardDevice::inject_scancode`] put a byte in the output buffer that
+    /// the guest was never told about: a public API for "give the guest a
+    /// keystroke" whose interrupt had nowhere to go.
+    interrupt_sink: Option<Arc<dyn crate::device::InterruptSink>>,
 }
 
 impl KeyboardState {
@@ -104,6 +124,7 @@ impl KeyboardState {
             scancode_set: 1, // Default to Set 1 (most compatible)
             led_state: 0,
             pic: None,
+            interrupt_sink: None,
         }
     }
 
@@ -133,10 +154,18 @@ impl KeyboardState {
             self.output_buffer.push_back(data);
             self.update_status();
 
-            // Raise IRQ 1 if keyboard interrupts are enabled
+            // Raise IRQ 1 if keyboard interrupts are enabled.
+            //
+            // Both places, and the second is the one that reaches a guest: the
+            // PIC below is a userspace model that a guest with an in-kernel
+            // interrupt controller never reads, so raising only there is
+            // indistinguishable from raising nothing.
             if (self.ccb & CCB_INT_KBD) != 0 {
                 if let Some(ref pic) = self.pic {
-                    let _ = pic.raise_irq(1);
+                    let _ = pic.raise_irq(KBD_IRQ);
+                }
+                if let Some(sink) = &self.interrupt_sink {
+                    sink.raise(KBD_IRQ);
                 }
             }
         }
@@ -343,6 +372,18 @@ impl Default for KeyboardDevice {
 
 #[async_trait]
 impl Device for KeyboardDevice {
+    fn pending_interrupt(&self) -> Option<u8> {
+        // The inherent `has_pending_interrupt` existed and this trait method
+        // did not, so the dispatch layer could never see this device's
+        // interrupt -- the same defect the RTC carried, and for the same
+        // reason: a public check nothing on the delivery path called.
+        self.has_pending_interrupt().then_some(KBD_IRQ)
+    }
+
+    fn set_interrupt_sink(&mut self, sink: Arc<dyn crate::device::InterruptSink>) {
+        self.state.lock().interrupt_sink = Some(sink);
+    }
+
     fn name(&self) -> &str {
         "Intel 8042 Keyboard"
     }
@@ -356,45 +397,33 @@ impl Device for KeyboardDevice {
     }
 
     async fn read(&self, offset: u64, data: &mut [u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Keyboard only supports single-byte reads".into(),
-            ));
+        // Offsets are relative to the base port, as everywhere else on the I/O
+        // path: registered at 0x60, the data port arrives as 0 and the status
+        // port as 4. Decoding the absolute 0x60 and 0x64 meant every real
+        // access fell through to an error, and an error here stops the VM --
+        // so a guest probing the keyboard controller killed itself.
+        //
+        // The ports in between (0x61 to 0x63) belong to other parts of the
+        // chipset and read as an absent device rather than as a failure.
+        // Erroring on them would be the same mistake in a different place.
+        for (index, byte) in data.iter_mut().enumerate() {
+            *byte = match offset + index as u64 {
+                KEYBOARD_DATA_OFFSET => self.read_data(),
+                KEYBOARD_STATUS_OFFSET => self.read_status(),
+                _ => 0xFF,
+            };
         }
-
-        let value = match offset {
-            0x60 => self.read_data(),
-            0x64 => self.read_status(),
-            _ => {
-                return Err(Error::Device(format!(
-                    "Invalid keyboard port: {:#x}",
-                    offset
-                )))
-            }
-        };
-
-        data[0] = value;
         Ok(())
     }
 
     async fn write(&mut self, offset: u64, data: &[u8]) -> Result<()> {
-        if data.len() != 1 {
-            return Err(Error::Device(
-                "Keyboard only supports single-byte writes".into(),
-            ));
-        }
-
-        match offset {
-            0x60 => self.write_data(data[0]),
-            0x64 => self.write_command(data[0]),
-            _ => {
-                return Err(Error::Device(format!(
-                    "Invalid keyboard port: {:#x}",
-                    offset
-                )))
+        for (index, byte) in data.iter().enumerate() {
+            match offset + index as u64 {
+                KEYBOARD_DATA_OFFSET => self.write_data(*byte),
+                KEYBOARD_STATUS_OFFSET => self.write_command(*byte),
+                _ => {}
             }
         }
-
         Ok(())
     }
 
@@ -543,10 +572,12 @@ mod tests {
         kbd.init().await.unwrap();
 
         let mut buf = [0u8; 1];
-        kbd.read(0x64, &mut buf).await.unwrap();
+        kbd.read(KEYBOARD_STATUS_OFFSET, &mut buf).await.unwrap();
 
-        kbd.write(0x64, &[CMD_SELF_TEST]).await.unwrap();
-        kbd.read(0x60, &mut buf).await.unwrap();
+        kbd.write(KEYBOARD_STATUS_OFFSET, &[CMD_SELF_TEST])
+            .await
+            .unwrap();
+        kbd.read(KEYBOARD_DATA_OFFSET, &mut buf).await.unwrap();
 
         kbd.reset().await.unwrap();
         kbd.shutdown().await.unwrap();
@@ -638,5 +669,74 @@ mod tests {
 
         // Buffer should be empty now
         assert_eq!(kbd.read_data(), 0);
+    }
+    #[tokio::test]
+    async fn the_controller_decodes_offsets_relative_to_its_base_port() {
+        // Registered at 0x60, the status port arrives as offset 4. Decoding
+        // the absolute 0x64 meant a guest polling the controller got a device
+        // error, and a device error on the I/O path stops the VM.
+        let keyboard = KeyboardDevice::new();
+        let mut status = [0u8; 1];
+        keyboard
+            .read(KEYBOARD_STATUS_OFFSET, &mut status)
+            .await
+            .expect("the status port has to answer");
+        assert_ne!(
+            status[0], 0xFF,
+            "0xff is what an absent device reads as, and a kernel polling for a \
+             bit to clear in it waits forever"
+        );
+    }
+
+    #[tokio::test]
+    async fn the_ports_between_read_as_absent_rather_than_failing() {
+        // 0x61 to 0x63 belong to other parts of the chipset. Erroring on them
+        // would stop the VM for an access that hardware simply ignores.
+        let keyboard = KeyboardDevice::new();
+        let mut byte = [0u8; 1];
+        keyboard.read(1, &mut byte).await.expect("no error");
+        assert_eq!(byte[0], 0xFF);
+    }
+
+    /// A keystroke injected from the host interrupts the guest.
+    ///
+    /// `inject_scancode` is a public API for "give the guest a keystroke", and
+    /// it used to raise only on the userspace `Pic8259` — which a guest whose
+    /// interrupt controller lives inside the hypervisor never reads. The byte
+    /// went into the output buffer and the guest was never told, so a guest
+    /// waiting on the keyboard waited forever while the host believed it had
+    /// typed. Raising on nothing and raising on something a guest cannot see
+    /// are the same failure, and neither shows up in a test that only checks
+    /// the buffer.
+    #[test]
+    fn an_injected_keystroke_reaches_a_guest_that_does_not_read_the_userspace_pic() {
+        #[derive(Debug, Default)]
+        struct Recorder(std::sync::Mutex<Vec<u8>>);
+        impl crate::device::InterruptSink for Recorder {
+            fn raise(&self, irq: u8) {
+                self.0.lock().expect("recorder").push(irq);
+            }
+        }
+
+        let raised = Arc::new(Recorder::default());
+        let mut kbd = KeyboardDevice::new();
+        kbd.set_interrupt_sink(raised.clone());
+
+        kbd.inject_scancode(0x1e);
+
+        assert_eq!(
+            *raised.0.lock().expect("recorder"),
+            vec![1],
+            "injecting a scancode should raise IRQ 1 somewhere the guest reads"
+        );
+        assert!(
+            kbd.has_pending_interrupt(),
+            "and the device should still report the interrupt as pending"
+        );
+        assert_eq!(
+            Device::pending_interrupt(&kbd),
+            Some(1),
+            "the dispatch layer sees it through the trait, not the inherent method"
+        );
     }
 }

@@ -1,0 +1,25 @@
+[package]
+name = "hv2-context"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Context as an environment: an addressable event log, externalized payloads and a confined runtime an agent queries instead of re-reading"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+hv2-sandbox = { path = "../hv2-sandbox" }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[lints]
+workspace = true

@@ -8,6 +8,240 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A command runs inside a guest through the published API** (`hv2-agent`).
+  Not the boot probe, which drives the vsock device by hand because it was
+  written alongside it, but `AgentVM::ping_guest` and `exec_in_guest` -- the
+  surface an embedder actually has:
+
+      ping          : agent 1.1.0
+      exec status   : exit=Some(0) signal=None timed_out=false
+      exec stdout   : Linux (none) 6.6.52 ... x86_64 GNU/Linux
+
+  `examples/guest_exec_probe.rs` is that run, and exits non-zero when the guest
+  does not answer, so it is a check rather than only a thing to read.
+- **`LoadedBoot::append_cmdline` and `LoadedBoot::cmdline`** (`hv2-core`): add
+  an argument to a kernel command line that was written before the device
+  existed, and report what a guest will actually be booted with rather than
+  what the caller typed.
+- **`VsockDevice::connect_ephemeral`** (`hv2-core`): a connection from a host
+  port nothing else is using.
+- **A command crosses the guest channel and is answered** (`hv2-core`,
+  `hv2-guest-agent`). The host publishes a framed request into the guest's
+  receive queue, `hv2-guest-agentd` inside a Linux guest reads it, and its reply
+  comes back over the transmit queue:
+
+      vsock reply : 73 bytes -- {"id":1,"version":1,"result":
+                    {"kind":"pong","agent_version":"1.1.0"}}
+
+  This is the experiment the guest channel existed for. The two halves of the
+  feature -- a device proven against hand-built virtqueues, and an agent proven
+  against the host kernel's own `AF_VSOCK` -- have now been proven against each
+  other.
+- **The host and the guest agent complete a request and a reply over vsock**
+  (`hv2-core`, `hv2-guest-agent`). With the operation numbers corrected, a run
+  against a Linux guest shows the whole exchange: the host publishes a 45-byte
+  framed request, the guest answers with a credit update -- which is a guest
+  saying it consumed the data -- and then a 73-byte reply from
+  `hv2-guest-agentd`. The two halves of this feature have now spoken.
+- **`hv2-guest-agentd` says when it accepts and how much it reads.** Silence
+  was ambiguous in the way that cost the most time here: a host that gets no
+  answer could not tell an agent that never accepted from one that accepted and
+  is waiting on a request that never arrived, and those are failures in
+  different halves of the transport.
+- **A VM with a kernel to boot now gets the devices it needs to reach
+  userspace** (`hv2-core`). `VM::provision` attaches `Machine::legacy_pc()`
+  when a boot source is configured. Until now the only caller of that model was
+  the boot probe, registering by hand -- so a VM created through a host had no
+  console, no CMOS and no keyboard controller. That is not a degraded guest but
+  one that cannot reach userspace at all: its output goes nowhere and it spins
+  on the first absent port it polls. No agent can run in a guest that never
+  gets that far, whatever the guest channel does.
+
+  `Machine::attach_absent` is what provisioning uses: it registers only what
+  the manager does not already have, so a caller who installed their own
+  machine model keeps it rather than being refused for having done the thing
+  this is a default for. A device occupying the same ports under a different
+  name is still a conflict, and still reported -- silently declining to map a
+  port range is how a guest ends up talking to something other than what the
+  caller thinks it is.
+- **A vsock connection is established between host and guest** (`hv2-core`).
+  The host opens a connection, the packet reaches the guest through the receive
+  queue, Linux's vsock stack answers over the transmit queue, and the
+  connection reports `Established`. Data moves in both directions across the
+  virtqueues for the first time.
+- **A guest channel can be asked for through the tool surface** (`hv2-agent`).
+  `vm.create` takes an optional `guest_cid`; `LocalVmHost` attaches the channel
+  before launching and merges `virtio_mmio.device=` into the guest's command
+  line first, because virtio-mmio has no enumeration and the address has to be
+  on the command line before `VM::new` freezes it. After attaching it checks
+  the rendered argument against what the device reports and fails the start on
+  a disagreement -- a guest that probes the wrong address finds nothing and
+  says nothing, so a warning would be useless.
+- **A host can publish to the guest and signal it** (`hv2-core`).
+  `VM::notify_vsock` moves packets the host queued into the receive buffers a
+  driver posted and then raises the used-queue interrupt -- two steps that have
+  to happen together: publishing without signalling leaves data in a ring the
+  guest has no reason to read, and signalling without publishing wakes it to
+  find nothing. `VsockDevice::deliver_pending` exposes the first half, which
+  previously ran only when the *guest* kicked a queue -- the wrong trigger for
+  a host-initiated message, since the guest kicks when it posts buffers and
+  then waits.
+  `VirtioMmioTransport` also routes its interrupt through the VM's
+  `InterruptSink` now. It raised only on the userspace `Pic8259`, which a guest
+  with an in-kernel irqchip never reads, so every virtio interrupt this device
+  raised went nowhere.
+- **A Linux guest driver binds to the vsock device** (`hv2-core`). The two
+  halves of this feature had never spoken: the device was proven against tests
+  that lay out virtqueues by hand, the guest agent over the host kernel's own
+  socket. A guest now enumerates it and completes the handshake:
+
+      /sys/bus/virtio/devices/virtio0/device  ->  0x0013   (VIRTIO_ID_VSOCK)
+      /sys/bus/virtio/devices/virtio0/status  ->  0x0000000f
+      /sys/bus/virtio/devices/virtio0/driver  ->  vmw_vsock_virtio_transport
+
+  `0x0f` is ACKNOWLEDGE | DRIVER | DRIVER_OK | FEATURES_OK -- full feature
+  negotiation, by Linux's real driver, against this device. Reaching it needed
+  a kernel built with `CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y`, which the WSL
+  kernel does not set, so `virtio_mmio.device=` enumerated nothing before.
+- **`Machine::legacy_pc()`** (`hv2-core`): the legacy PC device set in one
+  call, replacing three hand-registrations a caller had to get right in order.
+  Each entry records what breaks without it, because each was found the same
+  way -- a guest hung, and the port it was spinning on named the device.
+- **A boot regression test** (`hv2-core`). It asserts the e820 bounds
+  *computed from the VM's configured memory*, so a table describing memory the
+  guest does not have fails, and it skips -- naming what is missing -- where
+  there is no `/dev/kvm` or no kernel image, rather than passing vacuously on a
+  host that cannot execute a guest.
+- **Userspace output reaches the console** (`hv2-core`). A program running as
+  PID 1 inside the guest writes to `/dev/console` and the bytes come back out
+  of `VM::console_output`. That completes the path: kernel boots, initramfs
+  unpacks, init runs, writes through the tty layer, the 8250 driver takes a
+  transmit interrupt, and the device hands the byte to the host.
+- **egui, eframe and egui_extras moved 0.31 → 0.36** (`hm-gui`), which is what
+  dependabot PRs #65, #67 and #69 each needed and none could do alone -- the
+  three move as one ecosystem and CI failed on every one of them separately.
+- **Device interrupts have a path to the guest** (`hv2-core`).
+  `HypervisorBackend::set_irq_line` asserts and releases a line through the
+  interrupt controller, which for KVM means `KVM_IRQ_LINE` on a
+  `KvmVm::irq_line` that had been written and never called. It is deliberately
+  not `inject_interrupt`: that hands a vector straight to the vCPU, bypassing
+  the controller's masking and priority, and is wrong whenever an in-kernel
+  irqchip exists. `Device::pending_interrupt` lets a device report the line it
+  is asserting, polled after every access because that is when the condition
+  changes, and `SerialDevice` implements the 16550's two sources. A backend
+  that cannot drive a line says so rather than accepting the call and dropping
+  it.
+- **A guest reaches userspace** (`hv2-core`). The kernel boots, unpacks an
+  initramfs, and executes a statically linked binary as PID 1 inside the guest.
+  The proof is the kernel's own: an init that returns 42 produces
+  `Attempted to kill init! exitcode=0x00002a00`, which only happens if that
+  binary ran. Before it, the full boot -- RCU, the scheduler, SLUB, ftrace, the
+  8250 driver finding COM1 at `0x3f8 (irq = 4) is a 16550A`, every filesystem
+  registered, `Freeing unused kernel image (initmem) memory`. Userspace
+  *output* does not come back yet; see below.
+- **A Linux kernel boots** (`hv2-core`). It decompresses itself, enters the
+  kernel proper, reads the `e820` map this loader writes, sets up its zones and
+  prints ~20 lines of kernel log through `SerialDevice` to `VM::console_output`
+  -- the memory ranges it reports back (`0x1000-0x9efff` and
+  `0x100000-0x7fffffff`) are exactly the two entries handed to it. It does not
+  reach userspace: it currently stops polling the DMA controller, which is the
+  next legacy device to bring up. `examples/linux_boot_probe.rs` runs it and
+  says how far it got.
+- **Single-step tracing** (`hv2-core`). `VM::single_step_trace` steps a guest
+  one instruction at a time and reports where it went, which is the only way to
+  see either of the two ways a guest goes quiet: a triple fault arrives as
+  `VmExit::Shutdown` and KVM resets the vCPU on AMD before returning it, so the
+  registers afterwards describe the reset vector and not the fault; and a guest
+  spinning in a tight loop never exits at all. Addresses are recorded *before*
+  each step for that reason, and only a bounded tail is kept, because a guest
+  can execute millions of instructions before it fails and the interesting part
+  is always the end. It found the setup-header truncation below in one run,
+  after an afternoon of reasoning had not.
+- **Context as an environment** (`hv2-context`, `hv2-agent`). An agent's history
+  is normally kept by putting it back in the prompt, which forces the decision
+  about what matters to be made at *write* time: when a tool returns 40 MB,
+  something has to choose what to keep before anyone knows what the next
+  question will be, and whatever it discards is gone. The new crate implements
+  the alternative from Scroll (arXiv:2608.21690) -- keep the history outside the
+  context, as something the agent queries -- built on one invariant: **eviction
+  changes the view and never the record**. `EventLog` is append-only and offers
+  no operation that edits or removes an event, not as discipline but as absent
+  API; every event has a `Seq` that never changes and never repeats. Payloads
+  over 8 KiB move to a `PayloadStore` behind a handle, and are still indexed and
+  searchable by their whole content rather than by the preview the log keeps.
+  `SearchIndex` ranks with BM25 and returns addresses and previews, never
+  content. `WorkingView::evict` persists before it selects -- so nothing can
+  leave before it is addressable -- then protects the active turn and the recent
+  tail, folds unprotected tool payloads down to their addresses, and only then
+  evicts, leaving a `Headline` in a tiered `EvictionIndex` that keeps recent
+  history detailed, coarsens distant history, and carries the exact span at
+  every tier. `ContextRuntime` is somewhere to compute over what was retrieved
+  under `hv2-sandbox`, so the answer comes back instead of the data. Exposed as
+  seven MCP tools -- `context.search`, `expand`, `record`, `exec`, `compact`,
+  `view`, `status` -- dispatched against a `ContextHost` the way `sandbox.*`
+  dispatches against a `SandboxHost`; with none installed they refuse, because a
+  record that accepts every write and loses it is worse than none. `context.exec`
+  needs `HostExec` as well as the new `ContextMemory` capability: being able to
+  read the record is not a reason to run code on the machine holding it. The
+  runtime is a confined process with a durable workspace and not a resident
+  namespace -- files persist between calls, variables do not -- and
+  `docs/CONTEXT_AS_ENVIRONMENT.md` says so alongside the rest of what is not
+  built.
+- **A guest executed** (`hv2-core`). The boot path had only ever been
+  type-checked: `VM::provision`, `load_boot` and `launch` were described as
+  creating a hypervisor VM, writing an image into guest physical memory and
+  running it, and no kernel had ever been asked to do any of it. Two new
+  examples do. `kvm_probe` reports the platform, `VM::new` and `provision`
+  separately, because a host can pass one and fail the next -- Windows does,
+  when Hyper-V owns VT-x. `boot_probe` runs the whole path against a 512-byte
+  real-mode image and prints what came back: a KVM VM and its vCPUs exist, the
+  image is in guest memory, the guest runs, and `Hello, World!` arrives through
+  `SerialDevice` and `DeviceManager` into `VM::console_output` -- which
+  independently confirms the console plumbing as well. The gate on this was an
+  inherited assumption rather than hardware: WSL2 here has nested
+  virtualisation, `kvm_amd` loaded and an accessible `/dev/kvm`.
+- **A guest can be reached, and a command can be run inside it** (`hv2-core`,
+  `hv2-guest-agent`, `hv2-agent`, `hv2-api`). `execute_script` was described in
+  four places as running inside the guest and always evaluated a Rhai script on
+  the host; the engine was never the problem, because nothing in the repo could
+  reach a guest at all. Every virtio device kept its descriptor table in host
+  `Vec`s a test filled in, and no virtio register file was ever mapped into
+  guest physical address space. Three pieces close that: `GuestQueue` reads the
+  descriptor, available and used rings out of guest memory, bounding every
+  guest-written field (a chain that cycles is refused, an index past the table
+  errors, indirect tables may not nest, a chain may not claim more than 64 MiB);
+  `VirtioMmioTransport` is a virtio-mmio v2 register file implementing `Device`,
+  so `register_mmio_region` puts it on the MMIO exit path `VM::run` already
+  takes; and `VsockDevice` carries the connection state machine and credit
+  accounting, both bounded. The new `hv2-guest-agent` crate holds the wire
+  protocol and the in-guest binary that answers it, `GuestAgent` is the host
+  client, and `AgentVM::exec_in_guest` is the operation an agent calls —
+  surfaced as the `vm.exec` MCP tool and `POST /api/v1/vms/{id}/exec`. Four
+  ways of having no guest to run in each fail as themselves rather than as a
+  timeout, because an agent that receives a timeout when the real problem is a
+  missing device retries forever. Gated on `Capability::GuestExec`, which
+  existed and had never been consulted.
+- **Confinement the operating system enforces** (`hv2-sandbox`, `hv2-agent`).
+  Two things here were named like sandboxes and confined nothing: `hv2-agent`'s
+  `Sandbox` says so in its own docs, and `hv2-core::container` was 3,866 lines
+  of namespace, cgroup and seccomp types whose `start` fabricated a PID. A
+  repo-wide search for `seccomp|setrlimit|unshare|prctl|CreateJobObject` found
+  prose and struct fields, and not one confinement syscall. The new crate is
+  built on one rule: silently dropping a control is worse than no sandbox,
+  because a caller who asked for no network and got one believes the opposite
+  of the truth. `Sandbox::controls()` reports what *this host* enforces, probed
+  by attempting each control rather than assumed; a spec asking for something
+  the backend lacks is refused, naming the control and why it is unavailable;
+  and `best_effort()` is an explicit opt-in whose result reports what was
+  dropped. Two backends behind one trait — `ProcessSandbox` (cgroup v2,
+  namespaces, `RLIMIT_*` and `no_new_privs` on Linux; job objects on Windows;
+  resource limits and an honest refusal elsewhere) and `MicroVmSandbox`, which
+  gets the controls no host kernel gives an unprivileged process by having a
+  different kernel. Exposed to agents as `sandbox.run` and
+  `sandbox.capabilities`, dispatched against a `SandboxHost` the way `vm.*`
+  dispatches against a `VmHost`; with no host installed the tools refuse,
+  because the alternative to confinement is not running the program unconfined.
+  See `docs/SANDBOXES.md` and `docs/GUEST_AGENT.md`.
 - **Boot sources — a VM can now be told what to boot** (`hv2-core`): the new
   `BootSource` (`boot::source`) describes a Linux bzImage (with optional initrd
   and command line), a Multiboot kernel, or a raw image, and resolves to a
@@ -110,6 +344,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **Six tools that reported an effect nothing performed now refuse**
+  (`hv2-agent`). Each returned a plausible success and did nothing, which is
+  the defect `execute_plan` had and which the `vm.exec` fallback in the same
+  file already refuses by name:
+
+  - `snapshot.create` minted an id, a name and a timestamp and captured no
+    memory, disk or device state; `snapshot.restore` checked that the id
+    existed and reported `"restored"` without touching the VM. Together they
+    turned an agent's recovery plan -- snapshot, try the risky thing, restore
+    on failure -- into a no-op that reported success at every step. There is no
+    snapshot host in this project for any installation to supply, so the
+    refusal is unconditional.
+  - `network.attach` returned an `interface_id` for an interface it did not
+    create, writing nowhere and discarding the `mac_address` it accepts;
+    `network.detach` performed no lookup at all, so any invented id on any VM
+    came back `"detached"`.
+  - `agent.broadcast` reported a `recipients` count that was the number of
+    sessions that exist, presented as the number that received something;
+    `agent.send` reported `"delivered"` after finding a session and writing
+    nothing to it. `AgentSession` has no inbox, so two agents told to
+    coordinate this way would each be told delivery succeeded and would wait
+    for a reply that cannot come.
+
+  Two tests had to be corrected to land this, and both are the point: an
+  end-to-end "full workload lifecycle" test asserted the snapshot round trip
+  succeeded -- it did, and it did nothing -- and an integration test asserted
+  `snapshot.create` "falls through to the session mirror". A green test over a
+  no-op is how a fabricated feature survives.
+- **One producer of the guest-channel kernel argument** (`hv2-agent`).
+  `LocalVmHost` rendered `virtio_mmio.device=` itself, merged it into the boot
+  source, and then cross-checked its own string against the device's once the
+  device existed. That check was there to catch the two drifting apart -- which
+  is a thing worth checking only while two things build one string. Now that
+  the VM applies the argument itself when it loads the image, the merge and the
+  check are both gone and `guest_channel_kernel_arg` delegates to
+  `VM::vsock_kernel_args_for`. Sixteen lines removed and one class of drift with
+  them.
+
+  The tests that covered it were asserting on the *configured* boot source,
+  which is no longer where the argument lands -- so they would have passed while
+  a guest booted without it. They now assert on what the guest will actually be
+  booted with, via the new `VM::extra_kernel_args`.
+- **`Admin` no longer implies `HostExec`** (`hv2-agent`). Every other capability
+  is implied by the `Admin` wildcard, and every other tool acts on VMs the
+  server manages; `sandbox.run` acts on the machine the server runs on. Leaving
+  it in the wildcard would have granted host execution to every session already
+  holding `Admin` the moment the tool shipped — a privilege expansion nobody
+  would have written down. `AgentCapabilities::full()` now names it explicitly,
+  so "full" still means full. `PolicyAction::HostExec` and
+  `ToolCategory::GuestExecution` are likewise separate from their guest-side
+  counterparts: a program in a guest cannot reach the host, and one on the host
+  can, however well confined.
 - **Documented the agent enforcement boundary** (`hv2-agent`, `hv2-api`). An
   audit of the security-shaped types found several that decide but never
   intercept, described as though they were active. `limits` claimed "real-time
@@ -130,7 +416,433 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remains available through `execute_plan` and is still tagged
   `"simulated": true`, so the two can never be confused.
 
+### Known gaps
+- **A device interrupt is delivered, but only as a side effect of a guest
+  access.** `pending_interrupt` is polled after each I/O access, so a device
+  whose condition becomes true while the guest is *not* touching it -- input
+  arriving on a serial port, a timer expiring -- has no way to say so until
+  the guest happens to ask. That is enough for a UART the guest is actively
+  driving and is not enough in general.
+
+### Known gaps
+- **No vsock data has moved yet.** The driver is bound and the guest agent is
+  listening on port 1024 inside, but a host-initiated connection stays in
+  `Connecting`: the guest never answers, so the host-to-guest packet is not
+  completing through the receive queue. Enumeration and negotiation are done;
+  the data path is not, and `vm.exec` remains an API with nothing behind it.
+- **A device interrupt still needs a guest access to be noticed in one case.**
+  `pending_interrupt` is polled after an access; self-raised interrupts go
+  through `InterruptSink` instead. Devices that use neither -- currently the
+  virtio transport -- cannot signal the guest at all.
+
+### Known gaps
+- **vsock still moves no data, and the reason is now specific.** With the
+  publish-and-signal path in place, a host-initiated connection still stays in
+  `Connecting`, and the device can see why: the guest's driver has programmed
+  all three ring addresses for the receive queue (`desc`, `avail`, `used`, and
+  `QUEUE_READY` set, size 256) but `avail_idx` reads 0 and the descriptor table
+  and available ring are both **all zeros** in guest memory at the addresses
+  the driver itself supplied. So the device is not failing to find posted
+  buffers -- there are none to find. Whether Linux's `virtio_vsock` driver
+  never filled the queue, or filled it somewhere this VM's view of guest memory
+  does not reach, is the next thing to establish. Writes in the other direction
+  are known good: this is how the kernel image gets into the guest.
+- **`vm.exec` cannot reach a guest through the tool surface at all**, for a
+  reason upstream of the above: nothing on the MCP path ever attaches a vsock
+  device. `LocalVmHost::start` never calls `attach_guest_channel`, `VmSpec` has
+  no field for a guest CID, and nothing merges `vsock_kernel_args()` into the
+  guest's command line -- only the boot probe does that, by hand. The host-side
+  chain from `vm.exec` down to `VsockDevice` is otherwise unbroken and drives
+  the emulated device directly rather than the host's own `AF_VSOCK` stack.
+### Known gaps
+### Known gaps
+### Known gaps
+### Known gaps
+- **The PIT models the interface, not the interrupt** (`hv2-core`).
+  `TimerDevice` raises IRQ 0 on the userspace PIC only, and unlike the keyboard
+  and the serial port it was left that way deliberately: KVM is asked for an
+  in-kernel PIT, the guest's clock comes from there, and delivering this
+  device's tick as well would give the guest two per period and a clock that
+  runs fast. Said in the type's documentation, because "raises IRQ 0" is
+  otherwise a reasonable thing to assume from the code.
+
+### Known gaps
+- **`AgentPolicy` quotas and rate limits are recorded, not enforced**
+  (`hv2-agent`). `allows` consults `enabled` and `permissions` and nothing
+  else, so a `max_vms` of five does not stop a sixth, and
+  `PolicyError::QuotaExceeded` is never constructed. Both fields now say so, in
+  the style the sibling module already uses -- the module documentation
+  explains that `PolicySet` *is* wired up, which made silence about these read
+  as endorsement. Enforcing them needs usage counters that do not exist:
+  `PolicyContext` carries an agent id and a clock, not a tally, and where such
+  a tally should live is a design decision rather than an oversight.
+
 ### Fixed
+- **Four more parameters that were accepted and ignored** (`hv2-agent`).
+  - A **disabled tool was hidden, not refused**. `McpTool::enabled` was
+    filtered in `list_tools` and never checked on the call path, so a tool
+    disabled in future would still run for anyone who knew its name. Nothing
+    can disable one today, which is why it was worth closing before something
+    can.
+  - **`agent.send` could not be called as documented.** Its schema names the
+    parameter `target_agent`; the handler read `target_agent_id`, so a
+    schema-conforming call failed on a missing parameter it had supplied under
+    the documented name. Both are accepted now, since the undocumented one has
+    been the only one that worked.
+  - **`guest.file.write` ignored `encoding`.** The schema offers `text` and
+    `base64`; a base64 payload was forwarded as literal base64 text, writing
+    the characters of the encoding rather than the bytes they stand for, with
+    the caller told it succeeded. There is no decoder here, so the encoding is
+    refused rather than mis-delivered.
+  - **`guest.file.read` ignored `max_size_kb`**, so the request reaching the
+    guest agent carried no bound at all. It is carried through now.
+- **`vm.create` over the MCP tool path dropped the kernel** (`hm-cli`). It
+  deserialised a `CreateVmRequest` carrying `boot` and then called the
+  five-argument `create_vm`, which hardcodes `boot: None`. An agent that
+  supplied a kernel got a success record back and a VM with no guest code in
+  it. The REST handler on the same request type already called
+  `create_bootable_vm`; only the tool path dropped the field.
+- **Three of four system prompts told agents that scripts run inside the guest**
+  (`hm-cli`). `vm.execute_script` evaluates a Rhai expression on the *host*
+  against a read-only view of a VM -- four scope variables and no I/O -- and
+  `SystemPrompts::generic` had been corrected to say so, while the OpenAI,
+  Anthropic and Gemini prompts still said "Execute scripts within VMs". A wrong
+  prompt is worse than a wrong schema: it shapes the agent's plan before any
+  schema is read.
+- **The ontology taught that same tool as a shell** (`hm-cli`). Its only
+  example was `echo 'Hello, World!'` returning `{"success": true, "output":
+  "Hello, World!
+", "exit_code": 0, "execution_time_ms": 15}` -- an input the
+  engine cannot run and an output shape it never produces -- and the declared
+  `ScriptResult` type promised the same four fields. Both are served verbatim
+  to agents through `/agentic/schema` and the vendor tool exports, so the wrong
+  shape was taught everywhere. The example is now a Rhai expression over the
+  VM's scope, and `ScriptResult` says what the engine actually returns: the
+  final expression's value, as JSON.
+- **No tool call was bounded in time** (`hv2-agent`).
+  `McpConfig::default_timeout` documented itself as the default tool timeout
+  and `ToolCallRequest::timeout` as a per-call override; neither was ever read,
+  and `call_tool` awaited without limit. A hung `vm.exec` or `sandbox.run` held
+  the request forever and held its concurrency permit with it, so one stuck
+  guest could take the surface down while every field that promised otherwise
+  sat unused. Both are honoured now.
+- **`agent.claim` handed out the access it advertised as a restriction**
+  (`hv2-agent`). Its description promises exclusive access and that it
+  "prevents other agents from modifying" a VM. What it did was append the id to
+  the calling session's `owned_vms` with no checks at all -- and `owned_vms` is
+  the authorisation gate (`session_owns`) for `vm.delete`, `vm.exec` and the
+  rest. So claiming another agent's VM did not protect it, it granted full
+  access to it. A claim held by another session is now refused, and the reply
+  says plainly that this server keeps no timed leases rather than implying the
+  `duration_seconds` it accepts means something.
+- **The microVM sandbox claimed a confinement it discarded** (`hv2-agent`).
+  `MicroVmSandbox::controls` reported `Control::ProcessCount` as enforced while
+  `max_processes` never left the host -- the name appears nowhere in the crate.
+  Because `unenforced` came back empty, and this crate defines that as "every
+  requested control was applied", a caller asking for one process was told the
+  limit held while the guest could fork freely. It is now refused with a reason,
+  which is the pattern the sandbox crate already prescribes.
+
+  The test covering it asserted that *every* control was enforced, which is what
+  kept the claim alive: it agreed with the advertisement rather than checking
+  the behaviour.
+- **The looser of two deadlines won** (`hv2-agent`). `wall_clock.or(cpu_time)`
+  returned the wall clock whenever one was set, so one second of CPU inside a
+  ten-minute wall clock bounded at ten minutes, with both controls still
+  reported as enforced. It takes the minimum now, as `AgentVM` already did for
+  the same choice.
+- **Two tool parameters were accepted and dropped** (`hv2-agent`). `guest.exec`
+  read `timeout`, while its schema and the sibling `vm.exec` path both say
+  `timeout_seconds`, so a caller's deadline was silently replaced by the
+  default. `vm.create` never read `gpu_enabled` or `network_enabled` -- `VmSpec`
+  has both fields and the host forwards them, the dispatcher just never looked
+  -- so every VM built through that surface had networking off while the
+  schema documented a default of `true`.
+- **An injected keystroke never reached the guest** (`hv2-core`).
+  `KeyboardDevice::inject_scancode` is a public API for "give the guest a
+  keystroke", and it raised IRQ 1 only on the userspace `Pic8259` -- which a
+  guest whose interrupt controller lives inside the hypervisor never reads. The
+  byte went into the output buffer and the guest was never told. It also had an
+  inherent `has_pending_interrupt` that the dispatch layer could not see,
+  because the `Device` trait method did not exist: exactly the defect the RTC
+  carried and its own comment describes, left in the device beside it. Both
+  paths are wired now.
+
+  Found by the sweep this session's failures argued for -- looking deliberately
+  for an API that describes an effect nothing performs, rather than waiting for
+  each one to surface as a hang.
+- **Three defects between the guest channel and the API in front of it**
+  (`hv2-core`, `hv2-agent`), each of which made a working transport look like a
+  dead guest, and none of which the boot probe could have found -- it drove the
+  device by hand, so it never used the API the way an embedder must.
+
+  **Queued was not delivered.** A host-side packet sits in the device until
+  something moves it into a receive buffer the driver posted and signals the
+  used queue. The probe did that after every step; nothing else did. So
+  `exec_in_guest` queued a connection request no guest ever saw and then timed
+  out reporting that the guest might not be running. Delivery is now driven by
+  the device itself, through `PendingWake`: queueing a packet says so, and the
+  VM delivers it on a dedicated thread. A rule the caller has to remember is
+  not a design, and this one had exactly one caller who remembered.
+
+  **The kernel argument was reported, not applied.** `attach_guest_channel`
+  returned the `virtio_mmio.device=` argument a guest needs and left putting it
+  on the command line to the caller -- who cannot have written it down, because
+  the device did not exist when the boot source was described. A caller who
+  misses it gets a guest that boots perfectly and enumerates nothing, which
+  reads as a broken device. The VM now records the argument at attach and
+  applies it when the image is loaded.
+
+  **The host port was a constant.** `VsockChannel` always connected from port
+  2048, and a closed connection keeps its port pair until it is forgotten, so
+  the *second* call on a VM was refused for colliding with the first -- worse
+  than the concurrency limit it was recorded as. Ports are now allocated from
+  an ephemeral range that rotates: freeing a port does not hand it straight
+  back out, because the guest may still hold the other end and a reused pair
+  goes unanswered. The client also forgets a connection when it drops, and
+  treats a refusal as retryable within the caller's timeout -- an agent serving
+  one caller at a time is briefly busy rather than absent.
+- **A guest could wait on an interrupt that only its own idleness prevented**
+  (`hv2-core`). Interrupts raised by device code were delivered by a task on the
+  same tokio runtime as the vCPU loop -- and the vCPU loop calls `KVM_RUN`,
+  which is a blocking ioctl. While the guest runs it does not return, and while
+  the guest is *idle* it does not return for a long time, because KVM halts the
+  vCPU in the kernel and waits there for an interrupt. Either way it occupies a
+  runtime worker.
+
+  So the two could meet in the middle: a halted guest waiting for an interrupt,
+  and the interrupt that would wake it queued behind a worker the guest itself
+  was occupying. Nothing deadlocked outright -- the guest woke on the next timer
+  tick or console byte and found data that had been there all along -- so it
+  presented as seconds of latency, intermittently, which is far harder to see
+  than a hang. A trace makes it plain: the delivery thread logs its last line,
+  then two interrupts are queued with `sent=true` and neither is ever acted on.
+
+  Delivery now runs on a dedicated OS thread. Measured on the configuration that
+  showed it worst -- an idle guest with a quiet console -- the agent round trip
+  went from 0 of 1 runs answering to 4 of 4.
+
+  This is also why the vsock round trip had been intermittent, and why neither
+  an edge pulse nor a held level line changed anything: the trigger mode never
+  mattered, because the line was not being driven at all.
+- **The vsock operation numbers were each one below the specification's**
+  (`hv2-core`). This is why no data ever moved over a channel whose handshake
+  worked perfectly. `REQUEST` (1) and `RESPONSE` (2) happened to be correct;
+  everything else was wrong. What the host sent as `RW` arrived at a Linux
+  guest as `SHUTDOWN` with flags of zero -- which that stack handles by doing
+  nothing at all: no data delivered, no reply, no reset, and not one line in
+  the guest's log. In the other direction the guest's real `RW` (5) was read as
+  `CREDIT_UPDATE` and its `CREDIT_UPDATE` (6) as `CREDIT_REQUEST`, so a reply
+  that did arrive was discarded as a bookkeeping packet.
+
+  Twenty tests covered this device and all twenty passed against the wrong
+  table, because each compared the device with itself: a test that asserts
+  `op::RW == op::RW` passes against any numbering. The replacement test writes
+  the eight values out from section 5.10.6.1 of the specification instead.
+
+  Found by having the guest agent write before reading, which made the guest
+  send a packet of its own -- the first packet in the whole project whose
+  operation number came from Linux rather than from this codebase, and it did
+  not match.
+- **A virtio interrupt was pulsed rather than held** (`hv2-core`). A virtio
+  interrupt is level-triggered: the driver clears it by writing `InterruptACK`,
+  and a line asserted and released before that acknowledgement can be dropped
+  between one delivery and the next. `InterruptSink` gained `assert_line` and
+  `deassert_line` for it, defaulting to the old pulse so a sink that predates
+  them is no worse than it was; the transport holds the line while any status
+  bit is outstanding and releases it when the driver has acknowledged them all.
+- **The device model and the guest were reading different memory**
+  (`hv2-core`). This is the root cause of everything below it. `VM::new`
+  created a `GuestMemory` and the backend separately allocated the pages it
+  registered with the hypervisor -- two buffers. The guest ran in the
+  backend's; every emulated device read and wrote the other one. So a virtio
+  driver published descriptors into memory the device could not see, and the
+  device wrote replies where the guest would never look.
+
+  Nothing caught it, and the reason is worth recording: the boot path writes
+  the kernel image through the *backend*, so guests booted perfectly, printed,
+  ran userspace and took an interactive shell. Only a device that reads guest
+  memory could notice, and until virtio-vsock was driven by a real Linux driver
+  there was none. The symptom was a receive queue whose descriptor table and
+  available ring read as all zeros at the addresses the driver had just
+  programmed -- which reads like a driver that posted no buffers, and was
+  really a device looking at the wrong pages.
+
+  `GuestMemory::adopt_backend_pages` points the regions at the backend's
+  allocation and releases its own, called from `VM::provision` as soon as the
+  backend VM exists. `HypervisorBackend::guest_memory_host_addr` is how a
+  backend reports pages it owns; the default is `None`, meaning the caller's
+  allocation was already the right one.
+- **A timer test measured the host's scheduler rather than the timer**
+  (`hv2-core`). It counted PIT ticks across a real wall-clock second and
+  allowed 15 to 21. The interval uses `MissedTickBehavior::Skip`, which is
+  right for a timer and means a loaded machine genuinely loses ticks, so the
+  test failed under parallel builds for a reason unrelated to the code -- it
+  had done so repeatedly. It runs on paused time now, where the count is exact
+  (19) and the assertion fails only if the configured period changes.
+- **The transmit interrupt was never delivered, for three separate reasons**
+  (`hv2-core`). Each one hid the next.
+  1. `IIR` gated the transmit interrupt on a `thr_empty` flag that was set
+     false on every write to the transmit register and only set true again
+     when the *host* drained the buffer. So after the first byte, the register
+     that a driver's handler reads to find out why it was interrupted said
+     "nothing to do" -- forever. This device transmits the instant the guest
+     writes, so the holding register is empty again before the write returns.
+  2. The interrupt pulse was wired into `handle_exit_static` only, and a
+     single-vCPU guest takes the instance path. The plumbing was correct and
+     ran zero times; a trace counting pulses reported exactly none.
+  3. A FIFO reset erased the transcript, fixed earlier in this release, which
+     is why the first two were invisible: the boot log looked empty for a
+     reason that had nothing to do with interrupts.
+- **A correction to an earlier diagnosis in this changelog.** An entry here
+  previously said the guest "writes `IER = 0` every time and never sets the
+  `OUT2` bit in `MCR`", concluding it ran the port without interrupts. That
+  was wrong, and wrong in an avoidable way: it was measured from a capture
+  that never reached the tty driver's startup, because the logging needed to
+  see the registers slowed the guest enough that it never got there. Traced
+  properly -- narrow filter, full boot -- the driver writes `IER = 0x07`
+  sixty-seven times and `MCR = 0x0b`, `OUT2` included. It was asking for
+  interrupts all along and not getting them.
+- **The initrd was placed where the kernel unpacks itself** (`hv2-core`). It
+  went to a fixed 32 MB. A compressed kernel unpacks into `init_size` bytes
+  starting from where it will run -- 62 MB from 16 MB for the kernel tested
+  here -- so 32 MB is *inside* that region for any kernel of ordinary size, and
+  decompression wrote straight over the initrd. The kernel then reported
+  `invalid magic at start of compressed archive` about bytes it had destroyed
+  itself, fell back to treating it as a block device, and panicked with
+  `Unable to mount root fs`. The initrd is now placed as high as it will go,
+  under the header's `initrd_addr_max`, clamped to the guest's memory, page
+  aligned, and refused with "give the guest more memory" if it cannot be
+  placed clear of the unpack region. Two tests that asserted the fixed address
+  now assert the property instead, since the constant is what hid the
+  collision.
+- **A FIFO reset erased the console transcript** (`hv2-core`). Linux resets
+  both FIFOs when its 8250 driver takes the port over from earlyprintk, and
+  `SerialDevice` responded by clearing the transmit buffer -- so every guest
+  that got far enough to initialise its serial driver properly wiped its own
+  boot log on the way past, and the VM looked as though it had never printed at
+  all. On real hardware a transmit-FIFO reset discards bytes that have not gone
+  out yet; here a THR write *is* the transmission, so there is nothing unsent
+  to discard and the buffer is the transcript. The receive direction still
+  discards, because unread input is exactly what that reset is for.
+- **Every device access was four bytes wide, whatever the guest asked for**
+  (`hv2-core`). `IoDeviceHandle`/`MmioDeviceHandle` built a `[u8; 4]` and
+  handed the whole thing to the device, discarding the access size the exit
+  had reported. Register files are byte-wide and their reads have side
+  effects, so a one-byte `inb` of a UART made the device pop its receive
+  buffer *and* clear its interrupt-identification register; a one-byte `outb`
+  of a character wrote the three registers after the target with the padding
+  bytes, clearing interrupt-enable, FIFO-control and line-control on every
+  character printed. It looked like it worked, which is why it survived a
+  kernel boot. The width now travels with the access and a device is handed
+  exactly the bytes the guest asked for.
+- **An unhandled guest exception livelocked the VM** (`hv2-core`). Only a
+  double fault stopped the VM; every other exception was logged at warn level
+  and the vCPU resumed, which re-executed the faulting instruction and took the
+  same exception again, forever. A guest that hit one stopped making progress
+  while the VM stayed `Running` and nothing said why -- observed as roughly
+  60,000 exits a second, all identical. An exception reaches userspace only
+  because the backend could neither handle nor emulate it, and this VMM does
+  neither and cannot yet inject one back into the guest, so it stops and
+  reports the vector. `KVM_SET_VCPU_EVENTS` would make injection possible and
+  turn this into the fallback rather than the whole answer.
+- **The PIT refused wide reads and dropped wide writes** (`hv2-core`, found by
+  an audit prompted by the three device defects a kernel boot turned up).
+  `TimerDevice::read` returned `Err` for any access that was not exactly one
+  byte -- and an error there stops the VM -- while `write` consumed `data[0]`
+  and silently ignored the rest. Both now walk consecutive registers a byte at
+  a time, which is also what the channel latch semantics require. The same
+  audit found the same shape in `IdeController` and `VgaDevice`; neither is
+  registered with the device manager, and both now say so in their module
+  docs, along with what wiring them up would require.
+- **The setup header was truncated at the length it had in 2009** (`hv2-core`).
+  `create_boot_params` copied a fixed `0x1f1..0x250` out of the bzImage, which
+  was the whole header under boot protocol 2.09 and has not been since. The
+  header does not have a fixed length -- the image says where it ends, at
+  `0x202 + the byte at 0x201` -- so everything past 0x250 reached the guest as
+  zero. `init_size` at 0x260 is the field that bites: the kernel computes its
+  stack pointer from it, so zero put `%rsp` somewhere unmapped and the guest
+  triple-faulted on the first `push`, with no console, no exception, and a
+  vCPU that KVM had already reset. The header extent is read from the image now
+  and clamped at both ends, since it is a guest-supplied number deciding how
+  much gets copied.
+- **Three devices that could not work behind the device manager** (`hv2-core`).
+  All three shared a shape: correct when a unit test called them directly, and
+  broken the moment a guest did. `SerialDevice::read` refused anything but a
+  single byte, and the refusal reached `handle_exit` as a device error that
+  stopped the VM -- so a kernel probing the port with a word read killed its own
+  guest, where hardware would simply have answered; its `write` silently dropped
+  every byte after the first. `RtcDevice` and `KeyboardDevice` decoded the
+  absolute ports 0x70/0x71 and 0x60/0x64, but `DeviceManager` passes
+  `port - base_port`, so every real access arrived as a small offset, fell
+  through to an error arm, and stopped the VM. A 16550 and an i8042 are
+  byte-wide register files: a wide access now walks consecutive registers, and
+  a port the device does not implement reads as absent rather than as a
+  failure. Found by booting a kernel against them, one after the next.
+- **A search hit returned the whole payload when it happened to be small**
+  (`hv2-context`, found by its own integration test). Previews were bounded in
+  the payload store and nowhere else, so an inline payload -- anything under the
+  8 KiB externalization threshold -- came back from `search` in full, once per
+  hit. A search over a long session was then as expensive as re-reading it,
+  which is the exact cost the crate exists to avoid. The index bounds previews
+  itself now, whatever the storage decided.
+- **A Linux kernel was handed no memory map and no CPU** (`hv2-core`).
+  `BootSource::Linux` has always described itself as implementing the Linux
+  boot protocol. Running one found two pieces of it missing. `boot_params`
+  carried no `e820` map: the byte at `0x1e8` was zero and the table at `0x2d0`
+  was empty, and a guest booted this way runs no BIOS, so there is no
+  `INT 15h` for the kernel to fall back on -- it finds no RAM at all and stops
+  before it has a console to say so on. The map is built now from the guest's
+  memory size, which `LoadedBoot::set_memory_size` threads in from the VM
+  (separate from `load`, because callers validate images before a VM exists),
+  and asking for the memory regions without one is refused rather than
+  answered with an empty map. Separately, no KVM vCPU was ever given a CPUID
+  configuration: `set_cpuid` and `get_supported_cpuid` were both written and
+  neither was ever called, so the guest's `CPUID` reported no vendor, no
+  features and a maximum leaf of zero. A Linux kernel asks within its first
+  few dozen instructions. `KvmVm::create_vcpu` now applies the host's
+  supported set. The visible effect is a guest that executes instead of
+  spinning: it now runs and triple-faults, which is a failure that can be
+  worked on. `examples/linux_boot_probe.rs` is the program that reports it.
+  The 32-bit protected-mode entry state itself was verified separately and is
+  correct -- a hand-assembled 32-bit image entered at 1 MB executes and drives
+  COM1 -- so what remains is specific to the Linux path. The kernel still does
+  not boot; nothing here claims otherwise.
+- **`HypervisorPlatform::detect` reported KVM on hosts that could not use it**
+  (`hv2-core`). It tested `Path::new("/dev/kvm").exists()`, which is true
+  wherever the module is loaded -- including the very common case of a user not
+  in the `kvm` group. `detect` then returned `Kvm` and every call after it
+  failed with a permission error naming none of this. It opens the device now,
+  which is the question it was always asking. Verified both ways on one
+  machine: as root `Kvm`, unprivileged `Tcg`. Same shape as
+  `SetInformationJobObject` succeeding not meaning memory is capped.
+- **A container runtime that reported success for things that never happened**
+  (`hv2-core`). `ContainerRuntime::start` invented a PID — `1000 + n` — and
+  marked the container `Running`, so a caller could not tell it from a working
+  runtime: the state was right, the PID was plausible, and nothing was confined
+  or even executing. Writing the test for that turned up the same defect beside
+  it: `kill()` returned `Ok(())` for a container in any state other than
+  `Running`, reporting a signal delivered to a process that did not exist. Both
+  refuse now, and the module says plainly that it models the OCI spec without
+  implementing it. `Container::start` is unchanged and stays honest — it takes a
+  PID from its caller, so whoever supplies one is the party that knows it is
+  real.
+- **The Linux sandbox claimed isolation the workload could see through**
+  (`hv2-sandbox`). Found by running it on a real kernel rather than
+  cross-compiling for one. `/proc` and `/sys` are not ordinary directories —
+  each is a view of the namespace it was *mounted in* — so an inherited pair
+  left a workload correctly PID 1 in its own namespace while it enumerated 48
+  host processes, and showed only loopback on netlink while `/sys/class/net`
+  listed the host's interfaces. "Cannot signal" was true and "cannot see" was
+  not. Both namespaces now carry `CLONE_NEWNS` and remount the filesystem that
+  describes them, and both probes rehearse the remount rather than only the
+  `unshare`.
+- **`best_effort` attempted controls the probe had already refused**
+  (`hv2-sandbox`). On a host without cgroup delegation it promised to run with
+  whatever was available and then failed trying to create a cgroup its own
+  probe had reported unavailable. `Sandbox::run` now filters the spec through
+  `SandboxSpec::without_controls` before handing it to a backend, so no backend
+  can attempt a control its probe rejected.
 - **Boot admission was decided after the backend had already been asked for a
   partition** (`hv2-core`). `VM::provision` called `backend.create_vm` first, so
   a refused image had still cost hypervisor resources — and on a host where
@@ -198,6 +910,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `-D warnings` clean build on every supported target.
 
 ### CI
+- **The release workflow never ran because of a billing block, not a defect.**
+  All four build jobs at tag `v1.1.0` reported `steps: []` and no runner, and
+  the check annotation reads "The job was not started because recent account
+  payments have failed or your spending limit needs to be increased." No
+  amount of workflow repair fixes that. Real defects behind it were fixed
+  anyway, so the first run after billing is resolved has a chance: `protoc` was
+  never installed although `hv2-cli` pulls in `hv2-api`, whose build script
+  needs it; the aarch64 Linux target was built through `cross` in a container
+  the host's `protoc` could not reach, and is now cross-compiled directly with
+  `gcc-aarch64-linux-gnu` and an explicit linker.
+- **Three workflow steps that had never run once** were repaired. `Miri` asked
+  for the `miri` component on the *stable* toolchain: the job installs nightly,
+  but `rust-toolchain.toml` pins `channel = "stable"` and overrides whatever the
+  action installed, so bare `cargo miri` ran on a toolchain that never ships it
+  — the same fix the HV1 jobs already carry. `Coverage` and `Benchmarks` both
+  died before doing any work because `hv2-api`'s build script runs `prost-build`
+  and neither workflow installed `protoc`, which every building job in `ci.yml`
+  does. The `CLA` check pinned `contributor-assistant/github-action@v2`, a tag
+  that does not exist — the action publishes only `vX.Y.Z` — so it failed to
+  resolve on every pull request; note that repairing it makes an inert check
+  enforce again. `Benchmarks` remains red for a separate reason: the action is
+  configured with `tool: 'cargo'`, which parses libtest format, and the repo's
+  benches are criterion, which does not emit it — `--output-format bencher` is
+  not the fix, as it prints no `test <name>` prefix.
+
 
 Master had been red since June, for reasons predating this work. Six
 failures were stacked behind one another, each hidden by the one in front:

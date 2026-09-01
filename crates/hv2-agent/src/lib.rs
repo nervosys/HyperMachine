@@ -41,13 +41,16 @@ pub mod actions;
 pub mod agent_vm;
 pub mod capabilities;
 pub mod communication;
+pub mod context_host;
 pub mod events;
 pub mod gpu_host;
+pub mod guest_agent;
 pub mod image_host;
 pub mod learning;
 pub mod limits;
 pub mod mcp;
 pub mod memory;
+pub mod microvm_sandbox;
 pub mod orchestration;
 pub mod perception;
 pub mod permissions;
@@ -56,6 +59,7 @@ pub mod policies;
 pub mod reasoning;
 pub mod runtime;
 pub mod sandbox;
+pub mod sandbox_host;
 pub mod script;
 pub mod state;
 pub mod tasks;
@@ -80,6 +84,7 @@ pub use events::{
     EventReceiver, EventResult, EventSeverity, VmEvent,
 };
 pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
+pub use guest_agent::{GuestAgent, GuestChannel, GuestExec, VsockChannel};
 pub use image_host::{AdmissionVerdict, ImageDescriptor, ImageHost, RegistryImageHost};
 pub use learning::{
     ActionValue, Experience, ExperienceBuffer, LearningConfig, LearningError, LearningRateSchedule,
@@ -95,6 +100,7 @@ pub use memory::{
     MemorySystem, MemoryType, RetrievalConfig, RetrievalResult, SemanticFact, SemanticMemory,
     SharedMemory, WorkingItem, WorkingMemory,
 };
+pub use microvm_sandbox::MicroVmSandbox;
 pub use perception::{
     Observable, Observation, ObservationQuality, ObservationValue, PerceptionError,
     PerceptionFilter, PerceptionResult, PerceptionSystem, Sensor, SensorConfig, SensorDefinition,
@@ -119,6 +125,9 @@ pub use reasoning::{
 };
 pub use runtime::{AgentHandle, AgentRuntime};
 pub use sandbox::{Sandbox, SandboxConfig};
+pub use sandbox_host::{
+    LocalSandboxHost, SandboxCapabilities, SandboxHost, SandboxRequest, SandboxRun,
+};
 pub use script::{ScriptEngine, ScriptResult};
 pub use state::{
     CheckpointManager, ConflictStrategy, SharedStateStore, StateCheckpoint, StateError,

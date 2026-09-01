@@ -46,8 +46,10 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
-      # hv2-api's build script runs prost-build, which needs protoc, and the
-      # benchmark job builds the workspace to reach hv2-core's benches.
+      # hv2-api's build script (tonic_prost_build) shells out to protoc, and
+      # this job builds the workspace to reach hv2-core's benches. Without this
+      # step the build fails before a single benchmark runs, and the
+      # continue-on-error below was masking that.
       - name: Install protoc
         uses: arduino/setup-protoc@v3
         with:
@@ -74,12 +76,23 @@ jobs:
           cargo bench -p hv2-api --bench api_bench -- --noplot 2>&1 | Tee-Object -FilePath api_bench.txt
         continue-on-error: true
 
+      # criterion (harness = false, used by every bench in this repo) never
+      # emits the libtest `test <name> ... bench: <n> ns/iter` line that
+      # tool: 'cargo' greps for -- not even with --output-format bencher,
+      # which drops the leading `test <name>` token. What criterion does
+      # always write is structured JSON under target/criterion/**/new/, so
+      # convert that into the flat array the action's customSmallerIsBetter
+      # tool consumes natively, independent of any harness's text output.
+      - name: Convert criterion output to benchmark-action JSON
+        run: |
+          ./.github/scripts/criterion-to-benchmark-json.ps1 -CriterionDir target/criterion -OutFile bench-data.json
+
       - name: Store benchmark results
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: HyperMachine Benchmarks
-          tool: 'cargo'
-          output-file-path: crypto_bench.txt
+          tool: 'customSmallerIsBetter'
+          output-file-path: bench-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: true
           alert-threshold: '150%'
@@ -94,6 +107,7 @@ jobs:
           path: |
             crypto_bench.txt
             api_bench.txt
+            bench-data.json
             target/criterion/**/*.svg
           retention-days: 30
 

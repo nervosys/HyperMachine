@@ -10,6 +10,26 @@
 //! - Read/Write sectors
 //! - LBA addressing (28-bit and 48-bit)
 //!
+//!
+//! # Not wired to the device manager, and not ready to be
+//!
+//! Nothing registers this controller with [`crate::DeviceManager`], and its
+//! `Device` implementation would not work if something did. Two reasons, both
+//! the same defect class a boot found in the RTC and keyboard controller:
+//!
+//! - The register decode matches **absolute** ports (0x1F0..=0x1F7 and so on),
+//!   but the manager passes `port - base_port`, so every real access would
+//!   fall through to the default arm.
+//! - `read` and `write` return `Err` for any access that is not one byte. A
+//!   device error on the I/O path reaches the VM's exit handler and stops
+//!   the VM, and the IDE data port at 0x1F0 is conventionally read 16 or 32
+//!   bits at a time -- so the first real transfer would kill the guest.
+//!
+//! Fixing the second is mechanical. The first is not: one `Device` serves one
+//! contiguous base, and this controller spans two disjoint channels plus their
+//! control ports, so wiring it up means deciding how a device covers several
+//! ranges. That decision has not been made, which is why this says so instead
+//! of pretending the implementation is ready.
 //! I/O Ports:
 //! - Primary:   0x1F0-0x1F7 (command/data), 0x3F6 (control)
 //! - Secondary: 0x170-0x177 (command/data), 0x376 (control)

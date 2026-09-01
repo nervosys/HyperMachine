@@ -15,6 +15,19 @@
 //! [`AgentVM::effective_script_timeout`](crate::AgentVM::effective_script_timeout);
 //! `max_memory` and `allowed_syscalls` describe intent for a future
 //! process-isolated backend and constrain nothing today.
+//!
+//! # If you want confinement the operating system enforces
+//!
+//! That backend now exists, as a separate thing rather than as this one
+//! grown teeth: [`hv2_sandbox`] runs a program under limits a kernel keeps —
+//! cgroups and namespaces on Linux, a job object on Windows — and reports
+//! which of them *this host* can actually enforce, refusing to run rather
+//! than quietly dropping one. [`MicroVmSandbox`](crate::MicroVmSandbox) is
+//! the same interface backed by a whole guest.
+//!
+//! This type stays as it is because it does a different job: bounding a Rhai
+//! script that runs in this process, where there is no process boundary to
+//! enforce anything against.
 
 use crate::Result;
 use serde::{Deserialize, Serialize};

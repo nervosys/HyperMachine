@@ -165,17 +165,17 @@ async fn test_mmio_read_write() -> Result<()> {
     // Find and write to device
     let handle = manager.find_mmio_device(0x2000).await.unwrap();
 
-    handle.write_register(0, 0x12345678).await?;
-    let value = handle.read_register(0).await?;
+    handle.write_register(0, 0x12345678, 4).await?;
+    let value = handle.read_register(0, 4).await?;
     assert_eq!(value, 0x12345678);
 
     // Write to different offset
-    handle.write_register(4, 0xDEADBEEF).await?;
-    let value = handle.read_register(4).await?;
+    handle.write_register(4, 0xDEADBEEF, 4).await?;
+    let value = handle.read_register(4, 4).await?;
     assert_eq!(value, 0xDEADBEEF);
 
     // First value should be unchanged
-    let value = handle.read_register(0).await?;
+    let value = handle.read_register(0, 4).await?;
     assert_eq!(value, 0x12345678);
 
     Ok(())
@@ -198,8 +198,8 @@ async fn test_io_port_read_write() -> Result<()> {
     // Find and write to device
     let handle = manager.find_io_device(0x500).await.unwrap();
 
-    handle.write_register(0, 0xABCDEF00).await?;
-    let value = handle.read_register(0).await?;
+    handle.write_register(0, 0xABCDEF00, 4).await?;
+    let value = handle.read_register(0, 4).await?;
     assert_eq!(value, 0xABCDEF00);
 
     Ok(())
@@ -371,18 +371,18 @@ async fn test_multiple_devices() -> Result<()> {
 
     // Write to each device
     let serial_handle = manager.find_io_device(0x3F8).await.unwrap();
-    serial_handle.write_register(0, 0x41).await?;
+    serial_handle.write_register(0, 0x41, 4).await?;
 
     let timer_handle = manager.find_io_device(0x40).await.unwrap();
-    timer_handle.write_register(0, 100).await?;
+    timer_handle.write_register(0, 100, 4).await?;
 
     let video_handle = manager.find_mmio_device(0xA0000).await.unwrap();
-    video_handle.write_register(0, 0x12345678).await?;
+    video_handle.write_register(0, 0x12345678, 4).await?;
 
     // Verify each device
-    assert_eq!(serial_handle.read_register(0).await?, 0x41);
-    assert_eq!(timer_handle.read_register(0).await?, 100);
-    assert_eq!(video_handle.read_register(0).await?, 0x12345678);
+    assert_eq!(serial_handle.read_register(0, 4).await?, 0x41);
+    assert_eq!(timer_handle.read_register(0, 4).await?, 100);
+    assert_eq!(video_handle.read_register(0, 4).await?, 0x12345678);
 
     Ok(())
 }

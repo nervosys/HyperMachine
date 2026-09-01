@@ -238,6 +238,79 @@ struct VCpuTaskState {
     handle: JoinHandle<Result<()>>,
 }
 
+/// The [`InterruptSink`](crate::device::InterruptSink) a VM hands its devices.
+///
+/// A device raises into a queue rather than delivering directly, for two
+/// reasons: raising must not block, because it happens inside device code that
+/// may hold a lock the handler will want; and delivery needs the backend and
+/// an async context, which device code has neither of.
+#[derive(Debug)]
+struct QueuedInterrupts {
+    sender: tokio::sync::mpsc::UnboundedSender<(u8, IrqLevel)>,
+}
+
+/// What a queued interrupt asks the backend to do with the line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IrqLevel {
+    /// Assert and release, in that order.
+    Pulse,
+    /// Assert and hold, until a `Low` follows.
+    High,
+    /// Release a line held by a `High`.
+    Low,
+}
+
+impl crate::device::InterruptSink for QueuedInterrupts {
+    fn raise(&self, irq: u8) {
+        // A closed channel means the VM is gone. Nothing useful can be done
+        // about an interrupt for a VM that has stopped, and panicking inside a
+        // device because the machine shut down would be worse than dropping
+        // it, so this is deliberately quiet.
+        let _ = self.sender.send((irq, IrqLevel::Pulse));
+    }
+
+    fn assert_line(&self, irq: u8) {
+        let sent = self.sender.send((irq, IrqLevel::High)).is_ok();
+        tracing::trace!("queued IRQ {irq} high, sent={sent}");
+    }
+
+    fn deassert_line(&self, irq: u8) {
+        let sent = self.sender.send((irq, IrqLevel::Low)).is_ok();
+        tracing::trace!("queued IRQ {irq} low, sent={sent}");
+    }
+}
+
+/// Tells the delivery thread that a vsock packet is waiting for the guest.
+///
+/// The same shape and the same reason as [`QueuedInterrupts`]: the device
+/// cannot deliver its own packets, and the thread that can must not be woken
+/// from inside the device lock.
+#[derive(Debug)]
+struct QueuedPackets {
+    sender: std::sync::mpsc::Sender<()>,
+}
+
+impl crate::devices::virtio_vsock::PendingWake for QueuedPackets {
+    fn wake(&self) {
+        // A closed channel means the VM is gone; nothing useful follows from
+        // delivering a packet to a machine that has stopped.
+        let _ = self.sender.send(());
+    }
+}
+
+/// What one I/O access produced.
+///
+/// Two separate things, and conflating them is how a device interrupt gets
+/// dropped: the data an `IN` read, and the interrupt line the device is
+/// asserting as a result of the access.
+#[derive(Debug, Default)]
+pub struct IoOutcome {
+    /// Data and width to write back to the guest, for an `IN`.
+    pub input: Option<(u32, u8)>,
+    /// The interrupt line the device is asserting, if any.
+    pub interrupt: Option<u8>,
+}
+
 /// Virtual Machine
 pub struct VM {
     config: VMConfig,
@@ -245,6 +318,20 @@ pub struct VM {
     vcpus: Vec<Arc<VCpu>>,
     memory: Arc<GuestMemory>,
     devices: Arc<DeviceManager>,
+    /// Kernel command-line arguments added by devices attached after the boot
+    /// source was written down.
+    ///
+    /// A vsock window does not exist when a caller describes how to boot, so
+    /// the argument that tells the guest where to find it cannot be there
+    /// either. Applied in `provision`, where the image is loaded.
+    extra_cmdline: parking_lot::Mutex<Vec<String>>,
+    /// Interrupts devices raised on their own, waiting to be delivered.
+    ///
+    /// Taken by [`VM::launch`], which spawns the task that drains it, and
+    /// `None` afterwards so a second launch cannot start a second drainer
+    /// competing for the same queue.
+    interrupt_queue:
+        parking_lot::Mutex<Option<tokio::sync::mpsc::UnboundedReceiver<(u8, IrqLevel)>>>,
     pic: Arc<Pic8259>,
     backend: Arc<dyn HypervisorBackend>,
     exit_notify: Arc<Notify>,
@@ -269,6 +356,29 @@ pub struct VM {
     /// [`VM::set_image_registry`] to make a denied or revoked image fail to
     /// provision rather than merely be queryable.
     image_registry: RwLock<Option<Arc<crate::security::image_registry::ImageRegistry>>>,
+    /// The vsock device attached by [`VM::attach_vsock`], if any.
+    ///
+    /// Held here because the host side of a vsock connection is reached from
+    /// outside the device manager — an agent opening a channel to a program in
+    /// the guest needs the device itself, not an MMIO handle.
+    vsock: RwLock<Option<AttachedVsock>>,
+}
+
+/// A vsock device and where the guest will find it.
+///
+/// The address travels with the device because the kernel arguments have to
+/// name the window that was actually mapped; a VM attached at a non-default
+/// address would otherwise tell its guest to probe the default one.
+#[derive(Clone)]
+struct AttachedVsock {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>,
+    /// Kept so the host side can signal the used queue after it publishes.
+    ///
+    /// The device cannot do it itself: the interrupt belongs to the transport,
+    /// which owns the status bits a driver reads to find out why it woke.
+    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+    base_address: u64,
+    irq: u8,
 }
 
 impl VM {
@@ -333,6 +443,13 @@ impl VM {
         // Create device manager
         let devices = Arc::new(DeviceManager::new());
 
+        // Installed before any device can be registered, so every device has a
+        // way to raise an interrupt while the guest is not touching it.
+        let (interrupt_tx, interrupt_rx) = tokio::sync::mpsc::unbounded_channel();
+        devices.set_interrupt_sink(Arc::new(QueuedInterrupts {
+            sender: interrupt_tx,
+        }));
+
         // Create PIC (Intel 8259)
         let pic = Arc::new(Pic8259::new());
 
@@ -349,6 +466,8 @@ impl VM {
             vcpus,
             memory,
             devices,
+            extra_cmdline: parking_lot::Mutex::new(Vec::new()),
+            interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
             backend,
             exit_notify: Arc::new(Notify::new()),
@@ -359,6 +478,7 @@ impl VM {
             hv_vm: RwLock::new(None),
             run_task: RwLock::new(None),
             image_registry: RwLock::new(None),
+            vsock: RwLock::new(None),
         })
     }
 
@@ -401,7 +521,21 @@ impl VM {
         // happened to say first.
         let boot = match &self.config.boot {
             Some(source) => {
-                let loaded = source.load()?;
+                let mut loaded = source.load()?;
+
+                // The kernel's memory map is built from this and has no other
+                // source: a guest booted this way runs no BIOS to ask.
+                loaded.set_memory_size(self.config.memory_size);
+
+                // Devices attached after the boot source was described get
+                // their arguments on now. Without this a caller has to attach a
+                // device, ask what argument it needs, and go back and rewrite
+                // the command line -- and a caller who forgets gets a guest
+                // that boots perfectly and enumerates nothing, which reads as
+                // a broken device rather than a missing argument.
+                for arg in self.extra_cmdline.lock().iter() {
+                    loaded.append_cmdline(arg);
+                }
 
                 self.admit_boot_image(&loaded)?;
 
@@ -416,6 +550,27 @@ impl VM {
             }
             None => None,
         };
+
+        // A VM with a kernel to boot needs the legacy PC set, and until this
+        // ran here nothing attached it except the boot probe, by hand. So a VM
+        // created through a host had no console, no CMOS and no keyboard
+        // controller -- which is not a degraded guest but one that cannot reach
+        // userspace at all: its output goes nowhere and it spins on the first
+        // absent port it polls. Whatever the guest channel does, no agent can
+        // run in a guest that never gets that far.
+        //
+        // Only when there is something to boot. A VM with no boot source runs
+        // no guest code, and three emulated devices nothing will ever address
+        // are cost without a reader.
+        //
+        // `attach_absent` rather than `attach`: a caller who installed their
+        // own machine model before provisioning keeps it, and is not refused
+        // for having done the thing this is a default for.
+        if boot.is_some() {
+            crate::machine::Machine::legacy_pc()
+                .attach_absent(&self.devices)
+                .await?;
+        }
 
         // A boot source on a backend that cannot execute is the one case where
         // everything below succeeds and the guest still never runs. Say so here
@@ -433,6 +588,19 @@ impl VM {
             .backend
             .create_vm(self.config.vcpu_count, self.config.memory_size)
             .await?;
+
+        // The backend allocated the pages the guest actually runs in. Point the
+        // device model at them before anything is loaded or attached: until
+        // this happens every emulated device reads a buffer the guest never
+        // touches, and nothing says so, because the boot path writes through
+        // the backend and the guest boots either way.
+        if let Some(host_addr) = self.backend.guest_memory_host_addr() {
+            self.memory.adopt_backend_pages(host_addr)?;
+            tracing::debug!(
+                "VM '{}': device model now shares the backend's guest pages at {host_addr:#x}",
+                self.config.name
+            );
+        }
 
         tracing::info!(
             "Provisioned VM '{}' on the {} backend ({} vCPUs, {} MiB)",
@@ -543,6 +711,60 @@ impl VM {
         self.provision().await?;
         self.start().await?;
 
+        // Drain self-raised device interrupts for as long as the VM runs.
+        //
+        // Separate from the vCPU loop on purpose: that loop spends most of its
+        // time blocked inside KVM_RUN, which is exactly when a device needs to
+        // be able to interrupt. Delivering from there would mean an interrupt
+        // could only arrive once the guest had already exited for some other
+        // reason -- which is the limitation this replaces.
+        if let Some(mut queue) = self.interrupt_queue.lock().take() {
+            let vm = Arc::clone(self);
+            let handle = tokio::runtime::Handle::current();
+
+            // A dedicated OS thread, not a task on this runtime, and the
+            // reason is a deadlock rather than a preference.
+            //
+            // The vCPU loop calls `KVM_RUN`, which is a blocking ioctl: while
+            // the guest is running it does not return, and while the guest is
+            // *idle* it does not return for a long time, because KVM halts the
+            // vCPU in the kernel and waits there for an interrupt. As a task,
+            // that occupies a runtime worker for the whole of it.
+            //
+            // Deliver interrupts from another task on the same runtime and the
+            // two can meet in the middle: the guest is halted waiting for an
+            // interrupt, and the interrupt that would wake it is sitting in a
+            // queue behind a worker the guest itself is occupying. Nothing
+            // breaks -- the guest wakes on the next timer tick or console byte
+            // and finds the data that was there all along -- so it presents as
+            // latency of seconds, intermittently, which is a much harder thing
+            // to see than a hang.
+            std::thread::Builder::new()
+                .name(format!("hv2-irq-{}", vm.config.name))
+                .spawn(move || {
+                    while let Some((irq, level)) = queue.blocking_recv() {
+                        handle.block_on(async {
+                            match level {
+                                IrqLevel::Pulse => {
+                                    Self::pulse_irq(vm.backend.as_ref(), irq).await;
+                                }
+                                IrqLevel::High => {
+                                    Self::set_irq(vm.backend.as_ref(), irq, true).await;
+                                }
+                                IrqLevel::Low => {
+                                    Self::set_irq(vm.backend.as_ref(), irq, false).await;
+                                }
+                            }
+                        });
+                    }
+                })
+                .map_err(|e| {
+                    Error::Config(format!(
+                        "could not start the interrupt delivery thread: {e}"
+                    ))
+                })?;
+        }
+
         let vm = Arc::clone(self);
         let handle = tokio::spawn(async move {
             match vm.run().await {
@@ -562,6 +784,34 @@ impl VM {
         *self.run_task.write() = Some(handle);
 
         Ok(())
+    }
+
+    /// Step the guest one instruction at a time and report where it went.
+    ///
+    /// For a guest that produces nothing: it either faulted before it could,
+    /// or it is looping without ever exiting, and neither says anything on its
+    /// own. The trace ends at the first exit that is not a debug exit, and
+    /// `tail` holds the addresses leading up to it.
+    ///
+    /// Requires a provisioned VM and does not start the run loop -- this drives
+    /// the vCPU directly, so nothing else may be running it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidState`] if the VM has not been provisioned, and
+    /// [`Error::NotSupported`] on a backend that cannot single-step.
+    pub async fn single_step_trace(
+        &self,
+        max_steps: u64,
+    ) -> Result<crate::hypervisor::SingleStepTrace> {
+        if self.hv_vm.read().is_none() {
+            return Err(Error::InvalidState(
+                "provision the VM before tracing it; there is no vCPU to step yet".into(),
+            ));
+        }
+        self.backend
+            .single_step_trace(&self.vcpus[0], max_steps)
+            .await
     }
 
     /// Start the VM
@@ -768,6 +1018,240 @@ impl VM {
     /// Get PIC (interrupt controller)
     pub fn pic(&self) -> Arc<Pic8259> {
         Arc::clone(&self.pic)
+    }
+
+    /// Attach a virtio-vsock device, giving the guest CID `guest_cid`.
+    ///
+    /// This is what a host process needs in order to talk to a program running
+    /// inside the guest: it registers a
+    /// [`VirtioMmioTransport`](crate::devices::VirtioMmioTransport) in guest
+    /// physical address space at [`Self::VSOCK_MMIO_BASE`], so a guest driver
+    /// can find it, and keeps the device so [`Self::vsock`] can hand it back.
+    ///
+    /// Attaching a device is not the same as a guest using it. The guest kernel
+    /// must be told the window exists — see [`Self::vsock_kernel_args`] — and
+    /// something in the guest must be listening. Neither is knowable from here.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a vsock device is already attached, if `guest_cid`
+    /// is one of the reserved context IDs, or if the register window would
+    /// overlap guest RAM.
+    pub async fn attach_vsock(
+        self: &Arc<Self>,
+        guest_cid: u64,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.attach_vsock_at(guest_cid, Self::VSOCK_MMIO_BASE, Self::VSOCK_IRQ)
+            .await
+    }
+
+    /// Guest physical address of the vsock register window, by default.
+    ///
+    /// 3.25 GiB: above any conventional low-memory layout and below the 4 GiB
+    /// line, which is where a guest expects MMIO to live.
+    pub const VSOCK_MMIO_BASE: u64 = 0xd000_0000;
+
+    /// Interrupt line the vsock device raises, by default.
+    pub const VSOCK_IRQ: u8 = 5;
+
+    /// Attach a vsock device at an explicit address and interrupt line.
+    ///
+    /// The general form of [`Self::attach_vsock`], for a guest whose memory
+    /// map does not leave the default window free.
+    pub async fn attach_vsock_at(
+        self: &Arc<Self>,
+        guest_cid: u64,
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+        use crate::devices::virtio_vsock::VsockDevice;
+
+        if self.vsock.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a vsock device; a second would give the guest two \
+                 devices claiming the same context ID"
+                    .to_string(),
+            ));
+        }
+
+        // The register window is not RAM. Placing it inside the guest's memory
+        // would give two different meanings to one address, and the failure
+        // would surface as memory corruption rather than as a bad address.
+        if base_address < self.memory.total_size() {
+            return Err(Error::Device(format!(
+                "vsock register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioMmioTransport::new("virtio-vsock", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+
+        self.devices
+            .register_device("virtio-vsock", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-vsock".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+
+        // Deliver packets as they are queued, rather than when a caller
+        // remembers to ask.
+        //
+        // Queueing is not delivering: a host-side packet sits in the device
+        // until something moves it into a receive buffer the driver posted and
+        // signals the used queue. The boot probe did that by hand after every
+        // step. Nothing else did -- so `AgentVM::exec_in_guest`, the published
+        // way to run a command in a guest, queued a connection request no guest
+        // ever saw and then timed out saying the guest was not running.
+        //
+        // A dedicated OS thread for the same reason interrupt delivery has one:
+        // the vCPU loop blocks a runtime worker inside `KVM_RUN`, and a
+        // delivery task behind it would be starved exactly when the guest is
+        // idle and waiting to be told something.
+        // Tell the guest where to find this, by putting it on the command
+        // line rather than by reporting it and hoping the caller passes it on.
+        self.extra_cmdline
+            .lock()
+            .push(Self::vsock_kernel_args_for(base_address, irq));
+
+        let (packet_tx, packet_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
+
+        let pump_vm = Arc::clone(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-vsock-{}", self.config.name))
+            .spawn(move || {
+                while packet_rx.recv().is_ok() {
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_vsock().await {
+                            tracing::debug!("vsock: a queued packet could not be delivered: {e}");
+                        }
+                    });
+                }
+            })
+            .map_err(|e| {
+                Error::Config(format!("could not start the vsock delivery thread: {e}"))
+            })?;
+
+        *self.vsock.write() = Some(AttachedVsock {
+            device: device.clone(),
+            transport,
+            base_address,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': vsock device attached at {:#x} (guest CID {guest_cid}, IRQ {irq})",
+            self.config.name,
+            base_address
+        );
+        Ok(device)
+    }
+
+    /// Publish anything the host has queued for the guest, and tell it.
+    ///
+    /// Two steps that have to happen together and in this order: move pending
+    /// packets into the receive buffers the driver posted, then raise the
+    /// used-queue interrupt so the driver looks. Publishing without signalling
+    /// leaves the data sitting in a ring the guest has no reason to read, and
+    /// signalling without publishing wakes it to find nothing.
+    ///
+    /// Returns whether anything was published.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error, or a failure to raise the interrupt.
+    pub async fn notify_vsock(&self) -> Result<bool> {
+        let attached = {
+            let guard = self.vsock.read();
+            match guard.as_ref() {
+                Some(vsock) => (vsock.device.clone(), vsock.transport.clone()),
+                None => return Ok(false),
+            }
+        };
+
+        let published = {
+            let mut device = attached.0.lock();
+            // Two different reasons nothing moves, and they need telling
+            // apart: no packet queued, or no receive buffer from the driver.
+            let pending = device.has_pending();
+            let queue = &crate::devices::VirtioMmioDevice::queues(&mut *device)[0];
+            tracing::debug!(
+                "vsock: pending={pending} rx_ready={} rx_size={} rx_desc={:#x}",
+                queue.is_ready(),
+                queue.size(),
+                queue.desc_addr()
+            );
+            tracing::debug!(
+                "vsock: rx_avail={:#x} rx_used={:#x} avail_idx={:?}",
+                queue.avail_addr(),
+                queue.used_addr(),
+                queue.avail_idx(&self.memory)
+            );
+            device.deliver_pending(&self.memory)?
+        };
+        if published {
+            attached.1.read().await.signal_used_queue()?;
+        }
+        Ok(published)
+    }
+
+    /// The vsock device attached to this VM, if any.
+    ///
+    /// `None` means no channel to the guest exists — which is distinct from a
+    /// channel with nothing listening on the other end. A caller reporting on
+    /// guest connectivity needs to keep the two apart, for the same reason the
+    /// console reports `attached` separately from its contents.
+    pub fn vsock(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.vsock.read().as_ref().map(|v| v.device.clone())
+    }
+
+    /// Kernel command-line arguments that make a Linux guest probe the vsock
+    /// device attached by [`Self::attach_vsock`].
+    ///
+    /// Returns `None` when no device is attached. Without this the window is
+    /// mapped and no driver ever looks at it: virtio-mmio has no enumeration,
+    /// so a guest is told where to look or it does not look.
+    pub fn vsock_kernel_args(&self) -> Option<String> {
+        self.vsock
+            .read()
+            .as_ref()
+            .map(|v| Self::vsock_kernel_args_for(v.base_address, v.irq))
+    }
+
+    /// The argument a guest needs to find a vsock window at `base_address`.
+    ///
+    /// Public because it is the only place this string is built. A caller that
+    /// wants to describe a VM before one exists -- a tool surface rendering a
+    /// boot command line, say -- must not format it a second time: two
+    /// producers of one string drift, and the failure is a guest that probes an
+    /// address with nothing at it and reports nothing at all.
+    #[must_use]
+    pub fn vsock_kernel_args_for(base_address: u64, irq: u8) -> String {
+        format!("virtio_mmio.device=4K@{base_address:#x}:{irq}")
+    }
+
+    /// Kernel command-line arguments this VM will add when it boots.
+    ///
+    /// Devices attached after the boot source was described add what a guest
+    /// needs in order to find them, and that happens when the image is loaded
+    /// -- so the configured [`BootSource`](crate::BootSource) does not
+    /// show it. A caller reporting what a guest will be booted with needs both.
+    #[must_use]
+    pub fn extra_kernel_args(&self) -> Vec<String> {
+        self.extra_cmdline.lock().clone()
     }
 
     /// Wait for VM exit
@@ -1128,6 +1612,18 @@ impl VM {
                     phys_addr, &mut data, len, is_write, vm_name, devices, event_bus,
                 )
                 .await?;
+
+                // `data` is a copy taken out of the exit, so a read that is not
+                // written back is a read the guest never sees. It gets whatever
+                // was already in the shared page instead -- which is how a
+                // virtio driver came to read a stale magic number and refuse
+                // the device.
+                if !is_write {
+                    backend
+                        .set_mmio_result(vcpu, &data[..len.min(data.len() as u32) as usize])
+                        .await?;
+                }
+
                 Ok(true)
             }
 
@@ -1144,8 +1640,12 @@ impl VM {
                 .await?;
 
                 // Write IO IN data back to guest RAX
-                if let Some((in_data, in_size)) = io_result {
+                if let Some((in_data, in_size)) = io_result.input {
                     backend.set_io_result(vcpu, in_data, in_size).await?;
+                }
+
+                if let Some(irq) = io_result.interrupt {
+                    Self::pulse_irq(backend, irq).await;
                 }
 
                 Ok(true)
@@ -1176,17 +1676,29 @@ impl VM {
                     error_code
                 );
 
-                // Fatal exceptions (double fault, triple fault) should stop the VM
-                if vector == 8 {
-                    tracing::error!("Double fault — stopping VM");
-                    *state.write() = VMState::Stopped;
-                    exit_notify.notify_waiters();
-                    return Ok(false);
-                }
-
-                // Re-inject the exception into the guest so its IDT handler runs
-                backend.inject_exception(vcpu, vector, error_code).await?;
-                Ok(true)
+                // Any exception that reaches userspace is fatal to this VM,
+                // not just a double fault.
+                //
+                // There is an injection path below and it is the wrong one:
+                // `inject_exception` defaults to `inject_interrupt`, which
+                // delivers a *hardware interrupt* carrying the exception's
+                // vector number. That is not the same as delivering the
+                // exception -- the faulting instruction is not re-run and the
+                // guest's fault handler never sees a fault. So the vCPU
+                // resumed, re-executed the same instruction, took the same
+                // exception, and did it again: roughly 60,000 exits a second,
+                // the VM still reported as Running, and nothing saying why.
+                //
+                // Stopping loses nothing that resuming would have recovered
+                // and it names the vector. Real injection needs
+                // KVM_SET_VCPU_EVENTS with the exception fields set; when that
+                // exists, this becomes the fallback for when it fails.
+                tracing::error!(
+                    "Guest exception vector={vector} error_code={error_code:?}: it cannot be emulated, and the only injection path here delivers an interrupt rather than a fault, so stopping instead of re-executing it forever"
+                );
+                *state.write() = VMState::Stopped;
+                exit_notify.notify_waiters();
+                Ok(false)
             }
 
             VmExit::Debug { info } => {
@@ -1259,15 +1771,15 @@ impl VM {
                     4 => u32::from_le_bytes([data[0], data[1], data[2], data[3]]),
                     8 => {
                         let low = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-                        device.write_register(offset, low).await?;
+                        device.write_register(offset, low, 4).await?;
                         let high = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-                        device.write_register(offset + 4, high).await?;
+                        device.write_register(offset + 4, high, 4).await?;
                         return Ok(());
                     }
                     _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
                 };
 
-                device.write_register(offset, value).await?;
+                device.write_register(offset, value, len as u8).await?;
 
                 event_bus.publish(VmEvent::memory_access(
                     vm_name.to_string(),
@@ -1283,7 +1795,7 @@ impl VM {
 
             if let Some(device) = devices.find_mmio_device(phys_addr).await {
                 let offset = phys_addr - device.base_address();
-                let value = device.read_register(offset).await?;
+                let value = device.read_register(offset, len as u8).await?;
 
                 match len {
                     1 => data[0] = value as u8,
@@ -1296,8 +1808,8 @@ impl VM {
                         data[..4].copy_from_slice(&bytes);
                     }
                     8 => {
-                        let low = device.read_register(offset).await?;
-                        let high = device.read_register(offset + 4).await?;
+                        let low = device.read_register(offset, 4).await?;
+                        let high = device.read_register(offset + 4, 4).await?;
                         data[..4].copy_from_slice(&low.to_le_bytes());
                         data[4..8].copy_from_slice(&high.to_le_bytes());
                     }
@@ -1323,6 +1835,42 @@ impl VM {
     ///
     /// Returns `Some((data, size))` for IO IN operations so the caller can
     /// write the result back to guest RAX via `set_io_result()`.
+    /// Assert an interrupt line and release it again.
+    ///
+    /// A pulse rather than a level, because the conditions this is called for
+    /// are edges in practice: a UART that transmits instantly is *always*
+    /// ready to send, so holding the line high would assert it forever and the
+    /// guest would take the same interrupt until it masked the source.
+    ///
+    /// A backend that cannot drive a line is not an error worth stopping a VM
+    /// for -- it means this guest gets no device interrupts, which is the
+    /// situation that already existed -- so it is logged once per access at
+    /// debug level and the guest runs on.
+    async fn pulse_irq(backend: &dyn HypervisorBackend, irq: u8) {
+        let line = u32::from(irq);
+        tracing::trace!("pulsing IRQ {line}");
+        if let Err(e) = backend.set_irq_line(line, true).await {
+            tracing::debug!("IRQ {line} could not be asserted: {e}");
+            return;
+        }
+        if let Err(e) = backend.set_irq_line(line, false).await {
+            tracing::debug!("IRQ {line} could not be released: {e}");
+        }
+    }
+
+    /// Drive an interrupt line to a level and leave it there.
+    ///
+    /// The level-triggered half of the sink. A virtio device holds its line
+    /// until the driver writes `InterruptACK`; releasing it earlier, as a
+    /// pulse does, can drop the interrupt between one delivery and the next.
+    async fn set_irq(backend: &dyn HypervisorBackend, irq: u8, level: bool) {
+        let line = u32::from(irq);
+        tracing::trace!("IRQ {line} -> {}", u8::from(level));
+        if let Err(e) = backend.set_irq_line(line, level).await {
+            tracing::debug!("IRQ {line} could not be driven to {level}: {e}");
+        }
+    }
+
     async fn handle_io_static(
         port: u16,
         direction: IoDirection,
@@ -1332,32 +1880,42 @@ impl VM {
         devices: &DeviceManager,
         pic: &Pic8259,
         event_bus: &EventBus,
-    ) -> Result<Option<(u32, u8)>> {
+    ) -> Result<IoOutcome> {
         match direction {
             IoDirection::Out => {
                 tracing::debug!("IO OUT: port={:#x} data={:#x}", port, data);
 
+                let mut interrupt = None;
                 if pic.handles_port(port) {
                     pic.write_port(port, data as u8).await?;
                 } else if let Some(device) = devices.find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await?;
+                    device.write_register(offset, data, size).await?;
+                    // Asked immediately after the access, because that is when
+                    // the condition changes: writing a byte to a UART makes it
+                    // ready to send the next one.
+                    interrupt = device.pending_interrupt().await;
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
                 }
 
                 event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, true));
-                Ok(None)
+                Ok(IoOutcome {
+                    input: None,
+                    interrupt,
+                })
             }
 
             IoDirection::In => {
                 tracing::debug!("IO IN: port={:#x}", port);
 
+                let mut interrupt = None;
                 if pic.handles_port(port) {
                     data = pic.read_port(port).await? as u32;
                 } else if let Some(device) = devices.find_io_device(port).await {
                     let offset = (port - device.base_port()) as u64;
-                    data = device.read_register(offset).await?;
+                    data = device.read_register(offset, size).await?;
+                    interrupt = device.pending_interrupt().await;
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
                     data = 0xFF;
@@ -1365,7 +1923,10 @@ impl VM {
 
                 event_bus.publish(VmEvent::io_operation(vm_name.to_string(), port, false));
                 tracing::debug!("IO IN result: {:#x}", data);
-                Ok(Some((data, size)))
+                Ok(IoOutcome {
+                    input: Some((data, size)),
+                    interrupt,
+                })
             }
         }
     }
@@ -1438,6 +1999,15 @@ impl VM {
                 stats.mmio_exits.fetch_add(1, Ordering::Relaxed);
                 self.handle_mmio_exit(vcpu, phys_addr, &mut data, len, is_write)
                     .await?;
+
+                // Same as the static path: without this the guest reads stale
+                // bytes rather than what the device produced.
+                if !is_write {
+                    self.backend
+                        .set_mmio_result(vcpu, &data[..len.min(data.len() as u32) as usize])
+                        .await?;
+                }
+
                 Ok(true)
             }
 
@@ -1476,17 +2046,27 @@ impl VM {
                     error_code
                 );
 
-                // Fatal exceptions (double fault) should stop the VM
-                if vector == 8 {
-                    tracing::error!("Double fault — stopping VM");
-                    return Ok(false);
-                }
-
-                // Re-inject the exception into the guest so its IDT handler runs
-                self.backend
-                    .inject_exception(vcpu, vector, error_code)
-                    .await?;
-                Ok(true)
+                // Any exception that reaches userspace is fatal to this VM,
+                // not just a double fault.
+                //
+                // There is an injection path below and it is the wrong one:
+                // `inject_exception` defaults to `inject_interrupt`, which
+                // delivers a *hardware interrupt* carrying the exception's
+                // vector number. That is not the same as delivering the
+                // exception -- the faulting instruction is not re-run and the
+                // guest's fault handler never sees a fault. So the vCPU
+                // resumed, re-executed the same instruction, took the same
+                // exception, and did it again: roughly 60,000 exits a second,
+                // the VM still reported as Running, and nothing saying why.
+                //
+                // Stopping loses nothing that resuming would have recovered
+                // and it names the vector. Real injection needs
+                // KVM_SET_VCPU_EVENTS with the exception fields set; when that
+                // exists, this becomes the fallback for when it fails.
+                tracing::error!(
+                    "Guest exception vector={vector} error_code={error_code:?}: it cannot be emulated, and the only injection path here delivers an interrupt rather than a fault, so stopping instead of re-executing it forever"
+                );
+                Ok(false)
             }
 
             VmExit::Debug { info } => {
@@ -1560,15 +2140,15 @@ impl VM {
                     8 => {
                         // For 8-byte writes, we'll do two 4-byte writes
                         let low = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
-                        device.write_register(offset, low).await?;
+                        device.write_register(offset, low, 4).await?;
                         let high = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-                        device.write_register(offset + 4, high).await?;
+                        device.write_register(offset + 4, high, 4).await?;
                         return Ok(());
                     }
                     _ => return Err(Error::InvalidMemoryAccess { address: phys_addr }),
                 };
 
-                device.write_register(offset, value).await?;
+                device.write_register(offset, value, len as u8).await?;
 
                 // Publish event
                 self.event_bus.publish(VmEvent::memory_access(
@@ -1586,7 +2166,7 @@ impl VM {
 
             if let Some(device) = self.devices.find_mmio_device(phys_addr).await {
                 let offset = phys_addr - device.base_address();
-                let value = device.read_register(offset).await?;
+                let value = device.read_register(offset, len as u8).await?;
 
                 // Write value into data buffer
                 match len {
@@ -1601,8 +2181,8 @@ impl VM {
                     }
                     8 => {
                         // For 8-byte reads, we'll do two 4-byte reads
-                        let low = device.read_register(offset).await?;
-                        let high = device.read_register(offset + 4).await?;
+                        let low = device.read_register(offset, 4).await?;
+                        let high = device.read_register(offset + 4, 4).await?;
                         data[..4].copy_from_slice(&low.to_le_bytes());
                         data[4..8].copy_from_slice(&high.to_le_bytes());
                     }
@@ -1645,7 +2225,10 @@ impl VM {
                 } else if let Some(device) = self.devices.find_io_device(port).await {
                     // Device I/O write
                     let offset = (port - device.base_port()) as u64;
-                    device.write_register(offset, data).await?;
+                    device.write_register(offset, data, size).await?;
+                    if let Some(irq) = device.pending_interrupt().await {
+                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                    }
                 } else {
                     tracing::debug!("IO OUT to unhandled port: {:#x}", port);
                 }
@@ -1664,7 +2247,10 @@ impl VM {
                 } else if let Some(device) = self.devices.find_io_device(port).await {
                     // Device I/O read
                     let offset = (port - device.base_port()) as u64;
-                    data = device.read_register(offset).await?;
+                    data = device.read_register(offset, size).await?;
+                    if let Some(irq) = device.pending_interrupt().await {
+                        Self::pulse_irq(self.backend.as_ref(), irq).await;
+                    }
                 } else {
                     tracing::debug!("IO IN from unhandled port: {:#x}", port);
                     data = 0xFF; // Return 0xFF for unmapped ports
@@ -1769,6 +2355,125 @@ mod tests {
                 None
             }
         }
+    }
+
+    /// A small VM for the vsock attachment tests.
+    /// An `Arc` because attaching a device gives the VM a delivery thread that
+    /// outlives the call and has to hold the machine it delivers to.
+    fn vsock_vm() -> Option<Arc<VM>> {
+        vm_or_skip(VMConfig {
+            name: "vsock-vm".to_string(),
+            vcpu_count: 1,
+            memory_size: 64 * 1024 * 1024,
+            ..Default::default()
+        })
+        .map(Arc::new)
+    }
+
+    #[tokio::test]
+    async fn a_vm_has_no_vsock_device_until_one_is_attached() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        // Nothing attaches a channel to the guest automatically, and a caller
+        // must be able to tell "no channel" from "a channel with nothing
+        // listening".
+        assert!(vm.vsock().is_none());
+        assert!(vm.vsock_kernel_args().is_none());
+
+        let device = vm.attach_vsock(3).await.expect("attach");
+        assert_eq!(device.lock().guest_cid(), 3);
+        assert!(vm.vsock().is_some());
+    }
+
+    #[tokio::test]
+    async fn attaching_a_vsock_device_maps_it_where_the_guest_will_look() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("attach");
+
+        // virtio-mmio has no enumeration: the window is mapped and the kernel
+        // arguments name it, or no driver ever probes it.
+        let args = vm.vsock_kernel_args().expect("kernel args");
+        assert_eq!(args, "virtio_mmio.device=4K@0xd0000000:5");
+
+        // The MMIO exit path has to find it, or the mapping is decoration.
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::VSOCK_MMIO_BASE)
+            .await
+            .expect("the window should be registered");
+        assert_eq!(handle.device_name(), "virtio-vsock");
+        assert_eq!(
+            handle.read_register(0, 4).await.expect("magic"),
+            crate::devices::virtio_mmio::VIRTIO_MMIO_MAGIC
+        );
+    }
+
+    #[tokio::test]
+    async fn a_custom_window_is_the_one_the_guest_is_told_about() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock_at(7, 0xe000_0000, 9).await.expect("attach");
+
+        // Reporting the default window here would send the guest driver to an
+        // address nothing is mapped at.
+        assert_eq!(
+            vm.vsock_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xe0000000:9")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_vsock_device_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("attach");
+
+        // Two devices would give the guest two claims on one context ID, and
+        // the host two channels it cannot tell apart.
+        let err = vm.attach_vsock(4).await.expect_err("a second must refuse");
+        assert!(
+            err.to_string().contains("already has a vsock device"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_register_window_inside_guest_ram_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        // One address would mean two things, and the symptom would be memory
+        // corruption rather than a bad address.
+        let err = vm
+            .attach_vsock_at(3, 0x1000, 5)
+            .await
+            .expect_err("an overlapping window must refuse");
+        assert!(
+            err.to_string().contains("overlaps"),
+            "unexpected error: {err}"
+        );
+        assert!(
+            vm.vsock().is_none(),
+            "a refused attach leaves nothing behind"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_reserved_guest_context_id_is_refused() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+
+        assert!(vm.attach_vsock(2).await.is_err(), "CID 2 is the host");
+        assert!(vm.vsock().is_none());
+        assert!(vm.attach_vsock(3).await.is_ok());
     }
 
     #[tokio::test]

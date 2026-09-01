@@ -1,7 +1,10 @@
 //! Cgroup Resource Controllers
 //!
-//! This module provides cgroup v1 and v2 resource controller support
-//! for container resource isolation and limits.
+//! This module models cgroup v1 and v2 resource controller types -- it does
+//! not write to a cgroup filesystem or enforce any limit. See
+//! `container::runtime` for what the container module as a whole does and
+//! does not do; for cgroup limits the kernel actually enforces, see
+//! `hv2-sandbox`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;

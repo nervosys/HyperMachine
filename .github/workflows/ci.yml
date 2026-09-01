@@ -44,7 +44,7 @@ jobs:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Run cargo check
-              run: cargo check --workspace --all-targets --exclude hv1-core --exclude hv1-boot
+              run: cargo check --workspace --all-targets
 
     test:
         name: Test
@@ -75,7 +75,7 @@ jobs:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Run tests
-              run: cargo test --workspace --exclude hv2-core --exclude hv1-core --exclude hv1-boot
+              run: cargo test --workspace --exclude hv2-core
 
     test-core:
         name: Test Core (Linux only)
@@ -107,7 +107,7 @@ jobs:
               run: cargo test -p hv2-core
 
             - name: Run doc tests
-              run: cargo test --doc --workspace --exclude hv1-core --exclude hv1-boot
+              run: cargo test --doc --workspace
 
     test-core-windows:
         name: Test Core (Windows)
@@ -186,7 +186,7 @@ jobs:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Check MSRV compatibility
-              run: cargo check --workspace --all-targets --exclude hv1-core --exclude hv1-boot
+              run: cargo check --workspace --all-targets
 
     fmt:
         name: Rustfmt
@@ -231,7 +231,7 @@ jobs:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Run clippy
-              run: cargo clippy --workspace --all-targets --exclude hv1-core --exclude hv1-boot -- -D warnings
+              run: cargo clippy --workspace --all-targets -- -D warnings
 
     doc:
         name: Documentation
@@ -248,7 +248,7 @@ jobs:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
             - name: Build documentation
-              run: cargo doc --workspace --no-deps --exclude hv1-core --exclude hv1-boot
+              run: cargo doc --workspace --no-deps
               env:
                   RUSTDOCFLAGS: -D warnings
 
@@ -370,7 +370,7 @@ jobs:
             - name: Check hv1-boot (x86_64-unknown-none)
               continue-on-error: true
               run: >
-                  cargo +nightly-2026-08-17 check -p hv1-boot
+                  cargo +nightly-2026-08-17 check --manifest-path crates/hv1-boot/Cargo.toml
                   --target x86_64-unknown-none
                   -Zbuild-std=core,alloc
                   -Zbuild-std-features=compiler-builtins-mem

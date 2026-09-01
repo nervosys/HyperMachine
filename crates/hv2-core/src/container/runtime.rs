@@ -1,7 +1,28 @@
-//! OCI Container Runtime Interface
+//! OCI container types.
 //!
-//! This module provides OCI-compatible container runtime support for
-//! container-optimized VM execution.
+//! # This models the OCI runtime spec; it does not implement it
+//!
+//! Everything here is a type definition and a state machine over those types:
+//! [`ContainerSpec`] and its parts mirror the OCI configuration schema, and
+//! [`Container`] tracks the lifecycle a real runtime would drive. None of it
+//! creates a namespace, writes a cgroup, or starts a process.
+//!
+//! That distinction used to be invisible from the outside.
+//! [`ContainerRuntime::start`] fabricated a PID -- `1000 + n` -- and marked the
+//! container `Running`, so a caller received a plausible-looking container that
+//! confined nothing and contained no process. It now refuses instead, because a
+//! runtime that reports success without running anything is worse than one that
+//! says it cannot.
+//!
+//! [`Container::start`] is unchanged and still honest: it takes a PID from its
+//! caller, so whoever supplies one is the party that knows it is real.
+//!
+//! # For confinement that is enforced
+//!
+//! Use `hv2-sandbox`. It runs a program under limits the operating system
+//! keeps -- cgroup v2 and namespaces on Linux, job objects on Windows -- and
+//! reports which of them the host can actually enforce, refusing rather than
+//! silently dropping one. See `docs/SANDBOXES.md`.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -532,6 +553,11 @@ pub enum RuntimeError {
     ResourceError(String),
     /// I/O error
     IoError(String),
+    /// The operation needs a real runtime, and this module is types only.
+    ///
+    /// Distinct from every other variant here: those describe something that
+    /// went wrong, and this describes something that was never built.
+    NotImplemented(&'static str),
 }
 
 impl std::fmt::Display for RuntimeError {
@@ -542,6 +568,11 @@ impl std::fmt::Display for RuntimeError {
             Self::InvalidState(state, op) => {
                 write!(f, "Cannot {} container in {:?} state", op, state)
             }
+            Self::NotImplemented(what) => write!(
+                f,
+                "{what} is not implemented: this module models the OCI spec but has no \
+                 runtime behind it. Use hv2-sandbox for confinement the OS enforces"
+            ),
             Self::InvalidSpec(msg) => write!(f, "Invalid spec: {}", msg),
             Self::NamespaceError(msg) => write!(f, "Namespace error: {}", msg),
             Self::ResourceError(msg) => write!(f, "Resource error: {}", msg),
@@ -803,11 +834,21 @@ impl ContainerRuntime {
     }
 
     /// Start a container
+    /// Start a container.
+    ///
+    /// # Always returns an error
+    ///
+    /// This module has no runtime behind it. Until it does, starting a
+    /// container is something it cannot do, and it says so.
+    ///
+    /// It used to invent a PID (`1000 + n`) and mark the container `Running`,
+    /// which meant a caller could not tell this apart from a working runtime:
+    /// the state was right, the PID was plausible, and nothing was confined or
+    /// even executing. Resolving the container by `id` still happens first, so
+    /// an unknown container is still reported as unknown.
     pub fn start(&self, id: &str) -> RuntimeResult<()> {
-        let container = self.get(id)?;
-        // In real implementation, would fork/exec and setup namespaces
-        // For now, simulate with a PID
-        container.start(1000 + self.container_count.load(Ordering::Relaxed) as u32)
+        let _ = self.get(id)?;
+        Err(RuntimeError::NotImplemented("starting a container"))
     }
 
     /// Stop a container
@@ -819,14 +860,23 @@ impl ContainerRuntime {
     }
 
     /// Kill a container
+    /// Signal a container.
+    ///
+    /// Refuses unless the container is running. It used to return `Ok(())` for
+    /// a container in any other state -- reporting that a signal had been
+    /// delivered to a process that did not exist, which is the same defect as
+    /// the fabricated PID in [`Self::start`] wearing different clothes.
+    ///
+    /// Note that no signal is sent even when this succeeds: there is no
+    /// process behind a [`Container`] this module started, because it cannot
+    /// start one. What it does is move the state machine.
     pub fn kill(&self, id: &str, signal: i32) -> RuntimeResult<()> {
         let container = self.get(id)?;
-        // In real implementation, would send signal to container process
-        let _ = signal;
-        if container.state() == ContainerState::Running {
-            container.stop(128 + signal)?;
+        let state = container.state();
+        if state != ContainerState::Running {
+            return Err(RuntimeError::InvalidState(state, "kill"));
         }
-        Ok(())
+        container.stop(128 + signal)
     }
 
     /// Delete a container
@@ -1138,73 +1188,73 @@ mod tests {
     }
 
     #[test]
-    fn test_runtime_start_stop() {
+    fn starting_a_container_is_refused_rather_than_faked() {
         let runtime = ContainerRuntime::new();
-        let spec = ContainerSpec::default();
-
         runtime
-            .create("test1", PathBuf::from("/bundle"), spec)
+            .create("test1", PathBuf::from("/bundle"), ContainerSpec::default())
             .unwrap();
-        runtime.start("test1").unwrap();
+
+        // This used to invent PID 1000+n and report Running. A caller had no
+        // way to tell that apart from a working runtime: right state,
+        // plausible PID, nothing confined and nothing executing.
+        let err = runtime
+            .start("test1")
+            .expect_err("there is no runtime behind this module");
+        assert!(matches!(err, RuntimeError::NotImplemented(_)), "got: {err}");
+        assert!(err.to_string().contains("hv2-sandbox"), "got: {err}");
 
         let container = runtime.get("test1").unwrap();
-        assert_eq!(container.state(), ContainerState::Running);
-
-        runtime.stop("test1", Duration::from_secs(10)).unwrap();
-        assert_eq!(container.state(), ContainerState::Stopped);
+        assert_eq!(
+            container.state(),
+            ContainerState::Created,
+            "a refused start must not move the container"
+        );
+        assert_eq!(container.pid(), None, "no PID was invented");
     }
 
     #[test]
-    fn test_runtime_pause_resume() {
-        let runtime = ContainerRuntime::new();
-        let spec = ContainerSpec::default();
+    fn the_container_state_machine_runs_on_a_caller_supplied_pid() {
+        // Container::start takes a PID rather than inventing one, so whoever
+        // supplies it is the party that knows it is real. That makes this half
+        // honest and worth testing directly, unlike the runtime wrapper.
+        let container = Container::new("test1", PathBuf::from("/bundle"), ContainerSpec::default());
+        container.mark_created().unwrap();
+        container.start(4242).unwrap();
+        assert_eq!(container.pid(), Some(4242));
 
-        runtime
-            .create("test1", PathBuf::from("/bundle"), spec)
-            .unwrap();
-        runtime.start("test1").unwrap();
-        runtime.pause("test1").unwrap();
-
-        let container = runtime.get("test1").unwrap();
+        container.pause().unwrap();
         assert_eq!(container.state(), ContainerState::Paused);
-
-        runtime.resume("test1").unwrap();
+        container.resume().unwrap();
         assert_eq!(container.state(), ContainerState::Running);
     }
 
     #[test]
-    fn test_runtime_delete() {
+    fn a_created_container_can_be_deleted() {
         let runtime = ContainerRuntime::new();
-        let spec = ContainerSpec::default();
-
         runtime
-            .create("test1", PathBuf::from("/bundle"), spec)
+            .create("test1", PathBuf::from("/bundle"), ContainerSpec::default())
             .unwrap();
-        runtime.start("test1").unwrap();
 
-        // Can't delete running container
-        let result = runtime.delete("test1");
-        assert!(result.is_err());
-
-        runtime.stop("test1", Duration::from_secs(10)).unwrap();
         runtime.delete("test1").unwrap();
         assert_eq!(runtime.count(), 0);
+        assert!(runtime.delete("test1").is_err(), "and only once");
     }
 
     #[test]
-    fn test_runtime_kill() {
+    fn killing_a_container_that_never_started_invents_no_exit_code() {
         let runtime = ContainerRuntime::new();
-        let spec = ContainerSpec::default();
-
         runtime
-            .create("test1", PathBuf::from("/bundle"), spec)
+            .create("test1", PathBuf::from("/bundle"), ContainerSpec::default())
             .unwrap();
-        runtime.start("test1").unwrap();
-        runtime.kill("test1", 9).unwrap();
+
+        // Nothing can reach Running through this runtime, so a kill has
+        // nothing to signal. It used to report exit 137 regardless.
+        let err = runtime.kill("test1", 9).expect_err("nothing is running");
+        assert!(matches!(err, RuntimeError::InvalidState(..)), "got: {err}");
 
         let container = runtime.get("test1").unwrap();
-        assert_eq!(container.state(), ContainerState::Stopped);
-        assert_eq!(container.exit_code(), Some(137)); // 128 + 9
+        assert_eq!(container.exit_code(), None);
+        assert_eq!(container.state(), ContainerState::Created);
     }
 
     #[test]
@@ -1224,29 +1274,22 @@ mod tests {
     }
 
     #[test]
-    fn test_runtime_stats() {
+    fn stats_count_what_the_containers_actually_are() {
         let runtime = ContainerRuntime::new();
         let spec = ContainerSpec::default();
+        for id in ["test1", "test2", "test3"] {
+            runtime
+                .create(id, PathBuf::from("/bundle"), spec.clone())
+                .unwrap();
+        }
 
-        runtime
-            .create("test1", PathBuf::from("/bundle"), spec.clone())
-            .unwrap();
-        runtime
-            .create("test2", PathBuf::from("/bundle"), spec.clone())
-            .unwrap();
-        runtime
-            .create("test3", PathBuf::from("/bundle"), spec)
-            .unwrap();
-
-        runtime.start("test1").unwrap();
-        runtime.start("test2").unwrap();
-        runtime.stop("test2", Duration::from_secs(10)).unwrap();
-
+        // All three stay Created: nothing can start. Reporting one as running
+        // was only ever an artefact of the fabricated start.
         let stats = runtime.stats();
         assert_eq!(stats.total, 3);
-        assert_eq!(stats.running, 1);
-        assert_eq!(stats.stopped, 1);
-        assert_eq!(stats.created, 1);
+        assert_eq!(stats.created, 3);
+        assert_eq!(stats.running, 0);
+        assert_eq!(stats.stopped, 0);
     }
 
     #[test]

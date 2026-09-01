@@ -419,10 +419,8 @@ mod platform {
                     // targets) by decoding 16-bit code units from byte pairs.
                     let wide_len = (data_len as usize) / 2;
                     let wide_bytes = &data[..wide_len * 2];
-                    let wide: Vec<u16> = wide_bytes
-                        .chunks_exact(2)
-                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
-                        .collect();
+                    let (pairs, _) = wide_bytes.as_chunks::<2>();
+                    let wide: Vec<u16> = pairs.iter().copied().map(u16::from_le_bytes).collect();
                     let component_id = String::from_utf16_lossy(&wide)
                         .trim_end_matches('\0')
                         .to_lowercase();

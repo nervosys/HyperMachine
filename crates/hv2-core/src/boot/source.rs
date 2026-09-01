@@ -220,6 +220,8 @@ impl BootSource {
                     cmdline: cmdline.clone(),
                     setup_addr: *setup_addr,
                     kernel_addr: *kernel_addr,
+                    // Filled in by `set_memory_size` once a VM exists.
+                    memory_size: 0,
                 };
                 // Fail here — with the path in hand — rather than deep inside a
                 // backend where the error has lost its context.
@@ -302,6 +304,66 @@ impl LoadedBoot {
             // the backend refines this from the ELF header when present.
             Self::Multiboot(_) => DEFAULT_KERNEL_ADDR,
             Self::Raw { entry, .. } => *entry,
+        }
+    }
+
+    /// Tell a Linux boot how much RAM the guest has.
+    ///
+    /// Separate from [`BootSource::load`] because that reads and validates
+    /// images, which callers do before a VM exists — an API server checking an
+    /// image is admissible has no memory size to give. The kernel's `e820` map
+    /// is built from this and it has no other source of one, so a VM must set
+    /// it before asking for the memory regions.
+    ///
+    /// Does nothing for protocols that do not carry a memory map.
+    pub fn set_memory_size(&mut self, bytes: u64) {
+        if let Self::Linux(params) = self {
+            params.memory_size = bytes;
+        }
+    }
+
+    /// Add an argument to the kernel command line, if this protocol has one.
+    ///
+    /// For a device the VM attaches after the boot source was written down: a
+    /// guest cannot be told about a vsock window at build time, because the
+    /// window does not exist yet, and requiring the caller to go back and
+    /// rewrite the command line is a rule that gets forgotten. Ignored by
+    /// `Raw`, which has no command line to add to.
+    ///
+    /// Adding the same argument twice is a caller error rather than a silent
+    /// one -- but an argument already present is left alone, so a caller who
+    /// did write it down by hand is not punished with a duplicate.
+    pub fn append_cmdline(&mut self, arg: &str) {
+        let arg = arg.trim();
+        if arg.is_empty() {
+            return;
+        }
+        let cmdline = match self {
+            Self::Linux(params) => &mut params.cmdline,
+            Self::Multiboot(info) => &mut info.cmdline,
+            Self::Raw { .. } => return,
+        };
+        if cmdline.split_whitespace().any(|token| token == arg) {
+            return;
+        }
+        if !cmdline.is_empty() {
+            cmdline.push(' ');
+        }
+        cmdline.push_str(arg);
+    }
+
+    /// The kernel command line this will boot with, if the protocol has one.
+    ///
+    /// Worth having separately from the field: after
+    /// [`append_cmdline`](Self::append_cmdline) the command line is no longer
+    /// just what the caller wrote, and a caller reporting what a guest will be
+    /// booted with should report what it will actually be booted with.
+    #[must_use]
+    pub fn cmdline(&self) -> Option<&str> {
+        match self {
+            Self::Linux(params) => Some(&params.cmdline),
+            Self::Multiboot(info) => Some(&info.cmdline),
+            Self::Raw { .. } => None,
         }
     }
 
@@ -528,10 +590,19 @@ mod tests {
     #[test]
     fn linux_regions_cover_kernel_boot_params_and_cmdline() {
         let kernel = temp_file("kernel-regions.bin", &valid_bzimage());
-        let loaded = BootSource::linux(&kernel)
+        let mut loaded = BootSource::linux(&kernel)
             .with_cmdline("quiet")
             .load()
             .unwrap();
+
+        // Loading reads and validates the images; the memory map needs a size
+        // that only a VM has, and asking for the regions without one is
+        // refused rather than answered with an empty map.
+        assert!(
+            loaded.memory_regions().is_err(),
+            "regions without a memory size would carry an empty e820 map"
+        );
+        loaded.set_memory_size(256 * 1024 * 1024);
 
         let regions = loaded.memory_regions().unwrap();
         let addrs: Vec<u64> = regions.iter().map(|(a, _)| *a).collect();
@@ -564,5 +635,50 @@ mod tests {
         let source: BootSource =
             serde_json::from_str(r#"{"type":"linux","kernel":"/boot/vmlinuz"}"#).unwrap();
         assert_eq!(source, BootSource::linux("/boot/vmlinuz"));
+    }
+
+    /// A device attached after the boot source was described still gets its
+    /// argument to the guest.
+    ///
+    /// This is the defect the API-level probe hit first: `attach_guest_channel`
+    /// reported the argument a guest needs and left putting it on the command
+    /// line to the caller, so a guest booted perfectly and enumerated nothing.
+    /// That reads as a broken device rather than a missing argument, and the
+    /// caller has no way to be reminded.
+    #[test]
+    fn a_device_argument_reaches_a_command_line_that_was_written_first() {
+        let mut boot = LoadedBoot::Linux(Box::new(LinuxBootParams {
+            kernel_image: Vec::new(),
+            initrd: None,
+            cmdline: "console=ttyS0,115200".to_string(),
+            setup_addr: 0,
+            kernel_addr: 0,
+            memory_size: 0,
+        }));
+
+        boot.append_cmdline("virtio_mmio.device=4K@0xd0000000:5");
+        assert_eq!(
+            boot.cmdline(),
+            Some("console=ttyS0,115200 virtio_mmio.device=4K@0xd0000000:5")
+        );
+    }
+
+    /// A caller who did write the argument down by hand is not punished with a
+    /// duplicate, and an empty command line does not gain a leading space.
+    #[test]
+    fn appending_an_argument_twice_leaves_one_of_it() {
+        let mut boot = LoadedBoot::Linux(Box::new(LinuxBootParams {
+            kernel_image: Vec::new(),
+            initrd: None,
+            cmdline: String::new(),
+            setup_addr: 0,
+            kernel_addr: 0,
+            memory_size: 0,
+        }));
+
+        boot.append_cmdline("quiet");
+        boot.append_cmdline("quiet");
+        boot.append_cmdline("  ");
+        assert_eq!(boot.cmdline(), Some("quiet"));
     }
 }

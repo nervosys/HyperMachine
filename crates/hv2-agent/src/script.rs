@@ -44,7 +44,7 @@ impl ScriptEngine {
     /// terminates on the operation count rather than running until the
     /// wall-clock timeout, and unbounded string building fails on the size
     /// cap. `max_memory` and `allowed_syscalls` have no in-process equivalent
-    /// and are documented as declarative on [`SandboxConfig`].
+    /// and are documented as declarative on [`crate::SandboxConfig`].
     pub fn with_limits(capabilities: CapabilitySet, limits: &crate::SandboxConfig) -> Self {
         let mut engine = Engine::new();
 

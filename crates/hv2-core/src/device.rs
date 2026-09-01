@@ -47,6 +47,46 @@ pub trait Device: Send + Sync {
     /// Shutdown the device
     async fn shutdown(&mut self) -> Result<()>;
 
+    /// Accept somewhere to report an interrupt raised outside a guest access.
+    ///
+    /// Called once, when the device is registered. The default ignores it,
+    /// which is right for a device that only ever interrupts in response to
+    /// something the guest just did.
+    fn set_interrupt_sink(&mut self, sink: Arc<dyn InterruptSink>) {
+        let _ = sink;
+    }
+
+    /// The interrupt line this device is asserting right now, if any.
+    ///
+    /// Polled after every access, because that is when a device's interrupt
+    /// condition changes: a UART becomes ready to send the moment the guest
+    /// writes a byte, and has something to report the moment one arrives.
+    ///
+    /// `None` -- the default -- means this device never interrupts, which is
+    /// true of most of them and is why this is not a required method.
+    fn pending_interrupt(&self) -> Option<u8> {
+        None
+    }
+
+    /// Deliver input from the host to this device.
+    ///
+    /// The other direction from [`Self::console_output`]: what someone types
+    /// at a guest's console. Defaults to refusing, because a device that
+    /// cannot take input should say so rather than accept the bytes and drop
+    /// them -- a caller whose keystrokes vanish has no way to tell that from a
+    /// guest that ignored them.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] when this device accepts no input.
+    fn console_input(&mut self, data: &[u8]) -> Result<()> {
+        let _ = data;
+        Err(Error::Device(format!(
+            "device '{}' accepts no console input",
+            self.name()
+        )))
+    }
+
     /// Console bytes this device has buffered for the host to read, if it is
     /// the kind of device a guest writes a console to.
     ///
@@ -77,11 +117,58 @@ struct IoPortMapping {
     device: Arc<RwLock<dyn Device>>,
 }
 
+/// Somewhere a device can report an interrupt it raised on its own.
+///
+/// [`Device::pending_interrupt`] only answers when the guest touches the
+/// device, which covers a UART the guest is actively driving and nothing else.
+/// A byte arriving from the host, a timer expiring, a virtqueue the host
+/// filled -- all of those happen while the guest is idle, and a device with no
+/// way to speak up then simply never gets serviced.
+pub trait InterruptSink: Send + Sync + std::fmt::Debug {
+    /// Raise `irq` as a pulse: asserted and released. Must not block, because
+    /// this is called from device code that may hold a lock the interrupt
+    /// handler will want.
+    ///
+    /// Right for a device whose interrupt the guest discovers by reading a
+    /// status register it was going to read anyway -- a 16550's, say.
+    fn raise(&self, irq: u8);
+
+    /// Assert `irq` and leave it asserted.
+    ///
+    /// Right for a level-triggered line, which a virtio device's is: the
+    /// specification has the driver clear the interrupt by writing
+    /// `InterruptACK`, and a device that releases the line before the driver
+    /// has acknowledged it is describing an interrupt rather than holding one.
+    /// A pulse is not a safe stand-in -- it can be asserted and released
+    /// between one delivery and the next, and the interrupt is then simply
+    /// lost, which looks from the guest like a device that went quiet.
+    ///
+    /// Defaults to [`raise`](Self::raise), so a sink that predates this is a
+    /// pulse and no worse than it was.
+    fn assert_line(&self, irq: u8) {
+        self.raise(irq);
+    }
+
+    /// Release `irq`, after the driver has acknowledged it.
+    ///
+    /// Defaults to doing nothing, which is correct for a sink whose
+    /// [`assert_line`](Self::assert_line) is a pulse: there is nothing held.
+    fn deassert_line(&self, irq: u8) {
+        let _ = irq;
+    }
+}
+
 /// Device manager
 pub struct DeviceManager {
     devices: Arc<RwLock<HashMap<String, Arc<RwLock<dyn Device>>>>>,
     mmio_regions: Arc<RwLock<Vec<MmioRegionMapping>>>,
     io_ports: Arc<RwLock<Vec<IoPortMapping>>>,
+    /// Handed to each device as it is registered, so a device never has to be
+    /// told about it separately and cannot be left without one by accident.
+    ///
+    /// A synchronous lock because it is installed from `VM::new`, which is not
+    /// async, and read on a path that already holds an async lock.
+    interrupt_sink: parking_lot::RwLock<Option<Arc<dyn InterruptSink>>>,
 }
 
 impl DeviceManager {
@@ -91,6 +178,7 @@ impl DeviceManager {
             devices: Arc::new(RwLock::new(HashMap::new())),
             mmio_regions: Arc::new(RwLock::new(Vec::new())),
             io_ports: Arc::new(RwLock::new(Vec::new())),
+            interrupt_sink: parking_lot::RwLock::new(None),
         }
     }
 
@@ -110,8 +198,25 @@ impl DeviceManager {
             )));
         }
 
+        // Hand it the sink now rather than expecting a caller to remember. A
+        // device registered without one cannot raise an interrupt of its own
+        // and nothing would say so.
+        let sink = self.interrupt_sink.read().clone();
+        if let Some(sink) = sink {
+            device.write().await.set_interrupt_sink(sink);
+        }
+
         devices.insert(name, device);
         Ok(())
+    }
+
+    /// Install the sink devices report self-raised interrupts to.
+    ///
+    /// Applies to every device registered afterwards. Installed by `VM::new`
+    /// before any device can be registered, so in practice that is all of
+    /// them; a caller building a manager by hand has to install it first.
+    pub fn set_interrupt_sink(&self, sink: Arc<dyn InterruptSink>) {
+        *self.interrupt_sink.write() = Some(sink);
     }
 
     /// Unregister a device
@@ -338,18 +443,37 @@ impl MmioDeviceHandle {
     }
 
     /// Read a register at the given offset
-    pub async fn read_register(&self, offset: u64) -> Result<u32> {
+    pub async fn read_register(&self, offset: u64, width: u8) -> Result<u32> {
+        // `width` is the width the guest actually asked for, and handing the
+        // device anything else is not a rounding error. Register files are
+        // byte-wide and reads have side effects -- reading a UART receive
+        // buffer pops a byte, reading its interrupt identification register
+        // clears a pending interrupt -- so asking for four bytes when the
+        // guest asked for one silently disturbs three registers it never
+        // touched.
+        let width = width.clamp(1, 4) as usize;
         let device = self.device.read().await;
         let mut data = [0u8; 4];
-        device.read(offset, &mut data).await?;
+        device.read(offset, &mut data[..width]).await?;
         Ok(u32::from_le_bytes(data))
     }
 
     /// Write a register at the given offset
-    pub async fn write_register(&self, offset: u64, value: u32) -> Result<()> {
+    pub async fn write_register(&self, offset: u64, value: u32, width: u8) -> Result<()> {
+        // Same reason as the read, and worse: a one-byte OUT expanded to four
+        // wrote the three registers after the target with the zero bytes of
+        // the padding. On a serial port that meant every character printed
+        // also cleared the interrupt-enable, FIFO-control and line-control
+        // registers -- which looks like it works, right up until something
+        // depends on one of them.
+        let width = width.clamp(1, 4) as usize;
         let mut device = self.device.write().await;
         let data = value.to_le_bytes();
-        device.write(offset, &data).await
+        device.write(offset, &data[..width]).await
+    }
+    /// The interrupt line this device is asserting, if any.
+    pub async fn pending_interrupt(&self) -> Option<u8> {
+        self.device.read().await.pending_interrupt()
     }
 }
 
@@ -372,18 +496,47 @@ impl IoDeviceHandle {
     }
 
     /// Read a register at the given offset
-    pub async fn read_register(&self, offset: u64) -> Result<u32> {
+    pub async fn read_register(&self, offset: u64, width: u8) -> Result<u32> {
+        // `width` is the width the guest actually asked for, and handing the
+        // device anything else is not a rounding error. Register files are
+        // byte-wide and reads have side effects -- reading a UART receive
+        // buffer pops a byte, reading its interrupt identification register
+        // clears a pending interrupt -- so asking for four bytes when the
+        // guest asked for one silently disturbs three registers it never
+        // touched.
+        let width = width.clamp(1, 4) as usize;
         let device = self.device.read().await;
         let mut data = [0u8; 4];
-        device.read(offset, &mut data).await?;
+        device.read(offset, &mut data[..width]).await?;
         Ok(u32::from_le_bytes(data))
     }
 
     /// Write a register at the given offset
-    pub async fn write_register(&self, offset: u64, value: u32) -> Result<()> {
+    pub async fn write_register(&self, offset: u64, value: u32, width: u8) -> Result<()> {
+        // Same reason as the read, and worse: a one-byte OUT expanded to four
+        // wrote the three registers after the target with the zero bytes of
+        // the padding. On a serial port that meant every character printed
+        // also cleared the interrupt-enable, FIFO-control and line-control
+        // registers -- which looks like it works, right up until something
+        // depends on one of them.
+        let width = width.clamp(1, 4) as usize;
         let mut device = self.device.write().await;
         let data = value.to_le_bytes();
-        device.write(offset, &data).await
+        device.write(offset, &data[..width]).await
+    }
+
+    /// The interrupt line this device is asserting, if any.
+    pub async fn pending_interrupt(&self) -> Option<u8> {
+        self.device.read().await.pending_interrupt()
+    }
+
+    /// Deliver host input to this device.
+    ///
+    /// # Errors
+    ///
+    /// Propagates [`Error::Device`] if the device accepts no input.
+    pub async fn console_input(&self, data: &[u8]) -> Result<()> {
+        self.device.write().await.console_input(data)
     }
 }
 
@@ -520,5 +673,41 @@ mod tests {
         let out = manager.console_output().await;
         assert_eq!(out.len(), 1, "an attached-but-quiet console is not absent");
         assert!(out[0].1.is_empty());
+    }
+    #[tokio::test]
+    async fn a_one_byte_port_write_reaches_exactly_one_register() {
+        // The dispatch layer used to hand every device a four-byte buffer
+        // whatever the guest asked for, so a one-byte OUT of a character also
+        // wrote the three registers after it with the padding. On a serial
+        // port that cleared interrupt-enable, FIFO-control and line-control on
+        // every character printed -- which looks like it works.
+        use crate::devices::serial::SerialDevice;
+
+        let manager = DeviceManager::new();
+        let serial = Arc::new(RwLock::new(SerialDevice::new("COM1".to_string(), 0x3F8)));
+        manager.register_device("COM1", serial).await.unwrap();
+        manager
+            .register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF)
+            .await
+            .unwrap();
+
+        let handle = manager.find_io_device(0x3F8).await.expect("COM1");
+
+        // Set the interrupt-enable register, then print a character.
+        handle.write_register(1, 0x0F, 1).await.unwrap();
+        handle.write_register(0, u32::from(b'h'), 1).await.unwrap();
+
+        assert_eq!(
+            handle.read_register(1, 1).await.unwrap(),
+            0x0F,
+            "printing a character must not disturb the register beside it"
+        );
+
+        let console = manager.console_output().await;
+        assert_eq!(
+            console.first().map(|(_, bytes)| bytes.as_slice()),
+            Some(b"h".as_slice()),
+            "the character has to reach the transmit buffer: {console:?}"
+        );
     }
 }

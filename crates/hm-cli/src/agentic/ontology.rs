@@ -608,18 +608,17 @@ impl HyperMachineOntology {
             },
             TypeDefinition {
                 name: "ScriptResult".to_string(),
-                base: "object".to_string(),
-                description: "Result of script execution".to_string(),
+                base: "any".to_string(),
+                description: "Whatever the script's final expression evaluated to, converted to \
+                              JSON. Not an object with an exit code: the engine evaluates an \
+                              expression on the host, it does not run a process."
+                    .to_string(),
                 values: vec![],
-                schema: Some(serde_json::json!({
-                    "type": "object",
-                    "properties": {
-                        "success": { "type": "boolean" },
-                        "output": { "type": "string" },
-                        "exit_code": { "type": "integer" },
-                        "execution_time_ms": { "type": "integer" }
-                    }
-                })),
+                // No fixed shape. The declared object -- success, output,
+                // exit_code, execution_time_ms -- described a process result
+                // this engine never produces, so an agent parsing `.output` or
+                // branching on `.success` found neither.
+                schema: None,
                 pattern: None,
             },
         ]
@@ -1049,17 +1048,20 @@ impl HyperMachineOntology {
                 idempotent: false,
                 safe: false,
                 examples: vec![OperationExample {
-                    description: "Execute a simple script".to_string(),
+                    // A Rhai expression over the VM's read-only scope, not a
+                    // shell command. This example used to be
+                    // `echo 'Hello, World!'` returning a shell-shaped result
+                    // with an exit code: an input the engine cannot run and an
+                    // output shape it never produces. It is served verbatim to
+                    // agents through /agentic/schema and the OpenAI, Anthropic
+                    // and Gemini tool exports, so it taught every one of them
+                    // that this tool is a shell.
+                    description: "Read the VM's vCPU count from its scope".to_string(),
                     input: serde_json::json!({
                         "name": "my-vm",
-                        "script": "echo 'Hello, World!'"
+                        "script": "vm_name + \" has \" + vcpu_count + \" vCPUs\""
                     }),
-                    output: serde_json::json!({
-                        "success": true,
-                        "output": "Hello, World!\n",
-                        "exit_code": 0,
-                        "execution_time_ms": 15
-                    }),
+                    output: serde_json::json!("my-vm has 4 vCPUs"),
                 }],
             }],
         );
@@ -1242,5 +1244,30 @@ mod tests {
         assert_eq!(restored.version, ont.version);
         assert_eq!(restored.concepts.len(), ont.concepts.len());
         assert_eq!(restored.types.len(), ont.types.len());
+    }
+
+    /// The script result type must not describe a process result.
+    ///
+    /// It declared `success`, `output`, `exit_code` and `execution_time_ms` —
+    /// the shape of a shell command, which this engine never produces. An agent
+    /// parsing `.output` or branching on `.success` found neither. This type
+    /// and its example are served to agents through `/agentic/schema` and the
+    /// vendor tool exports, so a wrong shape here is taught everywhere.
+    #[test]
+    fn the_script_result_type_does_not_promise_an_exit_code() {
+        let ontology = HyperMachineOntology::build();
+        let script_result = ontology
+            .types
+            .iter()
+            .find(|t| t.name == "ScriptResult")
+            .expect("ScriptResult is declared");
+
+        let rendered = format!("{:?}", script_result);
+        for shell_ism in ["exit_code", "execution_time_ms"] {
+            assert!(
+                !rendered.contains(shell_ism),
+                "ScriptResult still promises {shell_ism}, which the engine never returns"
+            );
+        }
     }
 }

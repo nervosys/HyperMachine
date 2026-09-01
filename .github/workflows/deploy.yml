@@ -82,7 +82,7 @@ jobs:
 
       - name: Run tests
         if: inputs.skip_tests != 'true'
-        run: cargo test --workspace --release --exclude hv1-core --exclude hv1-boot
+        run: cargo test --workspace --release
 
       - name: Build release
         run: cargo build --release
