@@ -492,6 +492,27 @@ impl VM {
             None => None,
         };
 
+        // A VM with a kernel to boot needs the legacy PC set, and until this
+        // ran here nothing attached it except the boot probe, by hand. So a VM
+        // created through a host had no console, no CMOS and no keyboard
+        // controller -- which is not a degraded guest but one that cannot reach
+        // userspace at all: its output goes nowhere and it spins on the first
+        // absent port it polls. Whatever the guest channel does, no agent can
+        // run in a guest that never gets that far.
+        //
+        // Only when there is something to boot. A VM with no boot source runs
+        // no guest code, and three emulated devices nothing will ever address
+        // are cost without a reader.
+        //
+        // `attach_absent` rather than `attach`: a caller who installed their
+        // own machine model before provisioning keeps it, and is not refused
+        // for having done the thing this is a default for.
+        if boot.is_some() {
+            crate::machine::Machine::legacy_pc()
+                .attach_absent(&self.devices)
+                .await?;
+        }
+
         // A boot source on a backend that cannot execute is the one case where
         // everything below succeeds and the guest still never runs. Say so here
         // rather than leaving it to be inferred from a Running VM that produces

@@ -236,20 +236,57 @@ impl Machine {
     /// that.
     pub async fn attach(&self, manager: &DeviceManager) -> Result<()> {
         for device in &self.devices {
-            manager
-                .register_device(device.name.clone(), Arc::clone(&device.device))
-                .await
-                .map_err(|e| Error::Device(format!("attaching '{}': {e}", device.name)))?;
-            manager
-                .register_io_port_range(device.name.clone(), device.first_port, device.last_port)
-                .await
-                .map_err(|e| {
-                    Error::Device(format!(
-                        "mapping '{}' at {:#x}-{:#x}: {e}",
-                        device.name, device.first_port, device.last_port
-                    ))
-                })?;
+            self.attach_one(manager, device).await?;
         }
+        Ok(())
+    }
+
+    /// Register only the devices `manager` does not already have.
+    ///
+    /// This is what a VM calls for itself. [`attach`](Self::attach) is right
+    /// for a caller that means to install a whole machine and wants to be told
+    /// if something is in the way; this is right where the model is filling in
+    /// what nobody else provided, and a caller who has already attached their
+    /// own COM1 should keep it rather than be refused.
+    ///
+    /// A device is "already there" by name. A different device occupying the
+    /// same ports under another name is still a conflict, and still reported --
+    /// silently declining to map a port range is how a guest ends up talking to
+    /// something other than what the caller thinks it is talking to.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Device`] as [`attach`](Self::attach), for the devices it does
+    /// register.
+    pub async fn attach_absent(&self, manager: &DeviceManager) -> Result<()> {
+        for device in &self.devices {
+            if manager.get_device(&device.name).await.is_some() {
+                tracing::debug!(
+                    "machine: '{}' is already attached, leaving it alone",
+                    device.name
+                );
+                continue;
+            }
+            self.attach_one(manager, device).await?;
+        }
+        Ok(())
+    }
+
+    /// Register one device and map its ports.
+    async fn attach_one(&self, manager: &DeviceManager, device: &MachineDevice) -> Result<()> {
+        manager
+            .register_device(device.name.clone(), Arc::clone(&device.device))
+            .await
+            .map_err(|e| Error::Device(format!("attaching '{}': {e}", device.name)))?;
+        manager
+            .register_io_port_range(device.name.clone(), device.first_port, device.last_port)
+            .await
+            .map_err(|e| {
+                Error::Device(format!(
+                    "mapping '{}' at {:#x}-{:#x}: {e}",
+                    device.name, device.first_port, device.last_port
+                ))
+            })?;
         Ok(())
     }
 }
@@ -496,5 +533,59 @@ mod tests {
                 "port {port:#x} is unmapped on a VM the machine was attached to"
             );
         }
+    }
+
+    /// `attach_absent` on a bare manager installs the whole set: the case
+    /// where a VM is filling in a machine nobody else provided.
+    #[tokio::test]
+    async fn attach_absent_installs_a_bare_machine() {
+        let manager = DeviceManager::new();
+
+        Machine::legacy_pc()
+            .attach_absent(&manager)
+            .await
+            .expect("a bare manager has nothing in the way");
+
+        for name in ["COM1", "RTC", "i8042"] {
+            assert!(
+                manager.get_device(name).await.is_some(),
+                "{name} should have been attached"
+            );
+        }
+    }
+
+    /// Attaching twice is what a caller who installed their own machine before
+    /// provisioning will do, and it must leave their devices alone rather than
+    /// refuse them. The port ranges are already mapped at this point, so a
+    /// second `attach` would fail on the mapping even if the name were free --
+    /// which is exactly what this distinguishes.
+    #[tokio::test]
+    async fn attach_absent_leaves_an_existing_machine_alone() {
+        let manager = DeviceManager::new();
+        Machine::legacy_pc()
+            .attach(&manager)
+            .await
+            .expect("first attach");
+
+        let before = manager
+            .get_device("COM1")
+            .await
+            .expect("COM1 attached by the caller");
+
+        Machine::legacy_pc()
+            .attach_absent(&manager)
+            .await
+            .expect("a machine already installed is not a conflict");
+
+        let after = manager.get_device("COM1").await.expect("COM1 still there");
+        assert!(
+            Arc::ptr_eq(&before, &after),
+            "the caller's own COM1 should survive, not be replaced"
+        );
+
+        assert!(
+            Machine::legacy_pc().attach(&manager).await.is_err(),
+            "a strict attach over an installed machine is still an error"
+        );
     }
 }

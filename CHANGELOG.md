@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A VM with a kernel to boot now gets the devices it needs to reach
+  userspace** (`hv2-core`). `VM::provision` attaches `Machine::legacy_pc()`
+  when a boot source is configured. Until now the only caller of that model was
+  the boot probe, registering by hand -- so a VM created through a host had no
+  console, no CMOS and no keyboard controller. That is not a degraded guest but
+  one that cannot reach userspace at all: its output goes nowhere and it spins
+  on the first absent port it polls. No agent can run in a guest that never
+  gets that far, whatever the guest channel does.
+
+  `Machine::attach_absent` is what provisioning uses: it registers only what
+  the manager does not already have, so a caller who installed their own
+  machine model keeps it rather than being refused for having done the thing
+  this is a default for. A device occupying the same ports under a different
+  name is still a conflict, and still reported -- silently declining to map a
+  port range is how a guest ends up talking to something other than what the
+  caller thinks it is.
 - **A vsock connection is established between host and guest** (`hv2-core`).
   The host opens a connection, the packet reaches the guest through the receive
   queue, Linux's vsock stack answers over the transmit queue, and the
@@ -375,11 +391,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   delivered a zero-length REQUEST does not get a 45-byte RW accepted. Credit
   is not the explanation -- the device advertises a 256 KiB `buf_alloc` on
   every packet.
-- **A hosted VM still gets no legacy devices.** `Machine::legacy_pc()` is used
-  only by the boot probe, so a VM created through `LocalVmHost` has no COM1, no
-  CMOS and no i8042 -- each of which the probe records as a hang. Such a VM
-  cannot reach userspace, so no guest agent runs in it, whatever the vsock path
-  does.
 
 ### Fixed
 - **The device model and the guest were reading different memory**
