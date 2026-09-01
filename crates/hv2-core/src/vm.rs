@@ -244,6 +244,7 @@ struct VCpuTaskState {
 /// reasons: raising must not block, because it happens inside device code that
 /// may hold a lock the handler will want; and delivery needs the backend and
 /// an async context, which device code has neither of.
+#[derive(Debug)]
 struct QueuedInterrupts {
     sender: tokio::sync::mpsc::UnboundedSender<(u8, IrqLevel)>,
 }

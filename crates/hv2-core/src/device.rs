@@ -124,7 +124,7 @@ struct IoPortMapping {
 /// A byte arriving from the host, a timer expiring, a virtqueue the host
 /// filled -- all of those happen while the guest is idle, and a device with no
 /// way to speak up then simply never gets serviced.
-pub trait InterruptSink: Send + Sync {
+pub trait InterruptSink: Send + Sync + std::fmt::Debug {
     /// Raise `irq` as a pulse: asserted and released. Must not block, because
     /// this is called from device code that may hold a lock the interrupt
     /// handler will want.

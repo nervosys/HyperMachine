@@ -188,6 +188,22 @@ impl PitChannel {
 }
 
 /// Programmable Interval Timer device
+///
+/// # What its interrupt does, and does not, reach
+///
+/// This raises IRQ 0 on the userspace [`Pic8259`] only. A guest whose interrupt
+/// controller lives inside the hypervisor never reads that, so a tick raised
+/// here does not reach such a guest -- and unlike the keyboard and the serial
+/// port, which were given a path to one, that is deliberate: KVM is asked for
+/// an in-kernel PIT (`KVM_CREATE_PIT2`), the guest's clock comes from there,
+/// and delivering this device's tick as well would give the guest two
+/// interrupts per period and a clock that runs fast.
+///
+/// So on a KVM guest this device models the programming interface -- the mode
+/// and reload values a guest writes, and the counts it reads back -- while the
+/// interrupts belong to the hypervisor. It is stated here because "raises IRQ
+/// 0" is otherwise a reasonable thing to assume from the code, and a caller who
+/// assumed it would be wrong in a way nothing reports.
 pub struct TimerDevice {
     name: String,
     base_address: u64,

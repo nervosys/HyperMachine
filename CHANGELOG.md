@@ -415,7 +415,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Known gaps
 ### Known gaps
 ### Known gaps
+### Known gaps
+- **The PIT models the interface, not the interrupt** (`hv2-core`).
+  `TimerDevice` raises IRQ 0 on the userspace PIC only, and unlike the keyboard
+  and the serial port it was left that way deliberately: KVM is asked for an
+  in-kernel PIT, the guest's clock comes from there, and delivering this
+  device's tick as well would give the guest two per period and a clock that
+  runs fast. Said in the type's documentation, because "raises IRQ 0" is
+  otherwise a reasonable thing to assume from the code.
+
 ### Fixed
+- **An injected keystroke never reached the guest** (`hv2-core`).
+  `KeyboardDevice::inject_scancode` is a public API for "give the guest a
+  keystroke", and it raised IRQ 1 only on the userspace `Pic8259` -- which a
+  guest whose interrupt controller lives inside the hypervisor never reads. The
+  byte went into the output buffer and the guest was never told. It also had an
+  inherent `has_pending_interrupt` that the dispatch layer could not see,
+  because the `Device` trait method did not exist: exactly the defect the RTC
+  carried and its own comment describes, left in the device beside it. Both
+  paths are wired now.
+
+  Found by the sweep this session's failures argued for -- looking deliberately
+  for an API that describes an effect nothing performs, rather than waiting for
+  each one to surface as a hang.
 - **Three defects between the guest channel and the API in front of it**
   (`hv2-core`, `hv2-agent`), each of which made a working transport look like a
   dead guest, and none of which the boot probe could have found -- it drove the

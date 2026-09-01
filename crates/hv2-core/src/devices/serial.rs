@@ -949,6 +949,7 @@ mod tests {
         // shell never wakes.
         use std::sync::atomic::{AtomicU32, Ordering};
 
+        #[derive(Debug)]
         struct Recorder(Arc<AtomicU32>);
         impl crate::device::InterruptSink for Recorder {
             fn raise(&self, irq: u8) {

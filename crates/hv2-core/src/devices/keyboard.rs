@@ -79,6 +79,9 @@ const CCB_DISABLE_AUX: u8 = 0x20; // Auxiliary disable
 const CCB_TRANSLATE: u8 = 0x40; // Translate scancodes to Set 1
 
 /// Internal keyboard state
+/// The keyboard controller's line on a PC.
+const KBD_IRQ: u8 = 1;
+
 #[derive(Debug)]
 struct KeyboardState {
     /// Output buffer (keyboard to CPU)
@@ -99,6 +102,14 @@ struct KeyboardState {
     led_state: u8,
     /// PIC for raising IRQ 1
     pic: Option<Arc<Pic8259>>,
+    /// Where an interrupt actually reaches a guest.
+    ///
+    /// The `Pic8259` above is a userspace model, and a guest whose interrupt
+    /// controller lives inside the hypervisor never reads it. Without this,
+    /// [`KeyboardDevice::inject_scancode`] put a byte in the output buffer that
+    /// the guest was never told about: a public API for "give the guest a
+    /// keystroke" whose interrupt had nowhere to go.
+    interrupt_sink: Option<Arc<dyn crate::device::InterruptSink>>,
 }
 
 impl KeyboardState {
@@ -113,6 +124,7 @@ impl KeyboardState {
             scancode_set: 1, // Default to Set 1 (most compatible)
             led_state: 0,
             pic: None,
+            interrupt_sink: None,
         }
     }
 
@@ -142,10 +154,18 @@ impl KeyboardState {
             self.output_buffer.push_back(data);
             self.update_status();
 
-            // Raise IRQ 1 if keyboard interrupts are enabled
+            // Raise IRQ 1 if keyboard interrupts are enabled.
+            //
+            // Both places, and the second is the one that reaches a guest: the
+            // PIC below is a userspace model that a guest with an in-kernel
+            // interrupt controller never reads, so raising only there is
+            // indistinguishable from raising nothing.
             if (self.ccb & CCB_INT_KBD) != 0 {
                 if let Some(ref pic) = self.pic {
-                    let _ = pic.raise_irq(1);
+                    let _ = pic.raise_irq(KBD_IRQ);
+                }
+                if let Some(sink) = &self.interrupt_sink {
+                    sink.raise(KBD_IRQ);
                 }
             }
         }
@@ -352,6 +372,18 @@ impl Default for KeyboardDevice {
 
 #[async_trait]
 impl Device for KeyboardDevice {
+    fn pending_interrupt(&self) -> Option<u8> {
+        // The inherent `has_pending_interrupt` existed and this trait method
+        // did not, so the dispatch layer could never see this device's
+        // interrupt -- the same defect the RTC carried, and for the same
+        // reason: a public check nothing on the delivery path called.
+        self.has_pending_interrupt().then_some(KBD_IRQ)
+    }
+
+    fn set_interrupt_sink(&mut self, sink: Arc<dyn crate::device::InterruptSink>) {
+        self.state.lock().interrupt_sink = Some(sink);
+    }
+
     fn name(&self) -> &str {
         "Intel 8042 Keyboard"
     }
@@ -664,5 +696,47 @@ mod tests {
         let mut byte = [0u8; 1];
         keyboard.read(1, &mut byte).await.expect("no error");
         assert_eq!(byte[0], 0xFF);
+    }
+
+    /// A keystroke injected from the host interrupts the guest.
+    ///
+    /// `inject_scancode` is a public API for "give the guest a keystroke", and
+    /// it used to raise only on the userspace `Pic8259` — which a guest whose
+    /// interrupt controller lives inside the hypervisor never reads. The byte
+    /// went into the output buffer and the guest was never told, so a guest
+    /// waiting on the keyboard waited forever while the host believed it had
+    /// typed. Raising on nothing and raising on something a guest cannot see
+    /// are the same failure, and neither shows up in a test that only checks
+    /// the buffer.
+    #[test]
+    fn an_injected_keystroke_reaches_a_guest_that_does_not_read_the_userspace_pic() {
+        #[derive(Debug, Default)]
+        struct Recorder(std::sync::Mutex<Vec<u8>>);
+        impl crate::device::InterruptSink for Recorder {
+            fn raise(&self, irq: u8) {
+                self.0.lock().expect("recorder").push(irq);
+            }
+        }
+
+        let raised = Arc::new(Recorder::default());
+        let mut kbd = KeyboardDevice::new();
+        kbd.set_interrupt_sink(raised.clone());
+
+        kbd.inject_scancode(0x1e);
+
+        assert_eq!(
+            *raised.0.lock().expect("recorder"),
+            vec![1],
+            "injecting a scancode should raise IRQ 1 somewhere the guest reads"
+        );
+        assert!(
+            kbd.has_pending_interrupt(),
+            "and the device should still report the interrupt as pending"
+        );
+        assert_eq!(
+            Device::pending_interrupt(&kbd),
+            Some(1),
+            "the dispatch layer sees it through the trait, not the inherent method"
+        );
     }
 }
