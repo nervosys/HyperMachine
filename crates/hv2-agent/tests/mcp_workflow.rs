@@ -76,7 +76,15 @@ async fn full_workload_lifecycle_succeeds() {
         assert!(r.success, "{tool} failed: {:?}", r.error);
     }
 
-    // Snapshot create -> restore by the returned id.
+    // Snapshots refuse, and the lifecycle is not weaker for it.
+    //
+    // This used to create a snapshot and restore it by the returned id, and
+    // assert that both succeeded. Both did — and neither did anything. Nothing
+    // in this project captures VM state, so the "snapshot" was an id, a name
+    // and a timestamp, and the "restore" checked that the id existed and
+    // returned "restored" without touching the VM. An end-to-end test passing
+    // green over a round trip that is a no-op is how a fabricated feature
+    // survives; the assertion is now that it says so.
     let snap = session
         .call_tool(
             &server,
@@ -84,23 +92,28 @@ async fn full_workload_lifecycle_succeeds() {
             json!({ "vm_id": vm_id, "snapshot_name": "s1" }),
         )
         .await;
-    assert!(snap.success, "snapshot.create failed: {:?}", snap.error);
-    let snapshot_id = snap.result.unwrap()["snapshot_id"]
-        .as_str()
-        .unwrap()
-        .to_string();
+    assert!(
+        !snap.success,
+        "snapshot.create must not report success when nothing captures VM state"
+    );
+    assert!(
+        snap.error
+            .as_deref()
+            .is_some_and(|e| e.contains("no snapshot host is installed")),
+        "the refusal should name what is missing: {:?}",
+        snap.error
+    );
 
     let restore = session
         .call_tool(
             &server,
             "snapshot.restore",
-            json!({ "snapshot_id": snapshot_id }),
+            json!({ "snapshot_id": "any-id-at-all" }),
         )
         .await;
     assert!(
-        restore.success,
-        "snapshot.restore failed: {:?}",
-        restore.error
+        !restore.success,
+        "snapshot.restore must not report a rollback that did not happen"
     );
 
     for (tool, params) in [

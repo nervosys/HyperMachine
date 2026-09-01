@@ -2235,11 +2235,20 @@ impl McpServer {
         });
 
         // Execute tool via the dispatch table in execute_tool_impl
+        // Bound the call. `McpConfig::default_timeout` was documented as the
+        // default tool timeout and `ToolCallRequest::timeout` as a per-call
+        // override, and neither was ever read: the call awaited without limit,
+        // so a hung vm.exec held the request forever and held its concurrency
+        // permit with it.
+        let budget = request.timeout.unwrap_or(self.config.default_timeout);
         let result = match denial {
             Some(error) => Err(error),
             None => {
-                self.execute_tool_impl(&request.tool, &request.parameters, session)
-                    .await
+                let call = self.execute_tool_impl(&request.tool, &request.parameters, session);
+                match tokio::time::timeout(budget, call).await {
+                    Ok(result) => result,
+                    Err(_) => Err(format!("{} did not finish within {budget:?}; the call was abandoned and whatever it started may still be running", request.tool)),
+                }
             }
         };
 
@@ -3173,22 +3182,15 @@ impl McpServer {
                     .get("snapshot_name")
                     .and_then(|v| v.as_str())
                     .unwrap_or("snapshot");
-                let snapshot_id = uuid_v4();
-                let snap = json!({
-                    "snapshot_id": snapshot_id,
-                    "vm_id": vm_id,
-                    "name": snapshot_name,
-                    "created_at_epoch_ms": SystemTime::now()
-                        .duration_since(SystemTime::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64,
-                });
-                session
-                    .state
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .insert(format!("snap:{}", snapshot_id), snap.clone());
-                Ok(snap)
+                // A receipt is not a snapshot. This minted an id, recorded a
+                // name and a timestamp, and captured no memory, no disk and no
+                // device state -- there is no snapshot host in this project to
+                // capture any. The id looked real enough to hand to
+                // snapshot.restore, which is what made it dangerous: an agent's
+                // recovery plan ("snapshot, try the risky thing, restore if it
+                // fails") became a no-op reporting success at every step.
+                let _ = snapshot_name;
+                Err(format!("no snapshot host is installed, so the state of {vm_id} cannot be captured; an identifier handed back here would refer to nothing"))
             }
 
             "snapshot.restore" => {
@@ -3196,12 +3198,11 @@ impl McpServer {
                     .get("snapshot_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: snapshot_id")?;
-                let key = format!("snap:{}", snapshot_id);
-                let state = session.state.read().unwrap_or_else(|e| e.into_inner());
-                if !state.contains_key(&key) {
-                    return Err(format!("Snapshot not found: {}", snapshot_id));
-                }
-                Ok(json!({ "snapshot_id": snapshot_id, "status": "restored" }))
+                // Nothing was ever captured, so there is nothing to put back.
+                // This checked that a bookkeeping key existed and reported
+                // "restored" without touching the VM: memory, disk and device
+                // state all left exactly as they were.
+                Err(format!("no snapshot host is installed, so {snapshot_id} cannot be restored; reporting success would tell an agent its VM had been rolled back when nothing changed"))
             }
 
             "snapshot.list" => {
@@ -3230,13 +3231,11 @@ impl McpServer {
                     .get("network")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: network")?;
-                let interface_id = uuid_v4();
-                Ok(json!({
-                    "vm_id": vm_id,
-                    "network": network,
-                    "interface_id": interface_id,
-                    "status": "attached"
-                }))
+                // No interface is created. This minted an identifier and
+                // returned "attached" without writing anywhere -- not even to
+                // session state -- so the VM never showed the interface and the
+                // mac_address the schema accepts was discarded.
+                Err(format!("no network host is installed, so no interface can be attached to {vm_id} on {network}; an identifier for an interface that does not exist is worse than an error, because network.detach would accept it"))
             }
 
             "network.detach" => {
@@ -3248,11 +3247,9 @@ impl McpServer {
                     .get("interface_id")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: interface_id")?;
-                Ok(json!({
-                    "vm_id": vm_id,
-                    "interface_id": interface_id,
-                    "status": "detached"
-                }))
+                // This performed no lookup of any kind: any vm_id and any
+                // invented interface_id came back "detached".
+                Err(format!("no network host is installed, so interface {interface_id} cannot be detached from {vm_id}; nothing here has ever attached one"))
             }
 
             // ── GPU fabric ───────────────────────────────────────────
@@ -3702,13 +3699,12 @@ impl McpServer {
                     .get("message")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: message")?;
-                let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
-                let recipient_count = sessions.len().saturating_sub(1); // exclude sender
-                Ok(json!({
-                    "message": message,
-                    "recipients": recipient_count,
-                    "status": "broadcast_sent"
-                }))
+                // "recipients" counted the sessions that exist and presented
+                // it as the number that received something. There is no inbox,
+                // no queue and no channel: AgentSession holds state and
+                // owned_vms and nothing else, so the message was dropped.
+                let _ = message;
+                Err("this server has no agent-to-agent message channel, so a broadcast would be counted and discarded; AgentSession carries no inbox to deliver one to".to_string())
             }
 
             "agent.send" => {
@@ -3720,16 +3716,21 @@ impl McpServer {
                     .get("message")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing required parameter: message")?;
-                let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
-                let found = sessions.values().any(|s| s.agent_id == target);
+                let found = {
+                    let sessions = self.sessions.read().unwrap_or_else(|e| e.into_inner());
+                    sessions.values().any(|s| s.agent_id == target)
+                };
                 if !found {
                     return Err(format!("Target agent not found: {}", target));
                 }
-                Ok(json!({
-                    "target": target,
-                    "message": message,
-                    "status": "delivered"
-                }))
+
+                // The target existed and the message went nowhere. "delivered"
+                // was returned after finding a session with a matching id and
+                // writing nothing to it -- there is no inbox to write to. Two
+                // agents told to coordinate through this would each be told
+                // delivery succeeded and would wait for a reply that cannot come.
+                let _ = message;
+                Err(format!("agent {target} exists, but this server has no message channel to deliver to it: AgentSession carries no inbox"))
             }
 
             "agent.claim" => {

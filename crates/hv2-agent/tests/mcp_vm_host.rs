@@ -456,15 +456,24 @@ async fn tools_with_no_host_equivalent_still_work() {
         .unwrap();
     let vm_id = created["vm_id"].as_str().unwrap().to_string();
 
-    let snapshot = call(
+    // snapshot.create used to fall through to the session mirror and return a
+    // receipt: an id, a name and a timestamp, with no VM state captured. This
+    // test asserted that it succeeded, which is what kept it alive -- the tool
+    // was checked for returning something rather than for doing something. A
+    // VM host does not change this, because there is no snapshot host for it
+    // to be, so the refusal is unconditional and says so.
+    let refused = call(
         &server,
         &session,
         "snapshot.create",
         json!({"vm_id": vm_id, "snapshot_name": "s1"}),
     )
     .await
-    .expect("snapshot.create falls through to the session mirror");
-    assert_eq!(snapshot["vm_id"], vm_id);
+    .expect_err("nothing here can capture VM state, so this must not report success");
+    assert!(
+        refused.contains("no snapshot host is installed"),
+        "the refusal should name what is missing: {refused}"
+    );
 }
 
 #[tokio::test]

@@ -639,9 +639,29 @@ pub struct AgentPolicy {
     pub version: u32,
     /// Permission policies
     pub permissions: PolicySet,
-    /// Resource quotas
+    /// Resource quotas.
+    ///
+    /// **Recorded, not enforced.** [`AgentPolicy::allows`] consults `enabled`
+    /// and `permissions` and nothing else, so a quota set here does not stop a
+    /// sixth VM being created under a `max_vms` of five. Nothing in this crate
+    /// constructs [`PolicyError::QuotaExceeded`].
+    ///
+    /// Said here because the sibling field is wired up and the module
+    /// documentation explains that it is -- which makes silence about this one
+    /// read as endorsement. Enforcing it needs usage counters that do not
+    /// exist: [`PolicyContext`] carries an agent id and a clock, not a tally,
+    /// and where such a tally should live (per session, per agent, across
+    /// restarts) is a design decision rather than an oversight.
     pub quotas: QuotaSpec,
-    /// Rate limits by action
+    /// Rate limits by action.
+    ///
+    /// **Recorded, not enforced**, for the same reason as
+    /// [`quotas`](Self::quotas) and with the same requirement: rate limiting
+    /// needs a count of recent actions, and nothing here keeps one.
+    ///
+    /// Note that [`McpConfig::rate_limit`](crate::mcp::McpConfig) *is* enforced
+    /// -- it bounds calls per session on the tool surface. This field is a
+    /// different thing that looks like it.
     pub rate_limits: HashMap<PolicyAction, RateLimitSpec>,
     /// Enabled state
     pub enabled: bool,

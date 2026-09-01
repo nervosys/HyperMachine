@@ -344,6 +344,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **Six tools that reported an effect nothing performed now refuse**
+  (`hv2-agent`). Each returned a plausible success and did nothing, which is
+  the defect `execute_plan` had and which the `vm.exec` fallback in the same
+  file already refuses by name:
+
+  - `snapshot.create` minted an id, a name and a timestamp and captured no
+    memory, disk or device state; `snapshot.restore` checked that the id
+    existed and reported `"restored"` without touching the VM. Together they
+    turned an agent's recovery plan -- snapshot, try the risky thing, restore
+    on failure -- into a no-op that reported success at every step. There is no
+    snapshot host in this project for any installation to supply, so the
+    refusal is unconditional.
+  - `network.attach` returned an `interface_id` for an interface it did not
+    create, writing nowhere and discarding the `mac_address` it accepts;
+    `network.detach` performed no lookup at all, so any invented id on any VM
+    came back `"detached"`.
+  - `agent.broadcast` reported a `recipients` count that was the number of
+    sessions that exist, presented as the number that received something;
+    `agent.send` reported `"delivered"` after finding a session and writing
+    nothing to it. `AgentSession` has no inbox, so two agents told to
+    coordinate this way would each be told delivery succeeded and would wait
+    for a reply that cannot come.
+
+  Two tests had to be corrected to land this, and both are the point: an
+  end-to-end "full workload lifecycle" test asserted the snapshot round trip
+  succeeded -- it did, and it did nothing -- and an integration test asserted
+  `snapshot.create` "falls through to the session mirror". A green test over a
+  no-op is how a fabricated feature survives.
 - **One producer of the guest-channel kernel argument** (`hv2-agent`).
   `LocalVmHost` rendered `virtio_mmio.device=` itself, merged it into the boot
   source, and then cross-checked its own string against the device's once the
@@ -438,7 +466,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   runs fast. Said in the type's documentation, because "raises IRQ 0" is
   otherwise a reasonable thing to assume from the code.
 
+### Known gaps
+- **`AgentPolicy` quotas and rate limits are recorded, not enforced**
+  (`hv2-agent`). `allows` consults `enabled` and `permissions` and nothing
+  else, so a `max_vms` of five does not stop a sixth, and
+  `PolicyError::QuotaExceeded` is never constructed. Both fields now say so, in
+  the style the sibling module already uses -- the module documentation
+  explains that `PolicySet` *is* wired up, which made silence about these read
+  as endorsement. Enforcing them needs usage counters that do not exist:
+  `PolicyContext` carries an agent id and a clock, not a tally, and where such
+  a tally should live is a design decision rather than an oversight.
+
 ### Fixed
+- **No tool call was bounded in time** (`hv2-agent`).
+  `McpConfig::default_timeout` documented itself as the default tool timeout
+  and `ToolCallRequest::timeout` as a per-call override; neither was ever read,
+  and `call_tool` awaited without limit. A hung `vm.exec` or `sandbox.run` held
+  the request forever and held its concurrency permit with it, so one stuck
+  guest could take the surface down while every field that promised otherwise
+  sat unused. Both are honoured now.
 - **`agent.claim` handed out the access it advertised as a restriction**
   (`hv2-agent`). Its description promises exclusive access and that it
   "prevents other agents from modifying" a VM. What it did was append the id to
