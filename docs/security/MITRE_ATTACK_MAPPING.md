@@ -57,21 +57,19 @@ async fn authenticate(req: Request) -> Result<AuthenticatedRequest> {
 | Sub-Technique          | Risk | Mitigation                | Status      |
 | ---------------------- | ---- | ------------------------- | ----------- |
 | T1059.006 - Python     | N/A  | Not supported             | N/A         |
-| T1059.007 - JavaScript | Low  | WASM sandboxed            | ✅ Mitigated |
+| T1059.007 - JavaScript | N/A  | Not supported             | N/A         |
 | Custom - Rhai          | Low  | Sandboxed, no FFI         | ✅ Mitigated |
-| Custom - WASM          | Low  | wasmtime capability-based | ✅ Mitigated |
 
 **Agent Sandbox Controls:**
 ```rust
-// WASM capability restrictions (hv2-agent)
-let config = Config::new();
-config.wasm_component_model(true);
-config.consume_fuel(true);  // CPU limiting
-config.epoch_interruption(true);  // Timeout control
+// Rhai engine limits (hv2-agent/src/script.rs)
+engine.set_max_expr_depths(50, 25);
+engine.set_max_operations(limits.max_operations);  // an infinite loop terminates here
+engine.set_max_string_size(limits.max_string_size);
 
-// No filesystem access by default
-// No network access by default
-// No system calls by default
+// The scope holds only a read-only view of the VM: state, name,
+// vCPU count, memory size. No filesystem, network or syscall
+// bindings are registered, and execution requires Capability::VmRead.
 ```
 
 ### T1610 - Deploy Container

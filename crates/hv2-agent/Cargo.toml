@@ -30,15 +30,9 @@ rand = { workspace = true }
 
 # Scripting engines
 rhai = { workspace = true }
-# wasmtime is reserved for a future WASM scripting backend; opt-in via `wasm-scripts` feature.
-# Not pulled into default builds — eliminates wasmtime CVE exposure (RUSTSEC-2026-0085..96).
-wasmtime = { workspace = true, optional = true }
-wasmtime-wasi = { workspace = true, optional = true }
 
 [features]
 default = []
-# Reserved: enables wasmtime-based scripting engine. No source currently uses it.
-wasm-scripts = ["dep:wasmtime", "dep:wasmtime-wasi"]
 
 # Security (Linux only - commented out for Windows compatibility)
 # seccompiler = "0.4"

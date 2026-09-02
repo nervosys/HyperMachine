@@ -126,7 +126,7 @@ Control VM execution state.
 Execute sandboxed scripts within VMs.
 
 **Operations:**
-- `execute_script` - Run a Rhai or WASM script
+- `execute_script` - Run a Rhai script on the host against a read-only view of a VM
 - `list_agents` - List active agents
 - `get_agent_logs` - Get agent execution logs
 

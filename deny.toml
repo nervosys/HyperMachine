@@ -9,12 +9,12 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 
 # Ignore specific advisories (with justification)
 ignore = [
-    # bincode 1.x is unmaintained but used by bootloader crate
-    # We only use it in build-time dependencies
+    # bincode 1.x is unmaintained. hv2-core depends on it directly, for
+    # snapshot serialisation; it is stable and carries no known advisory.
     "RUSTSEC-2025-0141",
 
     # paste is archived but has no known vulnerabilities
-    # Used as transitive dep by wasmtime/cranelift
+    # Used as a transitive dep by image/rav1e, reached through eframe in hm-gui
     "RUSTSEC-2024-0436",
 
     # Marvin Attack: timing sidechannel in the pure-Rust `rsa` crate.
