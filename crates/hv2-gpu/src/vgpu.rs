@@ -209,7 +209,7 @@ impl VirtualGpu {
         tracing::info!("Initializing virtual GPU: {}", self.name);
 
         // Create WGPU instance with all backends
-        let instance = Instance::new(InstanceDescriptor {
+        let instance = Instance::new(&InstanceDescriptor {
             backends: Backends::all(),
             flags: InstanceFlags::default(),
             ..Default::default()
@@ -267,7 +267,7 @@ impl VirtualGpu {
                 compute: true,
                 graphics: true,
                 ray_tracing: adapter_features
-                    .contains(Features::RAY_TRACING_ACCELERATION_STRUCTURE),
+                    .contains(Features::EXPERIMENTAL_RAY_TRACING_ACCELERATION_STRUCTURE),
                 bindless: adapter_features.contains(
                     Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
                 ),
@@ -690,7 +690,7 @@ impl VirtualGpu {
                     label: Some("vgpu_compute_pipeline"),
                     layout: pipeline_layout.as_ref(),
                     module: &shader.module,
-                    entry_point: "main",
+                    entry_point: Some("main"),
                     compilation_options: Default::default(),
                     cache: None,
                 });
