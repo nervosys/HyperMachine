@@ -210,11 +210,32 @@ jobs:
           cargo bench -p hv2-core --bench crypto_bench -- --noplot --baseline baseline | Tee-Object -FilePath comparison.txt
         continue-on-error: true
 
-      - name: Check for regressions
+      # Reported, not enforced, and the distinction matters here.
+      #
+      # This greps criterion's text for the word "regressed" and used to exit 1
+      # on a match, with no threshold: a 1% wobble failed the build exactly as
+      # a 200% regression would. Criterion prints that line for any benchmark
+      # measured slower than its baseline, and the two runs being compared
+      # happen on one shared CI runner, minutes apart, with a full rebuild in
+      # between -- so noise produces it on most runs.
+      #
+      # The evidence it was noise: this failed identically on three Dependabot
+      # PRs bumping a Terraform provider, a Docker base image and
+      # tock-registers, none of which can affect hv2-core's crypto benchmarks.
+      # It only became visible now because the job `needs: benchmark`, and that
+      # job had never completed a run.
+      #
+      # Real regression alerting already exists, with a threshold and a
+      # baseline built from stored history: github-action-benchmark in the job
+      # above, at alert-threshold 150%. This step is here to put the numbers in
+      # front of a reviewer, which it now does without failing the build for
+      # having measured something on a busy machine.
+      - name: Report regressions
         run: |
           if (Select-String -Path pr/comparison.txt -Pattern "regressed" -Quiet) {
-            Write-Warning "Performance regressions detected!"
+            Write-Warning "Criterion reports slower measurements than baseline. On a shared runner this is usually noise -- compare against the alert-threshold job before treating it as real:"
             Get-Content pr/comparison.txt | Select-String "regressed"
-            exit 1
+          } else {
+            Write-Output "No benchmarks measured slower than baseline."
           }
 
