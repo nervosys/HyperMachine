@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788372531513,
+  "lastUpdate": 1788377609238,
   "repoUrl": "https://github.com/nervosys/HyperMachine",
   "entries": {
     "HyperMachine Benchmarks": [
@@ -8935,6 +8935,330 @@ window.BENCHMARK_DATA = {
             "name": "tool_formats/serialize_openai_tools",
             "value": 7575.794,
             "range": "+/- 33.54",
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5751456+admercs@users.noreply.github.com",
+            "name": "Adam Erickson",
+            "username": "admercs"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "375a9345cf7be4852b78efa9f1d374b522c6a419",
+          "message": "fix(ci): the baseline comparison failed builds on measurement noise (#76)\n\n* fix(ci): the baseline comparison failed builds on measurement noise\n\nFixing the Benchmarks job in #74 made this one visible for the first\ntime: benchmark-comparison declares `needs: benchmark`, and that job had\nnever completed a run, so this had never executed either.\n\nIt greps criterion's output for the word \"regressed\" and exited 1 on a\nmatch, with no threshold. Criterion prints that line for any benchmark\nmeasured slower than its baseline, however slightly, and the two runs\nbeing compared happen on one shared CI runner, minutes apart, with a full\nrebuild in between. A one percent wobble failed the build exactly as a\ntwo hundred percent regression would.\n\nThe evidence that this is noise rather than signal: it failed\nidentically, with a dozen \"Performance has regressed\" lines, on three\nDependabot pull requests bumping a Terraform provider, a Docker base\nimage and tock-registers. None of those can affect hv2-core's crypto\nbenchmarks.\n\nAlso worth noting: every other step in that job already carries\ncontinue-on-error, so the job tolerated the benchmarks themselves failing\nand then failed on noise in their output.\n\nReal regression alerting already exists and has both a threshold and a\nbaseline drawn from stored history -- github-action-benchmark at\nalert-threshold 150%, in the job above. This step's value is putting the\nnumbers in front of a reviewer, which it still does; it just no longer\nfails a build for having measured something on a busy machine.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\n\n* fix(ci): pull requests were writing the benchmark baseline they compare to\n\n`auto-push` was unconditional, so every event that ran this workflow\ncommitted its measurements to `gh-pages`. Of the first 20 stored\nmeasurements, 18 came from pull-request branches and only 2 from master\n-- and several of those branches have since been deleted, so the\nbaseline is largely measurements of work that was never merged.\n\nThat is a better explanation for the comparison failures than runner\nnoise alone: a master run was not comparing itself against the previous\nmaster run, it was comparing itself against whichever pull request\nhappened to benchmark last.\n\nHistory now comes from pushes only. A pull request still runs the\nbenchmarks and still receives its comparison comment; it just no longer\nrecords itself as the thing the next run measures against.\n\nThe stored history is left as it is. Pruning it means rewriting a data\nbranch, which is the repository owner's call, and the entries are\nharmless once nothing new is appended from a pull request.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01RsopUtvfyNzkKbbte56vZv\n\n* fix(ci): correct a claim I made about this repository publishing nothing\n\nThe comment added in #74 said GitHub Pages was not enabled here, so\nnothing committed to `gh-pages` is published. That is wrong, and I wrote\nit. Pages is enabled with `source.branch` set to `gh-pages`:\n\n  {\"status\":\"errored\",\"html_url\":\"https://nervosys.github.io/HyperMachine/\",\n   \"build_type\":\"legacy\",\"source\":{\"branch\":\"gh-pages\",\"path\":\"/\"},\n   \"public\":true}\n\nThe 404 that led me to the wrong conclusion comes from the Pages builds\nfailing, not from Pages being off. The two most recent builds both report\n\"Page build failed\".\n\nThis matters beyond the comment. Everything the benchmark action commits\nis served publicly at nervosys.github.io/HyperMachine/dev/bench/, so the\n18 pull-request measurements described in the previous commit are on a\npublic page rather than in a private data file.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01RsopUtvfyNzkKbbte56vZv\n\n---------\n\nCo-authored-by: Claude Opus 5 <noreply@anthropic.com>",
+          "timestamp": "2026-09-02T12:14:29-07:00",
+          "tree_id": "4243a38c142200cdbe5d96bdcd31707d373ebd2a",
+          "url": "https://github.com/nervosys/HyperMachine/commit/375a9345cf7be4852b78efa9f1d374b522c6a419"
+        },
+        "date": 1788377605668,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "aes_gcm_decrypt/1024",
+            "value": 531.149,
+            "range": "+/- 1.447",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/16384",
+            "value": 3360.658,
+            "range": "+/- 14.661",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/256",
+            "value": 508.358,
+            "range": "+/- 2.018",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/4096",
+            "value": 1016.89,
+            "range": "+/- 4.82",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/64",
+            "value": 369.028,
+            "range": "+/- 0.43",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/65536",
+            "value": 13585.393,
+            "range": "+/- 52.685",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/1024",
+            "value": 614.701,
+            "range": "+/- 1.31",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/16384",
+            "value": 3761.219,
+            "range": "+/- 9.237",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/256",
+            "value": 479.526,
+            "range": "+/- 1.172",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/4096",
+            "value": 1183.922,
+            "range": "+/- 3.651",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/64",
+            "value": 447.639,
+            "range": "+/- 1.334",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/65536",
+            "value": 13413.219,
+            "range": "+/- 27.816",
+            "unit": "ns"
+          },
+          {
+            "name": "fips_self_tests",
+            "value": 2669.012,
+            "range": "+/- 6.199",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes128_key",
+            "value": 101.177,
+            "range": "+/- 0.583",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes256_key",
+            "value": 121.14,
+            "range": "+/- 1.711",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/128",
+            "value": 1191.741,
+            "range": "+/- 1.594",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/256",
+            "value": 1906.118,
+            "range": "+/- 2.263",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/32",
+            "value": 663.826,
+            "range": "+/- 1.873",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/64",
+            "value": 843.863,
+            "range": "+/- 2.785",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/1024",
+            "value": 1054.433,
+            "range": "+/- 1.007",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/16384",
+            "value": 12088.013,
+            "range": "+/- 37.274",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/256",
+            "value": 495.842,
+            "range": "+/- 0.688",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/4096",
+            "value": 3238.734,
+            "range": "+/- 1.271",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/64",
+            "value": 357.683,
+            "range": "+/- 0.688",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/deserialize_ontology",
+            "value": 75661.468,
+            "range": "+/- 397.951",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/serialize_ontology",
+            "value": 11326.868,
+            "range": "+/- 114.244",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/1024",
+            "value": 402.721,
+            "range": "+/- 1.185",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/16",
+            "value": 16.695,
+            "range": "+/- 0.057",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/256",
+            "value": 104.422,
+            "range": "+/- 0.275",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/32",
+            "value": 21.984,
+            "range": "+/- 0.037",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/4096",
+            "value": 1611.912,
+            "range": "+/- 6.301",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/64",
+            "value": 34.54,
+            "range": "+/- 0.102",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/parse_create_vm_request",
+            "value": 2164.033,
+            "range": "+/- 31.445",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/serialize_list_response",
+            "value": 15897.524,
+            "range": "+/- 156.215",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1024",
+            "value": 847.56,
+            "range": "+/- 2.812",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1048576",
+            "value": 747126.844,
+            "range": "+/- 264.616",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/16384",
+            "value": 12243.73,
+            "range": "+/- 142.528",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/256",
+            "value": 282.587,
+            "range": "+/- 0.991",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/4096",
+            "value": 3037.284,
+            "range": "+/- 2.75",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/64",
+            "value": 141.365,
+            "range": "+/- 0.863",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/65536",
+            "value": 46819.424,
+            "range": "+/- 29.108",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1024",
+            "value": 2537.281,
+            "range": "+/- 6.833",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1048576",
+            "value": 2248741.87,
+            "range": "+/- 8063.661",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/16384",
+            "value": 35324.211,
+            "range": "+/- 123.501",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/256",
+            "value": 983.746,
+            "range": "+/- 20.413",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/4096",
+            "value": 9127.479,
+            "range": "+/- 52.591",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/64",
+            "value": 328.622,
+            "range": "+/- 1.43",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/65536",
+            "value": 140667.6,
+            "range": "+/- 676.697",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_anthropic_tools",
+            "value": 7230.012,
+            "range": "+/- 90.719",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_openai_tools",
+            "value": 7568.876,
+            "range": "+/- 37.232",
             "unit": "ns"
           }
         ]
