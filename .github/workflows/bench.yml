@@ -107,7 +107,17 @@ jobs:
           # committing to a branch of that name. Do not protect it -- the
           # action commits directly and a pull-request rule breaks it, which
           # is the same mistake the CLA workflow made with `master`.
-          auto-push: true
+          #
+          # Only pushes write history. Once the branch existed, every event
+          # wrote to it, so 18 of the first 20 stored measurements came from
+          # pull-request branches -- including branches since deleted. The
+          # baseline this job compares against was therefore mostly other
+          # people's unmerged work, which is a better explanation for the
+          # comparison failures than runner noise alone. A pull request still
+          # runs the benchmarks and still gets its comparison comment; it just
+          # no longer records itself as history for the next run to measure
+          # against.
+          auto-push: ${{ github.event_name == 'push' }}
           alert-threshold: '150%'
           comment-on-alert: true
           fail-on-alert: false
