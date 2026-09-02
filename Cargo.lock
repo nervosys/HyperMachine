@@ -3090,7 +3090,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 
@@ -3139,7 +3139,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3170,7 +3170,7 @@ dependencies = [
  "serde",
  "thiserror 2.0.20",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
