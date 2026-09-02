@@ -452,7 +452,7 @@ impl VmHost for LocalVmHost {
             }
         }
 
-        let vm_id = crate::mcp::uuid_v4();
+        let vm_id = crate::mcp::fresh_id();
         let hosted = HostedVm {
             vm: None,
             spec,
@@ -723,6 +723,41 @@ mod tests {
         names.sort();
 
         assert_eq!(names, vec!["a", "b"]);
+    }
+
+    /// VM ids were a hex nanosecond timestamp, so two VMs created inside one
+    /// clock tick shared an id and `insert` dropped the earlier one.
+    ///
+    /// Whether that collides is a property of the host clock -- macOS caught
+    /// it in `list_reports_every_vm` while Windows and Linux did not -- so
+    /// creating VMs in a loop and hoping for a duplicate does not test
+    /// anything reliably. This asserts the part that does not depend on
+    /// timing: ids must carry entropy rather than a clock reading.
+    ///
+    /// A nanosecond count since the epoch is around 2^61, and `{:032x}` pads
+    /// it to 32 digits, so every clock-derived id begins with sixteen zeros.
+    /// Random ids share no prefix at all beyond coincidence -- 64 of them
+    /// agreeing on even the first two digits has probability 256^-63.
+    #[tokio::test]
+    async fn vm_ids_carry_entropy_rather_than_a_clock_reading() {
+        let host = LocalVmHost::new();
+
+        let mut ids = Vec::new();
+        for i in 0..64 {
+            let vm = host.create(VmSpec::new(format!("vm-{i}"))).await.unwrap();
+            ids.push(vm.vm_id);
+        }
+
+        let first_two = &ids[0][..2];
+        assert!(
+            ids.iter().any(|id| &id[..2] != first_two),
+            "every id starts with {first_two:?}, so they are derived from              something shared -- a clock reading rather than entropy"
+        );
+
+        let unique: std::collections::HashSet<&String> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "two VMs were given the same id");
+        assert_eq!(host.vm_count(), 64, "a VM was overwritten by another");
+        assert_eq!(host.list().await.unwrap().len(), 64);
     }
 
     #[tokio::test]

@@ -2978,6 +2978,7 @@ dependencies = [
  "hv2-sandbox",
  "parking_lot",
  "proptest",
+ "rand 0.10.2",
  "rhai",
  "serde",
  "serde_json",
