@@ -25,6 +25,8 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
+# Identifiers come from the OS CSPRNG; see mcp::fresh_id.
+rand = { workspace = true }
 
 # Scripting engines
 rhai = { workspace = true }

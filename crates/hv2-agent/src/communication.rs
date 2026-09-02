@@ -172,7 +172,7 @@ impl Message {
         payload: MessagePayload,
     ) -> Self {
         Self {
-            id: uuid_v4(),
+            id: crate::mcp::fresh_id(),
             sender: sender.into(),
             recipient: recipient.into(),
             message_type: MessageType::Info,
@@ -253,16 +253,6 @@ impl Message {
     pub fn is_response(&self) -> bool {
         self.message_type == MessageType::Response
     }
-}
-
-/// Generate a simple UUID v4
-fn uuid_v4() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{:032x}", timestamp)
 }
 
 /// Agent registration info

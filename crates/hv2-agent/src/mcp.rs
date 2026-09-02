@@ -1972,7 +1972,7 @@ impl McpServer {
             }
         }
 
-        let session_id = format!("session-{}-{}", agent_id, uuid_v4());
+        let session_id = format!("session-{}-{}", agent_id, fresh_id());
         let session = Arc::new(AgentSession {
             id: session_id.clone(),
             agent_id: agent_id.to_string(),
@@ -2955,7 +2955,7 @@ impl McpServer {
                     .get("memory_gb")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(4);
-                let vm_id = uuid_v4();
+                let vm_id = fresh_id();
 
                 // Record the VM in the session's owned_vms
                 session
@@ -3943,7 +3943,7 @@ impl AgentSession {
         parameters: JsonValue,
     ) -> ToolCallResponse {
         let request = ToolCallRequest {
-            id: uuid_v4(),
+            id: fresh_id(),
             tool: tool.to_string(),
             parameters,
             timeout: None,
@@ -3981,13 +3981,29 @@ impl AgentSession {
 }
 
 /// Generate a UUID v4 string
-pub(crate) fn uuid_v4() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("{:032x}", timestamp)
+/// A fresh 128-bit identifier, as 32 hex digits.
+///
+/// This was previously a hex-formatted nanosecond timestamp under the name
+/// `uuid_v4`. It was neither a UUID nor unique: two calls landing in the same
+/// clock tick returned the same string, and `LocalVmHost::create` inserts by
+/// that string, so the second VM silently replaced the first. `SystemTime`
+/// resolution is coarser on macOS than on Linux or Windows, which is where
+/// `list_reports_every_vm` caught it -- creating "a" then "b" and finding only
+/// "b".
+///
+/// The bytes come from the OS CSPRNG, so identifiers are unpredictable as well
+/// as distinct. Ownership is still enforced by the session and capability
+/// checks rather than by an identifier being hard to guess; this only stops
+/// one agent's VM from taking another's place by accident.
+pub(crate) fn fresh_id() -> String {
+    use rand::TryRng;
+    let mut bytes = [0u8; 16];
+    // A failure here means the OS random source is unavailable, which is not
+    // a condition this process can continue through safely.
+    rand::rng()
+        .try_fill_bytes(&mut bytes)
+        .expect("the OS random source is unavailable");
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 #[cfg(test)]
