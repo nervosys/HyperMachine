@@ -1,3 +1,20 @@
 {
-   "signedContributors": []
+  "signedContributors": [
+    {
+      "name": "admercs",
+      "id": 5751456,
+      "comment_id": 5513362411,
+      "created_at": "2026-09-02T17:07:34Z",
+      "repoId": 1144697706,
+      "pullRequestNo": 76
+    },
+    {
+      "name": "admercs",
+      "id": 5751456,
+      "comment_id": 5513629789,
+      "created_at": "2026-09-02T17:28:14Z",
+      "repoId": 1144697706,
+      "pullRequestNo": 76
+    }
+  ]
 }
