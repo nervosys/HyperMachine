@@ -102,11 +102,18 @@ jobs:
           # branch to write to.
           #
           # The branch now exists as an orphan carrying only dev/bench data.
-          # GitHub Pages is not enabled for this repository, so nothing there
-          # is published; it exists because this action stores data by
-          # committing to a branch of that name. Do not protect it -- the
-          # action commits directly and a pull-request rule breaks it, which
-          # is the same mistake the CLA workflow made with `master`.
+          #
+          # Note that this branch IS published. An earlier version of this
+          # comment claimed GitHub Pages was not enabled here; it is, with
+          # `source.branch` set to `gh-pages`, so everything the action
+          # commits appears at nervosys.github.io/HyperMachine/dev/bench/.
+          # The 404 that suggested otherwise comes from the Pages builds
+          # failing, not from Pages being off. Whatever is stored here is
+          # public.
+          #
+          # Do not protect the branch -- the action commits directly and a
+          # pull-request rule breaks it, which is the same mistake the CLA
+          # workflow made with `master`.
           #
           # Only pushes write history. Once the branch existed, every event
           # wrote to it, so 18 of the first 20 stored measurements came from
