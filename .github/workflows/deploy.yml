@@ -159,7 +159,7 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Configure Kubernetes context
-        uses: azure/k8s-set-context@v4
+        uses: azure/k8s-set-context@v5
         with:
           kubeconfig: ${{ secrets.STAGING_KUBECONFIG }}
 
@@ -214,7 +214,7 @@ jobs:
         uses: azure/setup-helm@v4
 
       - name: Configure Kubernetes context
-        uses: azure/k8s-set-context@v4
+        uses: azure/k8s-set-context@v5
         with:
           kubeconfig: ${{ secrets.PRODUCTION_KUBECONFIG }}
 
