@@ -1,6 +1,6 @@
 [book]
 title = "HyperMachine Documentation"
-authors = ["Nervosys"]
+authors = ["NERVOSYS, LLC"]
 description = "Agentic hypervisors for autonomous AI systems"
 language = "en"
 src = "src"

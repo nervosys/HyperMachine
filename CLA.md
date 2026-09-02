@@ -1,11 +1,11 @@
 # Contributor License Agreement (CLA)
 
-**HyperMachine — Nervosys Contributor License Agreement v1.0**
+**HyperMachine — NERVOSYS, LLC Contributor License Agreement v1.0**
 
 Thank you for your interest in contributing to HyperMachine, a project
-maintained by Nervosys ("We", "Us", or "the Project"). This Contributor
-License Agreement ("Agreement") documents the rights granted by
-contributors to Nervosys.
+maintained by NERVOSYS, LLC ("Nervosys", "We", "Us", or "the Project").
+This Contributor License Agreement ("Agreement") documents the rights
+granted by contributors to Nervosys.
 
 By submitting a Contribution to this project, you accept and agree to the
 following terms and conditions for your present and future Contributions.

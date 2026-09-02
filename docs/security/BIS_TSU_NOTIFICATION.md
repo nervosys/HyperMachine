@@ -77,7 +77,7 @@ We believe the software is classifiable under **ECCN 5D002** and qualifies for t
 
 | | |
 |--|--|
-| **Organization** | Nervosys |
+| **Organization** | NERVOSYS, LLC |
 | **Website** | https://nervosys.ai |
 
 ---
