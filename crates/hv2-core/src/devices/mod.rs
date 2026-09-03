@@ -11,6 +11,7 @@ pub mod lapic;
 pub mod msi;
 pub mod net_backend;
 pub mod nvme;
+pub mod pci_config_io;
 pub mod rtc;
 pub mod serial;
 pub mod timer;
@@ -64,6 +65,7 @@ pub use nvme::{
     CompletionQueueEntry, NvmeController, NvmeQueue, SubmissionQueueEntry, NVME_BLOCK_SIZE,
     NVME_MAX_IO_QUEUES, NVME_MAX_QUEUE_ENTRIES, NVME_SECTOR_SIZE,
 };
+pub use pci_config_io::{PciConfigIo, PCI_CONFIG_IO_BASE, PCI_CONFIG_IO_LAST};
 pub use rtc::RtcDevice;
 pub use serial::SerialDevice;
 pub use timer::TimerDevice;

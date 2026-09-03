@@ -28,7 +28,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::device::{Device, DeviceManager};
-use crate::devices::{KeyboardDevice, RtcDevice, SerialDevice};
+use crate::devices::{
+    KeyboardDevice, PciConfigIo, RtcDevice, SerialDevice, PCI_CONFIG_IO_BASE, PCI_CONFIG_IO_LAST,
+};
 use crate::{Error, Result};
 
 /// COM1's base port. `console=ttyS0` means this one and no other.
@@ -142,9 +144,14 @@ impl Machine {
     }
 
     /// The legacy PC device set: what a Linux kernel needs in order to get as
-    /// far as mounting a root filesystem.
+    /// far as mounting a root filesystem, plus the port pair it uses to find
+    /// anything on a PCI bus.
     ///
-    /// Three devices, each earning its place by a guest hang it fixed.
+    /// The first three earned their place by a guest hang each one fixed. The
+    /// fourth is here because its absence is silent rather than fatal: a guest
+    /// probing for PCI reads `0xff` from the unhandled port, concludes the
+    /// machine has no PCI at all, and carries on booting without ever saying
+    /// so.
     pub fn legacy_pc() -> Self {
         Self {
             devices: vec![
@@ -187,6 +194,19 @@ impl Machine {
                      for the same reason",
                 )
                 .with_irq(1),
+                // No hang without this, which is why it went unnoticed. A
+                // guest that finds nothing at 0xCF8 simply decides the machine
+                // has no PCI bus, and every device behind one becomes
+                // invisible rather than broken. The `pci` module has modelled
+                // buses, config space and capabilities all along; nothing had
+                // ever connected that model to a port a guest reads.
+                MachineDevice::new(
+                    "PCI",
+                    Arc::new(RwLock::new(PciConfigIo::new("PCI"))),
+                    PCI_CONFIG_IO_BASE,
+                    PCI_CONFIG_IO_LAST,
+                    "without the configuration mechanism a guest cannot enumerate PCI at all, and                      reports no bus rather than an empty one",
+                ),
             ],
         }
     }
@@ -327,6 +347,9 @@ mod tests {
             (0x71, "RTC"),       // CMOS data
             (0x60, "i8042"),     // keyboard data
             (0x64, "i8042"),     // keyboard status/command
+            (0xCF8, "PCI"),      // CONFIG_ADDRESS
+            (0xCFC, "PCI"),      // CONFIG_DATA
+            (0xCFF, "PCI"),      // CONFIG_DATA, top byte lane
         ] {
             let handle = manager
                 .find_io_device(port)
@@ -338,6 +361,48 @@ mod tests {
                 "port {port:#x} resolved to the wrong device"
             );
         }
+    }
+
+    /// Reaching the port is not the same as getting an answer. Before the
+    /// configuration mechanism was registered, a guest's first probe fell
+    /// through to the unhandled-port path and read `0xff` in every byte --
+    /// which a kernel reads as "no PCI here" and accepts silently. This drives
+    /// the same sequence a guest does and insists on the two answers that
+    /// distinguish a working bus from an absent one.
+    #[tokio::test]
+    async fn a_guest_probing_pci_gets_an_empty_bus_rather_than_no_bus() {
+        let manager = legacy_manager().await;
+        let pci = manager
+            .find_io_device(PCI_CONFIG_IO_BASE)
+            .await
+            .expect("PCI");
+
+        // Select bus 0, device 0, function 0, register 0, enable bit set --
+        // the first thing any PCI probe writes.
+        let select = 0x8000_0000u32;
+        pci.write_register(u64::from(PCI_CONFIG_IO_BASE - pci.base_port()), select, 4)
+            .await
+            .unwrap();
+
+        // The latch must read back. An unhandled port returns 0xffffffff here
+        // too, so this is what separates "the device answered" from "nothing
+        // is listening".
+        let latched = pci
+            .read_register(u64::from(PCI_CONFIG_IO_BASE - pci.base_port()), 4)
+            .await
+            .unwrap();
+        assert_eq!(
+            latched, select,
+            "CONFIG_ADDRESS did not read back, so nothing is answering at 0xCF8"
+        );
+
+        // With nothing plugged in, the vendor id is all ones: an empty slot on
+        // a bus that exists.
+        let vendor = pci
+            .read_register(u64::from(0xCFC - pci.base_port()), 4)
+            .await
+            .unwrap();
+        assert_eq!(vendor, 0xFFFF_FFFF, "an empty slot reads as all ones");
     }
 
     #[tokio::test]
