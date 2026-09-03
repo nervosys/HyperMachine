@@ -1459,7 +1459,7 @@ impl HyperMachineOntology {
                     "properties": {
                         "id": { "type": "string", "format": "uuid" },
                         "vm_id": { "type": "string", "format": "uuid" },
-                        "script_type": { "type": "string", "enum": ["rhai", "wasm"] },
+                        "script_type": { "type": "string", "enum": ["rhai"] },
                         "state": { "type": "string", "enum": ["pending", "running", "completed", "failed"] },
                         "output": { "type": "string" },
                         "error": { "type": "string" },
@@ -1835,13 +1835,13 @@ impl HyperMachineOntology {
                         "properties": {
                             "script_type": { 
                                 "type": "string", 
-                                "enum": ["rhai", "wasm"],
+                                "enum": ["rhai"],
                                 "default": "rhai",
-                                "description": "Script runtime: 'rhai' for dynamic scripts, 'wasm' for compiled modules"
+                                "description": "Script runtime. Rhai is the only one implemented."
                             },
                             "script": { 
                                 "type": "string",
-                                "description": "Script content (Rhai source code or base64-encoded WASM)"
+                                "description": "Rhai source code"
                             },
                             "timeout_seconds": {
                                 "type": "integer",
@@ -2583,8 +2583,9 @@ impl HyperMachineOntology {
                 AgentSkill {
                     id: "agent_scripting".to_string(),
                     name: "Agent Script Execution".to_string(),
-                    description: "Execute Rhai or WASM scripts in sandboxed VM environments"
-                        .to_string(),
+                    description:
+                        "Execute Rhai scripts on the host against a read-only view of a VM"
+                            .to_string(),
                     tags: vec![
                         "agent".to_string(),
                         "script".to_string(),

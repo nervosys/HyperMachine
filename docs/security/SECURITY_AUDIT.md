@@ -38,15 +38,17 @@ This document provides a comprehensive security audit of HyperMachine, covering:
 
 #### Resolved Vulnerabilities
 
-| ID                | Crate    | Version | Severity  | Status  | Resolution         |
-| ----------------- | -------- | ------- | --------- | ------- | ------------------ |
-| RUSTSEC-2025-0118 | wasmtime | 24.0.4  | Low (1.8) | ✅ FIXED | Upgraded to 24.0.5 |
+| ID                | Crate    | Version | Severity  | Status     | Resolution                |
+| ----------------- | -------- | ------- | --------- | ---------- | ------------------------- |
+| RUSTSEC-2025-0118 | wasmtime | 24.0.4  | Low (1.8) | ✅ REMOVED | Dependency deleted        |
 
 **RUSTSEC-2025-0118 Details:**
 - **Title:** Unsound API access to WebAssembly shared linear memory
 - **Description:** API provided unsound access to shared memory in multi-threaded contexts
 - **Impact:** Potential memory safety issues in WASM workloads
-- **Resolution:** Upgraded wasmtime from 24.0.4 to 24.0.5
+- **Resolution:** wasmtime was first upgraded to 24.0.5, then removed from the
+  workspace entirely. No source ever used it, so no WASM runtime is present and
+  this advisory class no longer applies.
 - **Verification:** `cargo audit` passes with no vulnerabilities
 
 #### Acknowledged Warnings (Unmaintained Crates)
@@ -55,10 +57,12 @@ These are transitive dependencies with no security vulnerabilities, only mainten
 
 | ID                | Crate   | Version | Root Cause                          | Risk Assessment                  |
 | ----------------- | ------- | ------- | ----------------------------------- | -------------------------------- |
-| RUSTSEC-2025-0141 | bincode | 1.3.3   | mbrman → bootloader                 | Low - stable, serialization only |
-| RUSTSEC-2025-0057 | fxhash  | 0.2.1   | fxprof-processed-profile → wasmtime | Low - hash algorithm, no CVEs    |
-| RUSTSEC-2024-0384 | instant | 0.1.13  | rhai                                | Low - time utilities, no CVEs    |
-| RUSTSEC-2024-0436 | paste   | 1.0.15  | wasmtime, wgpu                      | Low - macro utility, no CVEs     |
+| RUSTSEC-2025-0141 | bincode | 1.3.3   | direct dependency of hv2-core       | Low - stable, serialization only |
+| RUSTSEC-2024-0436 | paste   | 1.0.15  | image/rav1e → eframe → hm-gui       | Low - macro utility, no CVEs     |
+
+`fxhash` (RUSTSEC-2025-0057) and `instant` (RUSTSEC-2024-0384) were listed here
+previously. Neither is in the dependency graph any more: `fxhash` arrived through
+wasmtime, which has been removed, and `instant` was dropped by a newer `rhai`.
 
 **Mitigation Strategy:**
 - Monitor for security-relevant updates
@@ -108,7 +112,6 @@ audit_frequency = "weekly"
 | REST API     | Type-checked via serde | JSON schema validation   |
 | gRPC         | Protobuf schema        | Auto-validated           |
 | CLI          | clap type system       | Path canonicalization    |
-| WASM modules | wasmtime sandbox       | Memory limits enforced   |
 | VM configs   | Schema validation      | Resource bounds checking |
 
 ### 2.3 Cryptographic Controls
