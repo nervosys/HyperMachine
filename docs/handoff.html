@@ -277,21 +277,24 @@
 <div class="wrap">
 
 <header>
-  <p class="eyebrow">Engineering handoff · nervosys/HyperMachine</p>
+  <p class="eyebrow">Engineering handoff · nervosys/HyperMachine · 3 September 2026</p>
   <h1>What Actually Ran</h1>
   <p class="standfirst">
-    A guest boots to a shell, an agent runs commands inside it over virtio-vsock
-    through the published API, and the sandboxes confine rather than describe.
-    Everything here is green and <em>nothing is merged</em> — both pull requests
-    are blocked on a review only a human can give.
+    A thousand hardware-isolated agents run at once under a command graph, a
+    unikernel reaches executing code in 2.67&nbsp;ms, and a sandbox costs
+    0.157&nbsp;MiB. Every one of those is measured. And
+    <em>no VM has ever shut down cleanly</em> — <code>stop()</code> does not
+    return, for any guest.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Branch</dt><dd>5294dd0</dd></div>
-    <div class="fact"><dt>PR #70</dt><dd class="good">CI 19/19</dd></div>
-    <div class="fact"><dt>PR #71</dt><dd class="hold">3 of 4</dd></div>
-    <div class="fact"><dt>Workspace</dt><dd class="good">4,812 pass</dd></div>
-    <div class="fact"><dt>Master CI</dt><dd class="hold">red</dd></div>
+    <div class="fact"><dt>Master</dt><dd>32e1f69</dd></div>
+    <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
+    <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
+    <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
+    <div class="fact"><dt>Per sandbox</dt><dd class="good">0.157 MiB</dd></div>
+    <div class="fact"><dt>Concurrent</dt><dd class="good">1,000</dd></div>
+    <div class="fact"><dt>stop()</dt><dd class="hold">hangs</dd></div>
   </dl>
 </header>
 
@@ -299,391 +302,356 @@
   <h2>The one thing to read first</h2>
 
   <div class="callout stop">
-    <h3>Nothing has landed, and master is broken until it does.</h3>
+    <h3><code>VM::stop()</code> never returns, and never has.</h3>
     <p>
-      Master's Clippy job fails on <code>manual_slice_fill</code> in
-      <code>crates/hv2-core/src/crypto/fips.rs</code> — the Rust 1.98 lint the
-      previous handoff predicted. The fix (<code>d6c061a</code>) has never been
-      pushed to master; it rides on PR #70. That is why #70's CI is green while
-      master's is red, and why #71 shows red on jobs it has nothing to do with.
+      Not slowly — not at all, at twenty seconds, for every guest shape tried.
+      <code>examples/halt_stop_probe</code> reproduces it in three variants that
+      differ only in what the guest does before shutdown:
     </p>
+    <pre>write-then-halt : stop() DID NOT RETURN within 20 s   console "."
+halt-only       : stop() DID NOT RETURN within 20 s   console ""
+spin-forever    : stop() DID NOT RETURN within 20 s   console ""</pre>
+    <p>
+      <code>stop()</code> clears the running flag, sends each vCPU a Stop
+      message, then awaits the vCPU task handles — all of which depend on the
+      vCPU leaving <code>KVM_RUN</code>, and none of which a thread inside the
+      ioctl can observe. And it cannot be made to leave, because
+      <code>KvmVcpu::run</code> retries on <code>EINTR</code> unconditionally:
+    </p>
+    <pre>Err(e) if e.raw_os_error() == Some(libc::EINTR) =&gt; continue,</pre>
     <p style="margin-bottom:0">
-      <strong>Merge #70 first, then #71.</strong> Both are blocked by a repository
-      ruleset requiring one approving review.
+      That retry is exactly the mechanism a VMM uses to kick a vCPU out. Without
+      a check before it, the vCPU is <strong>uninterruptible by
+      construction</strong>: a guest that stops exiting to userspace, by halting
+      or by spinning, owns its thread until the process dies.
     </p>
   </div>
 
   <p>
-    The second thing worth knowing is that this host has a Linux kernel and the
-    previous handoff was wrong to assume otherwise. WSL2 Debian 6.18 with cargo
-    installed is one command away, and running the sandbox there found two
-    defects that cross-compiling could never have shown.
+    Confirmed against a hung process: 0% CPU, all 28 threads sleeping,
+    <code>vcpu-0</code> at <code>wchan = kvm_vcpu_block</code>, everything else
+    parked on futexes. Nothing starved and nothing raced.
+  </p>
+
+  <p>
+    <strong>This changes how to read every other number here.</strong> Runs that
+    appeared to finish were killed by their <code>timeout</code> after printing.
+    The measurements were already on stdout and are unaffected — but no example
+    that calls <code>stop()</code> has exited cleanly, and every VM leaks its
+    vCPU thread.
   </p>
 </section>
 
 <section>
   <h2>What shipped</h2>
 
-  <h3>Running a command in the guest, for real</h3>
+  <h3>The cold start was never measured, and the first measurement found a 474× defect</h3>
   <p>
-    <code>execute_script</code> was described in four places as running inside the
-    guest and always evaluated a Rhai script on the host. The engine was never the
-    problem: nothing in the repo could reach a guest at all. Virtio devices kept
-    their descriptor tables in host <code>Vec</code>s that tests filled in, and no
-    virtio register file was ever mapped into guest physical address space.
-  </p>
-  <ul>
-    <li><strong>GuestQueue</strong> — split virtqueues read out of guest memory. Every field is guest-written, so each is bounded: a chain that cycles is refused, an index past the table errors, indirect tables may not nest, a chain may not claim more than 64&nbsp;MiB.</li>
-    <li><strong>VirtioMmioTransport</strong> — virtio-mmio v2, implementing <code>Device</code>, so <code>register_mmio_region</code> puts it on the MMIO exit path <code>VM::run</code> already takes.</li>
-    <li><strong>VsockDevice</strong>, <code>hv2-guest-agent</code> (wire protocol and in-guest binary), <code>GuestAgent</code>, <code>AgentVM::exec_in_guest</code> — surfaced as <code>vm.exec</code> and <code>POST /api/v1/vms/{id}/exec</code>.</li>
-  </ul>
-  <p>
-    Four ways of having no guest to run in each fail as themselves rather than as
-    a timeout. An agent that receives a timeout when the real problem is a missing
-    device retries forever.
-  </p>
-
-  <h3>Sandboxes that confine</h3>
-  <p>
-    Two things here were named like sandboxes and confined nothing.
-    <code>hv2-agent</code>'s <code>Sandbox</code> says so in its own docs;
-    <code>hv2-core::container</code> is 3,866 lines whose <code>start()</code>
-    reads <em>"For now, simulate with a PID"</em> and reports <code>Running</code>
-    with a fabricated <code>1000 + n</code>. A repo-wide search for
-    <code>seccomp|setrlimit|unshare|prctl|CreateJobObject</code> found prose and
-    struct fields, and not one confinement syscall.
+    Nothing in this repository had ever timed a boot. <code>vm_bench</code>,
+    whose results are published to <code>gh-pages</code>, measures guest-memory
+    allocation and snapshot serialisation — neither is a boot. So no performance
+    claim about HyperMachine could be checked in either direction.
   </p>
   <p>
-    <code>hv2-sandbox</code> is built on one rule: <strong>silently dropping a
-    control is worse than no sandbox</strong>, because a caller who asked for no
-    network and got one believes the opposite of the truth. So
-    <code>controls()</code> reports what <em>this host</em> enforces, probed by
-    attempting each one; a spec asking for what the backend lacks is refused,
-    naming the control and why; <code>best_effort()</code> is an explicit opt-in
-    whose result says what was dropped.
+    <code>hv2-agent --example cold_start</code> is the instrument. It reports
+    percentiles decomposed into four phases and refuses to print a number it did
+    not measure. Its first run said <code>launch</code> was 998.79&nbsp;ms and
+    scaled with guest memory — the shape of touching every page.
   </p>
   <p>
-    Two backends behind one trait — <code>ProcessSandbox</code> (cgroup v2,
-    namespaces, rlimits, <code>no_new_privs</code> on Linux; job objects on
-    Windows) and <code>MicroVmSandbox</code> on the vsock machinery above.
-    <code>sandbox.run</code> and <code>sandbox.capabilities</code> expose it to
-    agents.
+    The cause was one line and one alignment. <code>create_vm</code> allocated
+    guest RAM with <code>alloc_zeroed</code> at 4096-byte alignment, and Rust
+    forwards that to <code>calloc</code> only when alignment ≤
+    <code>MIN_ALIGN</code> (16 on x86-64). A page-aligned request took the other
+    branch: <code>aligned_alloc</code> then
+    <code>write_bytes(ptr, 0, size)</code> — a full memset of the guest's RAM,
+    zeroing memory the kernel already guarantees is zero. Measured on the host:
+    <code>calloc</code> of 1&nbsp;GiB is 0.0&nbsp;ms, <code>memset</code> of
+    1&nbsp;GiB is 848&nbsp;ms. <strong>The memset was the cold start.</strong>
+  </p>
+  <p>
+    It decided density as much as latency: a 1&nbsp;GiB VM cost 1&nbsp;GiB of
+    host RAM before executing an instruction. Now an anonymous
+    <code>mmap</code>, faulted in lazily.
   </p>
 
-  <div class="callout">
-    <h3>One change alters existing behaviour: <code>Admin</code> no longer implies <code>HostExec</code>.</h3>
-    <p style="margin-bottom:0">
-      Every other capability is implied by the <code>Admin</code> wildcard, and
-      every other tool acts on VMs the server manages. This one acts on the machine
-      the server runs on. Leaving it in the wildcard would have granted host
-      execution to every session already holding <code>Admin</code> the moment the
-      tool shipped — a privilege expansion nobody would have written down.
-      <code>AgentCapabilities::full()</code> now names it explicitly, so "full"
-      still means full.
-    </p>
-  </div>
+  <h3>Concurrency was capped at one VM per core, on the path a sandbox takes</h3>
+  <p>
+    <code>run()</code> chose between two execution paths.
+    <code>run_parallel</code> gives each vCPU a thread; <code>run_single</code>
+    awaited <code>backend.run_vcpu()</code> inline on the shared runtime, and
+    <code>run_vcpu</code> blocks inside <code>KVM_RUN</code>. The condition sent
+    a VM to <code>run_single</code> unless it had multiple vCPUs
+    <em>and</em> <code>parallel_vcpu</code>, or pinned affinity — and a sandbox
+    is a one-vCPU VM with neither.
+  </p>
+  <p>
+    23 VMs worked; 24 hung at 0% CPU on a 24-core host. After routing every VM
+    through the threaded path: <strong>1,000 concurrent VMs, all 1,000 guests
+    verified as having executed</strong>, 156.75&nbsp;MiB between them.
+  </p>
+  <p>
+    Worth knowing for next time: the first attempt at this fixed
+    <code>spawn_vcpu_task</code> and changed nothing, because
+    <code>run_single</code> never called it. The fix was applied to the path the
+    measurement was not using, and only the measurement caught that.
+  </p>
+
+  <h3>A unikernel boots, and having no kernel is the whole argument</h3>
+  <p>
+    <code>BootSource::Raw</code> named unikernels in its documentation and the
+    only example using it loaded <code>examples/guest_code/hello.bin</code> — a
+    path that has never existed in this repository. It has never been runnable.
+  </p>
+  <p>
+    <code>hv2-core --example unikernel_boot</code> assembles its guest in-process
+    so it cannot rot into a missing asset: 73 bytes of 16-bit real mode that
+    write to COM1 and halt. First output at <strong>2.67&nbsp;ms median</strong>
+    over nine runs. Every <code>out</code> leaves the guest, is decoded here, and
+    lands in a device model, so the console line proves the whole path — which is
+    why the example prints the console rather than a success line.
+  </p>
+
+  <h3>An orchestration layer that enforces rather than describes</h3>
+  <p>
+    <code>hv2-swarm</code> is a command graph: down is a command to any
+    descendant, up is a report to the immediate parent only, sideways needs an
+    explicit one-way grant, everything else is refused with the rule named. A
+    message may also name a capability, and then the recipient must hold it —
+    and on a command, <strong>so must the sender</strong>. Authority delegates
+    downward but does not amplify; without that rule every capability in the
+    swarm belongs to anyone with a subordinate who holds it.
+  </p>
+  <p>
+    <code>Swarm::send</code> is the only way a message moves and consults the
+    graph inside it. The tests assert on <em>delivery</em>, not on verdicts: a
+    rule that returns "denied" while the message still arrives passes a verdict
+    test and fails the swarm. <code>hv2-core</code> is a dev-dependency, not a
+    dependency — the policy layer needs no hypervisor to decide who may talk.
+  </p>
+  <p>
+    <code>examples/guest_transport</code> carries a message across the
+    host/guest boundary over COM1 and watches the guest echo it, with the
+    refusal verified at the recipient's console rather than at the sender's
+    return value.
+  </p>
 </section>
 
 <section>
-  <h2>The verification ledger</h2>
+  <h2>Measured, against the thing we are measured against</h2>
   <p>
-    The column that matters is the last one. This session's whole lesson is that
-    <em>compiles</em> and <em>was run</em> are different claims, and that a test
-    reading its own configuration back is not evidence of anything.
+    CubeSandbox (Tencent, 11.7k stars, v0.7) publishes 60&nbsp;ms cold start and
+    under 5&nbsp;MB per sandbox. All HyperMachine figures below are from this
+    host on 3 September, on WSL2 with real KVM — a virtualised host, so the
+    proportions travel and the absolutes are not bare-metal comparable.
   </p>
 
   <div class="scroll">
   <table>
-    <caption>Every claim, and what stands behind it</caption>
     <thead>
-      <tr><th>Claim</th><th>Evidence</th><th>Where</th></tr>
+      <tr><th>Metric</th><th>CubeSandbox</th><th>HyperMachine</th><th>Evidence</th></tr>
     </thead>
     <tbody>
       <tr>
-        <td class="claim">Workspace is sound</td>
-        <td><span class="tag ran">ran</span> 4,812 tests, 0 failing</td>
-        <td class="where">Windows host + CI</td>
+        <td>Cold start, unikernel</td><td>60 ms</td><td><strong>2.67 ms</strong></td>
+        <td><span class="tag ran">ran</span> 9 runs, guest console verified</td>
       </tr>
       <tr>
-        <td class="claim">Linux sandbox confines</td>
-        <td><span class="tag ran">ran</span> 20 tests + clippy <code>-D warnings</code></td>
-        <td class="where">WSL2 Debian 6.18, unprivileged</td>
+        <td>Cold start, Linux guest</td><td>60 ms</td><td>1,014 ms</td>
+        <td><span class="tag ran">ran</span> 8 runs; 988 ms of it is kernel boot</td>
       </tr>
       <tr>
-        <td class="claim">Windows sandbox confines</td>
-        <td><span class="tag ran">ran</span> 18 tests; kernel refuses the workload's 2nd process</td>
-        <td class="where">Windows host + CI</td>
+        <td>Memory per sandbox</td><td>&lt;5 MB</td><td><strong>0.157 MiB</strong></td>
+        <td><span class="tag ran">ran</span> RSS delta, 1,000 VMs</td>
       </tr>
       <tr>
-        <td class="claim">macOS backend works</td>
-        <td><span class="tag ran">ran</span> built and tested on real hardware</td>
-        <td class="where">CI, macos-latest</td>
+        <td>Overhead vs guest size</td><td>flat to 32 GB</td><td><strong>flat</strong></td>
+        <td><span class="tag ran">ran</span> 8 GiB guests cost the same as 1 GiB</td>
       </tr>
       <tr>
-        <td class="claim">vsock device implements the protocol</td>
-        <td><span class="tag ran">ran</span> 43 tests driving real guest memory</td>
-        <td class="where">Windows host + CI</td>
+        <td>Concurrent sandboxes</td><td>"thousands per node"</td><td><strong>1,000</strong></td>
+        <td><span class="tag ran">ran</span> all 1,000 guests executed</td>
       </tr>
       <tr>
-        <td class="claim">The guest agent answers on a real AF_VSOCK socket</td>
-        <td><span class="tag ran">ran</span> binds port 1024, pings, execs, reports exit 7</td>
-        <td class="where">Linux 6.18, real AF_VSOCK socket</td>
+        <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
+        <td><span class="tag ran">ran</span> 18 tests, and over 1,000 real VMs</td>
       </tr>
       <tr>
-        <td class="claim">A guest executes</td>
-        <td><span class="tag ran">ran</span> KVM VM and vCPUs created, image loaded, guest ran and printed to COM1</td>
-        <td class="where">WSL2, <code>/dev/kvm</code>, nested virt</td>
+        <td>Windows host</td><td>x86_64 Linux + KVM only</td><td>WHP backend</td>
+        <td><span class="tag typed">typed</span> WHP fails here: HRESULT 0x80370302</td>
       </tr>
       <tr>
-        <td class="claim">A Linux guest driver binds to the vsock device</td>
-        <td><span class="tag ran">ran</span> device 0x0013, status 0x0f (DRIVER_OK|FEATURES_OK), driver vmw_vsock_virtio_transport</td>
-        <td class="where">custom kernel, CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES=y</td>
-      </tr>
-      <tr>
-        <td class="claim">vsock carries data between host and guest</td>
-        <td><span class="tag ran">ran</span> host opens a connection, the guest answers over the transmit queue, state reaches Established — the rings were zeros because the device model was reading a different allocation from the guest</td>
-        <td class="where">WSL2 + KVM, custom kernel</td>
-      </tr>
-      <tr>
-        <td class="claim">The device model shares the guest's memory</td>
-        <td><span class="tag ran">ran</span> the kernel image is visible through GuestMemory at 0x100000; it read as zeros before, so every emulated device was on a separate allocation</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">A VM that boots a kernel has the devices to reach userspace</td>
-        <td><span class="tag ran">ran</span> <code>VM::provision</code> attaches COM1, the CMOS and the i8042 whenever a boot source is set. Only the boot probe registered them before, so a VM created through a host had no console at all — not a degraded guest but one that cannot reach userspace</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">An injected keystroke reaches the guest</td>
-        <td><span class="tag ran">ran</span> <code>inject_scancode</code> raises IRQ 1 on a sink, not only on the userspace PIC that a guest with an in-kernel irqchip never reads. Found by sweeping for the class rather than waiting for it to surface as a hang</td>
-        <td class="where">unit test</td>
-      </tr>
-      <tr>
-        <td class="claim">The guest agent answers through the emulated device</td>
-        <td><span class="tag ran">ran</span> host sends a framed request, hv2-guest-agentd reads it and replies: <code>{"kind":"pong","agent_version":"1.1.0"}</code>. It had not, because the operation numbers were each one below the specification — what the host sent as RW arrived as SHUTDOWN with zero flags, which Linux handles by doing nothing at all</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">Userspace runs a real program set</td>
-        <td><span class="tag ran">ran</span> busybox: /proc and /sys mounted, applets exec, interactive sh; host-typed commands execute and reply</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">A Linux kernel boots</td>
-        <td><span class="tag ran">ran</span> decompresses, enters the kernel, reads our e820 map back verbatim, prints ~20 lines of kernel log to COM1</td>
-        <td class="where">WSL2 + KVM, <code>examples/linux_boot_probe.rs</code></td>
-      </tr>
-      <tr>
-        <td class="claim">A Linux kernel reaches userspace</td>
-        <td><span class="tag ran">ran</span> initramfs unpacked, init executed as PID 1; proved by <code>Attempted to kill init! exitcode=0x00002a00</code></td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">Userspace output reaches the console</td>
-        <td><span class="tag ran">ran</span> init writes to /dev/console and the bytes come out of VM::console_output; reproduced</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">A device interrupt reaches a guest</td>
-        <td><span class="tag ran">ran</span> the 8250 driver's transmit interrupt is delivered through KVM_IRQ_LINE and its handler runs</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">A device can interrupt without being asked</td>
-        <td><span class="tag ran">ran</span> a device raises through <code>InterruptSink</code> without waiting for a guest access. Delivery runs on its own OS thread: as a task it shared a runtime with the vCPU loop, which blocks in <code>KVM_RUN</code>, so an idle guest waited on an interrupt queued behind a worker it was itself occupying</td>
-        <td class="where">enough for a driven UART, not general</td>
-      </tr>
-      <tr>
-        <td class="claim">vm.exec reaches a guest through the MCP tools</td>
-        <td><span class="tag ran">ran</span> <code>AgentVM::ping_guest</code> and <code>exec_in_guest</code> answer from a real guest: <code>exit=Some(0)</code>, stdout <code>Linux (none) 6.6.52 … x86_64</code>. The VM attaches the device and puts the argument on the command line itself, so a caller cannot forget either</td>
-        <td class="where">upstream of the data path</td>
-      </tr>
-      <tr>
-        <td class="claim">Filesystem isolation (process backend)</td>
-        <td><span class="tag ran">ran</span> pivot_root + mount namespace; a workload cannot see a file outside its root, and a read-only bind refuses writes recursively</td>
-        <td class="where">WSL2 Debian 6.18, unprivileged</td>
-      </tr>
-      <tr>
-        <td class="claim">32-bit protected-mode entry state is correct</td>
-        <td><span class="tag ran">ran</span> a hand-assembled image entered at 1 MB executes and drives COM1</td>
-        <td class="where">WSL2 + KVM</td>
-      </tr>
-      <tr>
-        <td class="claim">Evicted context is recoverable word for word</td>
-        <td><span class="tag ran">ran</span> 49 unit tests + 11 through the MCP surface; search finds it, expand returns the original</td>
-        <td class="where">Windows host + WSL2 Debian</td>
-      </tr>
-      <tr>
-        <td class="claim">Context runtime is a resident namespace</td>
-        <td><span class="tag none">not built</span> a confined process with a durable workspace; files persist between calls, variables do not</td>
-        <td class="where">trait, so a kernel backend can slot in</td>
-      </tr>
-      <tr>
-        <td class="claim">CLA workflow repaired</td>
-        <td><span class="tag typed">unverifiable</span> <code>pull_request_target</code> runs the base branch's file</td>
-        <td class="where">only testable post-merge</td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
-</section>
-
-<section>
-  <h2>What running on a kernel found</h2>
-  <p>
-    The Linux backend had only ever been type-checked. Both defects it turned up
-    were the same shape — a claim that held in the mechanism and failed in what
-    the workload could observe.
-  </p>
-
-  <h3>1. <code>best_effort</code> attempted what the probe had already refused</h3>
-  <p>
-    On any host without cgroup delegation it promised to run with whatever was
-    available, then tried to create a cgroup its own probe had reported
-    unavailable, and failed. Fixed structurally rather than locally:
-    <code>Sandbox::run</code> now filters the spec through
-    <code>without_controls</code> before handing it down, so no backend can
-    attempt a control its probe rejected.
-  </p>
-
-  <h3>2. <code>/proc</code> and <code>/sys</code> were inherited</h3>
-  <p>
-    Neither is an ordinary directory; each is a view of the namespace it was
-    <em>mounted in</em>. The workload was correctly PID&nbsp;1 in its own namespace
-    and could still enumerate 48 host processes; netlink showed only loopback while
-    <code>/sys/class/net</code> listed the host's interfaces. "Cannot signal" was
-    true and "cannot see" was not. Both namespaces now carry
-    <code>CLONE_NEWNS</code> and remount the filesystem that describes them, and
-    both probes rehearse the remount rather than only the <code>unshare</code>.
-  </p>
-
-  <p>
-    The tests that pin this ask the workload what it can <em>see</em> rather than
-    reading <code>controls()</code> back — a test doing only the latter passes on a
-    backend that reports everything and applies nothing.
-  </p>
-
-  <pre><i>$ cargo run -p hv2-sandbox --example probe   # WSL2 Debian 6.18, uid 1000</i>
-backend: process
-  unavailable memory limit         <i>— no writable cgroup v2 hierarchy</i>
-  unavailable process count limit  <i>— no writable cgroup v2 hierarchy</i>
-  <b>ENFORCED</b>    CPU time limit
-  <b>ENFORCED</b>    wall-clock deadline
-  <b>ENFORCED</b>    network isolation
-  <b>ENFORCED</b>    filesystem isolation
-  <b>ENFORCED</b>    process isolation
-  <b>ENFORCED</b>    no-new-privileges
-
-  pid namespace:   <b>pid=1</b>
-  network interfaces: <b>1</b>
-  process table:   <b>3</b>   <i>(48 before the /proc remount)</i></pre>
-</section>
-
-<section>
-  <h2>CI state</h2>
-  <p>
-    Only the <strong>CI</strong> workflow is the tracked set. The others have been
-    failing on master continuously, so their red marks had stopped carrying
-    information. Three are now repaired.
-  </p>
-
-  <div class="scroll">
-  <table>
-    <caption>PR #71 — workflow repairs</caption>
-    <thead>
-      <tr><th>Workflow</th><th>Root cause</th><th>State</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td class="claim">Miri</td>
-        <td><code>rust-toolchain.toml</code> pins stable and overrides the action, so <code>cargo miri</code> ran on stable, which never ships miri</td>
-        <td><span class="tag ran">fixed, verified</span></td>
-      </tr>
-      <tr>
-        <td class="claim">Coverage</td>
-        <td><code>hv2-api</code>'s build script needs <code>protoc</code>; <code>ci.yml</code> installs it everywhere, this workflow never did</td>
-        <td><span class="tag ran">fixed, verified</span></td>
-      </tr>
-      <tr>
-        <td class="claim">CLA</td>
-        <td><code>contributor-assistant/github-action@v2</code> — the action publishes only <code>vX.Y.Z</code> tags, so it never resolved</td>
-        <td><span class="tag typed">fixed, untestable</span></td>
-      </tr>
-      <tr>
-        <td class="claim">Benchmarks</td>
-        <td>protoc installed, and criterion's output converted to the format the tracking action expects</td>
-        <td><span class="tag typed">fixed</span></td>
+        <td>Control plane, E2B SDK, CoW snapshots</td><td>all three</td><td>none</td>
+        <td><span class="tag none">none</span> not attempted</td>
       </tr>
     </tbody>
   </table>
   </div>
 
-  <div class="callout">
-    <h3>The CLA fix changes behaviour</h3>
-    <p style="margin-bottom:0">
-      That check has been inert — failing to resolve rather than checking anything.
-      Repairing it makes it enforce, so contributors will start being asked to sign.
-      It is isolated to one line if the timing is wrong.
-    </p>
+  <p>
+    The Linux-guest row is the honest loss and it is not a hypervisor problem:
+    everything this project controls is 25.5&nbsp;ms of that 1,014, and the rest
+    is a generic 12.9&nbsp;MB kernel booting. CubeSandbox does not boot one
+    either — by their own description, pooling and snapshot cloning "skip all
+    cold-start overhead".
+  </p>
+</section>
+
+<section>
+  <h2>The four pillars, graded by evidence</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Pillar</th><th>Where</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Unikernel</td><td><code>BootSource::Raw</code></td>
+        <td><span class="tag ran">ran</span> 73 bytes executing, 2.67 ms</td>
+      </tr>
+      <tr>
+        <td>Type-2 hosted</td><td><code>hv2-core</code>, KVM + WHP</td>
+        <td><span class="tag ran">ran</span> Linux 6.6.52 booted, command run via the API</td>
+      </tr>
+      <tr>
+        <td>Agent sandbox</td><td><code>hv2-sandbox</code></td>
+        <td><span class="tag ran">ran</span> namespaces, pivot_root, cgroup v2, job objects</td>
+      </tr>
+      <tr>
+        <td>Type-1 bare metal</td><td><code>hv1-core</code>, <code>hv1-arm</code></td>
+        <td><span class="tag typed">typed</span> EL2, stage-2, vGIC — never booted on hardware</td>
+      </tr>
+    </tbody>
+  </table>
   </div>
+  <p>
+    Three proven by execution, one by compilation. "Uniquely supports four
+    models" invites exactly the scrutiny this project applies to itself, and for
+    Type-1 the current answer is that it compiles.
+  </p>
 </section>
 
 <section>
   <h2>Open, with diagnosis</h2>
 
-  <h3>Benchmarks: criterion output the action cannot parse</h3>
+  <h3>1. <code>stop()</code> hangs — the blocking defect</h3>
   <p>
-    <code>benchmark-action</code> is configured with <code>tool: 'cargo'</code>,
-    which parses libtest format — <code>test &lt;name&gt; ... bench: N ns/iter</code>.
-    The repo's benches are criterion with <code>harness = false</code>, which does
-    not emit that. The obvious fix does <em>not</em> work: I ran
-    <code>--output-format bencher</code> locally and it emits
-    <code>bench: 363 ns/iter (+/- 7)</code> with no <code>test &lt;name&gt;</code>
-    prefix — precisely the part the parser needs.
-  </p>
-  <p>
-    Making it green needs a decision, not a flag: post-process criterion's JSON,
-    switch the benches to a libtest harness, or replace the action. Note also that
-    <code>auto-push: true</code> will start writing benchmark history the moment it
-    works.
+    Described above. The fix is a stop path that can interrupt the ioctl: a
+    signal with a handler installed <em>without</em> <code>SA_RESTART</code>, a
+    per-vCPU flag the <code>EINTR</code> arm consults before retrying, and
+    <code>kvm_run-&gt;immediate_exit</code> so the next entry returns rather than
+    re-entering the guest. Delicate work in the hottest path in the system.
+    <code>examples/halt_stop_probe</code> is the reproducer and bounds its own
+    wait, so it reports instead of hanging.
   </p>
 
-  <h3>Commit signing</h3>
+  <h3>2. A Multiboot guest launches and produces nothing</h3>
   <p>
-    The ruleset requires signed commits and <strong>not one commit in this repo is
-    signed</strong> — unsigned commits reach master through the
-    <code>OrganizationAdmin</code> bypass. A key exists at
-    <code>~/.ssh/git-signing</code>, usable without a passphrase, but git is not
-    configured to use it and the <code>gh</code> token lacks
-    <code>admin:ssh_signing_key</code>, so whether GitHub would mark it verified is
-    unknown. Signing this branch alone would make it stricter than everything
-    already merged and would not unblock the merge, which is why it was left.
+    <code>BootSource::Multiboot</code> is the entry a compiled unikernel needs —
+    flat 32-bit protected mode, paging off, <code>EAX</code>/<code>EBX</code> set
+    — and <code>Raw</code> only ever gives 16-bit real mode, which is why
+    everything so far has been hand-assembled. Load and entry addresses agree
+    (<code>0x100000</code>), provision and launch both succeed, and no output
+    appears. The investigation was abandoned when it turned out the hang was
+    defect 1, not anything about Multiboot. This is the gate on a real
+    <code>no_std</code> Rust unikernel, and so on an actual agent payload.
   </p>
 
-  <h3>Left deliberately</h3>
+  <h3>3. <code>test_timer_frequency</code> fails on Linux</h3>
   <p>
-    <code>hv2-core::container</code> remains a model that fabricates PIDs — a
-    signpost was added in <code>hv2-agent/src/sandbox.rs</code> pointing at the real
-    thing, but nothing was half-migrated. <code>hv2-agent</code>'s
-    <code>Sandbox</code> stays as it is: bounding a Rhai script in-process is a
-    different job from OS confinement, and the module is honest about which is
-    which.
+    16 or 17 ticks against an expected 19, on a clean tree, with and without any
+    change from this session. A wall-clock-dependent test; the fix is virtual
+    time, not a wider tolerance.
+  </p>
+
+  <h3>4. The swarm transport does not reach a guest agent</h3>
+  <p>
+    <code>guest_transport</code> writes into COM1 and the guest echoes, which is
+    real delivery. vsock is the right transport and is unreachable from a guest
+    this small — it needs protected mode and virtqueues, which is defect 2
+    again.
+  </p>
+
+  <h3>5. Roadmap E4, still open</h3>
+  <p>
+    <code>AgentPolicy</code>'s quotas and rate limits are recorded and consulted
+    by nothing. Where usage counters live — per session, per agent, across
+    restarts — is a design question. <code>hv2-swarm</code> was built the other
+    way round deliberately: one chokepoint, consulted inside it.
   </p>
 </section>
 
 <section>
-  <h2>What to do next</h2>
+  <h2>Environment notes that cost time</h2>
   <ul>
-    <li><strong>Merge #70, then #71.</strong> Order matters — #71 inherits master's Rust 1.98 breakage until #70 lands. Both need one approving review; the admin bypass exists if you want it.</li>
-    <li><strong>Join the two halves.</strong> The agent has been proven over the kernel's own vsock stack and the device against tests; nothing has yet driven one from the other. That is the first real boot, and it still needs a Linux host with KVM, an Intel Mac, or Windows with Hyper-V disabled — WSL2 has a kernel but no <code>/dev/kvm</code>.</li>
-    <li><strong>Decide the benchmark question</strong> above, or turn that workflow off rather than leaving a permanently red mark nobody reads.</li>
-    <li><strong>Decide on commit signing</strong> as a standing practice, or drop the ruleset requirement that nothing satisfies.</li>
+    <li>
+      <strong>KVM works here.</strong> WSL2, kernel 6.18.33.2, API version 12, 24
+      vCPUs, 45&nbsp;GB. The user must be in the <code>kvm</code> group;
+      <code>sudo</code> blocks on a password, and
+      <code>wsl -u root -e usermod -aG kvm $USER</code> does not.
+    </li>
+    <li>
+      <strong>Build WSL into its own target directory.</strong>
+      <code>CARGO_TARGET_DIR=/var/tmp/hm-target</code> — a WSL build over
+      <code>/mnt/c</code> shares <code>target/</code> with the Windows host and
+      silently invalidates its artifacts.
+    </li>
+    <li>
+      <strong><code>protoc</code> is not installed in WSL</strong>, so
+      <code>hv2-api</code> does not build there and
+      <code>cargo test --workspace</code> fails on the Linux side. Per-crate runs
+      work: <code>hv2-core</code> is 2,167 passing with the one timer failure,
+      <code>hv2-swarm</code> 18.
+    </li>
+    <li>
+      <strong>Windows Hypervisor Platform fails on this host</strong> with
+      <code>Failed to set processor count: HRESULT 0x80370302</code>, so the
+      Windows backend is unexercised here.
+    </li>
+    <li>
+      <strong>Paths through <code>wsl.exe</code> need
+      <code>MSYS_NO_PATHCONV=1</code></strong>, or Git Bash rewrites
+      <code>/var/tmp/...</code> into a Windows path.
+    </li>
   </ul>
 </section>
 
+<section>
+  <h2>What to do next</h2>
+  <ol>
+    <li>
+      <strong>Fix <code>stop()</code>.</strong> Nothing else is safe to build on
+      while every VM leaks its vCPU thread and no process using the API can exit
+      cleanly. Start from <code>examples/halt_stop_probe</code>, which fails
+      today and should pass.
+    </li>
+    <li>
+      <strong>Then find why the Multiboot guest is silent</strong>, because that
+      is the gate on a compiled unikernel and therefore on an agent payload
+      rather than 73 bytes of hand-assembly.
+    </li>
+    <li>
+      <strong>Then a <code>no_std</code> Rust unikernel</strong> targeting that
+      entry, and a vsock transport for <code>hv2-swarm</code> so a message
+      reaches an agent rather than a serial port.
+    </li>
+    <li>
+      <strong>Boot <code>hv1</code> on hardware</strong>, or stop calling Type-1
+      a supported model.
+    </li>
+  </ol>
+  <p>
+    One habit is worth carrying forward, because it earned its place three times
+    today: <em>measure before claiming, and assert on the effect rather than the
+    verdict</em>. The memset was found by timing, not by reading. The
+    <code>run_single</code> ceiling was found because the fix that should have
+    worked changed nothing. And the first regression test written for the VM-id
+    collision passed against the broken code, which is how the second one came
+    to check entropy instead of luck.
+  </p>
+</section>
+
 <footer>
-  feat/virtio-vsock · head 8920920 · PR #70 (CI 19/19) and #71 · master red pending #70 · nothing merged
+  master 32e1f69 · 0 open PRs · 0 open issues · 37 commits on 3 September ·
+  measured on WSL2 + KVM, not bare metal · <code>stop()</code> hangs and is the first thing to fix
 </footer>
 
 </div>
