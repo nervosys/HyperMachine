@@ -1500,15 +1500,27 @@ impl VM {
             self.config.vcpu_count
         );
 
-        // Pinned vCPUs always use the parallel path, which gives each vCPU its
-        // own (optionally core-pinned) thread — even for a single vCPU.
-        if (self.config.parallel_vcpu && self.config.vcpu_count > 1)
-            || !self.config.vcpu_affinity.is_empty()
-        {
-            self.run_parallel().await
-        } else {
-            self.run_single().await
-        }
+        // Every vCPU gets its own thread, whatever the vCPU count. There used
+        // to be a `run_single` for the one-vCPU case that awaited
+        // `backend.run_vcpu()` inline on the shared runtime, and since
+        // `run_vcpu` blocks inside `KVM_RUN` until the guest exits, each such
+        // VM held a runtime worker for as long as its guest ran.
+        //
+        // A sandbox is a one-vCPU VM, so that was every sandbox, and it capped
+        // how many could exist at once at the host core count. Measured with
+        // `examples/memory_overhead` on a 24-core host:
+        //
+        //     23 VMs   0.139 MiB per VM, all guests ran
+        //     24 VMs   hangs at 0% CPU
+        //
+        // Nothing was short of memory -- twenty-three concurrent VMs cost
+        // 3.2 MiB between them -- and nothing was short of KVM: 400 bare
+        // `KVM_CREATE_VM` fds open on this host without error. The executor
+        // was the limit, and only for the path a sandbox actually takes.
+        //
+        // `run_parallel` spawns each vCPU through `spawn_vcpu_task`, which
+        // owns a thread, and then awaits a notification rather than blocking.
+        self.run_parallel().await
     }
 
     /// Run VM with single-threaded vCPU execution (round-robin)
