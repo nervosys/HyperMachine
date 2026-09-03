@@ -96,7 +96,7 @@ fn parse_options() -> Result<Options, String> {
         cpu_cores: 1,
         kernel: std::env::var("HV2_KERNEL").ok(),
         initrd: std::env::var("HV2_INITRD").ok(),
-        ready_timeout: Duration::from_secs(30),
+        ready_timeout: Duration::from_secs(10),
     };
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -121,12 +121,16 @@ fn parse_options() -> Result<Options, String> {
             }
             "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--ready-timeout-secs" => {
+                opts.ready_timeout =
+                    Duration::from_secs(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
+            }
             "--kernel" => opts.kernel = Some(value(&mut i)?),
             "--initrd" => opts.initrd = Some(value(&mut i)?),
             "--help" | "-h" => {
                 println!(
                     "usage: cold_start [--iterations N] [--concurrency N] [--memory-gb N] \
-                     [--cpu-cores N] [--kernel PATH] [--initrd PATH]"
+                     [--cpu-cores N] [--kernel PATH] [--initrd PATH]                      [--ready-timeout-secs N]"
                 );
                 std::process::exit(0);
             }
@@ -182,14 +186,25 @@ async fn one(opts: Arc<Options>, index: usize) -> Result<Sample, String> {
 
     // Only meaningful with a guest that has an agent in it. Without one this
     // would measure the timeout, not the boot.
+    let mut ready = Ok(());
     if opts.kernel.is_some() {
         let started = Instant::now();
-        vm.ping_guest(opts.ready_timeout)
-            .await
-            .map_err(|e| format!("waiting for the guest agent: {e}"))?;
-        sample.ready = Some(started.elapsed());
+        match vm.ping_guest(opts.ready_timeout).await {
+            Ok(_) => sample.ready = Some(started.elapsed()),
+            Err(e) => ready = Err(format!("waiting for the guest agent: {e}")),
+        }
     }
 
+    // Stop it whatever happened, and before returning the error if there was
+    // one. A vCPU left running does not idle: it spins, and every iteration
+    // after this one would then be measuring a busier machine. Leaving five
+    // failed creations running is how a benchmark comes to measure its own
+    // garbage -- observed here as 498% CPU across abandoned VMs.
+    if let Err(e) = vm.stop().await {
+        tracing::warn!("could not stop the VM after measuring: {e}");
+    }
+
+    ready?;
     Ok(sample)
 }
 
