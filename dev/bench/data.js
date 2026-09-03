@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788459823869,
+  "lastUpdate": 1788463634224,
   "repoUrl": "https://github.com/nervosys/HyperMachine",
   "entries": {
     "HyperMachine Benchmarks": [
@@ -5831,6 +5831,330 @@ window.BENCHMARK_DATA = {
             "name": "tool_formats/serialize_openai_tools",
             "value": 7617.991,
             "range": "+/- 49.54",
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "opensource@nervosys.ai",
+            "name": "nervosys",
+            "username": "admercs"
+          },
+          "committer": {
+            "email": "opensource@nervosys.ai",
+            "name": "nervosys",
+            "username": "admercs"
+          },
+          "distinct": true,
+          "id": "b85403aa02c19c3e66ee1472025f14de515a988e",
+          "message": "feat(swarm): a command graph that decides who may talk to whom\n\nFirst piece of the orchestration layer. The substrate for it landed in\nfb6b5af, which took concurrent sandboxes from 23 to 1,000 at 0.157 MiB\neach; this decides what those thousand agents are allowed to say to each\nother.\n\nThe design question was where enforcement lives, and there was only one\ndefensible answer. If agents address each other directly, a permission\ngraph is advice. So `Swarm::send` is the only way a message moves, it\nconsults the graph before handing anything to a transport, and there is no\nsecond path. This repository already has the other arrangement --\n`AgentPolicy` records quotas and rate limits that nothing reads -- and an\nunconsulted rule is worse than an absent one, because it is believed.\n\nThe model is a command tree with explicit lateral edges:\n\n  down     an agent commands anything beneath it, at any depth\n  up       an agent reports to its immediate parent, and no further\n  sideways nothing, unless a grant says otherwise\n  else     refused, with the rule named\n\nThe asymmetry between the two vertical directions is deliberate. A\nsupervisor reaching a grandchild is delegation working; a grandchild\nreaching a grandparent is a subordinate choosing its own audience and\nrouting around every supervisor in between, so `SkipsLevel` names the\nparent it may address instead.\n\nGrants are one-way. A worker that may hand a finding to an auditor has not\nthereby agreed to take instructions back from it, and a symmetric grant\nwould quietly create the second edge.\n\nThe tests assert on delivery rather than on verdicts. A rule that returns\n\"denied\" while the message still arrives passes a verdict test and fails\nthe swarm, so `a_refused_message_does_not_arrive` checks the recipient's\ninbox is empty, and `revoking_a_grant_closes_the_edge` checks that exactly\nthe message sent while the grant was open is the one that got through.\n`a_thousand_agents_keep_their_boundaries` builds the shape this is for --\n1,001 agents, ten supervisors, ninety-nine workers each -- and checks the\nroot still commands a leaf nine hundred agents away while siblings cannot\nreach each other.\n\nTransport is a trait with one in-process implementation. That is a real\ndelivery mechanism rather than a stub, which is what makes the enforcement\ntests mean something. A vsock transport reaching an agent inside a\nunikernel is the next piece, and it changes where messages land, not who\nmay send them.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01RsopUtvfyNzkKbbte56vZv",
+          "timestamp": "2026-09-03T12:10:10-07:00",
+          "tree_id": "890768e7b71d706451df800eb858008a729b8218",
+          "url": "https://github.com/nervosys/HyperMachine/commit/b85403aa02c19c3e66ee1472025f14de515a988e"
+        },
+        "date": 1788463631170,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "aes_gcm_decrypt/1024",
+            "value": 570.859,
+            "range": "+/- 1.036",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/16384",
+            "value": 3452.212,
+            "range": "+/- 17.753",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/256",
+            "value": 429.447,
+            "range": "+/- 0.965",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/4096",
+            "value": 1028.423,
+            "range": "+/- 3.479",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/64",
+            "value": 399.721,
+            "range": "+/- 1.215",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/65536",
+            "value": 16563.143,
+            "range": "+/- 53.896",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/1024",
+            "value": 629.094,
+            "range": "+/- 1.416",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/16384",
+            "value": 3823.116,
+            "range": "+/- 8.694",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/256",
+            "value": 497.787,
+            "range": "+/- 2.083",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/4096",
+            "value": 1204.396,
+            "range": "+/- 4.43",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/64",
+            "value": 456.784,
+            "range": "+/- 3.356",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/65536",
+            "value": 13257.148,
+            "range": "+/- 46.082",
+            "unit": "ns"
+          },
+          {
+            "name": "fips_self_tests",
+            "value": 2710.043,
+            "range": "+/- 5.696",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes128_key",
+            "value": 102.146,
+            "range": "+/- 0.228",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes256_key",
+            "value": 119.514,
+            "range": "+/- 0.609",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/128",
+            "value": 1224.395,
+            "range": "+/- 6.673",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/256",
+            "value": 1962.11,
+            "range": "+/- 7.801",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/32",
+            "value": 653.716,
+            "range": "+/- 2.151",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/64",
+            "value": 849.849,
+            "range": "+/- 4.148",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/1024",
+            "value": 1104.292,
+            "range": "+/- 7.889",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/16384",
+            "value": 12030.097,
+            "range": "+/- 11.86",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/256",
+            "value": 504.672,
+            "range": "+/- 1.559",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/4096",
+            "value": 3280.778,
+            "range": "+/- 5.97",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/64",
+            "value": 358.414,
+            "range": "+/- 0.451",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/deserialize_ontology",
+            "value": 76407.532,
+            "range": "+/- 360.042",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/serialize_ontology",
+            "value": 12108.425,
+            "range": "+/- 229.951",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/1024",
+            "value": 436.313,
+            "range": "+/- 10.828",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/16",
+            "value": 19.464,
+            "range": "+/- 0.263",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/256",
+            "value": 102.737,
+            "range": "+/- 0.229",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/32",
+            "value": 22.802,
+            "range": "+/- 0.209",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/4096",
+            "value": 1577.833,
+            "range": "+/- 3.603",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/64",
+            "value": 35.627,
+            "range": "+/- 0.204",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/parse_create_vm_request",
+            "value": 2061.863,
+            "range": "+/- 14.767",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/serialize_list_response",
+            "value": 19224.903,
+            "range": "+/- 524.013",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1024",
+            "value": 839.681,
+            "range": "+/- 0.987",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1048576",
+            "value": 747215.078,
+            "range": "+/- 288.275",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/16384",
+            "value": 11806.429,
+            "range": "+/- 12.634",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/256",
+            "value": 281.444,
+            "range": "+/- 0.512",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/4096",
+            "value": 3035.163,
+            "range": "+/- 3.742",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/64",
+            "value": 139.512,
+            "range": "+/- 0.404",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/65536",
+            "value": 46728.78,
+            "range": "+/- 19.049",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1024",
+            "value": 2531.57,
+            "range": "+/- 8.526",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1048576",
+            "value": 2277034.174,
+            "range": "+/- 13638.102",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/16384",
+            "value": 35538.139,
+            "range": "+/- 192.81",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/256",
+            "value": 925.453,
+            "range": "+/- 9.863",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/4096",
+            "value": 9244.762,
+            "range": "+/- 132.41",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/64",
+            "value": 327.379,
+            "range": "+/- 1.022",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/65536",
+            "value": 141949.997,
+            "range": "+/- 841.715",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_anthropic_tools",
+            "value": 6773.4,
+            "range": "+/- 28.544",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_openai_tools",
+            "value": 7632.136,
+            "range": "+/- 57.45",
             "unit": "ns"
           }
         ]
