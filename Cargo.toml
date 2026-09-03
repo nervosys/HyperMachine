@@ -101,7 +101,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Configuration
-toml = "0.8"
+toml = "1.1"
 
 # Time and date
 chrono = "0.4"
