@@ -212,7 +212,7 @@ impl VirtualGpu {
         let instance = Instance::new(InstanceDescriptor {
             backends: Backends::all(),
             flags: InstanceFlags::default(),
-            ..Default::default()
+            ..InstanceDescriptor::new_without_display_handle()
         });
 
         // Request adapter (prefer high-performance GPU)
@@ -221,9 +221,13 @@ impl VirtualGpu {
                 power_preference: PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                // Report the adapter's real limits rather than rounding them
+                // into portability buckets: the capability report below is
+                // meant to describe this host, not a portable subset.
+                apply_limit_buckets: false,
             })
             .await
-            .ok_or_else(|| GpuError::NotAvailable("No compatible GPU adapter found".into()))?;
+            .map_err(|e| GpuError::NotAvailable(format!("No compatible GPU adapter found: {e}")))?;
 
         let adapter_info = adapter.get_info();
         tracing::info!(
@@ -238,15 +242,14 @@ impl VirtualGpu {
 
         // Request device with reasonable limits
         let (device, queue) = adapter
-            .request_device(
-                &DeviceDescriptor {
-                    label: Some(&self.name),
-                    required_features: Features::empty(),
-                    required_limits: Limits::downlevel_defaults(),
-                    memory_hints: MemoryHints::Performance,
-                },
-                None,
-            )
+            .request_device(&DeviceDescriptor {
+                label: Some(&self.name),
+                required_features: Features::empty(),
+                required_limits: Limits::downlevel_defaults(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                memory_hints: MemoryHints::Performance,
+                trace: wgpu::Trace::Off,
+            })
             .await
             .map_err(|e| GpuError::InitFailed(format!("Failed to create device: {}", e)))?;
 
@@ -266,13 +269,15 @@ impl VirtualGpu {
             features: GpuFeatures {
                 compute: true,
                 graphics: true,
-                ray_tracing: adapter_features
-                    .contains(Features::RAY_TRACING_ACCELERATION_STRUCTURE),
+                ray_tracing: adapter_features.contains(Features::EXPERIMENTAL_RAY_QUERY),
                 bindless: adapter_features.contains(
                     Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING,
                 ),
                 sparse_resources: false,
-                multi_draw_indirect: adapter_features.contains(Features::MULTI_DRAW_INDIRECT),
+                // wgpu 30 makes multi-draw indirect unconditional, emulating
+                // it where a backend lacks it. Only the count-buffer variant
+                // is still a feature.
+                multi_draw_indirect: true,
                 timestamp_query: adapter_features.contains(Features::TIMESTAMP_QUERY),
             },
             backend: format!("{:?}", adapter_info.backend),
@@ -680,8 +685,8 @@ impl VirtualGpu {
                     });
                     let pl = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                         label: Some("vgpu_compute_pl"),
-                        bind_group_layouts: &[&bgl],
-                        push_constant_ranges: &[],
+                        bind_group_layouts: &[Some(&bgl)],
+                        immediate_size: 0,
                     });
                     (Some(pl), Some(bgl))
                 };
@@ -690,7 +695,7 @@ impl VirtualGpu {
                     label: Some("vgpu_compute_pipeline"),
                     layout: pipeline_layout.as_ref(),
                     module: &shader.module,
-                    entry_point: "main",
+                    entry_point: Some("main"),
                     compilation_options: Default::default(),
                     cache: None,
                 });
@@ -762,7 +767,11 @@ impl VirtualGpu {
     /// Wait for GPU to be idle
     pub async fn wait_idle(&self) -> Result<()> {
         if let Some(device) = &self.device {
-            device.poll(wgpu::Maintain::Wait);
+            device
+                .poll(wgpu::PollType::wait_indefinitely())
+                .map_err(|e| {
+                    GpuError::NotAvailable(format!("waiting for the GPU to go idle: {e}"))
+                })?;
         }
         Ok(())
     }
