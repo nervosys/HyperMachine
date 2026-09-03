@@ -27,5 +27,8 @@ tokio = { workspace = true }
 [[example]]
 name = "unikernel_swarm"
 
+[[example]]
+name = "guest_transport"
+
 [lints]
 workspace = true
