@@ -655,19 +655,43 @@ impl KvmVm {
             let vm_fd = kvm_create_vm(kvm_fd, 0)
                 .map_err(|e| Error::Hypervisor(format!("Failed to create KVM VM: {}", e)))?;
 
-            // Allocate guest memory
+            // Allocate guest memory.
+            //
+            // `mmap` rather than `alloc_zeroed`, which cost most of a cold
+            // start. Rust's `alloc_zeroed` only forwards to `calloc` when the
+            // alignment is at most `MIN_ALIGN` (16 on x86-64); KVM needs a
+            // page-aligned address, so a 4096 alignment took the other branch
+            // -- `aligned_alloc` followed by `write_bytes(ptr, 0, size)`. That
+            // is a full memset of the guest's RAM, and it is pure waste: the
+            // kernel already guarantees anonymous pages are zero.
+            //
+            // Measured on this host: `calloc` of 1 GiB is 0.0ms, `memset` of
+            // 1 GiB is 848ms at 1.27 GB/s, and a 1 GiB launch took 944ms of
+            // which `build` and `channel` were 1.6ms together. The memset was
+            // the cold start.
+            //
+            // It also decided the memory footprint. Writing every page
+            // materialises the whole guest allocation immediately, so a 1 GiB
+            // VM cost 1 GiB of host RAM before the guest had executed one
+            // instruction. Mapped lazily, a VM costs what its guest has
+            // actually touched.
             let guest_memory = if memory_size > 0 {
-                let layout = std::alloc::Layout::from_size_align(memory_size as usize, 4096)
-                    .map_err(|e| {
-                        libc::close(vm_fd);
-                        Error::Memory(format!("Invalid memory layout: {}", e))
-                    })?;
-
-                let ptr = std::alloc::alloc_zeroed(layout);
-                if ptr.is_null() {
+                let ptr = libc::mmap(
+                    std::ptr::null_mut(),
+                    memory_size as usize,
+                    libc::PROT_READ | libc::PROT_WRITE,
+                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_NORESERVE,
+                    -1,
+                    0,
+                );
+                if ptr == libc::MAP_FAILED {
                     libc::close(vm_fd);
-                    return Err(Error::Memory("Failed to allocate guest memory".into()));
+                    return Err(Error::Memory(format!(
+                        "Failed to map {memory_size} bytes of guest memory: {}",
+                        std::io::Error::last_os_error()
+                    )));
                 }
+                let ptr = ptr as *mut u8;
 
                 // Map guest memory into KVM
                 let region = kvm_userspace_memory_region {
@@ -679,7 +703,7 @@ impl KvmVm {
                 };
 
                 if let Err(e) = kvm_set_user_memory_region(vm_fd, &region) {
-                    std::alloc::dealloc(ptr, layout);
+                    libc::munmap(ptr as *mut libc::c_void, memory_size as usize);
                     libc::close(vm_fd);
                     return Err(Error::Hypervisor(format!(
                         "Failed to set user memory region: {}",
@@ -703,9 +727,7 @@ impl KvmVm {
             // Set TSS address (required by KVM for x86)
             if let Err(e) = kvm_set_tss_addr(vm_fd, 0xfffbd000) {
                 if let Some(ptr) = guest_memory {
-                    let layout =
-                        std::alloc::Layout::from_size_align_unchecked(memory_size as usize, 4096);
-                    std::alloc::dealloc(ptr.as_ptr(), layout);
+                    libc::munmap(ptr.as_ptr() as *mut libc::c_void, memory_size as usize);
                 }
                 libc::close(vm_fd);
                 return Err(Error::Hypervisor(format!(
@@ -975,11 +997,11 @@ impl Drop for KvmVm {
                 .unwrap_or_else(|e| e.into_inner())
                 .clear();
 
-            // Free guest memory
+            // Free guest memory. Mapped with `mmap`, so unmapped with
+            // `munmap` -- freeing it through the Rust allocator would be
+            // undefined behaviour.
             if let Some(ptr) = self.guest_memory {
-                let layout =
-                    std::alloc::Layout::from_size_align_unchecked(self.memory_size as usize, 4096);
-                std::alloc::dealloc(ptr.as_ptr(), layout);
+                libc::munmap(ptr.as_ptr() as *mut libc::c_void, self.memory_size as usize);
             }
 
             // Close VM fd
