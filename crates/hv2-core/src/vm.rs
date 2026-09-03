@@ -362,6 +362,13 @@ pub struct VM {
     /// outside the device manager — an agent opening a channel to a program in
     /// the guest needs the device itself, not an MMIO handle.
     vsock: RwLock<Option<AttachedVsock>>,
+    /// The PCI root complex the guest reads through the 0xCF8 window.
+    ///
+    /// Held here rather than inside the machine model because attaching a PCI
+    /// device means adding its configuration space to the same root complex
+    /// the guest enumerates, and there is no way to reach one the model built
+    /// for itself.
+    pci_root: Arc<parking_lot::RwLock<crate::pci::PciRootComplex>>,
 }
 
 /// A vsock device and where the guest will find it.
@@ -376,9 +383,45 @@ struct AttachedVsock {
     ///
     /// The device cannot do it itself: the interrupt belongs to the transport,
     /// which owns the status bits a driver reads to find out why it woke.
-    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+    transport: VsockTransport,
     base_address: u64,
     irq: u8,
+}
+
+/// Which transport a vsock device is attached through.
+///
+/// The device is the same either way -- `VsockDevice` implements
+/// `VirtioMmioDevice`, whose name is historical rather than descriptive -- and
+/// the only thing the host side asks of a transport is that it can raise the
+/// used-queue interrupt after publishing.
+enum VsockTransport {
+    /// Found by the guest because the address was put on the kernel command
+    /// line. Needs `CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES`.
+    Mmio(Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>),
+    /// Found by the guest enumerating its PCI bus, with no command line
+    /// argument and nothing the kernel has to have been built for.
+    Pci(Arc<tokio::sync::RwLock<crate::devices::virtio_pci::VirtioPciTransport>>),
+}
+
+impl Clone for VsockTransport {
+    /// Both variants are handles, so a clone shares the transport rather than
+    /// copying it. Derived `Clone` would demand `Clone` on the transports
+    /// themselves, which they are not.
+    fn clone(&self) -> Self {
+        match self {
+            Self::Mmio(t) => Self::Mmio(Arc::clone(t)),
+            Self::Pci(t) => Self::Pci(Arc::clone(t)),
+        }
+    }
+}
+
+impl VsockTransport {
+    async fn signal_used_queue(&self) -> Result<()> {
+        match self {
+            Self::Mmio(t) => t.read().await.signal_used_queue(),
+            Self::Pci(t) => t.read().await.signal_used_queue(),
+        }
+    }
 }
 
 impl VM {
@@ -467,6 +510,7 @@ impl VM {
             memory,
             devices,
             extra_cmdline: parking_lot::Mutex::new(Vec::new()),
+            pci_root: Arc::new(parking_lot::RwLock::new(crate::pci::PciRootComplex::new())),
             interrupt_queue: parking_lot::Mutex::new(Some(interrupt_rx)),
             pic,
             backend,
@@ -567,7 +611,7 @@ impl VM {
         // own machine model before provisioning keeps it, and is not refused
         // for having done the thing this is a default for.
         if boot.is_some() {
-            crate::machine::Machine::legacy_pc()
+            crate::machine::Machine::legacy_pc_with_pci_root(Arc::clone(&self.pci_root))
                 .attach_absent(&self.devices)
                 .await?;
         }
@@ -1054,6 +1098,161 @@ impl VM {
     /// Interrupt line the vsock device raises, by default.
     pub const VSOCK_IRQ: u8 = 5;
 
+    /// Where a PCI vsock device's BAR window lands by default.
+    ///
+    /// Past [`Self::VSOCK_MMIO_BASE`] and its register window, so a VM can
+    /// carry both transports without them overlapping -- which is what the
+    /// tests do, and what anyone comparing the two would want.
+    pub const VSOCK_PCI_BAR_BASE: u64 = 0xd001_0000;
+
+    /// PCI slot the vsock device occupies on bus 0.
+    ///
+    /// Slot 0 is conventionally the host bridge. Nothing here models one, but
+    /// a guest that finds a virtio device there is being told something odd
+    /// about the machine, and slots are free.
+    pub const VSOCK_PCI_SLOT: u8 = 3;
+
+    /// Interrupt line reported to the guest for the PCI vsock device.
+    ///
+    /// 11 is the conventional line for a PCI device on a legacy PC, and is not
+    /// one the legacy machine model already uses: COM1 has 4, the RTC 8, the
+    /// i8042 1, and MMIO vsock 5.
+    pub const VSOCK_PCI_IRQ: u8 = 11;
+
+    /// The PCI root complex this VM's guest enumerates.
+    ///
+    /// A caller adding its own PCI device needs this: configuration space has
+    /// to go into the same root complex the `0xCF8` window reads, and a device
+    /// added anywhere else is invisible however complete it is.
+    pub fn pci_root(&self) -> Arc<parking_lot::RwLock<crate::pci::PciRootComplex>> {
+        Arc::clone(&self.pci_root)
+    }
+
+    /// Attach a vsock device the guest can find by enumerating PCI.
+    ///
+    /// The difference from [`attach_vsock`](Self::attach_vsock) is discovery,
+    /// not function. Over MMIO the guest is told where to look, on the kernel
+    /// command line, and only a kernel built with
+    /// `CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES` can act on it. Here the guest
+    /// walks a bus it already knows how to walk, reads a vendor and device id
+    /// it already recognises, and binds `virtio_pci` -- so a stock
+    /// distribution image finds the device with no argument at all.
+    ///
+    /// Nothing is added to the kernel command line, deliberately. That is the
+    /// whole point.
+    ///
+    /// # Errors
+    ///
+    /// Refuses a second vsock device, and a window that overlaps guest RAM,
+    /// for the same reasons the MMIO path does.
+    pub async fn attach_vsock_pci(
+        self: &Arc<Self>,
+        guest_cid: u64,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        self.attach_vsock_pci_at(guest_cid, Self::VSOCK_PCI_BAR_BASE, Self::VSOCK_PCI_IRQ)
+            .await
+    }
+
+    /// Attach a PCI vsock device at an explicit window and interrupt line.
+    pub async fn attach_vsock_pci_at(
+        self: &Arc<Self>,
+        guest_cid: u64,
+        bar_base: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
+        use crate::devices::virtio_pci::{VirtioPciTransport, VIRTIO_PCI_BAR_SIZE};
+        use crate::devices::virtio_vsock::VsockDevice;
+
+        if self.vsock.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a vsock device; a second would give the guest two \
+                 devices claiming the same context ID"
+                    .to_string(),
+            ));
+        }
+
+        // The BAR window is not RAM. Placing it inside the guest's memory
+        // would give two different meanings to one address, and the failure
+        // would surface as memory corruption rather than as a bad address.
+        if bar_base < self.memory.total_size() {
+            return Err(Error::Device(format!(
+                "vsock BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VsockDevice::new(guest_cid)?));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioPciTransport::new("virtio-vsock-pci", bar_base, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+
+        // Configuration space first: it has to exist before the guest reads
+        // it, and building it asks the transport where its own structures
+        // are, so the two cannot disagree.
+        let mut config = transport.read().await.config_space();
+        // Which line the guest should unmask. Without this a driver binds,
+        // programs its queues, and then waits on an interrupt nobody raises.
+        config.set_interrupt_line(irq);
+        config.set_interrupt_pin(crate::pci::InterruptPin::IntA);
+        self.pci_root
+            .write()
+            .add_device(Self::VSOCK_PCI_SLOT, 0, config);
+
+        self.devices
+            .register_device("virtio-vsock-pci", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-vsock-pci".to_string(),
+                bar_base,
+                VIRTIO_PCI_BAR_SIZE,
+            )
+            .await?;
+
+        // Deliver packets as they are queued rather than when a caller
+        // remembers to ask, on a dedicated thread for the same reason the MMIO
+        // path uses one: the vCPU loop blocks a runtime worker inside
+        // `KVM_RUN`, and a delivery task behind it would be starved exactly
+        // when the guest is idle and waiting to be told something.
+        let (packet_tx, packet_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
+
+        let pump_vm = Arc::clone(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-vsock-pci-{}", self.config.name))
+            .spawn(move || {
+                while packet_rx.recv().is_ok() {
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_vsock().await {
+                            tracing::debug!("vsock: a queued packet could not be delivered: {e}");
+                        }
+                    });
+                }
+            })
+            .map_err(|e| {
+                Error::Config(format!("could not start the vsock delivery thread: {e}"))
+            })?;
+
+        *self.vsock.write() = Some(AttachedVsock {
+            device: device.clone(),
+            transport: VsockTransport::Pci(transport),
+            base_address: bar_base,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': vsock device attached over PCI at slot {}, BAR {:#x} \
+             (guest CID {guest_cid}, IRQ {irq}) -- no kernel argument needed",
+            self.config.name,
+            Self::VSOCK_PCI_SLOT,
+            bar_base
+        );
+        Ok(device)
+    }
+
     /// Attach a vsock device at an explicit address and interrupt line.
     ///
     /// The general form of [`Self::attach_vsock`], for a guest whose memory
@@ -1146,7 +1345,7 @@ impl VM {
 
         *self.vsock.write() = Some(AttachedVsock {
             device: device.clone(),
-            transport,
+            transport: VsockTransport::Mmio(transport),
             base_address,
             irq,
         });
@@ -1201,7 +1400,7 @@ impl VM {
             device.deliver_pending(&self.memory)?
         };
         if published {
-            attached.1.read().await.signal_used_queue()?;
+            attached.1.signal_used_queue().await?;
         }
         Ok(published)
     }
@@ -2385,6 +2584,132 @@ mod tests {
         let device = vm.attach_vsock(3).await.expect("attach");
         assert_eq!(device.lock().guest_cid(), 3);
         assert!(vm.vsock().is_some());
+    }
+
+    /// Attaching over PCI is only worth anything if a guest walking the bus
+    /// finds the device. This does exactly what a guest does -- write
+    /// CONFIG_ADDRESS, read CONFIG_DATA, through the same port the kernel
+    /// uses -- rather than inspecting the root complex directly, because
+    /// adding configuration space that no port exposes is the failure this
+    /// whole change exists to fix.
+    #[tokio::test]
+    async fn a_guest_enumerating_pci_finds_the_vsock_device() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        let pci = vm
+            .devices()
+            .find_io_device(crate::devices::PCI_CONFIG_IO_BASE)
+            .await
+            .expect("the PCI configuration mechanism is not mapped");
+
+        // CONFIG_ADDRESS for bus 0, the slot the device took, function 0,
+        // register 0 -- built the way a guest builds it.
+        let select = 0x8000_0000u32 | (u32::from(VM::VSOCK_PCI_SLOT) << 11);
+        pci.write_register(0, select, 4).await.unwrap();
+        let id = pci.read_register(4, 4).await.unwrap();
+
+        assert_eq!(id & 0xFFFF, 0x1AF4, "vendor id is not virtio");
+        // 0x1040 + 19: modern virtio-vsock.
+        assert_eq!(id >> 16, 0x1053, "device id is not virtio-vsock");
+
+        // The interrupt line, so the guest knows what to unmask. Without it a
+        // driver binds, programs its queues, and waits on an interrupt nobody
+        // raises.
+        pci.write_register(0, select | 0x3C, 4).await.unwrap();
+        let intr = pci.read_register(4, 4).await.unwrap();
+        assert_eq!(
+            intr & 0xFF,
+            u32::from(VM::VSOCK_PCI_IRQ),
+            "interrupt line not reported to the guest"
+        );
+        assert_eq!((intr >> 8) & 0xFF, 1, "interrupt pin should be INTA");
+    }
+
+    /// The BAR window has to be reachable as memory too, or the guest finds a
+    /// device it cannot talk to.
+    #[tokio::test]
+    async fn the_pci_vsock_bar_window_is_mapped_as_mmio() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        let mmio = vm
+            .devices()
+            .find_mmio_device(VM::VSOCK_PCI_BAR_BASE)
+            .await
+            .expect("the BAR window is not mapped");
+        assert_eq!(mmio.device_name(), "virtio-vsock-pci");
+
+        // The last byte of the window, to catch a region registered with the
+        // wrong size.
+        assert!(vm
+            .devices()
+            .find_mmio_device(
+                VM::VSOCK_PCI_BAR_BASE + crate::devices::virtio_pci::VIRTIO_PCI_BAR_SIZE - 1
+            )
+            .await
+            .is_some());
+    }
+
+    /// Discovery is the entire difference between the two transports, so a
+    /// PCI attach must not put anything on the command line.
+    #[tokio::test]
+    async fn attaching_over_pci_adds_no_kernel_argument() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        assert!(
+            vm.extra_kernel_args().is_empty(),
+            "a PCI device is found by enumeration; telling the guest where it \
+             is on the command line would mean it was not"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_vsock_device_is_refused_whichever_transport_asks() {
+        let Some(vm) = vsock_vm() else {
+            return;
+        };
+        // The machine model rather than `provision`, which needs a hypervisor
+        // this host may not have. This registers the same devices provision
+        // does, including the PCI window the test then reads through.
+        crate::machine::Machine::legacy_pc_with_pci_root(vm.pci_root())
+            .attach_absent(&vm.devices())
+            .await
+            .expect("attach the legacy machine");
+        vm.attach_vsock_pci(3).await.expect("attach over PCI");
+
+        // Two devices claiming one context ID is not something a guest can
+        // make sense of, and the transport they arrive on does not change it.
+        assert!(vm.attach_vsock(4).await.is_err());
+        assert!(vm.attach_vsock_pci(4).await.is_err());
     }
 
     #[tokio::test]

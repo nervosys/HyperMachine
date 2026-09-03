@@ -272,6 +272,14 @@ impl VirtioPciTransport {
         config
     }
 
+    /// Raise the vring interrupt: what a device calls after it has published
+    /// used descriptors on its own initiative, rather than in response to a
+    /// notify. The name matches the MMIO transport so the two are
+    /// interchangeable to a caller.
+    pub fn signal_used_queue(&self) -> Result<()> {
+        self.signal_used()
+    }
+
     /// Raise the queue interrupt: set the ISR bit and assert the line.
     fn signal_used(&self) -> Result<()> {
         // The bit comes first and matters either way: the driver's handler

@@ -153,6 +153,20 @@ impl Machine {
     /// machine has no PCI at all, and carries on booting without ever saying
     /// so.
     pub fn legacy_pc() -> Self {
+        Self::legacy_pc_with_pci_root(Arc::new(parking_lot::RwLock::new(
+            crate::pci::PciRootComplex::new(),
+        )))
+    }
+
+    /// The legacy set, with the PCI window onto a root complex the caller
+    /// keeps a handle to.
+    ///
+    /// A VM needs this: attaching a PCI device means adding its configuration
+    /// space to the same root complex the guest reads through `0xCF8`, and
+    /// there is no way to reach the one `legacy_pc` builds for itself.
+    pub fn legacy_pc_with_pci_root(
+        pci_root: Arc<parking_lot::RwLock<crate::pci::PciRootComplex>>,
+    ) -> Self {
         Self {
             devices: vec![
                 // Without this there is no console at all: `console=ttyS0`
@@ -202,7 +216,7 @@ impl Machine {
                 // ever connected that model to a port a guest reads.
                 MachineDevice::new(
                     "PCI",
-                    Arc::new(RwLock::new(PciConfigIo::new("PCI"))),
+                    Arc::new(RwLock::new(PciConfigIo::with_root("PCI", pci_root))),
                     PCI_CONFIG_IO_BASE,
                     PCI_CONFIG_IO_LAST,
                     "without the configuration mechanism a guest cannot enumerate PCI at all, and                      reports no bus rather than an empty one",
