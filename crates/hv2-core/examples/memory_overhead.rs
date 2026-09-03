@@ -131,6 +131,9 @@ async fn main() -> std::process::ExitCode {
             ..Default::default()
         };
 
+        // Progress on stderr: a run that blocks should say which VM it
+        // blocked on rather than going quiet after the baseline.
+        eprint!("creating VM {}/{count}... ", index + 1);
         let vm = match VM::new(config) {
             Ok(vm) => Arc::new(vm),
             Err(e) => {
@@ -153,6 +156,8 @@ async fn main() -> std::process::ExitCode {
             samples.push(rss);
         }
     }
+
+    eprintln!();
 
     // Give the guests a moment to run and touch what they touch, so the number
     // includes a VM that has executed rather than one that has only been

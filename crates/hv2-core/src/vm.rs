@@ -1607,79 +1607,90 @@ impl VM {
         let vcpu_id = vcpu.id();
         let core = self.config.affinity_for(vcpu_id);
 
-        match core {
-            // Pinned vCPU: run the loop on a dedicated OS thread bound to `core`
-            // with its own current-thread runtime, so the vCPU never migrates
-            // across cores. A thin tokio task awaits the thread's result, keeping
-            // the returned handle type unchanged.
-            Some(core) => tokio::spawn(async move {
-                let (done_tx, done_rx) = tokio::sync::oneshot::channel();
-                let spawned = std::thread::Builder::new()
-                    .name(format!("vcpu-{vcpu_id}-core{core}"))
-                    .spawn(move || {
-                        match crate::cpu_affinity::pin_current_thread(core) {
-                            Ok(()) => {
-                                tracing::info!("vCPU {vcpu_id} pinned to host core {core}");
-                            }
-                            Err(e) => {
-                                tracing::warn!("vCPU {vcpu_id}: failed to pin to core {core}: {e}");
-                            }
+        // Every vCPU runs on its own OS thread with its own current-thread
+        // runtime, pinned or not. A thin tokio task awaits the thread's result,
+        // so the returned handle type is unchanged.
+        //
+        // The unpinned case used to be a plain `tokio::spawn` onto the shared
+        // runtime, and that capped how many VMs a process could run at once.
+        // `run_vcpu` blocks inside `KVM_RUN` until the guest exits, so a vCPU
+        // task occupies a runtime worker for as long as its guest is running
+        // rather than yielding. Once every worker held one, nothing could make
+        // progress -- not another VM's provisioning, not the device I/O the
+        // running guests were waiting on -- and the process stopped at 0% CPU.
+        //
+        // Measured before this change, with `examples/memory_overhead`:
+        //
+        //     4 runtime workers    3 VMs ok,  6 hang
+        //    24 runtime workers   20 VMs ok, 30 hang
+        //
+        // About one VM per host core, which is a hard ceiling on density and
+        // has nothing to do with memory: twenty concurrent VMs cost 2.89 MiB
+        // between them. The rest of this file had already reached this
+        // conclusion twice -- interrupt delivery and the vsock pump each got a
+        // dedicated thread, both commented with the observation that the vCPU
+        // loop blocks a runtime worker inside `KVM_RUN`. Everything around the
+        // vCPU was moved off the runtime; the vCPU itself was not.
+        //
+        // A thread per vCPU is what a blocking ioctl wants anyway: the kernel
+        // is the scheduler here, the thread is descheduled inside the ioctl
+        // rather than spinning, and an idle guest costs a parked thread.
+        tokio::spawn(async move {
+            let (done_tx, done_rx) = tokio::sync::oneshot::channel();
+            let name = match core {
+                Some(core) => format!("vcpu-{vcpu_id}-core{core}"),
+                None => format!("vcpu-{vcpu_id}"),
+            };
+            let spawned = std::thread::Builder::new().name(name).spawn(move || {
+                if let Some(core) = core {
+                    match crate::cpu_affinity::pin_current_thread(core) {
+                        Ok(()) => {
+                            tracing::info!("vCPU {vcpu_id} pinned to host core {core}");
                         }
-                        let rt = match tokio::runtime::Builder::new_current_thread()
-                            .enable_all()
-                            .build()
-                        {
-                            Ok(rt) => rt,
-                            Err(e) => {
-                                let _ = done_tx.send(Err(Error::Config(format!(
-                                    "failed to build vCPU {vcpu_id} runtime: {e}"
-                                ))));
-                                return;
-                            }
-                        };
-                        let res = rt.block_on(Self::run_vcpu_loop(
-                            vcpu,
-                            stats,
-                            rx,
-                            backend,
-                            running,
-                            state,
-                            exit_notify,
-                            devices,
-                            pic,
-                            memory,
-                            event_bus,
-                            vm_name,
-                        ));
-                        let _ = done_tx.send(res);
-                    });
-                if let Err(e) = spawned {
-                    return Err(Error::Config(format!(
-                        "failed to spawn pinned vCPU {vcpu_id} thread: {e}"
-                    )));
+                        Err(e) => {
+                            tracing::warn!("vCPU {vcpu_id}: failed to pin to core {core}: {e}");
+                        }
+                    }
                 }
-                done_rx.await.unwrap_or(Ok(()))
-            }),
-            // Unpinned vCPU: existing behavior on the shared tokio runtime.
-            None => tokio::spawn(Self::run_vcpu_loop(
-                vcpu,
-                stats,
-                rx,
-                backend,
-                running,
-                state,
-                exit_notify,
-                devices,
-                pic,
-                memory,
-                event_bus,
-                vm_name,
-            )),
-        }
+                let rt = match tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        let _ = done_tx.send(Err(Error::Config(format!(
+                            "failed to build vCPU {vcpu_id} runtime: {e}"
+                        ))));
+                        return;
+                    }
+                };
+                let res = rt.block_on(Self::run_vcpu_loop(
+                    vcpu,
+                    stats,
+                    rx,
+                    backend,
+                    running,
+                    state,
+                    exit_notify,
+                    devices,
+                    pic,
+                    memory,
+                    event_bus,
+                    vm_name,
+                ));
+                let _ = done_tx.send(res);
+            });
+            if let Err(e) = spawned {
+                return Err(Error::Config(format!(
+                    "failed to spawn vCPU {vcpu_id} thread: {e}"
+                )));
+            }
+            done_rx.await.unwrap_or(Ok(()))
+        })
     }
 
-    /// The vCPU execution loop, factored out so it can run either as a tokio
-    /// task (unpinned) or via `block_on` on a dedicated, core-pinned thread.
+    /// The vCPU execution loop, run via `block_on` on the dedicated OS thread
+    /// this vCPU owns. Factored out so the spawning above stays readable.
     #[allow(clippy::too_many_arguments)]
     async fn run_vcpu_loop(
         vcpu: Arc<VCpu>,
