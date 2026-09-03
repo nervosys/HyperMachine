@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788409997997,
+  "lastUpdate": 1788420299093,
   "repoUrl": "https://github.com/nervosys/HyperMachine",
   "entries": {
     "HyperMachine Benchmarks": [
@@ -3563,6 +3563,330 @@ window.BENCHMARK_DATA = {
             "name": "tool_formats/serialize_openai_tools",
             "value": 7509.172,
             "range": "+/- 52.513",
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "opensource@nervosys.ai",
+            "name": "nervosys",
+            "username": "admercs"
+          },
+          "committer": {
+            "email": "opensource@nervosys.ai",
+            "name": "nervosys",
+            "username": "admercs"
+          },
+          "distinct": true,
+          "id": "0be69ef1b95935eb9d66a248ef097795e9a7d274",
+          "message": "feat(container): translate an OCI spec into confinement the kernel enforces\n\nRoadmap E1, arrived at differently than planned. The decision was to make\nthe OCI module the sandbox backend. Reading it first showed that premise\nwas wrong in a way worth recording:\n\n  crates/hv2-core/src/container/   3,921 lines, 0 calls to libc\n  crates/hv2-sandbox/.../linux.rs               87 calls to libc\n\n`ContainerRuntime::start` returns `NotImplemented(\"starting a\ncontainer\")`. The module's own doc already said it \"does not run\nanything\" and pointed at hv2-sandbox. Meanwhile hv2-sandbox already\nimplements everything the module describes: CLONE_NEWNS/NEWNET/NEWPID/\nNEWIPC, pivot_root, cgroup v2 memory.max and pids.max, RLIMIT_CPU,\nPR_SET_NO_NEW_PRIVS.\n\nSo there was no backend to wire it to, because the backend already\nexisted and was the sandbox. Making the OCI types a backend would have\nmeant rebuilding a working implementation behind a model that does\nnothing, and keeping two implementations of one thing in agreement\nforever.\n\nThis inverts it instead. The sandbox stays the backend; OCI becomes an\ninput format. `to_sandbox` turns a ContainerSpec into the SandboxSpec and\nSandboxCommand hv2-sandbox enforces -- the first path by which an OCI\nspecification in this codebase does anything at all.\n\nThe vocabularies are not the same size, and that is the whole risk. A\ntranslation that quietly ignored what it could not express would return\nconfinement weaker than the caller asked for -- seccomp filter gone, uid\nswitch gone, read-only path writable -- with nothing to say so, which is\nworse than refusing because the caller cannot find out. So every field is\neither translated or named in the error, and the error carries the OCI\nfield name rather than prose so a caller can act on it.\n\nRefused rather than approximated: seccomp, uid and gid mappings, user,\nUTS, cgroup and time namespaces, masked and read-only paths, block I/O, a\nterminal, non-root process.uid, joining an existing namespace, a\nrelocating bind mount, and a root without a mount namespace to apply it\nin. CPU is the one worth spelling out: OCI bounds a share of wall-clock\nper period, the sandbox bounds total CPU consumed, and mapping one onto\nthe other would be arithmetic without meaning.\n\nAll unsupported fields are reported at once. Reporting the first would\nmake a caller with four of them run four times to learn it cannot run at\nall.\n\nOne test checks the output against a Controls set enforcing everything,\nso a translation that produced a spec `reconcile` rejects would fail --\notherwise this would have moved the failure rather than removed it.\n\nhv2-core gains a dependency on hv2-sandbox. hv2-sandbox depends on\nnothing here, so the direction is acyclic.\n\n15 tests. `cargo test -p hv2-core` passes 2,221, clippy is silent with\n-D warnings, and `cargo check --workspace --all-targets` is clean.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01RsopUtvfyNzkKbbte56vZv",
+          "timestamp": "2026-09-03T00:08:54-07:00",
+          "tree_id": "4c70a3f3f3cf0c4ffc3bf4a66c762315589ad893",
+          "url": "https://github.com/nervosys/HyperMachine/commit/0be69ef1b95935eb9d66a248ef097795e9a7d274"
+        },
+        "date": 1788420295715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "aes_gcm_decrypt/1024",
+            "value": 493.916,
+            "range": "+/- 2.466",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/16384",
+            "value": 4410.635,
+            "range": "+/- 7.41",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/256",
+            "value": 380.223,
+            "range": "+/- 0.783",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/4096",
+            "value": 1005.533,
+            "range": "+/- 4.023",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/64",
+            "value": 337.33,
+            "range": "+/- 1.639",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/65536",
+            "value": 12489.937,
+            "range": "+/- 146.145",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/1024",
+            "value": 574.052,
+            "range": "+/- 4.111",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/16384",
+            "value": 4782.81,
+            "range": "+/- 33.384",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/256",
+            "value": 447.101,
+            "range": "+/- 4.204",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/4096",
+            "value": 1108.38,
+            "range": "+/- 3.501",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/64",
+            "value": 418.191,
+            "range": "+/- 4.114",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/65536",
+            "value": 12755.383,
+            "range": "+/- 44.608",
+            "unit": "ns"
+          },
+          {
+            "name": "fips_self_tests",
+            "value": 2615.907,
+            "range": "+/- 19.134",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes128_key",
+            "value": 100.925,
+            "range": "+/- 0.583",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes256_key",
+            "value": 118.027,
+            "range": "+/- 1.183",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/128",
+            "value": 1172.471,
+            "range": "+/- 6.725",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/256",
+            "value": 1891.102,
+            "range": "+/- 14.917",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/32",
+            "value": 604.828,
+            "range": "+/- 2.756",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/64",
+            "value": 803.567,
+            "range": "+/- 5.544",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/1024",
+            "value": 947.17,
+            "range": "+/- 3.004",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/16384",
+            "value": 10660.312,
+            "range": "+/- 8.286",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/256",
+            "value": 455.327,
+            "range": "+/- 1.637",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/4096",
+            "value": 3012.596,
+            "range": "+/- 19.601",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/64",
+            "value": 334.219,
+            "range": "+/- 2.517",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/deserialize_ontology",
+            "value": 73523.025,
+            "range": "+/- 399.489",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/serialize_ontology",
+            "value": 13258.203,
+            "range": "+/- 179.008",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/1024",
+            "value": 381.143,
+            "range": "+/- 8.675",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/16",
+            "value": 20.486,
+            "range": "+/- 0.303",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/256",
+            "value": 96.2,
+            "range": "+/- 0.556",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/32",
+            "value": 21.37,
+            "range": "+/- 0.218",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/4096",
+            "value": 1392.541,
+            "range": "+/- 2.993",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/64",
+            "value": 32.781,
+            "range": "+/- 0.189",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/parse_create_vm_request",
+            "value": 2091.011,
+            "range": "+/- 41.237",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/serialize_list_response",
+            "value": 18263.656,
+            "range": "+/- 438.195",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1024",
+            "value": 732.36,
+            "range": "+/- 1.603",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1048576",
+            "value": 662695.797,
+            "range": "+/- 392.307",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/16384",
+            "value": 10487.109,
+            "range": "+/- 24.924",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/256",
+            "value": 247.435,
+            "range": "+/- 0.384",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/4096",
+            "value": 2699.745,
+            "range": "+/- 2.884",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/64",
+            "value": 127.992,
+            "range": "+/- 0.506",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/65536",
+            "value": 41475.787,
+            "range": "+/- 31.449",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1024",
+            "value": 2298.525,
+            "range": "+/- 19.168",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1048576",
+            "value": 2050318.36,
+            "range": "+/- 11986.949",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/16384",
+            "value": 31552.591,
+            "range": "+/- 141.031",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/256",
+            "value": 793.038,
+            "range": "+/- 1.807",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/4096",
+            "value": 8117.444,
+            "range": "+/- 33.254",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/64",
+            "value": 296.461,
+            "range": "+/- 1.739",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/65536",
+            "value": 131905.775,
+            "range": "+/- 3674.791",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_anthropic_tools",
+            "value": 7416.811,
+            "range": "+/- 51.395",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_openai_tools",
+            "value": 8566.955,
+            "range": "+/- 81.204",
             "unit": "ns"
           }
         ]
