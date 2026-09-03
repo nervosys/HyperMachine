@@ -1,18 +1,23 @@
-# `crates/hv1-core` and `crates/hv1-boot` are Type-1, bare-metal, nightly-only
-# crates. Their dependency tree includes `bootloader` 0.11.17, whose build
-# script shells out to `cargo` with `-Zbuild-std` (a nightly-only flag) to
-# assemble BIOS/UEFI boot stages. On the `stable` toolchain this build
-# ("bootloader v0.11.17", "bootloader-boot-config") panics with:
+# Keep this project's build output in its own `target/`.
 #
-#   error: the `-Z` flag is only accepted on the nightly channel of Cargo,
-#   but this is the `stable` channel
+# A `~/.cargo/config.toml` that sets a shared `target-dir` for every Rust
+# project on one machine is a reasonable way to stop many copies of the same
+# dependencies filling a disk, but it is the wrong default here. This build is
+# large and worth keeping warm, and cargo takes an exclusive lock on a target
+# directory -- so the biggest projects, the ones most likely to be built
+# concurrently or by several agents at once, are the ones that most want a
+# directory of their own. `target` is also cargo's own default, so this only
+# asserts it against a machine-wide override.
+[build]
+target-dir = "target"
+
+# There was a `check-ws` alias here that ran `cargo check --workspace` with
+# `--exclude hv1-core --exclude hv1-boot`, because `bootloader`'s build script
+# passes `-Zbuild-std`, which stable cargo rejects, and a plain
+# `cargo check --workspace` therefore failed on the toolchain this repository
+# pins. That was issue #57.
 #
-# CI never runs a bare `cargo check --workspace`: every stable job passes
-# `--exclude hv1-core --exclude hv1-boot`, and hv1-core/hv1-boot are checked
-# separately in CI on a pinned nightly toolchain with
-# `-Zbuild-std=core,alloc --target x86_64-unknown-none` (see
-# .github/workflows/ci.yml, jobs `hv1-check`/`hv1-clippy`). So this failure
-# on a plain `cargo check --workspace` here on stable is expected, not a
-# regression -- use the alias below (or add the --exclude flags yourself).
-[alias]
-check-ws = "check --workspace --exclude hv1-core --exclude hv1-boot"
+# The workspace now excludes `crates/hv1-boot` outright, so the plain command
+# works and CI runs exactly that -- `cargo check --workspace --all-targets`,
+# with no excludes, on stable. The alias would now be a slower way to check
+# less, so it is gone rather than kept as advice that no longer holds.
