@@ -21,6 +21,10 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 memmap2 = { workspace = true }
+# The container module translates OCI specs into confinement this crate does
+# not implement; hv2-sandbox is where the syscalls live. It depends on nothing
+# from here, so the direction is acyclic.
+hv2-sandbox = { path = "../hv2-sandbox", version = "1.1.0" }
 bincode = { workspace = true }
 toml = { workspace = true }
 chrono = { workspace = true }
