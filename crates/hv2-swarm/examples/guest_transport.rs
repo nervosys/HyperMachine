@@ -122,7 +122,7 @@ impl Transport for GuestTransport {
                         .expect("undeliverable list poisoned")
                         .push((to, format!("COM1 refused the input: {e}")));
                 }
-            })
+            });
         });
     }
 }
