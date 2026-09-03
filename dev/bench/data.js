@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1788409021297,
+  "lastUpdate": 1788409997997,
   "repoUrl": "https://github.com/nervosys/HyperMachine",
   "entries": {
     "HyperMachine Benchmarks": [
@@ -3239,6 +3239,330 @@ window.BENCHMARK_DATA = {
             "name": "tool_formats/serialize_openai_tools",
             "value": 7488.217,
             "range": "+/- 22.603",
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "opensource@nervosys.ai",
+            "name": "nervosys",
+            "username": "admercs"
+          },
+          "committer": {
+            "email": "opensource@nervosys.ai",
+            "name": "nervosys",
+            "username": "admercs"
+          },
+          "distinct": true,
+          "id": "1dee1c3871f683ccc43622beec2e5d64e14a8511",
+          "message": "feat(vm): attach a vsock device a stock kernel can find by itself\n\nCompletes roadmap C4. `attach_vsock_pci` puts a virtio-vsock device on the\nguest's PCI bus: configuration space into the root complex the 0xCF8\nwindow reads, the BAR window registered as an MMIO region, and the\ninterrupt line reported so the driver knows what to unmask.\n\nThe difference from `attach_vsock` is discovery, not function. Over MMIO\nthe guest is told where to look, on the kernel command line, and only a\nkernel built with CONFIG_VIRTIO_MMIO_CMDLINE_DEVICES can act on it. Here\nthe guest walks a bus it already knows how to walk and binds virtio_pci.\nNothing is added to the command line, deliberately, and a test asserts\nthat -- an argument would mean the device was not discoverable after all.\n\nThree supporting changes:\n\n  - `AttachedVsock` holds a `VsockTransport` enum rather than the MMIO\n    transport specifically. The only thing the host side asks of a\n    transport is that it can raise the used-queue interrupt after\n    publishing, so the two are interchangeable behind one method.\n\n  - `Machine::legacy_pc_with_pci_root` shares a caller's root complex.\n    Attaching a PCI device means adding configuration space to the same\n    root complex the guest enumerates, and there was no way to reach the\n    one `legacy_pc` built for itself.\n\n  - `VM::pci_root` exposes it, for the same reason: a caller adding its\n    own PCI device needs somewhere real to add it to.\n\nThe interrupt line matters more than it looks. Without `set_interrupt_line`\nand `set_interrupt_pin` a driver binds, programs its queues, and then waits\non an interrupt nobody raises -- which from inside the guest is\nindistinguishable from a device that never answers.\n\nThe tests read through the same port a guest uses -- write CONFIG_ADDRESS,\nread CONFIG_DATA -- rather than inspecting the root complex directly.\nConfiguration space that no port exposes is the exact failure this change\nexists to fix, and a test that reached past the port could not tell the\ntwo apart. They attach the machine model rather than calling `provision`,\nwhich needs a hypervisor the host running the tests may not have.\n\n`cargo test -p hv2-core` passes 2,206; hv2-agent and hv2-api pass\nunchanged; `cargo check --workspace --all-targets` is clean and clippy is\nsilent with -D warnings.\n\nStill MMIO-only until someone asks for PCI: nothing changes for existing\ncallers, and no guest has yet booted against this on hardware.\n\nCo-Authored-By: Claude Opus 5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01RsopUtvfyNzkKbbte56vZv",
+          "timestamp": "2026-09-02T21:19:07-07:00",
+          "tree_id": "5a5e10f094a1bd86c0d02573ddbc0fa126d22842",
+          "url": "https://github.com/nervosys/HyperMachine/commit/1dee1c3871f683ccc43622beec2e5d64e14a8511"
+        },
+        "date": 1788409995760,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "aes_gcm_decrypt/1024",
+            "value": 531.829,
+            "range": "+/- 2.59",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/16384",
+            "value": 3428.025,
+            "range": "+/- 27.621",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/256",
+            "value": 423.094,
+            "range": "+/- 4.735",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/4096",
+            "value": 1014.793,
+            "range": "+/- 4.935",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/64",
+            "value": 370.152,
+            "range": "+/- 0.788",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/65536",
+            "value": 12867.6,
+            "range": "+/- 47.146",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/1024",
+            "value": 615.315,
+            "range": "+/- 3.435",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/16384",
+            "value": 3824.31,
+            "range": "+/- 17.681",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/256",
+            "value": 498.046,
+            "range": "+/- 4.964",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/4096",
+            "value": 1186.5,
+            "range": "+/- 3.377",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/64",
+            "value": 452.116,
+            "range": "+/- 3.251",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/65536",
+            "value": 13850.006,
+            "range": "+/- 114.392",
+            "unit": "ns"
+          },
+          {
+            "name": "fips_self_tests",
+            "value": 2744.822,
+            "range": "+/- 6.942",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes128_key",
+            "value": 108.374,
+            "range": "+/- 1.672",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes256_key",
+            "value": 121.694,
+            "range": "+/- 1.332",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/128",
+            "value": 1219.668,
+            "range": "+/- 4.117",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/256",
+            "value": 1972.742,
+            "range": "+/- 6.456",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/32",
+            "value": 656.323,
+            "range": "+/- 4.934",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/64",
+            "value": 831.502,
+            "range": "+/- 1.55",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/1024",
+            "value": 1053.709,
+            "range": "+/- 0.972",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/16384",
+            "value": 12182.503,
+            "range": "+/- 26.894",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/256",
+            "value": 498.808,
+            "range": "+/- 0.828",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/4096",
+            "value": 3260.764,
+            "range": "+/- 3.543",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/64",
+            "value": 360.666,
+            "range": "+/- 0.782",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/deserialize_ontology",
+            "value": 73825.653,
+            "range": "+/- 303.412",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/serialize_ontology",
+            "value": 11464.616,
+            "range": "+/- 100.586",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/1024",
+            "value": 398.769,
+            "range": "+/- 1.557",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/16",
+            "value": 17.343,
+            "range": "+/- 0.223",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/256",
+            "value": 102.444,
+            "range": "+/- 0.276",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/32",
+            "value": 22.55,
+            "range": "+/- 0.118",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/4096",
+            "value": 1580.505,
+            "range": "+/- 4.988",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/64",
+            "value": 36.495,
+            "range": "+/- 0.387",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/parse_create_vm_request",
+            "value": 2002.745,
+            "range": "+/- 20.981",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/serialize_list_response",
+            "value": 16175.216,
+            "range": "+/- 298.601",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1024",
+            "value": 882.026,
+            "range": "+/- 11.903",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1048576",
+            "value": 752420.672,
+            "range": "+/- 2215.926",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/16384",
+            "value": 11807.343,
+            "range": "+/- 9.094",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/256",
+            "value": 280.516,
+            "range": "+/- 0.433",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/4096",
+            "value": 3035.231,
+            "range": "+/- 3.031",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/64",
+            "value": 138.874,
+            "range": "+/- 0.168",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/65536",
+            "value": 46889.041,
+            "range": "+/- 101.362",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1024",
+            "value": 2662.942,
+            "range": "+/- 22.772",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1048576",
+            "value": 2466402.545,
+            "range": "+/- 30366.716",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/16384",
+            "value": 39650.173,
+            "range": "+/- 650.266",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/256",
+            "value": 980.322,
+            "range": "+/- 12.067",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/4096",
+            "value": 9322.873,
+            "range": "+/- 66.899",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/64",
+            "value": 335.702,
+            "range": "+/- 3.36",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/65536",
+            "value": 140320.904,
+            "range": "+/- 365.206",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_anthropic_tools",
+            "value": 6826.075,
+            "range": "+/- 62.438",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_openai_tools",
+            "value": 7509.172,
+            "range": "+/- 52.513",
             "unit": "ns"
           }
         ]
