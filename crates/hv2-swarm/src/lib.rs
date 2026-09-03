@@ -46,6 +46,29 @@
 //! grandchild is delegation working as intended; a grandchild reaching a
 //! grandparent is a subordinate choosing its own audience.
 //!
+//! # Two axes, not one
+//!
+//! Position says who may be addressed. It does not say what may be asked of
+//! them, and those are different questions: a supervisor may certainly address
+//! a worker, and still have no business telling it to open a network socket.
+//!
+//! So a message may name a [`Capability`] it requires, and two more rules
+//! apply when it does:
+//!
+//! - **The recipient must hold it.** Delivering an instruction an agent cannot
+//!   act on turns a permission failure into a runtime one, somewhere less
+//!   convenient.
+//! - **On a command, the sender must hold it too.** Authority delegates
+//!   downward but does not amplify: a supervisor cannot instruct a subordinate
+//!   to do what the supervisor is not itself entitled to do, even where the
+//!   subordinate is entitled. Without that rule, every capability in the swarm
+//!   is available to anyone with a subordinate who holds it.
+//!
+//! The second rule is deliberately not applied to reports and granted edges. A
+//! worker reporting a finding upward is not exercising its parent's authority,
+//! and requiring the parent to hold what the child holds would make
+//! specialisation impossible.
+//!
 //! # What this does not do yet
 //!
 //! Carry messages between machines, or into a guest. [`Transport`] is where
@@ -88,6 +111,45 @@ impl From<&str> for AgentId {
 }
 
 impl From<String> for AgentId {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+/// Something an agent is entitled to do.
+///
+/// An opaque token here on purpose. This crate decides who may ask; what the
+/// names mean is the caller's business, and `hv2-agent` has its own
+/// `CapabilitySet` whose members map onto these without this crate depending
+/// on it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Capability(pub String);
+
+impl Capability {
+    /// A capability from anything string-shaped.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self(name.into())
+    }
+
+    /// The capability as a string slice.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for Capability {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<&str> for Capability {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for Capability {
     fn from(s: String) -> Self {
         Self(s)
     }
@@ -165,6 +227,32 @@ pub enum Denied {
     /// The root has no parent to report to.
     #[error("'{0}' is the root and has nobody above it to report to")]
     RootHasNoParent(AgentId),
+
+    /// The recipient cannot act on what the message asks for.
+    #[error(
+        "'{to}' does not hold '{capability}', so it could not act on this message; \
+         delivering it would turn a permission failure into a runtime one"
+    )]
+    RecipientLacks {
+        /// Who the message was for.
+        to: AgentId,
+        /// What it required.
+        capability: Capability,
+    },
+
+    /// A command asking for more than the commander holds.
+    #[error(
+        "'{from}' does not hold '{capability}' and may not command '{to}' to use it — \
+         authority delegates downward but does not amplify"
+    )]
+    SenderLacks {
+        /// The commander.
+        from: AgentId,
+        /// The subordinate.
+        to: AgentId,
+        /// What was asked for.
+        capability: Capability,
+    },
 }
 
 /// Why an agent could not join the swarm.
@@ -197,6 +285,8 @@ pub struct Message {
     pub to: AgentId,
     /// The rule that admitted it.
     pub under: Relation,
+    /// The capability this message required, if it named one.
+    pub requires: Option<Capability>,
     /// The body. Opaque here: this crate routes, it does not interpret.
     pub payload: Vec<u8>,
 }
@@ -263,6 +353,7 @@ impl Transport for LocalTransport {
 struct Node {
     parent: Option<AgentId>,
     children: BTreeSet<AgentId>,
+    capabilities: BTreeSet<Capability>,
 }
 
 /// A swarm: the agents, the tree that orders them, and the only way to send.
@@ -301,6 +392,7 @@ impl<T: Transport> Swarm<T> {
             Node {
                 parent: None,
                 children: BTreeSet::new(),
+                capabilities: BTreeSet::new(),
             },
         );
         self.root = Some(id);
@@ -332,6 +424,7 @@ impl<T: Transport> Swarm<T> {
             Node {
                 parent: Some(parent.clone()),
                 children: BTreeSet::new(),
+                capabilities: BTreeSet::new(),
             },
         );
         if let Some(node) = self.nodes.get_mut(&parent) {
@@ -351,6 +444,27 @@ impl<T: Transport> Swarm<T> {
     /// Close an edge [`grant`](Self::grant) opened.
     pub fn revoke(&mut self, from: &AgentId, to: &AgentId) {
         self.grants.remove(&(from.clone(), to.clone()));
+    }
+
+    /// Give `agent` a capability. Ignored if the agent is not in the swarm.
+    pub fn grant_capability(&mut self, agent: &AgentId, capability: impl Into<Capability>) {
+        if let Some(node) = self.nodes.get_mut(agent) {
+            node.capabilities.insert(capability.into());
+        }
+    }
+
+    /// Take a capability away.
+    pub fn revoke_capability(&mut self, agent: &AgentId, capability: &Capability) {
+        if let Some(node) = self.nodes.get_mut(agent) {
+            node.capabilities.remove(capability);
+        }
+    }
+
+    /// Whether `agent` holds `capability`.
+    pub fn holds(&self, agent: &AgentId, capability: &Capability) -> bool {
+        self.nodes
+            .get(agent)
+            .is_some_and(|n| n.capabilities.contains(capability))
     }
 
     /// How many agents are in the swarm.
@@ -426,6 +540,75 @@ impl<T: Transport> Swarm<T> {
         })
     }
 
+    /// Whether `from` may send `to` a message requiring `capability`.
+    ///
+    /// Position first, then the two capability rules. Checking position first
+    /// means an agent learns it may not address someone at all before it
+    /// learns anything about what that someone can do, which is the order that
+    /// leaks least.
+    pub fn may_send_requiring(
+        &self,
+        from: &AgentId,
+        to: &AgentId,
+        capability: &Capability,
+    ) -> Result<Relation, Denied> {
+        let under = self.may_send(from, to)?;
+
+        if !self.holds(to, capability) {
+            return Err(Denied::RecipientLacks {
+                to: to.clone(),
+                capability: capability.clone(),
+            });
+        }
+
+        // Only commands are constrained by what the sender holds. A report
+        // upward is not an exercise of the parent's authority, and a granted
+        // edge was opened deliberately.
+        if under == Relation::Descendant && !self.holds(from, capability) {
+            return Err(Denied::SenderLacks {
+                from: from.clone(),
+                to: to.clone(),
+                capability: capability.clone(),
+            });
+        }
+
+        Ok(under)
+    }
+
+    /// Send a message that requires `capability`.
+    ///
+    /// # Errors
+    ///
+    /// [`Denied`], naming the rule that refused — position or capability.
+    pub fn send_requiring(
+        &mut self,
+        from: impl Into<AgentId>,
+        to: impl Into<AgentId>,
+        capability: impl Into<Capability>,
+        payload: impl Into<Vec<u8>>,
+    ) -> Result<Relation, Denied> {
+        let from = from.into();
+        let to = to.into();
+        let capability = capability.into();
+
+        let under = match self.may_send_requiring(&from, &to, &capability) {
+            Ok(under) => under,
+            Err(denied) => {
+                tracing::debug!("swarm: refused {from} -> {to} ({capability}): {denied}");
+                return Err(denied);
+            }
+        };
+
+        self.transport.deliver(Message {
+            from,
+            to,
+            under,
+            requires: Some(capability),
+            payload: payload.into(),
+        });
+        Ok(under)
+    }
+
     /// Send `payload` from `from` to `to`, if the graph allows it.
     ///
     /// The only way a message moves. Consults the graph first and hands the
@@ -458,6 +641,7 @@ impl<T: Transport> Swarm<T> {
             from,
             to,
             under,
+            requires: None,
             payload: payload.into(),
         });
         Ok(under)
@@ -664,6 +848,121 @@ mod tests {
         assert!(swarm.send("w-0-0", "w-0-1", "hey").is_err());
         assert_eq!(swarm.transport().delivered_to(&id("w-0-1")), 0);
         assert_eq!(swarm.transport().delivered_to(&id("w-9-98")), 1);
+    }
+
+    fn cap(s: &str) -> Capability {
+        Capability::new(s)
+    }
+
+    #[test]
+    fn a_command_needs_the_capability_at_both_ends() {
+        let mut swarm = swarm();
+        swarm.grant_capability(&id("supervisor"), "net");
+        swarm.grant_capability(&id("worker-a"), "net");
+
+        assert_eq!(
+            swarm
+                .send_requiring("supervisor", "worker-a", "net", "fetch")
+                .unwrap(),
+            Relation::Descendant
+        );
+        assert_eq!(swarm.transport().delivered_to(&id("worker-a")), 1);
+    }
+
+    /// The rule that stops a supervisor borrowing a subordinate's authority.
+    /// Without it every capability in the swarm belongs to anyone with a
+    /// subordinate who holds it.
+    #[test]
+    fn a_supervisor_cannot_command_what_it_does_not_hold() {
+        let mut swarm = swarm();
+        // The worker is entitled; the supervisor is not.
+        swarm.grant_capability(&id("worker-a"), "net");
+
+        let denied = swarm
+            .send_requiring("supervisor", "worker-a", "net", "fetch")
+            .unwrap_err();
+        match denied {
+            Denied::SenderLacks { capability, .. } => assert_eq!(capability, cap("net")),
+            other => panic!("expected SenderLacks, got {other}"),
+        }
+        assert_eq!(
+            swarm.transport().delivered_to(&id("worker-a")),
+            0,
+            "an amplifying command was refused and delivered anyway"
+        );
+    }
+
+    #[test]
+    fn a_message_the_recipient_cannot_act_on_is_refused() {
+        let mut swarm = swarm();
+        swarm.grant_capability(&id("supervisor"), "net");
+
+        let denied = swarm
+            .send_requiring("supervisor", "worker-a", "net", "fetch")
+            .unwrap_err();
+        assert!(matches!(denied, Denied::RecipientLacks { .. }), "{denied}");
+        assert_eq!(swarm.transport().delivered_to(&id("worker-a")), 0);
+    }
+
+    /// Reporting upward is not an exercise of the parent's authority, so a
+    /// specialised worker may report about something its supervisor cannot do.
+    #[test]
+    fn a_report_upward_does_not_require_the_parent_to_be_equally_privileged() {
+        let mut swarm = swarm();
+        swarm.grant_capability(&id("worker-a"), "net");
+        swarm.grant_capability(&id("planner"), "net");
+        // The planner holds it; the worker holds it; neither needs the other
+        // to be the commander here.
+        assert_eq!(
+            swarm
+                .send_requiring("worker-a", "planner", "net", "found something")
+                .unwrap(),
+            Relation::Parent
+        );
+    }
+
+    #[test]
+    fn position_is_checked_before_capability() {
+        let mut swarm = swarm();
+        swarm.grant_capability(&id("worker-a"), "net");
+        swarm.grant_capability(&id("worker-b"), "net");
+
+        // Both hold it, but they are siblings with no grant. The refusal
+        // should be about position, which tells the sender nothing about what
+        // the other agent can do.
+        let denied = swarm
+            .send_requiring("worker-a", "worker-b", "net", "psst")
+            .unwrap_err();
+        assert!(matches!(denied, Denied::NoGrant { .. }), "{denied}");
+    }
+
+    #[test]
+    fn revoking_a_capability_closes_the_message() {
+        let mut swarm = swarm();
+        swarm.grant_capability(&id("supervisor"), "net");
+        swarm.grant_capability(&id("worker-a"), "net");
+        swarm
+            .send_requiring("supervisor", "worker-a", "net", "one")
+            .unwrap();
+
+        swarm.revoke_capability(&id("worker-a"), &cap("net"));
+        assert!(swarm
+            .send_requiring("supervisor", "worker-a", "net", "two")
+            .is_err());
+        assert_eq!(swarm.transport().delivered_to(&id("worker-a")), 1);
+    }
+
+    #[test]
+    fn the_requirement_travels_with_the_message() {
+        let mut swarm = swarm();
+        swarm.grant_capability(&id("supervisor"), "net");
+        swarm.grant_capability(&id("worker-a"), "net");
+        swarm
+            .send_requiring("supervisor", "worker-a", "net", "fetch")
+            .unwrap();
+
+        let message = swarm.transport_mut().next_for(&id("worker-a")).unwrap();
+        assert_eq!(message.requires, Some(cap("net")));
     }
 
     #[test]

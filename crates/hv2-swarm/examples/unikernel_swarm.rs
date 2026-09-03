@@ -192,6 +192,29 @@ async fn main() -> std::process::ExitCode {
         )),
     }
 
+    // Capability, not position. The supervisor may certainly address the
+    // worker; it still may not borrow an entitlement it does not hold.
+    swarm.grant_capability(&hv2_swarm::AgentId::new(leaf.clone()), "net");
+    match swarm.send_requiring("root", leaf.as_str(), "net", b"fetch".to_vec()) {
+        Err(Denied::SenderLacks { .. }) => {
+            println!(
+                "no amplify    : root -> {leaf} refused; the worker holds 'net', the root does not"
+            );
+        }
+        other => failures.push(format!(
+            "root -> {leaf} requiring 'net' should refuse as SenderLacks, got {other:?}"
+        )),
+    }
+    swarm.grant_capability(&hv2_swarm::AgentId::new("root".to_string()), "net");
+    match swarm.send_requiring("root", leaf.as_str(), "net", b"fetch".to_vec()) {
+        Ok(Relation::Descendant) => {
+            println!("capability    : root given 'net', same command now allowed");
+        }
+        other => failures.push(format!(
+            "root -> {leaf} requiring 'net' should now pass, got {other:?}"
+        )),
+    }
+
     swarm.grant(leaf.as_str(), sibling.as_str());
     let granted = swarm.send(leaf.as_str(), sibling.as_str(), b"now allowed".to_vec());
     swarm.revoke(
