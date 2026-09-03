@@ -16,5 +16,16 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
+# Only the examples reach for a hypervisor. The crate itself decides who may
+# talk to whom and needs nothing but the standard library to do it -- keeping
+# hv2-core out of the dependencies is what lets the policy layer be used
+# without one.
+[dev-dependencies]
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+tokio = { workspace = true }
+
+[[example]]
+name = "unikernel_swarm"
+
 [lints]
 workspace = true

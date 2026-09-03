@@ -2697,8 +2697,10 @@ dependencies = [
 name = "hv2-swarm"
 version = "1.1.0"
 dependencies = [
+ "hv2-core",
  "serde",
  "thiserror 2.0.20",
+ "tokio",
  "tracing",
 ]
 
