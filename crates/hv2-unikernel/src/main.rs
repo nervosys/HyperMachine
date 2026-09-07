@@ -50,12 +50,8 @@
 #[cfg(not(target_arch = "x86"))]
 compile_error!(concat!(
     "hv2-unikernel is a 32-bit guest and must be built from its own directory, ",
-    "so that cargo reads its .cargo/config.toml:
-",
-    "
-    cd crates/hv2-unikernel && cargo build --release
-
-",
+    "so that cargo reads its .cargo/config.toml:\n",
+    "\n    cd crates/hv2-unikernel && cargo build --release\n\n",
     "Building it with --manifest-path from the workspace root ignores both the ",
     "target and the linker script.",
 ));
@@ -201,15 +197,99 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
         // SAFETY: as for the read above.
         let after = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
         if after == marker {
-            print(
-                " write refused
-",
-            );
+            print(" write refused\n");
         } else {
-            print(
-                " WRITE TOOK EFFECT
-",
-            );
+            print(" WRITE TOOK EFFECT\n");
+        }
+
+        // The host may also have left a working-set size in the region: how
+        // many mebibytes of its own memory this agent should touch before it
+        // reports for duty. It stands in for a KV cache, which is the one part
+        // of an agent that cannot be shared with any other agent and is
+        // therefore the thing that decides how many of them fit.
+        //
+        // One byte per page, not a full write. Residency is per page, so
+        // touching a page is what costs it; writing the other 4,095 bytes would
+        // measure memory bandwidth instead.
+        if marker != 0xFF {
+            // SAFETY: four bytes from the same read-only region.
+            let work_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 4) as *const u32) };
+            if work_mib > 0 {
+                const WORK_BASE: u32 = 16 * 1024 * 1024;
+                const PAGE: u32 = 4096;
+                let pages = work_mib * (1024 * 1024 / PAGE);
+                for page in 0..pages {
+                    // SAFETY: guest RAM this agent owns, above its own image
+                    // and below the memory it was configured with. The host
+                    // sizes the VM so that this fits.
+                    unsafe {
+                        core::ptr::write_volatile((WORK_BASE + page * PAGE) as *mut u8, 0xC5);
+                    }
+                }
+                print("work ");
+                print_hex(work_mib);
+                print("\n");
+            }
+        }
+
+        // The host may also have left a working-set size in the region: how
+        // many mebibytes of its own memory this agent should touch before it
+        // reports for duty. It stands in for a KV cache, which is the one part
+        // of an agent that cannot be shared with any other agent and is
+        // therefore the thing that decides how many of them fit.
+        //
+        // One byte per page, not a full write. Residency is per page, so
+        // touching a page is what costs it; writing the other 4,095 bytes would
+        // measure memory bandwidth instead.
+        if marker != 0xFF {
+            // SAFETY: four bytes from the same read-only region.
+            let work_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 4) as *const u32) };
+            if work_mib > 0 {
+                const WORK_BASE: u32 = 16 * 1024 * 1024;
+                const PAGE: u32 = 4096;
+                let pages = work_mib * (1024 * 1024 / PAGE);
+                for page in 0..pages {
+                    // SAFETY: guest RAM this agent owns, above its own image
+                    // and below the memory it was configured with. The host
+                    // sizes the VM so that this fits.
+                    unsafe {
+                        core::ptr::write_volatile((WORK_BASE + page * PAGE) as *mut u8, 0xC5);
+                    }
+                }
+                print("work ");
+                print_hex(work_mib);
+                print("\n");
+            }
+        }
+
+        // The host may also have left a working-set size in the region: how
+        // many mebibytes of its own memory this agent should touch before it
+        // reports for duty. It stands in for a KV cache, which is the one part
+        // of an agent that cannot be shared with any other agent and is
+        // therefore the thing that decides how many of them fit.
+        //
+        // One byte per page, not a full write. Residency is per page, so
+        // touching a page is what costs it; writing the other 4,095 bytes would
+        // measure memory bandwidth instead.
+        if marker != 0xFF {
+            // SAFETY: four bytes from the same read-only region.
+            let work_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 4) as *const u32) };
+            if work_mib > 0 {
+                const WORK_BASE: u32 = 16 * 1024 * 1024;
+                const PAGE: u32 = 4096;
+                let pages = work_mib * (1024 * 1024 / PAGE);
+                for page in 0..pages {
+                    // SAFETY: guest RAM this agent owns, above its own image
+                    // and below the memory it was configured with. The host
+                    // sizes the VM so that this fits.
+                    unsafe {
+                        core::ptr::write_volatile((WORK_BASE + page * PAGE) as *mut u8, 0xC5);
+                    }
+                }
+                print("work ");
+                print_hex(work_mib);
+                print("\n");
+            }
         }
     }
 

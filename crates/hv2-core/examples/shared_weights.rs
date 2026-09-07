@@ -22,8 +22,22 @@
 //! nothing, and "the VM started" has never been evidence in this project that
 //! the guest can do anything.
 //!
+//! # The other half: what an agent costs once it holds something
+//!
+//! Shared weights are the part a fleet does not pay for twice. Everything an
+//! agent holds *privately* it does pay for per agent, and for a language model
+//! that is the KV cache — which cannot be shared with another agent by
+//! definition, since it is that agent's conversation.
+//!
+//! `--touch-mib N` tells every guest to touch N MiB of its own memory before
+//! reporting, which stands in for a cache being filled. What it measures is
+//! whether private guest memory costs what it should or carries a multiplier:
+//! the density of a fleet is the model once, plus this per agent, and a hidden
+//! factor of two here halves how many agents fit on a node.
+//!
 //! ```text
-//! cargo run --release -p hv2-core --example shared_weights -- --agents 200 --mib 256
+//! cargo run --release -p hv2-core --example shared_weights -- \
+//!     --agents 200 --mib 350 --touch-mib 24
 //! ```
 
 use hv2_core::shared_rom::SharedRom;
@@ -91,6 +105,8 @@ fn mib(bytes: u64) -> f64 {
 async fn main() -> std::process::ExitCode {
     let mut agents = 100usize;
     let mut region_mib = 256u64;
+    let mut touch_mib = 0u32;
+    let mut guest_mib = 64u64;
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
     while i < args.len() {
@@ -101,6 +117,14 @@ async fn main() -> std::process::ExitCode {
             }
             "--mib" if i + 1 < args.len() => {
                 region_mib = args[i + 1].parse().unwrap_or(region_mib).max(1);
+                i += 1;
+            }
+            "--touch-mib" if i + 1 < args.len() => {
+                touch_mib = args[i + 1].parse().unwrap_or(touch_mib);
+                i += 1;
+            }
+            "--guest-mib" if i + 1 < args.len() => {
+                guest_mib = args[i + 1].parse().unwrap_or(guest_mib).max(32);
                 i += 1;
             }
             other => {
@@ -140,6 +164,10 @@ async fn main() -> std::process::ExitCode {
         // A marker the guests can look for, so a guest reading zeroes is
         // distinguishable from a guest reading the region.
         std::ptr::write(base, MARKER);
+        // And, four bytes in, how much private memory each of them should
+        // touch. The region is the only thing every guest can already read, so
+        // it is also the simplest place to put a parameter for them.
+        std::ptr::write(base.add(4) as *mut u32, touch_mib);
     }
     let after_region = rss_bytes().unwrap_or(0);
     println!(
@@ -154,7 +182,9 @@ async fn main() -> std::process::ExitCode {
         let config = VMConfig {
             name: format!("agent-{index}"),
             vcpu_count: 1,
-            memory_size: 64 * 1024 * 1024,
+            // The guest's working area starts at 16 MiB, so its RAM has to
+            // reach past that plus whatever it was asked to touch.
+            memory_size: guest_mib.max(u64::from(touch_mib) + 32) * 1024 * 1024,
             boot: Some(BootSource::multiboot(&elf)),
             ..Default::default()
         };
@@ -187,7 +217,11 @@ async fn main() -> std::process::ExitCode {
     // ones rather than as zero — so `rom 0x000000FF` is the answer when nothing
     // is there, and only the marker distinguishes a region that was read from
     // one that was never mapped.
-    let expected = format!("rom 0x{:08X} write refused", MARKER);
+    let expected = if touch_mib > 0 {
+        format!("work 0x{touch_mib:08X}")
+    } else {
+        format!("rom 0x{:08X} write refused", MARKER)
+    };
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut read_it = 0usize;
     while Instant::now() < deadline {
@@ -206,6 +240,16 @@ async fn main() -> std::process::ExitCode {
     let after_agents = rss_bytes().unwrap_or(0);
     let agent_growth = after_agents.saturating_sub(after_region);
 
+    // What a fleet costs if nothing is shared: every agent with its own copy of
+    // the model as well as its own working set.
+    let working = u64::from(touch_mib) * 1024 * 1024;
+    let copied = vms.len() as u64 * (region_bytes + working);
+    // And what it should cost if the model is shared: the model once, plus each
+    // agent's own working set and a megabyte for the agent itself. Both terms
+    // matter — an earlier version left the working set out and reported a
+    // perfectly shared fleet as unshared the moment the agents held anything.
+    let budget = region_bytes + vms.len() as u64 * (working + 1024 * 1024);
+
     println!(
         "agents        : {} booted in {:.1} ms",
         vms.len(),
@@ -215,6 +259,15 @@ async fn main() -> std::process::ExitCode {
         "read the ROM  : {read_it} of {} read {MARKER:#04x} at {ROM_BASE:#x}, write refused",
         vms.len()
     );
+    if touch_mib > 0 {
+        let per_agent = mib(agent_growth) / vms.len() as f64;
+        println!(
+            "touched       : {touch_mib} MiB each — {:.3} MiB per agent, {:+.3} MiB against \
+             what was asked for",
+            per_agent,
+            per_agent - f64::from(touch_mib)
+        );
+    }
     println!(
         "resident      : {:.1} MiB total, {:.1} MiB attributable to the agents",
         mib(after_agents.saturating_sub(baseline)),
@@ -228,8 +281,8 @@ async fn main() -> std::process::ExitCode {
     println!(
         "if copied     : {} agents x {} MiB would be {:.1} GiB",
         vms.len(),
-        region_mib,
-        (vms.len() as f64 * region_mib as f64) / 1024.0
+        region_mib + u64::from(touch_mib),
+        mib(copied) / 1024.0
     );
 
     for vm in &vms {
@@ -252,8 +305,6 @@ async fn main() -> std::process::ExitCode {
     // fails for a fleet large enough that its own legitimate cost exceeds one
     // copy of the model. That is the arithmetic of the thing being measured:
     // per-agent cost scales with the fleet and the shared region does not.
-    let copied = vms.len() as u64 * region_bytes;
-    let budget = region_bytes + vms.len() as u64 * 1024 * 1024;
     let total = after_agents.saturating_sub(baseline);
     let shared = total < budget;
 
