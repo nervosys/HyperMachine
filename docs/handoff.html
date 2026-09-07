@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>cf9311c</dd></div>
+    <div class="fact"><dt>Master</dt><dd>6f8e0f8</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -849,6 +849,41 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
     and belongs to whoever picks it.
   </p>
 
+  <h3>How fast a guest can stream weights, and what that rules out</h3>
+  <p>
+    Memory was the question that decided whether a fleet could hold a model.
+    Bandwidth is the one that decides whether it can use it. The loop a
+    quantised forward pass is made of — read a weight, multiply by an
+    activation, accumulate — run over the shared region, twice, reporting each
+    pass separately:
+  </p>
+  <pre>arithmetic : 13.20 cycles/byte cold, 1.66 warm</pre>
+  <p>
+    The two are separated because they answer different questions. The first
+    pass takes a nested-paging fault per page — 65,536 VM exits for
+    256&nbsp;MiB — and pays it once for the life of the VM. The second is the
+    steady state. A single number would have described a warm-up as a per-token
+    cost, which is a factor of eight in the wrong direction.
+  </p>
+  <p>
+    At 1.66&nbsp;cycles/byte a 350&nbsp;MiB model is about 0.6&nbsp;Gcycles of
+    weight streaming per token per agent — before any attention, softmax or
+    dequantisation. That is a floor rather than an estimate, and it is the
+    number worth having, because it rules something out:
+    <strong>a thousand agents inferring at once on one model would need
+    hundreds of GB/s of aggregate bandwidth, which no node has.</strong>
+  </p>
+  <p>
+    A thousand agents that are <em>mostly idle</em> is a completely different
+    proposition, and that one is already measured at 0.7% of a core. So the
+    fleet scales on the axis it was designed for — many sandboxes, cheap,
+    isolated, talking under a policy — and inference is a resource to be
+    scheduled across them rather than something every guest does simultaneously.
+    Whether that scheduling belongs in the guest, in the host, or in a
+    capability the guest invokes is a design decision this measurement informs
+    and does not make.
+  </p>
+
   <h3>What that settles about the architecture, and what it does not</h3>
   <p>
     One thing is now measured and the rest follows from it or is still open.
@@ -870,6 +905,19 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
         <td><span class="tag ran">ran</span> Exactly what it touches, plus
             0.18&nbsp;MiB. No multiplier on private guest memory, so a fleet is
             the model once plus the sum of the agents' working sets</td>
+      </tr>
+      <tr>
+        <td>Can the guest do the arithmetic?</td>
+        <td><span class="tag ran">ran</span> Yes, at 1.66 cycles/byte warm once
+            SSE is enabled — which needed <code>CR0.EM</code> cleared and
+            <code>CR4.OSFXSR</code> set, and faulted silently until the fault
+            reporter was moved to the first line of <code>kernel_main</code></td>
+      </tr>
+      <tr>
+        <td>Can a fleet infer concurrently?</td>
+        <td><span class="tag ran">ran</span> No. A thousand agents at once on a
+            350 MiB model needs hundreds of GB/s. Idle they cost 0.7% of a core,
+            so the fleet scales and the inference has to be scheduled</td>
       </tr>
       <tr>
         <td>Which architecture should the guest be?</td>
@@ -1015,6 +1063,11 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
         <td>Overhead on an agent's own memory</td><td>—</td><td><strong>0.18 MiB</strong></td>
         <td><span class="tag ran">ran</span> 24 MiB asked for, 24.184 MiB paid —
             no multiplier</td>
+      </tr>
+      <tr>
+        <td>In-guest weight streaming</td><td>—</td><td><strong>1.66 cyc/byte</strong></td>
+        <td><span class="tag ran">ran</span> warm; 13.20 cold, the difference
+            being one nested-paging fault per page, paid once</td>
       </tr>
       <tr>
         <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
@@ -1204,11 +1257,19 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
       being hidden by a hypervisor underneath.
     </li>
     <li>
-      <strong>Put a model in one.</strong> Everything under an agent is now
-      measured — a model shared once, a working set that costs what it is, a
-      channel that reaches inside, a policy that refuses, an idle agent that
-      costs nothing. What has never run is the agent: weights, a tokeniser, a
-      forward pass. That is the first thing whose difficulty is still a guess.
+      <strong>Decide where inference runs.</strong> The measurement above says a
+      fleet cannot all infer at once, and says nothing about whether the answer
+      is scheduling in-guest inference, or making inference a capability the
+      sandbox invokes and keeping the guest as small as it is. The second keeps
+      the property the sandbox exists for — minimal, and therefore auditable —
+      and the permission graph that would gate such a call already exists and
+      already refuses. The first keeps the isolation boundary around the model.
+      This is a product decision with the numbers now under it.
+    </li>
+    <li>
+      <strong>Then put something real behind whichever it is.</strong> Weights,
+      a tokeniser, a forward pass. Nothing on this page has run a model; every
+      figure here is the floor a model would sit on.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1271,9 +1332,9 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
 </section>
 
 <footer>
-  master cf9311c · 0 open PRs · 0 open issues · suite green · a fleet costs the
-  model once plus what each agent touches · measured on WSL2 + KVM, not bare
-  metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master 6f8e0f8 · 0 open PRs · 0 open issues · suite green · a fleet costs the
+  model once plus what each agent touches · 1.66 cycles/byte in the guest ·
+  measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
