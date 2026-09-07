@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>824c930</dd></div>
+    <div class="fact"><dt>Master</dt><dd>9101f52</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -302,6 +302,7 @@
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust</dd></div>
     <div class="fact"><dt>Transport</dt><dd class="good">vsock</dd></div>
     <div class="fact"><dt>Type-1</dt><dd class="hold">ran a guest</dd></div>
+    <div class="fact"><dt>Suite</dt><dd class="good">green</dd></div>
   </dl>
 </header>
 
@@ -689,6 +690,33 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     address instead of quietly rewriting a translation.
   </p>
 
+  <h3>Two failing tests, and neither was flaky</h3>
+  <p>
+    Both had been failing long enough to be read as background. That is the
+    dangerous state for a test to be in — noise a reader learns to ignore is how
+    a real failure gets ignored too — and neither turned out to be the flake it
+    was filed as.
+  </p>
+  <p>
+    <code>test_timer_frequency</code> already ran on a paused clock and still
+    counted 16 or 17 of 19 ticks, because the thing it counted did not:
+    <code>update_count</code> read <code>std::time::Instant</code> to decide how
+    far to advance the PIT, so under a paused clock it advanced by almost
+    nothing. The fix is not a tolerance band. <code>advance_by(Duration)</code>
+    takes the elapsed time from its caller and the periodic task passes its own
+    period — which is the more interesting half, because measuring the wall
+    clock meant a tick delayed by the executor advanced the emulated PIT by the
+    delay, and a guest reading its own timer learned how busy the host was.
+  </p>
+  <p>
+    <code>test_vm_creation_with_backend</code> asserted the backend was
+    <code>Tcg</code> or <code>Whpx</code> — the two it was written on. KVM
+    satisfies neither, so it passed everywhere it had ever run and failed the
+    moment a Linux host with <code>/dev/kvm</code> ran it. A test that names the
+    backends it was developed against fails when the code starts working
+    somewhere new.
+  </p>
+
   <h3>Quotas that refuse, at the point every VM operation crosses</h3>
   <p>
     <code>AgentPolicy</code> carried <code>quotas</code> and
@@ -832,10 +860,10 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
   <h2>Open, with diagnosis</h2>
 
   <p>
-    Five items that stood here have been closed and moved up the page. What is
-    left is the one thing this machine cannot do, two tests that fail for their
-    own reasons, two things that still compile and have never run, and the
-    honest edges of what shipped.
+    Seven items that stood here have been closed. What is left is the one thing
+    this machine cannot do, two things that still compile and have never run,
+    and the honest edges of what shipped. Nothing on this list is a failing
+    test: the suite is green, which it had not been for a while.
   </p>
 
   <h3>1. <code>hv1</code> has still never run on hardware</h3>
@@ -853,24 +881,7 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     nested path, and none of which have been.
   </p>
 
-  <h3>2. <code>test_timer_frequency</code> fails on Linux</h3>
-  <p>
-    16 or 17 ticks against an expected 19, on a clean tree, with and without any
-    change from any session. A wall-clock-dependent test; the fix is virtual
-    time, not a wider tolerance.
-  </p>
-
-  <h3>3. <code>test_vm_creation_with_backend</code> fails on any host with KVM</h3>
-  <p>
-    The test asserts the selected backend is <code>Tcg</code> or
-    <code>Whpx</code>, which KVM never satisfies — so it has passed everywhere
-    it has been run and fails the moment a real Linux hypervisor is present.
-    What it means to check is that the VM has a backend at all. Left alone
-    rather than quietly rewritten, because deciding what it should assert is a
-    decision, not a typo.
-  </p>
-
-  <h3>4. ARM Type-1 has not executed at all</h3>
+  <h3>2. ARM Type-1 has not executed at all</h3>
   <p>
     <code>hv1-arm</code> — EL2, stage-2, vGIC — is where <code>hv1-core</code>
     was a day ago: it compiles, on nightly with <code>-Zbuild-std</code>, and
@@ -880,7 +891,7 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     that reason.
   </p>
 
-  <h3>5. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
+  <h3>3. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
   <p>
     <code>WhpxBackend::kick_vcpu</code> cancels the run with
     <code>WHvCancelRunVirtualProcessor</code>, and its Multiboot path now
@@ -890,7 +901,7 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     marked as such, the same way Type-1 is.
   </p>
 
-  <h3>6. The agent guest polls, and a polling guest costs a core</h3>
+  <h3>4. The agent guest polls, and a polling guest costs a core</h3>
   <p>
     <code>hv2-unikernel</code>'s vsock driver spins on the used ring: no IDT, no
     interrupt handler, no <code>hlt</code> while it waits. That is the simplest
@@ -901,7 +912,7 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     agrees with the device about the interrupt line.
   </p>
 
-  <h3>7. Quota usage does not survive a restart</h3>
+  <h3>5. Quota usage does not survive a restart</h3>
   <p>
     <code>GovernedVmHost</code> counts what it has admitted, in one process, for
     as long as it exists. A process that comes back up has admitted nothing and
@@ -982,9 +993,9 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
       argument.
     </li>
     <li>
-      <strong>Fix the two failing tests</strong>, which are cheap and are
-      currently noise that a reader has to learn to ignore. Noise a reader
-      learns to ignore is how a real failure gets ignored too.
+      <strong>Keep the suite green.</strong> It is, as of today, and both tests
+      that were not turned out to be describing real defects rather than being
+      flaky. That is the usual outcome and the reason not to leave one sitting.
     </li>
   </ol>
   <p>
@@ -1026,8 +1037,8 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
 </section>
 
 <footer>
-  master 824c930 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
-  metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master 9101f52 · 0 open PRs · 0 open issues · suite green · measured on
+  WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
