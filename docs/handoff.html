@@ -286,11 +286,13 @@
     path an <em>agent payload</em> would take is now closed end to end: a
     unikernel written in Rust, compiled by the ordinary toolchain, booted by
     Multiboot, receiving a swarm message over vsock — and shutting down
-    afterwards, which no VM had ever done.
+    afterwards, which no VM had ever done. The Type-1 hypervisor has also now
+    <em>executed</em>, nested under the Type-2 one, which is a smaller claim
+    than hardware and a much larger one than compiling.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>2a1c5c9</dd></div>
+    <div class="fact"><dt>Master</dt><dd>6cd3425</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -299,6 +301,7 @@
     <div class="fact"><dt>stop()</dt><dd class="good">0.7 ms</dd></div>
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust</dd></div>
     <div class="fact"><dt>Transport</dt><dd class="good">vsock</dd></div>
+    <div class="fact"><dt>Type-1</dt><dd class="hold">ran nested</dd></div>
   </dl>
 </header>
 
@@ -570,7 +573,6 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     merely busy. Three spinning guests now stop in 0.8&nbsp;ms.
   </p>
 
-  <h3>Quotas that refuse, at the point every VM operation crosses</h3>
   <p>
     <code>AgentPolicy</code> carried <code>quotas</code> and
     <code>rate_limits</code> and neither did anything: <code>allows</code>
@@ -581,6 +583,52 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     in <code>limits.rs</code>. Somewhere to put the count that a caller could
     not go around was.
   </p>
+  <h3>The Type-1 hypervisor executed, for the first time</h3>
+  <p>
+    Every claim ever made about <code>hv1-core</code> was a claim about
+    <code>rustc</code>. The reason never changed: it is a bare-metal hypervisor
+    and there was no bare metal to put it on. There still is not — but
+    <code>hv2-core</code> can now boot a Multiboot ELF, and this host's CPU
+    offers AMD-V to its guests, so there was somewhere else.
+  </p>
+  <pre>efer  0x0000000000000500 LMA — 64-bit
+svm   available
+hv1   version 1.1.0
+hv1   initialize() OK
+hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
+  <p>
+    The last line is the one that matters, because "OK" is a verdict.
+    <code>svm::initialize()</code>'s entire architectural effect is setting
+    <code>EFER.SVME</code>, so the MSR is read back afterwards: <code>0x500</code>
+    before, <code>0x1500</code> after, bit 12 set by hv1's own code. An
+    <code>initialize()</code> that returned success and enabled nothing would
+    read as a pass and fail at the first <code>VMRUN</code>; the example calls
+    that a failure.
+  </p>
+  <p>
+    <strong>What it does not prove.</strong> Not hardware: the layer underneath
+    is KVM, and a guest sees the CPU its hypervisor chose to show it. Not a
+    working hypervisor: initialising is the first step, and nothing here has run
+    a guest under hv1. Both are said in the example, in the guest, and in the
+    pillars table above, because the distance between "ran nested" and "runs on
+    a machine" is exactly the kind of distance this page exists to keep.
+  </p>
+  <p>
+    Two pieces of machinery were needed. The image is an ELF64 and the
+    specification's ELF path is ELF32, so the header carries its own load
+    addresses — the a.out kludge, filled in from linker script symbols, and the
+    first real image to use the path added when the Multiboot loader was fixed.
+    And <code>boot.rs</code> crosses from the 32-bit mode Multiboot hands over
+    in to the long mode a 64-bit hypervisor needs: page tables,
+    <code>CR4.PAE</code>, <code>EFER.LME</code>, <code>CR0.PG</code>, far jump.
+    The two arguments cannot travel on the stack across that — a 32-bit
+    <code>push</code> writes four bytes and a 64-bit <code>pop</code> reads
+    eight, so the first pop returns both glued together — and go in
+    <code>EDI</code>/<code>ESI</code> instead, where the 64-bit ABI wants them
+    anyway.
+  </p>
+
+  <h3>Quotas that refuse, at the point every VM operation crosses</h3>
   <p>
     <code>GovernedVmHost</code> is a <code>VmHost</code> that wraps another one,
     and a refused operation never reaches the inner host. Every test counts what
@@ -690,15 +738,20 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
       </tr>
       <tr>
         <td>Type-1 bare metal</td><td><code>hv1-core</code>, <code>hv1-arm</code></td>
-        <td><span class="tag typed">typed</span> EL2, stage-2, vGIC — never booted on hardware</td>
+        <td><span class="tag ran">ran</span> x86 initialised nested under hv2, EFER.SVME set;
+            <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td>
       </tr>
     </tbody>
   </table>
   </div>
   <p>
-    Three proven by execution, one by compilation. "Uniquely supports four
-    models" invites exactly the scrutiny this project applies to itself, and for
-    Type-1 the current answer is that it compiles.
+    All four have now executed, and the fourth carries a caveat the others do
+    not. Type-1 ran <em>under</em> Type-2 rather than on hardware: the layer
+    beneath it is KVM, so it read a CPU its hypervisor chose to show it, and
+    nothing has yet run a guest under it. "Uniquely supports four models"
+    invites exactly the scrutiny this project applies to itself, and the honest
+    answer for Type-1 moved from "it compiles" to "it initialises, nested" —
+    which is a real step and is not the same as the other three.
   </p>
 </section>
 
@@ -706,19 +759,28 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
   <h2>Open, with diagnosis</h2>
 
   <p>
-    Four items that stood here have been closed and moved up the page. What is
-    left is one test that measures the wrong thing, one that asserts the wrong
-    thing, two claims that compile and have never run, and the honest edges of
-    what shipped.
+    Five items that stood here have been closed and moved up the page. What is
+    left is the one thing this machine cannot do, two tests that fail for their
+    own reasons, two things that still compile and have never run, and the
+    honest edges of what shipped.
   </p>
 
-  <h3>1. <code>hv1</code> has never booted on hardware</h3>
+  <h3>1. <code>hv1</code> has still never run on hardware, or hosted anything</h3>
   <p>
-    The Type-1 hypervisor compiles — EL2, stage-2, vGIC — and that is the whole
-    of the evidence. Nothing on this host can change that: it needs bare metal
-    and a serial console, not a VM inside WSL2. Until then "uniquely supports
-    four models" is three models and a compilation result, and the pillars table
-    above says so.
+    It initialises now, nested under hv2, and that closed the gap between
+    "compiles" and "executes" — but two gaps remain and they are different
+    sizes. <strong>Bare metal:</strong> the layer under it is KVM, so it read a
+    CPU that a hypervisor chose to show it, and the firmware path, the real
+    memory map and the AP bring-up are all still untested. That needs a machine
+    and a serial console; nothing on this host substitutes for it.
+    <strong>A guest:</strong> nothing has run under hv1 at all. <code>VMRUN</code>, the
+    VMCB, NPT and the exit loop are the next thing to execute, and they can be
+    executed here — the same nested path that ran <code>initialize()</code> runs
+    those too.
+  </p>
+  <p>
+    The second is the cheaper and the more informative of the two, and it does
+    not need anybody to provide hardware.
   </p>
 
   <h3>2. <code>test_timer_frequency</code> fails on Linux</h3>
@@ -738,7 +800,17 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     decision, not a typo.
   </p>
 
-  <h3>4. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
+  <h3>4. ARM Type-1 has not executed at all</h3>
+  <p>
+    <code>hv1-arm</code> — EL2, stage-2, vGIC — is where <code>hv1-core</code>
+    was a day ago: it compiles, on nightly with <code>-Zbuild-std</code>, and
+    nothing has run it. The trick that worked for x86 does not transfer, because
+    this host is x86: running it nested needs an AArch64 host, and emulating one
+    proves something about the emulator. The pillars table marks it typed for
+    that reason.
+  </p>
+
+  <h3>5. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
   <p>
     <code>WhpxBackend::kick_vcpu</code> cancels the run with
     <code>WHvCancelRunVirtualProcessor</code>, and its Multiboot path now
@@ -748,7 +820,7 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     marked as such, the same way Type-1 is.
   </p>
 
-  <h3>5. The agent guest polls, and a polling guest costs a core</h3>
+  <h3>6. The agent guest polls, and a polling guest costs a core</h3>
   <p>
     <code>hv2-unikernel</code>'s vsock driver spins on the used ring: no IDT, no
     interrupt handler, no <code>hlt</code> while it waits. That is the simplest
@@ -759,7 +831,7 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     agrees with the device about the interrupt line.
   </p>
 
-  <h3>6. Quota usage does not survive a restart</h3>
+  <h3>7. Quota usage does not survive a restart</h3>
   <p>
     <code>GovernedVmHost</code> counts what it has admitted, in one process, for
     as long as it exists. A process that comes back up has admitted nothing and
@@ -810,12 +882,19 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
   <h2>What to do next</h2>
   <ol>
     <li>
-      <strong>Boot <code>hv1</code> on hardware</strong>, or stop calling Type-1
-      a supported model. It is first because it is the only claim on the front
-      page of this project that has never been executed, and because it is the
-      one thing on this list that cannot be done on this machine — it needs bare
-      metal and a serial console, so it needs somebody to decide to provide
-      them.
+      <strong>Run a guest under <code>hv1</code>.</strong> It initialises; the
+      next thing it has never done is host anything, which means <code>VMRUN</code>, a
+      VMCB, nested page tables and an exit loop. All of that can be executed on
+      the same nested path that ran <code>initialize()</code> — no hardware
+      required — and it is the difference between a hypervisor that starts and
+      a hypervisor.
+    </li>
+    <li>
+      <strong>Then boot <code>hv1</code> on hardware</strong>, which is the only
+      item here that cannot be done on this machine: it needs bare metal and a
+      serial console, so it needs somebody to decide to provide them. Firmware,
+      a real memory map and AP bring-up are all untested and all of them are
+      things nesting hides.
     </li>
     <li>
       <strong>Give the agent guest an interrupt handler</strong>, so a guest
@@ -863,10 +942,10 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
 </section>
 
 <footer>
-  master 2a1c5c9 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
+  master 6cd3425 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
   metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
-  message over vsock · <code>hv1</code> on hardware is the last unexecuted
-  claim
+  message over vsock · Type-1 initialises nested and has still never hosted a
+  guest
 </footer>
 
 </div>
