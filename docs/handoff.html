@@ -287,12 +287,12 @@
     unikernel written in Rust, compiled by the ordinary toolchain, booted by
     Multiboot, receiving a swarm message over vsock — and shutting down
     afterwards, which no VM had ever done. The Type-1 hypervisor has also now
-    <em>executed</em>, nested under the Type-2 one, which is a smaller claim
-    than hardware and a much larger one than compiling.
+    <em>hosted a guest</em>, nested under the Type-2 one — a smaller claim than
+    bare metal and a much larger one than compiling.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>6cd3425</dd></div>
+    <div class="fact"><dt>Master</dt><dd>824c930</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -301,7 +301,7 @@
     <div class="fact"><dt>stop()</dt><dd class="good">0.7 ms</dd></div>
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust</dd></div>
     <div class="fact"><dt>Transport</dt><dd class="good">vsock</dd></div>
-    <div class="fact"><dt>Type-1</dt><dd class="hold">ran nested</dd></div>
+    <div class="fact"><dt>Type-1</dt><dd class="hold">ran a guest</dd></div>
   </dl>
 </header>
 
@@ -573,16 +573,6 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     merely busy. Three spinning guests now stop in 0.8&nbsp;ms.
   </p>
 
-  <p>
-    <code>AgentPolicy</code> carried <code>quotas</code> and
-    <code>rate_limits</code> and neither did anything: <code>allows</code>
-    consults <code>enabled</code> and <code>permissions</code>, so a sixth VM
-    was created under a <code>max_vms</code> of five and nothing ever
-    constructed the <code>QuotaExceeded</code> that exists for the purpose. The
-    machinery to count was never missing — <code>RateLimiter</code> was already
-    in <code>limits.rs</code>. Somewhere to put the count that a caller could
-    not go around was.
-  </p>
   <h3>The Type-1 hypervisor executed, for the first time</h3>
   <p>
     Every claim ever made about <code>hv1-core</code> was a claim about
@@ -607,11 +597,12 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
   </p>
   <p>
     <strong>What it does not prove.</strong> Not hardware: the layer underneath
-    is KVM, and a guest sees the CPU its hypervisor chose to show it. Not a
-    working hypervisor: initialising is the first step, and nothing here has run
-    a guest under hv1. Both are said in the example, in the guest, and in the
-    pillars table above, because the distance between "ran nested" and "runs on
-    a machine" is exactly the kind of distance this page exists to keep.
+    is KVM, and a guest sees the CPU its hypervisor chose to show it. And not,
+    at this point in the afternoon, a working hypervisor — initialising is the
+    first step, and hosting anything was still ahead. That distance is said in
+    the example, in the guest, and in the pillars table above, because the gap
+    between "ran nested" and "runs on a machine" is exactly the kind this page
+    exists to keep open.
   </p>
   <p>
     Two pieces of machinery were needed. The image is an ELF64 and the
@@ -628,7 +619,87 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
     anyway.
   </p>
 
+  <h3>And then it hosted a guest, which found three defects in an afternoon</h3>
+  <p>
+    Initialising is not hosting: a hypervisor that enables SVM and never enters
+    a guest is one MSR write away from doing nothing. So the next thing was
+    <code>VMRUN</code> — a VMCB the hardware accepts, a guest that executes, an
+    exit that says why, and a second entry afterwards.
+  </p>
+  <pre>hv1   guest exit 1 0x81 VMEXIT_VMMCALL — the guest called its hypervisor
+hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
+  <p>
+    Two exits rather than one, deliberately. One entry proves a guest ran; two
+    prove the hypervisor stepped over the intercepted instruction and went back
+    in, which is the difference between a hypervisor and a launcher — an
+    intercepted instruction nobody advances past is re-executed forever. The
+    guest is four bytes of real mode, <code>vmmcall</code> then <code>hlt</code>,
+    and it is <code>vmmcall</code> because nothing else produces
+    <code>VMEXIT_VMMCALL</code>, so the exit code cannot be a coincidence.
+  </p>
+  <p>
+    <strong>Three defects, each found by running and none findable otherwise.</strong>
+  </p>
+  <div class="scroll">
+  <table>
+    <caption>What only execution found</caption>
+    <thead><tr><th>Defect</th><th>How it presented</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>svm_run</code>'s <code>asm!</code> had no input operands at
+            all — it assumed <code>RDI</code> held the register block and
+            <code>RSI</code> the VMCB, the reverse of what the ABI passes, and
+            computed <code>vmcb_pa</code> into a local nothing read</td>
+        <td>It had never been executed, so it presented as nothing whatsoever.
+            <code>RAX</code>, which is where <code>VMRUN</code> takes its VMCB
+            address, was loaded from the slot holding the register block</td>
+      </tr>
+      <tr>
+        <td>Nested page tables need the U/S bit at every level</td>
+        <td><code>VMEXIT_NPF</code> on the first instruction fetch, at an
+            address that was plainly mapped. A nested page walk is a user-mode
+            access whatever the guest's CPL, and nothing in a kernel's own map
+            is user-accessible</td>
+      </tr>
+      <tr>
+        <td><code>setup_vmcb_controls</code> sets the IOIO and MSR intercepts
+            and neither bitmap address</td>
+        <td>The hardware reads both maps whenever those bits are set, so a VMCB
+            built entirely by the crate's own helper fails <code>VMRUN</code>'s
+            consistency check before a guest instruction runs</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    Using the bare <code>svm::vmrun</code> helper instead is what made the
+    console stop mid-word: <code>#VMEXIT</code> restores only <code>RAX</code>,
+    <code>RSP</code> and <code>RIP</code>, so every other host register came
+    back holding a guest value and the next thing the host did ran on the
+    guest's data. That is precisely what <code>svm_run</code> exists to prevent,
+    and why the broken one mattered.
+  </p>
+  <p>
+    A fourth was self-inflicted and worth recording for the shape of it. A
+    <code>Vmcb</code> is four kilobytes constructed by value; the boot stack was
+    16&nbsp;KiB and sat directly above the page directory, so building one
+    overflowed into a page table and the machine died several instructions later
+    inside a <code>print</code>, nowhere near the cause. The stack is 128&nbsp;KiB
+    now with a guard page under it, so the next overflow faults on its own
+    address instead of quietly rewriting a translation.
+  </p>
+
   <h3>Quotas that refuse, at the point every VM operation crosses</h3>
+  <p>
+    <code>AgentPolicy</code> carried <code>quotas</code> and
+    <code>rate_limits</code> and neither did anything: <code>allows</code>
+    consults <code>enabled</code> and <code>permissions</code>, so a sixth VM
+    was created under a <code>max_vms</code> of five and nothing ever
+    constructed the <code>QuotaExceeded</code> that exists for the purpose. The
+    machinery to count was never missing — <code>RateLimiter</code> was already
+    in <code>limits.rs</code>. Somewhere to put the count that a caller could
+    not go around was.
+  </p>
   <p>
     <code>GovernedVmHost</code> is a <code>VmHost</code> that wraps another one,
     and a refused operation never reaches the inner host. Every test counts what
@@ -738,7 +809,8 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
       </tr>
       <tr>
         <td>Type-1 bare metal</td><td><code>hv1-core</code>, <code>hv1-arm</code></td>
-        <td><span class="tag ran">ran</span> x86 initialised nested under hv2, EFER.SVME set;
+        <td><span class="tag ran">ran</span> x86 hosted a guest nested under hv2 —
+            VMMCALL, resumed, HLT;
             <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td>
       </tr>
     </tbody>
@@ -747,11 +819,12 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
   <p>
     All four have now executed, and the fourth carries a caveat the others do
     not. Type-1 ran <em>under</em> Type-2 rather than on hardware: the layer
-    beneath it is KVM, so it read a CPU its hypervisor chose to show it, and
-    nothing has yet run a guest under it. "Uniquely supports four models"
-    invites exactly the scrutiny this project applies to itself, and the honest
-    answer for Type-1 moved from "it compiles" to "it initialises, nested" —
-    which is a real step and is not the same as the other three.
+    beneath it is KVM, so it read a CPU its hypervisor chose to show it, and its
+    guest was four bytes of real mode rather than an operating system.
+    "Uniquely supports four models" invites exactly the scrutiny this project
+    applies to itself, and the honest answer for Type-1 moved in two days from
+    "it compiles" to "it hosts a guest, nested" — two real steps, and still not
+    the same claim as the other three.
   </p>
 </section>
 
@@ -765,22 +838,19 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
     honest edges of what shipped.
   </p>
 
-  <h3>1. <code>hv1</code> has still never run on hardware, or hosted anything</h3>
+  <h3>1. <code>hv1</code> has still never run on hardware</h3>
   <p>
-    It initialises now, nested under hv2, and that closed the gap between
-    "compiles" and "executes" — but two gaps remain and they are different
-    sizes. <strong>Bare metal:</strong> the layer under it is KVM, so it read a
-    CPU that a hypervisor chose to show it, and the firmware path, the real
-    memory map and the AP bring-up are all still untested. That needs a machine
-    and a serial console; nothing on this host substitutes for it.
-    <strong>A guest:</strong> nothing has run under hv1 at all. <code>VMRUN</code>, the
-    VMCB, NPT and the exit loop are the next thing to execute, and they can be
-    executed here — the same nested path that ran <code>initialize()</code> runs
-    those too.
+    It initialises and it hosts a guest, both nested under hv2, and that is as
+    far as this machine goes. The layer under it is KVM, so it read a CPU that a
+    hypervisor chose to show it; the firmware path, the real memory map, the AP
+    bring-up and every device are untested, and nesting hides all of them. That
+    needs a machine and a serial console, and nothing here substitutes for it.
   </p>
   <p>
-    The second is the cheaper and the more informative of the two, and it does
-    not need anybody to provide hardware.
+    The guest it hosted is also four bytes of real mode. Between that and an
+    operating system lie an exit handler worth the name, an IDT, interrupt
+    delivery, and a device or two — all of which can be built and run on the
+    nested path, and none of which have been.
   </p>
 
   <h3>2. <code>test_timer_frequency</code> fails on Linux</h3>
@@ -882,19 +952,20 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
   <h2>What to do next</h2>
   <ol>
     <li>
-      <strong>Run a guest under <code>hv1</code>.</strong> It initialises; the
-      next thing it has never done is host anything, which means <code>VMRUN</code>, a
-      VMCB, nested page tables and an exit loop. All of that can be executed on
-      the same nested path that ran <code>initialize()</code> — no hardware
-      required — and it is the difference between a hypervisor that starts and
-      a hypervisor.
+      <strong>Give <code>hv1</code> a guest worth running.</strong> It hosts four
+      bytes of real mode. An exit handler that does something with an exit, an
+      IDT, interrupt delivery and a device or two are what stand between that and
+      an operating system, and every one of them can be built and run on the
+      nested path that already works — no hardware required. The three defects
+      that afternoon found are the argument for doing it this way: each was
+      invisible to review and obvious the moment something executed.
     </li>
     <li>
-      <strong>Then boot <code>hv1</code> on hardware</strong>, which is the only
-      item here that cannot be done on this machine: it needs bare metal and a
-      serial console, so it needs somebody to decide to provide them. Firmware,
-      a real memory map and AP bring-up are all untested and all of them are
-      things nesting hides.
+      <strong>Then boot <code>hv1</code> on hardware</strong>, the only item here
+      that cannot be done on this machine. It needs bare metal and a serial
+      console, so it needs somebody to decide to provide them — and it is where
+      the firmware path, the real memory map, AP bring-up and every device stop
+      being hidden by a hypervisor underneath.
     </li>
     <li>
       <strong>Give the agent guest an interrupt handler</strong>, so a guest
@@ -939,13 +1010,26 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
     0.02&nbsp;ms for everything else provisioning does with it. One run measures
     whatever else the machine was doing. A median over nine does not.
   </p>
+  <p>
+    The strongest case for the habit, though, is <code>svm_run</code>. It sat in
+    the tree looking like a working function — documented, plausible, the sort of
+    thing a review skims and accepts. Its inline assembly had no input operands
+    at all, so it read its two arguments from the wrong registers and handed
+    <code>VMRUN</code> an address that was not a VMCB. Nothing could have found
+    that except running it, and nothing had run it, because running it needed a
+    Multiboot loader that worked and a way to get from 32-bit to 64-bit — which
+    is how a defect stays invisible for as long as the thing above it is
+    unfinished. The lesson is not "review harder". It is that unexecuted code
+    should be labelled unexecuted, which is what the pillars table has been
+    doing all along.
+  </p>
 </section>
 
 <footer>
-  master 6cd3425 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
+  master 824c930 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
   metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
-  message over vsock · Type-1 initialises nested and has still never hosted a
-  guest
+  message over vsock · Type-1 hosts a guest, nested, and has still never run on
+  a machine
 </footer>
 
 </div>
