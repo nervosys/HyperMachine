@@ -80,16 +80,36 @@ impl PitChannel {
         }
     }
 
-    /// Update the counter based on elapsed time.  Returns `true` when the
-    /// channel fires (output transitions that should trigger an IRQ on ch0).
+    /// Update the counter from the wall clock. Returns `true` when the channel
+    /// fires (an output transition that should raise IRQ 0 on channel 0).
+    ///
+    /// For a caller that reads the count at an arbitrary moment and wants to
+    /// know where the PIT would be by now. The periodic path uses
+    /// [`Self::advance_by`] instead, because a timer that ticks on a schedule
+    /// already knows how much time a tick is worth.
     fn update_count(&mut self) -> bool {
-        if !self.gate || !self.active {
-            return false;
-        }
-
         let now = Instant::now();
         let elapsed = now.duration_since(self.last_update);
         self.last_update = now;
+        self.advance_by(elapsed)
+    }
+
+    /// Update the counter by exactly `elapsed`. Returns `true` when the channel
+    /// fires.
+    ///
+    /// Taking the interval rather than reading a clock is what makes a periodic
+    /// timer testable and, separately, correct. `update_count` measured real
+    /// time between ticks, so under a paused clock it advanced by almost
+    /// nothing and `test_timer_frequency` counted 16 or 17 of the 19 ticks the
+    /// scheduler had actually delivered -- which read as a flaky test and was a
+    /// device reading a clock its own tick already told it about. On a loaded
+    /// host the same mismatch runs the other way: a tick delayed by the
+    /// executor advanced the PIT by the delay, so the emulated counter tracked
+    /// how busy the host was rather than how much guest time had passed.
+    fn advance_by(&mut self, elapsed: Duration) -> bool {
+        if !self.gate || !self.active {
+            return false;
+        }
 
         // PIT frequency is 1.193182 MHz
         let ticks = (elapsed.as_micros() as u64 * 1193182) / 1_000_000;
@@ -258,17 +278,21 @@ impl TimerDevice {
 
         // 18.2 Hz = 54.925 ms period
         let interval_micros = 54925;
+        let period = Duration::from_micros(interval_micros);
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_micros(interval_micros));
+            let mut interval = tokio::time::interval(period);
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
             while running.load(Ordering::Relaxed) {
                 interval.tick().await;
 
-                // Update channel 0 count and raise interrupt if it reaches zero
+                // Advance by the period, not by however long the executor took
+                // to deliver the tick. The guest's timer should measure guest
+                // time; measuring scheduling delay instead is how an emulated
+                // PIT ends up reporting the host's load.
                 let mut chans = channels.lock();
-                if chans[0].update_count() {
+                if chans[0].advance_by(period) {
                     total_ticks.fetch_add(1, Ordering::Relaxed);
 
                     // Raise IRQ 0 if PIC available

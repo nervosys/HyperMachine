@@ -45,13 +45,26 @@ async fn test_vm_creation_with_backend() -> Result<()> {
         return Ok(());
     };
 
-    // Verify backend exists
+    // That the VM has a backend at all, which is what this is for.
+    //
+    // It used to require the platform be `Tcg` or `Whpx` — the two this test
+    // happened to be written on. KVM satisfies neither, so the assertion passed
+    // everywhere it had ever run and failed the moment a Linux host with
+    // `/dev/kvm` ran it. A test that names the backends it was developed
+    // against is a test that fails when the code starts working somewhere new.
     let backend = vm.backend();
     let platform = backend.platform().to_string();
     assert!(
-        platform == "Tcg" || platform == "Whpx",
-        "Expected Tcg or Whpx, got {}",
-        platform
+        !platform.is_empty(),
+        "a VM should report the backend it was built on"
+    );
+
+    // And that the backend is one this crate knows about, rather than any
+    // string at all — the check above alone would pass on a typo.
+    const KNOWN: [&str; 4] = ["Kvm", "Whpx", "Hvf", "Tcg"];
+    assert!(
+        KNOWN.contains(&platform.as_str()),
+        "unknown backend {platform}; expected one of {KNOWN:?}"
     );
 
     Ok(())
