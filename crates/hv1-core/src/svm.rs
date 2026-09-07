@@ -878,32 +878,61 @@ pub fn read_exit_info(vmcb: &Vmcb) -> VmExitInfo {
     }
 }
 
-/// Execute VMRUN with full GP register save/restore.
+/// Enter the guest, and come back with the host intact.
 ///
-/// Saves host callee-saved registers, loads guest GP registers into CPU,
-/// executes VMRUN, then saves guest GP registers and restores host.
-/// RAX is saved/restored via the VMCB save area.
+/// `VMRUN` restores only `RAX`, `RSP` and `RIP` from the host save area on
+/// `#VMEXIT`. Every other general-purpose register comes back holding whatever
+/// the guest left in it, so a caller that does not save and restore them is
+/// running host code on guest values. That is why this exists alongside
+/// [`vmrun`], which is correct only for a guest that never gets far enough to
+/// write a register.
+///
+/// # What was wrong with this before
+///
+/// The `asm!` block had no input operands at all. It assumed `RDI` held the
+/// register block and `RSI` the VMCB address, which is the reverse of what the
+/// SysV ABI gives it -- the first argument is the VMCB -- and `vmcb_pa` was
+/// computed into a local that nothing read. `RAX` was then loaded from the
+/// stack slot holding the *register block* pointer, so `VMRUN` was handed a
+/// VMCB address that was not one.
+///
+/// It had never been executed. Running a guest under `hv1` for the first time
+/// is what found it, which is the argument for running things.
 ///
 /// # Safety
-/// VMCB must be fully configured. `regs` must be valid.
+///
+/// Requires `EFER.SVME`, ring 0, and a host save area configured through
+/// [`set_host_save_area`]. `vmcb` must be a fully-initialised, 4 KiB-aligned,
+/// identity-mapped VMCB, since its address is used as a physical one.
 pub unsafe fn svm_run(vmcb: &mut Vmcb, regs: &mut GeneralRegisters) -> Result<()> {
-    // RAX goes via VMCB save area (VMRUN uses RAX for VMCB physical address)
+    // RAX travels in the VMCB rather than in the register block: `VMRUN` needs
+    // RAX for the VMCB address itself.
     vmcb.save.rax = regs.rax;
 
     let vmcb_pa = vmcb as *mut Vmcb as u64;
+    let regs_ptr = regs as *mut GeneralRegisters;
 
     asm!(
-        // Save host callee-saved
-        "push rbx",
+        // Callee-saved registers, which the guest is about to own and this
+        // function has promised to return unchanged.
         "push rbp",
+        "push rbx",
         "push r12",
         "push r13",
         "push r14",
         "push r15",
-        "push rdi",   // GeneralRegisters pointer
-        "push rsi",   // VMCB PA
 
-        // Load guest GP registers from struct (rdi = regs pointer)
+        // Both pointers into fixed registers before anything else needs them:
+        // every register is about to hold a guest value.
+        "mov rax, {vmcb_pa}",
+        "mov rdi, {regs}",
+
+        // And the register block's address onto the stack, because after the
+        // guest runs there is nowhere else it could have survived.
+        "push rdi",
+
+        // Guest state in. RDI last, since it is the pointer everything else is
+        // read through.
         "mov rbx, [rdi + 0x08]",
         "mov rcx, [rdi + 0x10]",
         "mov rdx, [rdi + 0x18]",
@@ -917,24 +946,18 @@ pub unsafe fn svm_run(vmcb: &mut Vmcb, regs: &mut GeneralRegisters) -> Result<()
         "mov r13, [rdi + 0x68]",
         "mov r14, [rdi + 0x70]",
         "mov r15, [rdi + 0x78]",
-        "mov rdi, [rdi + 0x28]",   // guest rdi last
+        "mov rdi, [rdi + 0x28]",
 
-        // rax = VMCB PA (from stack)
-        "mov rax, [rsp]",
-
-        // Enter guest
         "vmrun",
 
-        // VM exit: save guest registers
-        // Recover regs pointer from stack (rsp+8 since rsp+0 = VMCB PA, rsp+8 = rdi=regs)
-        "push rdi",            // save guest rdi temporarily
-        "mov rdi, [rsp + 16]", // regs pointer (pushed as third from top)
-
+        // Guest state out. RDI is needed as the pointer and still holds a guest
+        // value, so it goes on the stack first and is retrieved from there.
+        "push rdi",
+        "mov rdi, [rsp + 8]",
         "mov [rdi + 0x08], rbx",
         "mov [rdi + 0x10], rcx",
         "mov [rdi + 0x18], rdx",
         "mov [rdi + 0x20], rsi",
-        "pop QWORD PTR [rdi + 0x28]", // guest rdi
         "mov [rdi + 0x30], rbp",
         "mov [rdi + 0x40], r8",
         "mov [rdi + 0x48], r9",
@@ -944,29 +967,36 @@ pub unsafe fn svm_run(vmcb: &mut Vmcb, regs: &mut GeneralRegisters) -> Result<()
         "mov [rdi + 0x68], r13",
         "mov [rdi + 0x70], r14",
         "mov [rdi + 0x78], r15",
+        "pop QWORD PTR [rdi + 0x28]",
 
-        // Restore host callee-saved
-        "pop rsi",
-        "pop rdi",
+        // Drop the saved pointer, then the callee-saved registers back.
+        "add rsp, 8",
         "pop r15",
         "pop r14",
         "pop r13",
         "pop r12",
-        "pop rbp",
         "pop rbx",
+        "pop rbp",
 
+        vmcb_pa = in(reg) vmcb_pa,
+        regs = in(reg) regs_ptr,
+        // Everything the guest may have written and this block does not
+        // restore by hand. Without these the compiler believes host values
+        // survived the guest, and the first use of one after the call is a
+        // host running on guest data.
         out("rax") _,
         out("rcx") _,
         out("rdx") _,
         out("rsi") _,
+        out("rdi") _,
         out("r8") _,
         out("r9") _,
         out("r10") _,
         out("r11") _,
-        options(nostack),
     );
 
-    // RAX comes back via VMCB save area
+    // RAX comes back through the VMCB, for the same reason it went out that
+    // way.
     regs.rax = vmcb.save.rax;
 
     Ok(())

@@ -175,6 +175,12 @@ async fn main() -> std::process::ExitCode {
     // `svm::initialize()` actually does, and an `Ok` without it is the one
     // outcome here that reads as a pass and is not one.
     let svme = console.contains("SVME set");
+    // A guest ran under hv1, exited for a reason it chose, was resumed past
+    // the instruction that caused the exit, and exited again. One entry
+    // proves a guest ran; two prove a loop, which is what makes it a
+    // hypervisor rather than a launcher.
+    let guest_ran = console.contains("VMEXIT_VMMCALL");
+    let guest_resumed = console.contains("VMEXIT_HLT");
 
     println!("long mode     : {}", yes_no(long_mode));
     println!("hv1 executed  : {}", yes_no(reached_hv1));
@@ -182,6 +188,14 @@ async fn main() -> std::process::ExitCode {
     println!(
         "CPU changed   : {}  (EFER.SVME, which is what svm::initialize() does)",
         yes_no(svme)
+    );
+    println!(
+        "ran a guest   : {}  (VMEXIT_VMMCALL, which only a guest can produce)",
+        yes_no(guest_ran)
+    );
+    println!(
+        "resumed it    : {}  (VMEXIT_HLT, after stepping past the vmmcall)",
+        yes_no(guest_resumed)
     );
     println!();
 
@@ -200,6 +214,25 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
+    if initialised && svme && !guest_ran {
+        println!(
+            "result        : hv1-core initialised and no guest ran. The exit codes above \
+             say how far VMRUN got — VMEXIT_INVALID means the VMCB was refused before any \
+             guest instruction executed, and VMEXIT_NPF means the nested page tables did \
+             not translate the guest's first fetch."
+        );
+        return std::process::ExitCode::FAILURE;
+    }
+
+    if guest_ran && !guest_resumed {
+        println!(
+            "result        : a guest entered and exited once, and did not survive being \
+             resumed. The exit loop is where to look: an intercepted instruction the \
+             hypervisor does not step over is re-executed forever."
+        );
+        return std::process::ExitCode::FAILURE;
+    }
+
     if initialised && !svme {
         println!(
             "result        : hv1-core reported success and left EFER.SVME clear. That is the \
@@ -211,11 +244,11 @@ async fn main() -> std::process::ExitCode {
 
     if initialised {
         println!(
-            "result        : hv1-core initialised on a real CPU and left EFER.SVME set, so \
-             it did the architectural work rather than only returning Ok. That is execution, \
-             not a \
-             compilation result — and it is still not bare metal: the layer underneath is \
-             KVM, and nothing here has run a guest."
+            "result        : hv1-core initialised on a real CPU, entered a guest, took an \
+             exit the guest caused, resumed it past that instruction, and took a second. \
+             That is a hypervisor hosting something — and it is still not bare metal: the \
+             layer underneath is KVM, and one four-byte real-mode guest is not an \
+             operating system."
         );
     } else {
         println!(

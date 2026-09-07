@@ -163,6 +163,14 @@ gdt64_pointer:
     // In .bss, so these cost nothing in the image and arrive as zeros. Page
     // tables built on top of whatever was in RAM would be a triple fault with
     // no diagnostic at all.
+    //
+    // Order matters, and cost a debugging round to establish. The stack used to
+    // sit directly above the page tables, and a `Vmcb` is four kilobytes
+    // constructed by value -- so building one overflowed a 16 KiB stack into
+    // the page directory, and the machine died a few instructions later while
+    // printing, nowhere near the cause. The stack is bigger now, and there is a
+    // page of nothing under it so that the next overflow faults on its own
+    // address rather than quietly rewriting a translation.
     .section .bss, "aw", @nobits
     .align 4096
 pml4:
@@ -171,8 +179,10 @@ pdpt:
     .skip 4096
 pd:
     .skip 4096
+stack_guard:
+    .skip 4096
 boot_stack_bottom:
-    .skip 16384
+    .skip 131072
 boot_stack_top:
 "#
 );

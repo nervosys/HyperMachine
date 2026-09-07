@@ -48,6 +48,7 @@ compile_error!(concat!(
 ));
 
 mod boot;
+mod guest;
 mod mem;
 
 use core::arch::asm;
@@ -212,6 +213,30 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
         }
     }
 
+    // Initialising is not hosting. This is the first time anything has
+    // run *under* hv1: a VMCB the hardware accepts, a guest that
+    // executes, an exit that says why, and a second entry afterwards.
+    // One entry proves a guest ran; two prove a loop.
+    //
+    // The nested page tables are the ones the trampoline built, read
+    // back out of CR3 rather than passed down from it: this image is
+    // identity mapped, so the guest's physical address space is the
+    // host's, and CR3 is where that map already lives.
+    // SAFETY: `initialize()` returned Ok above, so EFER.SVME is set;
+    // this is ring 0 and the address space is identity mapped.
+    match unsafe { guest::run() } {
+        guest::Outcome::NotEnabled => {
+            print(
+                "hv1   guest: SVM reports disabled, so no guest was run
+",
+            );
+        }
+        guest::Outcome::Ran { first, second } => {
+            report_exit(1, &first);
+            report_exit(2, &second);
+        }
+    }
+
     print("hv1   done\n");
     halt()
 }
@@ -237,6 +262,25 @@ fn error_name(e: hv1_core::Error) -> &'static str {
         Error::NotSupported => "NotSupported",
         _ => "an error initialize() was not expected to return",
     }
+}
+
+/// Print one guest exit.
+fn report_exit(n: u32, exit: &guest::Exit) {
+    print("hv1   guest exit ");
+    // SAFETY: COM1, as in `print`.
+    unsafe { outb(COM1, b'0' + n as u8) };
+    print(" ");
+    print_hex(exit.code);
+    print(" ");
+    print(guest::exit_name(exit.code));
+    if exit.code == guest::VMEXIT_NPF {
+        print(" at ");
+        print_hex(exit.fault_addr);
+    }
+    print(
+        "
+",
+    );
 }
 
 /// Read a model-specific register.
