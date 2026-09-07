@@ -60,6 +60,9 @@ compile_error!(concat!(
     "target and the linker script.",
 ));
 
+mod mem;
+mod vsock;
+
 use core::arch::asm;
 use core::panic::PanicInfo;
 
@@ -165,11 +168,128 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     print_hex(info);
     print("\n");
 
-    // A unikernel has nowhere to return to. Halting is how it says it is done;
-    // the vCPU takes a HLT exit and stops asking the host for time.
+    // Everything above proves the guest was booted. Everything below is the
+    // guest being an agent: a swarm message arrives over vsock, and the
+    // answer goes back the same way.
+    match vsock::Vsock::init() {
+        Ok(mut device) => {
+            print("vsock cid ");
+            print_hex(device.cid() as u32);
+            print("\n");
+            serve(&mut device)
+        }
+        Err(e) => {
+            // Not fatal. A VM with no vsock device attached is a perfectly
+            // good unikernel, and saying so beats halting silently.
+            print("vsock ");
+            print(e.as_str());
+            print("\n");
+            halt()
+        }
+    }
+}
+
+/// Answer the host until the VM is stopped.
+///
+/// The whole protocol this agent speaks:
+///
+///   REQUEST  -> RESPONSE      the host opened a connection
+///   RW       -> RW            a message arrived; the answer is its echo
+///   SHUTDOWN -> RST           the host is done
+///
+/// An echo rather than anything cleverer, because what is being demonstrated
+/// is that the bytes crossed the boundary in both directions. A guest that
+/// receives a message and answers with something unrelated proves only the
+/// first half.
+fn serve(device: &mut vsock::Vsock) -> ! {
     loop {
-        // SAFETY: `hlt` with interrupts disabled parks this vCPU for good,
-        // which is the intended end of the program.
+        device.ack_interrupt();
+
+        let Some(packet) = device.recv() else {
+            // Nothing waiting. Spin rather than halt: there is no interrupt
+            // handler here, so a halted vCPU would never wake to look again.
+            // This costs a host core for as long as the guest runs, which is
+            // only survivable because `stop()` can now interrupt a vCPU that
+            // never leaves the guest on its own.
+            spin();
+            continue;
+        };
+
+        match packet.header.op {
+            vsock::op::REQUEST => {
+                print("vsock connect\n");
+                device.reply(&packet.header, vsock::op::RESPONSE, &[]);
+            }
+            vsock::op::RW => {
+                print("agent recv \"");
+                print_bytes(packet.payload_at, packet.payload_len);
+                print("\"\n");
+
+                // Echo the payload straight back out of the receive buffer.
+                // Nothing is copied because there is nowhere to copy to: this
+                // guest has no allocator.
+                echo(device, &packet);
+            }
+            vsock::op::SHUTDOWN => {
+                device.reply(&packet.header, vsock::op::RST, &[]);
+            }
+            // A credit request wants a report, and every packet this driver
+            // sends carries one.
+            vsock::op::CREDIT_REQUEST => {
+                device.reply(&packet.header, vsock::op::CREDIT_UPDATE, &[]);
+            }
+            _ => {}
+        }
+
+        device.release(&packet);
+    }
+}
+
+/// Send a packet's payload back to the host, reading it from the receive
+/// buffer a byte at a time.
+fn echo(device: &mut vsock::Vsock, packet: &vsock::Packet) {
+    // Bounded by the transmit buffer, which is one page: a longer message is
+    // answered with as much of itself as fits rather than corrupting memory
+    // past the buffer. Nothing in this swarm sends one that long.
+    const MAX: u32 = 4096 - vsock::HEADER_SIZE as u32;
+    let len = packet.payload_len.min(MAX) as usize;
+
+    let mut scratch = [0u8; 256];
+    let len = len.min(scratch.len());
+    for (i, byte) in scratch.iter_mut().enumerate().take(len) {
+        // SAFETY: `payload_at + i` is inside the receive buffer the device
+        // wrote, bounded by `payload_len` above.
+        *byte = unsafe { core::ptr::read_volatile((packet.payload_at + i as u32) as *const u8) };
+    }
+    device.reply(&packet.header, vsock::op::RW, &scratch[..len]);
+}
+
+/// Write `len` bytes of guest memory at `at` to the console.
+fn print_bytes(at: u32, len: u32) {
+    for i in 0..len {
+        // SAFETY: the caller passes a receive buffer and the length the device
+        // reported writing into it.
+        let byte = unsafe { core::ptr::read_volatile((at + i) as *const u8) };
+        // SAFETY: COM1, as in `print`.
+        unsafe { outb(COM1, byte) };
+    }
+}
+
+/// Yield the pipeline between polls. `pause` is the instruction a spin loop is
+/// supposed to use: it does not exit to the host, so this stays a busy wait,
+/// but it stops the core burning quite as hard.
+fn spin() {
+    for _ in 0..1000 {
+        // SAFETY: `pause` has no operands and no effect but a scheduling hint.
+        unsafe { asm!("pause", options(nomem, nostack, preserves_flags)) };
+    }
+}
+
+/// Stop, for good.
+fn halt() -> ! {
+    loop {
+        // SAFETY: `hlt` with interrupts disabled parks this vCPU, which is the
+        // intended end of the program.
         unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)) };
     }
 }
@@ -178,8 +298,5 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     print("PANIC\n");
-    loop {
-        // SAFETY: as in `kernel_main`.
-        unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)) };
-    }
+    halt()
 }

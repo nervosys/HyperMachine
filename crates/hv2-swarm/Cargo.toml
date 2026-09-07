@@ -23,12 +23,17 @@ tracing = { workspace = true }
 [dev-dependencies]
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
 tokio = { workspace = true }
+# The vsock example holds a device the VM hands back behind this lock.
+parking_lot = { workspace = true }
 
 [[example]]
 name = "unikernel_swarm"
 
 [[example]]
 name = "guest_transport"
+
+[[example]]
+name = "vsock_swarm"
 
 [lints]
 workspace = true
