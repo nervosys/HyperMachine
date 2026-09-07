@@ -43,6 +43,7 @@ pub mod capabilities;
 pub mod communication;
 pub mod context_host;
 pub mod events;
+pub mod governed;
 pub mod gpu_host;
 pub mod guest_agent;
 pub mod image_host;

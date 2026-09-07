@@ -641,27 +641,38 @@ pub struct AgentPolicy {
     pub permissions: PolicySet,
     /// Resource quotas.
     ///
-    /// **Recorded, not enforced.** [`AgentPolicy::allows`] consults `enabled`
-    /// and `permissions` and nothing else, so a quota set here does not stop a
-    /// sixth VM being created under a `max_vms` of five. Nothing in this crate
-    /// constructs [`PolicyError::QuotaExceeded`].
+    /// **Not enforced here.** [`AgentPolicy::allows`] consults `enabled` and
+    /// `permissions` and nothing else, so a quota set on a policy does not by
+    /// itself stop a sixth VM under a `max_vms` of five, and nothing in this
+    /// module constructs [`PolicyError::QuotaExceeded`].
     ///
-    /// Said here because the sibling field is wired up and the module
-    /// documentation explains that it is -- which makes silence about this one
-    /// read as endorsement. Enforcing it needs usage counters that do not
-    /// exist: [`PolicyContext`] carries an agent id and a clock, not a tally,
-    /// and where such a tally should live (per session, per agent, across
-    /// restarts) is a design decision rather than an oversight.
+    /// Enforced by
+    /// [`GovernedVmHost`](crate::governed::GovernedVmHost), which wraps a
+    /// [`VmHost`](crate::vm_host::VmHost) and refuses an operation that would
+    /// pass a quota *before* it reaches the host underneath.
+    /// [`GovernedVmHost::from_policy`](crate::governed::GovernedVmHost::from_policy)
+    /// takes this field and [`rate_limits`](Self::rate_limits) together:
+    ///
+    /// ```no_run
+    /// # use hv2_agent::governed::GovernedVmHost;
+    /// # use hv2_agent::policies::AgentPolicy;
+    /// # use hv2_agent::vm_host::LocalVmHost;
+    /// let policy = AgentPolicy::operator("agent-7");
+    /// let host = GovernedVmHost::from_policy(LocalVmHost::new(), &policy);
+    /// ```
+    ///
+    /// The counters that made this an open question live in the governor, so
+    /// they are per-process and last as long as it does; its module
+    /// documentation says what that means and what it does not cover.
     pub quotas: QuotaSpec,
     /// Rate limits by action.
     ///
-    /// **Recorded, not enforced**, for the same reason as
-    /// [`quotas`](Self::quotas) and with the same requirement: rate limiting
-    /// needs a count of recent actions, and nothing here keeps one.
+    /// **Not enforced here**, and enforced by the same wrapper as
+    /// [`quotas`](Self::quotas) -- see that field.
     ///
-    /// Note that [`McpConfig::rate_limit`](crate::mcp::McpConfig) *is* enforced
-    /// -- it bounds calls per session on the tool surface. This field is a
-    /// different thing that looks like it.
+    /// Note that [`McpConfig::rate_limit`](crate::mcp::McpConfig) is a
+    /// different thing that looks like this one: it bounds calls per session on
+    /// the tool surface, whatever policy is in force.
     pub rate_limits: HashMap<PolicyAction, RateLimitSpec>,
     /// Enabled state
     pub enabled: bool,
