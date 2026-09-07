@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>9f7fc51</dd></div>
+    <div class="fact"><dt>Master</dt><dd>cf9311c</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -816,6 +816,39 @@ saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
     guest reading a region of zeroes are indistinguishable without a marker.
   </p>
 
+  <h3>And what an agent costs once it holds a context</h3>
+  <p>
+    Sharing is the half a fleet does not pay for twice. The other half it pays
+    for per agent, and for a language model that is the KV cache — which cannot
+    be shared with another agent by definition, since it is that agent's
+    conversation. That number, not 0.221&nbsp;MiB, is what density now depends
+    on, so it is worth knowing whether private guest memory costs what it should
+    or carries a multiplier.
+  </p>
+  <p>
+    It does not. A hundred agents, a 350&nbsp;MiB shared model, 24&nbsp;MiB of
+    private working set each:
+  </p>
+  <pre>touched       : 24 MiB each — 24.184 MiB per agent, +0.184 MiB against what was asked for
+resident      : 2768.5 MiB total
+if copied     : 100 agents x 374 MiB would be 36.5 GiB
+saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
+  <p>
+    The overhead is 0.184&nbsp;MiB, which is what an agent costs holding
+    nothing. So the density of a fleet is
+    <strong>the model once, plus per agent exactly what that agent
+    touches</strong> — measured rather than assumed, because a hidden factor of
+    two would have halved how many agents fit on a node and nothing in the code
+    would have shown it.
+  </p>
+  <p>
+    Worth knowing for whoever sizes a node from this: a KV cache for a small
+    model is roughly 12&nbsp;KiB per token at two bytes per element, so a
+    2,000-token context is around 24&nbsp;MiB and a 8,000-token one around
+    96&nbsp;MiB. The formula is what this measures; the constant is the model's
+    and belongs to whoever picks it.
+  </p>
+
   <h3>What that settles about the architecture, and what it does not</h3>
   <p>
     One thing is now measured and the rest follows from it or is still open.
@@ -834,9 +867,9 @@ saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
       </tr>
       <tr>
         <td>What does an agent then cost?</td>
-        <td><span class="tag typed">open</span> Its KV cache, activations and
-            scratch — which is what decides density now, and is unmeasured.
-            0.177&nbsp;MiB is an agent holding nothing</td>
+        <td><span class="tag ran">ran</span> Exactly what it touches, plus
+            0.18&nbsp;MiB. No multiplier on private guest memory, so a fleet is
+            the model once plus the sum of the agents' working sets</td>
       </tr>
       <tr>
         <td>Which architecture should the guest be?</td>
@@ -869,11 +902,12 @@ saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
   </table>
   </div>
   <p>
-    The one that most wants measuring next is the second, because it is the
-    number that has replaced 0.221&nbsp;MiB as the thing density depends on. A
-    context window is not free and a KV cache is per-agent by definition — it is
-    the one part of an agent that <em>cannot</em> be shared, which is precisely
-    why it is now the interesting number.
+    What is left open is the guest itself rather than the machine under it. The
+    hypervisor's side of an agentic fleet is now measured end to end: a model
+    shared once, a working set that costs what it is, a channel that reaches
+    inside the guest, a policy that refuses, and an idle agent that costs
+    nothing. What has never run is an agent — a model, a tokeniser, a tool
+    call — and everything above is the floor that sits under one.
   </p>
 
   <h3>Two failing tests, and neither was flaky</h3>
@@ -976,6 +1010,11 @@ saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
         <td>Model shared across a fleet</td><td>—</td><td><strong>once</strong></td>
         <td><span class="tag ran">ran</span> 1,000 agents on one 350 MiB region,
             99.85% of a copied fleet saved, writes refused</td>
+      </tr>
+      <tr>
+        <td>Overhead on an agent's own memory</td><td>—</td><td><strong>0.18 MiB</strong></td>
+        <td><span class="tag ran">ran</span> 24 MiB asked for, 24.184 MiB paid —
+            no multiplier</td>
       </tr>
       <tr>
         <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
@@ -1165,11 +1204,11 @@ saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
       being hidden by a hypervisor underneath.
     </li>
     <li>
-      <strong>Measure what an agent costs once it holds a context.</strong>
-      Weights are shared, so the number density now depends on is the KV cache
-      and activations — the one part of an agent that cannot be shared, and
-      therefore the one that decides how many fit. 0.177&nbsp;MiB is an agent
-      holding nothing.
+      <strong>Put a model in one.</strong> Everything under an agent is now
+      measured — a model shared once, a working set that costs what it is, a
+      channel that reaches inside, a policy that refuses, an idle agent that
+      costs nothing. What has never run is the agent: weights, a tokeniser, a
+      forward pass. That is the first thing whose difficulty is still a guess.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1232,9 +1271,9 @@ saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
 </section>
 
 <footer>
-  master 9f7fc51 · 0 open PRs · 0 open issues · suite green · 1,000 agents over
-  vsock at 0.7% of a core idle, sharing one 350&nbsp;MiB model · measured on
-  WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master cf9311c · 0 open PRs · 0 open issues · suite green · a fleet costs the
+  model once plus what each agent touches · measured on WSL2 + KVM, not bare
+  metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
