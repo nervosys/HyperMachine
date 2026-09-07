@@ -29,14 +29,18 @@
 //!
 //! # Cost
 //!
-//! Each agent is a VM whose guest polls its virtqueue in a spin loop, so each
-//! costs a host core while it runs. Three agents, deliberately: this
-//! demonstrates the transport, and `unikernel_swarm` is where the graph is run
-//! at a thousand agents. A polling guest is also only stoppable because
-//! `stop()` can now interrupt a vCPU that never leaves the guest on its own.
+//! An idle agent halts, so it costs a parked thread and no CPU. That was not
+//! true while the guest polled its virtqueue, and it is why this example used
+//! to run three agents and `unikernel_swarm` a thousand — the thousand were
+//! guests that halted immediately and never spoke, which measures the
+//! hypervisor and not the swarm.
+//!
+//! `--agents N` runs the same three checks and then holds the whole swarm idle
+//! to measure what it costs. Every agent is a full VM with its own vsock device
+//! and its own connection.
 //!
 //! ```text
-//! cargo run --release -p hv2-swarm --example vsock_swarm
+//! cargo run --release -p hv2-swarm --example vsock_swarm -- --agents 1000
 //! ```
 //!
 //! Needs `/dev/kvm` and the `i686-unknown-linux-musl` target.
@@ -209,6 +213,36 @@ where
     None
 }
 
+/// This process's CPU time so far, in seconds.
+///
+/// Read from `/proc/self/stat` rather than measured with a timer, because the
+/// claim is about CPU consumed and not about time passing — those are the same
+/// number for a spinning guest and very different for a halted one, which is
+/// the entire point.
+fn cpu_seconds() -> Option<f64> {
+    let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+    // The comm field can contain spaces and parentheses, so fields are counted
+    // from the closing parenthesis rather than from the start.
+    let after_comm = &stat[stat.rfind(')')? + 1..];
+    let fields: Vec<&str> = after_comm.split_whitespace().collect();
+    // utime and stime are fields 14 and 15 of the whole line; two are consumed
+    // before the comm, so they are 11 and 12 of what is left.
+    let utime: u64 = fields.get(11)?.parse().ok()?;
+    let stime: u64 = fields.get(12)?.parse().ok()?;
+    let hz = 100.0; // USER_HZ, fixed at 100 on every Linux this runs on
+    Some((utime + stime) as f64 / hz)
+}
+
+/// Resident set size in bytes, for the per-agent memory figure.
+fn rss_bytes() -> Option<u64> {
+    let statm = std::fs::read_to_string("/proc/self/statm").ok()?;
+    let pages: u64 = statm.split_whitespace().nth(1)?.parse().ok()?;
+    Some(pages * 4096)
+}
+
+/// How long the swarm is held idle while its cost is measured.
+const IDLE_WINDOW: Duration = Duration::from_secs(3);
+
 /// How long to wait before concluding a message did *not* arrive.
 ///
 /// A negative claim needs a bound, and the bound has to be generous relative to
@@ -227,16 +261,44 @@ async fn main() -> std::process::ExitCode {
     };
     println!("guest         : {}", elf.display());
 
+    // Three named agents carry the checks; anything beyond them is there to be
+    // counted. Three is the minimum the checks need -- a parent and two
+    // siblings -- so the small case is the same swarm it always was.
+    let mut total = 3usize;
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--agents" if i + 1 < args.len() => {
+                total = args[i + 1].parse().unwrap_or(total).max(3);
+                i += 1;
+            }
+            other => {
+                eprintln!("unrecognised argument {other}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+        i += 1;
+    }
+
+    let baseline_rss = rss_bytes();
+
     // The graph first. It is cheap, it is the thing being demonstrated, and a
     // topology mistake found before any VM exists costs nothing.
     let names = ["root", "w-a", "w-b"];
     let mut agents = BTreeMap::new();
     let started = Instant::now();
-    for (index, name) in names.iter().enumerate() {
+    for index in 0..total {
+        let name = match index {
+            0 => "root".to_string(),
+            1 => "w-a".to_string(),
+            2 => "w-b".to_string(),
+            n => format!("w-{n}"),
+        };
         // CIDs 0, 1 and 2 are reserved, so guests start at 3.
-        match start_agent(name, &elf, 3 + index as u64).await {
+        match start_agent(&name, &elf, 3 + index as u64).await {
             Ok(agent) => {
-                agents.insert(AgentId::new(*name), agent);
+                agents.insert(AgentId::new(name), agent);
             }
             Err(e) => {
                 eprintln!("agent         : FAILED — {e}");
@@ -245,11 +307,21 @@ async fn main() -> std::process::ExitCode {
             }
         }
     }
+    let booted = started.elapsed();
     println!(
-        "agents        : {} unikernels booted and connected in {:.1} ms",
+        "agents        : {} unikernels booted and connected in {:.1} ms ({:.2} ms each)",
         agents.len(),
-        started.elapsed().as_secs_f64() * 1000.0
+        booted.as_secs_f64() * 1000.0,
+        booted.as_secs_f64() * 1000.0 / agents.len() as f64
     );
+    if let (Some(base), Some(now)) = (baseline_rss, rss_bytes()) {
+        let growth = now.saturating_sub(base);
+        println!(
+            "memory        : {:.2} MiB resident for the swarm, {:.3} MiB per agent",
+            growth as f64 / (1024.0 * 1024.0),
+            growth as f64 / (1024.0 * 1024.0) / agents.len() as f64
+        );
+    }
 
     let agents = Arc::new(agents);
     let mut swarm = Swarm::new(VsockTransport {
@@ -259,6 +331,11 @@ async fn main() -> std::process::ExitCode {
     swarm.add_root("root").expect("root");
     swarm.add_agent("w-a", "root").expect("w-a");
     swarm.add_agent("w-b", "root").expect("w-b");
+    for index in 3..total {
+        swarm
+            .add_agent(format!("w-{index}"), "root")
+            .expect("worker");
+    }
 
     let mut ok = true;
 
@@ -355,7 +432,28 @@ async fn main() -> std::process::ExitCode {
         ok = false;
     }
 
+    // What the swarm costs while it is doing nothing, which is the state an
+    // agent fleet spends almost all of its time in. Measured as CPU consumed
+    // over a window of wall time: for a halted guest those two numbers are
+    // unrelated, and for a spinning one they are the same.
+    let cpu_before = cpu_seconds();
+    let idle_started = Instant::now();
+    tokio::time::sleep(IDLE_WINDOW).await;
+    let idle_elapsed = idle_started.elapsed();
+    if let (Some(before), Some(after)) = (cpu_before, cpu_seconds()) {
+        let used = after - before;
+        println!(
+            "idle          : {:.2} s of CPU across {} agents over {:.1} s — {:.1}% of one core",
+            used,
+            agents.len(),
+            idle_elapsed.as_secs_f64(),
+            100.0 * used / idle_elapsed.as_secs_f64()
+        );
+    }
+
     println!();
+    // Only the three named agents have anything to say; the rest booted,
+    // connected and went to sleep, which is the point being measured.
     for name in names {
         let agent = &agents[&AgentId::new(name)];
         for line in agent.vm.console_output().await.lines() {
@@ -364,19 +462,19 @@ async fn main() -> std::process::ExitCode {
     }
     println!();
 
-    // Stopping is not a formality here. Every guest is spinning on its
-    // virtqueue, so every one of them is a vCPU that never leaves the guest of
-    // its own accord.
+    // Stopping is not a formality. Every guest is halted inside `KVM_RUN`
+    // waiting for an interrupt that is not coming, which is exactly the state
+    // that used to make `stop()` never return.
     let stopping = Instant::now();
-    for name in names {
-        if let Err(e) = agents[&AgentId::new(name)].vm.stop().await {
-            println!("stop          : {name} — {e}");
+    for (name, agent) in agents.iter() {
+        if let Err(e) = agent.vm.stop().await {
+            println!("stop          : {} — {e}", name.as_str());
             ok = false;
         }
     }
     println!(
-        "stop          : {} spinning guests in {:.1} ms",
-        names.len(),
+        "stop          : {} halted guests in {:.1} ms",
+        agents.len(),
         stopping.elapsed().as_secs_f64() * 1000.0
     );
 
