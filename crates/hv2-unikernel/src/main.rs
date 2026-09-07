@@ -169,6 +169,50 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     print_hex(info);
     print("\n");
 
+    // If a shared read-only region has been mapped, read a byte of it and say
+    // so. A region that is mapped and unreadable costs the host exactly the
+    // same and is worth nothing, so the host measuring one needs a guest that
+    // has actually looked at it.
+    //
+    // Absent, the address reads as zero — this guest has no page tables of its
+    // own and an unmapped guest-physical address is not a fault it can take, so
+    // silence and a zero are the same thing and the marker is what tells them
+    // apart.
+    {
+        const ROM_BASE: u32 = 0xE000_0000;
+        // SAFETY: a single byte read from a guest-physical address the host
+        // either mapped read-only or left unmapped; neither faults here.
+        // SAFETY: a single byte read from a guest-physical address the host
+        // either mapped read-only or left unmapped; neither faults here.
+        let marker = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
+        print("rom ");
+        print_hex(marker as u32);
+
+        // And then try to write it. A shared region is only safe to share if
+        // the hardware refuses this: one writable copy read by a thousand
+        // agents is a thousand agents able to rewrite each other's model. The
+        // write is expected to be dropped and the byte to be unchanged, and
+        // reporting the read-back is what turns "should be read-only" into
+        // something a host can check.
+        // SAFETY: the write is the thing under test; the region is either
+        // read-only, in which case the hardware refuses it, or unmapped, in
+        // which case it goes nowhere.
+        unsafe { core::ptr::write_volatile(ROM_BASE as *mut u8, 0x00) };
+        // SAFETY: as for the read above.
+        let after = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
+        if after == marker {
+            print(
+                " write refused
+",
+            );
+        } else {
+            print(
+                " WRITE TOOK EFFECT
+",
+            );
+        }
+    }
+
     // Everything above proves the guest was booted. Everything below is the
     // guest being an agent: a swarm message arrives over vsock, and the
     // answer goes back the same way.

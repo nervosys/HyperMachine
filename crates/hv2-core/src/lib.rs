@@ -66,6 +66,7 @@ pub mod perf;
 pub mod platform;
 pub mod power;
 pub mod security;
+pub mod shared_rom;
 pub mod snapshot;
 pub mod telemetry;
 pub mod uefi;

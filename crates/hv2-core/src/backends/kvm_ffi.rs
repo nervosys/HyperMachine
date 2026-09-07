@@ -109,6 +109,14 @@ pub const KVM_CAP_XCRS: u32 = 56;
 pub const KVM_CAP_TSC_CONTROL: u32 = 60;
 pub const KVM_CAP_MAX_VCPUS: u32 = 66;
 pub const KVM_CAP_READONLY_MEM: u32 = 81;
+
+/// A memory slot the guest may read and execute but not write.
+///
+/// A write to one exits to the host rather than reaching the page, so a guest
+/// that tries is reported rather than able to corrupt what every other guest
+/// sharing the slot is reading.
+pub const KVM_MEM_READONLY: u32 = 1 << 1;
+
 pub const KVM_CAP_SPLIT_IRQCHIP: u32 = 121;
 pub const KVM_CAP_MAX_VCPU_ID: u32 = 128;
 pub const KVM_CAP_X2APIC_API: u32 = 129;
@@ -187,7 +195,7 @@ pub const KVM_EXIT_IO_OUT: u8 = 1;
 pub struct kvm_userspace_memory_region {
     /// Slot number (0-based, multiple regions can exist)
     pub slot: u32,
-    /// Flags (currently unused, must be 0)
+    /// Slot flags: see [`KVM_MEM_READONLY`].
     pub flags: u32,
     /// Guest physical address where the region starts
     pub guest_phys_addr: u64,

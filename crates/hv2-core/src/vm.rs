@@ -365,6 +365,10 @@ pub struct VM {
     /// [`VM::set_image_registry`] to make a denied or revoked image fail to
     /// provision rather than merely be queryable.
     image_registry: RwLock<Option<Arc<crate::security::image_registry::ImageRegistry>>>,
+    /// Shared read-only regions this VM has been shown, held so that none can
+    /// be unmapped while a guest is reading it.
+    shared_roms: RwLock<Vec<Arc<crate::shared_rom::SharedRom>>>,
+
     /// The vsock device attached by [`VM::attach_vsock`], if any.
     ///
     /// Held here because the host side of a vsock connection is reached from
@@ -531,6 +535,7 @@ impl VM {
             hv_vm: RwLock::new(None),
             run_task: RwLock::new(None),
             image_registry: RwLock::new(None),
+            shared_roms: RwLock::new(Vec::new()),
             vsock: RwLock::new(None),
         })
     }
@@ -1117,6 +1122,55 @@ impl VM {
     ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_vsock::VsockDevice>>> {
         self.attach_vsock_at(guest_cid, Self::VSOCK_MMIO_BASE, Self::VSOCK_IRQ)
             .await
+    }
+
+    /// Show this VM a shared read-only region at `guest_addr`.
+    ///
+    /// The region is host memory that any number of VMs may be given at once.
+    /// Each pays nothing for it: they are all mappings of the same allocation
+    /// in the same process, so the pages behind them are the same physical
+    /// pages. A fleet of agents sharing one model's weights costs the weights
+    /// once.
+    ///
+    /// The [`Arc`] is held for the life of the VM, so the region cannot be
+    /// unmapped while a guest is reading it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the VM has not been provisioned, if the region would
+    /// overlap guest RAM, or if the backend cannot share memory read-only.
+    pub async fn attach_shared_rom(
+        self: &Arc<Self>,
+        guest_addr: u64,
+        rom: Arc<crate::shared_rom::SharedRom>,
+    ) -> Result<()> {
+        if self.hv_vm.read().is_none() {
+            return Err(Error::InvalidState(
+                "provision the VM before showing it a shared region".into(),
+            ));
+        }
+
+        // The same rule the vsock window follows, for the same reason: two
+        // meanings for one address is memory corruption wearing a bad address's
+        // clothes.
+        if guest_addr < self.memory.total_size() {
+            return Err(Error::Device(format!(
+                "a shared region at {guest_addr:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        self.backend
+            .map_shared_rom(guest_addr, rom.host_addr(), rom.len())
+            .await?;
+
+        tracing::info!(
+            "VM '{}': {} MiB shared read-only at {guest_addr:#x}",
+            self.config.name,
+            rom.len() / (1024 * 1024),
+        );
+        self.shared_roms.write().push(rom);
+        Ok(())
     }
 
     /// Guest physical address of the vsock register window, by default.

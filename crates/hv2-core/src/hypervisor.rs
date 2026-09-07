@@ -215,6 +215,30 @@ pub trait HypervisorBackend: Send + Sync {
     /// then returns the exit reason for the hypervisor to handle.
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit>;
 
+    /// Show the guest a region of host memory it may read but not write.
+    ///
+    /// The same host address may be given to any number of VMs. They are all
+    /// mappings of one allocation in one process, so the pages behind them are
+    /// the same physical pages and the host pays for the region once however
+    /// many guests see it. That is what makes a model's weights affordable
+    /// across a fleet: a thousand agents reading 350 MB of weights cost 350 MB,
+    /// not 350 GB.
+    ///
+    /// Read-only is enforced by the hardware, not by convention. A guest that
+    /// writes takes an exit the host can see, rather than corrupting what every
+    /// other agent is reading.
+    ///
+    /// The default reports [`Error::NotSupported`], because a backend that
+    /// cannot share a region should say so rather than silently give each guest
+    /// its own copy of something the caller expected to be shared once.
+    async fn map_shared_rom(&self, guest_addr: u64, host_addr: u64, len: u64) -> Result<()> {
+        let _ = (guest_addr, host_addr, len);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot map a shared read-only region",
+            self.platform()
+        )))
+    }
+
     /// Ask a vCPU to leave the guest and return from [`Self::run_vcpu`].
     ///
     /// Called from another thread, typically while `run_vcpu` is blocked. A

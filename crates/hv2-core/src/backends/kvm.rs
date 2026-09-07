@@ -341,6 +341,36 @@ impl HypervisorBackend for KvmBackend {
         kvm_vcpu.run()
     }
 
+    async fn map_shared_rom(&self, guest_addr: u64, host_addr: u64, len: u64) -> Result<()> {
+        let kvm_vm = self
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| {
+                Error::Hypervisor(
+                    "no KVM VM — create_vm must run before a shared region can be mapped".into(),
+                )
+            })?;
+
+        // SAFETY: `KVM_CHECK_EXTENSION` is a system ioctl on `/dev/kvm` with no
+        // side effects.
+        let read_only_supported = unsafe { kvm_check_extension(self.kvm_fd, KVM_CAP_READONLY_MEM) }
+            .map(|v| v > 0)
+            .unwrap_or(false);
+        if !read_only_supported {
+            return Err(Error::NotSupported(
+                "this KVM does not support read-only memory slots, so a shared region could \
+                 not be protected from the guests reading it"
+                    .into(),
+            ));
+        }
+
+        // Slot 0 is the guest's own RAM. Shared regions start at 1 and there is
+        // one per VM, which is all the model-weights case needs.
+        kvm_vm.map_memory_with_flags(1, guest_addr, len, host_addr, KVM_MEM_READONLY)
+    }
+
     async fn kick_vcpu(&self, vcpu: &VCpu) -> Result<()> {
         let kvm_vcpu = {
             let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
@@ -975,9 +1005,30 @@ impl KvmVm {
         memory_size: u64,
         userspace_addr: u64,
     ) -> Result<()> {
+        self.map_memory_with_flags(slot, guest_phys_addr, memory_size, userspace_addr, 0)
+    }
+
+    /// The same, with slot flags — [`KVM_MEM_READONLY`] being the one that
+    /// matters here.
+    ///
+    /// Nothing stops several VMs being given the same `userspace_addr`. They
+    /// are all mappings of one host allocation in one process, so the pages
+    /// behind them are the same physical pages: the host pays for the region
+    /// once however many guests see it. That is the whole mechanism behind
+    /// sharing a model's weights across a fleet of agents, and it is why the
+    /// read-only flag is not optional — one writable copy shared by a thousand
+    /// guests is a thousand guests able to rewrite each other's model.
+    pub fn map_memory_with_flags(
+        &self,
+        slot: u32,
+        guest_phys_addr: u64,
+        memory_size: u64,
+        userspace_addr: u64,
+        flags: u32,
+    ) -> Result<()> {
         let region = kvm_userspace_memory_region {
             slot,
-            flags: 0,
+            flags,
             guest_phys_addr,
             memory_size,
             userspace_addr,
