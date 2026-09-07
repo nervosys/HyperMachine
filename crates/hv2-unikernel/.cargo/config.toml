@@ -1,0 +1,27 @@
+# The 32-bit x86 target for which stable Rust ships a prebuilt `core`. Nothing
+# Linux survives into the output: `-nostdlib` is implied by linking with
+# `rust-lld` directly rather than through a C compiler, and this crate is
+# `no_std`. The alternative is a custom target JSON with `-Z build-std`, which
+# would make an otherwise entirely stable binary need nightly.
+[build]
+target = "i686-unknown-linux-musl"
+# Asserted against the repository root's config, which cargo also finds by
+# walking up from here and which resolves `target` relative to itself -- so
+# without this the guest lands in the workspace's target directory, among host
+# artifacts, where the example that builds it does not think to look.
+target-dir = "target"
+
+[target.i686-unknown-linux-musl]
+# `rust-lld` ships with the toolchain, so this needs no cross-compiler and no
+# 32-bit multilib on the host -- linking through `cc` would need both.
+linker = "rust-lld"
+rustflags = [
+    "-C", "linker-flavor=ld.lld",
+    # Without this rustc contributes musl's `crt1.o`, which defines its own
+    # `_start` and collides with ours. A unikernel wants no C runtime startup:
+    # the loader enters `_start` directly and there is no environment to set up.
+    "-C", "link-self-contained=no",
+    "-C", "relocation-model=static",
+    "-C", "link-arg=-Tlink.ld",
+    "-C", "link-arg=--build-id=none",
+]

@@ -29,7 +29,11 @@ members = [
 # A member cannot be skipped by `--workspace`, so excluding it is what makes
 # the obvious command work. It is still built and checked on nightly, by name,
 # in the HV1 jobs in ci.yml.
-exclude = ["crates/hv1-boot"]
+#
+# hv2-unikernel is excluded for the same reason with a different cause: it is a
+# 32-bit bare-metal guest, so it has no host build at all. `hv2-core`'s
+# `rust_unikernel` example builds it by name and boots it.
+exclude = ["crates/hv1-boot", "crates/hv2-unikernel"]
 
 resolver = "2"
 

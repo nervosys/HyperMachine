@@ -420,6 +420,75 @@ jobs:
             # and failed with ~75 unresolved x86_64/x86/raw_cpuid references.
             # ARM coverage is the hv1-arm check above, which passes.
 
+    unikernel-build:
+        name: Unikernel Guest Build (stable, i686)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            # Stable, and no -Zbuild-std: `i686-unknown-linux-musl` is the
+            # 32-bit x86 target rustup ships a prebuilt `core` for. Nothing
+            # Linux reaches the output -- the crate is `no_std` and links with
+            # `rust-lld` and no C runtime -- so this needs neither nightly nor a
+            # cross-compiler nor 32-bit multilib on the runner.
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: i686-unknown-linux-musl
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      crates/hv2-unikernel/target
+                  key: ${{ runner.os }}-cargo-unikernel-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-unikernel-
+
+            # From its own directory, not by --manifest-path. Cargo reads
+            # .cargo/config.toml from the current directory upward rather than
+            # from the manifest, and this crate's target and linker script both
+            # live there -- run from the workspace root it would quietly build a
+            # 64-bit host binary instead. The crate says so in a compile_error!
+            # for anyone who tries.
+            - name: Build the unikernel guest
+              working-directory: crates/hv2-unikernel
+              run: cargo build --release
+
+            # The build succeeding is not the claim worth checking. A guest that
+            # links but has no Multiboot header is not bootable, and the loader
+            # would refuse it at provision time with no hint that the guest crate
+            # was what changed. This asserts the two things
+            # `BootSource::Multiboot` actually reads: the header magic at the
+            # start of the image, and an entry point past it.
+            - name: Check it is a bootable Multiboot image
+              run: |
+                  set -euo pipefail
+                  elf=crates/hv2-unikernel/target/i686-unknown-linux-musl/release/hv2-unikernel
+
+                  file_type=$(readelf -h "$elf" | awk -F: '/Type:/ {print $2}' | xargs)
+                  case "$file_type" in
+                      EXEC*) ;;
+                      *) echo "expected an ET_EXEC executable, got: $file_type" >&2; exit 1 ;;
+                  esac
+
+                  # 0x1BADB002, little-endian, at the very start of .text.
+                  magic=$(objdump -s -j .text --stop-address=0x100004 "$elf" \
+                      | awk '/^ 100000/ {print $2}')
+                  if [ "$magic" != "02b0ad1b" ]; then
+                      echo "no Multiboot header at the start of .text (found: ${magic:-nothing})" >&2
+                      exit 1
+                  fi
+
+                  entry=$(readelf -h "$elf" | awk -F: '/Entry point/ {print $2}' | xargs)
+                  if [ "$entry" = "0x100000" ]; then
+                      echo "entry point is the header itself; the loader would execute it" >&2
+                      exit 1
+                  fi
+                  echo "bootable: Multiboot header at 0x100000, entry $entry"
+
     hv1-arm-test:
         name: HV1 ARM64 Test (host)
         runs-on: ubuntu-latest
