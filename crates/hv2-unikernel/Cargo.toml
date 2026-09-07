@@ -12,6 +12,11 @@ repository = "https://github.com/nervosys/HyperMachine"
 description = "A Multiboot unikernel in no_std Rust: the whole guest, in one binary"
 publish = false
 
+[dependencies]
+# An allocator, so an agent's messages are not limited to what fits in a fixed
+# array on the stack. The same one `hv1-multiboot` uses, over a static region.
+linked_list_allocator = "0.10"
+
 [[bin]]
 name = "hv2-unikernel"
 path = "src/main.rs"

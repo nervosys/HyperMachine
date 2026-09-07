@@ -56,15 +56,41 @@ compile_error!(concat!(
     "target and the linker script.",
 ));
 
+extern crate alloc;
+
 mod interrupts;
 mod mem;
 mod vsock;
+
+use alloc::vec::Vec;
+use linked_list_allocator::LockedHeap;
 
 use core::arch::asm;
 use core::panic::PanicInfo;
 
 /// COM1's data port, which `Machine::legacy_pc` maps to an emulated 16550.
 const COM1: u16 = 0x3F8;
+
+/// An allocator, so an agent's messages are bounded by memory rather than by
+/// what fits in a fixed array on the stack.
+#[global_allocator]
+static HEAP: LockedHeap = LockedHeap::empty();
+
+/// How much of one. Deliberately small.
+///
+/// Every byte of this is in `.bss`, and `.bss` is not free here the way it is
+/// on an ordinary kernel: the Multiboot loader writes zeros across it at load
+/// time, because guest RAM is only reliably zero for a freshly created VM and a
+/// loader cannot assume it is being used that way. So the heap costs its full
+/// size in resident memory *per agent*, and a fleet pays for it a thousand
+/// times over.
+///
+/// 64 KiB is enough for a request, a reply and the copies between them, and
+/// small enough that a thousand agents pay 64 MiB for the privilege. If an
+/// agent protocol ever needs more, the number to change is here and the cost of
+/// changing it is on this line.
+const HEAP_SIZE: usize = 64 * 1024;
+static mut HEAP_SPACE: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
 /// What a Multiboot-compliant loader leaves in `EAX` before entering a kernel.
 const MULTIBOOT_BOOTLOADER_MAGIC: u32 = 0x2BAD_B002;
@@ -173,6 +199,8 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     unsafe {
         interrupts::install_fault_handlers();
         interrupts::enable_sse();
+        HEAP.lock()
+            .init(core::ptr::addr_of_mut!(HEAP_SPACE) as *mut u8, HEAP_SIZE);
     }
 
     print("HYPERMACHINE RUST UNIKERNEL\n");
@@ -501,33 +529,39 @@ fn starts_with(packet: &vsock::Packet, prefix: &[u8]) -> bool {
 /// advance, which is the point — an agent that could tell would be an agent
 /// that could plan around the answer.
 fn call_tool(device: &mut vsock::Vsock, packet: &vsock::Packet) {
-    const PREFIX: &[u8] = b"tool:";
-    let mut request = [0u8; 128];
-
-    let mut n = 0;
-    for byte in PREFIX {
-        request[n] = *byte;
-        n += 1;
-    }
-
-    // Everything after `do:`, which is the tool's name and its arguments.
-    let skip = 3;
-    let mut i = skip;
-    while i < packet.payload_len && n < request.len() {
-        // SAFETY: inside the receive buffer, bounded by its reported length.
-        request[n] = unsafe { core::ptr::read_volatile((packet.payload_at + i) as *const u8) };
-        n += 1;
-        i += 1;
-    }
+    // On the heap, so the request is bounded by memory rather than by a
+    // constant. The version before this assembled it in a 128-byte array and
+    // silently truncated anything longer — which is the wrong failure for a
+    // tool call, since a truncated argument is a different call rather than a
+    // refused one.
+    let mut request = Vec::with_capacity(packet.payload_len as usize + 5);
+    request.extend_from_slice(b"tool:");
+    request.extend_from_slice(&payload_bytes(packet)[3..]);
 
     print("agent calls \"");
-    for byte in request.iter().take(n) {
+    for byte in &request {
         // SAFETY: COM1, as in `print`.
         unsafe { outb(COM1, *byte) };
     }
     print("\"\n");
 
-    device.reply(&packet.header, vsock::op::RW, &request[..n]);
+    device.reply(&packet.header, vsock::op::RW, &request);
+}
+
+/// Copy a packet's payload out of the receive buffer.
+///
+/// The buffer belongs to the device and is handed back to it as soon as the
+/// packet is released, so anything that outlives the handler has to be copied.
+/// With a heap that is a `Vec`; without one it was whatever fitted on the
+/// stack.
+fn payload_bytes(packet: &vsock::Packet) -> Vec<u8> {
+    let mut out = Vec::with_capacity(packet.payload_len as usize);
+    for i in 0..packet.payload_len {
+        // SAFETY: inside the receive buffer the device wrote, bounded by the
+        // length it reported.
+        out.push(unsafe { core::ptr::read_volatile((packet.payload_at + i) as *const u8) });
+    }
+    out
 }
 
 /// Send a packet's payload back to the host, reading it from the receive
@@ -535,18 +569,12 @@ fn call_tool(device: &mut vsock::Vsock, packet: &vsock::Packet) {
 fn echo(device: &mut vsock::Vsock, packet: &vsock::Packet) {
     // Bounded by the transmit buffer, which is one page: a longer message is
     // answered with as much of itself as fits rather than corrupting memory
-    // past the buffer. Nothing in this swarm sends one that long.
-    const MAX: u32 = 4096 - vsock::HEADER_SIZE as u32;
-    let len = packet.payload_len.min(MAX) as usize;
-
-    let mut scratch = [0u8; 256];
-    let len = len.min(scratch.len());
-    for (i, byte) in scratch.iter_mut().enumerate().take(len) {
-        // SAFETY: `payload_at + i` is inside the receive buffer the device
-        // wrote, bounded by `payload_len` above.
-        *byte = unsafe { core::ptr::read_volatile((packet.payload_at + i as u32) as *const u8) };
-    }
-    device.reply(&packet.header, vsock::op::RW, &scratch[..len]);
+    // past the buffer. That ceiling is the device's and stays; the 256-byte one
+    // that used to sit under it was the stack's, and is gone.
+    const MAX: usize = 4096 - vsock::HEADER_SIZE;
+    let payload = payload_bytes(packet);
+    let len = payload.len().min(MAX);
+    device.reply(&packet.header, vsock::op::RW, &payload[..len]);
 }
 
 /// The time-stamp counter, for splitting one measurement into two.
