@@ -215,6 +215,22 @@ pub trait HypervisorBackend: Send + Sync {
     /// then returns the exit reason for the hypervisor to handle.
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit>;
 
+    /// Whether this backend's guest memory already reads as zero when a boot
+    /// image is loaded into it.
+    ///
+    /// A backend answering `true` lets the loader skip writing a `.bss`, which
+    /// is not a micro-optimisation: writing zeros makes every page of them
+    /// resident on the host, per guest, whether or not the guest ever touches
+    /// them.
+    ///
+    /// The default is `false` — the conservative answer, and the right one for
+    /// any backend that might be handed memory it did not just allocate. A
+    /// backend overriding it is asserting something specific about its own
+    /// allocation path and should say what.
+    fn guest_memory_starts_zeroed(&self) -> bool {
+        false
+    }
+
     /// Show the guest a region of host memory it may read but not write.
     ///
     /// The same host address may be given to any number of VMs. They are all

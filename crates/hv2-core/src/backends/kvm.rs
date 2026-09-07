@@ -341,6 +341,17 @@ impl HypervisorBackend for KvmBackend {
         kvm_vcpu.run()
     }
 
+    /// True. `create_vm` maps guest RAM with `MAP_ANONYMOUS`, which the kernel
+    /// guarantees is zero, and `load_boot` is the first thing to write to it.
+    ///
+    /// This is the whole justification, and it is narrow on purpose: it is a
+    /// statement about this backend's allocation path and not about KVM. A
+    /// backend that restored a snapshot into existing memory would have to
+    /// answer differently, which is why the trait's default is `false`.
+    fn guest_memory_starts_zeroed(&self) -> bool {
+        true
+    }
+
     async fn map_shared_rom(&self, guest_addr: u64, host_addr: u64, len: u64) -> Result<()> {
         let kvm_vm = self
             .vm
@@ -447,8 +458,18 @@ impl HypervisorBackend for KvmBackend {
             })?;
 
         // Every protocol starts the same way: the images go into guest RAM.
-        for (addr, data) in boot.memory_regions()? {
+        //
+        // The bytes, and then the `.bss` only if it needs writing. Guest RAM
+        // here is a fresh anonymous mapping made in `create_vm` and nothing has
+        // touched it since, so it already reads as zero and writing zeros over
+        // it would achieve nothing except making every page of it resident.
+        for (addr, data) in boot.data_regions()? {
             kvm_vm.write_guest_memory(addr, &data)?;
+        }
+        if !self.guest_memory_starts_zeroed() {
+            for (addr, len) in boot.zero_ranges()? {
+                kvm_vm.write_guest_memory(addr, &vec![0u8; len as usize])?;
+            }
         }
 
         match boot {

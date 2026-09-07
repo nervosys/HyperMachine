@@ -457,6 +457,62 @@ impl LoadedBoot {
         }
     }
 
+    /// The ranges that must read as zero, without materialising the zeros.
+    ///
+    /// A `.bss`. Separate from [`Self::memory_regions`] because the two cost
+    /// very differently: writing zeros into guest memory makes every page of
+    /// them resident on the host, per guest, whether or not the guest ever
+    /// touches them. A caller whose guest memory is already zero — a freshly
+    /// created VM, whose RAM is a fresh anonymous mapping — need write nothing
+    /// at all, and at fleet scale that is the difference between a guest heap
+    /// costing nothing and costing its full size once per agent.
+    ///
+    /// The caller decides, because only the caller knows which case it is in.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::memory_regions`].
+    pub fn zero_ranges(&self) -> Result<Vec<(u64, u64)>> {
+        match self {
+            Self::Multiboot(info) => Ok(MultibootProtocol::place_kernel(
+                &info.kernel_image,
+                &MultibootLayout::default(),
+            )?
+            .zeroed),
+            // Neither of these has a zero-fill region: a Linux image and a raw
+            // one are both entirely bytes.
+            Self::Linux(_) | Self::Raw { .. } => Ok(Vec::new()),
+        }
+    }
+
+    /// Everything with bytes in it, excluding whatever [`Self::zero_ranges`]
+    /// covers.
+    ///
+    /// Together the two are exactly [`Self::memory_regions`], and a caller that
+    /// writes both has written the same thing.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::memory_regions`].
+    pub fn data_regions(&self) -> Result<Vec<(u64, Vec<u8>)>> {
+        let zeroed = self.zero_ranges()?;
+        if zeroed.is_empty() {
+            return self.memory_regions();
+        }
+        // The zero ranges are appended by `prepare_guest_memory` as regions of
+        // exactly that address and length, so removing them by address is
+        // precise rather than heuristic.
+        Ok(self
+            .memory_regions()?
+            .into_iter()
+            .filter(|(addr, data)| {
+                !zeroed
+                    .iter()
+                    .any(|(zaddr, zlen)| zaddr == addr && *zlen == data.len() as u64)
+            })
+            .collect())
+    }
+
     /// The largest guest physical address any region touches.
     ///
     /// A VM whose memory is smaller than this cannot hold the boot images.

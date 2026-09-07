@@ -227,6 +227,7 @@ impl MultibootProtocol {
 
         Ok(KernelPlacement {
             regions: vec![(layout.kernel_addr, image.to_vec())],
+            zeroed: Vec::new(),
             entry: layout.kernel_addr,
         })
     }
@@ -282,22 +283,25 @@ impl MultibootProtocol {
         }
 
         let loaded_end = u64::from(addr.load_addr) + (text_end - text_offset) as u64;
-        let mut regions = vec![(
+        let regions = vec![(
             u64::from(addr.load_addr),
             image[text_offset..text_end].to_vec(),
         )];
 
         // The .bss, which is in the image's address space but not in its bytes.
-        // Written as zeros rather than assumed: guest RAM is zero at boot, but
-        // a snapshot restored into it is not, and neither is the memory under a
-        // second kernel loaded over the first.
+        // Recorded as a range that must read as zero rather than as a block of
+        // zeros: guest RAM is zero at boot, but a snapshot restored into it is
+        // not, and neither is the memory under a second kernel loaded over the
+        // first. Only the caller knows which case it is in, so the caller is
+        // told rather than guessed at.
+        let mut zeroed = Vec::new();
         if u64::from(addr.bss_end_addr) > loaded_end {
-            let bss = (u64::from(addr.bss_end_addr) - loaded_end) as usize;
-            regions.push((loaded_end, vec![0u8; bss]));
+            zeroed.push((loaded_end, u64::from(addr.bss_end_addr) - loaded_end));
         }
 
         Ok(KernelPlacement {
             regions,
+            zeroed,
             entry: u64::from(addr.entry_addr),
         })
     }
@@ -354,6 +358,7 @@ impl MultibootProtocol {
         }
 
         let mut regions = Vec::new();
+        let mut zeroed = Vec::new();
         for i in 0..phnum {
             let ph = phoff + i * phentsize;
             if word(ph) != PT_LOAD {
@@ -375,12 +380,10 @@ impl MultibootProtocol {
             if filesz > 0 {
                 regions.push((paddr, image[offset..end].to_vec()));
             }
-            // Anything the segment occupies beyond its file contents is .bss.
+            // Anything the segment occupies beyond its file contents is .bss,
+            // and is a range rather than a block of zeros. See `zeroed`.
             if memsz > filesz as u64 {
-                regions.push((
-                    paddr + filesz as u64,
-                    vec![0u8; (memsz - filesz as u64) as usize],
-                ));
+                zeroed.push((paddr + filesz as u64, memsz - filesz as u64));
             }
         }
 
@@ -394,6 +397,7 @@ impl MultibootProtocol {
 
         Ok(Some(KernelPlacement {
             regions,
+            zeroed,
             entry: u64::from(entry),
         }))
     }
@@ -586,8 +590,15 @@ impl MultibootProtocol {
 
         let mut regions: Vec<(u64, Vec<u8>)> = Vec::new();
 
-        // Kernel, wherever the image itself says it belongs.
-        regions.extend(Self::place_kernel(&info.kernel_image, layout)?.regions);
+        // Kernel, wherever the image itself says it belongs. Its `.bss` is
+        // materialised here, because this function's contract is every byte the
+        // guest should see; `LoadedBoot::zero_ranges` is how a caller asks for
+        // the cheaper form.
+        let placed = Self::place_kernel(&info.kernel_image, layout)?;
+        regions.extend(placed.regions);
+        for (addr, len) in placed.zeroed {
+            regions.push((addr, vec![0u8; len as usize]));
+        }
 
         // Module data, each 4 KB aligned, plus the descriptor for each.
         let mut placements = Vec::with_capacity(info.modules.len());
@@ -820,6 +831,16 @@ pub struct KernelPlacement {
     /// `(guest physical address, bytes)` for each part of the loaded image.
     pub regions: Vec<(u64, Vec<u8>)>,
     /// Guest physical address of the first instruction.
+    /// `(guest physical address, length)` for each range that must read as
+    /// zero — a `.bss`, in other words.
+    ///
+    /// A range rather than a block of zeros, because the two are not the same
+    /// cost. A guest whose memory is already zero needs nothing written here,
+    /// and writing it anyway makes every page resident on the host, per guest,
+    /// whether or not the guest ever touches it. At a thousand agents that is
+    /// the difference between a heap costing nothing and costing its full size
+    /// a thousand times.
+    pub zeroed: Vec<(u64, u64)>,
     pub entry: u64,
 }
 
@@ -948,15 +969,16 @@ mod tests {
         let placed =
             MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).expect("place");
 
-        assert_eq!(placed.regions.len(), 2, "text and .bss");
+        assert_eq!(placed.regions.len(), 1, "only the text has bytes");
         assert_eq!(
             placed.regions[0].1.len(),
             32,
             "load_end_addr bounds the text"
         );
-        assert_eq!(placed.regions[1].0, 0x0010_0020);
-        assert_eq!(placed.regions[1].1.len(), 0xE0);
-        assert!(placed.regions[1].1.iter().all(|b| *b == 0));
+
+        // The .bss is a range, not a block of zeros — which is the whole point:
+        // a guest whose memory is already zero pays nothing for it.
+        assert_eq!(placed.zeroed, vec![(0x0010_0020, 0xE0)]);
     }
 
     #[test]
@@ -984,10 +1006,8 @@ mod tests {
         let placed =
             MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).expect("place");
 
-        assert_eq!(placed.regions.len(), 2);
-        assert_eq!(placed.regions[1].0, 0x0030_0040);
-        assert_eq!(placed.regions[1].1.len(), 4096 - 64);
-        assert!(placed.regions[1].1.iter().all(|b| *b == 0));
+        assert_eq!(placed.regions.len(), 1, "only the file contents have bytes");
+        assert_eq!(placed.zeroed, vec![(0x0030_0040, 4096 - 64)]);
     }
 
     #[test]
