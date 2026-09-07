@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>6f8e0f8</dd></div>
+    <div class="fact"><dt>Master</dt><dd>132de74</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -849,6 +849,42 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
     and belongs to whoever picks it.
   </p>
 
+  <h3>An agent asks for a tool, and holding one is a permission</h3>
+  <p>
+    A sandbox that can only talk to other sandboxes is not much of an agent.
+    What makes it one is tools — reading a file, calling an API, spending money
+    — and what makes it safe is that holding a tool is a permission rather than
+    a property of the code. An agent that can decide which tool to call can also
+    decide to call one it should not have, and the point of a hardware-isolated
+    sandbox is that <em>deciding is not doing</em>.
+  </p>
+  <pre>trusted       : asked, allowed, tool returned "heimdall"
+untrusted     : asked, refused, tool not called
+tool ran      : 1 time(s), for 2 agents that asked</pre>
+  <p>
+    Two agents, identical images, one grant between them. The assertion is the
+    last line, and it is counted <em>at the tool</em> rather than at the broker
+    that gates it: a gate that refuses and then calls anyway is
+    indistinguishable from a working one at the agent, and distinguishable
+    everywhere that matters. Same reason the swarm's own tests assert on
+    delivery and not on verdicts.
+  </p>
+  <p>
+    The capability is checked where a request crosses from a guest into the host
+    — one place, consulted inside the thing that does the work.
+    <code>Capability</code> and <code>holds</code> already existed for messages
+    between agents; a tool call is the same question asked of a different edge.
+  </p>
+  <p>
+    <strong>What is honest about the agent here:</strong> nothing in the guest
+    decides anything. A task beginning <code>do:</code> is answered with
+    <code>tool:</code> and the rest, by one rule, standing in for a model
+    choosing a tool. What is under test is the path a decision travels and the
+    permission that governs it — neither of which cares how the decision was
+    reached, which is exactly why it can be measured before there is a model to
+    do the deciding.
+  </p>
+
   <h3>How fast a guest can stream weights, and what that rules out</h3>
   <p>
     Memory was the question that decided whether a fleet could hold a model.
@@ -935,11 +971,9 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
       </tr>
       <tr>
         <td>Where do an agent's tools run?</td>
-        <td><span class="tag typed">open</span> In the guest, or proxied to the
-            host over vsock. The permission model for the second already exists
-            — it is the capability check in <code>Swarm::send</code>, which
-            gates a message on the sender holding the capability, not only the
-            recipient</td>
+        <td><span class="tag ran">ran</span> Proxied to the host over vsock and
+            gated on a capability, with the refusal verified at the tool: two
+            identical agents asked, one grant apart, and it ran once</td>
       </tr>
       <tr>
         <td>Can agents talk to each other under a policy?</td>
@@ -1058,6 +1092,11 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
         <td>Model shared across a fleet</td><td>—</td><td><strong>once</strong></td>
         <td><span class="tag ran">ran</span> 1,000 agents on one 350 MiB region,
             99.85% of a copied fleet saved, writes refused</td>
+      </tr>
+      <tr>
+        <td>Tool call, capability-gated</td><td>—</td><td><strong>enforced</strong></td>
+        <td><span class="tag ran">ran</span> refused calls counted at the tool,
+            not at the gate — it ran once for two agents that asked</td>
       </tr>
       <tr>
         <td>Overhead on an agent's own memory</td><td>—</td><td><strong>0.18 MiB</strong></td>
@@ -1269,7 +1308,15 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
     <li>
       <strong>Then put something real behind whichever it is.</strong> Weights,
       a tokeniser, a forward pass. Nothing on this page has run a model; every
-      figure here is the floor a model would sit on.
+      figure here is the floor a model would sit on, and the tool call above is
+      a rule standing in for a decision.
+    </li>
+    <li>
+      <strong>Give the guest a heap.</strong> It has none, which is why the tool
+      request is assembled in a 128-byte array on the stack and why a payload
+      longer than that is truncated rather than refused. Any real agent
+      protocol — arguments, results, a conversation — needs one, and
+      <code>hv1-multiboot</code> already carries the worked example.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1332,9 +1379,9 @@ saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
 </section>
 
 <footer>
-  master 6f8e0f8 · 0 open PRs · 0 open issues · suite green · a fleet costs the
-  model once plus what each agent touches · 1.66 cycles/byte in the guest ·
-  measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master 132de74 · 0 open PRs · 0 open issues · suite green · a fleet costs the
+  model once plus what each agent touches · a tool is a permission, and a
+  refused one does not run · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
