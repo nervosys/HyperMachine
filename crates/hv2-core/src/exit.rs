@@ -143,6 +143,16 @@ pub enum VmExit {
         vector: u8,
     },
 
+    /// The VMM asked the vCPU to leave the guest.
+    ///
+    /// Not something the guest did: the host interrupted `KVM_RUN` so that a
+    /// thread sitting in the ioctl -- halted, or spinning without ever taking
+    /// an exit -- becomes reachable again. The run loop treats this as "look
+    /// at your control channel and the running flag", which is exactly what
+    /// it does at the top of every iteration, so no guest state is disturbed
+    /// and re-entering the guest afterwards is correct.
+    Interrupted,
+
     /// Unknown or unhandled exit reason
     Unknown {
         /// Exit reason code (platform-specific)
@@ -265,6 +275,7 @@ impl std::fmt::Display for VmExit {
                 write!(f, "WRMSR index={:#x} data={:#x}", index, data)
             }
             VmExit::IoapicEoi { vector } => write!(f, "IOAPIC_EOI vector={}", vector),
+            VmExit::Interrupted => write!(f, "INTERRUPTED"),
             VmExit::Unknown { reason } => write!(f, "UNKNOWN exit reason={}", reason),
         }
     }

@@ -308,6 +308,28 @@ impl HypervisorBackend for WhpxBackend {
         whpx_vcpu.run()
     }
 
+    /// Cancel the vCPU's run so its thread returns from
+    /// `WHvRunVirtualProcessor` with [`VmExit::Interrupted`].
+    ///
+    /// WHP latches the cancellation: applied to the current run if the vCPU is
+    /// executing, and to the next one if it is not, so a kick racing with entry
+    /// is not lost and this needs no equivalent of the KVM path's
+    /// `immediate_exit`.
+    ///
+    /// Unverified. WHP does not start on the host this was written on
+    /// (`HRESULT 0x80370302` from setting the processor count), so this is a
+    /// compilation result and the KVM path is the one that has been run.
+    async fn kick_vcpu(&self, vcpu: &VCpu) -> Result<()> {
+        let vcpu_id = vcpu.id();
+        let whpx_vcpu = {
+            let map = self.vcpu_map.read();
+            map.get(&vcpu_id)
+                .cloned()
+                .ok_or_else(|| Error::VM(format!("vCPU {} not found in WHPX backend", vcpu_id)))?
+        };
+        whpx_vcpu.kick()
+    }
+
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
         let vcpu_id = vcpu.id();
         let whpx_vcpu = {
@@ -994,6 +1016,7 @@ fn exit_type_name(exit: &crate::exit::VmExit) -> String {
         crate::exit::VmExit::Rdmsr { .. } => "Rdmsr".to_string(),
         crate::exit::VmExit::Wrmsr { .. } => "Wrmsr".to_string(),
         crate::exit::VmExit::IoapicEoi { .. } => "IoapicEoi".to_string(),
+        crate::exit::VmExit::Interrupted => "Interrupted".to_string(),
         crate::exit::VmExit::Unknown { .. } => "Unknown".to_string(),
     }
 }
@@ -1139,6 +1162,37 @@ impl WhpxVcpu {
         ))
     }
 
+    /// Ask this vCPU to leave the guest, so its run returns
+    /// [`VmExit::Interrupted`] rather than blocking until the guest exits on
+    /// its own.
+    ///
+    /// Safe to call while the vCPU is not running: WHP applies the
+    /// cancellation to the next run instead of dropping it.
+    #[cfg(target_os = "windows")]
+    pub fn kick(&self) -> Result<()> {
+        // SAFETY: `self.partition` is the live partition handle this vCPU was
+        // created against, and `self.vp_index` is its index within it. The
+        // call takes no pointers and is documented as callable from a thread
+        // other than the one running the vCPU -- which is the entire point.
+        let hr = unsafe { WHvCancelRunVirtualProcessor(self.partition, self.vp_index, 0) };
+
+        if hr != S_OK {
+            return Err(Error::VM(format!(
+                "Failed to cancel run of vCPU {}: HRESULT 0x{:08X}",
+                self.vp_index, hr
+            )));
+        }
+
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn kick(&self) -> Result<()> {
+        Err(Error::VM(
+            "WHPX backend is only available on Windows".into(),
+        ))
+    }
+
     /// Convert WHPX exit context to VmExit
     #[cfg(target_os = "windows")]
     fn convert_exit(&self, ctx: &WHV_RUN_VP_EXIT_CONTEXT) -> Result<VmExit> {
@@ -1203,7 +1257,11 @@ impl WhpxVcpu {
 
             WHvRunVpExitReasonUnsupportedFeature => Err(Error::VM("Unsupported feature".into())),
 
-            WHvRunVpExitReasonCanceled => Err(Error::VM("vCPU run canceled".into())),
+            // Not an error: a cancel is something this VMM does on purpose, to
+            // get a vCPU thread back out of `WHvRunVirtualProcessor` so it can
+            // read the running flag and its control channel. See
+            // `WhpxBackend::kick_vcpu`.
+            WHvRunVpExitReasonCanceled => Ok(VmExit::Interrupted),
 
             WHvRunVpExitReasonX64InterruptWindow => {
                 // Interrupt window opened - guest can now receive interrupts

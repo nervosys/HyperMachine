@@ -184,7 +184,8 @@ impl StandardExitHandler {
             VmExit::Shutdown => self.handle_shutdown(ctx),
             VmExit::Unknown { reason } => self.handle_unknown(*reason, ctx),
             VmExit::Debug { .. } => Ok(ExitHandlerResult::Continue),
-            VmExit::Hypercall { .. }
+            VmExit::Interrupted
+            | VmExit::Hypercall { .. }
             | VmExit::SystemEvent { .. }
             | VmExit::Nmi
             | VmExit::Rdmsr { .. }

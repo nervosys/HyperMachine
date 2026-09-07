@@ -185,6 +185,15 @@ impl Default for VMConfig {
 /// only elapses for a guest that has stopped exiting altogether.
 const RUN_LOOP_REAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// How long [`VM::stop`] waits for a kicked vCPU thread to unwind.
+///
+/// A backstop, not the mechanism: a kicked vCPU leaves the guest in
+/// microseconds, so reaching this bound means the kick did not arrive and the
+/// thread is still inside `KVM_RUN`. Bounded so that failure is a warning and
+/// a returning `stop()` rather than a caller that never wakes up — which is
+/// the shape this defect had for the whole life of the crate.
+const VCPU_REAP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Message type for vCPU coordination
 #[derive(Debug)]
 enum VCpuMessage {
@@ -956,16 +965,37 @@ impl VM {
             }
         }
 
+        // And then make the vCPU threads capable of reading any of that. The
+        // flag above and the message above it are both polled at the top of
+        // the vCPU loop, which a thread blocked inside `KVM_RUN` does not
+        // reach: a halted guest sits in `kvm_vcpu_block` and a spinning one
+        // never leaves the guest at all. Without this kick, every `stop()`
+        // below waits on threads that have no way of learning they were asked
+        // to finish, which is why `stop()` never returned for any guest.
+        for vcpu in &self.vcpus {
+            if let Err(e) = self.backend.kick_vcpu(vcpu).await {
+                tracing::warn!("failed to kick vCPU {}: {}", vcpu.id(), e);
+            }
+        }
+
         // Collect task handles (drop the lock before awaiting)
         let handles: Vec<_> = {
             let mut tasks = self.vcpu_tasks.write();
             tasks.drain(..).map(|t| t.handle).collect()
         };
 
-        // Wait for all vCPU tasks to complete (no lock held)
+        // Wait for all vCPU tasks to complete (no lock held). Bounded: a
+        // kicked vCPU returns immediately, so the timeout is a report that the
+        // kick did not land rather than an expected outcome.
         for handle in handles {
-            if let Err(e) = handle.await {
-                tracing::warn!("vCPU task join error: {:?}", e);
+            match tokio::time::timeout(VCPU_REAP_TIMEOUT, handle).await {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => tracing::warn!("vCPU task join error: {:?}", e),
+                Err(_) => tracing::error!(
+                    "VM '{}': a vCPU thread did not leave the guest within {:?} of being                      kicked; abandoning it. The thread is leaked and the process will not                      exit cleanly.",
+                    self.config.name,
+                    VCPU_REAP_TIMEOUT
+                ),
             }
         }
 
@@ -1928,6 +1958,11 @@ impl VM {
                 Ok(true)
             }
 
+            // The VMM asked for this exit, so there is nothing to emulate.
+            // Continue, and let the top of the run loop read the control
+            // channel and the running flag — the reason it was kicked.
+            VmExit::Interrupted => Ok(true),
+
             VmExit::Unknown { reason } => {
                 tracing::warn!("Unknown VM exit reason: {}", reason);
                 Ok(true)
@@ -2295,6 +2330,11 @@ impl VM {
                 tracing::debug!("Debug exit: {}", info);
                 Ok(true)
             }
+
+            // The VMM asked for this exit, so there is nothing to emulate.
+            // Continue, and let the top of the run loop read the control
+            // channel and the running flag — the reason it was kicked.
+            VmExit::Interrupted => Ok(true),
 
             VmExit::Unknown { reason } => {
                 tracing::warn!("Unknown VM exit reason: {}", reason);

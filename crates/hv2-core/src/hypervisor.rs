@@ -215,6 +215,27 @@ pub trait HypervisorBackend: Send + Sync {
     /// then returns the exit reason for the hypervisor to handle.
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit>;
 
+    /// Ask a vCPU to leave the guest and return from [`Self::run_vcpu`].
+    ///
+    /// Called from another thread, typically while `run_vcpu` is blocked. A
+    /// backend that can block indefinitely in the guest — every hardware one —
+    /// must implement this, or nothing can shut its VMs down: a halted or
+    /// spinning vCPU takes no exits, so it never reads a flag, polls a channel,
+    /// or observes anything else the VMM does.
+    ///
+    /// This is not a stop. It returns the vCPU thread to the run loop, which
+    /// then decides for itself whether to re-enter the guest. Delivering it to
+    /// a vCPU that is not currently running must be harmless, and must still be
+    /// honoured at the next entry rather than dropped, or a kick racing with
+    /// entry is lost and the shutdown hangs anyway.
+    ///
+    /// The default implementation does nothing, which is correct only for a
+    /// backend whose `run_vcpu` always returns on its own.
+    async fn kick_vcpu(&self, vcpu: &VCpu) -> Result<()> {
+        let _ = vcpu;
+        Ok(())
+    }
+
     /// Inject an interrupt into a vCPU
     ///
     /// This queues an interrupt to be delivered to the guest when interrupts are enabled.

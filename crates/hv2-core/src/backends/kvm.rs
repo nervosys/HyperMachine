@@ -54,7 +54,8 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 use std::ptr::NonNull;
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::{Arc, Once, RwLock};
 
 // ── Boot-time architectural constants ───────────────────────────────────────
 //
@@ -338,6 +339,18 @@ impl HypervisorBackend for KvmBackend {
 
         // Run the vCPU until it exits — this blocks until a VM exit occurs
         kvm_vcpu.run()
+    }
+
+    async fn kick_vcpu(&self, vcpu: &VCpu) -> Result<()> {
+        let kvm_vcpu = {
+            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+            map.get(&vcpu.id())
+                .cloned()
+                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
+        };
+
+        kvm_vcpu.kick();
+        Ok(())
     }
 
     async fn inject_interrupt(&self, vcpu: &VCpu, vector: u8) -> Result<()> {
@@ -1015,6 +1028,83 @@ impl Drop for KvmVm {
 unsafe impl Send for KvmVm {}
 unsafe impl Sync for KvmVm {}
 
+// ── Getting a vCPU back out of KVM_RUN ──────────────────────────────────────
+//
+// `KVM_RUN` blocks. A halted guest sits in `kvm_vcpu_block` and a spinning one
+// never leaves the guest at all, so a vCPU thread is unreachable from the rest
+// of the process: clearing a flag it will not read, or sending it a message on
+// a channel it will not poll, changes nothing. Every shutdown path in this
+// crate ultimately waits on those threads, which is why `VM::stop()` never
+// returned for any guest.
+//
+// Getting one out takes three things, and it is three rather than one because
+// each covers a different moment:
+//
+//   1. A signal whose handler is installed *without* `SA_RESTART`, so the
+//      kernel returns `EINTR` from the ioctl instead of restarting it. The
+//      handler itself does nothing; being delivered is the whole point.
+//   2. `kvm_run->immediate_exit`, which KVM checks on the way into the guest
+//      and answers with `EINTR` immediately. This covers the vCPU that has not
+//      entered the ioctl yet, so a signal aimed at it would land on nothing.
+//   3. A per-vCPU flag the `EINTR` arm consults before retrying. Without it,
+//      `run()` retries unconditionally and walks straight back into the guest —
+//      which is what it did, and why the vCPU was uninterruptible by
+//      construction rather than by accident.
+//
+// The ordering in `kick()` is what makes the race benign: the flag and
+// `immediate_exit` are both set before the signal is sent, and `run()` checks
+// the flag after storing its thread id and before entering the ioctl. A kick
+// that lands anywhere in that window is seen at the next entry rather than
+// lost.
+
+/// The signal used to kick a vCPU out of `KVM_RUN`.
+///
+/// A real-time signal, not `SIGUSR1` or `SIGUSR2`: those belong to whoever
+/// embeds this crate, and a hypervisor stealing one is the kind of thing that
+/// is only discovered in someone else's process. `SIGRTMIN` is what the other
+/// VMMs use for the same job.
+fn kick_signal() -> libc::c_int {
+    libc::SIGRTMIN()
+}
+
+/// Delivered to a vCPU thread to interrupt `KVM_RUN`. Deliberately empty.
+extern "C" fn kick_handler(_signum: libc::c_int) {}
+
+/// Install [`kick_handler`], once per process.
+///
+/// `SA_RESTART` is left off on purpose: with it, the kernel restarts the
+/// interrupted ioctl itself and userspace never learns the signal arrived.
+fn install_kick_handler() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        // SAFETY: `action` is a fully initialised `sigaction` with a valid
+        // handler and an empty mask; `sigaction` is called once, before any
+        // vCPU thread exists, and does not retain the pointer.
+        unsafe {
+            let mut action: libc::sigaction = std::mem::zeroed();
+            action.sa_sigaction = kick_handler as *const () as usize;
+            action.sa_flags = 0; // no SA_RESTART
+            libc::sigemptyset(&mut action.sa_mask);
+            if libc::sigaction(kick_signal(), &action, std::ptr::null_mut()) != 0 {
+                tracing::error!(
+                    "KVM: could not install the vCPU kick handler: {}.                      Stopping a halted or spinning guest will hang.",
+                    std::io::Error::last_os_error()
+                );
+            }
+        }
+    });
+}
+
+/// This thread's kernel thread id, which is what `tgkill` addresses.
+///
+/// `pthread_self()` would do as well via `pthread_kill`, but a raw tid is
+/// storable in an atomic and comparable to what `/proc` reports, which matters
+/// when the question is "which thread is stuck in the ioctl".
+fn current_tid() -> libc::pid_t {
+    // SAFETY: `gettid` takes no arguments and cannot fail.
+    unsafe { libc::syscall(libc::SYS_gettid) as libc::pid_t }
+}
+
 /// KVM vCPU
 ///
 /// Represents a single virtual CPU managed by KVM.
@@ -1027,6 +1117,25 @@ pub struct KvmVcpu {
     run: NonNull<kvm_run>,
     /// Size of mmap region
     mmap_size: usize,
+    /// Set by [`KvmVcpu::kick`]; read by the `EINTR` arm of [`KvmVcpu::run`]
+    /// before it retries the ioctl.
+    kick: AtomicBool,
+    /// The thread currently inside `KVM_RUN`, or `0` when none is.
+    ///
+    /// Cleared on the way out so a kick can never signal a thread that has
+    /// since exited — tids are reused, and the one that inherits it would be
+    /// some unrelated thread of this process.
+    tid: AtomicI32,
+}
+
+/// Clears the published tid however `run()` returns, including on an error
+/// path, so a later kick never signals a thread that has moved on.
+struct TidGuard<'a>(&'a AtomicI32);
+
+impl Drop for TidGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(0, Ordering::SeqCst);
+    }
 }
 
 impl KvmVcpu {
@@ -1076,11 +1185,15 @@ impl KvmVcpu {
             // Initialize vCPU to real mode
             Self::init_real_mode(vcpu_fd)?;
 
+            install_kick_handler();
+
             Ok(Self {
                 vcpu_fd,
                 vcpu_id,
                 run,
                 mmap_size,
+                kick: AtomicBool::new(false),
+                tid: AtomicI32::new(0),
             })
         }
     }
@@ -1141,16 +1254,35 @@ impl KvmVcpu {
         Ok(())
     }
 
-    /// Run the vCPU until it exits
+    /// Run the vCPU until it exits.
     ///
-    /// Automatically retries on EINTR (signal interruption), which is
-    /// normal during KVM execution and not an actual error.
+    /// `EINTR` is retried, which is the KVM convention — a signal arriving
+    /// while a guest runs is ordinary and means nothing to the guest. The one
+    /// exception is a kick from [`KvmVcpu::kick`]: that signal was sent *to
+    /// end this call*, so the retry consults the kick flag first and reports
+    /// [`VmExit::Interrupted`] instead of re-entering the guest. Retrying
+    /// unconditionally, as this did, is what made a halted or spinning vCPU
+    /// impossible to stop.
+    ///
+    /// Returns [`VmExit::Interrupted`] without having entered the guest if a
+    /// kick is already pending on entry.
     pub fn run(&self) -> Result<VmExit> {
+        // Publish which thread to signal before the first flag check, so a
+        // kick racing with entry either finds this tid or is caught by the
+        // check below. Cleared on every exit path.
+        self.tid.store(current_tid(), Ordering::SeqCst);
+        let _clear_tid = TidGuard(&self.tid);
+
         // SAFETY: `self.vcpu_fd` is a valid vCPU fd created in `new()`. The
-        // `kvm_run` mmap region is valid for the lifetime of this `KvmVcpu`.
-        // EINTR is retried per KVM convention (signals during guest execution).
+        // `kvm_run` mmap region is valid for the lifetime of this `KvmVcpu`,
+        // and `immediate_exit` is a `u8` the kernel reads on entry and never
+        // writes, so a plain volatile store is the whole synchronisation it
+        // needs.
         unsafe {
             loop {
+                if self.take_kick() {
+                    return Ok(VmExit::Interrupted);
+                }
                 match kvm_run(self.vcpu_fd) {
                     Ok(()) => return self.convert_exit(),
                     Err(e) if e.raw_os_error() == Some(libc::EINTR) => continue,
@@ -1161,6 +1293,54 @@ impl KvmVcpu {
                         )));
                     }
                 }
+            }
+        }
+    }
+
+    /// Consume a pending kick, clearing `immediate_exit` with it.
+    ///
+    /// Clearing matters: `immediate_exit` left set would make every subsequent
+    /// `KVM_RUN` return without running the guest, which looks exactly like a
+    /// guest that has stopped making progress.
+    unsafe fn take_kick(&self) -> bool {
+        if !self.kick.swap(false, Ordering::SeqCst) {
+            return false;
+        }
+        std::ptr::write_volatile(&mut (*self.run.as_ptr()).immediate_exit, 0);
+        tracing::debug!("KVM: vCPU {} left the guest on a kick", self.vcpu_id);
+        true
+    }
+
+    /// Ask this vCPU to leave `KVM_RUN` at the next opportunity.
+    ///
+    /// Safe to call from any thread, including when the vCPU is not running:
+    /// the request is latched and honoured at the next entry. It does not stop
+    /// the vCPU — it makes the thread reachable, and what happens next is the
+    /// run loop's decision.
+    pub fn kick(&self) {
+        // Order matters. The flag and `immediate_exit` are both visible before
+        // the signal is sent, so the vCPU sees the request whether it is
+        // already inside the ioctl (the signal interrupts it), about to enter
+        // (`immediate_exit` returns it), or between calls (the flag catches it
+        // at the next entry).
+        self.kick.store(true, Ordering::SeqCst);
+
+        // SAFETY: `self.run` points at the live `kvm_run` mmap owned by this
+        // vCPU. `immediate_exit` is a single byte the kernel only reads.
+        unsafe {
+            std::ptr::write_volatile(&mut (*self.run.as_ptr()).immediate_exit, 1);
+        }
+
+        let tid = self.tid.load(Ordering::SeqCst);
+        if tid != 0 {
+            // SAFETY: `tgkill` is addressed at this process and a tid that was
+            // published by a thread inside `run()` and cleared on its way out,
+            // so it is either live or already gone — in which case `tgkill`
+            // reports ESRCH rather than reaching an unrelated thread. Delivery
+            // to a thread that has just left the ioctl is harmless: the
+            // handler does nothing.
+            unsafe {
+                libc::syscall(libc::SYS_tgkill, libc::getpid(), tid, kick_signal());
             }
         }
     }
