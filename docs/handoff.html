@@ -292,12 +292,13 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>3ee110b</dd></div>
+    <div class="fact"><dt>Master</dt><dd>76b586d</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
     <div class="fact"><dt>Per sandbox</dt><dd class="good">0.157 MiB</dd></div>
     <div class="fact"><dt>Concurrent</dt><dd class="good">1,000</dd></div>
+    <div class="fact"><dt>Idle cost</dt><dd class="good">0.7% core</dd></div>
     <div class="fact"><dt>stop()</dt><dd class="good">0.7 ms</dd></div>
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust</dd></div>
     <div class="fact"><dt>Transport</dt><dd class="good">vsock</dd></div>
@@ -625,6 +626,41 @@ sleeping   user 0.65 s, 0.37 s</pre>
     bisected.
   </p>
 
+  <h3>And then a thousand of them, which is the measurement this is about</h3>
+  <p>
+    The thousand-agent figure on this page has always come from
+    <code>unikernel_swarm</code>, whose agents halt immediately and never speak
+    — which measures the hypervisor rather than the swarm.
+    <code>vsock_swarm</code> ran three that did speak, because a polling guest
+    costs a core and three cores is a demonstration where a thousand is a fan.
+    With idle agents halting there is no longer a reason for those to be
+    different numbers.
+  </p>
+  <pre>agents        : 1000 unikernels booted and connected in 37296.6 ms
+memory        : 220.79 MiB resident, 0.221 MiB per agent
+idle          : 0.02 s of CPU across 1000 agents over 3.0 s — 0.7% of one core
+stop          : 1000 halted guests in 612.7 ms</pre>
+  <p>
+    Every one is a full VM with its own vsock device, its own context ID and its
+    own open connection, and the command graph's three checks still pass against
+    the first three of them. The idle figure is measured as CPU consumed over a
+    window of wall time rather than with a timer — for a halted guest those are
+    unrelated numbers and for a spinning one they are the same, which is the
+    distinction being made — and it is read from <code>/proc/self/stat</code>,
+    so it counts every thread the process owns, including a thousand vCPU
+    threads and their interrupt and vsock pumps.
+  </p>
+  <p>
+    <strong>Two caveats, both in the example.</strong> The 37&nbsp;ms per agent
+    is serial setup and mostly polling granularity — the loop waiting for a
+    guest to announce its device and then for the handshake sleeps a millisecond
+    at a time — so it is not a measure of how fast a VM boots;
+    <code>rust_unikernel</code> puts that at 3.6&nbsp;ms. And 0.221&nbsp;MiB per
+    agent is more than <code>unikernel_swarm</code>'s 0.157&nbsp;MiB because
+    these agents have what those do not: a device, a driver, an IDT and a
+    connection.
+  </p>
+
   <h3>The Type-1 hypervisor executed, for the first time</h3>
   <p>
     Every claim ever made about <code>hv1-core</code> was a claim about
@@ -829,7 +865,13 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
       </tr>
       <tr>
         <td>Concurrent sandboxes</td><td>"thousands per node"</td><td><strong>1,000</strong></td>
-        <td><span class="tag ran">ran</span> all 1,000 guests executed</td>
+        <td><span class="tag ran">ran</span> all 1,000 guests executed; 1,000
+            again with a vsock device and an open connection each</td>
+      </tr>
+      <tr>
+        <td>Idle cost per agent</td><td>—</td><td><strong>~0%</strong></td>
+        <td><span class="tag ran">ran</span> 0.7% of one core across 1,000 idle
+            agents, over 3 s</td>
       </tr>
       <tr>
         <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
@@ -1019,12 +1061,12 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
       being hidden by a hypervisor underneath.
     </li>
     <li>
-      <strong>Run the swarm at a thousand agents over vsock.</strong>
-      <code>unikernel_swarm</code> reaches a thousand with guests that halt
-      immediately and never speak; <code>vsock_swarm</code> reaches three that
-      do. Now that an idle agent sleeps there is no reason those are different
-      numbers, and finding out is the measurement this project is actually
-      about.
+      <strong>Make an agent do something.</strong> A thousand of them boot,
+      connect, sleep and echo, which is the plumbing proved end to end and is
+      not yet a workload. What an agent actually runs inside a unikernel — and
+      whether that needs a heap, and therefore rather more than nine kilobytes
+      of image — is the next real design question, and it is now answerable by
+      experiment rather than by argument.
     </li>
     <li>
       <strong>Make the agent payload do something.</strong> The guest echoes,
@@ -1079,8 +1121,8 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
 </section>
 
 <footer>
-  master 3ee110b · 0 open PRs · 0 open issues · suite green · idle agents sleep ·
-  measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master 76b586d · 0 open PRs · 0 open issues · suite green · 1,000 agents over
+  vsock at 0.7% of a core idle · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
