@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>132de74</dd></div>
+    <div class="fact"><dt>Master</dt><dd>9988812</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -885,6 +885,33 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
     do the deciding.
   </p>
 
+  <h3>A heap, and the reason .bss is not free here</h3>
+  <p>
+    The guest had no allocator, which is why a tool request was assembled in a
+    128-byte array on the stack and anything longer was truncated. That is the
+    wrong failure for a tool call — a truncated argument is a different call,
+    not a refused one — and any real agent protocol needs one. It has 64 KiB of
+    <code>linked_list_allocator</code> now, the shape <code>hv1-multiboot</code>
+    already carried.
+  </p>
+  <p>
+    The size is small deliberately, and the reason is measured rather than
+    assumed. <code>.bss</code> is not free here the way it is on an ordinary
+    kernel: the Multiboot loader writes zeros across it at load time, because
+    guest RAM is only reliably zero for a freshly created VM and a loader cannot
+    assume it is being used that way. So a heap costs its full size in resident
+    memory <em>per agent</em>, whether or not that agent allocates.
+  </p>
+  <pre>100 agents, before : 0.231 MiB each
+100 agents, after  : 0.302 MiB each</pre>
+  <p>
+    0.07&nbsp;MiB of that is the heap and its page rounding. At a thousand
+    agents it is 64&nbsp;MiB of resident memory for an allocator most of them
+    will barely touch — the sort of cost that is invisible at three agents and
+    decides the shape of a fleet at a thousand. The number to change is one
+    constant, and the cost of changing it is written on that line.
+  </p>
+
   <h3>How fast a guest can stream weights, and what that rules out</h3>
   <p>
     Memory was the question that decided whether a fleet could hold a model.
@@ -964,10 +991,9 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
       </tr>
       <tr>
         <td>Does the guest need a heap?</td>
-        <td><span class="tag typed">open</span> Almost certainly. It has none;
-            <code>hv1-multiboot</code> carries a
-            <code>linked_list_allocator</code> over a static region and is the
-            worked example</td>
+        <td><span class="tag ran">ran</span> Yes, and it has one: 64 KiB, which
+            costs 0.07 MiB per agent because the loader zero-fills
+            <code>.bss</code>. Image 23 KB, still readable end to end</td>
       </tr>
       <tr>
         <td>Where do an agent's tools run?</td>
@@ -1312,11 +1338,12 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
       a rule standing in for a decision.
     </li>
     <li>
-      <strong>Give the guest a heap.</strong> It has none, which is why the tool
-      request is assembled in a 128-byte array on the stack and why a payload
-      longer than that is truncated rather than refused. Any real agent
-      protocol — arguments, results, a conversation — needs one, and
-      <code>hv1-multiboot</code> already carries the worked example.
+      <strong>Stop paying for <code>.bss</code> that nobody touches.</strong>
+      The loader zero-fills it because guest RAM is only reliably zero for a
+      fresh VM, and that is the right default — but a fresh VM's memory
+      <em>is</em> zero, and the loader is not told which case it is in. Saying
+      so would make a heap cost nothing until an agent allocates, which at a
+      thousand agents is 64&nbsp;MiB back.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1379,7 +1406,7 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
 </section>
 
 <footer>
-  master 132de74 · 0 open PRs · 0 open issues · suite green · a fleet costs the
+  master 9988812 · 0 open PRs · 0 open issues · suite green · a fleet costs the
   model once plus what each agent touches · a tool is a permission, and a
   refused one does not run · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
