@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>9101f52</dd></div>
+    <div class="fact"><dt>Master</dt><dd>3ee110b</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -567,11 +567,62 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     one. Round trip 1.2&nbsp;ms.
   </p>
   <p>
-    The driver polls rather than taking interrupts — no IDT, no handler, a spin
-    on the used ring. That is only tolerable because of the fix at the top of
-    this page: before <code>stop()</code> could kick a vCPU out of
-    <code>KVM_RUN</code>, this driver would have been unstoppable rather than
-    merely busy. Three spinning guests now stop in 0.8&nbsp;ms.
+    The driver polled at first — no IDT, no handler, a spin on the used ring —
+    which was only tolerable because of the fix at the top of this page: before
+    <code>stop()</code> could kick a vCPU out of <code>KVM_RUN</code>, a
+    spinning driver would have been unstoppable rather than merely busy. It
+    sleeps now; the section below is what that took.
+  </p>
+
+  <h3>An idle agent sleeps, and stops costing a core</h3>
+  <p>
+    A polling guest costs a host core for as long as it runs, which was the one
+    figure on this page worse than a Linux container's: a container doing
+    nothing costs nothing. An IDT, a programmed PIC, one handler and
+    <code>sti; hlt</code> in the idle path fix it, because a halted vCPU is a
+    thread blocked in <code>KVM_RUN</code> and a thread blocked there is one the
+    host never schedules.
+  </p>
+  <p>
+    Measured over the same three-agent <code>vsock_swarm</code> run, warm, twice
+    each:
+  </p>
+  <pre>polling    user 1.82 s, 1.88 s
+sleeping   user 0.65 s, 0.37 s</pre>
+  <p>
+    Three of the four pieces are one-liners. The fourth is the PIC: KVM's
+    in-kernel 8259 comes up unprogrammed, and an unprogrammed 8259 delivers
+    IRQ 0-7 as vectors 8-15 — which are processor exceptions, so the remap is
+    the difference between an interrupt and a double fault. The handler
+    acknowledges the device before the PIC, because the virtio line is
+    level-triggered and held until <code>InterruptACK</code>; the other order is
+    re-entered immediately and forever.
+  </p>
+  <p>
+    <strong>Two defects, and both presented as the console stopping mid-word.</strong>
+    <code>iret</code> is the <em>16-bit</em> form in Intel syntax, which is what
+    <code>global_asm!</code> uses — the 32-bit one is <code>iretd</code> — so
+    the handler ran perfectly and returned to a garbage selector popped off a
+    frame of the wrong width. And the i386 ABI wants <code>ESP</code> 16-byte
+    aligned at a <code>call</code>, which an interrupt frame plus
+    <code>pusha</code> does not leave it; this target's <code>core</code> is
+    built with SSE2, so a compiler-emitted <code>movaps</code> against a stack
+    slot faults on a misaligned one.
+  </p>
+  <p>
+    A fault with no gate is a general protection fault, which also has no gate,
+    which is a triple fault — and from outside, a triple fault is a console that
+    stops. So the guest now carries thirty-two exception stubs, one per vector,
+    each pushing its own number into a handler that prints the vector and the
+    three words the CPU pushed. The moment that existed the answer was one line:
+  </p>
+  <pre>FAULT vector 0x0000000D frame 0x00000010 0x00100026 0x00000008</pre>
+  <p>
+    #GP at <code>0x100026</code>, which <code>objdump</code> showed to be the
+    <code>iret</code>. The lesson is the ordering: fault reporting belongs
+    <em>before</em> interrupt handling, because a guest that says "vector 13 at
+    this address" can be debugged and a guest that stops mid-word can only be
+    bisected.
   </p>
 
   <h3>The Type-1 hypervisor executed, for the first time</h3>
@@ -860,10 +911,10 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
   <h2>Open, with diagnosis</h2>
 
   <p>
-    Seven items that stood here have been closed. What is left is the one thing
+    Eight items that stood here have been closed. What is left is the one thing
     this machine cannot do, two things that still compile and have never run,
-    and the honest edges of what shipped. Nothing on this list is a failing
-    test: the suite is green, which it had not been for a while.
+    and one honest edge of what shipped. Nothing on this list is a failing test:
+    the suite is green, which it had not been for a while.
   </p>
 
   <h3>1. <code>hv1</code> has still never run on hardware</h3>
@@ -901,18 +952,7 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     marked as such, the same way Type-1 is.
   </p>
 
-  <h3>4. The agent guest polls, and a polling guest costs a core</h3>
-  <p>
-    <code>hv2-unikernel</code>'s vsock driver spins on the used ring: no IDT, no
-    interrupt handler, no <code>hlt</code> while it waits. That is the simplest
-    thing that can work and it is why <code>vsock_swarm</code> runs three agents
-    rather than a thousand — <code>unikernel_swarm</code> is where the graph is
-    run at scale, with guests that halt. An interrupt handler is the fix, and it
-    is a real piece of work: an IDT, a PIC or APIC path, and a handler that
-    agrees with the device about the interrupt line.
-  </p>
-
-  <h3>5. Quota usage does not survive a restart</h3>
+  <h3>4. Quota usage does not survive a restart</h3>
   <p>
     <code>GovernedVmHost</code> counts what it has admitted, in one process, for
     as long as it exists. A process that comes back up has admitted nothing and
@@ -979,10 +1019,12 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
       being hidden by a hypervisor underneath.
     </li>
     <li>
-      <strong>Give the agent guest an interrupt handler</strong>, so a guest
-      waiting for work halts instead of spinning. Until then an agent costs a
-      host core while idle, which is the one number in this page that is worse
-      than a Linux container's.
+      <strong>Run the swarm at a thousand agents over vsock.</strong>
+      <code>unikernel_swarm</code> reaches a thousand with guests that halt
+      immediately and never speak; <code>vsock_swarm</code> reaches three that
+      do. Now that an idle agent sleeps there is no reason those are different
+      numbers, and finding out is the measurement this project is actually
+      about.
     </li>
     <li>
       <strong>Make the agent payload do something.</strong> The guest echoes,
@@ -1037,8 +1079,8 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
 </section>
 
 <footer>
-  master 9101f52 · 0 open PRs · 0 open issues · suite green · measured on
-  WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master 3ee110b · 0 open PRs · 0 open issues · suite green · idle agents sleep ·
+  measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
