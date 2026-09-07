@@ -277,68 +277,121 @@
 <div class="wrap">
 
 <header>
-  <p class="eyebrow">Engineering handoff · nervosys/HyperMachine · 3 September 2026</p>
+  <p class="eyebrow">Engineering handoff · nervosys/HyperMachine · 7 September 2026</p>
   <h1>What Actually Ran</h1>
   <p class="standfirst">
     A thousand hardware-isolated agents run at once under a command graph, a
     unikernel reaches executing code in 2.67&nbsp;ms, and a sandbox costs
-    0.157&nbsp;MiB. Every one of those is measured. And
-    <em>no VM has ever shut down cleanly</em> — <code>stop()</code> does not
-    return, for any guest.
+    0.157&nbsp;MiB. Every one of those is measured. And as of today they
+    <em>shut down</em> — <code>stop()</code> had never returned, for any guest,
+    until a vCPU could be interrupted.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>32e1f69</dd></div>
+    <div class="fact"><dt>Master</dt><dd>4a85896</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
     <div class="fact"><dt>Per sandbox</dt><dd class="good">0.157 MiB</dd></div>
     <div class="fact"><dt>Concurrent</dt><dd class="good">1,000</dd></div>
-    <div class="fact"><dt>stop()</dt><dd class="hold">hangs</dd></div>
+    <div class="fact"><dt>stop()</dt><dd class="good">0.7 ms</dd></div>
   </dl>
 </header>
 
 <section>
   <h2>The one thing to read first</h2>
 
-  <div class="callout stop">
-    <h3><code>VM::stop()</code> never returns, and never has.</h3>
+  <div class="callout">
+    <h3><code>VM::stop()</code> returns now. It never had before.</h3>
     <p>
-      Not slowly — not at all, at twenty seconds, for every guest shape tried.
-      <code>examples/halt_stop_probe</code> reproduces it in three variants that
-      differ only in what the guest does before shutdown:
+      Before this it did not return slowly — it did not return at all, at twenty
+      seconds, for every guest shape tried. <code>examples/halt_stop_probe</code>
+      is those same three variants, differing only in what the guest does before
+      shutdown, run against both:
     </p>
-    <pre>write-then-halt : stop() DID NOT RETURN within 20 s   console "."
-halt-only       : stop() DID NOT RETURN within 20 s   console ""
-spin-forever    : stop() DID NOT RETURN within 20 s   console ""</pre>
+    <pre>write-then-halt : DID NOT RETURN within 20 s   →   returned in 0.7 ms   console "."
+halt-only       : DID NOT RETURN within 20 s   →   returned in 0.8 ms   console ""
+spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   console ""</pre>
     <p>
       <code>stop()</code> clears the running flag, sends each vCPU a Stop
       message, then awaits the vCPU task handles — all of which depend on the
       vCPU leaving <code>KVM_RUN</code>, and none of which a thread inside the
-      ioctl can observe. And it cannot be made to leave, because
-      <code>KvmVcpu::run</code> retries on <code>EINTR</code> unconditionally:
+      ioctl can observe. It could not be made to leave, because
+      <code>KvmVcpu::run</code> retried on <code>EINTR</code> unconditionally:
     </p>
     <pre>Err(e) if e.raw_os_error() == Some(libc::EINTR) =&gt; continue,</pre>
     <p style="margin-bottom:0">
       That retry is exactly the mechanism a VMM uses to kick a vCPU out. Without
-      a check before it, the vCPU is <strong>uninterruptible by
-      construction</strong>: a guest that stops exiting to userspace, by halting
-      or by spinning, owns its thread until the process dies.
+      a check before it the vCPU was <strong>uninterruptible by
+      construction</strong>: a guest that stopped exiting to userspace, by
+      halting or by spinning, owned its thread until the process died.
     </p>
   </div>
 
   <p>
-    Confirmed against a hung process: 0% CPU, all 28 threads sleeping,
+    Diagnosed against a hung process: 0% CPU, all 28 threads sleeping,
     <code>vcpu-0</code> at <code>wchan = kvm_vcpu_block</code>, everything else
-    parked on futexes. Nothing starved and nothing raced.
+    parked on futexes. Nothing starved and nothing raced, which is what said the
+    problem was reachability rather than scheduling.
+  </p>
+
+  <h3>The fix is three things, because a kick has three moments to miss</h3>
+
+  <div class="scroll">
+  <table>
+    <caption>Getting a vCPU out of KVM_RUN</caption>
+    <thead>
+      <tr><th>Part</th><th>The moment it covers</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>SIGRTMIN</code>, handler installed without <code>SA_RESTART</code></td>
+        <td>A vCPU already inside the ioctl. With <code>SA_RESTART</code> the
+            kernel restarts the call itself and userspace never learns the signal
+            arrived. A real-time signal rather than <code>SIGUSR1</code>, which
+            belongs to whoever embeds this crate.</td>
+      </tr>
+      <tr>
+        <td><code>kvm_run-&gt;immediate_exit</code></td>
+        <td>A vCPU that has not reached the ioctl yet, at which a signal would be
+            aimed at nothing. KVM checks this on the way in and answers
+            <code>EINTR</code> without entering the guest.</td>
+      </tr>
+      <tr>
+        <td>A per-vCPU flag, read by the <code>EINTR</code> arm</td>
+        <td>The retry itself. This is what turns a delivered signal into a
+            returned call instead of a re-entered guest.</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p>
+    The ordering is what makes the race benign: the flag and
+    <code>immediate_exit</code> are both set before the signal is sent, and
+    <code>run()</code> checks the flag after publishing its thread id and before
+    entering the ioctl. A kick landing anywhere in that window is latched and
+    seen at the next entry — the difference between a shutdown that hangs
+    intermittently and one that does not hang.
   </p>
 
   <p>
-    <strong>This changes how to read every other number here.</strong> Runs that
+    <code>HypervisorBackend::kick_vcpu</code> is how <code>stop()</code> reaches
+    it, and <code>VmExit::Interrupted</code> is what a kicked vCPU reports. The
+    run loop continues on that exit, which sends it to the top of the loop to
+    read the flag and the control channel — the reason it was kicked. No guest
+    state is touched, so re-entering is correct when the kick was for something
+    else. <code>tests/vcpu_kick.rs</code> asserts on the effect, that
+    <code>stop()</code> completes, and covers the before-entry race separately by
+    requiring a pending kick to end a run without the guest being entered.
+  </p>
+
+  <p>
+    <strong>This changes how to read the older numbers below.</strong> Runs that
     appeared to finish were killed by their <code>timeout</code> after printing.
-    The measurements were already on stdout and are unaffected — but no example
-    that calls <code>stop()</code> has exited cleanly, and every VM leaks its
-    vCPU thread.
+    The measurements were already on stdout and are unaffected. The 1,000-VM
+    figure has since been re-run and now ends by exiting: 59 seconds, all 1,000
+    guests executed, 0.157&nbsp;MiB each, every <code>stop()</code> returned.
   </p>
 </section>
 
@@ -532,41 +585,43 @@ spin-forever    : stop() DID NOT RETURN within 20 s   console ""</pre>
 <section>
   <h2>Open, with diagnosis</h2>
 
-  <h3>1. <code>stop()</code> hangs — the blocking defect</h3>
-  <p>
-    Described above. The fix is a stop path that can interrupt the ioctl: a
-    signal with a handler installed <em>without</em> <code>SA_RESTART</code>, a
-    per-vCPU flag the <code>EINTR</code> arm consults before retrying, and
-    <code>kvm_run-&gt;immediate_exit</code> so the next entry returns rather than
-    re-entering the guest. Delicate work in the hottest path in the system.
-    <code>examples/halt_stop_probe</code> is the reproducer and bounds its own
-    wait, so it reports instead of hanging.
-  </p>
-
-  <h3>2. A Multiboot guest launches and produces nothing</h3>
+  <h3>1. A Multiboot guest launches and produces nothing</h3>
   <p>
     <code>BootSource::Multiboot</code> is the entry a compiled unikernel needs —
     flat 32-bit protected mode, paging off, <code>EAX</code>/<code>EBX</code> set
     — and <code>Raw</code> only ever gives 16-bit real mode, which is why
     everything so far has been hand-assembled. Load and entry addresses agree
     (<code>0x100000</code>), provision and launch both succeed, and no output
-    appears. The investigation was abandoned when it turned out the hang was
-    defect 1, not anything about Multiboot. This is the gate on a real
-    <code>no_std</code> Rust unikernel, and so on an actual agent payload.
+    appears. The investigation was abandoned when the hang it was chasing turned
+    out to be the <code>stop()</code> defect above, not anything about
+    Multiboot. This is the gate
+    on a real <code>no_std</code> Rust unikernel, and so on an actual agent
+    payload.
   </p>
 
-  <h3>3. <code>test_timer_frequency</code> fails on Linux</h3>
+  <h3>2. <code>test_timer_frequency</code> fails on Linux</h3>
   <p>
     16 or 17 ticks against an expected 19, on a clean tree, with and without any
     change from this session. A wall-clock-dependent test; the fix is virtual
     time, not a wider tolerance.
   </p>
 
+  <h3>3. <code>test_vm_creation_with_backend</code> fails on any host with KVM</h3>
+  <p>
+    Found running the integration suite on this host, and unrelated to anything
+    in this session: the test asserts the selected backend is
+    <code>Tcg</code> or <code>Whpx</code>, which KVM never satisfies — so it has
+    passed everywhere it has been run and fails the moment a real Linux
+    hypervisor is present. What it means to check is that the VM has a backend at
+    all. Left alone rather than quietly rewritten, because deciding what it
+    should assert is a decision, not a typo.
+  </p>
+
   <h3>4. The swarm transport does not reach a guest agent</h3>
   <p>
     <code>guest_transport</code> writes into COM1 and the guest echoes, which is
     real delivery. vsock is the right transport and is unreachable from a guest
-    this small — it needs protected mode and virtqueues, which is defect 2
+    this small — it needs protected mode and virtqueues, which is defect 1
     again.
   </p>
 
@@ -576,6 +631,16 @@ spin-forever    : stop() DID NOT RETURN within 20 s   console ""</pre>
     by nothing. Where usage counters live — per session, per agent, across
     restarts — is a design question. <code>hv2-swarm</code> was built the other
     way round deliberately: one chokepoint, consulted inside it.
+  </p>
+
+  <h3>6. WHPX can be kicked, but has never been kicked</h3>
+  <p>
+    <code>WhpxBackend::kick_vcpu</code> cancels the run with
+    <code>WHvCancelRunVirtualProcessor</code>, and WHP latches a cancellation
+    against the next run if the vCPU is not executing, so it needs no equivalent
+    of the KVM path's <code>immediate_exit</code>. None of that has been
+    observed: WHP does not start on this host, so it is a compilation result and
+    is marked as one, the same way Type-1 is.
   </p>
 </section>
 
@@ -618,15 +683,11 @@ spin-forever    : stop() DID NOT RETURN within 20 s   console ""</pre>
   <h2>What to do next</h2>
   <ol>
     <li>
-      <strong>Fix <code>stop()</code>.</strong> Nothing else is safe to build on
-      while every VM leaks its vCPU thread and no process using the API can exit
-      cleanly. Start from <code>examples/halt_stop_probe</code>, which fails
-      today and should pass.
-    </li>
-    <li>
-      <strong>Then find why the Multiboot guest is silent</strong>, because that
-      is the gate on a compiled unikernel and therefore on an agent payload
-      rather than 73 bytes of hand-assembly.
+      <strong>Find why the Multiboot guest is silent.</strong> It is now the top
+      of the list, and it was only ever second because a hang was in front of
+      it. It gates a compiled unikernel and therefore an agent payload rather
+      than 73 bytes of hand-assembly — and it gates vsock, so it gates the swarm
+      transport too.
     </li>
     <li>
       <strong>Then a <code>no_std</code> Rust unikernel</strong> targeting that
@@ -639,19 +700,23 @@ spin-forever    : stop() DID NOT RETURN within 20 s   console ""</pre>
     </li>
   </ol>
   <p>
-    One habit is worth carrying forward, because it earned its place three times
-    today: <em>measure before claiming, and assert on the effect rather than the
+    One habit is worth carrying forward, because it earned its place four times
+    now: <em>measure before claiming, and assert on the effect rather than the
     verdict</em>. The memset was found by timing, not by reading. The
     <code>run_single</code> ceiling was found because the fix that should have
-    worked changed nothing. And the first regression test written for the VM-id
+    worked changed nothing. The first regression test written for the VM-id
     collision passed against the broken code, which is how the second one came
-    to check entropy instead of luck.
+    to check entropy instead of luck. And the <code>stop()</code> hang was a
+    diagnosis before it was a fix: <code>wchan = kvm_vcpu_block</code> on an
+    otherwise idle process is what ruled out every explanation involving
+    scheduling and left only reachability.
   </p>
 </section>
 
 <footer>
-  master 32e1f69 · 0 open PRs · 0 open issues · 37 commits on 3 September ·
-  measured on WSL2 + KVM, not bare metal · <code>stop()</code> hangs and is the first thing to fix
+  master 4a85896 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
+  metal · <code>stop()</code> returns in under a millisecond for every guest
+  shape · the silent Multiboot guest is the first thing to fix
 </footer>
 
 </div>
