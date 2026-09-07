@@ -22,7 +22,7 @@
 //!
 //! // Read the images and validate the kernel header.
 //! let loaded = source.load()?;
-//! println!("boot entry point: {:#x}", loaded.entry_point());
+//! println!("boot entry point: {:#x}", loaded.entry_point()?);
 //! # Ok(())
 //! # }
 //! ```
@@ -297,13 +297,28 @@ pub enum LoadedBoot {
 
 impl LoadedBoot {
     /// Guest physical address the vCPU begins executing at.
-    pub fn entry_point(&self) -> u64 {
+    ///
+    /// For Multiboot this is read out of the image -- its header's address
+    /// fields, or its ELF entry -- and only falls back to the conventional 1 MB
+    /// for a flat image that says nothing. It used to be 1 MB unconditionally,
+    /// with a comment claiming the backend refined it from the ELF header; no
+    /// backend did, so every compiled kernel was entered at the first byte of
+    /// its own file header.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::VM`] if a Multiboot image cannot be placed: no header,
+    /// address fields pointing outside the file, or an ELF this loader cannot
+    /// enter.
+    pub fn entry_point(&self) -> Result<u64> {
         match self {
-            Self::Linux(params) => params.kernel_addr,
-            // Multiboot kernels are conventionally linked to run from 1 MB;
-            // the backend refines this from the ELF header when present.
-            Self::Multiboot(_) => DEFAULT_KERNEL_ADDR,
-            Self::Raw { entry, .. } => *entry,
+            Self::Linux(params) => Ok(params.kernel_addr),
+            Self::Multiboot(info) => Ok(MultibootProtocol::place_kernel(
+                &info.kernel_image,
+                &MultibootLayout::default(),
+            )?
+            .entry),
+            Self::Raw { entry, .. } => Ok(*entry),
         }
     }
 
@@ -532,7 +547,7 @@ mod tests {
             .expect("valid bzImage should load");
 
         assert_eq!(loaded.protocol(), "linux");
-        assert_eq!(loaded.entry_point(), DEFAULT_KERNEL_ADDR);
+        assert_eq!(loaded.entry_point().expect("entry"), DEFAULT_KERNEL_ADDR);
         assert_eq!(loaded.image_bytes(), 8192);
 
         let _ = std::fs::remove_file(kernel);

@@ -498,6 +498,10 @@ impl HypervisorBackend for KvmBackend {
                 // EBX the multiboot_info address, which is how the kernel
                 // recognises that it was Multiboot-loaded at all.
                 let layout = MultibootLayout::default();
+                // Where the image asked to be entered, which is only
+                // `layout.kernel_addr` for a flat image. The bytes went to the
+                // matching addresses in the loop above, via `memory_regions`.
+                let entry = boot.entry_point()?;
                 let (gdt_base, _idt_base, _pt_base, stack_pointer) =
                     BootSetup::allocate_standard_tables();
 
@@ -515,7 +519,7 @@ impl HypervisorBackend for KvmBackend {
                 kvm_vcpu.set_sregs(&sregs)?;
 
                 let mut regs = kvm_vcpu.get_regs()?;
-                regs.rip = layout.kernel_addr;
+                regs.rip = entry;
                 regs.rax = u64::from(MultibootProtocol::bootloader_magic());
                 regs.rbx = layout.info_addr;
                 regs.rsp = stack_pointer;
@@ -526,8 +530,8 @@ impl HypervisorBackend for KvmBackend {
                 kvm_vcpu.set_regs(&regs)?;
 
                 tracing::info!(
-                    "KVM: Multiboot kernel at {:#x}, info at {:#x}, {} module(s)",
-                    layout.kernel_addr,
+                    "KVM: Multiboot kernel entered at {:#x}, info at {:#x}, {} module(s)",
+                    entry,
                     layout.info_addr,
                     info.modules.len()
                 );

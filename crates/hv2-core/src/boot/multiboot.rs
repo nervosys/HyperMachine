@@ -33,6 +33,21 @@ use crate::{Error, Result};
 /// Multiboot magic number in kernel header
 const MULTIBOOT_HEADER_MAGIC: u32 = 0x1BADB002;
 
+/// Bit 16 of the header flags. When set, the header carries its own load
+/// addresses at offsets 12..32 and they are authoritative; when clear, the
+/// image's ELF headers say where it goes. The specification calls this the
+/// a.out kludge, because it exists for images whose own format cannot say.
+const MULTIBOOT_AOUT_KLUDGE: u32 = 1 << 16;
+
+/// `\x7fELF`, the first four bytes of any ELF file.
+const ELF_MAGIC: [u8; 4] = [0x7F, b'E', b'L', b'F'];
+/// `e_ident[EI_CLASS]` for a 32-bit ELF.
+const ELFCLASS32: u8 = 1;
+/// `p_type` of a segment that is to be loaded into memory.
+const PT_LOAD: u32 = 1;
+/// Size of one ELF32 program header entry.
+const ELF32_PHENT_SIZE: usize = 32;
+
 /// Multiboot magic number passed to kernel in EAX
 const MULTIBOOT_BOOTLOADER_MAGIC: u32 = 0x2BADB002;
 
@@ -93,8 +108,12 @@ impl MultibootProtocol {
         // Header must be in first 8KB
         let search_limit = kernel_image.len().min(8192);
 
-        // Search for magic number on 4-byte boundaries
-        for offset in (0..search_limit - 12).step_by(4) {
+        // Search for magic number on 4-byte boundaries. Saturating, because an
+        // image shorter than a header is a thing a caller can hand us -- and
+        // subtracting from a `usize` that is already smaller wraps to a search
+        // over the whole address space, which indexes out of bounds and panics
+        // rather than reporting an unusable image.
+        for offset in (0..search_limit.saturating_sub(12)).step_by(4) {
             let magic = u32::from_le_bytes([
                 kernel_image[offset],
                 kernel_image[offset + 1],
@@ -120,10 +139,16 @@ impl MultibootProtocol {
                 // Verify checksum: magic + flags + checksum must equal 0
                 let sum = magic.wrapping_add(flags).wrapping_add(checksum);
                 if sum == 0 {
+                    let addresses = if flags & MULTIBOOT_AOUT_KLUDGE != 0 {
+                        Some(Self::read_addresses(kernel_image, offset)?)
+                    } else {
+                        None
+                    };
                     return Ok(MultibootHeader {
                         offset,
                         flags,
                         checksum,
+                        addresses,
                     });
                 }
             }
@@ -132,6 +157,245 @@ impl MultibootProtocol {
         Err(Error::VM(
             "Multiboot header not found in kernel image".into(),
         ))
+    }
+
+    /// Read the five address fields that follow a header with bit 16 set.
+    fn read_addresses(image: &[u8], offset: usize) -> Result<MultibootAddresses> {
+        const FIELDS: usize = 32;
+        if image.len() < offset + FIELDS {
+            return Err(Error::VM(format!(
+                "Multiboot header at offset {offset:#x} sets the address flag but the image \
+                 ends after {} bytes, before the address fields it promises",
+                image.len()
+            )));
+        }
+        let word = |at: usize| -> u32 {
+            u32::from_le_bytes([
+                image[offset + at],
+                image[offset + at + 1],
+                image[offset + at + 2],
+                image[offset + at + 3],
+            ])
+        };
+        Ok(MultibootAddresses {
+            header_addr: word(12),
+            load_addr: word(16),
+            load_end_addr: word(20),
+            bss_end_addr: word(24),
+            entry_addr: word(28),
+        })
+    }
+
+    /// Decide where a kernel image is loaded and where execution begins.
+    ///
+    /// This is the part of the specification that distinguishes a bootloader
+    /// from a `memcpy`. A Multiboot image says for itself where it belongs, in
+    /// one of two ways, and only the third case -- an image that says nothing --
+    /// goes to the conventional 1 MB:
+    ///
+    /// 1. **The header's own address fields**, when flags bit 16 is set. They
+    ///    are authoritative and override everything, which is what lets an
+    ///    image in a format with no addresses of its own be loaded correctly.
+    /// 2. **The ELF program headers**, otherwise, for an image that is an ELF.
+    ///    Each `PT_LOAD` segment goes to its physical address and any tail
+    ///    beyond the file contents is zeroed, which is where a `.bss` lives.
+    /// 3. **Flat**, for anything else: the whole file at
+    ///    [`MultibootLayout::kernel_addr`], entered at its first byte.
+    ///
+    /// Only the third case used to exist. An ELF was written to 1 MB verbatim
+    /// and entered at its first byte -- which is `\x7fELF`, not code -- so a
+    /// compiled kernel launched, executed the bytes of its own file header, and
+    /// produced nothing. That is the shape of every "it boots and says nothing"
+    /// report against this protocol, and it is why an image assembled by hand
+    /// as flat bytes worked while anything from a linker did not.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::VM`] if no Multiboot header is present, if the address
+    /// fields describe a region outside the file, or if the image is an ELF
+    /// this loader cannot enter -- a 64-bit one, or one for another machine.
+    pub fn place_kernel(image: &[u8], layout: &MultibootLayout) -> Result<KernelPlacement> {
+        let header = Self::find_header(image)?;
+
+        if let Some(addresses) = header.addresses {
+            return Self::place_by_addresses(image, header.offset, &addresses);
+        }
+
+        if let Some(placement) = Self::place_elf32(image)? {
+            return Ok(placement);
+        }
+
+        Ok(KernelPlacement {
+            regions: vec![(layout.kernel_addr, image.to_vec())],
+            entry: layout.kernel_addr,
+        })
+    }
+
+    /// Place an image by the address fields in its Multiboot header.
+    fn place_by_addresses(
+        image: &[u8],
+        header_offset: usize,
+        addr: &MultibootAddresses,
+    ) -> Result<KernelPlacement> {
+        // The header sits at `header_addr` in memory and at `header_offset` in
+        // the file, so those two differ by a constant -- and that constant is
+        // how the file offset of `load_addr` is found. This is the whole trick
+        // of the a.out kludge, and getting it backwards loads the image off by
+        // the size of whatever precedes its header.
+        if addr.load_addr > addr.header_addr {
+            return Err(Error::VM(format!(
+                "Multiboot header declares load_addr {:#x} above header_addr {:#x}; the \
+                 header cannot precede the text it belongs to",
+                addr.load_addr, addr.header_addr
+            )));
+        }
+        let delta = (addr.header_addr - addr.load_addr) as usize;
+        if delta > header_offset {
+            return Err(Error::VM(format!(
+                "Multiboot header at file offset {header_offset:#x} declares load_addr \
+                 {:#x}, which would begin {} bytes before the start of the file",
+                addr.load_addr,
+                delta - header_offset
+            )));
+        }
+        let text_offset = header_offset - delta;
+
+        // load_end_addr of zero means "to the end of the file".
+        let text_end = if addr.load_end_addr == 0 {
+            image.len()
+        } else {
+            if addr.load_end_addr < addr.load_addr {
+                return Err(Error::VM(format!(
+                    "Multiboot header declares load_end_addr {:#x} below load_addr {:#x}",
+                    addr.load_end_addr, addr.load_addr
+                )));
+            }
+            text_offset + (addr.load_end_addr - addr.load_addr) as usize
+        };
+        if text_end > image.len() {
+            return Err(Error::VM(format!(
+                "Multiboot header declares {} bytes of text but the image holds {} from \
+                 that offset",
+                text_end - text_offset,
+                image.len() - text_offset
+            )));
+        }
+
+        let loaded_end = u64::from(addr.load_addr) + (text_end - text_offset) as u64;
+        let mut regions = vec![(
+            u64::from(addr.load_addr),
+            image[text_offset..text_end].to_vec(),
+        )];
+
+        // The .bss, which is in the image's address space but not in its bytes.
+        // Written as zeros rather than assumed: guest RAM is zero at boot, but
+        // a snapshot restored into it is not, and neither is the memory under a
+        // second kernel loaded over the first.
+        if u64::from(addr.bss_end_addr) > loaded_end {
+            let bss = (u64::from(addr.bss_end_addr) - loaded_end) as usize;
+            regions.push((loaded_end, vec![0u8; bss]));
+        }
+
+        Ok(KernelPlacement {
+            regions,
+            entry: u64::from(addr.entry_addr),
+        })
+    }
+
+    /// Place an ELF32 image by its program headers, or `None` if it is not one.
+    ///
+    /// Segments go to `p_paddr`, not `p_vaddr`: a kernel is linked for the
+    /// virtual addresses it will use once it has paging, and it is loaded at
+    /// the physical ones it has before that. For an identity-linked kernel the
+    /// two agree, which is exactly why using the wrong one is a mistake that
+    /// survives testing until someone links a higher-half kernel.
+    fn place_elf32(image: &[u8]) -> Result<Option<KernelPlacement>> {
+        if image.len() < 52 || image[..4] != ELF_MAGIC {
+            return Ok(None);
+        }
+        if image[4] != ELFCLASS32 {
+            return Err(Error::VM(
+                "Multiboot kernel is a 64-bit ELF; the protocol enters in 32-bit protected \
+                 mode, so the image must be an ELF32 or carry the header address fields"
+                    .into(),
+            ));
+        }
+
+        let word = |at: usize| -> u32 {
+            u32::from_le_bytes([image[at], image[at + 1], image[at + 2], image[at + 3]])
+        };
+        let half = |at: usize| -> u16 { u16::from_le_bytes([image[at], image[at + 1]]) };
+
+        let entry = word(0x18);
+        let phoff = word(0x1C) as usize;
+        let phentsize = half(0x2A) as usize;
+        let phnum = half(0x2C) as usize;
+
+        if phnum == 0 {
+            return Err(Error::VM(
+                "Multiboot kernel is an ELF32 with no program headers, so nothing says what \
+                 to load"
+                    .into(),
+            ));
+        }
+        if phentsize < ELF32_PHENT_SIZE {
+            return Err(Error::VM(format!(
+                "Multiboot kernel declares {phentsize}-byte program headers; ELF32 requires \
+                 at least {ELF32_PHENT_SIZE}"
+            )));
+        }
+        let table_end = phoff.saturating_add(phnum.saturating_mul(phentsize));
+        if table_end > image.len() {
+            return Err(Error::VM(format!(
+                "Multiboot kernel's program header table runs to {table_end:#x}, past the \
+                 end of a {}-byte image",
+                image.len()
+            )));
+        }
+
+        let mut regions = Vec::new();
+        for i in 0..phnum {
+            let ph = phoff + i * phentsize;
+            if word(ph) != PT_LOAD {
+                continue;
+            }
+            let offset = word(ph + 4) as usize;
+            let paddr = u64::from(word(ph + 12));
+            let filesz = word(ph + 16) as usize;
+            let memsz = u64::from(word(ph + 20));
+
+            let end = offset.saturating_add(filesz);
+            if end > image.len() {
+                return Err(Error::VM(format!(
+                    "Multiboot kernel's segment {i} claims {filesz} bytes at file offset \
+                     {offset:#x}, past the end of a {}-byte image",
+                    image.len()
+                )));
+            }
+            if filesz > 0 {
+                regions.push((paddr, image[offset..end].to_vec()));
+            }
+            // Anything the segment occupies beyond its file contents is .bss.
+            if memsz > filesz as u64 {
+                regions.push((
+                    paddr + filesz as u64,
+                    vec![0u8; (memsz - filesz as u64) as usize],
+                ));
+            }
+        }
+
+        if regions.is_empty() {
+            return Err(Error::VM(
+                "Multiboot kernel is an ELF32 with no PT_LOAD segments, so there is nothing \
+                 to execute"
+                    .into(),
+            ));
+        }
+
+        Ok(Some(KernelPlacement {
+            regions,
+            entry: u64::from(entry),
+        }))
     }
 
     /// Create multiboot_info structure
@@ -322,8 +586,8 @@ impl MultibootProtocol {
 
         let mut regions: Vec<(u64, Vec<u8>)> = Vec::new();
 
-        // Kernel.
-        regions.push((layout.kernel_addr, info.kernel_image.clone()));
+        // Kernel, wherever the image itself says it belongs.
+        regions.extend(Self::place_kernel(&info.kernel_image, layout)?.regions);
 
         // Module data, each 4 KB aligned, plus the descriptor for each.
         let mut placements = Vec::with_capacity(info.modules.len());
@@ -406,7 +670,41 @@ impl MultibootProtocol {
         );
         regions.push((layout.info_addr, multiboot_info));
 
+        Self::reject_overlaps(&regions)?;
+
         Ok(regions)
+    }
+
+    /// Refuse a set of regions in which any two overlap.
+    ///
+    /// Two regions writing the same address is not a layout question, it is a
+    /// kernel silently losing either its own text or the boot information it
+    /// was handed -- and the symptom is a guest that starts and does something
+    /// inexplicable, which is the most expensive kind of bug this protocol has.
+    /// Now that a kernel says for itself where it loads, this is reachable from
+    /// the kernel image rather than only from the layout constants, so it is
+    /// worth an explicit check that names both regions.
+    fn reject_overlaps(regions: &[(u64, Vec<u8>)]) -> Result<()> {
+        let mut spans: Vec<(u64, u64)> = regions
+            .iter()
+            .filter(|(_, data)| !data.is_empty())
+            .map(|(addr, data)| (*addr, addr + data.len() as u64))
+            .collect();
+        spans.sort_unstable();
+
+        for pair in spans.windows(2) {
+            let (first_start, first_end) = pair[0];
+            let (second_start, second_end) = pair[1];
+            if second_start < first_end {
+                return Err(Error::VM(format!(
+                    "Multiboot regions overlap: {first_start:#x}..{first_end:#x} and \
+                     {second_start:#x}..{second_end:#x}. The kernel's own load addresses \
+                     collide with the boot environment or with another image."
+                )));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -486,11 +784,274 @@ pub struct MultibootHeader {
 
     /// Checksum value
     pub checksum: u32,
+
+    /// The load addresses the header carries, present only when flags bit 16
+    /// is set. When present they are authoritative and the image's own format
+    /// is not consulted.
+    pub addresses: Option<MultibootAddresses>,
+}
+
+/// The five address fields a Multiboot header carries when flags bit 16 is set.
+///
+/// All are physical addresses in the guest, except that `header_addr` is the
+/// address the header itself is loaded at -- which is what ties the file's
+/// bytes to the addresses the other four describe.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MultibootAddresses {
+    /// Address the Multiboot header itself is loaded at.
+    pub header_addr: u32,
+    /// Address the image's text begins at.
+    pub load_addr: u32,
+    /// One past the last byte loaded from the file, or 0 for "to the end".
+    pub load_end_addr: u32,
+    /// One past the last byte of `.bss`, which is zeroed rather than loaded.
+    pub bss_end_addr: u32,
+    /// Address of the first instruction.
+    pub entry_addr: u32,
+}
+
+/// Where a kernel image's bytes go and where execution begins.
+///
+/// Separate from the boot environment around it because the two answer
+/// different questions: the layout says where *this loader* puts the things it
+/// builds, and this says where *the image* asked to be put.
+#[derive(Debug, Clone)]
+pub struct KernelPlacement {
+    /// `(guest physical address, bytes)` for each part of the loaded image.
+    pub regions: Vec<(u64, Vec<u8>)>,
+    /// Guest physical address of the first instruction.
+    pub entry: u64,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Where an image says it belongs ──────────────────────────────────
+    //
+    // Only the flat case used to exist: every image was written to 1 MB and
+    // entered at its first byte. An ELF's first byte is `\x7fELF`, which
+    // decodes as `jns +0x45`, so a compiled kernel jumped 0x45 bytes into its
+    // own header and died quietly. These say which of the three shapes is
+    // being honoured, so that a regression names itself.
+
+    /// A 12-byte Multiboot header with the given flags, plus any address
+    /// fields.
+    fn header_bytes(flags: u32, addresses: &[u32]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let checksum = 0u32
+            .wrapping_sub(MULTIBOOT_HEADER_MAGIC)
+            .wrapping_sub(flags);
+        out.extend_from_slice(&MULTIBOOT_HEADER_MAGIC.to_le_bytes());
+        out.extend_from_slice(&flags.to_le_bytes());
+        out.extend_from_slice(&checksum.to_le_bytes());
+        for value in addresses {
+            out.extend_from_slice(&value.to_le_bytes());
+        }
+        out
+    }
+
+    /// An ELF32 with one `PT_LOAD` segment: `filesz` bytes of `0xCC` at
+    /// `paddr`, growing to `memsz` in memory, entered at `entry`.
+    fn elf32(paddr: u32, entry: u32, filesz: usize, memsz: u32) -> Vec<u8> {
+        const EHSIZE: u32 = 52;
+        const PHENTSIZE: u32 = 32;
+        let payload_offset = EHSIZE + PHENTSIZE;
+
+        let mut image = Vec::new();
+        image.extend_from_slice(&[0x7F, b'E', b'L', b'F']);
+        image.extend_from_slice(&[1, 1, 1]); // ELFCLASS32, little-endian, v1
+        image.extend_from_slice(&[0u8; 9]);
+        image.extend_from_slice(&2u16.to_le_bytes()); // ET_EXEC
+        image.extend_from_slice(&3u16.to_le_bytes()); // EM_386
+        image.extend_from_slice(&1u32.to_le_bytes());
+        image.extend_from_slice(&entry.to_le_bytes());
+        image.extend_from_slice(&EHSIZE.to_le_bytes()); // e_phoff
+        image.extend_from_slice(&0u32.to_le_bytes()); // e_shoff
+        image.extend_from_slice(&0u32.to_le_bytes()); // e_flags
+        image.extend_from_slice(&(EHSIZE as u16).to_le_bytes());
+        image.extend_from_slice(&(PHENTSIZE as u16).to_le_bytes());
+        image.extend_from_slice(&1u16.to_le_bytes()); // e_phnum
+        image.extend_from_slice(&40u16.to_le_bytes());
+        image.extend_from_slice(&0u16.to_le_bytes());
+        image.extend_from_slice(&0u16.to_le_bytes());
+
+        image.extend_from_slice(&1u32.to_le_bytes()); // PT_LOAD
+        image.extend_from_slice(&payload_offset.to_le_bytes());
+        image.extend_from_slice(&paddr.to_le_bytes()); // p_vaddr
+        image.extend_from_slice(&paddr.to_le_bytes()); // p_paddr
+        image.extend_from_slice(&(filesz as u32).to_le_bytes());
+        image.extend_from_slice(&memsz.to_le_bytes());
+        image.extend_from_slice(&5u32.to_le_bytes()); // R+X
+        image.extend_from_slice(&0x1000u32.to_le_bytes());
+
+        // The Multiboot header lives inside the loaded segment, as it must.
+        let mut payload = header_bytes(0, &[]);
+        payload.resize(filesz, 0xCC);
+        image.extend_from_slice(&payload);
+        image
+    }
+
+    #[test]
+    fn a_flat_image_goes_where_the_layout_says() {
+        let image = create_multiboot_kernel();
+        let layout = MultibootLayout::default();
+
+        let placed = MultibootProtocol::place_kernel(&image, &layout).expect("place");
+
+        assert_eq!(placed.entry, layout.kernel_addr);
+        assert_eq!(placed.regions.len(), 1);
+        assert_eq!(placed.regions[0].0, layout.kernel_addr);
+        assert_eq!(placed.regions[0].1, image);
+    }
+
+    #[test]
+    fn address_fields_override_the_layout() {
+        // The header is at file offset 16, and declares itself loaded at
+        // 0x300010 — so the byte before it, at file offset 15, is 0x30000F.
+        let mut image = vec![0xAAu8; 16];
+        image.extend_from_slice(&header_bytes(
+            MULTIBOOT_AOUT_KLUDGE,
+            &[0x0030_0010, 0x0030_0000, 0, 0, 0x0030_0040],
+        ));
+        image.resize(96, 0xBB);
+
+        let placed =
+            MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).expect("place");
+
+        assert_eq!(
+            placed.entry, 0x0030_0040,
+            "entry_addr, not the load address"
+        );
+        assert_eq!(placed.regions.len(), 1);
+        assert_eq!(placed.regions[0].0, 0x0030_0000);
+        assert_eq!(
+            placed.regions[0].1, image,
+            "load_end_addr of 0 means the whole file"
+        );
+    }
+
+    #[test]
+    fn a_bss_beyond_the_file_is_zeroed() {
+        let mut image = header_bytes(
+            MULTIBOOT_AOUT_KLUDGE,
+            &[
+                0x0010_0000, // header_addr
+                0x0010_0000, // load_addr
+                0x0010_0020, // load_end_addr — 32 bytes of text
+                0x0010_0100, // bss_end_addr  — 224 more of .bss
+                0x0010_0000,
+            ],
+        );
+        image.resize(64, 0xCC); // more file than the header says to load
+
+        let placed =
+            MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).expect("place");
+
+        assert_eq!(placed.regions.len(), 2, "text and .bss");
+        assert_eq!(
+            placed.regions[0].1.len(),
+            32,
+            "load_end_addr bounds the text"
+        );
+        assert_eq!(placed.regions[1].0, 0x0010_0020);
+        assert_eq!(placed.regions[1].1.len(), 0xE0);
+        assert!(placed.regions[1].1.iter().all(|b| *b == 0));
+    }
+
+    #[test]
+    fn an_elf_is_placed_by_its_program_headers() {
+        let image = elf32(0x0030_0000, 0x0030_000C, 64, 64);
+
+        let placed =
+            MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).expect("place");
+
+        assert_eq!(placed.entry, 0x0030_000C, "e_entry, not the load address");
+        assert_eq!(placed.regions.len(), 1);
+        assert_eq!(placed.regions[0].0, 0x0030_0000, "p_paddr");
+        assert_eq!(placed.regions[0].1.len(), 64, "p_filesz");
+        assert_ne!(
+            placed.regions[0].1[..4],
+            [0x7F, b'E', b'L', b'F'],
+            "the segment is loaded, not the file that contains it"
+        );
+    }
+
+    #[test]
+    fn an_elf_segment_larger_in_memory_than_in_the_file_gets_its_bss() {
+        let image = elf32(0x0030_0000, 0x0030_0000, 64, 4096);
+
+        let placed =
+            MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).expect("place");
+
+        assert_eq!(placed.regions.len(), 2);
+        assert_eq!(placed.regions[1].0, 0x0030_0040);
+        assert_eq!(placed.regions[1].1.len(), 4096 - 64);
+        assert!(placed.regions[1].1.iter().all(|b| *b == 0));
+    }
+
+    #[test]
+    fn a_64_bit_elf_is_refused_rather_than_entered() {
+        let mut image = elf32(0x0030_0000, 0x0030_0000, 64, 64);
+        image[4] = 2; // ELFCLASS64
+
+        let error = MultibootProtocol::place_kernel(&image, &MultibootLayout::default())
+            .expect_err("an ELF64 cannot be entered in 32-bit protected mode");
+        assert!(
+            error.to_string().contains("64-bit"),
+            "the error should say why: {error}"
+        );
+    }
+
+    #[test]
+    fn address_fields_pointing_outside_the_file_are_refused() {
+        // header_addr below load_addr: the header would precede its own text.
+        let image = header_bytes(
+            MULTIBOOT_AOUT_KLUDGE,
+            &[0x0010_0000, 0x0010_0010, 0, 0, 0x0010_0010],
+        );
+        assert!(MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).is_err());
+
+        // A load_addr so far below header_addr that the text starts before the
+        // file does.
+        let image = header_bytes(
+            MULTIBOOT_AOUT_KLUDGE,
+            &[0x0010_1000, 0x0010_0000, 0, 0, 0x0010_0000],
+        );
+        assert!(MultibootProtocol::place_kernel(&image, &MultibootLayout::default()).is_err());
+    }
+
+    #[test]
+    fn an_image_shorter_than_a_header_is_refused_not_a_panic() {
+        // The search used to compute `len - 12` on a `usize`, which wraps for a
+        // short image and indexes far out of bounds.
+        for len in 0..12usize {
+            assert!(MultibootProtocol::find_header(&vec![0u8; len]).is_err());
+        }
+    }
+
+    #[test]
+    fn a_kernel_loaded_over_the_boot_information_is_refused() {
+        // 0x9000 is where the multiboot_info structure goes. A kernel that asks
+        // to load there would overwrite the very thing EBX points at.
+        let mut image = header_bytes(
+            MULTIBOOT_AOUT_KLUDGE,
+            &[0x0000_9000, 0x0000_9000, 0, 0, 0x0000_9000],
+        );
+        image.resize(4096, 0);
+
+        let info = MultibootInfo {
+            kernel_image: image,
+            ..MultibootInfo::default()
+        };
+
+        let error = MultibootProtocol::prepare_guest_memory(&info, &MultibootLayout::default())
+            .expect_err("a kernel overlapping the boot information must be refused");
+        assert!(
+            error.to_string().contains("overlap"),
+            "the error should name the collision: {error}"
+        );
+    }
 
     fn create_multiboot_kernel() -> Vec<u8> {
         let mut image = vec![0u8; 1024];

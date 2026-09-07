@@ -391,7 +391,7 @@ impl HypervisorBackend for WhpxBackend {
                 whpx_vcpu.boot_linux(&whpx_vm, params, params.kernel_addr)
             }
             crate::boot::source::LoadedBoot::Multiboot(info) => {
-                whpx_vcpu.boot_multiboot(&whpx_vm, info, crate::boot::source::DEFAULT_KERNEL_ADDR)
+                whpx_vcpu.boot_multiboot(&whpx_vm, info, boot.entry_point()?)
             }
             crate::boot::source::LoadedBoot::Raw {
                 data,
@@ -4651,8 +4651,11 @@ impl WhpxVcpu {
         let (gdt_base, _idt_base, _page_table_base, stack_pointer) =
             BootSetup::allocate_standard_tables();
         // Share the layout with every other backend so their guest memory
-        // images cannot drift apart.
-        let layout = MultibootLayout::default().with_kernel_addr(entry_point);
+        // images cannot drift apart. Not `with_kernel_addr(entry_point)`:
+        // `prepare_guest_memory` reads the image's own load addresses now, and
+        // an entry point is not a load address -- for an ELF, or for any header
+        // whose `entry_addr` is not its `load_addr`, the two differ.
+        let layout = MultibootLayout::default();
         let multiboot_info_addr = layout.info_addr;
 
         tracing::debug!(

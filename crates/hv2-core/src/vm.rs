@@ -670,7 +670,7 @@ impl VM {
             // Backends that keep no vCPU state of their own (TCG, mocks) read
             // the shared `VCpu`, so the entry point has to land there too.
             let mut regs = boot_vcpu.registers();
-            regs.rip = loaded.entry_point();
+            regs.rip = loaded.entry_point()?;
             boot_vcpu.set_registers(regs);
 
             tracing::info!(
@@ -678,7 +678,7 @@ impl VM {
                 self.config.name,
                 loaded.protocol(),
                 loaded.image_bytes(),
-                loaded.entry_point(),
+                loaded.entry_point()?,
             );
         }
 
