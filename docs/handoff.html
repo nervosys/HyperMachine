@@ -282,19 +282,23 @@
   <p class="standfirst">
     A thousand hardware-isolated agents run at once under a command graph, a
     unikernel reaches executing code in 2.67&nbsp;ms, and a sandbox costs
-    0.157&nbsp;MiB. Every one of those is measured. And as of today they
-    <em>shut down</em> — <code>stop()</code> had never returned, for any guest,
-    until a vCPU could be interrupted.
+    0.157&nbsp;MiB. Every one of those is measured. What is new is that the
+    path an <em>agent payload</em> would take is now closed end to end: a
+    unikernel written in Rust, compiled by the ordinary toolchain, booted by
+    Multiboot, receiving a swarm message over vsock — and shutting down
+    afterwards, which no VM had ever done.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>4a85896</dd></div>
+    <div class="fact"><dt>Master</dt><dd>2a1c5c9</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
     <div class="fact"><dt>Per sandbox</dt><dd class="good">0.157 MiB</dd></div>
     <div class="fact"><dt>Concurrent</dt><dd class="good">1,000</dd></div>
     <div class="fact"><dt>stop()</dt><dd class="good">0.7 ms</dd></div>
+    <div class="fact"><dt>Agent guest</dt><dd class="good">Rust</dd></div>
+    <div class="fact"><dt>Transport</dt><dd class="good">vsock</dd></div>
   </dl>
 </header>
 
@@ -488,15 +492,114 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     refusal verified at the recipient's console rather than at the sender's
     return value.
   </p>
+
+  <h3>A Multiboot guest was not silent; it was executing its own file header</h3>
+  <p>
+    The loader wrote every Multiboot image to 1&nbsp;MB verbatim and entered it
+    at its first byte. That is correct for a flat binary and wrong for anything
+    a linker emits: an ELF's first byte is <code>\x7fELF</code>, and
+    <code>7F 45</code> decodes as <code>jns +0x45</code>, so a compiled kernel
+    jumped 0x45 bytes into its own header and died quietly. Single-stepping the
+    old loader shows it exactly — <code>0x100000 → 0x100047</code>, then a
+    fault.
+  </p>
+  <p>
+    That is why every guest that ever ran here was hand-assembled and nothing
+    from a toolchain ever did. The specification gives an image two ways to say
+    where it belongs and neither was read.
+    <code>MultibootProtocol::place_kernel</code> now honours the header's own
+    address fields when flags bit 16 is set, and the ELF32 program headers
+    otherwise — segments at <code>p_paddr</code>, the tail past
+    <code>p_filesz</code> zeroed as <code>.bss</code> — falling back to
+    flat-at-1&nbsp;MB only for an image that says neither.
+    <code>examples/multiboot_probe</code> runs one guest program built all three
+    ways; against this commit all three speak, against its parent only the flat
+    one does.
+  </p>
+
+  <h3>A guest a compiler produced, and what it proves that assembly cannot</h3>
+  <p>
+    Every guest until now was hand-assembled bytes. That proves the hypervisor
+    works and proves nothing about whether anyone can <em>write</em> a guest for
+    it, which is the only question that matters for an agent payload.
+    <code>crates/hv2-unikernel</code> is a <code>no_std</code> Rust binary: no
+    scheduler, no init, no allocator, no syscall boundary, because there is
+    nothing on the other side of one.
+  </p>
+  <p>
+    It prints a greeting, then <code>EAX</code> and <code>EBX</code>. The
+    greeting proves the ELF was loaded by its program headers and entered at
+    <code>e_entry</code>. <code>EAX</code> proves more: the specification says a
+    bootloader leaves <code>0x2BADB002</code> there, and nothing but the loader
+    can put it there, so a guest reporting it was <strong>booted by the
+    protocol</strong> rather than jumped to. It reports
+    <code>magic 0x2BADB002 OK</code>.
+  </p>
+  <p>
+    Stable Rust, no nightly and no <code>-Z build-std</code>:
+    <code>i686-unknown-linux-musl</code> is the 32-bit x86 target rustup ships a
+    prebuilt <code>core</code> for, and nothing Linux survives — the crate links
+    with <code>rust-lld</code> and no C runtime. First output at
+    <strong>3.6&nbsp;ms median</strong> over nine boots, against 5.3&nbsp;ms for
+    the hand-assembled guest on the same host: being compiled costs nothing.
+  </p>
+
+  <h3>A swarm message that reaches an agent, over a socket rather than a wire</h3>
+  <p>
+    The host has had a complete virtio-vsock device for some time — split
+    virtqueues walked out of guest memory, connection state, credit accounting.
+    What it never had was a guest that could talk to it, so every delivery here
+    was a byte written to a serial port: real, one-directional, and not a
+    socket. <code>hv2-unikernel/src/vsock.rs</code> is the missing half — a
+    virtio-mmio bring-up, two split virtqueues, and the packet protocol.
+  </p>
+  <p>
+    <code>hv2-swarm --example vsock_swarm</code> boots three unikernels,
+    connects to each, and runs the command graph over them. A command from the
+    root reaches a worker and comes back echoed; a message between siblings is
+    refused <em>and does not arrive</em>, checked at the recipient, whose guest
+    echoed nothing and printed nothing; granting the edge makes the same bytes
+    arrive, which is what distinguishes an enforcing transport from a broken
+    one. Round trip 1.2&nbsp;ms.
+  </p>
+  <p>
+    The driver polls rather than taking interrupts — no IDT, no handler, a spin
+    on the used ring. That is only tolerable because of the fix at the top of
+    this page: before <code>stop()</code> could kick a vCPU out of
+    <code>KVM_RUN</code>, this driver would have been unstoppable rather than
+    merely busy. Three spinning guests now stop in 0.8&nbsp;ms.
+  </p>
+
+  <h3>Quotas that refuse, at the point every VM operation crosses</h3>
+  <p>
+    <code>AgentPolicy</code> carried <code>quotas</code> and
+    <code>rate_limits</code> and neither did anything: <code>allows</code>
+    consults <code>enabled</code> and <code>permissions</code>, so a sixth VM
+    was created under a <code>max_vms</code> of five and nothing ever
+    constructed the <code>QuotaExceeded</code> that exists for the purpose. The
+    machinery to count was never missing — <code>RateLimiter</code> was already
+    in <code>limits.rs</code>. Somewhere to put the count that a caller could
+    not go around was.
+  </p>
+  <p>
+    <code>GovernedVmHost</code> is a <code>VmHost</code> that wraps another one,
+    and a refused operation never reaches the inner host. Every test counts what
+    arrived at the host underneath rather than reading the governor's answer,
+    because a governor that refuses correctly and delegates anyway is
+    indistinguishable from a working one until the host runs out of memory. The
+    same shape as <code>Swarm::send</code>, for the same reason.
+  </p>
 </section>
 
 <section>
   <h2>Measured, against the thing we are measured against</h2>
   <p>
     CubeSandbox (Tencent, 11.7k stars, v0.7) publishes 60&nbsp;ms cold start and
-    under 5&nbsp;MB per sandbox. All HyperMachine figures below are from this
-    host on 3 September, on WSL2 with real KVM — a virtualised host, so the
-    proportions travel and the absolutes are not bare-metal comparable.
+    under 5&nbsp;MB per sandbox. Every HyperMachine figure below was measured on
+    this host, on WSL2 with real KVM — a virtualised host, so the proportions
+    travel and the absolutes are not bare-metal comparable. The compiled
+    unikernel, the guest channel and the quota rows are from 7 September; the
+    rest are unchanged from 3 September.
   </p>
 
   <div class="scroll">
@@ -508,6 +611,11 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
       <tr>
         <td>Cold start, unikernel</td><td>60 ms</td><td><strong>2.67 ms</strong></td>
         <td><span class="tag ran">ran</span> 9 runs, guest console verified</td>
+      </tr>
+      <tr>
+        <td>Cold start, compiled unikernel</td><td>60 ms</td><td><strong>3.6 ms</strong></td>
+        <td><span class="tag ran">ran</span> 9 boots, <code>no_std</code> Rust,
+            EAX carried the loader's magic</td>
       </tr>
       <tr>
         <td>Cold start, Linux guest</td><td>60 ms</td><td>1,014 ms</td>
@@ -528,6 +636,16 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
       <tr>
         <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
         <td><span class="tag ran">ran</span> 18 tests, and over 1,000 real VMs</td>
+      </tr>
+      <tr>
+        <td>Guest channel</td><td>—</td><td>vsock, guest-side driver</td>
+        <td><span class="tag ran">ran</span> 1.2 ms round trip; a refused message
+            did not arrive</td>
+      </tr>
+      <tr>
+        <td>Quota enforcement</td><td>—</td><td>per-process</td>
+        <td><span class="tag ran">ran</span> refused operations never reached the
+            host underneath</td>
       </tr>
       <tr>
         <td>Windows host</td><td>x86_64 Linux + KVM only</td><td>WHP backend</td>
@@ -557,8 +675,10 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     <thead><tr><th>Pillar</th><th>Where</th><th>Status</th></tr></thead>
     <tbody>
       <tr>
-        <td>Unikernel</td><td><code>BootSource::Raw</code></td>
-        <td><span class="tag ran">ran</span> 73 bytes executing, 2.67 ms</td>
+        <td>Unikernel</td>
+        <td><code>BootSource::Raw</code>, <code>::Multiboot</code></td>
+        <td><span class="tag ran">ran</span> 73 hand-assembled bytes at 2.67 ms;
+            a compiled <code>no_std</code> Rust guest at 3.6 ms</td>
       </tr>
       <tr>
         <td>Type-2 hosted</td><td><code>hv2-core</code>, KVM + WHP</td>
@@ -585,62 +705,69 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
 <section>
   <h2>Open, with diagnosis</h2>
 
-  <h3>1. A Multiboot guest launches and produces nothing</h3>
   <p>
-    <code>BootSource::Multiboot</code> is the entry a compiled unikernel needs —
-    flat 32-bit protected mode, paging off, <code>EAX</code>/<code>EBX</code> set
-    — and <code>Raw</code> only ever gives 16-bit real mode, which is why
-    everything so far has been hand-assembled. Load and entry addresses agree
-    (<code>0x100000</code>), provision and launch both succeed, and no output
-    appears. The investigation was abandoned when the hang it was chasing turned
-    out to be the <code>stop()</code> defect above, not anything about
-    Multiboot. This is the gate
-    on a real <code>no_std</code> Rust unikernel, and so on an actual agent
-    payload.
+    Four items that stood here have been closed and moved up the page. What is
+    left is one test that measures the wrong thing, one that asserts the wrong
+    thing, two claims that compile and have never run, and the honest edges of
+    what shipped.
+  </p>
+
+  <h3>1. <code>hv1</code> has never booted on hardware</h3>
+  <p>
+    The Type-1 hypervisor compiles — EL2, stage-2, vGIC — and that is the whole
+    of the evidence. Nothing on this host can change that: it needs bare metal
+    and a serial console, not a VM inside WSL2. Until then "uniquely supports
+    four models" is three models and a compilation result, and the pillars table
+    above says so.
   </p>
 
   <h3>2. <code>test_timer_frequency</code> fails on Linux</h3>
   <p>
     16 or 17 ticks against an expected 19, on a clean tree, with and without any
-    change from this session. A wall-clock-dependent test; the fix is virtual
+    change from any session. A wall-clock-dependent test; the fix is virtual
     time, not a wider tolerance.
   </p>
 
   <h3>3. <code>test_vm_creation_with_backend</code> fails on any host with KVM</h3>
   <p>
-    Found running the integration suite on this host, and unrelated to anything
-    in this session: the test asserts the selected backend is
-    <code>Tcg</code> or <code>Whpx</code>, which KVM never satisfies — so it has
-    passed everywhere it has been run and fails the moment a real Linux
-    hypervisor is present. What it means to check is that the VM has a backend at
-    all. Left alone rather than quietly rewritten, because deciding what it
-    should assert is a decision, not a typo.
+    The test asserts the selected backend is <code>Tcg</code> or
+    <code>Whpx</code>, which KVM never satisfies — so it has passed everywhere
+    it has been run and fails the moment a real Linux hypervisor is present.
+    What it means to check is that the VM has a backend at all. Left alone
+    rather than quietly rewritten, because deciding what it should assert is a
+    decision, not a typo.
   </p>
 
-  <h3>4. The swarm transport does not reach a guest agent</h3>
-  <p>
-    <code>guest_transport</code> writes into COM1 and the guest echoes, which is
-    real delivery. vsock is the right transport and is unreachable from a guest
-    this small — it needs protected mode and virtqueues, which is defect 1
-    again.
-  </p>
-
-  <h3>5. Roadmap E4, still open</h3>
-  <p>
-    <code>AgentPolicy</code>'s quotas and rate limits are recorded and consulted
-    by nothing. Where usage counters live — per session, per agent, across
-    restarts — is a design question. <code>hv2-swarm</code> was built the other
-    way round deliberately: one chokepoint, consulted inside it.
-  </p>
-
-  <h3>6. WHPX can be kicked, but has never been kicked</h3>
+  <h3>4. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
   <p>
     <code>WhpxBackend::kick_vcpu</code> cancels the run with
-    <code>WHvCancelRunVirtualProcessor</code>, and WHP latches a cancellation
-    against the next run if the vCPU is not executing, so it needs no equivalent
-    of the KVM path's <code>immediate_exit</code>. None of that has been
-    observed: WHP does not start on this host, so it is a compilation result and
-    is marked as one, the same way Type-1 is.
+    <code>WHvCancelRunVirtualProcessor</code>, and its Multiboot path now
+    receives a resolved entry point rather than treating one as a load address.
+    Neither has been observed: WHP does not start on this host
+    (<code>HRESULT 0x80370302</code>), so both are compilation results and are
+    marked as such, the same way Type-1 is.
+  </p>
+
+  <h3>5. The agent guest polls, and a polling guest costs a core</h3>
+  <p>
+    <code>hv2-unikernel</code>'s vsock driver spins on the used ring: no IDT, no
+    interrupt handler, no <code>hlt</code> while it waits. That is the simplest
+    thing that can work and it is why <code>vsock_swarm</code> runs three agents
+    rather than a thousand — <code>unikernel_swarm</code> is where the graph is
+    run at scale, with guests that halt. An interrupt handler is the fix, and it
+    is a real piece of work: an IDT, a PIC or APIC path, and a handler that
+    agrees with the device about the interrupt line.
+  </p>
+
+  <h3>6. Quota usage does not survive a restart</h3>
+  <p>
+    <code>GovernedVmHost</code> counts what it has admitted, in one process, for
+    as long as it exists. A process that comes back up has admitted nothing and
+    will admit a full quota again. Persisting it needs a store <em>and</em> an
+    answer to what happens when the store disagrees with the host's inventory,
+    which is a larger decision than the enforcement was. Recorded here rather
+    than in a doc comment nobody reads, since it is the same class of gap that
+    left the quotas unenforced in the first place.
   </p>
 </section>
 
@@ -683,40 +810,63 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
   <h2>What to do next</h2>
   <ol>
     <li>
-      <strong>Find why the Multiboot guest is silent.</strong> It is now the top
-      of the list, and it was only ever second because a hang was in front of
-      it. It gates a compiled unikernel and therefore an agent payload rather
-      than 73 bytes of hand-assembly — and it gates vsock, so it gates the swarm
-      transport too.
-    </li>
-    <li>
-      <strong>Then a <code>no_std</code> Rust unikernel</strong> targeting that
-      entry, and a vsock transport for <code>hv2-swarm</code> so a message
-      reaches an agent rather than a serial port.
-    </li>
-    <li>
       <strong>Boot <code>hv1</code> on hardware</strong>, or stop calling Type-1
-      a supported model.
+      a supported model. It is first because it is the only claim on the front
+      page of this project that has never been executed, and because it is the
+      one thing on this list that cannot be done on this machine — it needs bare
+      metal and a serial console, so it needs somebody to decide to provide
+      them.
+    </li>
+    <li>
+      <strong>Give the agent guest an interrupt handler</strong>, so a guest
+      waiting for work halts instead of spinning. Until then an agent costs a
+      host core while idle, which is the one number in this page that is worse
+      than a Linux container's.
+    </li>
+    <li>
+      <strong>Make the agent payload do something.</strong> The guest echoes,
+      which was the right thing to prove and is not a workload. What an agent
+      actually runs inside a unikernel — and whether it needs an allocator, a
+      heap, and therefore rather more than 8 KB of image — is the next real
+      design question, and it is now answerable by experiment rather than by
+      argument.
+    </li>
+    <li>
+      <strong>Fix the two failing tests</strong>, which are cheap and are
+      currently noise that a reader has to learn to ignore. Noise a reader
+      learns to ignore is how a real failure gets ignored too.
     </li>
   </ol>
   <p>
-    One habit is worth carrying forward, because it earned its place four times
-    now: <em>measure before claiming, and assert on the effect rather than the
-    verdict</em>. The memset was found by timing, not by reading. The
+    One habit is worth carrying forward, because it has now earned its place
+    six times: <em>measure before claiming, and assert on the effect rather than
+    the verdict</em>. The memset was found by timing, not by reading. The
     <code>run_single</code> ceiling was found because the fix that should have
     worked changed nothing. The first regression test written for the VM-id
-    collision passed against the broken code, which is how the second one came
-    to check entropy instead of luck. And the <code>stop()</code> hang was a
-    diagnosis before it was a fix: <code>wchan = kvm_vcpu_block</code> on an
-    otherwise idle process is what ruled out every explanation involving
-    scheduling and left only reachability.
+    collision passed against the broken code, which is how the second came to
+    check entropy instead of luck. The <code>stop()</code> hang was a diagnosis
+    before it was a fix: <code>wchan = kvm_vcpu_block</code> on an otherwise
+    idle process ruled out every explanation involving scheduling and left only
+    reachability.
+  </p>
+  <p>
+    Twice more today, and both were the same mistake in different clothes. The
+    Multiboot guest was reported as silent, and running the same program built
+    three ways showed that only the ELF and the address-carrying image were
+    silent — which turned a vague symptom into <code>jns +0x45</code>. And the
+    first timing of the compiled unikernel said 12&nbsp;ms, then 31&nbsp;ms for
+    a <em>smaller</em> guest, which is the shape of a number that means nothing:
+    the cost was a cold read of the image over a 9p mount, 9.0&nbsp;ms against
+    0.02&nbsp;ms for everything else provisioning does with it. One run measures
+    whatever else the machine was doing. A median over nine does not.
   </p>
 </section>
 
 <footer>
-  master 4a85896 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
-  metal · <code>stop()</code> returns in under a millisecond for every guest
-  shape · the silent Multiboot guest is the first thing to fix
+  master 2a1c5c9 · 0 open PRs · 0 open issues · measured on WSL2 + KVM, not bare
+  metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  message over vsock · <code>hv1</code> on hardware is the last unexecuted
+  claim
 </footer>
 
 </div>
