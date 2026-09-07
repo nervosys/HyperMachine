@@ -1,0 +1,37 @@
+# A Multiboot image of the Type-1 hypervisor, so it can be executed rather than
+# only compiled.
+#
+# Not a workspace member: it targets 64-bit bare metal and has no host build,
+# the same reason `hv1-boot` and `hv2-unikernel` are excluded. Build it from
+# this directory -- cargo reads `.cargo/config.toml` from the current directory
+# upward, not from the manifest.
+[package]
+name = "hv1-multiboot"
+version = "1.1.0"
+edition = "2021"
+authors = ["HyperMachine Contributors"]
+license = "AGPL-3.0-only OR LicenseRef-Commercial"
+repository = "https://github.com/nervosys/HyperMachine"
+description = "Boot hv1-core from a Multiboot loader, so the Type-1 hypervisor can be run"
+publish = false
+
+[[bin]]
+name = "hv1-multiboot"
+path = "src/main.rs"
+
+[dependencies]
+# The hypervisor under test. `intel` and `amd` only: no bootloader_api, which
+# needs the `bootloader` crate and therefore nightly.
+hv1-core = { path = "../hv1-core", default-features = false, features = ["intel", "amd"] }
+
+# hv1-core allocates, so a bare-metal image of it has to say where from. The
+# same allocator hv1-core already depends on, so this adds no new code to trust.
+linked_list_allocator = "0.10"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = "s"
+codegen-units = 1

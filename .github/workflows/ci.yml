@@ -489,6 +489,71 @@ jobs:
                   fi
                   echo "bootable: Multiboot header at 0x100000, entry $entry"
 
+    hv1-multiboot-build:
+        name: HV1 Multiboot Image (stable, x86_64-unknown-none)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            # Stable and no -Zbuild-std: `x86_64-unknown-none` is a real
+            # freestanding target with a prebuilt `core`. This is what makes an
+            # executable image of hv1-core possible at all -- `hv1-boot` needs
+            # the `bootloader` crate, which needs nightly, and is why the Type-1
+            # hypervisor went so long without ever being run.
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+              with:
+                  targets: x86_64-unknown-none
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      crates/hv1-multiboot/target
+                  key: ${{ runner.os }}-cargo-hv1-multiboot-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-hv1-multiboot-
+
+            # From its own directory: cargo reads .cargo/config.toml from the
+            # current directory upward rather than from the manifest, and this
+            # crate's target and linker script both live there.
+            - name: Build the hv1 Multiboot image
+              working-directory: crates/hv1-multiboot
+              run: cargo build --release
+
+            # Linking is not the claim. This image is an ELF64, which the
+            # Multiboot specification's ELF path cannot load -- that path is
+            # ELF32 -- so it must carry its own load addresses in the header,
+            # and an entry point past the header rather than at it. A build that
+            # silently lost either would present as a guest that boots and says
+            # nothing, with nothing pointing at this crate.
+            - name: Check it is a loadable Multiboot image
+              run: |
+                  set -euo pipefail
+                  elf=crates/hv1-multiboot/target/x86_64-unknown-none/release/hv1-multiboot
+
+                  class=$(readelf -h "$elf" | awk -F: '/Class:/ {print $2}' | xargs)
+                  [ "$class" = "ELF64" ] || { echo "expected ELF64, got $class" >&2; exit 1; }
+
+                  header=$(objdump -s -j .multiboot --stop-address=0x100020 "$elf" \
+                      | awk '/^ 10000/ {printf "%s%s%s%s", $2, $3, $4, $5}')
+
+                  # magic 0x1BADB002, then flags with bit 16 set: without that
+                  # bit the address fields that follow are not read at all.
+                  case "$header" in
+                      02b0ad1b00000100*) ;;
+                      *) echo "bad Multiboot magic or flags: ${header:0:16}" >&2; exit 1 ;;
+                  esac
+
+                  entry=$(readelf -h "$elf" | awk -F: '/Entry point/ {print $2}' | xargs)
+                  if [ "$entry" = "0x100000" ]; then
+                      echo "entry point is the header itself; the loader would execute it" >&2
+                      exit 1
+                  fi
+                  echo "loadable: ELF64, address fields present, entry $entry"
+
     hv1-arm-test:
         name: HV1 ARM64 Test (host)
         runs-on: ubuntu-latest

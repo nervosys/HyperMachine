@@ -181,9 +181,9 @@ async fn main() -> std::process::ExitCode {
     // Connect. The device sends REQUEST to the guest and the guest answers
     // RESPONSE; `state` becomes Established when that answer arrives.
     // The guard is dropped before the match, not held across the awaits in its
-     // arms: this is a `parking_lot` mutex the vsock device is also taken under
-     // from the delivery thread, and holding one across an await is how an
-     // executor deadlocks against itself.
+    // arms: this is a `parking_lot` mutex the vsock device is also taken under
+    // from the delivery thread, and holding one across an await is how an
+    // executor deadlocks against itself.
     let opened = device.lock().connect(HOST_PORT, GUEST_PORT);
     let id = match opened {
         Ok(id) => id,

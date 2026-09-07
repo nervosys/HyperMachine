@@ -33,7 +33,7 @@ members = [
 # hv2-unikernel is excluded for the same reason with a different cause: it is a
 # 32-bit bare-metal guest, so it has no host build at all. `hv2-core`'s
 # `rust_unikernel` example builds it by name and boots it.
-exclude = ["crates/hv1-boot", "crates/hv2-unikernel"]
+exclude = ["crates/hv1-boot", "crates/hv2-unikernel", "crates/hv1-multiboot"]
 
 resolver = "2"
 

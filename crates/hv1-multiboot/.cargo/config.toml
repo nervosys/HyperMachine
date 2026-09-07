@@ -1,0 +1,21 @@
+# 64-bit bare metal. Unlike `hv2-unikernel`'s 32-bit guest this is a real
+# freestanding target with a prebuilt `core`, so it needs no `-Z build-std`
+# either.
+[build]
+target = "x86_64-unknown-none"
+# Asserted against the repository root's config, which cargo also finds by
+# walking up from here and which resolves `target` relative to itself.
+target-dir = "target"
+
+[target.x86_64-unknown-none]
+linker = "rust-lld"
+rustflags = [
+    "-C", "linker-flavor=ld.lld",
+    "-C", "relocation-model=static",
+    # No `link-self-contained` and no soft-float flags: unlike the 32-bit Linux
+    # target the guest uses, `x86_64-unknown-none` is a real freestanding target
+    # -- it ships no C runtime objects to exclude and already disables SSE and
+    # the red zone in its own spec. Setting them by hand is rejected.
+    "-C", "link-arg=-Tlink.ld",
+    "-C", "link-arg=--build-id=none",
+]
