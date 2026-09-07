@@ -38,5 +38,8 @@ name = "vsock_swarm"
 [[example]]
 name = "tool_calls"
 
+[[example]]
+name = "agent_messages"
+
 [lints]
 workspace = true

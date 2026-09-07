@@ -85,11 +85,16 @@ static HEAP: LockedHeap = LockedHeap::empty();
 /// size in resident memory *per agent*, and a fleet pays for it a thousand
 /// times over.
 ///
-/// 64 KiB is enough for a request, a reply and the copies between them, and
-/// small enough that a thousand agents pay 64 MiB for the privilege. If an
-/// agent protocol ever needs more, the number to change is here and the cost of
-/// changing it is on this line.
-const HEAP_SIZE: usize = 64 * 1024;
+/// 256 KiB. It was 64, chosen when a heap cost its full size in resident
+/// memory per agent because the loader wrote zeros across `.bss`. It no longer
+/// does — `.bss` is a range the loader skips when the guest's memory already
+/// reads as zero — so a heap now costs the pages an agent actually touches, and
+/// this number bounds what an agent *may* use rather than what it does.
+///
+/// Measured at a hundred agents: 0.242 MiB each with 64 KiB, and the same with
+/// 256. The cost of the ceiling is now nearly nothing, which is the only reason
+/// to raise it.
+const HEAP_SIZE: usize = 256 * 1024;
 static mut HEAP_SPACE: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 
 /// What a Multiboot-compliant loader leaves in `EAX` before entering a kernel.
@@ -487,6 +492,8 @@ fn serve(device: &mut vsock::Vsock) -> ! {
                 // Everything else is echoed, as before.
                 if starts_with(&packet, b"do:") {
                     call_tool(device, &packet);
+                } else if starts_with(&packet, b"send:") {
+                    send_to_agent(device, &packet);
                 } else {
                     echo(device, &packet);
                 }
@@ -539,6 +546,32 @@ fn call_tool(device: &mut vsock::Vsock, packet: &vsock::Packet) {
     request.extend_from_slice(&payload_bytes(packet)[3..]);
 
     print("agent calls \"");
+    for byte in &request {
+        // SAFETY: COM1, as in `print`.
+        unsafe { outb(COM1, *byte) };
+    }
+    print("\"\n");
+
+    device.reply(&packet.header, vsock::op::RW, &request);
+}
+
+/// Ask to send a message to another agent.
+///
+/// `send:b:hello` becomes `to:b:hello`. The guest names a recipient and does
+/// not know whether it may reach one — the graph decides that outside, and an
+/// agent that could tell in advance would be an agent that could plan around
+/// the answer.
+///
+/// This is the direction that was missing. Messages have always been delivered
+/// *into* guests; until now a guest could only answer on its own connection,
+/// so "agents interacting" meant a host relaying on their behalf. An agent that
+/// cannot address another agent is not really in a swarm.
+fn send_to_agent(device: &mut vsock::Vsock, packet: &vsock::Packet) {
+    let mut request = Vec::with_capacity(packet.payload_len as usize + 3);
+    request.extend_from_slice(b"to:");
+    request.extend_from_slice(&payload_bytes(packet)[5..]);
+
+    print("agent sends \"");
     for byte in &request {
         // SAFETY: COM1, as in `print`.
         unsafe { outb(COM1, *byte) };
