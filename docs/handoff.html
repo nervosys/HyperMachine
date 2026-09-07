@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>76b586d</dd></div>
+    <div class="fact"><dt>Master</dt><dd>9f7fc51</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -777,6 +777,105 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     address instead of quietly rewriting a translation.
   </p>
 
+  <h3>A model costs a fleet once, not once each</h3>
+  <p>
+    The agents these unikernels are for run small language models with
+    task-specific tools, and talk to each other under the permission graph.
+    That changes the arithmetic that every figure on this page rests on. An
+    agent VM costs 0.221&nbsp;MiB because it holds nothing but its own code; an
+    agent that runs a model holds the model, and a 0.6-billion-parameter model
+    at four bits is around 350&nbsp;MB. A thousand private copies is 350&nbsp;GB,
+    and "a thousand agents on a node" does not survive contact with the thing
+    the agents are for.
+  </p>
+  <p>
+    They do not need private copies. Every agent in a fleet runs the <em>same</em>
+    weights, reads them and never writes them, which is exactly a shared
+    read-only mapping. Measured, a thousand agents against a 350&nbsp;MiB region:
+  </p>
+  <pre>region        : 350 MiB filled — resident grew 350.1 MiB
+read the ROM  : 1000 of 1000 read 0xa7 at 0xe0000000, write refused
+resident      : 526.9 MiB total, 176.9 MiB from the agents
+per agent     : 0.177 MiB
+if copied     : 1000 x 350 MiB would be 341.8 GiB
+saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
+  <p>
+    Every VM in this process is backed by host memory in this process, so
+    handing several VMs the same host address for a memory slot copies nothing:
+    the pages behind them are the same physical pages. Read-only is enforced by
+    the hardware and checked from inside the guest rather than asserted here —
+    every guest writes to the region, reads it back and reports whether the
+    write took, because one writable copy shared by a thousand agents is a
+    thousand agents able to rewrite each other's model.
+  </p>
+  <p>
+    The guests read it too, for the reason this page always gives: a region that
+    is mapped and unreadable costs exactly the same and is worth nothing. That
+    check earned itself immediately — an unmapped guest-physical address reads
+    as <code>0xFF</code> rather than as zero, so a guest reading nothing and a
+    guest reading a region of zeroes are indistinguishable without a marker.
+  </p>
+
+  <h3>What that settles about the architecture, and what it does not</h3>
+  <p>
+    One thing is now measured and the rest follows from it or is still open.
+    Keeping those apart is the point of this page.
+  </p>
+  <div class="scroll">
+  <table>
+    <caption>An agentic unikernel, decided and undecided</caption>
+    <thead><tr><th>Question</th><th>Where it stands</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Can a fleet afford a model at all?</td>
+        <td><span class="tag ran">ran</span> Yes. Weights shared read-only:
+            1,000 agents on one 350&nbsp;MiB model for 527&nbsp;MiB, 99.85%
+            saved, writes refused by hardware</td>
+      </tr>
+      <tr>
+        <td>What does an agent then cost?</td>
+        <td><span class="tag typed">open</span> Its KV cache, activations and
+            scratch — which is what decides density now, and is unmeasured.
+            0.177&nbsp;MiB is an agent holding nothing</td>
+      </tr>
+      <tr>
+        <td>Which architecture should the guest be?</td>
+        <td><span class="tag typed">open</span> It is 32-bit i686 today, chosen
+            because stable Rust ships a prebuilt <code>core</code> for it.
+            Inference wants AVX2 and 64-bit addressing, and
+            <code>hv1-multiboot</code> already shows the 64-bit shape</td>
+      </tr>
+      <tr>
+        <td>Does the guest need a heap?</td>
+        <td><span class="tag typed">open</span> Almost certainly. It has none;
+            <code>hv1-multiboot</code> carries a
+            <code>linked_list_allocator</code> over a static region and is the
+            worked example</td>
+      </tr>
+      <tr>
+        <td>Where do an agent's tools run?</td>
+        <td><span class="tag typed">open</span> In the guest, or proxied to the
+            host over vsock. The permission model for the second already exists
+            — it is the capability check in <code>Swarm::send</code>, which
+            gates a message on the sender holding the capability, not only the
+            recipient</td>
+      </tr>
+      <tr>
+        <td>Can agents talk to each other under a policy?</td>
+        <td><span class="tag ran">ran</span> Yes, and it is enforced rather than
+            described: refused messages do not arrive, checked at the recipient</td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+  <p>
+    The one that most wants measuring next is the second, because it is the
+    number that has replaced 0.221&nbsp;MiB as the thing density depends on. A
+    context window is not free and a KV cache is per-agent by definition — it is
+    the one part of an agent that <em>cannot</em> be shared, which is precisely
+    why it is now the interesting number.
+  </p>
+
   <h3>Two failing tests, and neither was flaky</h3>
   <p>
     Both had been failing long enough to be read as background. That is the
@@ -872,6 +971,11 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
         <td>Idle cost per agent</td><td>—</td><td><strong>~0%</strong></td>
         <td><span class="tag ran">ran</span> 0.7% of one core across 1,000 idle
             agents, over 3 s</td>
+      </tr>
+      <tr>
+        <td>Model shared across a fleet</td><td>—</td><td><strong>once</strong></td>
+        <td><span class="tag ran">ran</span> 1,000 agents on one 350 MiB region,
+            99.85% of a copied fleet saved, writes refused</td>
       </tr>
       <tr>
         <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
@@ -1061,12 +1165,19 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
       being hidden by a hypervisor underneath.
     </li>
     <li>
-      <strong>Make an agent do something.</strong> A thousand of them boot,
-      connect, sleep and echo, which is the plumbing proved end to end and is
-      not yet a workload. What an agent actually runs inside a unikernel — and
-      whether that needs a heap, and therefore rather more than nine kilobytes
-      of image — is the next real design question, and it is now answerable by
-      experiment rather than by argument.
+      <strong>Measure what an agent costs once it holds a context.</strong>
+      Weights are shared, so the number density now depends on is the KV cache
+      and activations — the one part of an agent that cannot be shared, and
+      therefore the one that decides how many fit. 0.177&nbsp;MiB is an agent
+      holding nothing.
+    </li>
+    <li>
+      <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
+      Rust ships a prebuilt <code>core</code> for that target, which was the
+      right call for a guest that writes to a serial port and the wrong one for
+      a guest that does arithmetic: inference wants AVX2 and more than 4&nbsp;GB
+      of address space. <code>hv1-multiboot</code> is already the worked example
+      of the 64-bit shape, heap included.
     </li>
     <li>
       <strong>Make the agent payload do something.</strong> The guest echoes,
@@ -1121,8 +1232,9 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
 </section>
 
 <footer>
-  master 76b586d · 0 open PRs · 0 open issues · suite green · 1,000 agents over
-  vsock at 0.7% of a core idle · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
+  master 9f7fc51 · 0 open PRs · 0 open issues · suite green · 1,000 agents over
+  vsock at 0.7% of a core idle, sharing one 350&nbsp;MiB model · measured on
+  WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
   a machine
 </footer>
