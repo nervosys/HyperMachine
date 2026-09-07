@@ -30,40 +30,42 @@
 //! once it is touched, which is the right trade for weights that every agent
 //! reads constantly and the wrong one for something read rarely.
 
+use std::alloc::{alloc_zeroed, dealloc, Layout};
 use std::sync::Arc;
 
 use crate::{Error, Result};
 
+/// The page size a memory slot is described in. KVM refuses a region whose
+/// size or address is not a multiple of one.
+const PAGE: u64 = 4096;
+
 /// A read-only region of host memory that many guests can be shown.
 ///
-/// Owns its mapping and unmaps it on drop, so the region outlives every VM that
-/// borrows it only if the caller keeps the [`Arc`] alive — which is the
-/// intended shape: build one, hand it to every agent, drop it when the fleet
-/// is gone.
+/// Owns its allocation and frees it on drop, so the region outlives every VM
+/// that borrows it only if the caller keeps the [`Arc`] alive — which is the
+/// intended shape: build one, hand it to every agent, drop it when the fleet is
+/// gone.
 #[derive(Debug)]
 pub struct SharedRom {
     ptr: *mut u8,
-    len: usize,
+    layout: Layout,
 }
 
-// SAFETY: the mapping is owned exclusively by this value, and everything a
+// SAFETY: the allocation is owned exclusively by this value, and everything a
 // caller can do with it after construction is read the base address and length.
-// Guests write to it only through KVM, which refuses.
+// Guests write to it only through the hypervisor, which refuses.
 unsafe impl Send for SharedRom {}
 unsafe impl Sync for SharedRom {}
 
 impl SharedRom {
-    /// Allocate `len` bytes and fill them from `contents`.
-    ///
-    /// Rounded up to a page, because a memory slot is described in pages and
-    /// KVM refuses a size that is not a multiple of one.
+    /// Allocate a page-aligned region and fill it from `contents`.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::Memory`] if the mapping cannot be made.
+    /// Returns [`Error::Memory`] if the allocation fails.
     pub fn from_bytes(contents: &[u8]) -> Result<Arc<Self>> {
         let rom = Self::zeroed(contents.len() as u64)?;
-        // SAFETY: `rom.ptr` is a fresh mapping of at least `contents.len()`
+        // SAFETY: `rom.ptr` is a fresh allocation of at least `contents.len()`
         // bytes and nothing else refers to it yet.
         unsafe {
             std::ptr::copy_nonoverlapping(contents.as_ptr(), rom.ptr, contents.len());
@@ -73,38 +75,35 @@ impl SharedRom {
 
     /// Allocate `len` bytes of zeroed, page-aligned host memory.
     ///
+    /// Rounded up to a page. `alloc_zeroed` rather than a zeroed `Vec`: for a
+    /// region this size the allocator hands back fresh anonymous pages, which
+    /// the kernel already guarantees are zero and faults in lazily, so nothing
+    /// is resident until it is touched. Writing the zeros by hand would make a
+    /// 350 MiB region cost 350 MiB before a guest had read a byte of it — the
+    /// same mistake that once made this project's cold start 474 times slower
+    /// than it needed to be.
+    ///
     /// # Errors
     ///
-    /// Returns [`Error::Memory`] if the mapping cannot be made.
+    /// Returns [`Error::Memory`] if `len` is zero or the allocation fails.
     pub fn zeroed(len: u64) -> Result<Arc<Self>> {
-        const PAGE: u64 = 4096;
         if len == 0 {
             return Err(Error::Memory("a shared region of zero bytes".into()));
         }
         let len = len.div_ceil(PAGE) * PAGE;
 
-        // SAFETY: a fresh anonymous mapping. The result is checked before use.
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len as usize,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-                -1,
-                0,
-            )
-        };
-        if ptr == libc::MAP_FAILED {
+        let layout = Layout::from_size_align(len as usize, PAGE as usize)
+            .map_err(|e| Error::Memory(format!("a shared region of {len} bytes: {e}")))?;
+
+        // SAFETY: `layout` has a non-zero size, checked above.
+        let ptr = unsafe { alloc_zeroed(layout) };
+        if ptr.is_null() {
             return Err(Error::Memory(format!(
-                "could not map {len} bytes for a shared region: {}",
-                std::io::Error::last_os_error()
+                "could not allocate {len} bytes for a shared region"
             )));
         }
 
-        Ok(Arc::new(Self {
-            ptr: ptr as *mut u8,
-            len: len as usize,
-        }))
+        Ok(Arc::new(Self { ptr, layout }))
     }
 
     /// Host address of the first byte. What a memory slot is told.
@@ -114,28 +113,28 @@ impl SharedRom {
 
     /// Size of the region, in bytes and a multiple of a page.
     pub fn len(&self) -> u64 {
-        self.len as u64
+        self.layout.size() as u64
     }
 
     /// Whether the region is empty. Never true — [`Self::zeroed`] refuses a
     /// zero length — and present because clippy asks for it next to `len`.
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.layout.size() == 0
     }
 
     /// The contents, for a host that wants to check what it published.
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: `ptr` maps `len` readable bytes for as long as `self` lives.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { std::slice::from_raw_parts(self.ptr, self.layout.size()) }
     }
 }
 
 impl Drop for SharedRom {
     fn drop(&mut self) {
-        // SAFETY: `ptr` and `len` describe this value's own mapping, made in
-        // `zeroed` and not unmapped anywhere else.
+        // SAFETY: `ptr` and `layout` describe this value's own allocation, made
+        // in `zeroed` with this layout and freed nowhere else.
         unsafe {
-            libc::munmap(self.ptr as *mut libc::c_void, self.len);
+            dealloc(self.ptr, self.layout);
         }
     }
 }
