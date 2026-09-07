@@ -98,6 +98,20 @@ core::arch::global_asm!(
     ".section .text.entry",
     ".global _start",
     "_start:",
+    // Align the stack before calling into Rust. The loader leaves ESP wherever
+    // it likes, and the i386 SysV ABI requires ESP to be 16-byte aligned at the
+    // point of a `call` — so that with the return address pushed, a callee's
+    // frame is aligned. LLVM relies on that: with SSE enabled it spills to the
+    // stack with `movaps`, which faults with #GP on a misaligned address.
+    //
+    // Nothing here needed it until this guest started doing arithmetic worth
+    // vectorising. It presented as a #GP several function calls deep, long
+    // after boot, in code that had been running for weeks.
+    //
+    // Two arguments are pushed after the alignment, so eight bytes are taken
+    // off first to land back on a boundary at the `call`.
+    "  and esp, -16",
+    "  sub esp, 8",
     "  push ebx", // second argument: the multiboot_info address
     "  push eax", // first argument:  the bootloader magic
     "  call kernel_main",
@@ -193,6 +207,14 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
         let marker = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
         print("rom ");
         print_hex(marker as u32);
+        if marker == 0xFF {
+            // Nothing mapped, so the write test below is skipped and this line
+            // needs its own ending.
+            print(
+                "
+",
+            );
+        }
 
         // Only if something is actually mapped there. An unmapped
         // guest-physical address reads as all ones, and *writing* one exits to
@@ -426,10 +448,20 @@ fn serve(device: &mut vsock::Vsock) -> ! {
                 print_bytes(packet.payload_at, packet.payload_len);
                 print("\"\n");
 
-                // Echo the payload straight back out of the receive buffer.
-                // Nothing is copied because there is nowhere to copy to: this
-                // guest has no allocator.
-                echo(device, &packet);
+                // A task beginning `do:` is answered with a tool call. This is
+                // where a model would decide which tool to reach for and with
+                // what arguments; here it is one rule, and saying so matters —
+                // nothing in this guest is deciding anything. What is under
+                // test is the path a decision would travel and the permission
+                // that governs it, neither of which cares how the decision was
+                // reached.
+                //
+                // Everything else is echoed, as before.
+                if starts_with(&packet, b"do:") {
+                    call_tool(device, &packet);
+                } else {
+                    echo(device, &packet);
+                }
             }
             vsock::op::SHUTDOWN => {
                 device.reply(&packet.header, vsock::op::RST, &[]);
@@ -444,6 +476,58 @@ fn serve(device: &mut vsock::Vsock) -> ! {
 
         device.release(&packet);
     }
+}
+
+/// Whether a received payload begins with `prefix`.
+fn starts_with(packet: &vsock::Packet, prefix: &[u8]) -> bool {
+    if (packet.payload_len as usize) < prefix.len() {
+        return false;
+    }
+    for (i, want) in prefix.iter().enumerate() {
+        // SAFETY: inside the receive buffer the device wrote, bounded by the
+        // length it reported.
+        let got = unsafe { core::ptr::read_volatile((packet.payload_at + i as u32) as *const u8) };
+        if got != *want {
+            return false;
+        }
+    }
+    true
+}
+
+/// Answer a task with a tool call.
+///
+/// `do:hostname` becomes `tool:hostname`. The host decides whether this agent
+/// is allowed to invoke that tool; the guest does not know and is not told in
+/// advance, which is the point — an agent that could tell would be an agent
+/// that could plan around the answer.
+fn call_tool(device: &mut vsock::Vsock, packet: &vsock::Packet) {
+    const PREFIX: &[u8] = b"tool:";
+    let mut request = [0u8; 128];
+
+    let mut n = 0;
+    for byte in PREFIX {
+        request[n] = *byte;
+        n += 1;
+    }
+
+    // Everything after `do:`, which is the tool's name and its arguments.
+    let skip = 3;
+    let mut i = skip;
+    while i < packet.payload_len && n < request.len() {
+        // SAFETY: inside the receive buffer, bounded by its reported length.
+        request[n] = unsafe { core::ptr::read_volatile((packet.payload_at + i) as *const u8) };
+        n += 1;
+        i += 1;
+    }
+
+    print("agent calls \"");
+    for byte in request.iter().take(n) {
+        // SAFETY: COM1, as in `print`.
+        unsafe { outb(COM1, *byte) };
+    }
+    print("\"\n");
+
+    device.reply(&packet.header, vsock::op::RW, &request[..n]);
 }
 
 /// Send a packet's payload back to the host, reading it from the receive

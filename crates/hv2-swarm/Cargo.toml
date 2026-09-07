@@ -35,5 +35,8 @@ name = "guest_transport"
 [[example]]
 name = "vsock_swarm"
 
+[[example]]
+name = "tool_calls"
+
 [lints]
 workspace = true
