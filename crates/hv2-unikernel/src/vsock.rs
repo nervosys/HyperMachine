@@ -498,15 +498,8 @@ impl Vsock {
     }
 
     /// Acknowledge a device interrupt, if one is pending.
-    ///
-    /// Nothing here handles interrupts, but the device raises them and an
-    /// unacknowledged one leaves `INTERRUPT_STATUS` set forever. Clearing it
-    /// costs one register write and keeps the device's own state honest.
     pub fn ack_interrupt(&self) {
-        let pending = reg_read(reg::INTERRUPT_STATUS);
-        if pending != 0 {
-            reg_write(reg::INTERRUPT_ACK, pending);
-        }
+        ack_interrupt_raw();
     }
 }
 
@@ -536,4 +529,18 @@ fn setup_queue(queue: u32, desc: u32, avail: u32, used: u32) -> Result<(), InitE
 /// Tell the device a queue has new entries.
 fn notify(queue: u32) {
     reg_write(reg::QUEUE_NOTIFY, queue);
+}
+
+/// Acknowledge a device interrupt, without a driver in hand.
+///
+/// The interrupt handler runs with no access to the `Vsock` value — it is
+/// reached through the IDT, not called — and this is the only thing it needs to
+/// do to the device. The virtio line is level-triggered and held until
+/// `InterruptACK` is written, so a handler that skips this is re-entered
+/// immediately and forever.
+pub fn ack_interrupt_raw() {
+    let pending = reg_read(reg::INTERRUPT_STATUS);
+    if pending != 0 {
+        reg_write(reg::INTERRUPT_ACK, pending);
+    }
 }

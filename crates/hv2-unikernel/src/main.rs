@@ -60,6 +60,7 @@ compile_error!(concat!(
     "target and the linker script.",
 ));
 
+mod interrupts;
 mod mem;
 mod vsock;
 
@@ -128,7 +129,7 @@ unsafe fn outb(port: u16, value: u8) {
 }
 
 /// Write a string to COM1, one byte at a time.
-fn print(text: &str) {
+pub(crate) fn print(text: &str) {
     for byte in text.as_bytes() {
         // SAFETY: COM1 is a serial data port; the machine model routes it to a
         // device that only records what it is given.
@@ -137,7 +138,7 @@ fn print(text: &str) {
 }
 
 /// Write `value` as eight hex digits.
-fn print_hex(value: u32) {
+pub(crate) fn print_hex(value: u32) {
     const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
     print("0x");
     for shift in (0..8).rev() {
@@ -176,6 +177,14 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             print("vsock cid ");
             print_hex(device.cid() as u32);
             print("\n");
+
+            // An IDT and a programmed PIC, so the loop below can sleep. Without
+            // them any interrupt is a triple fault, which is why this driver
+            // used to spin.
+            // SAFETY: called once, before anything relies on being woken.
+            unsafe { interrupts::init() };
+            print("idle mode: hlt\n");
+
             serve(&mut device)
         }
         Err(e) => {
@@ -205,15 +214,31 @@ fn serve(device: &mut vsock::Vsock) -> ! {
     loop {
         device.ack_interrupt();
 
+        // Interrupts off across the check. A device that raises its line
+        // between the ring being found empty and the CPU halting would
+        // otherwise be missed, and the guest would sleep until something else
+        // happened to wake it — the kind of bug that presents as occasional
+        // seconds of latency and nothing else.
+        // SAFETY: re-enabled below, on both paths.
+        unsafe { interrupts::disable() };
+
         let Some(packet) = device.recv() else {
-            // Nothing waiting. Spin rather than halt: there is no interrupt
-            // handler here, so a halted vCPU would never wake to look again.
-            // This costs a host core for as long as the guest runs, which is
-            // only survivable because `stop()` can now interrupt a vCPU that
-            // never leaves the guest on its own.
-            spin();
+            // Nothing waiting, so stop asking. A halted vCPU is a thread
+            // blocked in `KVM_RUN`, which is a thread the host never schedules:
+            // an idle agent costs a parked thread and no CPU at all.
+            //
+            // `sti; hlt` as one pair, never separated — `sti` does not take
+            // effect until after the instruction following it, so an interrupt
+            // cannot arrive between enabling them and halting.
+            // SAFETY: `interrupts::init` ran before this loop, so something can
+            // wake this CPU again.
+            unsafe { interrupts::wait_for_interrupt() };
             continue;
         };
+
+        // SAFETY: there is work in hand and the handler is not needed to find
+        // it; interrupts stay on while it is processed.
+        unsafe { interrupts::enable() };
 
         match packet.header.op {
             vsock::op::REQUEST => {
@@ -272,16 +297,6 @@ fn print_bytes(at: u32, len: u32) {
         let byte = unsafe { core::ptr::read_volatile((at + i) as *const u8) };
         // SAFETY: COM1, as in `print`.
         unsafe { outb(COM1, byte) };
-    }
-}
-
-/// Yield the pipeline between polls. `pause` is the instruction a spin loop is
-/// supposed to use: it does not exit to the host, so this stays a busy wait,
-/// but it stops the core burning quite as hard.
-fn spin() {
-    for _ in 0..1000 {
-        // SAFETY: `pause` has no operands and no effect but a scheduling hint.
-        unsafe { asm!("pause", options(nomem, nostack, preserves_flags)) };
     }
 }
 
