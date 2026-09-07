@@ -403,21 +403,25 @@ unsafe fn init_pic() {
     outb(PIC2_DATA, 0xFF);
 }
 
-/// Install the IDT, program the PIC, and enable interrupts.
+/// Install the fault handlers, and nothing else.
 ///
-/// After this the guest can `hlt` and expect to be woken.
+/// Called first, before anything that could fault — which is everything. A
+/// fault with no gate is a general protection fault, which also has no gate,
+/// which triple-faults the CPU and stops the console mid-word with no
+/// indication that anything went wrong.
+///
+/// That ordering is the lesson this guest has already learned once, and it was
+/// still wrong: the IDT went in with the device interrupts, after the code that
+/// reads the shared region. Building the guest for speed rather than size made
+/// the compiler emit SSE, SSE faulted because nothing had enabled it, and the
+/// result was silence — a fault reporter installed three functions too late.
 ///
 /// # Safety
 ///
-/// Called once, before anything relies on being interrupted.
-pub unsafe fn init() {
-    let handler = vsock_isr as *const () as u32;
+/// Called once, before anything else.
+pub unsafe fn install_fault_handlers() {
     let idt = core::ptr::addr_of_mut!(IDT);
 
-    // Every processor exception gets the reporting handler. Not because this
-    // guest can recover from any of them, but because a fault that says which
-    // fault and where is a diagnosis, and a fault with no gate at all is a
-    // triple fault and a console that stops mid-word.
     for (vector, &stub) in fault_stub_table.iter().enumerate() {
         (*idt)[vector] = Gate {
             offset_low: stub as u16,
@@ -428,6 +432,64 @@ pub unsafe fn init() {
         };
     }
 
+    let idtr = Idtr {
+        limit: (core::mem::size_of::<[Gate; 256]>() - 1) as u16,
+        base: idt as u32,
+    };
+    asm!("lidt [{}]", in(reg) &idtr, options(readonly, nostack, preserves_flags));
+}
+
+/// Turn on SSE, which this target's compiler assumes it may use.
+///
+/// `i686-unknown-linux-musl` has SSE2 in its baseline, so any loop the
+/// optimiser thinks is worth vectorising becomes `movdqa` and friends. On a CPU
+/// straight out of reset those raise #UD or #NM, because `CR0.EM` says there is
+/// no FPU to speak of and `CR4.OSFXSR` says the operating system has not
+/// promised to save the register file. Nothing had told this guest to promise
+/// anything.
+///
+/// Four bits, and every one of them is required:
+///
+/// - `CR0.EM` clear: there is a real FPU, do not trap to emulate one.
+/// - `CR0.MP` set: `WAIT`/`FWAIT` respects `TS`, which is the pair `EM` belongs to.
+/// - `CR4.OSFXSR` set: this guest can save and restore the SSE register file,
+///   which is true because it never context-switches.
+/// - `CR4.OSXMMEXCPT` set: unmasked SIMD exceptions arrive as #XM rather than
+///   as #UD, so a numeric fault reports itself as one.
+///
+/// # Safety
+///
+/// Called once, before any code the compiler may have vectorised.
+pub unsafe fn enable_sse() {
+    const CR0_MP: u32 = 1 << 1;
+    const CR0_EM: u32 = 1 << 2;
+    const CR4_OSFXSR: u32 = 1 << 9;
+    const CR4_OSXMMEXCPT: u32 = 1 << 10;
+
+    let mut cr0: u32;
+    asm!("mov {}, cr0", out(reg) cr0, options(nomem, nostack, preserves_flags));
+    cr0 &= !CR0_EM;
+    cr0 |= CR0_MP;
+    asm!("mov cr0, {}", in(reg) cr0, options(nomem, nostack, preserves_flags));
+
+    let mut cr4: u32;
+    asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack, preserves_flags));
+    cr4 |= CR4_OSFXSR | CR4_OSXMMEXCPT;
+    asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack, preserves_flags));
+}
+
+/// Program the PIC, point the device vector at its handler, and enable
+/// interrupts.
+///
+/// After this the guest can `hlt` and expect to be woken.
+///
+/// # Safety
+///
+/// Requires [`install_fault_handlers`] to have run.
+pub unsafe fn init() {
+    let handler = vsock_isr as *const () as u32;
+    let idt = core::ptr::addr_of_mut!(IDT);
+
     (*idt)[VSOCK_VECTOR] = Gate {
         offset_low: handler as u16,
         selector: CODE_SELECTOR,
@@ -435,12 +497,6 @@ pub unsafe fn init() {
         kind: GATE_INTERRUPT_32,
         offset_high: (handler >> 16) as u16,
     };
-
-    let idtr = Idtr {
-        limit: (core::mem::size_of::<[Gate; 256]>() - 1) as u16,
-        base: idt as u32,
-    };
-    asm!("lidt [{}]", in(reg) &idtr, options(readonly, nostack, preserves_flags));
 
     init_pic();
 

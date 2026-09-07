@@ -23,6 +23,12 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
-opt-level = "s"
+# Speed, not size. `opt-level = "s"` was right for a guest whose whole job was
+# to write to a serial port, and it forbids vectorisation — which measured as
+# 191 MiB/s through the one loop an inference workload is made of. An image a
+# few kilobytes larger is not a cost this project has ever had to care about;
+# the rate a guest can stream weights at is the ceiling on how fast an agent
+# can think.
+opt-level = 3
 lto = true
 codegen-units = 1

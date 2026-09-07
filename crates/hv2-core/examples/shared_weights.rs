@@ -107,6 +107,7 @@ async fn main() -> std::process::ExitCode {
     let mut region_mib = 256u64;
     let mut touch_mib = 0u32;
     let mut guest_mib = 64u64;
+    let mut sweep_mib = 0u32;
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
     while i < args.len() {
@@ -125,6 +126,10 @@ async fn main() -> std::process::ExitCode {
             }
             "--guest-mib" if i + 1 < args.len() => {
                 guest_mib = args[i + 1].parse().unwrap_or(guest_mib).max(32);
+                i += 1;
+            }
+            "--sweep-mib" if i + 1 < args.len() => {
+                sweep_mib = args[i + 1].parse().unwrap_or(sweep_mib);
                 i += 1;
             }
             other => {
@@ -168,6 +173,10 @@ async fn main() -> std::process::ExitCode {
         // touch. The region is the only thing every guest can already read, so
         // it is also the simplest place to put a parameter for them.
         std::ptr::write(base.add(4) as *mut u32, touch_mib);
+        // And how much of the region each should stream through an integer
+        // multiply-accumulate, which is the arithmetic a forward pass is made
+        // of.
+        std::ptr::write(base.add(8) as *mut u32, sweep_mib.min(region_mib as u32));
     }
     let after_region = rss_bytes().unwrap_or(0);
     println!(
@@ -217,12 +226,15 @@ async fn main() -> std::process::ExitCode {
     // ones rather than as zero — so `rom 0x000000FF` is the answer when nothing
     // is there, and only the marker distinguishes a region that was read from
     // one that was never mapped.
-    let expected = if touch_mib > 0 {
+    let expected = if sweep_mib > 0 {
+        "sweep done".to_string()
+    } else if touch_mib > 0 {
         format!("work 0x{touch_mib:08X}")
     } else {
         format!("rom 0x{:08X} write refused", MARKER)
     };
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let settle_started = Instant::now();
+    let deadline = Instant::now() + Duration::from_secs(600);
     let mut read_it = 0usize;
     while Instant::now() < deadline {
         read_it = 0;
@@ -237,6 +249,7 @@ async fn main() -> std::process::ExitCode {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
 
+    let settled = settle_started.elapsed();
     let after_agents = rss_bytes().unwrap_or(0);
     let agent_growth = after_agents.saturating_sub(after_region);
 
@@ -259,6 +272,27 @@ async fn main() -> std::process::ExitCode {
         "read the ROM  : {read_it} of {} read {MARKER:#04x} at {ROM_BASE:#x}, write refused",
         vms.len()
     );
+    if sweep_mib > 0 {
+        // Wall time from launch to the last guest reporting, which includes the
+        // boot and is therefore an over-estimate of the arithmetic alone. Said
+        // rather than corrected for: a per-agent figure this bounds from above
+        // is more useful than a tighter one nobody can check.
+        let swept = u64::from(sweep_mib) * 1024 * 1024 * vms.len() as u64;
+        let seconds = booted.as_secs_f64() + settled.as_secs_f64();
+        println!(
+            "swept         : {sweep_mib} MiB each, {:.2} GiB in total in {:.2} s — \
+             {:.2} GiB/s aggregate",
+            mib(swept) / 1024.0,
+            seconds,
+            mib(swept) / 1024.0 / seconds
+        );
+        println!(
+            "per agent     : {:.0} MiB/s, so one pass over a {} MiB model would take {:.2} s",
+            mib(swept) / seconds / vms.len() as f64,
+            region_mib,
+            region_mib as f64 / (mib(swept) / seconds / vms.len() as f64)
+        );
+    }
     if touch_mib > 0 {
         let per_agent = mib(agent_growth) / vms.len() as f64;
         println!(
@@ -268,6 +302,41 @@ async fn main() -> std::process::ExitCode {
             per_agent - f64::from(touch_mib)
         );
     }
+    // What the guests reported of themselves. Cycles per byte, not bytes per
+    // second: the wall clock here covers boot, console I/O and the host's own
+    // polling, so a rate derived from it is an under-estimate of the arithmetic
+    // by several times. Cycles per byte needs no clock frequency and measures
+    // only the loop.
+    if sweep_mib > 0 {
+        let console = vms[0].console_output().await;
+        if let Some(rest) = console.split("cold ").nth(1) {
+            let mut parts = rest.split(" warm ");
+            let cold = parts
+                .next()
+                .and_then(|v| u64::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok());
+            let warm = parts.next().and_then(|v| {
+                u64::from_str_radix(
+                    v.split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .trim_start_matches("0x"),
+                    16,
+                )
+                .ok()
+            });
+            if let (Some(cold), Some(warm)) = (cold, warm) {
+                let bytes = f64::from(sweep_mib) * 1024.0 * 1024.0;
+                println!(
+                    "arithmetic    : {:.2} cycles/byte cold, {:.2} warm — a {} MiB model is {:.1} Gcycles",
+                    cold as f64 / bytes,
+                    warm as f64 / bytes,
+                    region_mib,
+                    (warm as f64 / bytes) * region_mib as f64 * 1024.0 * 1024.0 / 1e9
+                );
+            }
+        }
+    }
+
     println!(
         "resident      : {:.1} MiB total, {:.1} MiB attributable to the agents",
         mib(after_agents.saturating_sub(baseline)),

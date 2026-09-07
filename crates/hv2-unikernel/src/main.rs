@@ -151,6 +151,16 @@ pub(crate) fn print_hex(value: u32) {
 /// and a guest that prints the magic proves it was *booted*.
 #[no_mangle]
 pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
+    // Before anything at all. Everything below this line can fault, and a fault
+    // with no handler is a console that stops mid-word — which is how the first
+    // two attempts at an interrupt handler presented, and how the first attempt
+    // at vectorised arithmetic presented after that.
+    // SAFETY: called once, first.
+    unsafe {
+        interrupts::install_fault_handlers();
+        interrupts::enable_sse();
+    }
+
     print("HYPERMACHINE RUST UNIKERNEL\n");
 
     print("magic ");
@@ -184,22 +194,29 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
         print("rom ");
         print_hex(marker as u32);
 
-        // And then try to write it. A shared region is only safe to share if
-        // the hardware refuses this: one writable copy read by a thousand
-        // agents is a thousand agents able to rewrite each other's model. The
-        // write is expected to be dropped and the byte to be unchanged, and
-        // reporting the read-back is what turns "should be read-only" into
-        // something a host can check.
-        // SAFETY: the write is the thing under test; the region is either
-        // read-only, in which case the hardware refuses it, or unmapped, in
-        // which case it goes nowhere.
-        unsafe { core::ptr::write_volatile(ROM_BASE as *mut u8, 0x00) };
-        // SAFETY: as for the read above.
-        let after = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
-        if after == marker {
-            print(" write refused\n");
-        } else {
-            print(" WRITE TOOK EFFECT\n");
+        // Only if something is actually mapped there. An unmapped
+        // guest-physical address reads as all ones, and *writing* one exits to
+        // a host that has no device at that address — which stops the VM. The
+        // write below is a test of read-only enforcement, and there is nothing
+        // to enforce when there is nothing there.
+        if marker != 0xFF {
+            // And then try to write it. A shared region is only safe to share if
+            // the hardware refuses this: one writable copy read by a thousand
+            // agents is a thousand agents able to rewrite each other's model. The
+            // write is expected to be dropped and the byte to be unchanged, and
+            // reporting the read-back is what turns "should be read-only" into
+            // something a host can check.
+            // SAFETY: the write is the thing under test; the region is either
+            // read-only, in which case the hardware refuses it, or unmapped, in
+            // which case it goes nowhere.
+            unsafe { core::ptr::write_volatile(ROM_BASE as *mut u8, 0x00) };
+            // SAFETY: as for the read above.
+            let after = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
+            if after == marker {
+                print(" write refused\n");
+            } else {
+                print(" WRITE TOOK EFFECT\n");
+            }
         }
 
         // The host may also have left a working-set size in the region: how
@@ -229,6 +246,41 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 print("work ");
                 print_hex(work_mib);
                 print("\n");
+            }
+
+            // And how many mebibytes of the shared region to stream through an
+            // integer multiply-accumulate, which is the shape of the only loop
+            // that matters in a quantised forward pass: read a weight, multiply
+            // it by an activation, add it to a running sum. A token costs one
+            // pass over every weight, so the rate at which a guest can do this
+            // is the ceiling on how fast an agent can think.
+            //
+            // SAFETY: four more bytes of the same read-only region.
+            let sweep_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 8) as *const u32) };
+            if sweep_mib > 0 {
+                // Twice, reported separately. The first pass over a shared
+                // region pays a nested-paging fault per page — one VM exit
+                // each, 65,536 of them for 256 MiB — and that is paid once for
+                // the life of the VM, not once per token. A single-pass number
+                // conflates a one-off mapping cost with the steady-state rate,
+                // and those answer different questions: how long an agent takes
+                // to warm up, and how fast it can then think.
+                let first = rdtsc();
+                let a = mac_sweep(ROM_BASE, sweep_mib);
+                let middle = rdtsc();
+                let b = mac_sweep(ROM_BASE, sweep_mib);
+                let last = rdtsc();
+
+                print("sweep done ");
+                print_hex(a ^ b);
+                print(" cold ");
+                print_hex((middle - first) as u32);
+                print(" warm ");
+                print_hex((last - middle) as u32);
+                print(
+                    "
+",
+                );
             }
         }
 
@@ -411,6 +463,54 @@ fn echo(device: &mut vsock::Vsock, packet: &vsock::Packet) {
         *byte = unsafe { core::ptr::read_volatile((packet.payload_at + i as u32) as *const u8) };
     }
     device.reply(&packet.header, vsock::op::RW, &scratch[..len]);
+}
+
+/// The time-stamp counter, for splitting one measurement into two.
+///
+/// Only ever used as a ratio. Turning cycles into seconds needs the TSC
+/// frequency, which this guest has no way to learn and does not need: the host
+/// knows how long both passes took together, and the ratio says how to divide
+/// it between them.
+fn rdtsc() -> u64 {
+    let (low, high): (u32, u32);
+    // SAFETY: `rdtsc` has no operands and no side effects.
+    unsafe {
+        asm!("rdtsc", out("eax") low, out("edx") high, options(nomem, nostack, preserves_flags));
+    }
+    (u64::from(high) << 32) | u64::from(low)
+}
+
+/// Multiply-accumulate over `mib` mebibytes starting at `base`.
+///
+/// The inner loop of a quantised forward pass, with the parts that do not
+/// affect its cost left out: each byte is a weight, it is multiplied by a
+/// varying activation, and the products are summed. Nothing here is a real
+/// model — there is no matrix shape, no attention and no softmax — but the
+/// memory traffic and the arithmetic per byte are the same, and those are what
+/// decide how long a token takes.
+///
+/// Deliberately not optimised into a memcmp: the accumulator is returned and
+/// printed, so the compiler cannot drop the loop, and the multiplier changes
+/// each iteration so it cannot fold it into a shift.
+fn mac_sweep(base: u32, mib: u32) -> u32 {
+    let bytes = mib.saturating_mul(1024 * 1024) as usize;
+
+    // A slice and an ordinary loop, not `read_volatile` per byte. The volatile
+    // version measured 155 MiB/s, which is a number about load-store
+    // serialisation rather than about inference: it forbids the compiler from
+    // using a wide load, and a real kernel would use the widest it has. The
+    // region does not change under us, so an ordinary read is also the correct
+    // one.
+    // SAFETY: inside the shared read-only region, whose length the host chose
+    // to cover this sweep. It is mapped for the life of the VM and no guest can
+    // write it.
+    let weights = unsafe { core::slice::from_raw_parts(base as *const u8, bytes) };
+
+    let mut sum: u32 = 0;
+    for (i, &w) in weights.iter().enumerate() {
+        sum = sum.wrapping_add(u32::from(w).wrapping_mul(i as u32 & 0xFF));
+    }
+    sum
 }
 
 /// Write `len` bytes of guest memory at `at` to the console.
