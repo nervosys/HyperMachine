@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>9988812</dd></div>
+    <div class="fact"><dt>Master</dt><dd>8cd070e</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -902,14 +902,26 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
     assume it is being used that way. So a heap costs its full size in resident
     memory <em>per agent</em>, whether or not that agent allocates.
   </p>
-  <pre>100 agents, before : 0.231 MiB each
-100 agents, after  : 0.302 MiB each</pre>
+  <pre>100 agents, before the heap : 0.231 MiB each
+100 agents, with the heap   : 0.302 MiB each
+100 agents, now             : 0.242 MiB each</pre>
   <p>
-    0.07&nbsp;MiB of that is the heap and its page rounding. At a thousand
-    agents it is 64&nbsp;MiB of resident memory for an allocator most of them
-    will barely touch — the sort of cost that is invisible at three agents and
-    decides the shape of a fleet at a thousand. The number to change is one
-    constant, and the cost of changing it is written on that line.
+    The third line is the fix, and it arrived an hour after the problem. The
+    zeros were never wrong, only unnecessary — and only the caller can know
+    which, because guest RAM is zero for a freshly created VM and is not zero
+    for a snapshot restored into existing memory. The loader had no way to tell
+    those apart, so now it is told: <code>.bss</code> is carried as a
+    <em>range that must read as zero</em> rather than a block of zeros, and
+    <code>guest_memory_starts_zeroed</code> asks the backend which case it is
+    in. The default is <code>false</code>; KVM answers <code>true</code> because
+    its <code>create_vm</code> maps guest RAM with <code>MAP_ANONYMOUS</code>
+    and <code>load_boot</code> is the first thing to write to it.
+  </p>
+  <p>
+    So the 64&nbsp;KiB heap costs about 0.011&nbsp;MiB per agent — the pages it
+    actually touches — rather than its full size. Which also means the heap
+    could now be considerably larger for very little, and that is a decision
+    with numbers under it rather than a guess.
   </p>
 
   <h3>How fast a guest can stream weights, and what that rules out</h3>
@@ -991,9 +1003,10 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
       </tr>
       <tr>
         <td>Does the guest need a heap?</td>
-        <td><span class="tag ran">ran</span> Yes, and it has one: 64 KiB, which
-            costs 0.07 MiB per agent because the loader zero-fills
-            <code>.bss</code>. Image 23 KB, still readable end to end</td>
+        <td><span class="tag ran">ran</span> Yes, and it has one: 64 KiB costing
+            0.011 MiB per agent, once the loader stopped writing a
+            <code>.bss</code> the guest's memory already satisfied. Image 23 KB,
+            still readable end to end</td>
       </tr>
       <tr>
         <td>Where do an agent's tools run?</td>
@@ -1338,12 +1351,11 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
       a rule standing in for a decision.
     </li>
     <li>
-      <strong>Stop paying for <code>.bss</code> that nobody touches.</strong>
-      The loader zero-fills it because guest RAM is only reliably zero for a
-      fresh VM, and that is the right default — but a fresh VM's memory
-      <em>is</em> zero, and the loader is not told which case it is in. Saying
-      so would make a heap cost nothing until an agent allocates, which at a
-      thousand agents is 64&nbsp;MiB back.
+      <strong>Decide how big the guest's heap should be</strong>, now that one
+      costs the pages it touches rather than its size. 64&nbsp;KiB was chosen
+      when it was expensive. An agent protocol with arguments, results and a
+      conversation in it probably wants more, and the constraint that used to
+      make that a hard call has gone.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1406,7 +1418,7 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
 </section>
 
 <footer>
-  master 9988812 · 0 open PRs · 0 open issues · suite green · a fleet costs the
+  master 8cd070e · 0 open PRs · 0 open issues · suite green · a fleet costs the
   model once plus what each agent touches · a tool is a permission, and a
   refused one does not run · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
