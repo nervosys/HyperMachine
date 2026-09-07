@@ -156,7 +156,7 @@ jobs:
         uses: azure/setup-kubectl@v5
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Configure Kubernetes context
         uses: azure/k8s-set-context@v5
@@ -211,7 +211,7 @@ jobs:
         uses: azure/setup-kubectl@v5
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Configure Kubernetes context
         uses: azure/k8s-set-context@v5
