@@ -292,7 +292,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>8cd070e</dd></div>
+    <div class="fact"><dt>Master</dt><dd>d6bf1de</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -885,6 +885,40 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
     do the deciding.
   </p>
 
+  <h3>An agent addresses another agent</h3>
+  <p>
+    Every message on this page so far travelled <em>into</em> a guest. The host
+    decided to send it, the graph was consulted on the host's behalf, and the
+    guest could only answer on its own connection. That proves a transport and
+    is not a swarm: an agent that cannot address another agent is not
+    interacting with anything, it is being talked to.
+  </p>
+  <pre>a asks        : send to "b", 17 bytes
+refused       : ok — siblings, no grant, and b's guest never saw it
+granted       : ok — b's guest received it</pre>
+  <p>
+    The refusal is checked at the recipient's console, inside the recipient's
+    VM, and the same message is sent again once the edge is granted — so a
+    silent recipient cannot be mistaken for a broken transport. Without that
+    second half a swarm whose delivery had simply failed would score identically
+    to one that was enforcing.
+  </p>
+  <p>
+    The guest's half is one rule: <code>send:b:hello</code> becomes
+    <code>to:b:hello</code>. It names a recipient and does not learn whether it
+    may reach one, which is deliberate — an agent that could tell in advance is
+    an agent that can plan around the answer.
+  </p>
+  <p>
+    <strong>The first run of this looked like a leak, and was not.</strong> The
+    example read the guest's replies with <code>peek</code>, which does not
+    consume, so the second request arrived concatenated to the first and carried
+    the refused text inside a payload that <em>was</em> permitted. It presented
+    exactly as the graph delivering something it had refused. A demonstration
+    that has to be right about a refusal cannot read its evidence with a
+    function that keeps the evidence around.
+  </p>
+
   <h3>A heap, and the reason .bss is not free here</h3>
   <p>
     The guest had no allocator, which is why a tool request was assembled in a
@@ -1016,8 +1050,10 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
       </tr>
       <tr>
         <td>Can agents talk to each other under a policy?</td>
-        <td><span class="tag ran">ran</span> Yes, and it is enforced rather than
-            described: refused messages do not arrive, checked at the recipient</td>
+        <td><span class="tag ran">ran</span> Both directions. Into a guest, and
+            now <em>from</em> one: an agent names a recipient, the graph
+            decides, and a refused message is absent from the recipient's own
+            console</td>
       </tr>
     </tbody>
   </table>
@@ -1131,6 +1167,11 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
         <td>Model shared across a fleet</td><td>—</td><td><strong>once</strong></td>
         <td><span class="tag ran">ran</span> 1,000 agents on one 350 MiB region,
             99.85% of a copied fleet saved, writes refused</td>
+      </tr>
+      <tr>
+        <td>Agent-initiated message</td><td>—</td><td><strong>enforced</strong></td>
+        <td><span class="tag ran">ran</span> refused between siblings and absent
+            from the recipient; delivered once the edge was granted</td>
       </tr>
       <tr>
         <td>Tool call, capability-gated</td><td>—</td><td><strong>enforced</strong></td>
@@ -1351,11 +1392,12 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
       a rule standing in for a decision.
     </li>
     <li>
-      <strong>Decide how big the guest's heap should be</strong>, now that one
-      costs the pages it touches rather than its size. 64&nbsp;KiB was chosen
-      when it was expensive. An agent protocol with arguments, results and a
-      conversation in it probably wants more, and the constraint that used to
-      make that a hard call has gone.
+      <strong>Give the agent protocol a shape.</strong> It is four prefixes
+      parsed by hand — <code>do:</code>, <code>send:</code>, <code>tool:</code>,
+      <code>to:</code> — with no framing, no request ids and no way to have two
+      things outstanding at once. That was the right amount of protocol for
+      proving each path exists and is the wrong amount for an agent that has a
+      conversation while a tool call is pending.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1418,7 +1460,7 @@ tool ran      : 1 time(s), for 2 agents that asked</pre>
 </section>
 
 <footer>
-  master 8cd070e · 0 open PRs · 0 open issues · suite green · a fleet costs the
+  master d6bf1de · 0 open PRs · 0 open issues · suite green · a fleet costs the
   model once plus what each agent touches · a tool is a permission, and a
   refused one does not run · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
   message over vsock · Type-1 hosts a guest, nested, and has still never run on
