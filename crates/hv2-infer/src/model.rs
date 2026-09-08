@@ -318,8 +318,23 @@ impl<'a> Session<'a> {
     }
 
     /// How many positions this conversation holds.
+    ///
+    /// Also the position the next token goes at, which is what makes a second
+    /// turn a continuation rather than a new conversation.
     pub fn len(&self) -> usize {
         self.filled
+    }
+
+    /// Forget everything, keeping the allocations.
+    ///
+    /// The scratch buffers stay; only the conversation goes. An agent whose
+    /// context is dropped and immediately refilled should not pay for a
+    /// hundred and twenty-eight thousand floats again.
+    pub fn forget(&mut self) {
+        for cache in self.keys.iter_mut().chain(self.values.iter_mut()) {
+            cache.clear();
+        }
+        self.filled = 0;
     }
 
     /// Whether it holds none.

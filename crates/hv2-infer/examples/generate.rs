@@ -23,7 +23,7 @@
 
 use std::time::Instant;
 
-use hv2_infer::{generate, Model, Session};
+use hv2_infer::{ask, Model, Session};
 
 /// A question whose answer is not a matter of opinion, so that "it worked" is
 /// checkable rather than a judgement about prose.
@@ -40,7 +40,11 @@ fn main() -> std::process::ExitCode {
         eprintln!("Any Llama-architecture GGUF in Q8_0, F16 or F32.");
         return std::process::ExitCode::FAILURE;
     };
-    let question = args.get(1).map_or(QUESTION, String::as_str);
+    let questions: Vec<&str> = if args.len() > 1 {
+        args[1..].iter().map(String::as_str).collect()
+    } else {
+        vec![QUESTION]
+    };
     let checking = args.len() < 2;
 
     let started = Instant::now();
@@ -74,20 +78,33 @@ fn main() -> std::process::ExitCode {
         model.cache_bytes_per_token()
     );
     println!();
-    println!("question      : {question}");
-
     let mut session = Session::open(&model);
+    let mut last = String::new();
     let asked = Instant::now();
-    let answer = match generate(&model, &mut session, question, 32) {
-        Ok(answer) => answer,
-        Err(e) => {
-            eprintln!("generate      : FAILED — {e}");
-            return std::process::ExitCode::FAILURE;
-        }
-    };
+    // Every question after the first continues the same session, so a follow-up
+    // is a follow-up: the model attends over the earlier turns, which are
+    // already in the cache and are not read again.
+    for question in &questions {
+        println!();
+        println!("you           : {question}");
+        let turn = Instant::now();
+        last = match ask(&model, &mut session, question, 32) {
+            Ok(answer) => answer,
+            Err(e) => {
+                eprintln!("generate      : FAILED — {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        println!(
+            "model         : {}   [{:.1} s, context now {} tokens]",
+            last.trim(),
+            turn.elapsed().as_secs_f64(),
+            session.len()
+        );
+    }
     let elapsed = asked.elapsed();
+    let answer = last;
 
-    println!("answer        : {}", answer.trim());
     println!();
     println!(
         "tokens        : {} in the conversation, {:.2} s — {:.1} ms per token",

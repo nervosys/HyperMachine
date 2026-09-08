@@ -47,13 +47,15 @@
 //! - [`tensor`] is the arithmetic: dequantise a row, dot it with a vector.
 //! - [`tokenizer`] is byte-level BPE, built from the vocabulary in the file.
 //! - [`model`] is the forward pass, and [`Session`] is one agent's conversation.
+//! - [`schedule`] is who gets it and when — a queue, a bound on how many passes
+//!   run at once, and a bound on how much context one agent may hold.
 //!
 //! # What is not
 //!
-//! Batching, speculative decoding, a KV cache that evicts, and every
-//! quantisation but `Q8_0` and the two float kinds. Nothing here is a serving
-//! stack; it is the smallest complete thing that turns weights into a token,
-//! which is what the measurements were waiting for.
+//! Batching several agents into one pass, speculative decoding, a cache that
+//! evicts, and every quantisation but `Q8_0` and the two float kinds. Nothing
+//! here is a serving stack; it is the smallest complete thing that turns
+//! weights into a token and then decides who may.
 //!
 //! ```no_run
 //! use hv2_infer::{Model, Session, generate};
@@ -66,23 +68,35 @@
 
 pub mod gguf;
 pub mod model;
+pub mod schedule;
 pub mod tensor;
 pub mod tokenizer;
 
 pub use gguf::{Error, Gguf};
 pub use model::{argmax, Model, Rope, Session, Shape};
+pub use schedule::{Limits, Refused, Scheduler, Served, Stats};
 pub use tokenizer::Tokenizer;
 
-/// Wrap a question in the turn markers this model family was tuned with.
+/// The tokens for one user turn, and the header that invites an answer.
 ///
-/// An instruction-tuned model given bare text continues it; given its own chat
-/// markers, it answers. The markers are looked up by name, so a model that does
-/// not have them falls back to the bare prompt rather than emitting the literal
-/// text of a marker it has no token for.
-pub fn chat_prompt(model: &Model, question: &str) -> Vec<u32> {
+/// `opening` adds the beginning-of-text marker, which belongs once at the start
+/// of a conversation and nowhere else. A second turn that repeated it would be
+/// telling the model the conversation had started twice.
+///
+/// The markers are looked up by name, so a model that does not have them falls
+/// back to the bare question rather than emitting the literal text of a marker
+/// it has no token for.
+pub fn chat_turn(model: &Model, question: &str, opening: bool) -> Vec<u32> {
+    /// What follows a role header before the turn's text. Named because it is
+    /// part of the template the model was tuned with, not whitespace anyone is
+    /// free to reformat.
+    const NEWLINES: &str = "\n\n";
+
     let mut ids = Vec::new();
-    if let Some(bos) = model.bos {
-        ids.push(bos);
+    if opening {
+        if let Some(bos) = model.bos {
+            ids.push(bos);
+        }
     }
 
     let start = model.tokenizer.id_of("<|start_header_id|>");
@@ -91,42 +105,52 @@ pub fn chat_prompt(model: &Model, question: &str) -> Vec<u32> {
 
     match (start, end, eot) {
         (Some(start), Some(end), Some(eot)) => {
-            let mut turn = |role: &str, text: &str| {
-                ids.push(start);
-                ids.extend(model.tokenizer.encode(role));
-                ids.push(end);
-                ids.extend(model.tokenizer.encode("\n\n"));
-                if !text.is_empty() {
-                    ids.extend(model.tokenizer.encode(text));
-                    ids.push(eot);
-                }
-            };
-            turn("user", question);
+            ids.push(start);
+            ids.extend(model.tokenizer.encode("user"));
+            ids.push(end);
+            ids.extend(model.tokenizer.encode(NEWLINES));
+            ids.extend(model.tokenizer.encode(question));
+            ids.push(eot);
             // The assistant's header with nothing after it: the model's turn
             // begins where the prompt ends, which is what makes it answer
             // rather than continue.
-            turn("assistant", "");
+            ids.push(start);
+            ids.extend(model.tokenizer.encode("assistant"));
+            ids.push(end);
+            ids.extend(model.tokenizer.encode(NEWLINES));
         }
         _ => ids.extend(model.tokenizer.encode(question)),
     }
     ids
 }
 
-/// Answer `question`, greedily, for at most `limit` tokens.
+/// Wrap a question as a whole conversation of one turn.
+pub fn chat_prompt(model: &Model, question: &str) -> Vec<u32> {
+    chat_turn(model, question, true)
+}
+
+/// Ask `question` in `session`, continuing whatever it already holds.
+///
+/// This is what makes an agent's second question a follow-up. The session's
+/// key/value cache already holds every token of the conversation so far, and
+/// the new turn is fed in at the position after them — so the model attends
+/// over the earlier turns without their being re-read, which is the entire
+/// reason a cache exists.
 ///
 /// Returns the text the model produced. Stops at a stop token, which is the
-/// difference between an answer and a model that keeps going until the limit.
-pub fn generate(
+/// difference between an answer and a model that runs to the limit.
+pub fn ask(
     model: &Model,
     session: &mut Session<'_>,
     question: &str,
     limit: usize,
 ) -> Result<String, Error> {
-    let prompt = chat_prompt(model, question);
-    let mut position = 0;
-    let mut logits = Vec::new();
+    let opening = session.is_empty();
+    let turn = chat_turn(model, question, opening);
 
-    for token in &prompt {
+    let mut position = session.len();
+    let mut logits = Vec::new();
+    for token in &turn {
         logits = session.forward(*token, position)?;
         position += 1;
     }
@@ -142,5 +166,25 @@ pub fn generate(
         position += 1;
     }
 
+    // Close the assistant's turn in the cache. Without this the next user turn
+    // is appended to an answer the model still believes it is in the middle of,
+    // and it reads as one run-on turn rather than two.
+    if let Some(eot) = model.tokenizer.id_of("<|eot_id|>") {
+        session.forward(eot, position)?;
+    }
+
     Ok(model.tokenizer.decode(&produced))
+}
+
+/// Answer `question` in a session, greedily, for at most `limit` tokens.
+///
+/// Kept as the one-shot spelling of [`ask`]. A caller with no conversation to
+/// continue has the same thing either way.
+pub fn generate(
+    model: &Model,
+    session: &mut Session<'_>,
+    question: &str,
+    limit: usize,
+) -> Result<String, Error> {
+    ask(model, session, question, limit)
 }
