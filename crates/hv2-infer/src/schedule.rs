@@ -572,8 +572,7 @@ impl<'m> Scheduler<'m> {
                         // steps it already sat through happened, and a
                         // re-queued request that reported zero would say the
                         // failure had cost it nothing.
-                        let queued_at_step =
-                            inner.stats.steps.saturating_sub(lane.waited_steps);
+                        let queued_at_step = inner.stats.steps.saturating_sub(lane.waited_steps);
                         inner.pending.push_back(Waiting {
                             ticket: lane.ticket,
                             agent: lane.agent,

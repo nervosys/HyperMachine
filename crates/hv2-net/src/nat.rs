@@ -413,7 +413,6 @@ fn write_ipv4_addr(frame: &mut [u8], offset: usize, addr: Ipv4Addr) {
 
 /// RFC 1071 internet checksum: ones'-complement sum of 16-bit words,
 /// folded to 16 bits, then complemented.
-#[allow(clippy::chunks_exact_to_as_chunks)] // `as_chunks` is nightly-only; this stays on stable.
 fn internet_checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     let mut chunks = data.chunks_exact(2);

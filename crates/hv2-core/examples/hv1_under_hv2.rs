@@ -240,8 +240,7 @@ async fn main() -> std::process::ExitCode {
     // ratio, over the same window. One timer shared between them could not
     // produce two different counts, and a hypervisor that ran them in sequence
     // rather than interleaved could not produce this ratio.
-    let its_own_timer =
-        console.contains("4 ticks on the first processor and 3 on the second");
+    let its_own_timer = console.contains("4 ticks on the first processor and 3 on the second");
     // And that it arrived while the guest was *running*. The guest's wait loop
     // is `pause; jmp`, not `hlt`, so it never leaves — the only way the count
     // moves is if hv1's own timer fired underneath it and the interception of

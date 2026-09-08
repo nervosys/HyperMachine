@@ -1557,6 +1557,39 @@ hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by<
   </p>
 
   <div class="callout stop">
+    <h3>And the sweep that checks all of it was not checking rustfmt</h3>
+    <p>
+      Every Rust edit in this stretch of work was made by script &mdash; python
+      substituting into source files &mdash; and that produces code
+      <code>rustfmt</code> rejects: a <code>let</code> binding that now fits on
+      one line, a closure that no longer needs wrapping. Three violations across
+      three files accumulated before anything checked, and
+      <code>cargo fmt --all -- --check</code> is a CI job, so those commits would
+      have failed there while the local sweep called itself green.
+    </p>
+    <p>
+      The sweep runs it first now, before the slow parts, and clippy runs with
+      <code>--all-targets</code> rather than against one example &mdash; the
+      narrow form misses examples and tests, which is exactly where scripted
+      edits land. Eighth instrument, and the first one that was not measuring
+      anything: it was simply not there.
+    </p>
+    <p>
+      <strong>And widening clippy immediately found that the CI job was
+      failing.</strong> <code>crates/hv2-net/src/nat.rs</code> carried
+      <code>#[allow(clippy::chunks_exact_to_as_chunks)]</code> &mdash; a lint
+      name that does not exist, so it raises <code>unknown_lints</code>, and CI
+      runs <code>cargo clippy --workspace --all-targets -- -D warnings</code>.
+      Both the repository and CI take <code>channel = "stable"</code>, so it is
+      the same command against the same channel and the warning is
+      deterministic: that job has been red. The suppression was dead &mdash;
+      removing it leaves clippy silent, so it was never suppressing anything
+      &mdash; and it was five commits old and nothing local looked at it,
+      because the local sweep had been running clippy against a single example.
+    </p>
+  </div>
+
+  <div class="callout stop">
     <h3>The way out exists in the architecture, and this platform does not deliver it</h3>
     <p>
       An NMI is not maskable. The local vector table's <em>timer</em> entry
@@ -2220,6 +2253,17 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       the answer is no, the scheduler is already right. If it is yes, the
       priority belongs in the graph that already decides who may ask at all, and
       the scheduler should read it rather than invent one.
+    </li>
+    <li>
+      <strong>Nothing automated runs the examples.</strong> CI runs
+      <code>cargo test</code> on Linux, Windows, macOS and ARM, plus rustfmt,
+      clippy and an MSRV check. It does not run a single one of the sixteen
+      examples &mdash; and the examples are where every claim on this page comes
+      from. hv1 hosting a guest, a model answering a sandbox, the queue
+      queueing: all of it is verified by one person on one machine, by hand,
+      because it needs <code>/dev/kvm</code>, a GGUF on a Linux filesystem, and
+      nested SVM. Anyone reading this list should know that the numbers above
+      have no automation behind them.
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is: 5,268 tests across 88 test

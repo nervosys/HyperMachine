@@ -1300,9 +1300,8 @@ impl KvmVcpu {
         // function means to set is set below; the ones it does not mention are
         // now KVM's rather than zero.
         let mut sregs = kvm_sregs::default();
-        kvm_get_sregs(vcpu_fd, &mut sregs).map_err(|e| {
-            Error::Hypervisor(format!("Failed to read special registers: {}", e))
-        })?;
+        kvm_get_sregs(vcpu_fd, &mut sregs)
+            .map_err(|e| Error::Hypervisor(format!("Failed to read special registers: {}", e)))?;
 
         // CS: base=0xFFFF0000, limit=0xFFFF, selector=0xF000
         sregs.cs.base = 0xFFFF0000;
