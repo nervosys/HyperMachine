@@ -35,7 +35,7 @@ use core::ptr::{read_volatile, write_volatile};
 ///
 /// A fixed address, agreed with the host rather than discovered: 3.25 GiB, above
 /// any conventional low-memory layout and below the 4 GiB line.
-const MMIO_BASE: u32 = 0xD000_0000;
+const MMIO_BASE: usize = 0xD000_0000;
 
 /// The host's context ID, fixed by the specification.
 pub const HOST_CID: u64 = 2;
@@ -102,7 +102,7 @@ const DESC_F_WRITE: u16 = 2;
 /// needs and keeps every ring inside one page.
 const QUEUE_SIZE: u16 = 8;
 /// Bytes per packet buffer: a header, plus room for a message.
-const BUF_SIZE: u32 = 4096;
+const BUF_SIZE: usize = 4096;
 
 /// Queue indices, fixed by the device.
 const RX_QUEUE: u32 = 0;
@@ -114,14 +114,14 @@ const TX_QUEUE: u32 = 1;
 /// a few kilobytes: nothing else in this guest allocates, so a static map is
 /// both sufficient and the only thing that could be verified by reading it.
 mod mem {
-    pub const RX_DESC: u32 = 0x0020_0000;
-    pub const RX_AVAIL: u32 = 0x0020_1000;
-    pub const RX_USED: u32 = 0x0020_2000;
-    pub const TX_DESC: u32 = 0x0020_3000;
-    pub const TX_AVAIL: u32 = 0x0020_4000;
-    pub const TX_USED: u32 = 0x0020_5000;
+    pub const RX_DESC: usize = 0x0020_0000;
+    pub const RX_AVAIL: usize = 0x0020_1000;
+    pub const RX_USED: usize = 0x0020_2000;
+    pub const TX_DESC: usize = 0x0020_3000;
+    pub const TX_AVAIL: usize = 0x0020_4000;
+    pub const TX_USED: usize = 0x0020_5000;
     /// Eight 4 KiB receive buffers.
-    pub const RX_BUFS: u32 = 0x0021_0000;
+    pub const RX_BUFS: usize = 0x0021_0000;
     /// Eight 4 KiB transmit buffers, one per ring slot.
     ///
     /// It was one buffer, reused, which was correct for a driver that sent one
@@ -141,7 +141,7 @@ mod mem {
     /// slot removes the dependence for 28 KiB more of the fixed map below —
     /// guest-physical addresses this driver claims, not image bytes, so the
     /// pages nothing writes to cost nothing resident.
-    pub const TX_BUFS: u32 = 0x0022_0000;
+    pub const TX_BUFS: usize = 0x0022_0000;
 }
 
 /// The 44-byte packet header.
@@ -167,7 +167,7 @@ pub struct Header {
 pub const HEADER_SIZE: usize = 44;
 
 impl Header {
-    fn write_to(&self, at: u32) {
+    fn write_to(&self, at: usize) {
         let mut w = Writer { at };
         w.u64(self.src_cid);
         w.u64(self.dst_cid);
@@ -181,7 +181,7 @@ impl Header {
         w.u32(self.fwd_cnt);
     }
 
-    fn read_from(at: u32) -> Self {
+    fn read_from(at: usize) -> Self {
         let mut r = Reader { at };
         Self {
             src_cid: r.u64(),
@@ -200,7 +200,7 @@ impl Header {
 
 /// A cursor that writes little-endian integers to guest physical memory.
 struct Writer {
-    at: u32,
+    at: usize,
 }
 
 impl Writer {
@@ -224,7 +224,7 @@ impl Writer {
 
 /// A cursor that reads little-endian integers from guest physical memory.
 struct Reader {
-    at: u32,
+    at: usize,
 }
 
 impl Reader {
@@ -253,13 +253,13 @@ fn reg_read(offset: u32) -> u32 {
     // SAFETY: `MMIO_BASE + offset` is inside the register window the host
     // registered for this VM. Every access is a naturally aligned 32-bit one,
     // which is what the transport accepts.
-    unsafe { read_volatile((MMIO_BASE + offset) as *const u32) }
+    unsafe { read_volatile((MMIO_BASE + offset as usize) as *const u32) }
 }
 
 /// Write a device register.
 fn reg_write(offset: u32, value: u32) {
     // SAFETY: as in `reg_read`.
-    unsafe { write_volatile((MMIO_BASE + offset) as *mut u32, value) }
+    unsafe { write_volatile((MMIO_BASE + offset as usize) as *mut u32, value) }
 }
 
 /// Why bring-up failed, in the words a reader would want.
@@ -295,7 +295,7 @@ pub struct Packet {
     /// Where the payload is, and how much of it there is. Left in the receive
     /// buffer rather than copied: there is no allocator here, and the caller
     /// reads it before the buffer is returned to the device.
-    pub payload_at: u32,
+    pub payload_at: usize,
     pub payload_len: u32,
 }
 
@@ -365,7 +365,7 @@ impl Vsock {
 
         // The guest CID is the first eight bytes of configuration space.
         let cid = Reader {
-            at: MMIO_BASE + reg::CONFIG,
+            at: MMIO_BASE + reg::CONFIG as usize,
         }
         .u64();
 
@@ -396,14 +396,14 @@ impl Vsock {
 
     /// Hand receive buffer `slot` to the device.
     fn post_rx(&mut self, slot: u16) {
-        let desc = mem::RX_DESC + u32::from(slot) * 16;
+        let desc = mem::RX_DESC + usize::from(slot) * 16;
         let mut w = Writer { at: desc };
-        w.u64(u64::from(mem::RX_BUFS + u32::from(slot) * BUF_SIZE));
-        w.u32(BUF_SIZE);
+        w.u64((mem::RX_BUFS + usize::from(slot) * BUF_SIZE) as u64);
+        w.u32(BUF_SIZE as u32);
         w.u16(DESC_F_WRITE);
         w.u16(0); // no chaining: one descriptor is one packet
 
-        let ring = mem::RX_AVAIL + 4 + u32::from(self.rx_avail % QUEUE_SIZE) * 2;
+        let ring = mem::RX_AVAIL + 4 + usize::from(self.rx_avail % QUEUE_SIZE) * 2;
         Writer { at: ring }.u16(slot);
         self.rx_avail = self.rx_avail.wrapping_add(1);
         // The index is published after the ring entry it refers to. On x86
@@ -430,13 +430,13 @@ impl Vsock {
             return None;
         }
 
-        let entry = mem::RX_USED + 4 + u32::from(self.rx_used_seen % QUEUE_SIZE) * 8;
+        let entry = mem::RX_USED + 4 + usize::from(self.rx_used_seen % QUEUE_SIZE) * 8;
         let mut r = Reader { at: entry };
         let slot = r.u32() as u16;
         let written = r.u32();
         self.rx_used_seen = self.rx_used_seen.wrapping_add(1);
 
-        let buf = mem::RX_BUFS + u32::from(slot) * BUF_SIZE;
+        let buf = mem::RX_BUFS + usize::from(slot) * BUF_SIZE;
         if written < HEADER_SIZE as u32 {
             // Not a packet. Give the buffer straight back rather than reading
             // a header that was never written.
@@ -451,14 +451,14 @@ impl Vsock {
 
         Some(Packet {
             header,
-            payload_at: buf + HEADER_SIZE as u32,
+            payload_at: buf + HEADER_SIZE,
             payload_len,
         })
     }
 
     /// Return a consumed receive buffer to the device.
     pub fn release(&mut self, packet: &Packet) {
-        let slot = ((packet.payload_at - HEADER_SIZE as u32 - mem::RX_BUFS) / BUF_SIZE) as u16;
+        let slot = ((packet.payload_at - HEADER_SIZE - mem::RX_BUFS) / BUF_SIZE) as u16;
         self.post_rx(slot);
         notify(RX_QUEUE);
     }
@@ -474,7 +474,7 @@ impl Vsock {
     /// length actually written, so the host reads a short frame rather than a
     /// frame whose header promises bytes that were never sent.
     pub fn reply(&mut self, to: &Header, op: u16, payload: &[u8]) {
-        let room = BUF_SIZE as usize - HEADER_SIZE;
+        let room = BUF_SIZE - HEADER_SIZE;
         let payload = &payload[..payload.len().min(room)];
         let header = Header {
             src_cid: self.cid,
@@ -489,32 +489,32 @@ impl Vsock {
             // driver can hold and `fwd_cnt` is what it has already consumed;
             // a host that never sees them stops sending once it believes the
             // window is full.
-            buf_alloc: BUF_SIZE,
+            buf_alloc: BUF_SIZE as u32,
             fwd_cnt: self.fwd_cnt,
         };
         // The slot this packet will occupy, and therefore the buffer that
         // belongs to it. Chosen before the header is written, because the
         // header goes into that buffer and not into a shared one.
         let slot = self.tx_avail % QUEUE_SIZE;
-        let buf = mem::TX_BUFS + u32::from(slot) * BUF_SIZE;
+        let buf = mem::TX_BUFS + usize::from(slot) * BUF_SIZE;
         header.write_to(buf);
 
-        let base = buf + HEADER_SIZE as u32;
+        let base = buf + HEADER_SIZE;
         for (i, byte) in payload.iter().enumerate() {
             // SAFETY: the transmit buffer is 4 KiB of guest RAM this program
             // owns, and the caller's payload is bounded by the receive buffer
             // it came from.
-            unsafe { write_volatile((base + i as u32) as *mut u8, *byte) };
+            unsafe { write_volatile((base + i) as *mut u8, *byte) };
         }
 
-        let desc = mem::TX_DESC + u32::from(slot) * 16;
+        let desc = mem::TX_DESC + usize::from(slot) * 16;
         let mut w = Writer { at: desc };
-        w.u64(u64::from(buf));
-        w.u32(HEADER_SIZE as u32 + payload.len() as u32);
+        w.u64(buf as u64);
+        w.u32((HEADER_SIZE + payload.len()) as u32);
         w.u16(0); // device-readable
         w.u16(0);
 
-        let ring = mem::TX_AVAIL + 4 + u32::from(slot) * 2;
+        let ring = mem::TX_AVAIL + 4 + usize::from(slot) * 2;
         Writer { at: ring }.u16(slot);
         self.tx_avail = self.tx_avail.wrapping_add(1);
         Writer {
@@ -532,7 +532,7 @@ impl Vsock {
 }
 
 /// Point one queue at its rings and mark it ready.
-fn setup_queue(queue: u32, desc: u32, avail: u32, used: u32) -> Result<(), InitError> {
+fn setup_queue(queue: u32, desc: usize, avail: usize, used: usize) -> Result<(), InitError> {
     reg_write(reg::QUEUE_SEL, queue);
     if reg_read(reg::QUEUE_NUM_MAX) < u32::from(QUEUE_SIZE) {
         return Err(InitError::QueueTooSmall);
@@ -543,11 +543,11 @@ fn setup_queue(queue: u32, desc: u32, avail: u32, used: u32) -> Result<(), InitE
     // below 4 GiB, so every high half is zero -- written anyway, because a
     // stale high half from a previous configuration would point the device at
     // memory that does not exist.
-    reg_write(reg::QUEUE_DESC_LOW, desc);
+    reg_write(reg::QUEUE_DESC_LOW, desc as u32);
     reg_write(reg::QUEUE_DESC_HIGH, 0);
-    reg_write(reg::QUEUE_DRIVER_LOW, avail);
+    reg_write(reg::QUEUE_DRIVER_LOW, avail as u32);
     reg_write(reg::QUEUE_DRIVER_HIGH, 0);
-    reg_write(reg::QUEUE_DEVICE_LOW, used);
+    reg_write(reg::QUEUE_DEVICE_LOW, used as u32);
     reg_write(reg::QUEUE_DEVICE_HIGH, 0);
 
     reg_write(reg::QUEUE_READY, 1);

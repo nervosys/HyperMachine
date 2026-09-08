@@ -1,27 +1,52 @@
-# The 32-bit x86 target for which stable Rust ships a prebuilt `core`. Nothing
-# Linux survives into the output: `-nostdlib` is implied by linking with
-# `rust-lld` directly rather than through a C compiler, and this crate is
-# `no_std`. The alternative is a custom target JSON with `-Z build-std`, which
-# would make an otherwise entirely stable binary need nightly.
+# 64-bit bare metal.
+#
+# This was `i686-unknown-linux-musl` — a Linux target used because it is the
+# 32-bit x86 target for which stable Rust ships a prebuilt `core`, with the
+# Linux parts linked away. That was the right call for a guest whose whole job
+# was writing to a serial port, and the wrong one for a guest that is supposed
+# to hold a context: 32 bits caps an agent's address space at 4 GiB, which is
+# below a single small model's weights plus its own working set.
+#
+# `x86_64-unknown-none` is a real freestanding target with a prebuilt `core`, so
+# unlike the 32-bit case there is nothing Linux to link away, and unlike a
+# custom target JSON it needs no `-Z build-std` and therefore no nightly. It
+# also disables SSE and the red zone in its own spec, which removes two of the
+# three defects the 32-bit guest hit: no `movaps` against a misaligned stack
+# slot, and no interrupt frame written over a leaf function's red zone.
+#
+# What it costs is vectorised arithmetic, and that cost is measured rather than
+# assumed — see `mac_sweep` in `main.rs` and the note in `Cargo.toml`.
 [build]
-target = "i686-unknown-linux-musl"
+target = "x86_64-unknown-none"
 # Asserted against the repository root's config, which cargo also finds by
 # walking up from here and which resolves `target` relative to itself -- so
 # without this the guest lands in the workspace's target directory, among host
-# artifacts, where the example that builds it does not think to look.
+# artifacts, where the examples that build it do not think to look.
 target-dir = "target"
 
-[target.i686-unknown-linux-musl]
-# `rust-lld` ships with the toolchain, so this needs no cross-compiler and no
-# 32-bit multilib on the host -- linking through `cc` would need both.
+[target.x86_64-unknown-none]
+# `rust-lld` ships with the toolchain, so this needs no cross-compiler on the
+# host -- linking through `cc` would need one.
 linker = "rust-lld"
 rustflags = [
     "-C", "linker-flavor=ld.lld",
-    # Without this rustc contributes musl's `crt1.o`, which defines its own
-    # `_start` and collides with ours. A unikernel wants no C runtime startup:
-    # the loader enters `_start` directly and there is no environment to set up.
-    "-C", "link-self-contained=no",
     "-C", "relocation-model=static",
+    # No `link-self-contained=no` and no soft-float flags, unlike the 32-bit
+    # Linux target this replaced: a freestanding target ships no C runtime
+    # objects to exclude and already sets those in its spec. Setting them by
+    # hand here is rejected.
+    # SSE back on. The target spec disables it and builds `core` soft-float,
+    # which is the right default for a freestanding kernel and the wrong one for
+    # a guest whose reason to be 64-bit is arithmetic: measured over the same
+    # 256 MiB sweep, scalar is 4.18 cycles/byte warm against 1.66 with SSE — a
+    # factor of 2.5 on the one loop a quantised forward pass is made of.
+    #
+    # It is not free. Nothing enables SSE on a CPU coming out of reset, so
+    # `interrupts::enable_sse` has to run before the first vectorised
+    # instruction, and a `movaps` against a misaligned stack slot is a #GP.
+    # Both of those cost the 32-bit guest a debugging session each; the fault
+    # reporter installed first is what makes them one line instead.
+    "-C", "target-feature=+sse,+sse2",
     "-C", "link-arg=-Tlink.ld",
     "-C", "link-arg=--build-id=none",
 ]

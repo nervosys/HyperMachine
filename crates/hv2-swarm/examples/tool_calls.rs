@@ -32,7 +32,7 @@
 //! cargo run --release -p hv2-swarm --example tool_calls
 //! ```
 //!
-//! Needs `/dev/kvm` and the `i686-unknown-linux-musl` target.
+//! Needs `/dev/kvm` and the `x86_64-unknown-none` target.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -46,7 +46,7 @@ use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, V
 use hv2_core::{BootSource, VMConfig, VM};
 use hv2_swarm::{AgentId, Capability, Swarm};
 
-const GUEST_TARGET: &str = "i686-unknown-linux-musl";
+const GUEST_TARGET: &str = "x86_64-unknown-none";
 const HOST_PORT: u32 = 1024;
 const GUEST_PORT: u32 = 5000;
 

@@ -10,8 +10,8 @@
 //!
 //! 1. **A PIC that is programmed.** KVM's in-kernel 8259 comes up unprogrammed,
 //!    and an unprogrammed 8259 delivers IRQ 0-7 as vectors 8-15, which on any
-//!    32-bit CPU are processor exceptions. The remap is not a nicety; without
-//!    it a disk interrupt arrives as a double fault.
+//!    x86 CPU are processor exceptions. The remap is not a nicety; without it a
+//!    disk interrupt arrives as a double fault.
 //! 2. **An IDT** with a gate for the vector the device raises.
 //! 3. **A handler** that acknowledges the device and then the PIC, in that
 //!    order. The virtio line is level-triggered and is held until
@@ -21,6 +21,21 @@
 //!
 //! The saving is the whole cost: a halted vCPU is a thread blocked in
 //! `KVM_RUN`, which is a thread the scheduler never runs.
+//!
+//! # What moving to 64 bits changed here
+//!
+//! An IDT gate is sixteen bytes rather than eight, because an offset is sixty-
+//! four bits rather than thirty-two. A handler returns with `iretq`. There is
+//! no `pusha`, so the nine caller-saved registers are pushed by name.
+//!
+//! And two of the three defects the 32-bit version of this file cost are gone
+//! by construction rather than by being fixed. `iret` versus `iretd` — the
+//! 16-bit form assembling silently against a 32-bit frame — has no equivalent
+//! here, since `iretq` is spelled differently from both. And nothing needs to
+//! enable SSE, because `x86_64-unknown-none` disables it in the target spec, so
+//! there is no compiler-emitted `movaps` to fault on a misaligned stack slot.
+//! The stack is still aligned before every call, because the ABI still says so
+//! and because being right by accident is how the first one was found.
 
 use core::arch::{asm, global_asm};
 
@@ -47,31 +62,62 @@ const PIC2_DATA: u16 = 0xA1;
 /// End-of-interrupt.
 const PIC_EOI: u8 = 0x20;
 
-/// The code selector the Multiboot loader's GDT puts our code in. Flat 32-bit
-/// code at entry 1, so selector 8.
+/// The code selector this guest is running under.
+///
+/// Not the loader's any more. The Multiboot loader's GDT has no 64-bit code
+/// descriptor in it, so `boot.rs` loads one of its own and far-jumps through
+/// entry 1 of it — selector 8, which happens to be the same number for an
+/// entirely different reason than it was in 32-bit mode.
 const CODE_SELECTOR: u16 = 0x08;
 
-/// Present, ring 0, 32-bit interrupt gate. An *interrupt* gate rather than a
+/// Present, ring 0, 64-bit interrupt gate. An *interrupt* gate rather than a
 /// trap gate: it clears IF on entry, so a handler cannot be interrupted by the
 /// line it is in the middle of acknowledging.
-const GATE_INTERRUPT_32: u8 = 0x8E;
+const GATE_INTERRUPT_64: u8 = 0x8E;
 
 /// One IDT entry, in the layout the CPU reads.
+///
+/// Sixteen bytes in long mode, against eight in protected mode. The extra eight
+/// are the top half of the offset and a reserved word — a table of the 32-bit
+/// shape is not a smaller table, it is a table whose second entry the CPU reads
+/// as the first one's high bits.
 #[repr(C, packed)]
 #[derive(Clone, Copy, Default)]
 struct Gate {
     offset_low: u16,
     selector: u16,
-    zero: u8,
+    /// Interrupt-stack-table index, or zero for "keep using the current stack".
+    ///
+    /// Zero here, and correct because this guest never changes privilege level
+    /// and its stack is large and guarded. A kernel that took a fault on a bad
+    /// stack would need one of these; this one has nowhere else to go anyway.
+    ist: u8,
     kind: u8,
-    offset_high: u16,
+    offset_mid: u16,
+    offset_high: u32,
+    reserved: u32,
+}
+
+impl Gate {
+    /// A gate pointing at `handler`.
+    fn to(handler: u64) -> Self {
+        Self {
+            offset_low: handler as u16,
+            selector: CODE_SELECTOR,
+            ist: 0,
+            kind: GATE_INTERRUPT_64,
+            offset_mid: (handler >> 16) as u16,
+            offset_high: (handler >> 32) as u32,
+            reserved: 0,
+        }
+    }
 }
 
 /// What `lidt` takes.
 #[repr(C, packed)]
 struct Idtr {
     limit: u16,
-    base: u32,
+    base: u64,
 }
 
 /// The table. 256 entries so that any vector at all lands somewhere defined —
@@ -80,43 +126,57 @@ struct Idtr {
 static mut IDT: [Gate; 256] = [Gate {
     offset_low: 0,
     selector: 0,
-    zero: 0,
+    ist: 0,
     kind: 0,
+    offset_mid: 0,
     offset_high: 0,
+    reserved: 0,
 }; 256];
 
 // The handler's outer half. Written in assembly because a Rust `extern "C"`
-// function returns with `ret` and an interrupt handler must return with `iret`,
-// which also restores EFLAGS and re-enables interrupts. `pusha`/`popa` save the
-// eight general-purpose registers, since the interrupted code is entitled to
-// find them as it left them.
+// function returns with `ret` and an interrupt handler must return with
+// `iretq`, which also restores RFLAGS and re-enables interrupts.
 //
-// The alignment is not decoration. The i386 SysV ABI requires ESP to be
-// 16-byte aligned at a `call`, and this target's `core` is compiled with SSE2,
-// so a compiler-emitted `movaps` against a stack slot faults with #GP on a
-// misaligned one. An interrupt frame is twelve bytes and `pusha` is another
-// thirty-two, so the stack at this point is aligned only by luck. Without the
-// `and`, this handler faulted the first time it ran — which presented as the
-// console stopping mid-word, three frames away from anything to do with
-// interrupts.
+// There is no `pusha` in long mode, so the caller-saved registers are pushed by
+// name: the interrupted code is entitled to find them as it left them, and the
+// Rust function called below is entitled to clobber every one of them.
+//
+// The alignment is not decoration. The SysV AMD64 ABI wants RSP 16-byte aligned
+// at a `call`, and a long-mode interrupt frame is five eight-byte words, so the
+// stack here is aligned only by luck. Nothing in this build emits `movaps`
+// against a stack slot — the target disables SSE — but the 32-bit version of
+// this file faulted on exactly that, and an alignment that holds because of a
+// target flag is one that stops holding when the flag changes.
 global_asm!(
     r#"
     .section .text
     .global vsock_isr
 vsock_isr:
-    pusha
-    mov ebp, esp
-    and esp, -16
+    push rax
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
     call vsock_interrupt
-    mov esp, ebp
-    popa
-    // `iretd`, not `iret`. In Intel syntax -- which is what `asm!` and
-    // `global_asm!` use -- bare `iret` is the 16-bit form and assembles with a
-    // 0x66 prefix, so it pops a 16-bit IP/CS/FLAGS off a 32-bit interrupt
-    // frame and returns to a garbage selector. That presented as #GP with
-    // error code 0x10 at the `iret` itself, which is to say: the handler ran
-    // perfectly and could not get back.
-    iretd
+    mov rsp, rbp
+    pop rbp
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rax
+    iretq
 "#
 );
 
@@ -265,19 +325,16 @@ fault_stub_31:
     jmp fault_common
 
 fault_common:
-    // [esp] is the vector this stub pushed. Above it is what the CPU pushed:
-    // EIP, CS, EFLAGS — or, for the vectors that have one, an error code first.
-    // All three are reported rather than interpreted, because guessing which
-    // layout applies is how a diagnostic misleads.
-    mov eax, [esp]
-    mov ecx, [esp + 4]
-    mov edx, [esp + 8]
-    mov ebx, [esp + 12]
-    and esp, -16
-    push ebx
-    push edx
-    push ecx
-    push eax
+    // [rsp] is the vector this stub pushed. Above it is what the CPU pushed:
+    // RIP, CS, RFLAGS, RSP, SS — or, for the vectors that have one, an error
+    // code first. The first three words above the vector are reported rather
+    // than interpreted, because guessing which layout applies is how a
+    // diagnostic misleads.
+    mov rdi, [rsp]
+    mov rsi, [rsp + 8]
+    mov rdx, [rsp + 16]
+    mov rcx, [rsp + 24]
+    and rsp, -16
     call fault_report
 1:
     hlt
@@ -286,59 +343,59 @@ fault_common:
     .section .rodata
     .global fault_stub_table
 fault_stub_table:
-    .long fault_stub_0
-    .long fault_stub_1
-    .long fault_stub_2
-    .long fault_stub_3
-    .long fault_stub_4
-    .long fault_stub_5
-    .long fault_stub_6
-    .long fault_stub_7
-    .long fault_stub_8
-    .long fault_stub_9
-    .long fault_stub_10
-    .long fault_stub_11
-    .long fault_stub_12
-    .long fault_stub_13
-    .long fault_stub_14
-    .long fault_stub_15
-    .long fault_stub_16
-    .long fault_stub_17
-    .long fault_stub_18
-    .long fault_stub_19
-    .long fault_stub_20
-    .long fault_stub_21
-    .long fault_stub_22
-    .long fault_stub_23
-    .long fault_stub_24
-    .long fault_stub_25
-    .long fault_stub_26
-    .long fault_stub_27
-    .long fault_stub_28
-    .long fault_stub_29
-    .long fault_stub_30
-    .long fault_stub_31
+    .quad fault_stub_0
+    .quad fault_stub_1
+    .quad fault_stub_2
+    .quad fault_stub_3
+    .quad fault_stub_4
+    .quad fault_stub_5
+    .quad fault_stub_6
+    .quad fault_stub_7
+    .quad fault_stub_8
+    .quad fault_stub_9
+    .quad fault_stub_10
+    .quad fault_stub_11
+    .quad fault_stub_12
+    .quad fault_stub_13
+    .quad fault_stub_14
+    .quad fault_stub_15
+    .quad fault_stub_16
+    .quad fault_stub_17
+    .quad fault_stub_18
+    .quad fault_stub_19
+    .quad fault_stub_20
+    .quad fault_stub_21
+    .quad fault_stub_22
+    .quad fault_stub_23
+    .quad fault_stub_24
+    .quad fault_stub_25
+    .quad fault_stub_26
+    .quad fault_stub_27
+    .quad fault_stub_28
+    .quad fault_stub_29
+    .quad fault_stub_30
+    .quad fault_stub_31
 "#
 );
 
 extern "C" {
     fn vsock_isr();
     /// Thirty-two stub addresses, indexed by vector.
-    static fault_stub_table: [u32; 32];
+    static fault_stub_table: [u64; 32];
 }
 
 /// Report a fault and stop. Never returns to the faulting instruction, because
 /// nothing here could put right whatever caused it.
 #[no_mangle]
-pub extern "C" fn fault_report(vector: u32, w0: u32, w1: u32, w2: u32) {
+pub extern "C" fn fault_report(vector: u64, w0: u64, w1: u64, w2: u64) {
     crate::print("\nFAULT vector ");
-    crate::print_hex(vector);
+    crate::print_hex(vector as u32);
     crate::print(" frame ");
-    crate::print_hex(w0);
+    crate::print_hex64(w0);
     crate::print(" ");
-    crate::print_hex(w1);
+    crate::print_hex64(w1);
     crate::print(" ");
-    crate::print_hex(w2);
+    crate::print_hex64(w2);
     crate::print("\n");
 }
 
@@ -411,10 +468,9 @@ unsafe fn init_pic() {
 /// indication that anything went wrong.
 ///
 /// That ordering is the lesson this guest has already learned once, and it was
-/// still wrong: the IDT went in with the device interrupts, after the code that
-/// reads the shared region. Building the guest for speed rather than size made
-/// the compiler emit SSE, SSE faulted because nothing had enabled it, and the
-/// result was silence — a fault reporter installed three functions too late.
+/// still wrong the second time: the IDT went in with the device interrupts,
+/// after the code that reads the shared region, and a fault three functions
+/// earlier had no reporter to reach.
 ///
 /// # Safety
 ///
@@ -423,30 +479,22 @@ pub unsafe fn install_fault_handlers() {
     let idt = core::ptr::addr_of_mut!(IDT);
 
     for (vector, &stub) in fault_stub_table.iter().enumerate() {
-        (*idt)[vector] = Gate {
-            offset_low: stub as u16,
-            selector: CODE_SELECTOR,
-            zero: 0,
-            kind: GATE_INTERRUPT_32,
-            offset_high: (stub >> 16) as u16,
-        };
+        (*idt)[vector] = Gate::to(stub);
     }
 
     let idtr = Idtr {
         limit: (core::mem::size_of::<[Gate; 256]>() - 1) as u16,
-        base: idt as u32,
+        base: idt as u64,
     };
     asm!("lidt [{}]", in(reg) &idtr, options(readonly, nostack, preserves_flags));
 }
 
-/// Turn on SSE, which this target's compiler assumes it may use.
+/// Turn on SSE, which this build's compiler assumes it may use.
 ///
-/// `i686-unknown-linux-musl` has SSE2 in its baseline, so any loop the
-/// optimiser thinks is worth vectorising becomes `movdqa` and friends. On a CPU
-/// straight out of reset those raise #UD or #NM, because `CR0.EM` says there is
-/// no FPU to speak of and `CR4.OSFXSR` says the operating system has not
-/// promised to save the register file. Nothing had told this guest to promise
-/// anything.
+/// `x86_64-unknown-none` disables SSE in its own target spec and this crate
+/// turns it back on, because the loop that decides how fast an agent can think
+/// is 2.5 times slower without it. Having asked for vector instructions, the
+/// guest has to make them legal.
 ///
 /// Four bits, and every one of them is required:
 ///
@@ -457,22 +505,29 @@ pub unsafe fn install_fault_handlers() {
 /// - `CR4.OSXMMEXCPT` set: unmasked SIMD exceptions arrive as #XM rather than
 ///   as #UD, so a numeric fault reports itself as one.
 ///
+/// On a CPU straight out of reset none of them hold, so the first
+/// compiler-emitted `movdqa` raises #UD or #NM. In the 32-bit guest that
+/// presented as the console stopping mid-word, from a fault three functions
+/// before the reporter that would have named it.
+///
 /// # Safety
 ///
-/// Called once, before any code the compiler may have vectorised.
+/// Called once, before any code the compiler may have vectorised — which in
+/// practice means immediately after the fault handlers and before anything
+/// else.
 pub unsafe fn enable_sse() {
-    const CR0_MP: u32 = 1 << 1;
-    const CR0_EM: u32 = 1 << 2;
-    const CR4_OSFXSR: u32 = 1 << 9;
-    const CR4_OSXMMEXCPT: u32 = 1 << 10;
+    const CR0_MP: u64 = 1 << 1;
+    const CR0_EM: u64 = 1 << 2;
+    const CR4_OSFXSR: u64 = 1 << 9;
+    const CR4_OSXMMEXCPT: u64 = 1 << 10;
 
-    let mut cr0: u32;
+    let mut cr0: u64;
     asm!("mov {}, cr0", out(reg) cr0, options(nomem, nostack, preserves_flags));
     cr0 &= !CR0_EM;
     cr0 |= CR0_MP;
     asm!("mov cr0, {}", in(reg) cr0, options(nomem, nostack, preserves_flags));
 
-    let mut cr4: u32;
+    let mut cr4: u64;
     asm!("mov {}, cr4", out(reg) cr4, options(nomem, nostack, preserves_flags));
     cr4 |= CR4_OSFXSR | CR4_OSXMMEXCPT;
     asm!("mov cr4, {}", in(reg) cr4, options(nomem, nostack, preserves_flags));
@@ -487,16 +542,10 @@ pub unsafe fn enable_sse() {
 ///
 /// Requires [`install_fault_handlers`] to have run.
 pub unsafe fn init() {
-    let handler = vsock_isr as *const () as u32;
+    let handler = vsock_isr as *const () as u64;
     let idt = core::ptr::addr_of_mut!(IDT);
 
-    (*idt)[VSOCK_VECTOR] = Gate {
-        offset_low: handler as u16,
-        selector: CODE_SELECTOR,
-        zero: 0,
-        kind: GATE_INTERRUPT_32,
-        offset_high: (handler >> 16) as u16,
-    };
+    (*idt)[VSOCK_VECTOR] = Gate::to(handler);
 
     init_pic();
 

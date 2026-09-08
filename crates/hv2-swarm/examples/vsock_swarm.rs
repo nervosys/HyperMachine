@@ -43,7 +43,7 @@
 //! cargo run --release -p hv2-swarm --example vsock_swarm -- --agents 1000
 //! ```
 //!
-//! Needs `/dev/kvm` and the `i686-unknown-linux-musl` target.
+//! Needs `/dev/kvm` and the `x86_64-unknown-none` target.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -57,7 +57,7 @@ use hv2_core::{BootSource, VMConfig, VM};
 use hv2_swarm::{AgentId, Denied, Message, Swarm, Transport};
 
 /// The 32-bit x86 target stable Rust ships a prebuilt `core` for.
-const GUEST_TARGET: &str = "i686-unknown-linux-musl";
+const GUEST_TARGET: &str = "x86_64-unknown-none";
 
 /// The host port every agent's connection uses. Each agent has its own device,
 /// so the same number on different guests is a different socket.

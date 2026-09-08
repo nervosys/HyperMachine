@@ -24,7 +24,7 @@
 //! cargo run --release -p hv2-core --example vsock_echo
 //! ```
 //!
-//! Needs `/dev/kvm` and the `i686-unknown-linux-musl` target.
+//! Needs `/dev/kvm` and the `x86_64-unknown-none` target.
 
 use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::VsockConnectionState;
@@ -36,7 +36,7 @@ use std::time::{Duration, Instant};
 
 /// The target the guest crate is built for: the 32-bit x86 target stable Rust
 /// ships a prebuilt `core` for.
-const GUEST_TARGET: &str = "i686-unknown-linux-musl";
+const GUEST_TARGET: &str = "x86_64-unknown-none";
 
 /// The guest's context ID. 0, 1 and 2 are reserved; 3 is the first a guest may
 /// have.

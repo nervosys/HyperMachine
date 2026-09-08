@@ -24,19 +24,26 @@
 //!
 //! # Building
 //!
-//! Not a workspace member: it targets 32-bit bare metal and cannot be built for
-//! the host. `examples/rust_unikernel` in `hv2-core` builds and boots it, or by
-//! hand:
+//! Not a workspace member: it targets bare metal and cannot be built for the
+//! host. `examples/rust_unikernel` in `hv2-core` builds and boots it, or by
+//! hand, from this directory so that cargo reads its `.cargo/config.toml`:
 //!
 //! ```text
-//! cargo build --release --target i686-unknown-linux-musl
+//! cd crates/hv2-unikernel && cargo build --release
 //! ```
 //!
-//! The target is a Linux one and nothing here is Linux: it is used because it
-//! is the 32-bit x86 target for which stable Rust ships a prebuilt `core`, and
-//! `-nostdlib` with this crate's linker script leaves nothing of it in the
-//! output. The alternative is a custom target JSON and `-Z build-std`, which
-//! needs nightly for a binary that is otherwise entirely stable.
+//! The target is `x86_64-unknown-none`, a real freestanding target for which
+//! stable Rust ships a prebuilt `core` — so no nightly and no `-Z build-std`.
+//! It was `i686-unknown-linux-musl` until this guest was expected to hold a
+//! context: a Linux target used for its prebuilt 32-bit `core`, with everything
+//! Linux linked away. Thirty-two bits caps an agent's address space at 4 GiB,
+//! which is below one small model's weights plus its own working set, so
+//! `boot.rs` now crosses to long mode before the first Rust instruction.
+//!
+//! The one thing put back by hand is SSE, which the target spec disables. A
+//! guest that is 64-bit for the sake of arithmetic and then does that
+//! arithmetic one byte at a time has moved for nothing: measured over the same
+//! 256 MiB sweep, 4.18 cycles per byte scalar against 1.38 with SSE.
 
 #![no_std]
 #![no_main]
@@ -47,9 +54,9 @@
 // script, and builds a 64-bit host binary whose first error is
 // "instruction requires: Not 64-bit mode" pointing at inline assembly. Which is
 // true, and says nothing about the cause.
-#[cfg(not(target_arch = "x86"))]
+#[cfg(not(target_arch = "x86_64"))]
 compile_error!(concat!(
-    "hv2-unikernel is a 32-bit guest and must be built from its own directory, ",
+    "hv2-unikernel is a 64-bit bare-metal guest and must be built from its own directory, ",
     "so that cargo reads its .cargo/config.toml:\n",
     "\n    cd crates/hv2-unikernel && cargo build --release\n\n",
     "Building it with --manifest-path from the workspace root ignores both the ",
@@ -58,6 +65,7 @@ compile_error!(concat!(
 
 extern crate alloc;
 
+mod boot;
 mod interrupts;
 mod mem;
 mod vsock;
@@ -101,59 +109,6 @@ static mut HEAP_SPACE: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
 /// What a Multiboot-compliant loader leaves in `EAX` before entering a kernel.
 const MULTIBOOT_BOOTLOADER_MAGIC: u32 = 0x2BAD_B002;
 
-// The Multiboot header. Assembled here rather than declared as a Rust static
-// because it has to be the first thing in the image, and a `#[link_section]`
-// static is subject to whatever order the compiler feels like emitting statics
-// in. The linker script places this section first; between them the header is
-// at the image's first byte, well inside the 8 KB the specification allows.
-//
-//   magic     0x1BADB002, which is how a loader recognises the image at all
-//   flags     0, so no alignment or memory-map requests
-//   checksum  -(magic + flags), which the loader verifies sums to zero
-core::arch::global_asm!(
-    ".section .multiboot",
-    ".align 4",
-    ".long 0x1BADB002",
-    ".long 0",
-    ".long -(0x1BADB002)",
-);
-
-// The entry point. Written in assembly rather than Rust because Multiboot
-// hands its two arguments over in registers and the C ABI this target uses
-// expects them on the stack -- there is no way to spell "read EAX" in Rust
-// before the first Rust statement has already clobbered it.
-//
-// The stack pointer the loader set is used as it is. `.text.entry` is what the
-// linker script places first, so this is the image's first byte after the
-// Multiboot header.
-core::arch::global_asm!(
-    ".section .text.entry",
-    ".global _start",
-    "_start:",
-    // Align the stack before calling into Rust. The loader leaves ESP wherever
-    // it likes, and the i386 SysV ABI requires ESP to be 16-byte aligned at the
-    // point of a `call` — so that with the return address pushed, a callee's
-    // frame is aligned. LLVM relies on that: with SSE enabled it spills to the
-    // stack with `movaps`, which faults with #GP on a misaligned address.
-    //
-    // Nothing here needed it until this guest started doing arithmetic worth
-    // vectorising. It presented as a #GP several function calls deep, long
-    // after boot, in code that had been running for weeks.
-    //
-    // Two arguments are pushed after the alignment, so eight bytes are taken
-    // off first to land back on a boundary at the `call`.
-    "  and esp, -16",
-    "  sub esp, 8",
-    "  push ebx", // second argument: the multiboot_info address
-    "  push eax", // first argument:  the bootloader magic
-    "  call kernel_main",
-    // kernel_main does not return. If it somehow does, stop rather than
-    // execute whatever follows in memory.
-    "1:",
-    "  hlt",
-    "  jmp 1b",
-);
-
 /// Write one byte to an I/O port.
 ///
 /// # Safety
@@ -190,13 +145,30 @@ pub(crate) fn print_hex(value: u32) {
     }
 }
 
+/// Write `value` as sixteen hex digits.
+///
+/// Separate from [`print_hex`] rather than replacing it: most of what this
+/// guest prints is a device register, a marker byte or a count, and sixteen
+/// digits of leading zeros in front of every one of them is harder to read, not
+/// more precise. Addresses are the exception, and a fault frame is all
+/// addresses.
+pub(crate) fn print_hex64(value: u64) {
+    const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+    print("0x");
+    for shift in (0..16).rev() {
+        let nibble = ((value >> (shift * 4)) & 0xF) as usize;
+        // SAFETY: as above.
+        unsafe { outb(COM1, DIGITS[nibble]) };
+    }
+}
+
 /// The whole program.
 ///
 /// `magic` and `info` are what the bootloader left in `EAX` and `EBX`. Reported
 /// rather than assumed: a guest that prints a greeting proves it was entered,
 /// and a guest that prints the magic proves it was *booted*.
 #[no_mangle]
-pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
+pub extern "C" fn kernel_main(magic: u64, info: u64) -> ! {
     // Before anything at all. Everything below this line can fault, and a fault
     // with no handler is a console that stops mid-word — which is how the first
     // two attempts at an interrupt handler presented, and how the first attempt
@@ -212,15 +184,15 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     print("HYPERMACHINE RUST UNIKERNEL\n");
 
     print("magic ");
-    print_hex(magic);
-    if magic == MULTIBOOT_BOOTLOADER_MAGIC {
+    print_hex(magic as u32);
+    if magic as u32 == MULTIBOOT_BOOTLOADER_MAGIC {
         print(" OK\n");
     } else {
         print(" WRONG\n");
     }
 
     print("info  ");
-    print_hex(info);
+    print_hex(info as u32);
     print("\n");
 
     // If a shared read-only region has been mapped, read a byte of it and say
@@ -233,38 +205,43 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     // silence and a zero are the same thing and the marker is what tells them
     // apart.
     {
-        const ROM_BASE: u32 = 0xE000_0000;
-        // SAFETY: a single byte read from a guest-physical address the host
-        // either mapped read-only or left unmapped; neither faults here.
+        /// Where the host maps a shared read-only region, if it maps one.
+        ///
+        /// 3.5 GiB. That is above the 32-bit guest's whole address space had it
+        /// not been identity-mapped, and it is why `boot.rs` maps four
+        /// gigabytes rather than the one a guest of this size needs: an address
+        /// that is not in the page tables is not slow, it is a fault.
+        const ROM_BASE: usize = 0xE000_0000;
+
+        // If a shared read-only region has been mapped, read a byte of it and
+        // say so. A region that is mapped and unreadable costs the host exactly
+        // the same and is worth nothing, so a host measuring one needs a guest
+        // that has actually looked at it.
+        //
+        // Absent, the address reads as all ones — the page tables map it, but
+        // nothing is behind it, and an unmapped guest-physical address is not a
+        // fault this guest can take. So silence and a marker are the same
+        // thing, and the marker is what tells them apart.
+        //
         // SAFETY: a single byte read from a guest-physical address the host
         // either mapped read-only or left unmapped; neither faults here.
         let marker = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
         print("rom ");
         print_hex(marker as u32);
-        if marker == 0xFF {
-            // Nothing mapped, so the write test below is skipped and this line
-            // needs its own ending.
-            print(
-                "
-",
-            );
-        }
 
-        // Only if something is actually mapped there. An unmapped
-        // guest-physical address reads as all ones, and *writing* one exits to
-        // a host that has no device at that address — which stops the VM. The
-        // write below is a test of read-only enforcement, and there is nothing
-        // to enforce when there is nothing there.
-        if marker != 0xFF {
-            // And then try to write it. A shared region is only safe to share if
-            // the hardware refuses this: one writable copy read by a thousand
-            // agents is a thousand agents able to rewrite each other's model. The
-            // write is expected to be dropped and the byte to be unchanged, and
-            // reporting the read-back is what turns "should be read-only" into
-            // something a host can check.
-            // SAFETY: the write is the thing under test; the region is either
-            // read-only, in which case the hardware refuses it, or unmapped, in
-            // which case it goes nowhere.
+        if marker == 0xFF {
+            // Nothing mapped, so everything below is skipped and this line
+            // needs its own ending.
+            print("\n");
+        } else {
+            // And then try to write it. A shared region is only safe to share
+            // if the hardware refuses this: one writable copy read by a
+            // thousand agents is a thousand agents able to rewrite each other's
+            // model. The write is expected to be dropped and the byte to be
+            // unchanged, and reporting the read-back is what turns "should be
+            // read-only" into something a host can check.
+            // SAFETY: the write is the thing under test; the region is
+            // read-only, in which case the hardware refuses it.
             unsafe { core::ptr::write_volatile(ROM_BASE as *mut u8, 0x00) };
             // SAFETY: as for the read above.
             let after = unsafe { core::ptr::read_volatile(ROM_BASE as *const u8) };
@@ -273,24 +250,28 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             } else {
                 print(" WRITE TOOK EFFECT\n");
             }
-        }
 
-        // The host may also have left a working-set size in the region: how
-        // many mebibytes of its own memory this agent should touch before it
-        // reports for duty. It stands in for a KV cache, which is the one part
-        // of an agent that cannot be shared with any other agent and is
-        // therefore the thing that decides how many of them fit.
-        //
-        // One byte per page, not a full write. Residency is per page, so
-        // touching a page is what costs it; writing the other 4,095 bytes would
-        // measure memory bandwidth instead.
-        if marker != 0xFF {
+            // The host may also have left a working-set size in the region: how
+            // many mebibytes of its own memory this agent should touch before
+            // it reports for duty. It stands in for a KV cache, which is the
+            // one part of an agent that cannot be shared with any other agent
+            // and is therefore the thing that decides how many of them fit.
+            //
+            // One byte per page, not a full write. Residency is per page, so
+            // touching a page is what costs it; writing the other 4,095 bytes
+            // would measure memory bandwidth instead.
+            //
+            // Once. This block was written out three times in a row, which
+            // touched the same pages three times over — invisible in the number
+            // it produces, since residency is idempotent, and three times the
+            // boot latency for an agent with a large working set.
+            //
             // SAFETY: four bytes from the same read-only region.
             let work_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 4) as *const u32) };
             if work_mib > 0 {
-                const WORK_BASE: u32 = 16 * 1024 * 1024;
-                const PAGE: u32 = 4096;
-                let pages = work_mib * (1024 * 1024 / PAGE);
+                const WORK_BASE: usize = 16 * 1024 * 1024;
+                const PAGE: usize = 4096;
+                let pages = work_mib as usize * (1024 * 1024 / PAGE);
                 for page in 0..pages {
                     // SAFETY: guest RAM this agent owns, above its own image
                     // and below the memory it was configured with. The host
@@ -333,73 +314,11 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 print_hex((middle - first) as u32);
                 print(" warm ");
                 print_hex((last - middle) as u32);
-                print(
-                    "
-",
-                );
-            }
-        }
-
-        // The host may also have left a working-set size in the region: how
-        // many mebibytes of its own memory this agent should touch before it
-        // reports for duty. It stands in for a KV cache, which is the one part
-        // of an agent that cannot be shared with any other agent and is
-        // therefore the thing that decides how many of them fit.
-        //
-        // One byte per page, not a full write. Residency is per page, so
-        // touching a page is what costs it; writing the other 4,095 bytes would
-        // measure memory bandwidth instead.
-        if marker != 0xFF {
-            // SAFETY: four bytes from the same read-only region.
-            let work_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 4) as *const u32) };
-            if work_mib > 0 {
-                const WORK_BASE: u32 = 16 * 1024 * 1024;
-                const PAGE: u32 = 4096;
-                let pages = work_mib * (1024 * 1024 / PAGE);
-                for page in 0..pages {
-                    // SAFETY: guest RAM this agent owns, above its own image
-                    // and below the memory it was configured with. The host
-                    // sizes the VM so that this fits.
-                    unsafe {
-                        core::ptr::write_volatile((WORK_BASE + page * PAGE) as *mut u8, 0xC5);
-                    }
-                }
-                print("work ");
-                print_hex(work_mib);
-                print("\n");
-            }
-        }
-
-        // The host may also have left a working-set size in the region: how
-        // many mebibytes of its own memory this agent should touch before it
-        // reports for duty. It stands in for a KV cache, which is the one part
-        // of an agent that cannot be shared with any other agent and is
-        // therefore the thing that decides how many of them fit.
-        //
-        // One byte per page, not a full write. Residency is per page, so
-        // touching a page is what costs it; writing the other 4,095 bytes would
-        // measure memory bandwidth instead.
-        if marker != 0xFF {
-            // SAFETY: four bytes from the same read-only region.
-            let work_mib = unsafe { core::ptr::read_volatile((ROM_BASE + 4) as *const u32) };
-            if work_mib > 0 {
-                const WORK_BASE: u32 = 16 * 1024 * 1024;
-                const PAGE: u32 = 4096;
-                let pages = work_mib * (1024 * 1024 / PAGE);
-                for page in 0..pages {
-                    // SAFETY: guest RAM this agent owns, above its own image
-                    // and below the memory it was configured with. The host
-                    // sizes the VM so that this fits.
-                    unsafe {
-                        core::ptr::write_volatile((WORK_BASE + page * PAGE) as *mut u8, 0xC5);
-                    }
-                }
-                print("work ");
-                print_hex(work_mib);
                 print("\n");
             }
         }
     }
+
 
     // Everything above proves the guest was booted. Everything below is the
     // guest being an agent: a swarm message arrives over vsock, and the
@@ -762,7 +681,7 @@ fn payload_bytes(packet: &vsock::Packet) -> Vec<u8> {
     for i in 0..packet.payload_len {
         // SAFETY: inside the receive buffer the device wrote, bounded by the
         // length it reported.
-        out.push(unsafe { core::ptr::read_volatile((packet.payload_at + i) as *const u8) });
+        out.push(unsafe { core::ptr::read_volatile((packet.payload_at + i as usize) as *const u8) });
     }
     out
 }
@@ -794,8 +713,8 @@ fn rdtsc() -> u64 {
 /// Deliberately not optimised into a memcmp: the accumulator is returned and
 /// printed, so the compiler cannot drop the loop, and the multiplier changes
 /// each iteration so it cannot fold it into a shift.
-fn mac_sweep(base: u32, mib: u32) -> u32 {
-    let bytes = mib.saturating_mul(1024 * 1024) as usize;
+fn mac_sweep(base: usize, mib: u32) -> u32 {
+    let bytes = mib as usize * (1024 * 1024);
 
     // A slice and an ordinary loop, not `read_volatile` per byte. The volatile
     // version measured 155 MiB/s, which is a number about load-store

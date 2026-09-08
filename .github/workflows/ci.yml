@@ -426,15 +426,16 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            # Stable, and no -Zbuild-std: `i686-unknown-linux-musl` is the
-            # 32-bit x86 target rustup ships a prebuilt `core` for. Nothing
-            # Linux reaches the output -- the crate is `no_std` and links with
-            # `rust-lld` and no C runtime -- so this needs neither nightly nor a
-            # cross-compiler nor 32-bit multilib on the runner.
+            # Stable, and no -Zbuild-std: `x86_64-unknown-none` is a real
+            # freestanding target that rustup ships a prebuilt `core` for, so
+            # the guest needs neither nightly nor a cross-compiler on the
+            # runner. It was `i686-unknown-linux-musl` -- a Linux target with
+            # the Linux parts linked away -- until the guest outgrew a 4 GiB
+            # address space.
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
               with:
-                  targets: i686-unknown-linux-musl
+                  targets: x86_64-unknown-none
 
             - name: Cache cargo registry
               uses: actions/cache@v4
@@ -466,7 +467,7 @@ jobs:
             - name: Check it is a bootable Multiboot image
               run: |
                   set -euo pipefail
-                  elf=crates/hv2-unikernel/target/i686-unknown-linux-musl/release/hv2-unikernel
+                  elf=crates/hv2-unikernel/target/x86_64-unknown-none/release/hv2-unikernel
 
                   file_type=$(readelf -h "$elf" | awk -F: '/Type:/ {print $2}' | xargs)
                   case "$file_type" in

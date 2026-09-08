@@ -29,8 +29,8 @@
 //! cargo run --release -p hv2-core --example rust_unikernel
 //! ```
 //!
-//! Needs `/dev/kvm` and the `i686-unknown-linux-musl` target
-//! (`rustup target add i686-unknown-linux-musl`). Without either it says which
+//! Needs `/dev/kvm` and the `x86_64-unknown-none` target
+//! (`rustup target add x86_64-unknown-none`). Without either it says which
 //! and exits non-zero rather than printing a time it did not measure.
 
 use hv2_core::{BootSource, VMConfig, VM};
@@ -39,10 +39,12 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// The target the guest crate is built for. Not because anything here is
-/// Linux, but because it is the 32-bit x86 target stable Rust ships a prebuilt
-/// `core` for; the guest links with `rust-lld` and no C runtime.
-const GUEST_TARGET: &str = "i686-unknown-linux-musl";
+/// The target the guest crate is built for.
+///
+/// A real freestanding target with a prebuilt `core`, so the guest needs
+/// neither nightly nor `-Z build-std`; it links with `rust-lld` and no C
+/// runtime.
+const GUEST_TARGET: &str = "x86_64-unknown-none";
 
 /// What the guest writes first. Checked, so a guest that boots into something
 /// else is a failure rather than a surprise.
@@ -206,7 +208,7 @@ async fn main() -> std::process::ExitCode {
     let built = build_started.elapsed();
     let size = std::fs::metadata(&elf).map(|m| m.len()).unwrap_or(0);
     println!(
-        "guest          : {size} bytes of ELF32, compiled in {:.2} s",
+        "guest          : {size} bytes of ELF64, compiled in {:.2} s",
         built.as_secs_f64()
     );
     println!("timing         : {RUNS} boots, median. The compile is not part of it — a sandbox");

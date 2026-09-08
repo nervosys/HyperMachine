@@ -57,7 +57,7 @@ const ROM_BASE: u64 = 0xE000_0000;
 /// to be recognisable in a hex dump and impossible to confuse with zero.
 const MARKER: u8 = 0xA7;
 
-const GUEST_TARGET: &str = "i686-unknown-linux-musl";
+const GUEST_TARGET: &str = "x86_64-unknown-none";
 
 fn build_guest() -> Result<PathBuf, String> {
     let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
