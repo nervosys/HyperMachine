@@ -57,7 +57,7 @@ use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_core::{BootSource, VMConfig, VM};
 use hv2_infer::schedule::default_threads;
-use hv2_infer::{generate, Model, Session};
+use hv2_infer::{generate, Model, Runner, Session};
 use hv2_swarm::{AgentId, Capability, Swarm};
 
 const GUEST_TARGET: &str = "x86_64-unknown-none";
@@ -347,7 +347,7 @@ async fn main() -> std::process::ExitCode {
     // of the first one's freed arena and its resident growth read as zero — a
     // number about the allocator, presented as a number about what an agent
     // costs.
-    let mut sessions: Vec<Session<'_>> = Vec::new();
+    let mut sessions: Vec<Session> = Vec::new();
 
     for (index, (name, question, expected, granted)) in AGENTS.iter().enumerate() {
         let id = AgentId::new(*name);
@@ -380,9 +380,10 @@ async fn main() -> std::process::ExitCode {
         }
 
         let before = resident();
+        let mut runner = Runner::single(&model);
         let mut session = Session::open(&model);
         let thinking = Instant::now();
-        let answer = match pool.install(|| generate(&model, &mut session, argument, 32)) {
+        let answer = match pool.install(|| generate(&mut runner, &mut session, argument, 32)) {
             Ok(answer) => answer,
             Err(e) => {
                 println!("{name:<6}        : FAILED — {e}");

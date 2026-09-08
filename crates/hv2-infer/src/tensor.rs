@@ -84,6 +84,55 @@ impl<'a> Tensor<'a> {
             }),
         }
     }
+
+    /// `out[r * lanes + b] = row_r · x[b]`, for every row and every lane.
+    ///
+    /// This is the reason batching is worth anything. A matrix-vector product
+    /// reads 1.25 GiB of weights to produce one token for one agent; this reads
+    /// each row *once* and uses it for every lane, so eight agents cost one
+    /// pass over the weights rather than eight. The arithmetic is eight times
+    /// as much and the memory traffic is unchanged, which is the right trade on
+    /// any machine where the weights do not fit in cache — that is, on every
+    /// machine.
+    ///
+    /// The output is row-major (`rows × lanes`) rather than lane-major, because
+    /// that is what lets the rows be handed to separate threads as contiguous
+    /// slices. [`to_lanes`] turns it back the other way round, which costs a
+    /// transpose of `rows × lanes` floats against a read of the whole matrix.
+    ///
+    /// `x` is lane-major: lane `b`'s activations are `x[b * row..][..row]`.
+    pub fn matmul(&self, x: &[f32], lanes: usize, out: &mut [f32]) {
+        debug_assert_eq!(x.len(), self.row * lanes);
+        debug_assert_eq!(out.len(), self.rows * lanes);
+        if lanes == 1 {
+            // The same work, and it keeps the one-agent path off the wider one
+            // while that is still the path everything else uses.
+            return self.matvec(x, out);
+        }
+
+        let row_bytes = self.quant.size_of(self.row);
+        let quant = self.quant;
+        let width = self.row;
+        out.par_chunks_mut(lanes).enumerate().for_each(|(r, slot)| {
+            let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
+            for (b, cell) in slot.iter_mut().enumerate() {
+                let lane = &x[b * width..(b + 1) * width];
+                *cell = match quant {
+                    Quant::Q8_0 => dot_q8_0(row, lane),
+                    Quant::F32 => row
+                        .chunks_exact(4)
+                        .zip(lane)
+                        .map(|(w, a)| f32::from_le_bytes([w[0], w[1], w[2], w[3]]) * a)
+                        .sum(),
+                    Quant::F16 => row
+                        .chunks_exact(2)
+                        .zip(lane)
+                        .map(|(w, a)| f32::from(half::f16::from_le_bytes([w[0], w[1]])) * a)
+                        .sum(),
+                };
+            }
+        });
+    }
 }
 
 /// Whether this CPU has the instructions the wide dot product needs.
@@ -102,6 +151,22 @@ static WIDE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
     }
     is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")
 });
+
+/// Turn a `rows × lanes` result into `lanes × rows`.
+///
+/// Small: a transpose of the *output* of a matrix product, which is the model's
+/// width rather than its parameters. Even for the output head — 128,256 rows by
+/// eight lanes, four megabytes — it is a rounding error against the 268 MB of
+/// weights the product just read.
+pub fn to_lanes(rowmajor: &[f32], rows: usize, lanes: usize, out: &mut [f32]) {
+    debug_assert_eq!(rowmajor.len(), rows * lanes);
+    debug_assert_eq!(out.len(), rows * lanes);
+    for r in 0..rows {
+        for b in 0..lanes {
+            out[b * rows + r] = rowmajor[r * lanes + b];
+        }
+    }
+}
 
 /// One `Q8_0` row dotted with `x`.
 ///

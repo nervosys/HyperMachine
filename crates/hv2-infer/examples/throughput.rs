@@ -25,7 +25,7 @@
 
 use std::time::Instant;
 
-use hv2_infer::{Model, Session};
+use hv2_infer::{Model, Runner, Session};
 
 /// Forward passes to time. The first is excluded: it faults in the mapping,
 /// which is a cost paid once for the life of the process and not per token.
@@ -46,7 +46,7 @@ fn median(mut values: Vec<f64>) -> f64 {
 fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
-        eprintln!("usage: throughput <model.gguf> [passes] [threads]");
+        eprintln!("usage: throughput <model.gguf> [passes] [threads] [lanes]");
         eprintln!();
         eprintln!("Threads defaults to what the scheduler would choose. Sweeping it is how the");
         eprintln!("knee below was found, and how it should be re-found on another machine.");
@@ -65,6 +65,11 @@ fn main() -> std::process::ExitCode {
         .num_threads(threads)
         .build()
         .expect("a thread pool");
+
+    // Conversations carried by one pass. The whole question this example
+    // exists to answer: a pass reads the entire model to produce a token, so
+    // does producing eight tokens cost eight passes or one?
+    let lanes = args.get(3).and_then(|n| n.parse().ok()).unwrap_or(1usize);
 
     let model = match Model::load(path) {
         Ok(model) => model,
@@ -96,15 +101,25 @@ fn main() -> std::process::ExitCode {
         }
     );
 
-    let mut session = Session::open(&model);
+    let mut runner = Runner::new(&model, lanes);
+    let mut sessions: Vec<Session> = (0..lanes).map(|_| Session::open(&model)).collect();
     let token = model.bos.unwrap_or(1);
+    println!(
+        "lanes         : {lanes} conversation(s) per pass, {:.1} MiB of runner scratch",
+        runner.scratch_bytes() as f64 / (1024.0 * 1024.0)
+    );
 
     // One pass to fault the mapping in, then the timed ones. All of them inside
     // the pool, so the thread count above is the one that is measured.
-    if let Err(e) = pool.install(|| session.forward(token, 0)) {
+    let mut work: Vec<(&mut Session, u32, usize)> = sessions
+        .iter_mut()
+        .map(|session| (session, token, 0usize))
+        .collect();
+    if let Err(e) = pool.install(|| runner.step(&mut work)) {
         eprintln!("warm-up       : FAILED — {e}");
         return std::process::ExitCode::FAILURE;
     }
+    drop(work);
 
     let mut per_pass = Vec::with_capacity(RUNS);
     for run in 0..RUNS {
@@ -113,7 +128,11 @@ fn main() -> std::process::ExitCode {
             // Position 1 every time: the same work, over a cache holding one
             // token. A growing context would make later passes cost more and
             // turn the rate into an average over a ramp.
-            if let Err(e) = pool.install(|| session.forward(token, 1)) {
+            let mut work: Vec<(&mut Session, u32, usize)> = sessions
+                .iter_mut()
+                .map(|session| (session, token, 1usize))
+                .collect();
+            if let Err(e) = pool.install(|| runner.step(&mut work)) {
                 eprintln!("pass          : FAILED — {e}");
                 return std::process::ExitCode::FAILURE;
             }
@@ -121,10 +140,11 @@ fn main() -> std::process::ExitCode {
         let each = started.elapsed().as_secs_f64() / passes as f64;
         per_pass.push(each);
         println!(
-            "run {:<10}: {passes} passes, {:.1} ms each, {:.2} GiB/s",
+            "run {:<10}: {passes} passes, {:.1} ms each, {:.2} GiB/s, {:.2} tokens/s",
             run + 1,
             each * 1000.0,
-            bytes as f64 / each / (1024.0 * 1024.0 * 1024.0)
+            bytes as f64 / each / (1024.0 * 1024.0 * 1024.0),
+            lanes as f64 / each
         );
     }
 
@@ -133,11 +153,15 @@ fn main() -> std::process::ExitCode {
     let mid = median(per_pass);
     println!();
     println!(
-        "per pass      : {:.1} ms median   ({:.1} to {:.1}), {:.2} tokens/s",
+        "per pass      : {:.1} ms median   ({:.1} to {:.1})",
         mid * 1000.0,
         low * 1000.0,
-        high * 1000.0,
-        1.0 / mid
+        high * 1000.0
+    );
+    println!(
+        "tokens        : {:.2} per second across {lanes} lane(s) — {:.1} ms per token",
+        lanes as f64 / mid,
+        mid * 1000.0 / lanes as f64
     );
     println!(
         "weight rate   : {:.2} GiB/s at the median, {:.2} at the best run. Every parameter is read once per pass, so this is what a pass costs.",

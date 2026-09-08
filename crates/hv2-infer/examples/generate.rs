@@ -24,7 +24,7 @@
 use std::time::Instant;
 
 use hv2_infer::schedule::default_threads;
-use hv2_infer::{ask, Model, Session};
+use hv2_infer::{ask, Model, Runner, Session};
 
 /// A question whose answer is not a matter of opinion, so that "it worked" is
 /// checkable rather than a judgement about prose.
@@ -94,6 +94,7 @@ fn main() -> std::process::ExitCode {
         model.cache_bytes_per_token()
     );
     println!();
+    let mut runner = Runner::single(&model);
     let mut session = Session::open(&model);
     let mut last = String::new();
     let asked = Instant::now();
@@ -104,7 +105,7 @@ fn main() -> std::process::ExitCode {
         println!();
         println!("you           : {question}");
         let turn = Instant::now();
-        last = match pool.install(|| ask(&model, &mut session, question, 32)) {
+        last = match pool.install(|| ask(&mut runner, &mut session, question, 32)) {
             Ok(answer) => answer,
             Err(e) => {
                 eprintln!("generate      : FAILED — {e}");

@@ -49,7 +49,7 @@ use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::model::{Model, Session};
+use crate::model::{Model, Runner, Session};
 use crate::{ask, chat_turn, Error};
 
 /// What a node will not let one agent take.
@@ -171,7 +171,14 @@ struct Inner<'m> {
     /// One conversation per agent, kept between requests. Taken out of the map
     /// while it is being used, so a long forward pass does not hold the lock
     /// every other agent needs to join the queue.
-    sessions: BTreeMap<String, Session<'m>>,
+    sessions: BTreeMap<String, Session>,
+    /// Runners not currently in use, one per worker.
+    ///
+    /// The scratch a forward pass needs is per *worker*, not per agent: it used
+    /// to live in every session, so a thousand idle agents held 800 MiB of
+    /// buffers that only the one being served was using. A worker takes one
+    /// from here, runs, and puts it back.
+    runners: Vec<Runner<'m>>,
     stats: Stats,
 }
 
@@ -224,6 +231,9 @@ impl<'m> Scheduler<'m> {
                 running: 0,
                 next_ticket: 0,
                 sessions: BTreeMap::new(),
+                runners: (0..limits.workers.max(1))
+                    .map(|_| Runner::new(model, 1))
+                    .collect(),
                 stats: Stats::default(),
             }),
             turn: Condvar::new(),
@@ -301,7 +311,7 @@ impl<'m> Scheduler<'m> {
         // Wait for a worker and for every earlier ticket to have been taken.
         // First-in-first-out, so a busy fleet becomes a longer queue rather
         // than a lottery.
-        let mut session = {
+        let (mut session, mut runner) = {
             let mut inner = self.inner.lock().expect("not poisoned");
             loop {
                 let mine = inner.waiting.front() == Some(&ticket);
@@ -316,10 +326,15 @@ impl<'m> Scheduler<'m> {
             // Out of the map for the duration. A forward pass is hundreds of
             // milliseconds per token and holding the shared lock across it would
             // stop every other agent from so much as joining the queue.
-            inner
+            let session = inner
                 .sessions
                 .remove(agent)
-                .unwrap_or_else(|| Session::open(self.model))
+                .unwrap_or_else(|| Session::open(self.model));
+            let runner = inner
+                .runners
+                .pop()
+                .expect("a free runner, since a worker slot was taken");
+            (session, runner)
         };
         let waited = queued_at.elapsed();
 
@@ -329,7 +344,7 @@ impl<'m> Scheduler<'m> {
         // machine — see `Limits::threads` for the measurement.
         let answer = self.pool.install(|| {
             ask(
-                self.model,
+                &mut runner,
                 &mut session,
                 question,
                 self.limits.answer_tokens,
@@ -341,6 +356,7 @@ impl<'m> Scheduler<'m> {
         {
             let mut inner = self.inner.lock().expect("not poisoned");
             inner.sessions.insert(agent.to_string(), session);
+            inner.runners.push(runner);
             inner.running -= 1;
             if answer.is_ok() {
                 inner.stats.served += 1;

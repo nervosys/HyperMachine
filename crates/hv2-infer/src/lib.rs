@@ -58,11 +58,14 @@
 //! weights into a token and then decides who may.
 //!
 //! ```no_run
-//! use hv2_infer::{Model, Session, generate};
+//! use hv2_infer::{ask, Model, Runner, Session};
 //!
 //! let model = Model::load("model.gguf")?;
+//! // The runner holds the scratch a pass needs and can carry several
+//! // conversations at once; the session holds one conversation.
+//! let mut runner = Runner::new(&model, 1);
 //! let mut session = Session::open(&model);
-//! let answer = generate(&model, &mut session, "What is the capital of France?", 24)?;
+//! let answer = ask(&mut runner, &mut session, "What is the capital of France?", 24)?;
 //! # Ok::<(), hv2_infer::Error>(())
 //! ```
 
@@ -73,7 +76,7 @@ pub mod tensor;
 pub mod tokenizer;
 
 pub use gguf::{Error, Gguf};
-pub use model::{argmax, Model, Rope, Session, Shape};
+pub use model::{argmax, Model, Rope, Runner, Session, Shape};
 pub use schedule::{Limits, Refused, Scheduler, Served, Stats};
 pub use tokenizer::Tokenizer;
 
@@ -140,29 +143,29 @@ pub fn chat_prompt(model: &Model, question: &str) -> Vec<u32> {
 /// Returns the text the model produced. Stops at a stop token, which is the
 /// difference between an answer and a model that runs to the limit.
 pub fn ask(
-    model: &Model,
-    session: &mut Session<'_>,
+    runner: &mut Runner<'_>,
+    session: &mut Session,
     question: &str,
     limit: usize,
 ) -> Result<String, Error> {
+    let model = runner.model();
     let opening = session.is_empty();
     let turn = chat_turn(model, question, opening);
 
     let mut position = session.len();
-    let mut logits = Vec::new();
+    let mut next = 0u32;
     for token in &turn {
-        logits = session.forward(*token, position)?;
+        next = argmax(runner.forward(session, *token, position)?);
         position += 1;
     }
 
     let mut produced = Vec::new();
     for _ in 0..limit {
-        let next = argmax(&logits);
         if model.stops.contains(&next) {
             break;
         }
         produced.push(next);
-        logits = session.forward(next, position)?;
+        next = argmax(runner.forward(session, next, position)?);
         position += 1;
     }
 
@@ -170,7 +173,7 @@ pub fn ask(
     // is appended to an answer the model still believes it is in the middle of,
     // and it reads as one run-on turn rather than two.
     if let Some(eot) = model.tokenizer.id_of("<|eot_id|>") {
-        session.forward(eot, position)?;
+        runner.forward(session, eot, position)?;
     }
 
     Ok(model.tokenizer.decode(&produced))
@@ -181,10 +184,146 @@ pub fn ask(
 /// Kept as the one-shot spelling of [`ask`]. A caller with no conversation to
 /// continue has the same thing either way.
 pub fn generate(
-    model: &Model,
-    session: &mut Session<'_>,
+    runner: &mut Runner<'_>,
+    session: &mut Session,
     question: &str,
     limit: usize,
 ) -> Result<String, Error> {
-    ask(model, session, question, limit)
+    ask(runner, session, question, limit)
+}
+
+/// What one lane of a batched generation is doing.
+enum Lane {
+    /// Still feeding the prompt, at this index into it.
+    Prompt(usize),
+    /// Generating, with this token to feed next.
+    Answering(u32),
+    /// Finished, and the tail of the turn has been closed.
+    Done,
+}
+
+/// Ask several questions at once, one per conversation.
+///
+/// The point of batching, and the only reason it is worth the bookkeeping: one
+/// pass over the weights advances every conversation by a token. A pass reads
+/// 1.25 GiB whether it is producing one token or eight, so a fleet with eight
+/// agents waiting should not read the model eight times.
+///
+/// Lanes are independent in every way that matters. They are at different
+/// positions, their prompts are different lengths, and they stop at different
+/// times — a lane that finishes drops out of the batch and the rest carry on.
+/// Nothing is shared between them but the weights, which are read-only.
+///
+/// # Panics
+///
+/// If given more conversations than the runner has lanes, or a different number
+/// of questions than conversations.
+pub fn ask_many(
+    runner: &mut Runner<'_>,
+    sessions: &mut [&mut Session],
+    questions: &[&str],
+    limit: usize,
+) -> Result<Vec<String>, Error> {
+    assert_eq!(
+        sessions.len(),
+        questions.len(),
+        "a question per conversation"
+    );
+    assert!(
+        sessions.len() <= runner.lanes(),
+        "{} conversations into a runner with {} lanes",
+        sessions.len(),
+        runner.lanes()
+    );
+
+    let model = runner.model();
+    let lanes = sessions.len();
+    let turns: Vec<Vec<u32>> = questions
+        .iter()
+        .zip(sessions.iter())
+        .map(|(question, session)| chat_turn(model, question, session.is_empty()))
+        .collect();
+
+    let mut state: Vec<Lane> = (0..lanes).map(|_| Lane::Prompt(0)).collect();
+    let mut positions: Vec<usize> = sessions.iter().map(|s| s.len()).collect();
+    let mut produced: Vec<Vec<u32>> = vec![Vec::new(); lanes];
+
+    loop {
+        // Which lanes still have a token to feed, and what it is.
+        let mut active: Vec<usize> = Vec::with_capacity(lanes);
+        let mut tokens: Vec<u32> = Vec::with_capacity(lanes);
+        for (lane, s) in state.iter().enumerate() {
+            match s {
+                Lane::Prompt(at) => {
+                    active.push(lane);
+                    tokens.push(turns[lane][*at]);
+                }
+                Lane::Answering(token) => {
+                    active.push(lane);
+                    tokens.push(*token);
+                }
+                Lane::Done => {}
+            }
+        }
+        if active.is_empty() {
+            break;
+        }
+
+        {
+            // The borrow checker needs the active sessions gathered as a slice
+            // of exclusive references, and they come from disjoint indices of
+            // `sessions` — which it cannot see, so they are taken one at a time
+            // with `split_at_mut` folded into an index walk.
+            let mut work: Vec<(&mut Session, u32, usize)> = Vec::with_capacity(active.len());
+            let mut rest: &mut [&mut Session] = sessions;
+            let mut taken = 0usize;
+            for (slot, &lane) in active.iter().enumerate() {
+                let (_, tail) = rest.split_at_mut(lane - taken);
+                let (head, tail) = tail.split_at_mut(1);
+                taken = lane + 1;
+                rest = tail;
+                work.push((head[0], tokens[slot], positions[lane]));
+            }
+            runner.step(&mut work)?;
+        }
+
+        for (slot, &lane) in active.iter().enumerate() {
+            let next = argmax(runner.logits(slot));
+            positions[lane] += 1;
+            state[lane] = match &state[lane] {
+                Lane::Prompt(at) if at + 1 < turns[lane].len() => Lane::Prompt(at + 1),
+                // The prompt is in; `next` is the first token of the answer.
+                Lane::Prompt(_) => {
+                    if model.stops.contains(&next) || limit == 0 {
+                        Lane::Done
+                    } else {
+                        produced[lane].push(next);
+                        Lane::Answering(next)
+                    }
+                }
+                Lane::Answering(_) => {
+                    if model.stops.contains(&next) || produced[lane].len() >= limit {
+                        Lane::Done
+                    } else {
+                        produced[lane].push(next);
+                        Lane::Answering(next)
+                    }
+                }
+                Lane::Done => Lane::Done,
+            };
+        }
+    }
+
+    // Close each turn in its own cache, so a follow-up is a new turn rather
+    // than a continuation of an answer the model thinks it is still giving.
+    if let Some(eot) = model.tokenizer.id_of("<|eot_id|>") {
+        for (lane, session) in sessions.iter_mut().enumerate() {
+            runner.forward(session, eot, positions[lane])?;
+        }
+    }
+
+    Ok(produced
+        .iter()
+        .map(|tokens| model.tokenizer.decode(tokens))
+        .collect())
 }

@@ -35,7 +35,7 @@
 //! silent divergence.
 
 use crate::gguf::{Error, Gguf, Value};
-use crate::tensor::{dequant, rms_norm, silu, softmax, Tensor};
+use crate::tensor::{dequant, rms_norm, silu, softmax, to_lanes, Tensor};
 use crate::tokenizer::Tokenizer;
 
 /// Which components of a head pair up under rotation.
@@ -234,10 +234,11 @@ impl Model {
         let probe = self.tokenizer.encode("The capital of France is");
         let mut best = (Rope::Interleaved, f32::NEG_INFINITY);
         for rope in [Rope::Interleaved, Rope::HalfSplit] {
-            let mut session = Session::new(self, rope);
+            let mut runner = Runner::with_rope(self, 1, rope);
+            let mut session = Session::new(self);
             let mut logits = Vec::new();
             for (position, token) in probe.iter().enumerate() {
-                logits = session.forward(*token, position)?;
+                logits = runner.forward(&mut session, *token, position)?.to_vec();
             }
             softmax(&mut logits);
             let peak = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
@@ -257,87 +258,44 @@ impl Model {
     }
 }
 
-/// One conversation: the key/value cache, and the scratch a pass needs.
+/// One agent's conversation: its key/value cache, and nothing else.
 ///
-/// # A caller using this directly should give it a thread pool
+/// Deliberately nothing else. This used to carry the scratch a forward pass
+/// needs too — the logits alone are 128,256 floats, half a megabyte — which
+/// made a session cost about 800 KiB before it held a single token of context.
+/// A thousand idle agents were paying 800 MiB for buffers only the one being
+/// served was using. The scratch belongs to whoever is running a pass, which is
+/// [`Runner`], and there are as many of those as there are workers rather than
+/// as there are agents.
 ///
-/// [`Session::forward`] spreads each matrix-vector product across rayon's
-/// current pool, which by default is sized to the whole machine — and a forward
-/// pass gets *slower* past about a third of this host's cores. Going through
-/// [`crate::Scheduler`] gets a pool of the right size; calling `forward` or
-/// [`crate::ask`] directly gets whatever the process happens to have, so wrap
-/// it: `pool.install(|| ask(..))`. `examples/generate` does exactly that, and
-/// `examples/throughput` is how the size was chosen.
-///
-/// Per agent, by definition. The weights are shared and this is not — which is
-/// the whole shape of the arithmetic this project measured before it had a
-/// model: the model once, plus per agent exactly what that agent holds.
-pub struct Session<'a> {
-    model: &'a Model,
-    blocks: Vec<Block<'a>>,
-    output_norm: Vec<f32>,
-    embeddings: Tensor<'a>,
-    rope: Rope,
-
+/// It also has no lifetime any more, which is what lets a scheduler keep a map
+/// of them without threading the model's borrow through everything that touches
+/// it.
+pub struct Session {
     /// `[layer][position * kv_width + i]`.
-    keys: Vec<Vec<f32>>,
-    values: Vec<Vec<f32>>,
+    pub(crate) keys: Vec<Vec<f32>>,
+    pub(crate) values: Vec<Vec<f32>>,
     /// How many positions the cache holds.
-    filled: usize,
-
-    // Scratch, allocated once. A forward pass that allocates per token spends
-    // its time in the allocator rather than in the arithmetic.
-    x: Vec<f32>,
-    normed: Vec<f32>,
-    q: Vec<f32>,
-    k: Vec<f32>,
-    v: Vec<f32>,
-    attended: Vec<f32>,
-    scores: Vec<f32>,
-    gate: Vec<f32>,
-    up: Vec<f32>,
-    projected: Vec<f32>,
-    logits: Vec<f32>,
+    pub(crate) filled: usize,
+    /// Remembered rather than asked of the model, so this type needs no
+    /// reference to one.
+    bytes_per_token: usize,
 }
 
-impl<'a> Session<'a> {
-    /// Open a conversation over `model`.
-    pub fn new(model: &'a Model, rope: Rope) -> Self {
-        let s = &model.shape;
-        let kv_width = s.kv_heads * s.head_dim;
-        let blocks = (0..s.layers)
-            .map(|l| model.block(l).expect("every block was found at load"))
-            .collect();
-        let mut output_norm = vec![0.0; s.width];
-        let t = Tensor::find(&model.gguf, "output_norm.weight").expect("an output norm");
-        dequant(t.quant, t.bytes, &mut output_norm);
-
+impl Session {
+    /// An empty conversation for `model`.
+    pub fn new(model: &Model) -> Self {
         Self {
-            model,
-            blocks,
-            output_norm,
-            embeddings: Tensor::find(&model.gguf, "token_embd.weight").expect("an embedding table"),
-            rope,
-            keys: vec![Vec::new(); s.layers],
-            values: vec![Vec::new(); s.layers],
+            keys: vec![Vec::new(); model.shape.layers],
+            values: vec![Vec::new(); model.shape.layers],
             filled: 0,
-            x: vec![0.0; s.width],
-            normed: vec![0.0; s.width],
-            q: vec![0.0; s.heads * s.head_dim],
-            k: vec![0.0; kv_width],
-            v: vec![0.0; kv_width],
-            attended: vec![0.0; s.heads * s.head_dim],
-            scores: Vec::new(),
-            gate: vec![0.0; s.ffn],
-            up: vec![0.0; s.ffn],
-            projected: vec![0.0; s.width],
-            logits: vec![0.0; s.vocab],
+            bytes_per_token: model.cache_bytes_per_token(),
         }
     }
 
-    /// Open a conversation using whichever rotation the model was detected with.
-    pub fn open(model: &'a Model) -> Self {
-        Self::new(model, model.rope)
+    /// The same. Kept because every caller already spells it this way.
+    pub fn open(model: &Model) -> Self {
+        Self::new(model)
     }
 
     /// How many positions this conversation holds.
@@ -348,11 +306,12 @@ impl<'a> Session<'a> {
         self.filled
     }
 
+    /// Whether it holds none.
+    pub fn is_empty(&self) -> bool {
+        self.filled == 0
+    }
+
     /// Forget everything, keeping the allocations.
-    ///
-    /// The scratch buffers stay; only the conversation goes. An agent whose
-    /// context is dropped and immediately refilled should not pay for a
-    /// hundred and twenty-eight thousand floats again.
     pub fn forget(&mut self) {
         for cache in self.keys.iter_mut().chain(self.values.iter_mut()) {
             cache.clear();
@@ -360,120 +319,351 @@ impl<'a> Session<'a> {
         self.filled = 0;
     }
 
-    /// Whether it holds none.
-    pub fn is_empty(&self) -> bool {
-        self.filled == 0
-    }
-
     /// Bytes of key/value cache this conversation is currently holding.
     pub fn cache_bytes(&self) -> usize {
-        self.filled * self.model.cache_bytes_per_token()
+        self.filled * self.bytes_per_token
+    }
+}
+
+/// What runs a forward pass: the weights it needs to touch, and the scratch.
+///
+/// One per worker, not one per agent. A `Runner` can advance several
+/// conversations by one token each in a single pass over the weights, which is
+/// the only way a fleet gets cheap: the pass reads 1.25 GiB to produce a token,
+/// and whether that produces one token or eight is decided here.
+pub struct Runner<'a> {
+    model: &'a Model,
+    blocks: Vec<Block<'a>>,
+    output_norm: Vec<f32>,
+    embeddings: Tensor<'a>,
+    rope: Rope,
+    /// The most conversations one pass may carry.
+    lanes: usize,
+
+    // Scratch, lane-major: lane `b`'s vector starts at `b * width`.
+    x: Vec<f32>,
+    normed: Vec<f32>,
+    q: Vec<f32>,
+    k: Vec<f32>,
+    v: Vec<f32>,
+    attended: Vec<f32>,
+    gate: Vec<f32>,
+    up: Vec<f32>,
+    projected: Vec<f32>,
+    logits: Vec<f32>,
+    /// Row-major staging for a batched product, before it is turned lane-major.
+    wide: Vec<f32>,
+    /// Attention weights for the lane being attended, which is one at a time:
+    /// every lane is at a different position in a different conversation, so
+    /// there is nothing to share.
+    scores: Vec<f32>,
+}
+
+impl<'a> Runner<'a> {
+    /// A runner over `model` that can carry `lanes` conversations at once.
+    pub fn new(model: &'a Model, lanes: usize) -> Self {
+        let lanes = lanes.max(1);
+        let s = &model.shape;
+        let kv_width = s.kv_heads * s.head_dim;
+        let blocks = (0..s.layers)
+            .map(|l| model.block(l).expect("every block was found at load"))
+            .collect();
+        let mut output_norm = vec![0.0; s.width];
+        let t = Tensor::find(&model.gguf, "output_norm.weight").expect("an output norm");
+        dequant(t.quant, t.bytes, &mut output_norm);
+        let embeddings =
+            Tensor::find(&model.gguf, "token_embd.weight").expect("an embedding table");
+
+        // The widest product is the output head, so the staging buffer is sized
+        // for that and every other product fits inside it.
+        let widest = s.vocab.max(s.ffn).max(s.width);
+
+        Self {
+            model,
+            blocks,
+            output_norm,
+            embeddings,
+            rope: model.rope,
+            lanes,
+            x: vec![0.0; lanes * s.width],
+            normed: vec![0.0; lanes * s.width],
+            q: vec![0.0; lanes * s.heads * s.head_dim],
+            k: vec![0.0; lanes * kv_width],
+            v: vec![0.0; lanes * kv_width],
+            attended: vec![0.0; lanes * s.heads * s.head_dim],
+            gate: vec![0.0; lanes * s.ffn],
+            up: vec![0.0; lanes * s.ffn],
+            projected: vec![0.0; lanes * s.width],
+            logits: vec![0.0; lanes * s.vocab],
+            wide: vec![0.0; lanes * widest],
+            scores: Vec::new(),
+        }
     }
 
-    /// Run one token at `position` and return the logits over the vocabulary.
+    /// A runner for one conversation.
+    pub fn single(model: &'a Model) -> Self {
+        Self::new(model, 1)
+    }
+
+    /// A runner using a rotation the model has not settled on yet.
     ///
-    /// The logits are borrowed from the session's own scratch, so the caller
-    /// gets them without an allocation of 128,256 floats per token.
-    pub fn forward(&mut self, token: u32, position: usize) -> Result<Vec<f32>, Error> {
+    /// Only [`Model::detect_rope`] wants this: it decides the convention by
+    /// running the model under both, which it cannot do through the field it is
+    /// in the middle of deciding.
+    pub(crate) fn with_rope(model: &'a Model, lanes: usize, rope: Rope) -> Self {
+        let mut runner = Self::new(model, lanes);
+        runner.rope = rope;
+        runner
+    }
+
+    /// The model it runs.
+    pub fn model(&self) -> &'a Model {
+        self.model
+    }
+
+    /// The most conversations it can carry at once.
+    pub fn lanes(&self) -> usize {
+        self.lanes
+    }
+
+    /// Bytes of scratch this runner holds.
+    ///
+    /// Worth knowing because it is the cost that used to be per agent and is
+    /// now per worker: at eight lanes it is a few megabytes once, rather than
+    /// 800 KiB times however many agents exist.
+    pub fn scratch_bytes(&self) -> usize {
+        (self.x.len()
+            + self.normed.len()
+            + self.q.len()
+            + self.k.len()
+            + self.v.len()
+            + self.attended.len()
+            + self.gate.len()
+            + self.up.len()
+            + self.projected.len()
+            + self.logits.len()
+            + self.wide.len())
+            * core::mem::size_of::<f32>()
+    }
+
+    /// Advance every conversation in `work` by one token.
+    ///
+    /// Each entry is a conversation, the token to feed it, and the position to
+    /// feed it at — positions differ between lanes because the conversations
+    /// are different lengths. Afterwards [`Runner::logits`] gives each lane's
+    /// distribution over the vocabulary.
+    ///
+    /// The weights are read once for the whole batch. Everything that is *not*
+    /// a weight — the norms, the rotation, the attention over each
+    /// conversation's own cache — is done per lane, because none of it is
+    /// shared and none of it is the expensive part.
+    pub fn step(&mut self, work: &mut [(&mut Session, u32, usize)]) -> Result<(), Error> {
+        let lanes = work.len();
+        assert!(
+            lanes <= self.lanes,
+            "a runner with {} lanes was given {lanes} conversations",
+            self.lanes
+        );
+        if lanes == 0 {
+            return Ok(());
+        }
+
         let s = self.model.shape.clone();
         let kv_width = s.kv_heads * s.head_dim;
+        let group = s.heads / s.kv_heads;
+        let scale = 1.0 / (s.head_dim as f32).sqrt();
 
-        // The embedding table is the model's largest tensor and is read one row
-        // at a time: a token is a row index, not a matrix product.
-        self.embeddings.row_into(token as usize, &mut self.x);
+        // A token is a row index into the embedding table, not a product.
+        for (b, (_, token, _)) in work.iter().enumerate() {
+            self.embeddings
+                .row_into(*token as usize, &mut self.x[b * s.width..(b + 1) * s.width]);
+        }
 
         for layer in 0..s.layers {
             let block = &self.blocks[layer];
 
-            rms_norm(&self.x, &block.attn_norm, s.rms_epsilon, &mut self.normed);
-            block.q.matvec(&self.normed, &mut self.q);
-            block.k.matvec(&self.normed, &mut self.k);
-            block.v.matvec(&self.normed, &mut self.v);
-
-            for head in 0..s.heads {
-                rotate(
-                    &mut self.q[head * s.head_dim..(head + 1) * s.head_dim],
-                    position,
-                    s.rope_base,
-                    self.rope,
-                );
-            }
-            for head in 0..s.kv_heads {
-                rotate(
-                    &mut self.k[head * s.head_dim..(head + 1) * s.head_dim],
-                    position,
-                    s.rope_base,
-                    self.rope,
+            for b in 0..lanes {
+                let at = b * s.width;
+                rms_norm(
+                    &self.x[at..at + s.width],
+                    &block.attn_norm,
+                    s.rms_epsilon,
+                    &mut self.normed[at..at + s.width],
                 );
             }
 
-            // Everything before this position is already in the cache; this
-            // position joins it. Growing rather than indexing, so a conversation
-            // costs what it holds rather than what it might hold.
-            let keys = &mut self.keys[layer];
-            let values = &mut self.values[layer];
-            keys.truncate(position * kv_width);
-            values.truncate(position * kv_width);
-            keys.extend_from_slice(&self.k);
-            values.extend_from_slice(&self.v);
+            product(&block.q, &self.normed, lanes, &mut self.wide, &mut self.q);
+            product(&block.k, &self.normed, lanes, &mut self.wide, &mut self.k);
+            product(&block.v, &self.normed, lanes, &mut self.wide, &mut self.v);
 
-            let seen = position + 1;
-            self.scores.resize(seen, 0.0);
-            let scale = 1.0 / (s.head_dim as f32).sqrt();
-            // Four query heads to each key/value head. The other way round is a
-            // model that runs and is wrong.
-            let group = s.heads / s.kv_heads;
-
-            for head in 0..s.heads {
-                let kv_head = head / group;
-                let q = &self.q[head * s.head_dim..(head + 1) * s.head_dim];
-
-                for (p, score) in self.scores.iter_mut().enumerate() {
-                    let at = p * kv_width + kv_head * s.head_dim;
-                    *score = q
-                        .iter()
-                        .zip(&keys[at..at + s.head_dim])
-                        .map(|(a, b)| a * b)
-                        .sum::<f32>()
-                        * scale;
+            for (b, (_, _, position)) in work.iter().enumerate() {
+                let q_at = b * s.heads * s.head_dim;
+                for head in 0..s.heads {
+                    rotate(
+                        &mut self.q[q_at + head * s.head_dim..q_at + (head + 1) * s.head_dim],
+                        *position,
+                        s.rope_base,
+                        self.rope,
+                    );
                 }
-                softmax(&mut self.scores);
+                let kv_at = b * kv_width;
+                for head in 0..s.kv_heads {
+                    rotate(
+                        &mut self.k[kv_at + head * s.head_dim..kv_at + (head + 1) * s.head_dim],
+                        *position,
+                        s.rope_base,
+                        self.rope,
+                    );
+                }
+            }
 
-                let out = &mut self.attended[head * s.head_dim..(head + 1) * s.head_dim];
-                out.fill(0.0);
-                for (p, weight) in self.scores.iter().enumerate() {
-                    let at = p * kv_width + kv_head * s.head_dim;
-                    for (slot, value) in out.iter_mut().zip(&values[at..at + s.head_dim]) {
-                        *slot += weight * value;
+            // Attention, per lane, over that lane's own cache. Nothing here is
+            // shared between lanes and nothing here reads a weight.
+            for (b, (session, _, position)) in work.iter_mut().enumerate() {
+                let keys = &mut session.keys[layer];
+                let values = &mut session.values[layer];
+                keys.truncate(*position * kv_width);
+                values.truncate(*position * kv_width);
+                keys.extend_from_slice(&self.k[b * kv_width..(b + 1) * kv_width]);
+                values.extend_from_slice(&self.v[b * kv_width..(b + 1) * kv_width]);
+
+                let seen = *position + 1;
+                self.scores.resize(seen, 0.0);
+                let q_at = b * s.heads * s.head_dim;
+
+                for head in 0..s.heads {
+                    let kv_head = head / group;
+                    let q = &self.q[q_at + head * s.head_dim..q_at + (head + 1) * s.head_dim];
+
+                    for (p, score) in self.scores.iter_mut().enumerate() {
+                        let at = p * kv_width + kv_head * s.head_dim;
+                        *score = q
+                            .iter()
+                            .zip(&keys[at..at + s.head_dim])
+                            .map(|(a, b)| a * b)
+                            .sum::<f32>()
+                            * scale;
+                    }
+                    softmax(&mut self.scores);
+
+                    let out = &mut self.attended
+                        [q_at + head * s.head_dim..q_at + (head + 1) * s.head_dim];
+                    out.fill(0.0);
+                    for (p, weight) in self.scores.iter().enumerate() {
+                        let at = p * kv_width + kv_head * s.head_dim;
+                        for (slot, value) in out.iter_mut().zip(&values[at..at + s.head_dim]) {
+                            *slot += weight * value;
+                        }
                     }
                 }
             }
 
-            block.o.matvec(&self.attended, &mut self.projected);
-            for (x, delta) in self.x.iter_mut().zip(&self.projected) {
+            product(
+                &block.o,
+                &self.attended,
+                lanes,
+                &mut self.wide,
+                &mut self.projected,
+            );
+            for (x, delta) in self.x[..lanes * s.width]
+                .iter_mut()
+                .zip(&self.projected[..lanes * s.width])
+            {
                 *x += delta;
             }
 
-            rms_norm(&self.x, &block.ffn_norm, s.rms_epsilon, &mut self.normed);
-            block.gate.matvec(&self.normed, &mut self.gate);
-            block.up.matvec(&self.normed, &mut self.up);
-            for (g, u) in self.gate.iter_mut().zip(&self.up) {
+            for b in 0..lanes {
+                let at = b * s.width;
+                rms_norm(
+                    &self.x[at..at + s.width],
+                    &block.ffn_norm,
+                    s.rms_epsilon,
+                    &mut self.normed[at..at + s.width],
+                );
+            }
+            product(
+                &block.gate,
+                &self.normed,
+                lanes,
+                &mut self.wide,
+                &mut self.gate,
+            );
+            product(&block.up, &self.normed, lanes, &mut self.wide, &mut self.up);
+            for (g, u) in self.gate[..lanes * s.ffn]
+                .iter_mut()
+                .zip(&self.up[..lanes * s.ffn])
+            {
                 *g = silu(*g) * u;
             }
-            block.down.matvec(&self.gate, &mut self.projected);
-            for (x, delta) in self.x.iter_mut().zip(&self.projected) {
+            product(
+                &block.down,
+                &self.gate,
+                lanes,
+                &mut self.wide,
+                &mut self.projected,
+            );
+            for (x, delta) in self.x[..lanes * s.width]
+                .iter_mut()
+                .zip(&self.projected[..lanes * s.width])
+            {
                 *x += delta;
             }
         }
 
-        rms_norm(&self.x, &self.output_norm, s.rms_epsilon, &mut self.normed);
+        for b in 0..lanes {
+            let at = b * s.width;
+            rms_norm(
+                &self.x[at..at + s.width],
+                &self.output_norm,
+                s.rms_epsilon,
+                &mut self.normed[at..at + s.width],
+            );
+        }
         // The embedding table again, transposed — this model ties its input and
         // output vocabularies, which is why the file has no separate head.
-        self.embeddings.matvec(&self.normed, &mut self.logits);
+        product(
+            &self.embeddings,
+            &self.normed,
+            lanes,
+            &mut self.wide,
+            &mut self.logits,
+        );
 
-        self.filled = position + 1;
-        Ok(self.logits.clone())
+        for (session, _, position) in work.iter_mut() {
+            session.filled = *position + 1;
+        }
+        Ok(())
     }
+
+    /// The distribution over the vocabulary for one lane of the last step.
+    pub fn logits(&self, lane: usize) -> &[f32] {
+        let vocab = self.model.shape.vocab;
+        &self.logits[lane * vocab..(lane + 1) * vocab]
+    }
+
+    /// Advance one conversation by one token, and give back its logits.
+    ///
+    /// The single-lane spelling, kept because most callers have one
+    /// conversation and should not have to build a slice of one to say so.
+    pub fn forward(
+        &mut self,
+        session: &mut Session,
+        token: u32,
+        position: usize,
+    ) -> Result<&[f32], Error> {
+        self.step(&mut [(session, token, position)])?;
+        Ok(self.logits(0))
+    }
+}
+
+/// One batched product, staged row-major and handed back lane-major.
+///
+/// A free function rather than a method so that the tensor, the input and the
+/// two buffers can be four disjoint borrows of the same runner.
+fn product(t: &Tensor<'_>, x: &[f32], lanes: usize, wide: &mut [f32], out: &mut [f32]) {
+    let cells = t.rows * lanes;
+    t.matmul(&x[..t.row * lanes], lanes, &mut wide[..cells]);
+    to_lanes(&wide[..cells], t.rows, lanes, &mut out[..cells]);
 }
 
 /// Rotate one head's vector by its position.
