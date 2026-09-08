@@ -33,6 +33,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_core::{BootSource, VMConfig, VM};
 use hv2_swarm::{AgentId, Denied, Message, Swarm, Transport};
@@ -79,12 +80,18 @@ impl Agent {
 /// Delivery into a guest, over that guest's own vsock connection.
 struct VsockTransport {
     agents: Arc<BTreeMap<AgentId, Agent>>,
+    /// Ids for delivered frames, so a console line names the delivery that
+    /// produced it.
+    next_id: u32,
 }
 
 impl Transport for VsockTransport {
     fn deliver(&mut self, message: Message) {
         if let Some(agent) = self.agents.get(&message.to) {
-            agent.send(&message.payload);
+            // A `Deliver`, not a task: being reached by another agent is a
+            // different thing from being told what to do.
+            agent.send(&frame(self.next_id, Kind::Deliver, &message.payload));
+            self.next_id += 1;
         }
     }
 }
@@ -163,6 +170,15 @@ async fn start_agent(name: &str, elf: &Path, cid: u64) -> Result<Agent, String> 
     })
 }
 
+/// Build one frame.
+fn frame(id: u32, kind: Kind, payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; HEADER_LEN];
+    Header::new(id, kind, payload.len() as u32)
+        .encode((&mut out[..HEADER_LEN]).try_into().expect("header sized"));
+    out.extend_from_slice(payload);
+    out
+}
+
 async fn wait_for<F, Fut>(bound: Duration, mut check: F) -> Option<()>
 where
     F: FnMut() -> Fut,
@@ -180,16 +196,22 @@ where
 
 /// Wait for an agent to ask to send something, and return what it asked.
 ///
-/// The guest answers a `send:` task with `to:<recipient>:<text>`. Splitting it
-/// here rather than in the guest keeps the guest's half to one rule.
+/// The guest answers a task beginning `send ` with a `Send` frame whose payload
+/// is `<recipient>:<text>`. Splitting that here rather than in the guest keeps
+/// the guest's half to one rule.
 async fn take_request(agent: &Agent) -> Option<(String, Vec<u8>)> {
-    wait_for(BOUND, || async { agent.said().starts_with(b"to:") }).await?;
-    // Consumed, not peeked: see `Agent::take`.
+    wait_for(BOUND, || async {
+        matches!(parse(&agent.said()), Some((header, _)) if header.kind == Kind::Send)
+    })
+    .await?;
+    // Consumed, not peeked: see `Agent::take`. Framing makes a leftover
+    // harmless, but leaving one there would still mean the *next* request is
+    // read from behind it.
     let said = agent.take();
-    let rest = &said[b"to:".len()..];
-    let colon = rest.iter().position(|b| *b == b':')?;
-    let to = String::from_utf8_lossy(&rest[..colon]).to_string();
-    Some((to, rest[colon + 1..].to_vec()))
+    let (_, body) = parse(&said)?;
+    let colon = body.iter().position(|b| *b == b':')?;
+    let to = String::from_utf8_lossy(&body[..colon]).to_string();
+    Some((to, body[colon + 1..].to_vec()))
 }
 
 #[tokio::main(flavor = "multi_thread")]
@@ -224,6 +246,7 @@ async fn main() -> std::process::ExitCode {
 
     let mut swarm = Swarm::new(VsockTransport {
         agents: Arc::clone(&agents),
+        next_id: 1,
     });
     swarm.add_root("root").expect("root");
     swarm.add_agent("a", "root").expect("a");
@@ -235,7 +258,7 @@ async fn main() -> std::process::ExitCode {
 
     // ── 1. a addresses b, with no edge between them ─────────────────────
     println!();
-    a.send(b"send:b:the first message");
+    a.send(&frame(1, Kind::Task, b"send b:the first message"));
     let Some((to, payload)) = take_request(a).await else {
         println!("refused       : FAILED — a never asked to send anything");
         return std::process::ExitCode::FAILURE;
@@ -265,7 +288,7 @@ async fn main() -> std::process::ExitCode {
 
     // ── 2. the same message, once the edge exists ───────────────────────
     swarm.grant("a", "b");
-    a.send(b"send:b:the second message");
+    a.send(&frame(2, Kind::Task, b"send b:the second message"));
     let Some((to, payload)) = take_request(a).await else {
         println!("granted       : FAILED — a never asked again");
         return std::process::ExitCode::FAILURE;

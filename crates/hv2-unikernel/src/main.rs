@@ -63,6 +63,7 @@ mod mem;
 mod vsock;
 
 use alloc::vec::Vec;
+use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use linked_list_allocator::LockedHeap;
 
 use core::arch::asm;
@@ -477,10 +478,9 @@ fn serve(device: &mut vsock::Vsock) -> ! {
                 device.reply(&packet.header, vsock::op::RESPONSE, &[]);
             }
             vsock::op::RW => {
-                print("agent recv \"");
-                print_bytes(packet.payload_at, packet.payload_len);
-                print("\"\n");
-
+                // The frame handler logs what it understood, which is more
+                // use than the raw bytes: a header printed as text is a line
+                // of punctuation in front of the message.
                 // A task beginning `do:` is answered with a tool call. This is
                 // where a model would decide which tool to reach for and with
                 // what arguments; here it is one rule, and saying so matters —
@@ -490,13 +490,7 @@ fn serve(device: &mut vsock::Vsock) -> ! {
                 // reached.
                 //
                 // Everything else is echoed, as before.
-                if starts_with(&packet, b"do:") {
-                    call_tool(device, &packet);
-                } else if starts_with(&packet, b"send:") {
-                    send_to_agent(device, &packet);
-                } else {
-                    echo(device, &packet);
-                }
+                handle_frame(device, &packet);
             }
             vsock::op::SHUTDOWN => {
                 device.reply(&packet.header, vsock::op::RST, &[]);
@@ -513,72 +507,100 @@ fn serve(device: &mut vsock::Vsock) -> ! {
     }
 }
 
-/// Whether a received payload begins with `prefix`.
-fn starts_with(packet: &vsock::Packet, prefix: &[u8]) -> bool {
-    if (packet.payload_len as usize) < prefix.len() {
-        return false;
-    }
-    for (i, want) in prefix.iter().enumerate() {
-        // SAFETY: inside the receive buffer the device wrote, bounded by the
-        // length it reported.
-        let got = unsafe { core::ptr::read_volatile((packet.payload_at + i as u32) as *const u8) };
-        if got != *want {
-            return false;
+/// Act on one framed message from the host.
+///
+/// A task is answered with a tool call or a message to another agent, depending
+/// on what it says; anything else is echoed back under the same id. The rules
+/// are one line each and stand in for a model deciding — what is being
+/// exercised is the frame, the id and the permission around them, none of which
+/// care how the decision was reached.
+fn handle_frame(device: &mut vsock::Vsock, packet: &vsock::Packet) {
+    let bytes = payload_bytes(packet);
+
+    let Some((header, body)) = parse(&bytes) else {
+        // Not a whole frame, or a kind this guest does not know. Either way
+        // there is nothing safe to do with it: a guest that guesses at a frame
+        // it cannot read is a guest acting on a host it does not agree with.
+        reply(device, packet, Header::new(0, Kind::Error, 0), b"unreadable frame");
+        return;
+    };
+
+    match header.kind {
+        Kind::Task => {
+            print("agent task ");
+            print_id(header.id);
+            print(" \"");
+            print_slice(body);
+            print("\"\n");
+
+            // `send <agent> <text>` asks to reach another agent; anything else
+            // is a tool call.
+            if let Some(rest) = strip(body, b"send ") {
+                reply(device, packet, Header::new(header.id, Kind::Send, 0), rest);
+            } else {
+                reply(device, packet, Header::new(header.id, Kind::ToolCall, 0), body);
+            }
+        }
+        Kind::ToolResult => {
+            print("agent got ");
+            print_id(header.id);
+            print(" \"");
+            print_slice(body);
+            print("\"\n");
+        }
+        Kind::Deliver => {
+            print("agent recv ");
+            print_id(header.id);
+            print(" \"");
+            print_slice(body);
+            print("\"\n");
+        }
+        Kind::Error => {
+            print("agent denied ");
+            print_id(header.id);
+            print(" \"");
+            print_slice(body);
+            print("\"\n");
+        }
+        // A guest never receives these; it sends them.
+        Kind::ToolCall | Kind::Send => {
+            reply(device, packet, Header::new(header.id, Kind::Error, 0), b"not for a guest");
         }
     }
-    true
 }
 
-/// Answer a task with a tool call.
-///
-/// `do:hostname` becomes `tool:hostname`. The host decides whether this agent
-/// is allowed to invoke that tool; the guest does not know and is not told in
-/// advance, which is the point — an agent that could tell would be an agent
-/// that could plan around the answer.
-fn call_tool(device: &mut vsock::Vsock, packet: &vsock::Packet) {
-    // On the heap, so the request is bounded by memory rather than by a
-    // constant. The version before this assembled it in a 128-byte array and
-    // silently truncated anything longer — which is the wrong failure for a
-    // tool call, since a truncated argument is a different call rather than a
-    // refused one.
-    let mut request = Vec::with_capacity(packet.payload_len as usize + 5);
-    request.extend_from_slice(b"tool:");
-    request.extend_from_slice(&payload_bytes(packet)[3..]);
+/// Send a frame back, filling in the length from the payload.
+fn reply(device: &mut vsock::Vsock, packet: &vsock::Packet, header: Header, payload: &[u8]) {
+    let header = Header::new(header.id, header.kind, payload.len() as u32);
+    let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
+    let mut bytes = [0u8; HEADER_LEN];
+    header.encode(&mut bytes);
+    out.extend_from_slice(&bytes);
+    out.extend_from_slice(payload);
+    device.reply(&packet.header, vsock::op::RW, &out);
+}
 
-    print("agent calls \"");
-    for byte in &request {
+/// `body` with `prefix` removed, if it starts with it.
+fn strip<'a>(body: &'a [u8], prefix: &[u8]) -> Option<&'a [u8]> {
+    if body.len() >= prefix.len() && &body[..prefix.len()] == prefix {
+        Some(&body[prefix.len()..])
+    } else {
+        None
+    }
+}
+
+/// Write a request id, so a console line can be matched to a frame.
+fn print_id(id: u32) {
+    print("#");
+    print_hex(id);
+}
+
+/// Write bytes to the console.
+fn print_slice(bytes: &[u8]) {
+    for byte in bytes {
         // SAFETY: COM1, as in `print`.
         unsafe { outb(COM1, *byte) };
     }
-    print("\"\n");
-
-    device.reply(&packet.header, vsock::op::RW, &request);
-}
-
-/// Ask to send a message to another agent.
-///
-/// `send:b:hello` becomes `to:b:hello`. The guest names a recipient and does
-/// not know whether it may reach one — the graph decides that outside, and an
-/// agent that could tell in advance would be an agent that could plan around
-/// the answer.
-///
-/// This is the direction that was missing. Messages have always been delivered
-/// *into* guests; until now a guest could only answer on its own connection,
-/// so "agents interacting" meant a host relaying on their behalf. An agent that
-/// cannot address another agent is not really in a swarm.
-fn send_to_agent(device: &mut vsock::Vsock, packet: &vsock::Packet) {
-    let mut request = Vec::with_capacity(packet.payload_len as usize + 3);
-    request.extend_from_slice(b"to:");
-    request.extend_from_slice(&payload_bytes(packet)[5..]);
-
-    print("agent sends \"");
-    for byte in &request {
-        // SAFETY: COM1, as in `print`.
-        unsafe { outb(COM1, *byte) };
-    }
-    print("\"\n");
-
-    device.reply(&packet.header, vsock::op::RW, &request);
 }
 
 /// Copy a packet's payload out of the receive buffer.
@@ -595,19 +617,6 @@ fn payload_bytes(packet: &vsock::Packet) -> Vec<u8> {
         out.push(unsafe { core::ptr::read_volatile((packet.payload_at + i) as *const u8) });
     }
     out
-}
-
-/// Send a packet's payload back to the host, reading it from the receive
-/// buffer a byte at a time.
-fn echo(device: &mut vsock::Vsock, packet: &vsock::Packet) {
-    // Bounded by the transmit buffer, which is one page: a longer message is
-    // answered with as much of itself as fits rather than corrupting memory
-    // past the buffer. That ceiling is the device's and stays; the 256-byte one
-    // that used to sit under it was the stack's, and is gone.
-    const MAX: usize = 4096 - vsock::HEADER_SIZE;
-    let payload = payload_bytes(packet);
-    let len = payload.len().min(MAX);
-    device.reply(&packet.header, vsock::op::RW, &payload[..len]);
 }
 
 /// The time-stamp counter, for splitting one measurement into two.

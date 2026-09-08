@@ -1,0 +1,24 @@
+# The wire format an agent and its host speak.
+#
+# A workspace member so it is tested on the host, and `no_std` so the guest can
+# use the same definition. One definition, two users: the alternative is an
+# encoder in the guest and a decoder on the host drifting apart, which is a
+# class of bug this repository has already paid for once in the Multiboot
+# module list.
+[package]
+name = "hv2-agent-proto"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "The framed message format an agent unikernel and its host speak"
+
+[dependencies]
+
+[lints]
+workspace = true

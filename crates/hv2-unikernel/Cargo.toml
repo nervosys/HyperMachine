@@ -17,6 +17,11 @@ publish = false
 # array on the stack. The same one `hv1-multiboot` uses, over a static region.
 linked_list_allocator = "0.10"
 
+# The wire format, shared with the host rather than reimplemented here. A guest
+# that encodes with different code than the host decodes with is a wire format
+# with two definitions, which is a wire format waiting to drift.
+hv2-agent-proto = { path = "../hv2-agent-proto" }
+
 [[bin]]
 name = "hv2-unikernel"
 path = "src/main.rs"

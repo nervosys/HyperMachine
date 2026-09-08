@@ -26,6 +26,7 @@
 //!
 //! Needs `/dev/kvm` and the `i686-unknown-linux-musl` target.
 
+use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::VsockConnectionState;
 use hv2_core::{BootSource, VMConfig, VM};
 use std::path::{Path, PathBuf};
@@ -211,7 +212,11 @@ async fn main() -> std::process::ExitCode {
 
     // Send, and wait for the whole message to come back.
     let sent_at = Instant::now();
-    let sent = device.lock().send(id, MESSAGE.as_bytes());
+    // A framed task rather than a bare string. The guest answers a task it
+    // does not recognise as a `send` with a tool call carrying the same bytes,
+    // which is the echo this example has always checked — now with an id on it.
+    let request = frame(1, Kind::Task, MESSAGE.as_bytes());
+    let sent = device.lock().send(id, &request);
     if let Err(e) = sent {
         eprintln!("send          : FAILED — {e}");
         let _ = vm.stop().await;
@@ -220,7 +225,9 @@ async fn main() -> std::process::ExitCode {
 
     let echo = until(Duration::from_secs(5), || {
         let got = device.lock().peek(id).unwrap_or_default();
-        (got.len() >= MESSAGE.len()).then_some(got)
+        // Decoded, not measured by length: a stream that happens to be long
+        // enough is not the same thing as a frame that has arrived.
+        parse(&got).map(|(header, body)| (header, body.to_vec()))
     })
     .await;
     let round_trip = sent_at.elapsed();
@@ -234,7 +241,12 @@ async fn main() -> std::process::ExitCode {
     }
     println!();
 
-    match echo {
+    match echo.map(|(header, body)| {
+        // The id comes back unchanged, which is what lets an agent have more
+        // than one thing outstanding at a time.
+        assert_eq!(header.id, 1, "the guest should echo the request id");
+        body
+    }) {
         Some(bytes) if bytes == MESSAGE.as_bytes() => {
             println!("sent          : {MESSAGE:?}");
             println!("echoed        : {:?}", String::from_utf8_lossy(&bytes));
@@ -257,6 +269,15 @@ async fn main() -> std::process::ExitCode {
             std::process::ExitCode::FAILURE
         }
     }
+}
+
+/// Build one frame.
+fn frame(id: u32, kind: Kind, payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; HEADER_LEN];
+    Header::new(id, kind, payload.len() as u32)
+        .encode((&mut out[..HEADER_LEN]).try_into().expect("header sized"));
+    out.extend_from_slice(payload);
+    out
 }
 
 fn ms(d: Duration) -> f64 {

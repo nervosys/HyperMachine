@@ -21,6 +21,9 @@ tracing = { workspace = true }
 # hv2-core out of the dependencies is what lets the policy layer be used
 # without one.
 [dev-dependencies]
+# The wire format the guest speaks, so the examples decode it rather than
+# guessing at it.
+hv2-agent-proto = { path = "../hv2-agent-proto" }
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
 tokio = { workspace = true }
 # The vsock example holds a device the VM hands back behind this lock.

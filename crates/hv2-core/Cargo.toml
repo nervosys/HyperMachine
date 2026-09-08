@@ -66,6 +66,9 @@ pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 remote-telemetry = ["dep:reqwest"]
 
 [dev-dependencies]
+# The wire format the guest speaks, so the examples decode it rather than
+# guessing at it.
+hv2-agent-proto = { path = "../hv2-agent-proto" }
 proptest = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }

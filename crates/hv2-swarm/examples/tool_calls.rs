@@ -21,8 +21,8 @@
 //!
 //! # What is honest about the agent here
 //!
-//! Nothing in the guest decides anything. A task beginning `do:` is answered
-//! with `tool:` and the rest, by one rule, and that stands in for a model
+//! Nothing in the guest decides anything. A task is answered with a tool call
+//! carrying the same bytes, by one rule, and that stands in for a model
 //! choosing a tool. What is under test is the path a decision travels and the
 //! permission that governs it, and neither cares how the decision was reached
 //! — which is exactly why this can be measured before there is a model to
@@ -41,6 +41,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_core::{BootSource, VMConfig, VM};
 use hv2_swarm::{AgentId, Capability, Swarm};
@@ -160,6 +161,15 @@ async fn start_agent(name: &str, elf: &Path, cid: u64) -> Result<Agent, String> 
     })
 }
 
+/// Build one frame.
+fn frame(id: u32, kind: Kind, payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; HEADER_LEN];
+    Header::new(id, kind, payload.len() as u32)
+        .encode((&mut out[..HEADER_LEN]).try_into().expect("header sized"));
+    out.extend_from_slice(payload);
+    out
+}
+
 async fn wait_for<F, Fut>(bound: Duration, mut check: F) -> Option<()>
 where
     F: FnMut() -> Fut,
@@ -191,24 +201,30 @@ enum Outcome {
 /// from a guest into the host — the same shape as `Swarm::send`, and for the
 /// same reason: a check a caller can forget is advice.
 async fn broker(swarm: &Swarm<hv2_swarm::LocalTransport>, id: &AgentId, agent: &Agent) -> Outcome {
-    let asked = wait_for(BOUND, || async { agent.said().starts_with(b"tool:") }).await;
+    // A whole frame, decoded — not a prefix on a stream. What arrives is a
+    // `ToolCall` under the id of the task that prompted it.
+    let asked = wait_for(BOUND, || async {
+        matches!(parse(&agent.said()), Some((header, _)) if header.kind == Kind::ToolCall)
+    })
+    .await;
     if asked.is_none() {
         return Outcome::Silent;
     }
 
-    let request = agent.said();
-    let name = String::from_utf8_lossy(&request[b"tool:".len()..])
-        .trim()
-        .to_string();
+    let said = agent.said();
+    let (header, body) = parse(&said).expect("a whole tool call, just waited for");
+    let name = String::from_utf8_lossy(body).trim().to_string();
 
     let capability = Capability::new(format!("tool:{name}"));
     if !swarm.holds(id, &capability) {
-        agent.send(b"refused");
+        // The refusal comes back under the request's own id, so an agent with
+        // several calls outstanding knows which one was refused.
+        agent.send(&frame(header.id, Kind::Error, b"refused"));
         return Outcome::Refused;
     }
 
     let answer = run_tool();
-    agent.send(answer.as_bytes());
+    agent.send(&frame(header.id, Kind::ToolResult, answer.as_bytes()));
     Outcome::Ran(answer)
 }
 
@@ -255,7 +271,7 @@ async fn main() -> std::process::ExitCode {
     for name in names {
         let id = AgentId::new(name);
         let agent = &agents[&id];
-        agent.send(format!("do:{TOOL}").as_bytes());
+        agent.send(&frame(1, Kind::Task, TOOL.as_bytes()));
         let outcome = broker(&swarm, &id, agent).await;
         match &outcome {
             Outcome::Ran(answer) => {
@@ -268,6 +284,22 @@ async fn main() -> std::process::ExitCode {
             }
         }
         outcomes.push(outcome);
+    }
+
+    // A refusal the agent is never told about is a hang, not a refusal. The
+    // guest prints one when it decodes an `Error`, so wait for that rather than
+    // dumping the console the instant the frame is handed to the device.
+    let told = wait_for(BOUND, || async {
+        agents[&AgentId::new("untrusted")]
+            .vm
+            .console_output()
+            .await
+            .contains("agent denied")
+    })
+    .await;
+    if told.is_none() {
+        println!("refusal       : FAILED — untrusted was refused and never told");
+        ok = false;
     }
 
     // The assertion that matters, counted at the tool rather than at the gate.

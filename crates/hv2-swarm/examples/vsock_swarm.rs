@@ -51,6 +51,7 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use hv2_agent_proto::{Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_core::{BootSource, VMConfig, VM};
 use hv2_swarm::{AgentId, Denied, Message, Swarm, Transport};
@@ -85,6 +86,9 @@ impl Agent {
 /// device afterwards, never from here.
 struct VsockTransport {
     agents: Arc<BTreeMap<AgentId, Agent>>,
+    /// Ids for the frames this transport sends. Monotonic, so a console line
+    /// can be matched to the delivery that produced it.
+    next_id: u32,
     /// Deliveries that could not reach a guest, kept rather than discarded so
     /// a run can report them instead of appearing to have worked.
     undeliverable: Vec<(AgentId, String)>,
@@ -101,10 +105,37 @@ impl Transport for VsockTransport {
         // the guest woken before this returns. A delivery that completed later
         // would make "the message arrived" and "the message was accepted" two
         // different moments, and every assertion below a race.
-        if let Err(e) = agent.device.lock().send(agent.connection, &message.payload) {
+        // Framed, and as a `Deliver`: the guest is being told another agent
+        // reached it, which is a different thing from being given a task.
+        let payload = frame(self.next_id, Kind::Deliver, &message.payload);
+        self.next_id += 1;
+        if let Err(e) = agent.device.lock().send(agent.connection, &payload) {
             self.undeliverable.push((message.to, e.to_string()));
         }
     }
+}
+
+/// Build one frame.
+fn frame(id: u32, kind: Kind, payload: &[u8]) -> Vec<u8> {
+    let mut out = vec![0u8; HEADER_LEN];
+    Header::new(id, kind, payload.len() as u32)
+        .encode((&mut out[..HEADER_LEN]).try_into().expect("header sized"));
+    out.extend_from_slice(payload);
+    out
+}
+
+/// Whether an agent's guest has printed `payload` on its own console.
+///
+/// Checked at the recipient, in the recipient's VM, which is the only place a
+/// claim about delivery is worth anything. The negative case has always been
+/// checked this way; both positive ones are now, so all three agree about what
+/// counts as arriving.
+async fn saw(agent: &Agent, payload: &[u8]) -> bool {
+    agent
+        .vm
+        .console_output()
+        .await
+        .contains(&String::from_utf8_lossy(payload).to_string())
 }
 
 /// Build the guest crate and stage its ELF on local storage.
@@ -326,6 +357,7 @@ async fn main() -> std::process::ExitCode {
     let agents = Arc::new(agents);
     let mut swarm = Swarm::new(VsockTransport {
         agents: Arc::clone(&agents),
+        next_id: 1,
         undeliverable: Vec::new(),
     });
     swarm.add_root("root").expect("root");
@@ -345,17 +377,16 @@ async fn main() -> std::process::ExitCode {
         Ok(relation) => {
             let agent = &agents[&AgentId::new("w-a")];
             let arrived = wait_for(Duration::from_secs(5), || async {
-                agent.echoed() == command
+                saw(agent, &command).await
             })
             .await;
             match arrived {
                 Some(()) => {
-                    println!("down          : ok — w-a echoed the command back ({relation})");
+                    println!("down          : ok — w-a's guest received the command ({relation})");
                 }
                 None => {
                     println!(
-                        "down          : FAILED — the graph admitted it but w-a echoed {:?}",
-                        String::from_utf8_lossy(&agent.echoed())
+                        "down          : FAILED — the graph admitted it and w-a's guest never                          saw it"
                     );
                     ok = false;
                 }
@@ -406,7 +437,7 @@ async fn main() -> std::process::ExitCode {
         Ok(relation) => {
             let agent = &agents[&AgentId::new("w-b")];
             let arrived = wait_for(Duration::from_secs(5), || async {
-                agent.echoed() == sideways
+                saw(agent, &sideways).await
             })
             .await;
             match arrived {
@@ -415,7 +446,7 @@ async fn main() -> std::process::ExitCode {
                      ({relation})"
                 ),
                 None => {
-                    println!("granted       : FAILED — granted, but w-b echoed nothing");
+                    println!("granted       : FAILED — granted, but w-b's guest never saw it");
                     ok = false;
                 }
             }
