@@ -107,6 +107,18 @@ pub(crate) fn print_byte(byte: u8) {
     unsafe { outb(COM1, byte) };
 }
 
+/// Write a small count in decimal.
+///
+/// `print_hex` is for addresses. Using it on "how many times" gives sixteen
+/// digits of leading zeros in front of a two, which is a formatter chosen for
+/// one job doing another.
+fn print_dec(value: u64) {
+    if value >= 10 {
+        print_dec(value / 10);
+    }
+    print_byte(b'0' + (value % 10) as u8);
+}
+
 fn print_hex(value: u64) {
     const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
     print("0x");
@@ -249,8 +261,23 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
 ");
         }
         guest::Outcome::Ran(log) => {
-            for (n, exit) in log.exits[..log.count].iter().enumerate() {
-                report_exit(n + 1, exit);
+            // Runs of identical exits are collapsed. A serial port written a
+            // byte at a time produces sixty consecutive lines that say the same
+            // thing, which is not a log, it is a wall — and it overran the
+            // console buffer on the way, truncating the summary that comes
+            // after it. Sixty identical lines and "x60" carry the same
+            // information.
+            let mut n = 0;
+            while n < log.count {
+                let mut run = 1;
+                while n + run < log.count
+                    && log.exits[n + run].code == log.exits[n].code
+                    && log.exits[n + run].answer.as_ptr() == log.exits[n].answer.as_ptr()
+                {
+                    run += 1;
+                }
+                report_exit(n + 1, &log.exits[n], run);
+                n += run;
             }
             print("hv1   stopped: ");
             print(log.stopped);
@@ -308,6 +335,21 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             });
             print("
 ");
+            print("hv1   second cpu: ");
+            if log.ap_started && log.ap_ran && log.ap_seen {
+                print("started, ran, and the first processor saw its work through memory
+");
+            } else if log.ap_started {
+                print("FAILED — started and did not get where it was going
+");
+            } else {
+                print("FAILED — never started
+");
+            }
+            print("hv1   switches  : ");
+            print_dec(log.switches as u64);
+            print(" times the hypervisor moved from one processor to the other
+");
             print("hv1   interrupt : ");
             print(if log.interrupt_handled {
                 "injected 0x20 while halted, and the guest's own handler ran"
@@ -358,9 +400,14 @@ fn error_name(e: hv1_core::Error) -> &'static str {
 ///
 /// The answer is the half that matters. An exit log is a list of things that
 /// happened to a guest; a hypervisor is the column next to it.
-fn report_exit(n: usize, exit: &guest::Exit) {
+fn report_exit(n: usize, exit: &guest::Exit, run: usize) {
     print("hv1   exit ");
-    print_byte(b'0' + (n / 10) as u8);
+    // Three digits, because the log holds a hundred and sixty. Two of them
+    // printed exit 100 as `;0`, which is what `b'0' + 10` is — a counter that
+    // outgrew its formatter, and unreadable in exactly the place a reader goes
+    // looking when something has gone wrong.
+    print_byte(b'0' + (n / 100) as u8);
+    print_byte(b'0' + ((n / 10) % 10) as u8);
     print_byte(b'0' + (n % 10) as u8);
     print("  ");
     print_hex(exit.code);
@@ -372,6 +419,10 @@ fn report_exit(n: usize, exit: &guest::Exit) {
     print_hex(exit.info);
     print("  -> ");
     print(exit.answer);
+    if run > 1 {
+        print("  x");
+        print_dec(run as u64);
+    }
     print("
 ");
 }

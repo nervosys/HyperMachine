@@ -132,13 +132,18 @@ async fn main() -> std::process::ExitCode {
     }
 
     // Wait for the guest to finish rather than for a fixed time: the last line
-    // it writes is "done", and anything short of that is a guest that stopped
-    // somewhere it did not choose.
+    // it writes is `hv1   done`, and anything short of that is a guest that
+    // stopped somewhere it did not choose.
+    //
+    // The whole line, not the word. This matched on "done" until hv1 gained an
+    // exit description ending "and is done" — after which it stopped reading
+    // partway through the log and reported every later claim as absent. A
+    // sentinel that can appear inside ordinary output is not a sentinel.
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut console = String::new();
     while Instant::now() < deadline {
         console = vm.console_output().await;
-        if console.contains("done") {
+        if console.contains("hv1   done") {
             break;
         }
         tokio::time::sleep(Duration::from_millis(2)).await;
@@ -192,6 +197,7 @@ async fn main() -> std::process::ExitCode {
     let drove_a_ring = console.contains("a request through a ring");
     let ring_returned = console.contains("read the reply back out of the buffer it named");
     let refused_out_of_range = console.contains("outside the guest's own memory was not followed");
+    let second_processor = console.contains("the first processor saw its work through memory");
     let delivered_an_interrupt = console.contains("the guest's own handler ran");
     let guest_carried_on = console.contains("the handler's iret returned");
 
@@ -229,6 +235,10 @@ async fn main() -> std::process::ExitCode {
     println!(
         "refused a bad one: {}  (a descriptor pointing outside the guest's own memory)",
         yes_no(refused_out_of_range)
+    );
+    println!(
+        "second processor: {}  (started where the first asked, and the first saw its work in shared memory)",
+        yes_no(second_processor)
     );
     println!(
         "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
@@ -289,11 +299,12 @@ async fn main() -> std::process::ExitCode {
         && drove_a_ring
         && ring_returned
         && refused_out_of_range
+        && second_processor
         && delivered_an_interrupt
         && guest_carried_on
     {
         println!(
-            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, AP bring-up and every real device remain untested — and one vCPU is not an operating system either."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor where the first one asked and scheduled the two of them onto the one it has, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, the real bring-up protocol and every real device remain untested."
         );
     } else if initialised {
         println!(

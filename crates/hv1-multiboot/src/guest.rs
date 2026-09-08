@@ -160,6 +160,9 @@ core::arch::global_asm!(
     .set MESSAGE_OFFSET, message - guest_start
     .set RING_MSG_LINEAR, GUEST_BASE + ring_message - guest_start
     .set RING_MSG_LEN,    ring_message_end - ring_message
+    .set AP_ENTRY_LINEAR, GUEST_BASE + ap_entry - guest_start
+    .set AP_MSG_LINEAR,   GUEST_BASE + ap_message - guest_start
+    .set AP_STACK_TOP,    0x8000
     .set GDT_PTR_OFFSET, gdt_pointer - guest_start
     .set IDT_PTR_LINEAR, GUEST_BASE + idt_pointer - guest_start
     .set STACK_TOP,      GUEST_BASE + 0xF00
@@ -319,6 +322,31 @@ protected:
     // Hypercall 6: asked for something out of range.
     mov eax, 6
     vmmcall
+
+    // ── A second processor ──────────────────────────────────────────────
+    // Hypercall 7 asks the hypervisor to start one, at the address in EBX.
+    // On hardware this would be INIT and SIPI through the local APIC; here it
+    // is a hypercall, which is a real shortcut and is labelled as one -- what
+    // is being shown is two guest processors sharing memory and a hypervisor
+    // scheduling them, not the bring-up protocol.
+    mov dword ptr [0x4000], 0
+    mov eax, 7
+    mov ebx, offset AP_ENTRY_LINEAR
+    vmmcall
+
+    // Wait for it, yielding rather than spinning. There is one physical
+    // processor under both of these, so a busy loop would never let the other
+    // one run: `hlt` is intercepted, so it is a yield and not a stop.
+8:
+    mov eax, [0x4000]
+    test eax, eax
+    jnz 9f
+    hlt
+    jmp 8b
+9:
+    // Hypercall 10: the first processor saw what the second one wrote.
+    mov eax, 10
+    vmmcall
 3:
     hlt
     jmp 3b
@@ -378,6 +406,42 @@ idt_pointer:
 
 message:
     .asciz "hello from a guest of hv1\n"
+    // The second processor starts here, in protected mode with the tables the
+    // first one built -- it shares them, because it shares the memory they are
+    // in. Its stack is its own: two processors on one stack is one processor
+    // with a corrupted one.
+ap_entry:
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov fs, ax
+    mov gs, ax
+    mov esp, offset AP_STACK_TOP
+
+    mov esi, offset AP_MSG_LINEAR
+11:
+    mov al, [esi]
+    test al, al
+    jz 12f
+    mov dx, 0x3F8
+    out dx, al
+    inc esi
+    jmp 11b
+12:
+    // Tell the other processor, through memory both of them can see.
+    mov dword ptr [0x4000], 1
+    // Hypercall 9: the second processor ran.
+    mov eax, 9
+    vmmcall
+13:
+    hlt
+    jmp 13b
+
+ap_message:
+    .asciz "and this line is from the second processor
+"
+
 ring_message:
     .ascii "a request through a ring"
 ring_message_end:
@@ -448,6 +512,31 @@ static mut MSRPM: Msrpm = Msrpm([0; 8 * 1024]);
 
 /// The VMCB. 4 KiB aligned by its own `repr`.
 static mut VMCB: Option<Vmcb> = None;
+
+/// The second processor's.
+///
+/// Its own, not a copy taken at run time: a VMCB is four kilobytes the hardware
+/// reads and writes while its guest runs, so two vCPUs sharing one would be two
+/// processors sharing a register file.
+static mut VMCB_AP: Option<Vmcb> = None;
+
+/// How many guest processors this hypervisor is prepared to run.
+const VCPUS: usize = 2;
+
+/// One of the two VMCBs.
+///
+/// # Safety
+///
+/// Both must have been assigned, and the returned reference must not outlive
+/// the caller's use of it — there is one processor here and one of these in
+/// hand at a time.
+unsafe fn vmcb_of(index: usize) -> &'static mut Vmcb {
+    if index == 0 {
+        (*core::ptr::addr_of_mut!(VMCB)).as_mut().expect("vcpu 0")
+    } else {
+        (*core::ptr::addr_of_mut!(VMCB_AP)).as_mut().expect("vcpu 1")
+    }
+}
 
 /// One level of a nested page table: 512 eight-byte entries in a 4 KiB page.
 #[repr(C, align(4096))]
@@ -655,6 +744,13 @@ pub struct Transcript {
     pub ring_returned: bool,
     /// Whether a descriptor pointed outside the guest's own memory.
     pub ring_refused: bool,
+    /// Whether a second guest processor was started and ran.
+    pub ap_started: bool,
+    pub ap_ran: bool,
+    /// Whether the first processor saw what the second one wrote.
+    pub ap_seen: bool,
+    /// How many times the hypervisor moved from one processor to the other.
+    pub switches: usize,
     /// Why the loop stopped.
     pub stopped: &'static str,
 }
@@ -675,6 +771,14 @@ const EFER_SVME: u64 = 1 << 12;
 
 /// Flush the whole TLB on entry. Correct on a first entry and cheap after.
 const TLB_FLUSH_ALL: u8 = 1;
+
+/// Where the second processor's stack goes.
+///
+/// Above the ring's buffers and a long way from the first processor's, because
+/// two processors on one stack is one processor with a corrupted one. It has to
+/// match the guest's own idea of it, which is why the guest sets `esp` to the
+/// same number.
+const AP_STACK_TOP: u64 = 0x8000;
 
 /// Instruction lengths, for stepping over an intercepted instruction when the
 /// hardware did not say how long it was.
@@ -746,19 +850,26 @@ pub unsafe fn run() -> Outcome {
     let _ = svm::set_host_save_area(host_save);
 
     VMCB = Some(Vmcb::new());
-    let vmcb = (*core::ptr::addr_of_mut!(VMCB))
-        .as_mut()
-        .expect("just assigned");
+    VMCB_AP = Some(Vmcb::new());
+    let npt = build_npt();
 
-    // The crate's own helper, which is the point: this runs hv1's VMCB setup,
-    // not a reimplementation of it.
-    svm::setup_vmcb_controls(vmcb, build_npt(), 1);
+    // Both processors, set up the same way and sharing everything a guest's
+    // processors share: the nested page tables, the ASID, the permission maps.
+    // What they do not share is the VMCB itself, which is where their registers
+    // live.
+    for index in 0..VCPUS {
+        let vmcb = vmcb_of(index);
+        // The crate's own helper, which is the point: this runs hv1's VMCB
+        // setup, not a reimplementation of it.
+        svm::setup_vmcb_controls(vmcb, npt, 1);
+        // The two addresses the helper leaves at zero and the hardware reads
+        // anyway. See the module documentation.
+        vmcb.control.iopm_base_pa = core::ptr::addr_of!(IOPM) as u64;
+        vmcb.control.msrpm_base_pa = core::ptr::addr_of!(MSRPM) as u64;
+        vmcb.control.tlb_control = TLB_FLUSH_ALL;
+    }
 
-    // The two addresses the helper leaves at zero and the hardware reads
-    // anyway. See the module documentation.
-    vmcb.control.iopm_base_pa = core::ptr::addr_of!(IOPM) as u64;
-    vmcb.control.msrpm_base_pa = core::ptr::addr_of!(MSRPM) as u64;
-    vmcb.control.tlb_control = TLB_FLUSH_ALL;
+    let vmcb = vmcb_of(0);
 
     // Guest state: real mode, entered at GUEST_CODE_ADDR.
     let save = &mut vmcb.save;
@@ -812,7 +923,14 @@ pub unsafe fn run() -> Outcome {
     // register comes back holding a guest value, so the first thing the host
     // does afterwards runs on the guest's data — which here meant the console
     // stopping mid-word, and is why this path is the one worth exercising.
-    let mut regs = GeneralRegisters::default();
+    let mut regs = [GeneralRegisters::default(); VCPUS];
+
+    // Which processor is running, which exist, and which have finished. There
+    // is one physical processor underneath, so "scheduling" is: run one until
+    // it yields, then run the other.
+    let mut current = 0usize;
+    let mut runnable = [true, false];
+    let mut finished = [false; VCPUS];
 
     let mut log = Transcript {
         exits: core::array::from_fn(|_| Exit {
@@ -834,13 +952,20 @@ pub unsafe fn run() -> Outcome {
         ring_len: 0,
         ring_returned: false,
         ring_refused: false,
+        ap_started: false,
+        ap_ran: false,
+        ap_seen: false,
+        switches: 0,
         stopped: "the guest halted with nothing left to do",
     };
     let mut halts = 0usize;
 
     while log.count < MAX_EXITS {
+        // The processor being run this time round. Fetched here rather than
+        // held across the loop, because which one it is changes.
+        let vmcb = vmcb_of(current);
         vmcb.control.vmcb_clean = 0;
-        let _ = svm::svm_run(vmcb, &mut regs);
+        let _ = svm::svm_run(vmcb, &mut regs[current]);
 
         let code = vmcb.control.exit_code;
         let rip = vmcb.save.rip;
@@ -934,6 +1059,40 @@ pub unsafe fn run() -> Outcome {
                         "the ring round trip finished"
                     }
                     6 => "and then asked for memory it does not have",
+                    7 => {
+                        // Start the second processor where the first one said.
+                        // Its state is the first one's, which is what makes it
+                        // a processor of the same guest: the same segments, the
+                        // same tables, the same memory. What differs is where
+                        // it starts and what it stands on.
+                        let entry = regs[current].rbx;
+                        let bsp = vmcb.save;
+                        let ap = vmcb_of(1);
+                        ap.save = bsp;
+                        ap.save.rip = entry;
+                        ap.save.rsp = AP_STACK_TOP;
+                        ap.save.rax = 0;
+                        ap.control.vmcb_clean = 0;
+                        runnable[1] = true;
+                        log.ap_started = true;
+                        "a second processor, started where the first one asked"
+                    }
+                    9 => {
+                        // Its last word. Marking it finished is what stops the
+                        // yield loop below: two processors that have both said
+                        // everything they have to say will otherwise hand the
+                        // one physical processor back and forth forever, which
+                        // is exactly what the first version of this did until
+                        // the exit log filled up.
+                        log.ap_ran = true;
+                        finished[current] = true;
+                        "the second processor ran, and is done"
+                    }
+                    10 => {
+                        log.ap_seen = true;
+                        finished[current] = true;
+                        "the first processor saw what the second one wrote"
+                    }
                     0xFF => {
                         log.faulted = true;
                         log.stopped = "the guest took a processor exception and said so";
@@ -945,8 +1104,27 @@ pub unsafe fn run() -> Outcome {
                 vmcb.save.rip = step_over(vmcb, LEN_VMMCALL);
             }
             VMEXIT_HLT => {
-                halts += 1;
+                // A halt is a yield when there is another processor to run. It
+                // is the guest's only way to give up the one physical processor
+                // underneath both of them, and it is why the waiting loop in
+                // the guest halts rather than spins.
                 vmcb.save.rip = step_over(vmcb, LEN_HLT);
+                let other = 1 - current;
+                if runnable[other] && !finished[other] {
+                    current = other;
+                    log.switches += 1;
+                    answer = "yielded — the other processor runs";
+                    log.exits[log.count] = Exit {
+                        code,
+                        rip,
+                        info,
+                        answer,
+                    };
+                    log.count += 1;
+                    continue;
+                }
+
+                halts += 1;
                 if halts == 1 {
                     // Wake it, through its own interrupt table. Injection is
                     // unconditional — it does not consult the guest's IF — so
@@ -964,9 +1142,9 @@ pub unsafe fn run() -> Outcome {
                 // to fault: a hypervisor that intercepts an instruction and has
                 // no answer for it has intercepted it by accident.
                 vmcb.save.rax = 0;
-                regs.rbx = 0;
-                regs.rcx = 0;
-                regs.rdx = 0;
+                regs[current].rbx = 0;
+                regs[current].rcx = 0;
+                regs[current].rdx = 0;
                 vmcb.save.rip = step_over(vmcb, LEN_CPUID);
                 answer = "answered with zeros";
             }
