@@ -188,6 +188,7 @@ async fn main() -> std::process::ExitCode {
     // the handler line can only be reached by the CPU taking a vector through
     // the guest's own table, and the third only by an `iret` returning from it.
     let emulated_a_device = console.contains("hello from a guest of hv1");
+    let crossed_to_protected = console.contains("crossed into 32-bit mode");
     let delivered_an_interrupt = console.contains("the guest's own handler ran");
     let guest_carried_on = console.contains("the handler's iret returned");
 
@@ -209,6 +210,10 @@ async fn main() -> std::process::ExitCode {
     println!(
         "emulated a device: {}  (the guest's line arrived one intercepted `out` at a time)",
         yes_no(emulated_a_device)
+    );
+    println!(
+        "crossed modes : {}  (its own GDT, CR0.PE and a far jump — the RIP in the exit log goes from 0x21 to 0x1060, a linear address, so the segment is flat)",
+        yes_no(crossed_to_protected)
     );
     println!(
         "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
@@ -263,9 +268,14 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
-    if initialised && emulated_a_device && delivered_an_interrupt && guest_carried_on {
+    if initialised
+        && emulated_a_device
+        && crossed_to_protected
+        && delivered_an_interrupt
+        && guest_carried_on
+    {
         println!(
-            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls, injected an interrupt into it while it was halted, and let it carry on from where its own handler returned. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, AP bring-up and every real device remain untested, and the guest is real mode with one emulated port rather than an operating system."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, injected an interrupt that the guest took through a gate in its own IDT, and let it carry on from where that handler returned. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, AP bring-up and every real device remain untested — and one vCPU running 32-bit code with one emulated port is not an operating system either."
         );
     } else if initialised {
         println!(

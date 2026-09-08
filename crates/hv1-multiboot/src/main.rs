@@ -240,6 +240,14 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
 ",
             );
         }
+        guest::Outcome::BaseMismatch { asm, rust } => {
+            print("hv1   guest: the guest's assembly was built for ");
+            print_hex(asm);
+            print(" and this module loads it at ");
+            print_hex(rust);
+            print(" — a far jump into nothing, refused before it happened
+");
+        }
         guest::Outcome::Ran(log) => {
             for (n, exit) in log.exits[..log.count].iter().enumerate() {
                 report_exit(n + 1, exit);
@@ -260,6 +268,18 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             });
             print("
 ");
+            print("hv1   protected : ");
+            print(if log.protected_mode {
+                "the guest built a GDT and an IDT and crossed into 32-bit mode"
+            } else {
+                "FAILED — the guest never reported reaching protected mode"
+            });
+            print("
+");
+            if log.faulted {
+                print("hv1   fault     : the guest took a processor exception of its own
+");
+            }
             print("hv1   interrupt : ");
             print(if log.interrupt_handled {
                 "injected 0x20 while halted, and the guest's own handler ran"

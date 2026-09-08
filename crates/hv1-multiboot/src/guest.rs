@@ -29,10 +29,28 @@
 //! stayed four bytes long. `.code16` in a section of its own costs nothing and
 //! removes the ceiling.
 //!
-//! It is real mode, because a real-mode guest needs no page tables of its own
-//! and its interrupt table is four bytes per vector at physical zero. That is
-//! not a smaller demonstration of interrupt delivery than a protected-mode IDT
-//! would be; it is the same mechanism with less scaffolding in front of it.
+//! It starts in real mode, because that is where a `VMRUN` with `CR0.PE` clear
+//! puts it, and then leaves: a descriptor table of its own, `CR0.PE`, and a far
+//! jump into 32-bit code. That is the step that separates a guest from a
+//! program a hypervisor happens to be running — it builds the environment it
+//! runs in rather than being handed one, and everything after the jump uses
+//! *linear* addresses, which is visible from outside as the RIP in the exit log
+//! going from `0x21` to `0x1060`.
+//!
+//! In protected mode the interrupt table is thirty-three eight-byte gates
+//! rather than four-byte vectors: each has a selector, a privilege level and a
+//! present bit, and the thirty-two the processor reserves for itself point at a
+//! handler that reports rather than at nothing. A guest that faults now says
+//! so with a hypercall instead of triple-faulting into a shutdown exit with no
+//! diagnostic.
+//!
+//! # Two copies of one number, and a check
+//!
+//! Once the guest is in protected mode every address it forms is linear, so it
+//! has to know where it was loaded — which means the load address exists twice,
+//! in this module and in the assembly. A mismatch would not fail to build; it
+//! would far-jump somewhere plausible and die. So the assembly exports its copy
+//! as an absolute symbol and `run` compares them before `VMRUN`.
 //!
 //! # The guest has its own memory now
 //!
@@ -127,38 +145,41 @@ core::arch::global_asm!(
     .section .text.guest16, "ax"
     .code16
 
-    // Absolute constants, defined before they are used. Every address inside
-    // the guest has to be a distance from its own start, because it runs with
-    // CS.base at its load address and RIP at zero -- and the assembler will not
-    // accept that subtraction written at the point of use, where it is two
-    // symbols in one operand.
-    .set HANDLER_OFFSET, handler - guest_start
+    // Where the hypervisor loads this. Protected mode addresses are linear and
+    // a flat code segment has base zero, so every address after the far jump
+    // has to be the load address plus an offset — which means the guest has to
+    // know where it was put. Checked against the Rust constant at run time
+    // rather than kept in step by hand: see `GUEST_BASE_FROM_ASM`.
+    .set GUEST_BASE, 0x1000
+    .global guest_base_marker
+    .set guest_base_marker, GUEST_BASE
+
+    // Absolute constants, defined before they are used. The assembler will not
+    // take a difference of two symbols written at the point of use, where it is
+    // two symbols in one operand.
     .set MESSAGE_OFFSET, message - guest_start
+    .set GDT_PTR_OFFSET, gdt_pointer - guest_start
+    .set IDT_PTR_LINEAR, GUEST_BASE + idt_pointer - guest_start
+    .set STACK_TOP,      GUEST_BASE + 0xF00
+    .set PM_ENTRY,       GUEST_BASE + protected - guest_start
+    .set TIMER_LINEAR,   GUEST_BASE + timer - guest_start
+    .set FAULT_LINEAR,   GUEST_BASE + fault - guest_start
 
     .global guest_start
 guest_start:
+    // ── Real mode ───────────────────────────────────────────────────────
     // Data and stack. `mov ax, cs` is the only way a real-mode program learns
     // where it is, and it works here because the guest is loaded low enough for
-    // its base to be a selector -- which is why GUEST_CODE_ADDR is 0x1000 and
-    // not something more comfortable.
+    // its base to be a selector — which is why GUEST_BASE is 0x1000 and not
+    // somewhere more comfortable.
     mov ax, cs
     mov ds, ax
     xor ax, ax
     mov ss, ax
     mov sp, 0xF00
 
-    // The interrupt table: four bytes per vector at physical zero, offset then
-    // segment. ES is zero, so this writes the guest's own table -- which is in
-    // the guest's own memory, since the nested tables translate rather than
-    // identity-map.
-    mov es, ax
-    mov ax, offset HANDLER_OFFSET
-    mov word ptr es:[0x20 * 4], ax
-    mov ax, cs
-    mov word ptr es:[0x20 * 4 + 2], ax
-    sti
-
-    // Say hello, one intercepted `out` at a time. There is no serial port here.
+    // Say hello before changing anything, one intercepted `out` at a time.
+    // There is no serial port on the other side of these.
     mov si, offset MESSAGE_OFFSET
 1:
     mov al, [si]
@@ -169,28 +190,118 @@ guest_start:
     inc si
     jmp 1b
 2:
-    // Hypercall 1: ready.
+    // Hypercall 1: about to leave real mode.
     mov eax, 1
     vmmcall
 
-    // Idle, and wait to be woken. Nothing in the guest arranges this: the
-    // hypervisor sees the halt and injects the vector.
+    // ── The crossing ────────────────────────────────────────────────────
+    // A descriptor table of its own, then CR0.PE, then a far jump. The jump is
+    // what makes the CPU 32-bit: until it retires, CS still has a real-mode
+    // base and the next instruction would be decoded under the old rules.
+    //
+    // The loader's tables are not reused and could not be — this guest has no
+    // loader. Every table below is its own, in its own memory, which is the
+    // difference between a guest that has been handed an environment and one
+    // that builds one.
+    cli
+    mov bx, offset GDT_PTR_OFFSET
+    lgdt [bx]
+
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+
+    // 0x08 is the flat 32-bit code descriptor, the first after the null.
+    ljmp 0x08, offset PM_ENTRY
+
+    .code32
+protected:
+    // Flat data everywhere. In protected mode a selector is an index into the
+    // table just loaded, and a stale real-mode one refers to nothing.
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov ss, ax
+    mov fs, ax
+    mov gs, ax
+    mov esp, offset STACK_TOP
+
+    // An interrupt table with eight-byte gates, not four-byte vectors. This is
+    // the piece a real-mode guest does not have: every vector has a descriptor
+    // with a selector, a privilege level and a present bit, and the thirty-two
+    // the processor reserves point at a reporter rather than at nothing.
+    mov ebx, offset IDT_PTR_LINEAR
+    lidt [ebx]
+    sti
+
+    // Hypercall 2: in protected mode, with an IDT of its own.
+    mov eax, 2
+    vmmcall
+
+    // Idle. Nothing in the guest arranges what happens next: the hypervisor
+    // sees the halt and injects a vector.
     hlt
 
-    // Hypercall 3: back from the handler, so the `iret` returned here.
-    mov eax, 3
+    // Hypercall 4: the handler returned here, so `iretd` came back to 32-bit
+    // code at the right address.
+    mov eax, 4
     vmmcall
 3:
     hlt
     jmp 3b
 
-    // Hypercall 2, from inside the interrupt handler. This is the line that
-    // cannot be faked: the only way it runs is if the CPU took vector 0x20
-    // through the table written above.
-handler:
-    mov eax, 2
+    // Hypercall 3, from inside the handler. The only way this runs is if the
+    // CPU took vector 0x20 through a gate in the table above — in protected
+    // mode, where a gate is a descriptor and not an address.
+timer:
+    mov eax, 3
     vmmcall
-    iret
+    // `iretd`, not `iret`. In Intel syntax bare `iret` is the 16-bit form and
+    // would pop a 16-bit frame off a 32-bit one, returning to a garbage
+    // selector. The same mistake cost hv2's guest a debugging session.
+    iretd
+
+    // Any of the processor's own exceptions. A guest that faults should say so
+    // rather than triple-fault into a shutdown exit with no diagnostic: this
+    // hypercall is how the hypervisor learns the guest broke rather than
+    // finished.
+fault:
+    mov eax, 0xFF
+    vmmcall
+4:
+    hlt
+    jmp 4b
+
+    .align 8
+gdt:
+    .quad 0                                  // null
+    .quad 0x00CF9A000000FFFF                 // 0x08 code32: base 0, limit 4 GiB
+    .quad 0x00CF92000000FFFF                 // 0x10 data32: the same, writable
+gdt_end:
+gdt_pointer:
+    .word gdt_end - gdt - 1
+    .long GUEST_BASE + gdt - guest_start
+
+    // Thirty-three gates: the thirty-two the architecture reserves, all
+    // pointing at the reporter, and then the one the hypervisor injects.
+    .align 8
+idt:
+    .rept 32
+    .word FAULT_LINEAR & 0xFFFF
+    .word 0x08
+    .byte 0
+    .byte 0x8E
+    .word (FAULT_LINEAR >> 16) & 0xFFFF
+    .endr
+    .word TIMER_LINEAR & 0xFFFF
+    .word 0x08
+    .byte 0
+    .byte 0x8E
+    .word (TIMER_LINEAR >> 16) & 0xFFFF
+idt_end:
+idt_pointer:
+    .word idt_end - idt - 1
+    .long GUEST_BASE + idt - guest_start
 
 message:
     .asciz "hello from a guest of hv1\n"
@@ -203,6 +314,16 @@ guest_end:
 extern "C" {
     static guest_start: u8;
     static guest_end: u8;
+    /// An absolute symbol whose *value* is the load address the guest was
+    /// assembled for.
+    ///
+    /// Protected mode addresses are linear, so the guest has to know where it
+    /// was put in order to far-jump into itself and to point its own
+    /// descriptor tables at themselves. That means the same number exists twice
+    /// — once in the assembly and once in `GUEST_CODE_ADDR` — and a mismatch
+    /// would not fail to build, it would jump somewhere plausible and die. So
+    /// the assembly exports its copy and [`run`] checks them.
+    static guest_base_marker: u8;
 }
 
 /// Where the guest's code sits in *guest*-physical memory.
@@ -210,7 +331,11 @@ extern "C" {
 /// 0x1000: above the interrupt table and the area a real machine's BIOS uses,
 /// and low enough that its address divided by sixteen is a real-mode selector.
 /// That second constraint is the binding one — a guest loaded at 4 MiB cannot
-/// name its own segment.
+/// name its own segment, and this guest starts in real mode.
+///
+/// The assembly needs the same number, because after it enters protected mode
+/// every address it forms is linear. `guest_base_marker` is its copy and [`run`]
+/// checks the two agree.
 const GUEST_CODE_ADDR: u64 = 0x1000;
 
 /// How much memory the guest has.
@@ -330,6 +455,9 @@ pub struct Exit {
 pub enum Outcome {
     /// SVM is not on, so there is nothing to run a guest with.
     NotEnabled,
+    /// The guest's assembly and this module disagree about where the guest is
+    /// loaded, which would be a far jump into nothing.
+    BaseMismatch { asm: u64, rust: u64 },
     /// The loop ran. Everything it saw, and everything it did.
     Ran(Transcript),
 }
@@ -351,10 +479,14 @@ pub struct Transcript {
     /// The hypercall numbers the guest made, in order.
     pub calls: [u32; 16],
     pub call_count: usize,
+    /// Whether the guest reached protected mode.
+    pub protected_mode: bool,
     /// Whether the injected interrupt reached the guest's own handler.
     pub interrupt_handled: bool,
     /// Whether the guest resumed after the handler returned.
     pub resumed: bool,
+    /// Whether the guest took one of the processor's own exceptions.
+    pub faulted: bool,
     /// Why the loop stopped.
     pub stopped: &'static str,
 }
@@ -423,6 +555,17 @@ pub unsafe fn run() -> Outcome {
     let dest = (core::ptr::addr_of_mut!(GUEST_RAM) as *mut u8).add(GUEST_CODE_ADDR as usize);
     for i in 0..length {
         core::ptr::write_volatile(dest.add(i), core::ptr::read_volatile(source.add(i)));
+    }
+
+    // The load address exists twice: here and in the guest's assembly, which
+    // needs it to form linear addresses once it is in protected mode. A
+    // mismatch would not fail to build — it would far-jump somewhere plausible
+    // and die — so the assembly exports its copy and it is compared here.
+    if core::ptr::addr_of!(guest_base_marker) as u64 != GUEST_CODE_ADDR {
+        return Outcome::BaseMismatch {
+            asm: core::ptr::addr_of!(guest_base_marker) as u64,
+            rust: GUEST_CODE_ADDR,
+        };
     }
 
     intercept_port(COM1);
@@ -514,8 +657,10 @@ pub unsafe fn run() -> Outcome {
         console_len: 0,
         calls: [0; 16],
         call_count: 0,
+        protected_mode: false,
         interrupt_handled: false,
         resumed: false,
+        faulted: false,
         stopped: "the guest halted with nothing left to do",
     };
     let mut halts = 0usize;
@@ -566,14 +711,24 @@ pub unsafe fn run() -> Outcome {
                     log.call_count += 1;
                 }
                 answer = match call {
-                    1 => "the guest says it is ready",
+                    1 => "real mode, and about to leave it",
                     2 => {
+                        log.protected_mode = true;
+                        "protected mode, with a GDT and an IDT of its own"
+                    }
+                    3 => {
                         log.interrupt_handled = true;
                         "from inside the interrupt handler"
                     }
-                    3 => {
+                    4 => {
                         log.resumed = true;
                         "the handler returned and the guest carried on"
+                    }
+                    0xFF => {
+                        log.faulted = true;
+                        log.stopped = "the guest took a processor exception and said so";
+                        done = true;
+                        "the guest faulted — one of its own exception gates ran"
                     }
                     _ => "a hypercall this hypervisor does not know",
                 };
