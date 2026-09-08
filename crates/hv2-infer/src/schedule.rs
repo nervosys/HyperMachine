@@ -234,22 +234,21 @@ pub struct Stats {
 ///
 /// Two facts, both measured, pulling in opposite directions.
 ///
-/// A pass over the weights is memory-bound, and a *small* number of threads
-/// saturates the memory system: on this host four threads reach 15.7 GiB/s, and
-/// `examples/bandwidth` says the machine tops out at 15.9 GiB/s reading the
-/// same bytes with no arithmetic at all. More threads past that do not help and
-/// measurably hurt.
+/// A pass over the weights is close to memory-bound, and a *small* number of
+/// threads gets most of what is there: on this host four threads reach
+/// 17.0 GiB/s, against 20.6 GiB/s for reading the same bytes and doing nothing
+/// with them. More threads past four do not help and measurably hurt.
 ///
 /// But a wider batch does more arithmetic per byte read, so it stops being
 /// purely memory-bound: at eight lanes the best is eight threads, not four.
 ///
 /// ```text
 ///  lanes  threads  result
-///      1        4  77.7 ms per pass, 15.74 GiB/s   <- the machine's ceiling
+///      1        4  71.8 ms per pass, 17.02 GiB/s   <- 83% of a plain read
 ///      1        8  127.3 ms,          9.61
 ///      1       24  232.2 ms,          5.27
 ///      8        4  35.8 ms per token
-///      8        8  28.0 ms per token               <- best
+///      8        8  24.4 ms per token               <- best
 ///      8       16  28.5 ms per token
 /// ```
 ///

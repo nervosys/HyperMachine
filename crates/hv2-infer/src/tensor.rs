@@ -28,9 +28,10 @@ const Q8_BYTES: usize = 34;
 /// them out grew with the number of threads competing to take one.
 ///
 /// That is what the knee was. Reading the same bytes with no arithmetic at all
-/// does not knee: `examples/bandwidth` climbs to 15 GiB/s by four threads and
-/// stays there through twenty-four, while a forward pass peaked at 7 and got
-/// worse. The machine was never the limit; the granularity was.
+/// does not knee: `examples/bandwidth` reaches 18.7 GiB/s on a *single* thread
+/// and stays flat through twenty-four, while a forward pass peaked at 7 and got
+/// worse as threads were added. The machine was never the limit; the
+/// granularity was.
 const ROWS_PER_TASK: usize = 64;
 
 /// A tensor, as bytes inside the model's mapping plus what they mean.
@@ -148,6 +149,21 @@ static WIDE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
     is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")
 });
 
+/// Whether this CPU has the *wider* instructions, sixteen floats at a time.
+///
+/// `HV2_INFER_AVX2=1` forces the narrower path, which is how the two are
+/// compared on one machine at one moment — the only comparison worth making
+/// here.
+#[cfg(target_arch = "x86_64")]
+static WIDER: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    if std::env::var_os("HV2_INFER_SCALAR").is_some()
+        || std::env::var_os("HV2_INFER_AVX2").is_some()
+    {
+        return false;
+    }
+    is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
+});
+
 /// Turn a `rows × lanes` result into `lanes × rows`.
 ///
 /// Small: a transpose of the *output* of a matrix product, which is the model's
@@ -190,11 +206,61 @@ fn dot(quant: Quant, row: &[u8], x: &[f32]) -> f32 {
 /// once and calling the wide version keeps both.
 fn dot_q8_0(row: &[u8], x: &[f32]) -> f32 {
     #[cfg(target_arch = "x86_64")]
+    if *WIDER {
+        // SAFETY: `WIDER` is exactly the check that AVX-512F and BW are present.
+        return unsafe { dot_q8_0_wider(row, x) };
+    }
+    #[cfg(target_arch = "x86_64")]
     if *WIDE {
         // SAFETY: `WIDE` is exactly the check that AVX2 and FMA are present.
         return unsafe { dot_q8_0_wide(row, x) };
     }
     dot_q8_0_scalar(row, x)
+}
+
+/// The same product, sixteen lanes at a time.
+///
+/// A `Q8_0` block is thirty-two weights, so it is exactly two of these
+/// registers — which is the tidiest the arithmetic gets, and the reason this is
+/// worth writing separately rather than letting the compiler widen the other
+/// one.
+///
+/// What this deliberately is *not* is a VNNI kernel. `avx512_vnni` multiplies
+/// and accumulates bytes in a single instruction and is the obvious shape for a
+/// quantised product — but it wants both operands as integers, and the
+/// activations here are floats. Using it means quantising the activation vector
+/// too, which is a change to what the model computes and belongs behind its own
+/// measurement of whether the answers survive it.
+///
+/// # Safety
+///
+/// The caller must have established that AVX-512F and AVX-512BW are available.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,avx512bw")]
+unsafe fn dot_q8_0_wider(row: &[u8], x: &[f32]) -> f32 {
+    use std::arch::x86_64::*;
+
+    let mut total = _mm512_setzero_ps();
+    let blocks = row.len() / Q8_BYTES;
+
+    for block in 0..blocks {
+        let at = block * Q8_BYTES;
+        let scale = f32::from(half::f16::from_le_bytes([row[at], row[at + 1]]));
+        let quants = row.as_ptr().add(at + 2);
+        let activations = x.as_ptr().add(block * Q8_BLOCK);
+
+        // Two halves of sixteen.
+        let mut sum = _mm512_setzero_ps();
+        for half in 0..2 {
+            let sixteen = _mm_loadu_si128(quants.add(half * 16) as *const __m128i);
+            let widened = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(sixteen));
+            let a = _mm512_loadu_ps(activations.add(half * 16));
+            sum = _mm512_fmadd_ps(widened, a, sum);
+        }
+        total = _mm512_fmadd_ps(sum, _mm512_set1_ps(scale), total);
+    }
+
+    _mm512_reduce_add_ps(total)
 }
 
 /// The same product, eight lanes at a time.
