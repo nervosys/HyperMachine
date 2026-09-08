@@ -1284,8 +1284,25 @@ impl KvmVcpu {
         kvm_set_regs(vcpu_fd, &regs)
             .map_err(|e| Error::Hypervisor(format!("Failed to set registers: {}", e)))?;
 
-        // Set up segment registers for real mode
+        // Set up segment registers for real mode.
+        //
+        // Read back rather than built from `default()`. `kvm_sregs` carries
+        // `apic_base` alongside the segments, and KVM has already put
+        // 0xFEE00900 there -- the architectural base, plus the enable bit and
+        // the bootstrap-processor bit. A zeroed struct written back turns the
+        // vCPU's local APIC *off* and unmaps its page, so a guest that reads
+        // IA32_APIC_BASE sees zero and a guest that reads 0xFEE00020 sees
+        // 0xFFFFFFFF, which is unassigned MMIO.
+        //
+        // That is exactly how it presented: hv1, booted here, reported
+        // "apic 0x0 DISABLED, application processor, id 255" on a vCPU that
+        // KVM had made a bootstrap processor with an APIC. Every field this
+        // function means to set is set below; the ones it does not mention are
+        // now KVM's rather than zero.
         let mut sregs = kvm_sregs::default();
+        kvm_get_sregs(vcpu_fd, &mut sregs).map_err(|e| {
+            Error::Hypervisor(format!("Failed to read special registers: {}", e))
+        })?;
 
         // CS: base=0xFFFF0000, limit=0xFFFF, selector=0xF000
         sregs.cs.base = 0xFFFF0000;

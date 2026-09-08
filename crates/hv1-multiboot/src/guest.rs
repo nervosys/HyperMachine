@@ -142,6 +142,9 @@ pub const VMEXIT_VMMCALL: u64 = 0x81;
 /// What the hardware writes when `VMRUN` fails its consistency checks: the VMCB
 /// described a machine that cannot exist, and no guest instruction ran.
 pub const VMEXIT_INVALID: u64 = u64::MAX;
+/// `VMEXIT_INTR`. A physical interrupt arrived while the guest was running and
+/// the hypervisor asked to have it rather than let the guest see it.
+pub const VMEXIT_INTR: u64 = 0x60;
 /// A nested page fault: the guest touched a guest-physical address the nested
 /// page tables did not translate.
 pub const VMEXIT_NPF: u64 = 0x400;
@@ -456,12 +459,14 @@ protected:
     mov eax, 12
     vmmcall
 15:
-    // Wait for three of them, halting between -- which is what an idle kernel
-    // does, and the only way the hypervisor gets a chance to deliver one.
+    // Wait for three of them by *spinning*. Not `hlt`: a halt is an exit, and a
+    // hypervisor that only ever sees exits could notice the deadline there and
+    // claim a timer. This loop never leaves the guest, so the only way the
+    // count moves is if the interrupt arrives while the guest is running.
     mov eax, [TICKS_LINEAR]
     cmp eax, 3
     jae 16f
-    hlt
+    pause
     jmp 15b
 16:
     // Mask it, bit 16. A periodic timer nobody stops is a periodic timer.
@@ -951,6 +956,11 @@ pub struct Transcript {
     pub identified: [bool; VCPUS],
     /// How many end-of-interrupt writes the guest made.
     pub eois: usize,
+    /// What one arming of hv1's own timer costs, in timestamp ticks. Two
+    /// uncached writes to a device the layer below emulates, measured rather
+    /// than guessed at, because the round-trip cost tripled when this
+    /// mechanism arrived and something had to account for it.
+    pub arm_cost: u64,
     /// Whether the guest saw its timer's count go down on its own.
     pub timer_counts: bool,
     /// What the timer was armed with, and what the guest read back the first
@@ -1110,6 +1120,23 @@ impl Timer {
     fn arm(&mut self, now: u64) {
         self.due = now + u64::from(self.initial) * self.divisor;
     }
+}
+
+/// Convert a span of timestamp-counter ticks into APIC ticks.
+///
+/// The two clocks run at different rates and nothing says what the ratio is, so
+/// it is measured once at boot and carried here. Saturating at both ends: a
+/// span longer than the counter can hold becomes the longest wait it can do,
+/// and a span of nothing becomes one tick rather than zero, because zero
+/// disarms the timer instead of firing it immediately.
+fn to_apic_ticks(tsc: u64) -> u32 {
+    // SAFETY: written once by `kernel_main` before any guest ran.
+    let (tsc_per, apic_per) = unsafe { crate::CLOCK_RATIO };
+    if tsc_per == 0 {
+        return 1;
+    }
+    let ticks = tsc.saturating_mul(apic_per) / tsc_per;
+    u32::try_from(ticks).unwrap_or(u32::MAX).max(1)
 }
 
 /// Now, as the processor counts it.
@@ -1372,6 +1399,11 @@ pub unsafe fn run() -> Outcome {
         // The crate's own helper, which is the point: this runs hv1's VMCB
         // setup, not a reimplementation of it.
         svm::setup_vmcb_controls(vmcb, npt, 1);
+        // A physical interrupt arriving while this guest runs has to be the
+        // hypervisor's, not the guest's. Without this intercept the guest would
+        // take hv1's timer through its own tables, which is both wrong and the
+        // most confusing kind of wrong.
+        vmcb.control.intercept_instr1 |= svm::intercept1::INTR;
         // The two addresses the helper leaves at zero and the hardware reads
         // anyway. See the module documentation.
         vmcb.control.iopm_base_pa = core::ptr::addr_of!(IOPM) as u64;
@@ -1452,6 +1484,18 @@ pub unsafe fn run() -> Outcome {
     // One timer, on the first processor. The second one never arms its own, so
     // giving each a timer would be giving one of them an unexercised timer.
     let mut timer = Timer::new();
+    // What hv1's own timer is currently set for, so it is not reprogrammed on
+    // every entry: each write to it is an uncached store to a device KVM
+    // emulates, and costs an exit of hv1's own.
+    //
+    // It was added expecting it to undo the rise in round-trip cost that came
+    // with this mechanism -- 124,000 timestamp ticks before, ~380,000 after --
+    // and it did not: the number did not move. So the cost is in the arming
+    // exit itself and in the interrupt intercept, not in repeated arming, and
+    // the two writes it saves per entry are a saving that has not been
+    // measured. It is kept because writing a device register for no reason is
+    // still writing a device register for no reason. `None` means disarmed.
+    let mut armed_for: Option<u64> = None;
 
     let mut log = Transcript {
         exits: core::array::from_fn(|_| Exit {
@@ -1476,6 +1520,7 @@ pub unsafe fn run() -> Outcome {
         apic_enabled: false,
         identified: [false; VCPUS],
         eois: 0,
+        arm_cost: 0,
         timer_counts: false,
         timer_armed: 0,
         timer_first_read: 0,
@@ -1495,6 +1540,42 @@ pub unsafe fn run() -> Outcome {
         // held across the loop, because which one it is changes.
         let vmcb = vmcb_of(current);
         vmcb.control.vmcb_clean = 0;
+
+        // The guest's timer, decided here rather than at whatever exit happens
+        // to come next. If it is due, the vector goes in before entry; if it is
+        // not, hv1 arms *its own* timer for the remaining span, so the
+        // interrupt arrives while the guest is running and the intercept of it
+        // is the exit. That is the whole mechanism, and it is why the guest can
+        // spin rather than halt.
+        if timer.live() {
+            if now() >= timer.due && vmcb.control.event_inject & INJECT_VALID == 0 {
+                vmcb.control.event_inject =
+                    timer.vector() | INJECT_TYPE_INTR | INJECT_VALID;
+                log.ticks += 1;
+                if timer.lvt & LVT_PERIODIC != 0 {
+                    timer.arm(now());
+                } else {
+                    timer.initial = 0;
+                }
+            }
+            if timer.live() {
+                if armed_for != Some(timer.due) {
+                    let before = now();
+                    crate::apic::arm_oneshot(to_apic_ticks(timer.due.saturating_sub(now())));
+                    if log.arm_cost == 0 {
+                        log.arm_cost = now().wrapping_sub(before);
+                    }
+                    armed_for = Some(timer.due);
+                }
+            } else if armed_for.is_some() {
+                crate::apic::disarm();
+                armed_for = None;
+            }
+        } else if armed_for.is_some() {
+            crate::apic::disarm();
+            armed_for = None;
+        }
+
         let _ = svm::svm_run(vmcb, &mut regs[current]);
 
         let code = vmcb.control.exit_code;
@@ -1703,6 +1784,17 @@ pub unsafe fn run() -> Outcome {
                 vmcb.save.rip = step_over(vmcb, LEN_CPUID);
                 answer = "answered with zeros";
             }
+            VMEXIT_INTR => {
+                // hv1's own timer, taken by hv1. The guest is not told about
+                // it and does not know it stopped: what it gets is the vector
+                // it asked for, injected before the next entry.
+                //
+                // Two flags have to be opened for the handler to run at all --
+                // see `apic::take_pending`, and the note there about `GIF`.
+                crate::apic::take_pending();
+                answer = "hv1's own timer, while the guest was running";
+                vmcb.control.vmcb_clean = 0;
+            }
             VMEXIT_NPF => {
                 // Two very different things arrive here. A fault on the APIC
                 // page is a device the guest is talking to and this hypervisor
@@ -1909,7 +2001,7 @@ pub fn exit_name(code: u64) -> &'static str {
         VMEXIT_CPUID => "VMEXIT_CPUID   — the guest asked what it is running on",
         VMEXIT_VMMCALL => "VMEXIT_VMMCALL — the guest called its hypervisor",
         VMEXIT_INVALID => "VMEXIT_INVALID — VMRUN refused the VMCB; no guest instruction ran",
-        0x60 => "VMEXIT_INTR",
+        VMEXIT_INTR => "VMEXIT_INTR    — a physical interrupt, while the guest ran",
         0x61 => "VMEXIT_NMI",
         0x40..=0x5F => "VMEXIT_EXCP    — the guest faulted",
         VMEXIT_NPF => "VMEXIT_NPF     — a nested page fault",

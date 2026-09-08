@@ -1265,6 +1265,99 @@ hv1   timer     : <b>3 ticks on the vector the guest chose</b>, and its count we
     the serial port follows, that an emulated device which invents data is worse
     than one which admits it has none.
   </p>
+  <h3>And then it had to fire while the guest was running</h3>
+  <p>
+    The timer above expires at an exit, which is fine for a guest that halts and
+    useless for one that schedules. So the guest's wait loop is now
+    <code>pause; jmp</code> rather than <code>hlt</code>. It never leaves. A
+    hypervisor that only ever looks at exits can no longer notice anything, and
+    if the tick still arrives it arrives for a reason.
+  </p>
+  <p>
+    It does. hv1 arms <em>its own</em> local APIC &mdash; the real one, on the
+    processor it is running on &mdash; for the guest's deadline, and sets the
+    interrupt intercept so the arrival is a <code>#VMEXIT</code> rather than
+    something the guest sees. The exit happens inside the spin loop, at the same
+    address every time:
+  </p>
+  <pre>exit 143  VMEXIT_INTR  rip <b>0x11C6</b>  -> hv1's own timer, while the guest was running
+exit 144  VMEXIT_NPF                  -> end of interrupt, from inside the handler
+exit 145  VMEXIT_INTR  rip <b>0x11C6</b>  -> hv1's own timer, while the guest was running
+exit 146  VMEXIT_NPF                  -> end of interrupt, from inside the handler
+exit 147  VMEXIT_INTR  rip <b>0x11C6</b>  -> hv1's own timer, while the guest was running</pre>
+  <p>
+    <code>0x11C6</code> is the <code>pause</code>. One interrupt per tick, so
+    the calibration is right &mdash; and there is a calibration, because the
+    APIC counts a bus clock and everything else here counts <code>RDTSC</code>,
+    and nothing tells you the ratio. It is measured once at boot by running the
+    two against each other: <strong>2,000,108 timestamp ticks per 476,267 APIC
+    ticks</strong>, about 4.2 to 1, which is a ~1&nbsp;GHz emulated APIC under a
+    ~4.2&nbsp;GHz processor.
+  </p>
+
+  <div class="callout stop">
+    <h3>Three things had to be true first, and two of them were not.</h3>
+    <p>
+      <strong>The page had to be mapped.</strong> hv1's trampoline
+      identity-mapped one gigabyte, and the local APIC is at
+      <code>0xFEE00000</code> &mdash; just under four. It maps four now, with
+      that one page marked uncacheable, because a write-back mapping of a device
+      register is a write that may never arrive.
+    </p>
+    <p>
+      <strong>The APIC had to be on, and it was not &mdash; because of a bug in
+      hv2.</strong> hv2 initialised each vCPU's segments from a zeroed
+      <code>kvm_sregs</code>, and <code>kvm_sregs</code> carries
+      <code>apic_base</code> next to the segments. KVM had already put
+      <code>0xFEE00900</code> there &mdash; the architectural base, the enable
+      bit, and the bootstrap-processor bit &mdash; and writing the struct back
+      turned it off and unmapped the page. hv1 reported
+      <code>apic 0x0 DISABLED, application processor, id 255</code> on a vCPU
+      that was none of those three things; <code>255</code> is what unassigned
+      MMIO reads as. hv2 reads the struct back before modifying it now. That is
+      a defect in the Type-2 hypervisor that would have hit <em>any</em> guest
+      expecting a local APIC, which is every real kernel, and it was found by a
+      kernel that read one register and printed it.
+    </p>
+    <p>
+      <strong><code>GIF</code> had to be set.</strong> <code>#VMEXIT</code>
+      clears the global interrupt flag, so after the first <code>VMRUN</code> a
+      hypervisor that never executes <code>STGI</code> has interrupts masked at
+      a level <code>STI</code> cannot reach &mdash; it can arm a timer, the
+      interrupt can arrive, and the handler will never run. Nothing had noticed,
+      because nothing had ever wanted an interrupt.
+    </p>
+  </div>
+
+  <p>
+    hv1 also has an interrupt table of its own now, for the first time: 256
+    sixteen-byte gates, the timer at its vector and every other one pointing at
+    a handler that prints <code>?!</code> and stops. A kernel with no table
+    triple-faults on its first exception with nothing on the console, and a
+    kernel with holes in its table does the same on the first vector it forgot.
+  </p>
+
+  <div class="callout">
+    <h3>It cost about three times as much per exit, and the guess about why was wrong</h3>
+    <p>
+      The guest measures the gap between arming its timer and reading the count
+      back, which is one round trip through the exit loop. It was ~124,000
+      timestamp ticks before this mechanism and ~380,000 after. The obvious
+      suspect was hv1 reprogramming its own timer on every entry, so that was
+      guarded &mdash; arm only when the deadline moves &mdash; and the number
+      <em>did not move</em>.
+    </p>
+    <p>
+      So the arming was measured directly rather than reasoned about again, and
+      it is <strong>roughly half the round trip</strong>: 120,000&ndash;235,000
+      ticks for two uncached writes to a device the layer below emulates, each
+      one an exit of hv1's own. The guard is kept, because writing a device
+      register for no reason is still writing a device register for no reason,
+      but it is not what fixed anything and the page should not say it was. Both
+      numbers print on every run; both are noisy while the host is busy, which
+      is why they are quoted as ranges.
+    </p>
+  </div>
   <p>
     The rest is what two processors of one guest share, and it is in the
     controls rather than in the bring-up: the same nested page tables, the same
@@ -1591,7 +1684,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
               and STARTUP on an emulated APIC page — refusing a startup that skipped the reset — then
               scheduled the two of them onto the one processor it has, both of which read their own
               identity from one instruction at one address, one of which armed a timer and took three
-              ticks on the vector it chose itself; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+              ticks on the vector it chose itself, delivered while it was spinning by hv1 arming its own
+              real APIC and intercepting the interrupt; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -1806,12 +1900,20 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Let the timer expire while the guest is running.</strong> It
-      expires at an exit, so a guest that computes for a second gets its
-      millisecond tick a second late &mdash; which is fine for a guest that
-      halts and useless for one that schedules. Real hypervisors arm the
-      hardware's own timer to force the exit; that is the mechanism this is
-      standing in for, and it is the next honest thing to build.
+      <strong>Make the tick cost less than the tick.</strong> Arming hv1's own
+      timer is two uncached writes to an emulated device and about half the cost
+      of a round trip through the exit loop. A real hypervisor on real hardware
+      writes to a real APIC and pays nothing like that, so the number here is
+      mostly a measurement of being nested &mdash; but it has never been
+      measured anywhere else, and until it is, that is an assumption rather than
+      a finding.
+    </li>
+    <li>
+      <strong>Give the second processor a timer too.</strong> There is one
+      <code>Timer</code> and it belongs to the first processor, because the
+      second one never arms its own &mdash; so a second would be an unexercised
+      one. Two guest processors that can each keep time independently is what a
+      scheduler needs and is the next thing this cannot do.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
@@ -1828,8 +1930,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       go.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,265 tests across 88 test
-      binaries, and all fifteen examples, re-run after the timer landed. The sweep now refuses to print a
+      <strong>Keep the suite green.</strong> It is: 5,269 tests across 93 test
+      binaries, and all fifteen examples. The sweep now refuses to print a
       summary when it counts fewer than twenty binaries, because the run before
       last printed 3,331 with crates missing and the one before that printed
       nothing at all — which is the point of the paragraph above, applied to the
@@ -1919,7 +2021,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   STARTUP on a faulted APIC page, refuses a startup that skipped the reset,
   schedules both onto the one processor it has, tells them apart &mdash; one
   instruction, one address, two answers &mdash; and delivers a guest's own timer
-  on the guest's own vector — nested, and still never on a
+  on the guest's own vector while the guest is spinning rather than halted —
+  nested, and still never on a
   machine
 </footer>
 

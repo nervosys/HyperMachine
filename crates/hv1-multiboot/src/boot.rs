@@ -76,18 +76,28 @@ _start:
     mov edi, eax
     mov esi, ebx
 
-    // ── 1. Page tables: 1 GiB identity, 2 MiB pages ────────────────────
+    // ── 1. Page tables: 4 GiB identity, 2 MiB pages ────────────────────
+    // One gigabyte was enough until this kernel needed its own local APIC,
+    // which the architecture puts at 0xFEE00000 -- just under four. Four
+    // PDPT entries and one flat run of 2048 page-directory entries.
     // PML4[0] -> PDPT, present + writable.
     mov eax, offset pdpt
     or eax, 0x3
     mov [pml4], eax
     mov dword ptr [pml4 + 4], 0
 
-    // PDPT[0] -> PD, present + writable.
-    mov eax, offset pd
+    // PDPT[i] -> pd + i * 4 KiB, present + writable.
+    mov ecx, 0
+1:
+    mov eax, 0x1000
+    mul ecx
+    add eax, offset pd
     or eax, 0x3
-    mov [pdpt], eax
-    mov dword ptr [pdpt + 4], 0
+    mov [pdpt + ecx * 8], eax
+    mov dword ptr [pdpt + ecx * 8 + 4], 0
+    inc ecx
+    cmp ecx, 4
+    jb 1b
 
     // PD[i] -> i * 2 MiB, present + writable + page-size.
     mov ecx, 0
@@ -98,8 +108,21 @@ _start:
     mov [pd + ecx * 8], eax
     mov [pd + ecx * 8 + 4], edx
     inc ecx
-    cmp ecx, 512
+    cmp ecx, 2048
     jb 2b
+
+    // The one page that is not memory. 0xFEE00000 is the local APIC, and a
+    // write-back cacheable mapping of a device register is a write that may
+    // never arrive. PCD and PWT make it uncached; on a real machine the MTRRs
+    // would say the same thing, and this does not depend on them having been
+    // set up by whatever booted us.
+    //
+    // 0xFEE00000 / 2 MiB = 2039, and 2039 * 2 MiB is 0xFEE00000 exactly, so
+    // the page begins where the APIC does.
+    mov eax, 0xFEE00000
+    or eax, 0x9B            // present | writable | PWT | PCD | PS
+    mov [pd + 2039 * 8], eax
+    mov dword ptr [pd + 2039 * 8 + 4], 0
 
     mov eax, offset pml4
     mov cr3, eax
@@ -178,7 +201,7 @@ pml4:
 pdpt:
     .skip 4096
 pd:
-    .skip 4096
+    .skip 16384
 stack_guard:
     .skip 4096
 boot_stack_bottom:

@@ -47,6 +47,7 @@ compile_error!(concat!(
     "target and the linker script.",
 ));
 
+mod apic;
 mod boot;
 mod guest;
 mod mem;
@@ -172,6 +173,53 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     } else {
         " no LMA\n"
     });
+
+    // This kernel's own local APIC, which it needs for the same reason its
+    // guest does: it is the only clock a processor has that it can set. The
+    // base address is in a model-specific register rather than being assumed,
+    // because it is relocatable and because the enable bit is in the same
+    // register -- and a kernel that reads 0xFEE00000 without checking either
+    // is reading whatever the last thing to own that page left behind.
+    let apic_base = read_msr(IA32_APIC_BASE);
+    print("apic  ");
+    print_hex(apic_base & 0xFFFF_F000);
+    print(if apic_base & APIC_BASE_ENABLE != 0 {
+        " enabled"
+    } else {
+        " DISABLED"
+    });
+    print(if apic_base & APIC_BASE_BSP != 0 {
+        ", bootstrap processor, id "
+    } else {
+        ", application processor, id "
+    });
+    // SAFETY: the page is identity-mapped uncached by the trampoline, and this
+    // is a read of an architectural register.
+    let id = unsafe { apic::read(apic::ID) } >> 24;
+    print_dec(u64::from(id));
+    print("
+");
+
+    // An interrupt table before anything can interrupt, then the APIC on, then
+    // the one measurement that cannot be looked up: how fast its counter runs
+    // against the timestamp counter the rest of this kernel uses.
+    //
+    // SAFETY: called once, on the only processor running, before interrupts
+    // are enabled anywhere and before any guest runs.
+    let ratio = unsafe {
+        apic::load_idt();
+        apic::enable();
+        apic::calibrate()
+    };
+    // SAFETY: written once here, before any guest runs and before any other
+    // code reads it.
+    unsafe { CLOCK_RATIO = ratio };
+    print("clock ");
+    print_dec(ratio.0);
+    print(" timestamp ticks per ");
+    print_dec(ratio.1);
+    print(" APIC ticks
+");
 
     // What the CPU says it can do, before asking hv1 what it made of it. These
     // two lines are the difference between "hv1 refused" and "there was nothing
@@ -357,7 +405,11 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
 ");
                 print("hv1   exit cost : ");
                 print_dec(u64::from(log.timer_armed - log.timer_first_read));
-                print(" timer ticks gone in the two nested exits it took to arm it and ask
+                print(" timer ticks gone in the two nested exits it took to arm it and ask, of which
+");
+                print("hv1   arm cost  : ");
+                print_dec(log.arm_cost);
+                print(" were two uncached writes to hv1's own timer
 ");
             } else {
                 print("FAILED — the guest armed a timer and did not get what it asked for
@@ -464,6 +516,16 @@ fn report_exit(n: usize, exit: &guest::Exit, run: usize) {
 }
 
 /// Read a model-specific register.
+/// The measured ratio between the two clocks, as numerator and denominator.
+/// Written once by `kernel_main` before any guest runs, read by the exit loop.
+static mut CLOCK_RATIO: (u64, u64) = (1, 1);
+
+/// Where the local APIC's base address and enable bit live.
+const IA32_APIC_BASE: u32 = 0x1B;
+/// Bit 11: the APIC is on at all. Bit 8: this is the bootstrap processor.
+const APIC_BASE_ENABLE: u64 = 1 << 11;
+const APIC_BASE_BSP: u64 = 1 << 8;
+
 fn read_msr(msr: u32) -> u64 {
     let (low, high): (u32, u32);
     // SAFETY: `rdmsr` at ring 0 on an MSR the architecture defines. `EFER`
