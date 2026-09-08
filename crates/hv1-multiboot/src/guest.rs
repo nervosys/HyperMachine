@@ -193,6 +193,12 @@ core::arch::global_asm!(
     .set APIC_ID,         0xFEE00020
     .set APIC_EOI,        0xFEE000B0
     .set APIC_SPURIOUS,   0xFEE000F0
+    .set APIC_LVT_TIMER,  0xFEE00320
+    .set APIC_INITIAL,    0xFEE00380
+    .set APIC_CURRENT,    0xFEE00390
+    .set APIC_DIVIDE,     0xFEE003E0
+    .set TICKS_LINEAR,    0x4100
+    .set APIC_TIMER_LINEAR, GUEST_BASE + apic_timer - guest_start
     .set WHOAMI_LINEAR,   GUEST_BASE + whoami - guest_start
     .set GDT_PTR_OFFSET, gdt_pointer - guest_start
     .set IDT_PTR_LINEAR, GUEST_BASE + idt_pointer - guest_start
@@ -414,6 +420,55 @@ protected:
     // Hypercall 10: the first processor saw what the second one wrote.
     mov eax, 10
     vmmcall
+
+    // ── A timer of the guest's own ──────────────────────────────────────
+    // Everything above took an interrupt the hypervisor chose to send. This is
+    // the guest asking for one: it picks the vector, the period and the mode,
+    // and the hypervisor's job is to make it arrive on time rather than to
+    // decide that it should.
+    mov dword ptr [TICKS_LINEAR], 0
+    // Divide by one -- encoding 0b1011, which is the one this guest uses.
+    mov dword ptr [APIC_DIVIDE], 0x0B
+    // Periodic, bit 17, delivering vector 0x21 through the guest's own gate.
+    mov dword ptr [APIC_LVT_TIMER], 0x20021
+    // Twenty million, not two hundred thousand. The first version used the
+    // smaller number and the timer sometimes expired *inside the two exits it
+    // took to read the count back* -- both reads returned zero, neither was
+    // smaller than the other, and the guest reported that its timer was not
+    // counting. The period has to be long against the cost of a nested exit,
+    // and the hypervisor now reports what that cost actually was.
+    mov dword ptr [APIC_INITIAL], 20000000
+
+    // It should be counting down before anything is delivered. Read it twice
+    // with work in between: a count that does not move is a register, and a
+    // count that moves is a timer.
+    mov edi, APIC_CURRENT
+    mov eax, [edi]
+    mov ebx, eax
+    mov ecx, 2000
+14:
+    dec ecx
+    jnz 14b
+    mov eax, [edi]
+    cmp eax, ebx
+    jae 15f
+    // Hypercall 12: the count went down on its own.
+    mov eax, 12
+    vmmcall
+15:
+    // Wait for three of them, halting between -- which is what an idle kernel
+    // does, and the only way the hypervisor gets a chance to deliver one.
+    mov eax, [TICKS_LINEAR]
+    cmp eax, 3
+    jae 16f
+    hlt
+    jmp 15b
+16:
+    // Mask it, bit 16. A periodic timer nobody stops is a periodic timer.
+    mov dword ptr [APIC_LVT_TIMER], 0x10021
+    // Hypercall 11: the guest's own timer fired, three times, on its vector.
+    mov eax, 11
+    vmmcall
 3:
     hlt
     jmp 3b
@@ -445,6 +500,18 @@ whoami:
     mov al, 10
     out dx, al
     ret
+
+    // The guest's own timer vector. It counts, acknowledges, and returns --
+    // which is all a tick handler does, and it has to be re-entrant enough to
+    // run again immediately because a periodic timer will.
+apic_timer:
+    push eax
+    mov eax, [TICKS_LINEAR]
+    inc eax
+    mov [TICKS_LINEAR], eax
+    mov dword ptr [APIC_EOI], 0
+    pop eax
+    iretd
 
 timer:
     mov eax, 3
@@ -496,6 +563,12 @@ idt:
     .byte 0
     .byte 0x8E
     .word (TIMER_LINEAR >> 16) & 0xFFFF
+    // 0x21, the vector the guest gave its own timer.
+    .word APIC_TIMER_LINEAR & 0xFFFF
+    .word 0x08
+    .byte 0
+    .byte 0x8E
+    .word (APIC_TIMER_LINEAR >> 16) & 0xFFFF
 idt_end:
 idt_pointer:
     .word idt_end - idt - 1
@@ -878,6 +951,17 @@ pub struct Transcript {
     pub identified: [bool; VCPUS],
     /// How many end-of-interrupt writes the guest made.
     pub eois: usize,
+    /// Whether the guest saw its timer's count go down on its own.
+    pub timer_counts: bool,
+    /// What the timer was armed with, and what the guest read back the first
+    /// time it asked. The difference is what two nested exits cost, measured
+    /// rather than assumed.
+    pub timer_armed: u32,
+    pub timer_first_read: u32,
+    /// How many times the guest's own timer vector was delivered.
+    pub ticks: usize,
+    /// Whether the guest's timer handler ran as many times as it wanted.
+    pub timer_served: bool,
     /// Whether a startup message that skipped the reset was refused.
     pub ap_refused: bool,
     /// Whether a second guest processor was started and ran.
@@ -929,6 +1013,114 @@ const APIC_EOI: u64 = 0x0B0;
 const APIC_SPURIOUS: u64 = 0x0F0;
 /// Bit 8 of the above: the software enable.
 const APIC_ENABLE: u32 = 1 << 8;
+/// The timer's entry in the local vector table: its vector, and whether it is
+/// periodic and whether it is masked.
+const APIC_LVT_TIMER: u64 = 0x320;
+/// What the timer is reloaded with. Writing it is what arms it.
+const APIC_INITIAL: u64 = 0x380;
+/// What is left, which is the register that proves it is a timer and not a
+/// number the hypervisor remembered.
+const APIC_CURRENT: u64 = 0x390;
+/// How many bus cycles make one tick.
+const APIC_DIVIDE: u64 = 0x3E0;
+/// Bit 16 of the LVT entry: masked, so it counts and delivers nothing.
+const LVT_MASKED: u32 = 1 << 16;
+/// Bit 17: reload and start again on expiry.
+const LVT_PERIODIC: u32 = 1 << 17;
+
+/// The divide configuration's encoding, which is not the number it looks like:
+/// the divisor is in bits 3, 1 and 0, and the all-ones value means one.
+///
+/// This guest writes `0xB`, divide by one. The other seven arms are the
+/// architecture's table and are not exercised here.
+fn divisor_of(config: u32) -> u64 {
+    match config & 0xB {
+        0x0 => 2,
+        0x1 => 4,
+        0x2 => 8,
+        0x3 => 16,
+        0x8 => 32,
+        0x9 => 64,
+        0xA => 128,
+        _ => 1,
+    }
+}
+
+/// What the guest asked its timer for, and when it is next due.
+///
+/// # One tick is one TSC tick
+///
+/// A real local APIC counts the bus clock. There is no bus clock to read here,
+/// so a tick is a timestamp-counter tick — which makes the *period* wrong by
+/// whatever the ratio is, and the behaviour right: it counts down on its own,
+/// at a rate the guest cannot influence, and expires. What the guest gets is a
+/// timer that is real and not calibrated, and that distinction is worth keeping
+/// rather than hiding behind a plausible-looking multiplier.
+///
+/// # It expires at an exit
+///
+/// The hypervisor notices expiry when the guest leaves, and waits for it when
+/// the guest halts. A guest that never exits never gets its tick. That is a
+/// real limitation of doing it this way rather than with the hardware's own
+/// timer intercept, and it is why the guest's wait loop halts.
+#[derive(Clone, Copy)]
+struct Timer {
+    /// The LVT entry as written: vector in the low eight bits, mask, periodic.
+    lvt: u32,
+    /// The reload value, and zero when the timer is disarmed.
+    initial: u32,
+    /// Ticks per count.
+    divisor: u64,
+    /// The timestamp it is next due at.
+    due: u64,
+}
+
+impl Timer {
+    const fn new() -> Self {
+        Self {
+            lvt: LVT_MASKED,
+            initial: 0,
+            divisor: 1,
+            due: 0,
+        }
+    }
+
+    /// Armed and not masked, so it will deliver something.
+    fn live(&self) -> bool {
+        self.initial != 0 && self.lvt & LVT_MASKED == 0
+    }
+
+    fn vector(&self) -> u64 {
+        u64::from(self.lvt & 0xFF)
+    }
+
+    /// What a read of the current-count register should say.
+    fn remaining(&self, now: u64) -> u32 {
+        if self.initial == 0 {
+            return 0;
+        }
+        let left = self.due.saturating_sub(now) / self.divisor;
+        // Saturating rather than wrapping: a count that has run out reads zero,
+        // which is what the architecture says and what a guest polling it will
+        // be waiting for.
+        u32::try_from(left).unwrap_or(u32::MAX).min(self.initial)
+    }
+
+    /// Start it, or start it again.
+    fn arm(&mut self, now: u64) {
+        self.due = now + u64::from(self.initial) * self.divisor;
+    }
+}
+
+/// Now, as the processor counts it.
+///
+/// # Safety
+///
+/// `RDTSC` is architectural on every part this runs on; it is unsafe only
+/// because the intrinsic is.
+unsafe fn now() -> u64 {
+    core::arch::x86_64::_rdtsc()
+}
 
 /// Delivery mode 101: hold the target processor at reset.
 const DELIVERY_INIT: u32 = 5;
@@ -1257,6 +1449,9 @@ pub unsafe fn run() -> Outcome {
     let mut icr_high: u32 = 0;
     let mut reset = [false; VCPUS];
     let mut spurious: u32 = 0;
+    // One timer, on the first processor. The second one never arms its own, so
+    // giving each a timer would be giving one of them an unexercised timer.
+    let mut timer = Timer::new();
 
     let mut log = Transcript {
         exits: core::array::from_fn(|_| Exit {
@@ -1281,6 +1476,11 @@ pub unsafe fn run() -> Outcome {
         apic_enabled: false,
         identified: [false; VCPUS],
         eois: 0,
+        timer_counts: false,
+        timer_armed: 0,
+        timer_first_read: 0,
+        ticks: 0,
+        timer_served: false,
         ap_refused: false,
         ap_started: false,
         ap_ran: false,
@@ -1408,6 +1608,14 @@ pub unsafe fn run() -> Outcome {
                         finished[current] = true;
                         "the first processor saw what the second one wrote"
                     }
+                    11 => {
+                        log.timer_served = true;
+                        "the guest's own timer fired as many times as it asked for"
+                    }
+                    12 => {
+                        log.timer_counts = true;
+                        "the timer's count went down between two reads"
+                    }
                     0xFF => {
                         log.faulted = true;
                         log.stopped = "the guest took a processor exception and said so";
@@ -1429,6 +1637,38 @@ pub unsafe fn run() -> Outcome {
                     current = other;
                     log.switches += 1;
                     answer = "yielded — the other processor runs";
+                    log.exits[log.count] = Exit {
+                        code,
+                        rip,
+                        info,
+                        answer,
+                    };
+                    log.count += 1;
+                    continue;
+                }
+
+                if timer.live() {
+                    // The guest asked for this one. Wait for it rather than
+                    // deciding when it should arrive: the deadline is the
+                    // guest's, and the only thing the hypervisor contributes is
+                    // being there when it passes.
+                    //
+                    // Spinning, because there is nothing else for this
+                    // processor to do — the other one is finished and the guest
+                    // is halted, which is exactly the case a real hypervisor
+                    // would give the physical processor away in.
+                    while now() < timer.due {
+                        core::hint::spin_loop();
+                    }
+                    vmcb.control.event_inject =
+                        timer.vector() | INJECT_TYPE_INTR | INJECT_VALID;
+                    log.ticks += 1;
+                    if timer.lvt & LVT_PERIODIC != 0 {
+                        timer.arm(now());
+                    } else {
+                        timer.initial = 0;
+                    }
+                    answer = "halted, waited for the guest's own timer, and delivered its vector";
                     log.exits[log.count] = Exit {
                         code,
                         rip,
@@ -1499,6 +1739,17 @@ pub unsafe fn run() -> Outcome {
                                     )
                                 }
                                 APIC_SPURIOUS => (spurious, "the spurious-interrupt vector register"),
+                                APIC_CURRENT => {
+                                    let left = timer.remaining(now());
+                                    if log.timer_first_read == 0 && log.timer_armed != 0 {
+                                        log.timer_first_read = left;
+                                    }
+                                    (
+                                        left,
+                                        "what is left on the timer, which is smaller every time it is asked",
+                                    )
+                                }
+                                APIC_LVT_TIMER => (timer.lvt, "the timer's local vector table entry"),
                                 _ => (0, "an APIC register this hypervisor does not have — read as zero"),
                             };
                             answer = said;
@@ -1554,6 +1805,32 @@ pub unsafe fn run() -> Outcome {
                                         "the spurious-interrupt vector register — the APIC is on"
                                     } else {
                                         "the spurious-interrupt vector register — the APIC is off"
+                                    }
+                                }
+                                APIC_LVT_TIMER => {
+                                    timer.lvt = stored;
+                                    if stored & LVT_MASKED != 0 {
+                                        "the timer's vector table entry — masked, so it delivers nothing"
+                                    } else if stored & LVT_PERIODIC != 0 {
+                                        "the timer's vector table entry — periodic, on the guest's own vector"
+                                    } else {
+                                        "the timer's vector table entry — one shot"
+                                    }
+                                }
+                                APIC_DIVIDE => {
+                                    timer.divisor = divisor_of(stored);
+                                    "the timer's divide configuration"
+                                }
+                                APIC_INITIAL => {
+                                    timer.initial = stored;
+                                    timer.arm(now());
+                                    if log.timer_armed == 0 {
+                                        log.timer_armed = stored;
+                                    }
+                                    if stored == 0 {
+                                        "the timer's initial count — zero, which disarms it"
+                                    } else {
+                                        "the timer's initial count — armed, and counting"
                                     }
                                 }
                                 APIC_EOI => {

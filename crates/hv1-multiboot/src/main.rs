@@ -350,6 +350,19 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 ", and FAILED — a processor never read its identity
 "
             });
+            print("hv1   timer     : ");
+            if log.timer_counts && log.timer_served {
+                print_dec(log.ticks as u64);
+                print(" ticks on the vector the guest chose, and its count went down between two reads
+");
+                print("hv1   exit cost : ");
+                print_dec(u64::from(log.timer_armed - log.timer_first_read));
+                print(" timer ticks gone in the two nested exits it took to arm it and ask
+");
+            } else {
+                print("FAILED — the guest armed a timer and did not get what it asked for
+");
+            }
             print("hv1   half a start: ");
             print(if log.ap_refused {
                 "a startup that skipped the reset was refused

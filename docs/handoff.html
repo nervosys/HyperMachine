@@ -1165,6 +1165,106 @@ hv1   switches   : 2</pre>
 exit 071  VMEXIT_NPF  -> <b>STARTUP to a processor that was never reset — refused</b>
 exit 072  VMEXIT_NPF  -> INIT — the other processor is held at reset
 exit 073  VMEXIT_NPF  -> STARTUP — the other processor begins in real mode at the page it names</pre>
+  <h3>An APIC, not two registers of one</h3>
+  <p>
+    The command register alone is enough to <em>start</em> a processor and not
+    enough to <em>run</em> one, so the guest now uses four more. It
+    software-enables the APIC through bit 8 of the spurious-interrupt vector
+    register, which is the step a kernel written from the manual forgets and
+    then spends an afternoon on. Its interrupt handler writes end-of-interrupt
+    before returning &mdash; injection here does not consult that, so this is
+    the guest doing the right thing rather than being made to. And both
+    processors read the identity register.
+  </p>
+  <p>
+    That last one is the whole difference between an APIC and a register the
+    hypervisor keeps one copy of. It is a single routine at a single address,
+    <code>call</code>ed by each processor:
+  </p>
+  <pre>exit 030  VMEXIT_NPF  rip 0x11E1  -> its own identity &mdash; 0, the first processor
+exit 084  VMEXIT_NPF  rip 0x11E1  -> its own identity &mdash; 1, the second one, from the same instruction
+
+hv1   &gt;  <b>cpu 0</b>
+hv1   &gt;  <b>cpu 1</b></pre>
+  <div class="callout stop">
+    <h3>And the first time it ran, both said <code>cpu 0</code>.</h3>
+    <p>
+      The log said the hypervisor had returned 1. The guest printed 0. So the
+      value was being lost between the two, and the reason is in
+      <code>svm_run</code>: <code>RAX</code> travels in the VMCB because
+      <code>VMRUN</code> needs <code>RAX</code> for the VMCB address itself, so
+      the helper copies <code>regs.rax</code> into the save area on the way in
+      and back out on the way out. A value written to <code>vmcb.save.rax</code>
+      between two entries is overwritten before the guest ever sees it.
+    </p>
+    <p>
+      Two places in this hypervisor were already doing exactly that &mdash; the
+      reply to an <code>in</code> from a port with nothing behind it, and the
+      answer to <code>CPUID</code>. Both were wrong and neither had ever been
+      noticed, because this guest executes neither instruction. They are fixed,
+      and it is worth saying plainly what that means: <strong>the bug was found
+      by a guest that read a register and printed the answer.</strong> Code that
+      is never executed is not code that works, and two of these three sites
+      were the unexecuted kind.
+    </p>
+  </div>
+
+  <h3>And a timer, which is the difference between being woken and keeping time</h3>
+  <p>
+    Every interrupt above this point was one the hypervisor decided to send. The
+    timer is one the <em>guest</em> asks for: it picks the vector, the period
+    and the mode, writes them to the local vector table, the divide
+    configuration and the initial count, and then halts. Four more registers,
+    and the four that change who is in charge of when.
+  </p>
+  <pre>exit 137  -> the timer's divide configuration
+exit 138  -> the timer's vector table entry &mdash; periodic, on the guest's own vector
+exit 139  -> the timer's initial count &mdash; armed, and counting
+exit 140  -> what is left on the timer, which is smaller every time it is asked  <b>x2</b>
+exit 143  -> halted, waited for the guest's own timer, and delivered its vector
+exit 144  -> end of interrupt, from inside the handler
+        ... twice more, then:
+exit 149  -> the timer's vector table entry &mdash; masked, so it delivers nothing
+
+hv1   timer     : <b>3 ticks on the vector the guest chose</b>, and its count went
+                  down between two reads</pre>
+  <p>
+    Two things about it are honest rather than convenient. <strong>A tick is a
+    timestamp-counter tick</strong>, because there is no bus clock to read here
+    &mdash; which makes the period wrong by whatever the ratio is and the
+    behaviour right: it counts down on its own, at a rate the guest cannot
+    influence, and expires. And <strong>it expires at an exit.</strong> The
+    hypervisor notices when the guest leaves and waits for the deadline when the
+    guest halts, so a guest that never exits never gets its tick. Both are
+    written down where the code is rather than smoothed over with a
+    plausible-looking multiplier.
+  </p>
+  <div class="callout stop">
+    <h3>The first period was 200,000 ticks, and that was too short to measure with.</h3>
+    <p>
+      The guest reads the count twice with work in between, because a count that
+      does not move is a register and a count that moves is a timer. It
+      intermittently read the same value twice &mdash; zero, both times &mdash;
+      and reported that its timer was not counting. The timer was fine. The
+      period was shorter than the exits used to ask about it.
+    </p>
+    <p>
+      So the hypervisor now reports the gap between what the timer was armed
+      with and what the guest read back first, and it is
+      <strong>&asymp;124,000 ticks for two nested exits</strong> &mdash; about
+      60,000 each, call it 15&ndash;20&nbsp;&micro;s. A 200,000-tick period was
+      one and a half exits long. The period is twenty million now, and the
+      number that made it obvious is printed by the example on every run rather
+      than remembered in a commit message.
+    </p>
+  </div>
+  <p>
+    Nine registers is still not an APIC. There is no interrupt priority, no
+    remote read, no error status, nothing for the second processor's own timer,
+    and a read of anything else returns zero and says so &mdash; the same rule
+    the serial port follows, that an emulated device which invents data is worse
+    than one which admits it has none.
+  </p>
   <p>
     The rest is what two processors of one guest share, and it is in the
     controls rather than in the bring-up: the same nested page tables, the same
@@ -1264,7 +1364,7 @@ exit 073  VMEXIT_NPF  -> STARTUP — the other processor begins in real mode at 
     is KVM, so hv1 read a CPU its own hypervisor chose to show it; the firmware
     path, the real memory map, AP bring-up and every real device are hidden by
     that. And two processors running 32-bit code with one emulated port, one
-    ring and five APIC registers is not an operating system either — what it now
+    ring and nine APIC registers is not an operating system either — what it now
     has is most of the machinery a small kernel uses and none of the reasons to
     have one.
   </p>
@@ -1489,7 +1589,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
               took a request through a descriptor ring and refused one pointing outside the guest's memory,
               delivered it an interrupt through its own gates, and started a second processor through INIT
               and STARTUP on an emulated APIC page — refusing a startup that skipped the reset — then
-              scheduled the two of them onto the one processor it has; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+              scheduled the two of them onto the one processor it has, both of which read their own
+              identity from one instruction at one address, one of which armed a timer and took three
+              ticks on the vector it chose itself; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -1704,12 +1806,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Give the guest an APIC rather than two registers of one.</strong>
-      hv1 emulates the interrupt command register and nothing else, which is
-      exactly enough to start a processor and not enough to run one: no ID
-      register, no spurious vector, no timer, no end-of-interrupt. A guest that
-      reads its own APIC ID — which is how ordinary kernels tell their
-      processors apart — gets a fault this hypervisor reports and stops on.
+      <strong>Let the timer expire while the guest is running.</strong> It
+      expires at an exit, so a guest that computes for a second gets its
+      millisecond tick a second late &mdash; which is fine for a guest that
+      halts and useless for one that schedules. Real hypervisors arm the
+      hardware's own timer to force the exit; that is the mechanism this is
+      standing in for, and it is the next honest thing to build.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
@@ -1727,7 +1829,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is: 5,265 tests across 88 test
-      binaries, and all fifteen examples. The sweep now refuses to print a
+      binaries, and all fifteen examples, re-run after the timer landed. The sweep now refuses to print a
       summary when it counts fewer than twenty binaries, because the run before
       last printed 3,331 with crates missing and the one before that printed
       nothing at all — which is the point of the paragraph above, applied to the
@@ -1815,8 +1917,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   builds its guest's descriptor tables, drives a ring, refuses one pointing at
   memory it does not have, and starts a second guest processor with INIT and
   STARTUP on a faulted APIC page, refuses a startup that skipped the reset,
-  schedules both onto the one processor it has, and tells them apart — one
-  instruction, one address, two answers — nested, and still never on a
+  schedules both onto the one processor it has, tells them apart &mdash; one
+  instruction, one address, two answers &mdash; and delivers a guest's own timer
+  on the guest's own vector — nested, and still never on a
   machine
 </footer>
 

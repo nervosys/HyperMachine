@@ -211,7 +211,13 @@ async fn main() -> std::process::ExitCode {
     // print different numbers there is a per-processor APIC behind it and not a
     // register the hypervisor keeps one copy of.
     let told_apart = console.contains("> cpu 0") && console.contains("> cpu 1");
-    let apic_used = console.contains("software-enabled by the guest, 1 end-of-interrupt");
+    let apic_used = console.contains("software-enabled by the guest, 4 end-of-interrupt");
+    // A timer the guest programmed, not a vector the hypervisor chose to send.
+    // The guest picks the vector, the period and the mode; three interrupts
+    // arrive on that vector through its own gate, and the count it reads back
+    // is smaller the second time — which is what separates a timer from a
+    // number the hypervisor remembered.
+    let its_own_timer = console.contains("3 ticks on the vector the guest chose");
     let delivered_an_interrupt = console.contains("the guest's own handler ran");
     let guest_carried_on = console.contains("the handler's iret returned");
 
@@ -267,9 +273,22 @@ async fn main() -> std::process::ExitCode {
         yes_no(told_apart)
     );
     println!(
-        "an APIC, used   : {}  (the guest software-enabled it, and its handler wrote end-of-interrupt)",
+        "an APIC, used   : {}  (the guest software-enabled it, and its handlers wrote end-of-interrupt)",
         yes_no(apic_used)
     );
+    println!(
+        "a timer of its own: {}  (the guest armed it, its count fell between two reads, and three interrupts arrived on the vector it picked)",
+        yes_no(its_own_timer)
+    );
+    // Not a claim, a measurement, and the reason the timer's period is what it
+    // is: the first version used a period of 200,000 ticks and the timer
+    // sometimes expired inside the two exits it took to read the count back.
+    if let Some(cost) = console
+        .lines()
+        .find_map(|line| line.split("exit cost : ").nth(1))
+    {
+        println!("a nested exit costs: {}", cost.trim());
+    }
     println!(
         "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
         yes_no(delivered_an_interrupt)
@@ -334,11 +353,12 @@ async fn main() -> std::process::ExitCode {
         && half_a_start
         && told_apart
         && apic_used
+        && its_own_timer
         && delivered_an_interrupt
         && guest_carried_on
     {
         println!(
-            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor the way hardware does — INIT and STARTUP written to the local APIC page, faulted out of the nested tables and decoded from the guest's own instruction stream, with the second processor beginning in real mode at the page the vector named — and scheduled the two of them onto the one it has, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, and the APIC is this hypervisor's rather than a real one — five registers of one, and the identity register is the only one whose answer depends on which processor asked — so the firmware path, the real memory map and every real device remain untested."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor the way hardware does — INIT and STARTUP written to the local APIC page, faulted out of the nested tables and decoded from the guest's own instruction stream, with the second processor beginning in real mode at the page the vector named — and scheduled the two of them onto the one it has, gave both of them an identity to read and a timer to arm, delivered three ticks on the vector the guest itself chose, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, and the APIC is this hypervisor's rather than a real one — nine registers of one, counting a timer whose tick is a timestamp-counter tick because there is no bus clock to read — so the firmware path, the real memory map and every real device remain untested."
         );
     } else if initialised {
         println!(
