@@ -2715,6 +2715,7 @@ dependencies = [
  "hv2-core",
  "hv2-infer",
  "parking_lot",
+ "rayon",
  "serde",
  "thiserror 2.0.20",
  "tokio",
