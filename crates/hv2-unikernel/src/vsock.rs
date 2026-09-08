@@ -122,9 +122,26 @@ mod mem {
     pub const TX_USED: u32 = 0x0020_5000;
     /// Eight 4 KiB receive buffers.
     pub const RX_BUFS: u32 = 0x0021_0000;
-    /// One transmit buffer, reused: this driver sends one packet at a time and
-    /// waits for the device to consume it.
-    pub const TX_BUF: u32 = 0x0022_0000;
+    /// Eight 4 KiB transmit buffers, one per ring slot.
+    ///
+    /// It was one buffer, reused, which was correct for a driver that sent one
+    /// packet and waited for its answer. An agent with three requests in the
+    /// air queues three packets back to back, and with one buffer all three
+    /// descriptors name the same address: whatever the guest wrote last is what
+    /// the device reads, for every one of them.
+    ///
+    /// It has never been observed to go wrong, and that is worth stating
+    /// plainly rather than claiming a defect that was not seen. The shared
+    /// buffer was tried deliberately against the three-in-flight example and it
+    /// passed, because this host's vsock device drains the transmit queue
+    /// inside the notification that announces it — so every packet is consumed
+    /// before the next one is written. That is a property of the device on the
+    /// other side, not of this driver, and a descriptor handed to a device
+    /// names memory the device owns until it says otherwise. One buffer per
+    /// slot removes the dependence for 28 KiB more of the fixed map below —
+    /// guest-physical addresses this driver claims, not image bytes, so the
+    /// pages nothing writes to cost nothing resident.
+    pub const TX_BUFS: u32 = 0x0022_0000;
 }
 
 /// The 44-byte packet header.
@@ -451,7 +468,14 @@ impl Vsock {
     /// `to` is the packet being answered: the reply's ports are its ports
     /// swapped, which is how a driver with no connection table at all still
     /// answers the right socket.
+    /// A payload longer than one buffer is truncated, because there is nowhere
+    /// else for it to go: this driver has no fragmentation and the frame format
+    /// deliberately has none either. The length in the packet header is the
+    /// length actually written, so the host reads a short frame rather than a
+    /// frame whose header promises bytes that were never sent.
     pub fn reply(&mut self, to: &Header, op: u16, payload: &[u8]) {
+        let room = BUF_SIZE as usize - HEADER_SIZE;
+        let payload = &payload[..payload.len().min(room)];
         let header = Header {
             src_cid: self.cid,
             dst_cid: HOST_CID,
@@ -468,9 +492,14 @@ impl Vsock {
             buf_alloc: BUF_SIZE,
             fwd_cnt: self.fwd_cnt,
         };
-        header.write_to(mem::TX_BUF);
+        // The slot this packet will occupy, and therefore the buffer that
+        // belongs to it. Chosen before the header is written, because the
+        // header goes into that buffer and not into a shared one.
+        let slot = self.tx_avail % QUEUE_SIZE;
+        let buf = mem::TX_BUFS + u32::from(slot) * BUF_SIZE;
+        header.write_to(buf);
 
-        let base = mem::TX_BUF + HEADER_SIZE as u32;
+        let base = buf + HEADER_SIZE as u32;
         for (i, byte) in payload.iter().enumerate() {
             // SAFETY: the transmit buffer is 4 KiB of guest RAM this program
             // owns, and the caller's payload is bounded by the receive buffer
@@ -478,10 +507,9 @@ impl Vsock {
             unsafe { write_volatile((base + i as u32) as *mut u8, *byte) };
         }
 
-        let slot = self.tx_avail % QUEUE_SIZE;
         let desc = mem::TX_DESC + u32::from(slot) * 16;
         let mut w = Writer { at: desc };
-        w.u64(u64::from(mem::TX_BUF));
+        w.u64(u64::from(buf));
         w.u32(HEADER_SIZE as u32 + payload.len() as u32);
         w.u16(0); // device-readable
         w.u16(0);

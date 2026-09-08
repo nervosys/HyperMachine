@@ -63,7 +63,7 @@ mod mem;
 mod vsock;
 
 use alloc::vec::Vec;
-use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
+use hv2_agent_proto::{Header, Kind, HEADER_LEN};
 use linked_list_allocator::LockedHeap;
 
 use core::arch::asm;
@@ -430,19 +430,250 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     }
 }
 
+/// One request this agent has issued and has not been answered.
+struct Pending {
+    /// The id this guest put on the request.
+    id: u32,
+    /// What the request was for.
+    ///
+    /// Kept so that an answer can be reported as an answer to *this* request
+    /// rather than merely as an answer. Without it, a guest pairing replies by
+    /// arrival order would be indistinguishable from one reading the ids — up
+    /// until the host answered out of order, which is exactly when it matters.
+    what: Vec<u8>,
+}
+
+/// What the agent holds between packets.
+struct Agent {
+    /// The connection, remembered from the last packet that arrived on it.
+    ///
+    /// A frame is not a packet. Bytes left over from one packet are read as a
+    /// frame while a later packet is in hand, so the header a reply takes its
+    /// ports from cannot be the packet currently being processed.
+    link: vsock::Header,
+    /// Received bytes that are not yet a whole frame.
+    inbox: Vec<u8>,
+    /// Requests outstanding, in the order they were issued.
+    pending: Vec<Pending>,
+    /// The next id to put on a request this guest originates.
+    ///
+    /// This is the guest's own id space, and it is not the host's. A `Task`
+    /// carries an id the host chose; a `ToolCall` carries one this counter
+    /// chose. The two may collide and it is harmless, because a frame's kind
+    /// says which direction it is answering — an `Error` arriving here answers
+    /// something this guest asked for, and an `Error` leaving here refuses
+    /// something the host sent.
+    ///
+    /// The guest used to answer a `Task` under the task's own id, which reads
+    /// as tidy and cannot survive a task that produces two requests: they would
+    /// share an id, and the first answer would settle whichever the guest
+    /// happened to find first.
+    next_id: u32,
+}
+
+impl Agent {
+    fn new() -> Self {
+        Self {
+            link: vsock::Header::default(),
+            inbox: Vec::new(),
+            pending: Vec::new(),
+            next_id: 1,
+        }
+    }
+
+    /// Read every whole frame the stream now holds.
+    ///
+    /// A loop and not a single parse. Two frames written back to back arrive as
+    /// one run of bytes — that is what a stream is — and the previous version
+    /// read the first and discarded the rest along with the packet buffer. It
+    /// never showed, because nothing had ever sent two.
+    fn drain(&mut self, device: &mut vsock::Vsock) {
+        while self.inbox.len() >= HEADER_LEN {
+            let Some(header) = Header::decode(&self.inbox) else {
+                // Twelve bytes are present and they do not decode, so this is a
+                // kind this build does not know rather than a frame still
+                // arriving. There is no resynchronising from that: the length
+                // that would say where the next frame starts is part of what
+                // could not be read.
+                self.say(Header::new(0, Kind::Error, 0), b"unreadable frame", device);
+                self.inbox.clear();
+                return;
+            };
+            let end = HEADER_LEN + header.len as usize;
+            if self.inbox.len() < end {
+                // The ordinary case on a stream, and not an error.
+                return;
+            }
+            let body: Vec<u8> = self.inbox[HEADER_LEN..end].to_vec();
+            self.inbox.drain(..end);
+            self.act(header, &body, device);
+        }
+    }
+
+    /// Act on one frame.
+    fn act(&mut self, header: Header, body: &[u8], device: &mut vsock::Vsock) {
+        match header.kind {
+            Kind::Task => {
+                print("agent task ");
+                print_id(header.id);
+                print(" \"");
+                print_slice(body);
+                print("\"\n");
+                self.take_on(body, device);
+            }
+            Kind::ToolResult => match self.settle(header.id) {
+                Some(what) => {
+                    print("agent done ");
+                    print_id(header.id);
+                    print(" \"");
+                    print_slice(&what);
+                    print("\" = \"");
+                    print_slice(body);
+                    print("\"\n");
+                }
+                None => self.stray(header.id),
+            },
+            Kind::Error => match self.settle(header.id) {
+                Some(what) => {
+                    // The first half of this line is what it always was, so a
+                    // reader looking for a refusal still finds one. The tail is
+                    // the new half: which of several outstanding requests was
+                    // refused.
+                    print("agent denied ");
+                    print_id(header.id);
+                    print(" \"");
+                    print_slice(body);
+                    print("\" was \"");
+                    print_slice(&what);
+                    print("\"\n");
+                }
+                None => self.stray(header.id),
+            },
+            Kind::Deliver => {
+                // Received and not answered. The guest used to reply to
+                // everything, which is a convenient property for a test and a
+                // strange one for an agent: being reached by a peer is not a
+                // question.
+                print("agent recv ");
+                print_id(header.id);
+                print(" \"");
+                print_slice(body);
+                print("\"\n");
+            }
+            // A guest never receives these; it sends them.
+            Kind::ToolCall | Kind::Send => {
+                self.say(
+                    Header::new(header.id, Kind::Error, 0),
+                    b"not for a guest",
+                    device,
+                );
+            }
+        }
+    }
+
+    /// Turn a task into requests.
+    ///
+    /// Three rules, each one line, standing in for a model deciding what to do.
+    /// What is under test is the frame, the id and the permission around them,
+    /// none of which care how the decision was reached.
+    ///
+    /// ```text
+    ///   send <to>:<text>     reach another agent
+    ///   tools <a> <b> ...    call several tools, all at once
+    ///   anything else        call one tool, named by the whole task
+    /// ```
+    fn take_on(&mut self, body: &[u8], device: &mut vsock::Vsock) {
+        if let Some(rest) = strip(body, b"send ") {
+            let id = self.issue(rest);
+            self.say(Header::new(id, Kind::Send, 0), rest, device);
+            print("agent send ");
+            print_id(id);
+            print("\n");
+        } else if let Some(rest) = strip(body, b"tools ") {
+            for name in rest.split(|byte| *byte == b' ').filter(|n| !n.is_empty()) {
+                let id = self.issue(name);
+                self.say(Header::new(id, Kind::ToolCall, 0), name, device);
+                print("agent call ");
+                print_id(id);
+                print(" \"");
+                print_slice(name);
+                print("\"\n");
+            }
+        } else {
+            let id = self.issue(body);
+            self.say(Header::new(id, Kind::ToolCall, 0), body, device);
+            print("agent call ");
+            print_id(id);
+            print(" \"");
+            print_slice(body);
+            print("\"\n");
+        }
+
+        // How many things this agent is holding at once. Printed because it is
+        // the whole claim: a guest that reports two outstanding requests and
+        // goes back to reading is not waiting for either of them.
+        print("agent holds ");
+        print_hex(self.pending.len() as u32);
+        print("\n");
+    }
+
+    /// Record a request this guest is about to send, and give it an id.
+    fn issue(&mut self, what: &[u8]) -> u32 {
+        let id = self.next_id;
+        self.next_id = self.next_id.wrapping_add(1);
+        self.pending.push(Pending {
+            id,
+            what: what.to_vec(),
+        });
+        id
+    }
+
+    /// Take the outstanding request that `id` answers, if there is one.
+    fn settle(&mut self, id: u32) -> Option<Vec<u8>> {
+        let at = self.pending.iter().position(|p| p.id == id)?;
+        Some(self.pending.remove(at).what)
+    }
+
+    /// An answer to nothing this guest asked for.
+    ///
+    /// Reported rather than ignored. Under the old scheme, where a reply was
+    /// matched by being the only one outstanding, this could not be detected at
+    /// all: whatever arrived was the answer.
+    fn stray(&self, id: u32) {
+        print("agent stray ");
+        print_id(id);
+        print("\n");
+    }
+
+    /// Write one frame to the host, filling in the length from the payload.
+    fn say(&self, header: Header, payload: &[u8], device: &mut vsock::Vsock) {
+        let header = Header::new(header.id, header.kind, payload.len() as u32);
+        let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
+        let mut bytes = [0u8; HEADER_LEN];
+        header.encode(&mut bytes);
+        out.extend_from_slice(&bytes);
+        out.extend_from_slice(payload);
+        device.reply(&self.link, vsock::op::RW, &out);
+    }
+}
+
 /// Answer the host until the VM is stopped.
 ///
-/// The whole protocol this agent speaks:
+/// The packet-level conversation:
 ///
+/// ```text
 ///   REQUEST  -> RESPONSE      the host opened a connection
-///   RW       -> RW            a message arrived; the answer is its echo
+///   RW       -> RW            frames, in both directions
 ///   SHUTDOWN -> RST           the host is done
+/// ```
 ///
-/// An echo rather than anything cleverer, because what is being demonstrated
-/// is that the bytes crossed the boundary in both directions. A guest that
-/// receives a message and answers with something unrelated proves only the
-/// first half.
+/// Nothing here waits for an answer. A request is issued, recorded, and the
+/// loop goes back to reading — which is why a tool call and a peer's message
+/// can be outstanding at the same time, and why the host may answer them in
+/// whichever order it likes.
 fn serve(device: &mut vsock::Vsock) -> ! {
+    let mut agent = Agent::new();
+
     loop {
         device.ack_interrupt();
 
@@ -478,19 +709,9 @@ fn serve(device: &mut vsock::Vsock) -> ! {
                 device.reply(&packet.header, vsock::op::RESPONSE, &[]);
             }
             vsock::op::RW => {
-                // The frame handler logs what it understood, which is more
-                // use than the raw bytes: a header printed as text is a line
-                // of punctuation in front of the message.
-                // A task beginning `do:` is answered with a tool call. This is
-                // where a model would decide which tool to reach for and with
-                // what arguments; here it is one rule, and saying so matters —
-                // nothing in this guest is deciding anything. What is under
-                // test is the path a decision would travel and the permission
-                // that governs it, neither of which cares how the decision was
-                // reached.
-                //
-                // Everything else is echoed, as before.
-                handle_frame(device, &packet);
+                agent.link = packet.header;
+                agent.inbox.extend_from_slice(&payload_bytes(&packet));
+                agent.drain(device);
             }
             vsock::op::SHUTDOWN => {
                 device.reply(&packet.header, vsock::op::RST, &[]);
@@ -505,79 +726,6 @@ fn serve(device: &mut vsock::Vsock) -> ! {
 
         device.release(&packet);
     }
-}
-
-/// Act on one framed message from the host.
-///
-/// A task is answered with a tool call or a message to another agent, depending
-/// on what it says; anything else is echoed back under the same id. The rules
-/// are one line each and stand in for a model deciding — what is being
-/// exercised is the frame, the id and the permission around them, none of which
-/// care how the decision was reached.
-fn handle_frame(device: &mut vsock::Vsock, packet: &vsock::Packet) {
-    let bytes = payload_bytes(packet);
-
-    let Some((header, body)) = parse(&bytes) else {
-        // Not a whole frame, or a kind this guest does not know. Either way
-        // there is nothing safe to do with it: a guest that guesses at a frame
-        // it cannot read is a guest acting on a host it does not agree with.
-        reply(device, packet, Header::new(0, Kind::Error, 0), b"unreadable frame");
-        return;
-    };
-
-    match header.kind {
-        Kind::Task => {
-            print("agent task ");
-            print_id(header.id);
-            print(" \"");
-            print_slice(body);
-            print("\"\n");
-
-            // `send <agent> <text>` asks to reach another agent; anything else
-            // is a tool call.
-            if let Some(rest) = strip(body, b"send ") {
-                reply(device, packet, Header::new(header.id, Kind::Send, 0), rest);
-            } else {
-                reply(device, packet, Header::new(header.id, Kind::ToolCall, 0), body);
-            }
-        }
-        Kind::ToolResult => {
-            print("agent got ");
-            print_id(header.id);
-            print(" \"");
-            print_slice(body);
-            print("\"\n");
-        }
-        Kind::Deliver => {
-            print("agent recv ");
-            print_id(header.id);
-            print(" \"");
-            print_slice(body);
-            print("\"\n");
-        }
-        Kind::Error => {
-            print("agent denied ");
-            print_id(header.id);
-            print(" \"");
-            print_slice(body);
-            print("\"\n");
-        }
-        // A guest never receives these; it sends them.
-        Kind::ToolCall | Kind::Send => {
-            reply(device, packet, Header::new(header.id, Kind::Error, 0), b"not for a guest");
-        }
-    }
-}
-
-/// Send a frame back, filling in the length from the payload.
-fn reply(device: &mut vsock::Vsock, packet: &vsock::Packet, header: Header, payload: &[u8]) {
-    let header = Header::new(header.id, header.kind, payload.len() as u32);
-    let mut out = Vec::with_capacity(HEADER_LEN + payload.len());
-    let mut bytes = [0u8; HEADER_LEN];
-    header.encode(&mut bytes);
-    out.extend_from_slice(&bytes);
-    out.extend_from_slice(payload);
-    device.reply(&packet.header, vsock::op::RW, &out);
 }
 
 /// `body` with `prefix` removed, if it starts with it.
@@ -665,17 +813,6 @@ fn mac_sweep(base: u32, mib: u32) -> u32 {
         sum = sum.wrapping_add(u32::from(w).wrapping_mul(i as u32 & 0xFF));
     }
     sum
-}
-
-/// Write `len` bytes of guest memory at `at` to the console.
-fn print_bytes(at: u32, len: u32) {
-    for i in 0..len {
-        // SAFETY: the caller passes a receive buffer and the length the device
-        // reported writing into it.
-        let byte = unsafe { core::ptr::read_volatile((at + i) as *const u8) };
-        // SAFETY: COM1, as in `print`.
-        unsafe { outb(COM1, byte) };
-    }
 }
 
 /// Stop, for good.

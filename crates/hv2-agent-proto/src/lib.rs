@@ -23,6 +23,20 @@
 //! its request is to allow one at a time, which is a protocol decision
 //! masquerading as an omission.
 //!
+//! # Who allocates an id
+//!
+//! Whoever originates the request. A `Task` carries an id the host chose and a
+//! `ToolCall` carries one the guest chose, and they are two independent
+//! counters: the same number may be outstanding in both directions at once.
+//! That is unambiguous rather than merely tolerable, because a frame's kind
+//! says which direction it answers — an `Error` arriving at a guest refuses
+//! something that guest asked for, and an `Error` leaving one refuses something
+//! the host sent.
+//!
+//! The alternative — one shared space, or a bit reserved to partition it — buys
+//! nothing that reading the kind does not already give, and costs a rule both
+//! ends have to keep.
+//!
 //! # What is deliberately absent
 //!
 //! No versioning, no negotiation, no compression, no fragmentation. This is the
