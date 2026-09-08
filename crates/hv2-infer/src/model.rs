@@ -73,6 +73,59 @@ pub struct Shape {
     pub context: usize,
 }
 
+impl Shape {
+    /// Refuse a shape the rest of this crate cannot work in.
+    ///
+    /// Every field here is a number out of the model file, and until this
+    /// existed they went straight into arithmetic. `head_count` of zero divided
+    /// by zero while `head_dim` was being derived, which is a panic during
+    /// `Model::load` -- on a file, reported as a crash rather than as "this
+    /// file says it has no attention heads".
+    ///
+    /// The checks are the relations the forward pass assumes rather than a
+    /// taste test: it slices `width` into `heads` of `head_dim`, and it slices
+    /// those heads into `kv_heads` groups. A file where those do not divide is
+    /// a file this would mis-slice silently, which is worse than refusing it.
+    fn check(&self) -> Result<(), Error> {
+        let zero = |what: &str| Error::Missing(format!("{what} must not be zero"));
+        if self.layers == 0 {
+            return Err(zero("llama.block_count"));
+        }
+        if self.width == 0 {
+            return Err(zero("llama.embedding_length"));
+        }
+        if self.heads == 0 {
+            return Err(zero("llama.attention.head_count"));
+        }
+        if self.kv_heads == 0 {
+            return Err(zero("llama.attention.head_count_kv"));
+        }
+        if self.ffn == 0 {
+            return Err(zero("llama.feed_forward_length"));
+        }
+        if self.vocab == 0 {
+            return Err(zero("llama.vocab_size"));
+        }
+        if self.context == 0 {
+            return Err(zero("llama.context_length"));
+        }
+        if !self.width.is_multiple_of(self.heads) {
+            return Err(Error::Missing(format!(
+                "a width the heads divide — the file says {} across {} heads",
+                self.width, self.heads
+            )));
+        }
+        if !self.heads.is_multiple_of(self.kv_heads) {
+            return Err(Error::Missing(format!(
+                "a head count the key/value heads divide — the file says {} heads and {} \
+                 key/value heads",
+                self.heads, self.kv_heads
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// One block's weights.
 struct Block<'a> {
     attn_norm: Vec<f32>,
@@ -127,6 +180,11 @@ impl Model {
 
         let width = gguf.count("llama.embedding_length")?;
         let heads = gguf.count("llama.attention.head_count")?;
+        if heads == 0 {
+            return Err(Error::Missing(
+                "llama.attention.head_count must not be zero".into(),
+            ));
+        }
         let shape = Shape {
             layers: gguf.count("llama.block_count")?,
             width,
@@ -134,7 +192,9 @@ impl Model {
             kv_heads: gguf.count("llama.attention.head_count_kv")?,
             // Not in the file, and derived rather than assumed to be 128: a
             // model whose heads are not the width divided by their number is a
-            // model this would silently mis-slice.
+            // model this would silently mis-slice. The divisor is checked just
+            // above, because this line used to be the division that a
+            // `head_count` of zero turned into a panic.
             head_dim: width / heads,
             ffn: gguf.count("llama.feed_forward_length")?,
             vocab: gguf.count("llama.vocab_size")?,
@@ -142,6 +202,7 @@ impl Model {
             rope_base: gguf.real("llama.rope.freq_base")?,
             context: gguf.count("llama.context_length")?,
         };
+        shape.check()?;
 
         let tokens = gguf
             .get("tokenizer.ggml.tokens")
@@ -189,11 +250,13 @@ impl Model {
     /// 280,147 merge rules, which are several megabytes that no forward pass
     /// ever reads. A rate computed against the file would flatter itself.
     pub fn weight_bytes(&self) -> usize {
-        self.gguf
-            .tensors
-            .values()
-            .map(|t| t.quant.size_of(t.elements()))
-            .sum()
+        // Saturating: `size_of` saturates for a tensor whose dimensions do not
+        // fit, so summing several of those overflows, and this workspace builds
+        // release with overflow checks on. A number that large is nonsense
+        // either way; aborting while reporting it is worse than reporting it.
+        self.gguf.tensors.values().fold(0usize, |acc, t| {
+            acc.saturating_add(t.quant.size_of(t.elements()))
+        })
     }
 
     fn block(&self, layer: usize) -> Result<Block<'_>, Error> {
@@ -704,4 +767,74 @@ pub fn argmax(values: &[f32]) -> u32 {
         }
     }
     best as u32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shape of the model this crate was written against, which every case
+    /// below is a single field away from.
+    fn llama_1b() -> Shape {
+        Shape {
+            layers: 16,
+            width: 2048,
+            heads: 32,
+            kv_heads: 8,
+            head_dim: 64,
+            ffn: 8192,
+            vocab: 128_256,
+            rms_epsilon: 1e-5,
+            rope_base: 500_000.0,
+            context: 131_072,
+        }
+    }
+
+    #[test]
+    fn the_shape_this_was_written_against_is_accepted() {
+        llama_1b().check().expect("a real model's shape");
+    }
+
+    /// The one that panicked: `head_dim` is `width / heads`, and this was the
+    /// divisor.
+    #[test]
+    fn no_attention_heads_is_refused_not_divided_by() {
+        let mut shape = llama_1b();
+        shape.heads = 0;
+        assert!(shape.check().is_err());
+    }
+
+    #[test]
+    fn every_dimension_must_be_present() {
+        for (name, set) in [
+            ("layers", (|s: &mut Shape| s.layers = 0) as fn(&mut Shape)),
+            ("width", |s: &mut Shape| s.width = 0),
+            ("kv_heads", |s: &mut Shape| s.kv_heads = 0),
+            ("ffn", |s: &mut Shape| s.ffn = 0),
+            ("vocab", |s: &mut Shape| s.vocab = 0),
+            ("context", |s: &mut Shape| s.context = 0),
+        ] {
+            let mut shape = llama_1b();
+            set(&mut shape);
+            assert!(shape.check().is_err(), "a zero {name} was accepted");
+        }
+    }
+
+    /// A width the heads do not divide would be sliced into heads that overlap
+    /// or fall short, quietly.
+    #[test]
+    fn a_width_the_heads_do_not_divide_is_refused() {
+        let mut shape = llama_1b();
+        shape.width = 2049;
+        assert!(shape.check().is_err());
+    }
+
+    /// Grouped-query attention shares one key/value head across several query
+    /// heads, so the groups have to come out even.
+    #[test]
+    fn heads_that_do_not_group_evenly_are_refused() {
+        let mut shape = llama_1b();
+        shape.kv_heads = 7;
+        assert!(shape.check().is_err());
+    }
 }

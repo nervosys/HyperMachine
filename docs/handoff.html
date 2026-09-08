@@ -2395,6 +2395,25 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
     tested, so it is capped rather than reported as a bug that was caught.
   </p>
   <p>
+    The same question asked one layer up found one more.
+    <code>Model::load</code> reads the shape out of the metadata and derives
+    <code>head_dim</code> as <code>width / heads</code> &mdash; so a file
+    declaring <code>llama.attention.head_count = 0</code> divides by zero while
+    loading. There was no validation of the shape at all: every field went from
+    the file straight into arithmetic.
+  </p>
+  <p>
+    <code>Shape::check</code> now refuses the ones the forward pass cannot work
+    in, and the checks are the relations it assumes rather than a taste test: it
+    slices <code>width</code> into <code>heads</code> of <code>head_dim</code>
+    and those into <code>kv_heads</code> groups, so a width the heads do not
+    divide is a model that would be mis-sliced <em>silently</em>, which is worse
+    than one that is refused. It is a plain function over a struct, so its five
+    tests need no file at all &mdash; and one of them asserts that the shape of
+    the model this crate was actually written against still passes, which is the
+    test that would catch a validator that is merely strict.
+  </p>
+  <p>
     None of this is reachable by an attacker in any sense that matters today:
     the file is a model a person names on the command line. It is worth having
     anyway, and worth stating why. A parser that aborts on a truncated file
@@ -2467,7 +2486,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,276 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,281 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current
