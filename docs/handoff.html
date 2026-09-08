@@ -2439,6 +2439,54 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
     covers the kernel everywhere.
   </p>
   <p>
+    Asking the question a third way &mdash; <em>which tests never run at
+    all?</em> &mdash; found seven. <code>tests/kvm_backend.rs</code> marks every
+    one of its tests <code>#[ignore] // Requires /dev/kvm access</code>, and
+    every one of those tests <em>already</em> checks for KVM and returns with a
+    printed reason when it is absent. The attribute was suppressing tests whose
+    own bodies did the skipping. On this machine, which has
+    <code>/dev/kvm</code>, they pass in 0.14 seconds and had never been run by
+    the suite.
+  </p>
+  <p>
+    The file beside it had already settled the question in a comment:
+    <em>"Without it these skip rather than fail, so they are not
+    <code>#[ignore]</code>d: on a machine that can run them, the ordinary suite
+    does."</em> One file followed that rule and its neighbour did not. It does
+    now, and those seven run.
+  </p>
+  <div class="callout stop">
+    <h3>The count of what is still ignored was itself wrong, twice over</h3>
+    <p>
+      The sweep was extended to report ignored tests alongside passed and
+      failed, and it said <strong>zero</strong>. That was very nearly published.
+      It is an <code>awk</code> field index &mdash; <code>$8</code> of a line
+      split on spaces and semicolons &mdash; and it lands on the wrong field.
+      Counting the words instead of the positions gives <strong>twelve</strong>.
+    </p>
+    <p>
+      Which is the ninth instrument on this page to be wrong, and the second in
+      the same afternoon to be an index into <code>awk</code>'s idea of a line.
+      The one that summed <em>passed</em> and <em>failed</em> was right by luck.
+    </p>
+    <p>
+      What the twelve actually are is worth knowing, because they are two
+      different things. <strong>One</strong> is a real
+      <code>#[ignore]</code>, on a test that wants Windows hardware
+      virtualisation &mdash; the kind the attribute is for. The other
+      <strong>eleven are doc-tests</strong>: code samples written in
+      <code>```ignore</code> fences, which rustdoc neither compiles nor runs.
+      Three in <code>hv2-agent</code>, six in <code>hv2-core</code>, one each in
+      <code>hv2-api</code> and <code>hv2-runtime</code>. A sample in an
+      <code>ignore</code> fence cannot fail, so it cannot tell you it has gone
+      stale &mdash; <code>no_run</code> compiles without executing and
+      <code>text</code> says plainly that it is not code, and either would be a
+      more honest thing for a sample to be. That has not been changed here: it
+      is twenty fences across four crates and somebody should decide which of
+      them are examples and which are prose.
+    </p>
+  </div>
+  <p>
     None of this is reachable by an attacker in any sense that matters today:
     the file is a model a person names on the command line. It is worth having
     anyway, and worth stating why. A parser that aborts on a truncated file
@@ -2511,7 +2559,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,282 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,289 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current

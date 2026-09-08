@@ -1,7 +1,14 @@
 //! KVM Backend Integration Tests
 //!
 //! These tests verify the KVM backend implementation.
-//! They require Linux with KVM support to run.
+//!
+//! They want `/dev/kvm` and every one of them already skips without it — the
+//! bodies below check and return, printing why. They were nonetheless
+//! `#[ignore]`d, which meant that on a machine that *could* run them the
+//! ordinary suite did not, and seven passing tests sat dormant. The file beside
+//! this one, `vcpu_kick.rs`, says the rule outright: "Without it these skip
+//! rather than fail, so they are not `#[ignore]`d: on a machine that can run
+//! them, the ordinary suite does." This file now follows it.
 
 #![cfg(target_os = "linux")]
 
@@ -10,7 +17,6 @@ use hv2_core::hypervisor::{HypervisorBackend, HypervisorPlatform};
 use hv2_core::{IoDirection, VmExit};
 
 #[tokio::test]
-#[ignore] // Requires /dev/kvm access
 async fn test_kvm_backend_creation() {
     let backend = KvmBackend::new();
 
@@ -29,7 +35,6 @@ async fn test_kvm_backend_creation() {
 }
 
 #[tokio::test]
-#[ignore] // Requires /dev/kvm access
 async fn test_kvm_backend_initialization() {
     let mut backend = match KvmBackend::new() {
         Ok(b) => b,
@@ -44,7 +49,6 @@ async fn test_kvm_backend_initialization() {
 }
 
 #[tokio::test]
-#[ignore] // Requires /dev/kvm access
 async fn test_kvm_vm_creation() {
     let mut backend = match KvmBackend::new() {
         Ok(b) => b,
@@ -66,7 +70,6 @@ async fn test_kvm_vm_creation() {
 }
 
 #[tokio::test]
-#[ignore] // Requires /dev/kvm access
 async fn test_kvm_vm_memory_limits() {
     let mut backend = match KvmBackend::new() {
         Ok(b) => b,
@@ -147,7 +150,6 @@ fn test_exit_reason_conversion() {
 
 /// Test KVM capabilities detection
 #[test]
-#[ignore] // Requires /dev/kvm access
 fn test_capabilities_detection() {
     let backend = match KvmBackend::new() {
         Ok(b) => b,
@@ -181,7 +183,6 @@ fn test_capabilities_detection() {
 /// This test creates a VM, allocates memory, creates a vCPU,
 /// and verifies the basic setup works correctly.
 #[tokio::test]
-#[ignore] // Requires /dev/kvm access
 async fn test_kvm_full_vm_setup() {
     let mut backend = match KvmBackend::new() {
         Ok(b) => b,
@@ -208,7 +209,6 @@ async fn test_kvm_full_vm_setup() {
 
 /// Test shutdown cleanup
 #[tokio::test]
-#[ignore] // Requires /dev/kvm access
 async fn test_kvm_shutdown() {
     let mut backend = match KvmBackend::new() {
         Ok(b) => b,
