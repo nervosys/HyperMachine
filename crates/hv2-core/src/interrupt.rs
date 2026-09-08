@@ -479,18 +479,19 @@ impl Pic8259 {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```
     /// use hv2_core::interrupt::Pic8259;
-    /// use hv2_core::backends::whpx::WhpxVm;
-    ///
-    /// # fn example(vm: &WhpxVm) -> hv2_core::Result<()> {
+    /// # fn example() -> hv2_core::Result<()> {
     /// let pic = Pic8259::new();
     ///
-    /// // Register handlers for all PIC ports
-    /// for port in [0x20, 0x21, 0xA0, 0xA1] {
-    ///     let handler = pic.create_io_handler();
-    ///     vm.register_io_handler(port, handler);
-    /// }
+    /// // One handler per PIC port, to be registered with whichever backend
+    /// // this is running on -- the handler does not know or care which.
+    /// let handler = pic.create_io_handler();
+    ///
+    /// // What the backend does with it on an `out 0x21, al`: the port, that
+    /// // it is a write, one byte wide, and the value.
+    /// let mut value = 0xFF_u32;
+    /// handler(0x21, true, 1, &mut value)?;
     /// # Ok(())
     /// # }
     /// ```

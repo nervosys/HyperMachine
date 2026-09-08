@@ -2482,8 +2482,29 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       stale &mdash; <code>no_run</code> compiles without executing and
       <code>text</code> says plainly that it is not code, and either would be a
       more honest thing for a sample to be. That has not been changed here: it
-      is twenty fences across four crates and somebody should decide which of
-      them are examples and which are prose.
+      is twenty fences across four crates.
+    </p>
+    <p>
+      <strong>Four of them were then measured rather than left to a decision,
+      and all four were already broken.</strong> Sixteen of the twenty are in
+      <code>whpx.rs</code>, a Windows-only backend that does not compile here at
+      all, so those are fenced for a structural reason. The other four were
+      changed to <code>no_run</code> to see what would happen, and every one
+      failed: <code>LinuxBootProtocol::boot</code> and
+      <code>MultibootProtocol::boot</code> are methods that no longer exist,
+      <code>LinuxBootParams</code> had gained a <code>memory_size</code> field
+      the sample did not set, two samples imported the Windows backend for no
+      reason beyond having something to hand a handler to, one used
+      <code>?</code> with nothing to return it to, and one had the wrong error
+      type entirely.
+    </p>
+    <p>
+      That is the module-level documentation of <em>how to boot a guest</em>,
+      and a reader following it would have written code that does not compile.
+      All four are rewritten against the API as it is and are now checked on
+      every run: hv2-core's doc-tests went from <strong>29 passing and 6
+      ignored to 33 passing and 2 ignored</strong>. The two that remain are the
+      Windows ones, which is what the fence is for.
     </p>
   </div>
   <p>
@@ -2559,7 +2580,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,289 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,293 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current

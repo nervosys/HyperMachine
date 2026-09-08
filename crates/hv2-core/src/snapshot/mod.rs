@@ -13,9 +13,9 @@
 //!
 //! # Example
 //!
-//! ```ignore
-//! use hv2_core::snapshot::{SnapshotManager, CreateSnapshotOptions};
-//!
+//! ```no_run
+//! use hv2_core::snapshot::{CreateSnapshotOptions, SnapshotManager};
+//! # fn example() -> hv2_core::snapshot::SnapshotResult<()> {
 //! let mut manager = SnapshotManager::with_defaults();
 //!
 //! // Create a full snapshot
@@ -27,6 +27,8 @@
 //! manager.begin_restore(&id)?;
 //! // ... restore state ...
 //! manager.complete_restore()?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod device;

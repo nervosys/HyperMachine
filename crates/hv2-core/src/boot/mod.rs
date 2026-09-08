@@ -13,49 +13,45 @@
 //!
 //! # Example: Linux Boot
 //!
-//! ```ignore
+//! ```no_run
 //! use hv2_core::boot::linux::{LinuxBootParams, LinuxBootProtocol};
-//! use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
 //! # fn example() -> hv2_core::Result<()> {
-//! # let backend = WhpxBackend::new()?;
-//! # let vm = WhpxVm::new(1, 64 * 1024 * 1024)?;
-//! # let vcpu = vm.create_vcpu(0)?;
-//!
-//! // Configure Linux boot parameters
 //! let params = LinuxBootParams {
-//!     kernel_image: include_bytes!("vmlinuz").to_vec(),
+//!     kernel_image: std::fs::read("vmlinuz").unwrap_or_default(),
 //!     initrd: None,
 //!     cmdline: "console=ttyS0 root=/dev/vda".to_string(),
-//!     setup_addr: 0x90000,
-//!     kernel_addr: 0x100000,
+//!     setup_addr: 0x9_0000,
+//!     kernel_addr: 0x10_0000,
+//!     // The kernel's memory map is built from this and from nowhere else.
+//!     memory_size: 64 * 1024 * 1024,
 //! };
 //!
-//! // Boot the kernel
-//! LinuxBootProtocol::boot(&vcpu, &vm, params)?;
+//! // What the guest's RAM has to contain before the first instruction runs:
+//! // the kernel, the boot parameters, the command line, and any initrd, each
+//! // with the address it belongs at.
+//! let regions: Vec<(u64, Vec<u8>)> = LinuxBootProtocol::prepare_guest_memory(&params)?;
 //! # Ok(())
 //! # }
 //! ```
 //!
 //! # Example: Multiboot
 //!
-//! ```ignore
-//! use hv2_core::boot::multiboot::{MultibootInfo, MultibootProtocol};
-//! use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
+//! ```no_run
+//! use hv2_core::boot::multiboot::{MultibootInfo, MultibootLayout, MultibootProtocol};
 //! # fn example() -> hv2_core::Result<()> {
-//! # let backend = WhpxBackend::new()?;
-//! # let vm = WhpxVm::new(1, 64 * 1024 * 1024)?;
-//! # let vcpu = vm.create_vcpu(0)?;
-//!
-//! // Configure Multiboot parameters
 //! let info = MultibootInfo {
-//!     kernel_image: include_bytes!("kernel.elf").to_vec(),
+//!     kernel_image: std::fs::read("kernel.elf").unwrap_or_default(),
 //!     modules: Vec::new(),
 //!     cmdline: "root=/dev/sda1".to_string(),
 //!     memory_map: vec![(0, 640 * 1024), (1024 * 1024, 63 * 1024 * 1024)],
 //! };
 //!
-//! // Boot the kernel
-//! MultibootProtocol::boot(&vcpu, &vm, info)?;
+//! // The layout says where the kernel and its information structure go; the
+//! // header in the image itself can override it, which is why it is a
+//! // separate argument rather than a constant.
+//! let layout = MultibootLayout::new();
+//! let regions: Vec<(u64, Vec<u8>)> =
+//!     MultibootProtocol::prepare_guest_memory(&info, &layout)?;
 //! # Ok(())
 //! # }
 //! ```
