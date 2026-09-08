@@ -335,6 +335,21 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             });
             print("
 ");
+            print("hv1   apic      : ");
+            print(if log.apic_enabled {
+                "software-enabled by the guest, "
+            } else {
+                "FAILED — never turned on, "
+            });
+            print_dec(log.eois as u64);
+            print(" end-of-interrupt");
+            print(if log.identified[0] && log.identified[1] {
+                ", and both processors read their own identity from one instruction
+"
+            } else {
+                ", and FAILED — a processor never read its identity
+"
+            });
             print("hv1   half a start: ");
             print(if log.ap_refused {
                 "a startup that skipped the reset was refused

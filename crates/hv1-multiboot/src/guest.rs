@@ -29,6 +29,13 @@
 //!   coming out of reset can be told. A startup that skipped the reset is
 //!   refused, which real parts do not do and a hypervisor that *is* the APIC
 //!   can.
+//! - **An APIC with five registers, and one of them per processor.** The guest
+//!   software-enables it through the spurious-interrupt vector register, its
+//!   handler writes end-of-interrupt, and both processors `call` one routine at
+//!   one address to read the identity register — and get different answers.
+//!   That last part is the difference between an APIC and a register the
+//!   hypervisor keeps one copy of. Everything else on that page reads as zero
+//!   and says so.
 //!
 //! # The guest
 //!
@@ -183,6 +190,10 @@ core::arch::global_asm!(
     // The local APIC, where the architecture puts it.
     .set APIC_ICR_LOW,    0xFEE00300
     .set APIC_ICR_HIGH,   0xFEE00310
+    .set APIC_ID,         0xFEE00020
+    .set APIC_EOI,        0xFEE000B0
+    .set APIC_SPURIOUS,   0xFEE000F0
+    .set WHOAMI_LINEAR,   GUEST_BASE + whoami - guest_start
     .set GDT_PTR_OFFSET, gdt_pointer - guest_start
     .set IDT_PTR_LINEAR, GUEST_BASE + idt_pointer - guest_start
     .set STACK_TOP,      GUEST_BASE + 0xF00
@@ -262,6 +273,17 @@ protected:
     // Hypercall 2: in protected mode, with an IDT of its own.
     mov eax, 2
     vmmcall
+
+    // Software-enable the local APIC: bit 8 of the spurious-interrupt vector
+    // register, plus a vector for interrupts nobody claimed. A kernel that
+    // skips this has an APIC that is present and off, which is the first thing
+    // that goes wrong when one is written from the manual.
+    mov dword ptr [APIC_SPURIOUS], 0x1FF
+
+    // And ask which processor this is. Both processors call this, at this
+    // address, and get different answers -- which is the whole difference
+    // between an APIC and a register the hypervisor keeps one copy of.
+    call whoami
 
     // Idle. Nothing in the guest arranges what happens next: the hypervisor
     // sees the halt and injects a vector.
@@ -399,9 +421,39 @@ protected:
     // Hypercall 3, from inside the handler. The only way this runs is if the
     // CPU took vector 0x20 through a gate in the table above — in protected
     // mode, where a gate is a descriptor and not an address.
+    // Which processor is running this. The identity register is the one thing
+    // that answers differently on each of them, and reading it is how a kernel
+    // tells its processors apart before it has any other way to.
+whoami:
+    mov edi, APIC_ID
+    mov eax, [edi]
+    shr eax, 24
+    add al, 48
+    // Kept in AH, because AL is about to be every character of the line.
+    mov ah, al
+    mov dx, 0x3F8
+    mov al, 99
+    out dx, al
+    mov al, 112
+    out dx, al
+    mov al, 117
+    out dx, al
+    mov al, 32
+    out dx, al
+    mov al, ah
+    out dx, al
+    mov al, 10
+    out dx, al
+    ret
+
 timer:
     mov eax, 3
     vmmcall
+    // Acknowledge it. A handler that does not write end-of-interrupt leaves
+    // the vector in service and the next one undeliverable -- injection here
+    // does not consult that, so this is the guest doing the right thing rather
+    // than the guest being forced to.
+    mov dword ptr [APIC_EOI], 0
     // `iretd`, not `iret`. In Intel syntax bare `iret` is the 16-bit form and
     // would pop a 16-bit frame off a 32-bit one, returning to a garbage
     // selector. The same mistake cost hv2's guest a debugging session.
@@ -463,6 +515,9 @@ ap_entry:
     mov fs, ax
     mov gs, ax
     mov esp, offset AP_STACK_TOP
+
+    // The same call, at the same address, on the other processor.
+    call whoami
 
     mov esi, offset AP_MSG_LINEAR
 11:
@@ -790,14 +845,14 @@ pub enum Outcome {
 /// written a byte at a time costs one exit per character, so two short lines of
 /// console are sixty exits on their own — which is the reason real device models
 /// batch, and the reason this number is what it is.
-const MAX_EXITS: usize = 160;
+const MAX_EXITS: usize = 200;
 
 /// What the hypervisor saw and said.
 pub struct Transcript {
     pub exits: [Exit; MAX_EXITS],
     pub count: usize,
     /// Bytes the guest wrote to its serial port, and how many.
-    pub console: [u8; 128],
+    pub console: [u8; 192],
     pub console_len: usize,
     /// The hypercall numbers the guest made, in order.
     pub calls: [u32; 16],
@@ -817,6 +872,12 @@ pub struct Transcript {
     pub ring_returned: bool,
     /// Whether a descriptor pointed outside the guest's own memory.
     pub ring_refused: bool,
+    /// Whether the guest turned its local APIC on before using it.
+    pub apic_enabled: bool,
+    /// Which processors read their own identity register, and got their own.
+    pub identified: [bool; VCPUS],
+    /// How many end-of-interrupt writes the guest made.
+    pub eois: usize,
     /// Whether a startup message that skipped the reset was refused.
     pub ap_refused: bool,
     /// Whether a second guest processor was started and ran.
@@ -858,30 +919,54 @@ const APIC_BASE: u64 = 0xFEE0_0000;
 /// high half only says who it is for, which is why it is written first.
 const APIC_ICR_LOW: u64 = 0x300;
 const APIC_ICR_HIGH: u64 = 0x310;
+/// Who this processor is. The one register whose answer depends on which
+/// processor asked, which is what makes this an APIC rather than a register the
+/// hypervisor keeps one copy of.
+const APIC_ID: u64 = 0x020;
+/// End of interrupt. Write-only, and the value written is ignored.
+const APIC_EOI: u64 = 0x0B0;
+/// The spurious-interrupt vector register. Bit 8 is what turns the APIC on.
+const APIC_SPURIOUS: u64 = 0x0F0;
+/// Bit 8 of the above: the software enable.
+const APIC_ENABLE: u32 = 1 << 8;
 
 /// Delivery mode 101: hold the target processor at reset.
 const DELIVERY_INIT: u32 = 5;
 /// Delivery mode 110: start it, at the page in the low eight bits.
 const DELIVERY_STARTUP: u32 = 6;
 
-/// A store to the APIC page: which register, what value, and how long the
-/// instruction was so the guest can be stepped over it.
-struct Store {
-    offset: u64,
-    value: u32,
-    length: u64,
+/// What the guest was doing to the APIC page: which register, which direction,
+/// and how long the instruction was so the guest can be stepped over it.
+enum Access {
+    Store {
+        offset: u64,
+        value: u32,
+        length: u64,
+    },
+    Load {
+        offset: u64,
+        dest: u8,
+        length: u64,
+    },
 }
 
 /// The value of one of the eight 32-bit general registers, by encoding.
 ///
-/// `RAX` lives in the VMCB and the other seven live in the block `svm_run`
+/// `RSP` lives in the VMCB and the other seven live in the block `svm_run`
 /// saves, which is the whole reason this function exists rather than an index.
-/// Only `EAX` is read by this guest — it is the source of both command-register
-/// writes — so the other seven arms are a decoder table that this workload does
-/// not exercise.
+///
+/// `RAX` is the one that has to be read and written *through the block*, even
+/// though it travels in the VMCB: `svm_run` copies `regs.rax` into the save
+/// area on the way in and back out again on the way out, so a value put into
+/// `vmcb.save.rax` between two entries is overwritten before the guest sees it.
+/// That is not a hypothetical — it is what made the second processor read its
+/// identity as zero.
+/// Only `EAX` is used by this guest — it is the source of the command-register
+/// writes and the destination of the identity read — so the other seven arms
+/// are a decoder table that this workload does not exercise.
 fn reg32(vmcb: &Vmcb, regs: &GeneralRegisters, which: u8) -> u32 {
     let value = match which {
-        0 => vmcb.save.rax,
+        0 => regs.rax,
         1 => regs.rcx,
         2 => regs.rdx,
         3 => regs.rbx,
@@ -893,38 +978,64 @@ fn reg32(vmcb: &Vmcb, regs: &GeneralRegisters, which: u8) -> u32 {
     value as u32
 }
 
-/// Decode the store that faulted on the APIC page.
+/// Put a value into one of the eight 32-bit general registers, by encoding.
+///
+/// The high half is cleared, which is what a 32-bit write to a register does in
+/// long mode and what the guest's 32-bit code expects in every mode.
+fn set_reg32(vmcb: &mut Vmcb, regs: &mut GeneralRegisters, which: u8, value: u32) {
+    let slot = match which {
+        0 => &mut regs.rax,
+        1 => &mut regs.rcx,
+        2 => &mut regs.rdx,
+        3 => &mut regs.rbx,
+        4 => &mut vmcb.save.rsp,
+        5 => &mut regs.rbp,
+        6 => &mut regs.rsi,
+        _ => &mut regs.rdi,
+    };
+    *slot = u64::from(value);
+}
+
+/// Decode the access that faulted on the APIC page.
 ///
 /// The instruction is read out of the guest's own memory at `CS.base + RIP`,
 /// rather than out of the VMCB's fetched bytes, because the fetched bytes are a
 /// decode assist and a hypervisor that requires one does not work on the parts
 /// that lack it.
 ///
-/// Two forms, because two forms are what the guest executes: a store of an
-/// immediate to an absolute address, and a store of a register through a
-/// register. Anything else returns `None` and is reported rather than guessed
-/// at — a decoder that invents a length re-executes the instruction forever.
+/// Three forms, because three forms are what the guest executes: a store of an
+/// immediate to an absolute address, a store of a register through a register,
+/// and a load into a register through a register. Anything else returns `None`
+/// and is reported rather than guessed at — a decoder that invents a length
+/// re-executes the instruction forever.
 ///
 /// # Safety
 ///
 /// As `guest_slice`.
-unsafe fn decode_store(vmcb: &Vmcb, regs: &GeneralRegisters, gpa: u64) -> Option<Store> {
+unsafe fn decode_access(vmcb: &Vmcb, regs: &GeneralRegisters, gpa: u64) -> Option<Access> {
     let at = vmcb.save.cs.base.wrapping_add(vmcb.save.rip);
     let code = guest_slice(at, 10)?;
     let offset = gpa - APIC_BASE;
+    // mod=00 with an rm that is a plain register — not 100, which means a SIB
+    // byte follows, and not 101, which means a bare displacement.
+    let through_register = code[1] >> 6 == 0 && code[1] & 7 != 4 && code[1] & 7 != 5;
     match code[0] {
         // C7 /0 with mod=00 rm=101: mov dword ptr [disp32], imm32.
-        0xC7 if code[1] == 0x05 => Some(Store {
+        0xC7 if code[1] == 0x05 => Some(Access::Store {
             offset,
             value: u32::from_le_bytes([code[6], code[7], code[8], code[9]]),
             length: 10,
         }),
-        // 89 /r with mod=00 and an rm that is a plain register — not 100,
-        // which means a SIB byte follows, and not 101, which means a bare
-        // displacement: mov [reg], r32.
-        0x89 if code[1] >> 6 == 0 && code[1] & 7 != 4 && code[1] & 7 != 5 => Some(Store {
+        // 89 /r: mov [reg], r32.
+        0x89 if through_register => Some(Access::Store {
             offset,
             value: reg32(vmcb, regs, (code[1] >> 3) & 7),
+            length: 2,
+        }),
+        // 8B /r: mov r32, [reg].
+        0x8B if through_register => Some(Access::Load {
+            offset,
+            dest: (code[1] >> 3) & 7,
             length: 2,
         }),
         _ => None,
@@ -1145,6 +1256,7 @@ pub unsafe fn run() -> Outcome {
     // here rather than quietly obeyed.
     let mut icr_high: u32 = 0;
     let mut reset = [false; VCPUS];
+    let mut spurious: u32 = 0;
 
     let mut log = Transcript {
         exits: core::array::from_fn(|_| Exit {
@@ -1154,7 +1266,7 @@ pub unsafe fn run() -> Outcome {
             answer: "",
         }),
         count: 0,
-        console: [0; 128],
+        console: [0; 192],
         console_len: 0,
         calls: [0; 16],
         call_count: 0,
@@ -1166,6 +1278,9 @@ pub unsafe fn run() -> Outcome {
         ring_len: 0,
         ring_returned: false,
         ring_refused: false,
+        apic_enabled: false,
+        identified: [false; VCPUS],
+        eois: 0,
         ap_refused: false,
         ap_started: false,
         ap_ran: false,
@@ -1200,7 +1315,10 @@ pub unsafe fn run() -> Outcome {
                     // Nothing is behind this port to read. Zero, and say so:
                     // an emulated device that invents data is worse than one
                     // that admits it has none.
-                    vmcb.save.rax = 0;
+                    // Through the register block, not the save area: see
+                    // `reg32`. The save area is overwritten from the block on
+                    // the way back in.
+                    regs[current].rax = 0;
                     answer = "read as zero";
                 } else if port == NOTIFY {
                     // The device. It runs here, inside the exit the doorbell
@@ -1250,7 +1368,7 @@ pub unsafe fn run() -> Outcome {
                 vmcb.save.rip = vmcb.control.exit_info2;
             }
             VMEXIT_VMMCALL => {
-                let call = vmcb.save.rax as u32;
+                let call = regs[current].rax as u32;
                 if log.call_count < log.calls.len() {
                     log.calls[log.call_count] = call;
                     log.call_count += 1;
@@ -1338,7 +1456,7 @@ pub unsafe fn run() -> Outcome {
                 // Nothing this guest asks for, and answered rather than left
                 // to fault: a hypervisor that intercepts an instruction and has
                 // no answer for it has intercepted it by accident.
-                vmcb.save.rax = 0;
+                regs[current].rax = 0;
                 regs[current].rbx = 0;
                 regs[current].rcx = 0;
                 regs[current].rdx = 0;
@@ -1352,20 +1470,53 @@ pub unsafe fn run() -> Outcome {
                 // of its own memory, which is what the nested tables are for.
                 let gpa = vmcb.control.exit_info2;
                 if gpa & !0xFFF == APIC_BASE {
-                    match decode_store(vmcb, &regs[current], gpa) {
+                    match decode_access(vmcb, &regs[current], gpa) {
                         None => {
                             answer = "the APIC page, by an instruction this hypervisor cannot decode";
                             log.stopped = "an APIC access this hypervisor cannot decode";
                             done = true;
                         }
-                        Some(store) => {
-                            answer = match store.offset {
+                        Some(Access::Load {
+                            offset,
+                            dest,
+                            length,
+                        }) => {
+                            // Only one register here answers, and it answers
+                            // per processor. Everything else reads as zero and
+                            // says so: an emulated device that invents data is
+                            // worse than one that admits it has none, which is
+                            // the same rule the serial port follows above.
+                            let (value, said) = match offset {
+                                APIC_ID => {
+                                    log.identified[current] = true;
+                                    (
+                                        (current as u32) << 24,
+                                        if current == 0 {
+                                            "its own identity — 0, the first processor"
+                                        } else {
+                                            "its own identity — 1, the second one, from the same instruction"
+                                        },
+                                    )
+                                }
+                                APIC_SPURIOUS => (spurious, "the spurious-interrupt vector register"),
+                                _ => (0, "an APIC register this hypervisor does not have — read as zero"),
+                            };
+                            answer = said;
+                            set_reg32(vmcb, &mut regs[current], dest, value);
+                            vmcb.save.rip = vmcb.save.rip.wrapping_add(length);
+                        }
+                        Some(Access::Store {
+                            offset,
+                            value: stored,
+                            length,
+                        }) => {
+                            answer = match offset {
                                 APIC_ICR_HIGH => {
-                                    icr_high = store.value;
+                                    icr_high = stored;
                                     "the command register's high half — who the next message is for"
                                 }
                                 APIC_ICR_LOW => {
-                                    let delivery = (store.value >> 8) & 7;
+                                    let delivery = (stored >> 8) & 7;
                                     let target = (icr_high >> 24) as usize;
                                     if target >= VCPUS {
                                         "a message for a processor that does not exist"
@@ -1374,8 +1525,12 @@ pub unsafe fn run() -> Outcome {
                                         "INIT — the other processor is held at reset"
                                     } else if delivery == DELIVERY_STARTUP {
                                         if reset[target] {
-                                            let vector = (store.value & 0xFF) as u64;
+                                            let vector = (stored & 0xFF) as u64;
                                             start_at_reset(vmcb_of(target), vector);
+                                            // Its registers as well as its
+                                            // save area: a processor at reset
+                                            // has neither.
+                                            regs[target] = GeneralRegisters::default();
                                             runnable[target] = true;
                                             log.ap_started = true;
                                             "STARTUP — the other processor begins in real mode at the page it names"
@@ -1392,9 +1547,26 @@ pub unsafe fn run() -> Outcome {
                                         "a delivery mode this hypervisor does not implement"
                                     }
                                 }
+                                APIC_SPURIOUS => {
+                                    spurious = stored;
+                                    if stored & APIC_ENABLE != 0 {
+                                        log.apic_enabled = true;
+                                        "the spurious-interrupt vector register — the APIC is on"
+                                    } else {
+                                        "the spurious-interrupt vector register — the APIC is off"
+                                    }
+                                }
+                                APIC_EOI => {
+                                    // Write-only, and the value is ignored.
+                                    // What matters is that the guest wrote it
+                                    // at all: a handler that does not is a
+                                    // handler that gets one interrupt.
+                                    log.eois += 1;
+                                    "end of interrupt, from inside the handler"
+                                }
                                 _ => "an APIC register this hypervisor does not have",
                             };
-                            vmcb.save.rip = vmcb.save.rip.wrapping_add(store.length);
+                            vmcb.save.rip = vmcb.save.rip.wrapping_add(length);
                         }
                     }
                 } else {

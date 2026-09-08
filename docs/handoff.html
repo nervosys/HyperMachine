@@ -1264,7 +1264,7 @@ exit 073  VMEXIT_NPF  -> STARTUP — the other processor begins in real mode at 
     is KVM, so hv1 read a CPU its own hypervisor chose to show it; the firmware
     path, the real memory map, AP bring-up and every real device are hidden by
     that. And two processors running 32-bit code with one emulated port, one
-    ring and two APIC registers is not an operating system either — what it now
+    ring and five APIC registers is not an operating system either — what it now
     has is most of the machinery a small kernel uses and none of the reasons to
     have one.
   </p>
@@ -1726,11 +1726,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       go.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,265 tests and all fifteen
-      examples, run together after the second processor came up through the
-      APIC. The count is higher than the 3,331 quoted an hour earlier because
-      that run had crates missing from it — which is the whole point of the
-      paragraph above.
+      <strong>Keep the suite green.</strong> It is: 5,265 tests across 88 test
+      binaries, and all fifteen examples. The sweep now refuses to print a
+      summary when it counts fewer than twenty binaries, because the run before
+      last printed 3,331 with crates missing and the one before that printed
+      nothing at all — which is the point of the paragraph above, applied to the
+      thing that checks everything else.
     </li>
   </ul>
 </section>
@@ -1813,8 +1814,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   · a fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
   builds its guest's descriptor tables, drives a ring, refuses one pointing at
   memory it does not have, and starts a second guest processor with INIT and
-  STARTUP on a faulted APIC page, refuses a startup that skipped the reset, and
-  schedules both onto the one processor it has — nested, and still never on a
+  STARTUP on a faulted APIC page, refuses a startup that skipped the reset,
+  schedules both onto the one processor it has, and tells them apart — one
+  instruction, one address, two answers — nested, and still never on a
   machine
 </footer>
 

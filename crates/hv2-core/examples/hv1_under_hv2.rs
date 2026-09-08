@@ -206,6 +206,12 @@ async fn main() -> std::process::ExitCode {
     let bring_up = console.contains("INIT — the other processor is held at reset")
         && console.contains("STARTUP — the other processor begins in real mode");
     let half_a_start = console.contains("a startup that skipped the reset was refused");
+    // The identity register, which is the only one whose answer depends on who
+    // asked. One instruction, at one address, run by both processors: if they
+    // print different numbers there is a per-processor APIC behind it and not a
+    // register the hypervisor keeps one copy of.
+    let told_apart = console.contains("> cpu 0") && console.contains("> cpu 1");
+    let apic_used = console.contains("software-enabled by the guest, 1 end-of-interrupt");
     let delivered_an_interrupt = console.contains("the guest's own handler ran");
     let guest_carried_on = console.contains("the handler's iret returned");
 
@@ -255,6 +261,14 @@ async fn main() -> std::process::ExitCode {
     println!(
         "refused half of it: {}  (a STARTUP for a processor that had never been reset did not start one)",
         yes_no(half_a_start)
+    );
+    println!(
+        "told apart      : {}  (both processors ran one instruction at one address and read different identities)",
+        yes_no(told_apart)
+    );
+    println!(
+        "an APIC, used   : {}  (the guest software-enabled it, and its handler wrote end-of-interrupt)",
+        yes_no(apic_used)
     );
     println!(
         "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
@@ -318,11 +332,13 @@ async fn main() -> std::process::ExitCode {
         && second_processor
         && bring_up
         && half_a_start
+        && told_apart
+        && apic_used
         && delivered_an_interrupt
         && guest_carried_on
     {
         println!(
-            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor the way hardware does — INIT and STARTUP written to the local APIC page, faulted out of the nested tables and decoded from the guest's own instruction stream, with the second processor beginning in real mode at the page the vector named — and scheduled the two of them onto the one it has, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, and the APIC is this hypervisor's rather than a real one, so the firmware path, the real memory map and every real device remain untested."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor the way hardware does — INIT and STARTUP written to the local APIC page, faulted out of the nested tables and decoded from the guest's own instruction stream, with the second processor beginning in real mode at the page the vector named — and scheduled the two of them onto the one it has, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, and the APIC is this hypervisor's rather than a real one — five registers of one, and the identity register is the only one whose answer depends on which processor asked — so the firmware path, the real memory map and every real device remain untested."
         );
     } else if initialised {
         println!(
