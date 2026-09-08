@@ -221,6 +221,62 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     print(" APIC ticks
 ");
 
+    // Can this processor produce an interrupt a guest cannot mask?
+    //
+    // It matters because the timer above cannot: an external-interrupt
+    // intercept produces an exit when the interrupt would be delivered, and a
+    // guest that clears `IF` and spins is a guest to which it never would be.
+    // The way out is a performance counter set to overflow into an *NMI*, which
+    // is not maskable -- so the question is whether there is a usable counter
+    // here at all, and it is asked rather than assumed.
+    let (_, _, ecx_ext, _) = cpuid(0x8000_0001);
+    let core_perf = ecx_ext & (1 << 23) != 0;
+    print("perf  ");
+    print(if core_perf {
+        "PerfCtrExtCore, "
+    } else {
+        "no PerfCtrExtCore, "
+    });
+    // SAFETY: ring 0. These are the legacy four AMD performance MSRs, present
+    // on every K8 and later; a processor without them faults, and this kernel
+    // now has a table that would report that rather than triple-fault.
+    let counts = unsafe {
+        // Event 0x76, CPU clocks not halted: OS and user, enabled.
+        write_msr(PERF_CTL0, 0x0053_0076);
+        write_msr(PERF_CTR0, 0);
+        let first = read_msr(PERF_CTR0);
+        for _ in 0..1000 {
+            core::hint::spin_loop();
+        }
+        let second = read_msr(PERF_CTR0);
+        write_msr(PERF_CTL0, 0);
+        second.wrapping_sub(first)
+    };
+    if counts > 0 {
+        print_dec(counts);
+        print(" cycles counted, ");
+        // SAFETY: ring 0, the APIC page is mapped, and the interrupt table
+        // is loaded with a gate at vector 2.
+        let (nmi, armed, ended) = unsafe { apic::probe_nmi() };
+        print("armed at ");
+        print_hex(armed);
+        print(" and reached ");
+        print_hex(ended);
+        print(" — past the 48-bit wrap, so it overflowed — ");
+        print(if nmi {
+            "and it can raise an NMI with interrupts off
+"
+        } else {
+            "but no NMI arrived — nothing here can preempt a guest with IF clear
+"
+        });
+        // SAFETY: written once, before any guest runs.
+        unsafe { CAN_PREEMPT_MASKED = nmi };
+    } else {
+        print("the counter did not move — no unmaskable source
+");
+    }
+
     // What the CPU says it can do, before asking hv1 what it made of it. These
     // two lines are the difference between "hv1 refused" and "there was nothing
     // to accept".
@@ -398,6 +454,16 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 ", and FAILED — a processor never read its identity
 "
             });
+            print("hv1   masked    : ");
+            if log.ran_masked {
+                print("a processor ran with interrupts off and hv1 could not preempt it — the other's tick was ");
+                print_dec(log.max_late);
+                print(" timestamp ticks late
+");
+            } else {
+                print("FAILED — no processor ever ran with interrupts off
+");
+            }
             print("hv1   timer     : ");
             if log.timer_counts && log.timer_served && log.ap_timer_served {
                 print_dec(log.ticks[0] as u64);
@@ -529,11 +595,37 @@ fn report_exit(n: usize, exit: &guest::Exit, run: usize) {
 /// Written once by `kernel_main` before any guest runs, read by the exit loop.
 static mut CLOCK_RATIO: (u64, u64) = (1, 1);
 
+/// Whether this processor can interrupt itself while interrupts are off, which
+/// is the only way to take the processor back from a guest that has turned them
+/// off. Measured at boot, because it is a property of the layer underneath.
+static mut CAN_PREEMPT_MASKED: bool = false;
+
+/// AMD's first legacy performance-counter pair: what to count, and the count.
+const PERF_CTL0: u32 = 0xC001_0000;
+const PERF_CTR0: u32 = 0xC001_0004;
+
 /// Where the local APIC's base address and enable bit live.
 const IA32_APIC_BASE: u32 = 0x1B;
 /// Bit 11: the APIC is on at all. Bit 8: this is the bootstrap processor.
 const APIC_BASE_ENABLE: u64 = 1 << 11;
 const APIC_BASE_BSP: u64 = 1 << 8;
+
+/// Write a model-specific register.
+///
+/// # Safety
+///
+/// Ring 0, and the MSR must exist on this processor -- a write to one that does
+/// not is a `#GP`, which on a kernel with an interrupt table is a report and on
+/// one without is a triple fault.
+unsafe fn write_msr(msr: u32, value: u64) {
+    asm!(
+        "wrmsr",
+        in("ecx") msr,
+        in("eax") value as u32,
+        in("edx") (value >> 32) as u32,
+        options(nomem, nostack, preserves_flags),
+    );
+}
 
 fn read_msr(msr: u32) -> u64 {
     let (low, high): (u32, u32);

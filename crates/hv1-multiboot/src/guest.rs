@@ -479,6 +479,34 @@ protected:
 16:
     // Mask it, bit 16. A periodic timer nobody stops is a periodic timer.
     mov dword ptr [APIC_LVT_TIMER], 0x10021
+
+    // ── And now take the machine away from everybody ────────────────────
+    // One instruction. With interrupts off this processor cannot be sent one,
+    // and an external-interrupt intercept produces an exit when the interrupt
+    // *would be delivered* -- so it produces none. hv1 is not slow to react
+    // here; it is not running. The other processor's timer is still going, and
+    // its tick will be exactly as late as this loop is long.
+    //
+    // Bounded, because the point is to measure the gap rather than to hang:
+    // 200 million timestamp ticks, about fifty milliseconds.
+    cli
+    rdtsc
+    mov esi, eax
+    mov edi, edx
+19:
+    rdtsc
+    sub eax, esi
+    sbb edx, edi
+    test edx, edx
+    jnz 20f
+    cmp eax, 200000000
+    jb 19b
+20:
+    sti
+    // Hypercall 14: it held the processor with interrupts off, and has stopped.
+    mov eax, 14
+    vmmcall
+
     // Hypercall 11: this processor's timer fired as often as it asked, on the
     // vector it chose, while it was running.
     mov eax, 11
@@ -665,12 +693,14 @@ ap_entry:
     mov dword ptr [APIC_LVT_TIMER], 0x20022
     mov dword ptr [APIC_INITIAL], 40000000
 17:
-    // Spin, like the other one, and stop after two of its own -- which is the
-    // same length of time, because its period is twice as long. Each processor
-    // waits on its own count rather than on a flag from the other, so what the
-    // two counts come out as is decided by the two timers and nothing else.
+    // Spin, like the other one, and stop after three of its own. Its period is
+    // twice as long, so two of those cover the other processor's four -- and
+    // the third falls inside the window where that processor has interrupts
+    // off, which is the tick that arrives late. Each waits on its own count
+    // rather than on a flag from the other, so what the counts come out as is
+    // decided by the two timers and nothing else.
     mov eax, [AP_TICKS_LINEAR]
-    cmp eax, 2
+    cmp eax, 3
     jae 18f
     pause
     jmp 17b
@@ -1037,6 +1067,13 @@ pub struct Transcript {
     pub timer_first_read: u32,
     /// How many times each processor's own timer vector was delivered.
     pub ticks: [usize; VCPUS],
+    /// Whether a processor ran with interrupts off for a measured while.
+    pub ran_masked: bool,
+    /// The most a tick was ever late by, in timestamp ticks: the gap between
+    /// when a processor's timer was due and when hv1 was next able to give that
+    /// processor the vector. It is a measure of the worst delay a guest can
+    /// impose, and here the guest imposes it deliberately.
+    pub max_late: u64,
     /// Whether each processor's timer handler ran as often as it wanted.
     pub timer_served: bool,
     pub ap_timer_served: bool,
@@ -1607,6 +1644,8 @@ pub unsafe fn run() -> Outcome {
         timer_armed: 0,
         timer_first_read: 0,
         ticks: [0; VCPUS],
+        ran_masked: false,
+        max_late: 0,
         timer_served: false,
         ap_timer_served: false,
         ap_refused: false,
@@ -1687,6 +1726,9 @@ pub unsafe fn run() -> Outcome {
             vmcb.control.event_inject =
                 timer[current].vector() | INJECT_TYPE_INTR | INJECT_VALID;
             log.ticks[current] += 1;
+            // How late it is. Zero when hv1 was running and could deliver on
+            // time; whatever the other processor felt like when it was not.
+            log.max_late = log.max_late.max(now().wrapping_sub(timer[current].due));
             if timer[current].lvt & LVT_PERIODIC != 0 {
                 timer[current].arm(now());
             } else {
@@ -1845,6 +1887,10 @@ pub unsafe fn run() -> Outcome {
                     10 => {
                         log.ap_seen = true;
                         "the first processor saw what the second one wrote"
+                    }
+                    14 => {
+                        log.ran_masked = true;
+                        "it held the processor with interrupts off, and hv1 could not take it back"
                     }
                     11 => {
                         log.timer_served = true;

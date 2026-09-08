@@ -1451,6 +1451,61 @@ hv1   switches  : <b>14&ndash;18</b> times the hypervisor moved from one process
       measurable this way.
     </p>
   </div>
+  <h3>And the one instruction that defeats all of it</h3>
+  <p>
+    Everything above rests on an external-interrupt intercept, and that
+    intercept produces an exit <em>when the interrupt would be delivered</em>.
+    To a guest that has cleared its interrupt flag, it never would be. So the
+    first processor now does exactly that, on purpose, and holds the machine for
+    a measured fifty milliseconds while the second one's timer goes on running:
+  </p>
+  <pre>hv1   masked    : a processor ran with interrupts off and hv1 could not preempt it
+                  &mdash; the other's tick was <b>191,502,568 timestamp ticks late</b></pre>
+  <p>
+    Against a window of 200,000,000. The second processor's clock was late by
+    very nearly exactly as long as the first one felt like being uninterruptible
+    &mdash; which is the number, and the number is the point. hv1 is not slow to
+    react here. It is not running.
+  </p>
+  <p>
+    The window is bounded because the point is to measure the gap rather than to
+    hang; an unbounded one would be the same result with nothing to read off it.
+    A guest that meant harm would not bound it.
+  </p>
+
+  <div class="callout stop">
+    <h3>The way out exists in the architecture, and this platform does not deliver it</h3>
+    <p>
+      An NMI is not maskable. The local vector table's <em>timer</em> entry
+      cannot raise one &mdash; fixed delivery is all it supports &mdash; but the
+      <em>performance-counter</em> entry can, which is why the Linux NMI
+      watchdog is built on a performance counter rather than a timer. So: set a
+      counter to overflow after so many cycles, point its LVT entry at NMI
+      delivery, intercept NMI, and a guest with <code>IF</code> clear is
+      preemptible again.
+    </p>
+    <p>
+      It was tried before it was believed, and the probe is in the boot output
+      on every run:
+    </p>
+    <pre>perf  PerfCtrExtCore, 230964 cycles counted, armed at 0x0000FFFFFFFD1DC5
+      and reached 0x00000000014FB87F &mdash; past the 48-bit wrap, so it overflowed
+      &mdash; <b>but no NMI arrived</b></pre>
+    <p>
+      The counter exists, counts, and wrapped: it was armed 200,000 short of the
+      wrap and ran twenty-one million past it. The overflow happened and nothing
+      was delivered. So the mechanism is not written here, because a preemption
+      path that has never once executed is not a preemption path &mdash; it is a
+      claim, and this page has spent a lot of its length on the difference.
+    </p>
+    <p>
+      What that leaves is a measured statement about the layer underneath rather
+      than about hv1: <strong>on this platform, a guest that clears its
+      interrupt flag cannot be preempted at all.</strong> Whether the same is
+      true on hardware is exactly the sort of thing that cannot be settled from
+      inside a nested guest.
+    </p>
+  </div>
   <p>
     The rest is what two processors of one guest share, and it is in the
     controls rather than in the bring-up: the same nested page tables, the same
@@ -1779,7 +1834,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
               identity from one instruction at one address, one of which armed a timer and took three
               ticks on the vector it chose itself, delivered while both were spinning by hv1 arming
               its own real APIC, intercepting the interrupt, and taking the processor back from each
-              of them in turn; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+              of them in turn &mdash; and could not take it back at all from one that cleared its
+              interrupt flag, which is measured rather than assumed; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -2003,12 +2059,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       a finding.
     </li>
     <li>
-      <strong>Preempt a guest that has turned interrupts off.</strong> hv1
-      cannot. Its external-interrupt intercept only produces an exit when the
-      interrupt would be delivered, so a guest that clears <code>IF</code> and
-      spins keeps the processor until it chooses not to &mdash; which is a
-      guest holding a hypervisor hostage with one instruction. The mechanism for
-      it exists in the architecture; hv1 does not use it yet.
+      <strong>Find out whether the NMI path works on hardware.</strong> It is
+      the only way to preempt a guest that has cleared its interrupt flag, and
+      on this platform the counter overflows and delivers nothing &mdash; which
+      is a fact about KVM's emulated performance counters and says nothing about
+      a real one. It needs the same bare metal the item below needs, and it
+      would be the first thing worth trying once there is any.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot

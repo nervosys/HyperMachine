@@ -48,6 +48,10 @@ pub const INITIAL_COUNT: usize = 0x380;
 pub const CURRENT_COUNT: usize = 0x390;
 /// Bus cycles per tick.
 pub const DIVIDE: usize = 0x3E0;
+/// The performance-monitor counter's entry in the local vector table. Unlike
+/// the timer's, this one takes a delivery mode -- which is the whole reason it
+/// is here, because one of the modes is NMI.
+pub const LVT_PMC: usize = 0x340;
 
 /// Bit 16 of an LVT entry: counts, delivers nothing.
 const LVT_MASKED: u32 = 1 << 16;
@@ -59,6 +63,20 @@ const DIVIDE_BY_1: u32 = 0x0B;
 pub const TIMER_VECTOR: u8 = 0xE0;
 /// The vector for interrupts that arrive with nobody claiming them.
 const SPURIOUS_VECTOR: u32 = 0xFF;
+
+/// Delivery mode 100 in an LVT entry: deliver as an NMI, which goes to vector 2
+/// and is not blocked by the interrupt flag.
+const LVT_NMI: u32 = 0b100 << 8;
+
+/// AMD's first legacy performance-counter pair.
+const PERF_CTL0: u32 = 0xC001_0000;
+const PERF_CTR0: u32 = 0xC001_0004;
+/// Event 0x76, CPU clocks not halted, counted in both user and supervisor, with
+/// the counter enabled and told to raise an APIC interrupt when it overflows.
+const PERF_CYCLES: u64 = 0x0063_0076;
+/// The counters are 48 bits wide, so a count of `n` is armed by starting `n`
+/// short of the wrap.
+const PERF_WIDTH: u64 = 1 << 48;
 
 /// Read one of the local APIC's registers.
 ///
@@ -87,6 +105,10 @@ pub unsafe fn write(reg: usize, value: u32) {
 #[no_mangle]
 pub static mut HOST_TICKS: u64 = 0;
 
+/// How many non-maskable interrupts this kernel has taken.
+#[no_mangle]
+pub static mut HOST_NMIS: u64 = 0;
+
 global_asm!(
     r#"
     .section .text, "ax"
@@ -106,6 +128,17 @@ isr_timer:
     xor eax, eax
     mov [rdx], eax
     pop rdx
+    pop rax
+    iretq
+
+    // The one interrupt a guest cannot turn off. It carries no end-of-interrupt
+    // -- an NMI is not delivered through the APIC's priority machinery -- so
+    // all it does is count and return. Further NMIs are blocked until the
+    // `iretq`, which is the architecture's doing and not this handler's.
+    .global isr_nmi
+isr_nmi:
+    push rax
+    inc qword ptr [rip + HOST_NMIS]
     pop rax
     iretq
 
@@ -130,6 +163,7 @@ isr_unexpected:
 
 extern "C" {
     fn isr_timer();
+    fn isr_nmi();
     fn isr_unexpected();
 }
 
@@ -206,6 +240,8 @@ pub unsafe fn load_idt() {
         (*idt)[slot] = Gate::to(isr_unexpected);
     }
     (*idt)[TIMER_VECTOR as usize] = Gate::to(isr_timer);
+    // Vector 2 is the NMI, and the architecture chooses it rather than us.
+    (*idt)[2] = Gate::to(isr_nmi);
 
     let idtr = Idtr {
         limit: (core::mem::size_of::<[Gate; 256]>() - 1) as u16,
@@ -287,6 +323,97 @@ pub unsafe fn arm_oneshot(count: u32) {
 pub unsafe fn disarm() {
     write(INITIAL_COUNT, 0);
     write(LVT_TIMER, u32::from(TIMER_VECTOR) | LVT_MASKED);
+}
+
+/// Arm a performance counter to raise an NMI after `cycles` unhalted cycles.
+///
+/// This is the only preemption source that works on a guest which has cleared
+/// its interrupt flag. The timer cannot: an external-interrupt intercept
+/// produces an exit when the interrupt *would be delivered*, and to a guest with
+/// `IF` clear it never would be. An NMI is not maskable, so it arrives anyway.
+///
+/// The local vector table's timer entry has no delivery mode -- fixed is all it
+/// supports -- and the performance-counter entry does. That is why this is a
+/// counter of cycles rather than a second timer.
+///
+/// # Safety
+///
+/// Ring 0, an APIC page that is mapped, and a processor with AMD's legacy
+/// performance counters.
+pub unsafe fn nmi_after(cycles: u64) {
+    write(LVT_PMC, LVT_NMI);
+    // Stop it before moving the count, so an overflow cannot land in between.
+    wrmsr(PERF_CTL0, 0);
+    wrmsr(PERF_CTR0, PERF_WIDTH.wrapping_sub(cycles));
+    wrmsr(PERF_CTL0, PERF_CYCLES);
+}
+
+/// Stop the counter.
+///
+/// # Safety
+///
+/// As [`nmi_after`].
+pub unsafe fn nmi_off() {
+    wrmsr(PERF_CTL0, 0);
+    write(LVT_PMC, LVT_NMI | LVT_MASKED);
+}
+
+/// # Safety
+///
+/// Ring 0, and the MSR must exist.
+unsafe fn wrmsr(msr: u32, value: u64) {
+    core::arch::asm!(
+        "wrmsr",
+        in("ecx") msr,
+        in("eax") value as u32,
+        in("edx") (value >> 32) as u32,
+        options(nomem, nostack, preserves_flags),
+    );
+}
+
+/// Whether an NMI arrived while the interrupt flag was clear.
+///
+/// Asked at boot rather than assumed, because the answer is a property of the
+/// layer underneath -- this kernel is itself a guest, and whether its counters
+/// and its APIC's delivery modes are virtualised is not something to find out
+/// halfway through a scheduling decision.
+///
+/// # Safety
+///
+/// As [`nmi_after`], and it spins for the sampling window.
+pub unsafe fn probe_nmi() -> (bool, u64, u64) {
+    let before = core::ptr::read_volatile(core::ptr::addr_of!(HOST_NMIS));
+    nmi_after(200_000);
+    let armed = rdmsr(PERF_CTR0);
+    let start = core::arch::x86_64::_rdtsc();
+    // Interrupts are already off in this kernel and stay off: if this returns
+    // true, it returned true with `IF` clear, which is the whole question.
+    while core::arch::x86_64::_rdtsc().wrapping_sub(start) < 20_000_000 {
+        if core::ptr::read_volatile(core::ptr::addr_of!(HOST_NMIS)) != before {
+            let ended = rdmsr(PERF_CTR0);
+            nmi_off();
+            return (true, armed, ended);
+        }
+        core::hint::spin_loop();
+    }
+    let ended = rdmsr(PERF_CTR0);
+    nmi_off();
+    (false, armed, ended)
+}
+
+/// # Safety
+///
+/// Ring 0, and the MSR must exist.
+unsafe fn rdmsr(msr: u32) -> u64 {
+    let (low, high): (u32, u32);
+    core::arch::asm!(
+        "rdmsr",
+        in("ecx") msr,
+        out("eax") low,
+        out("edx") high,
+        options(nomem, nostack, preserves_flags),
+    );
+    (u64::from(high) << 32) | u64::from(low)
 }
 
 /// Let one pending interrupt in, and shut the door again.
