@@ -56,6 +56,7 @@ use std::time::{Duration, Instant};
 use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_core::{BootSource, VMConfig, VM};
+use hv2_infer::schedule::default_threads;
 use hv2_infer::{generate, Model, Session};
 use hv2_swarm::{AgentId, Capability, Swarm};
 
@@ -258,6 +259,15 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     };
 
+    // A pool of the size a forward pass actually wants. Rayon's global pool is
+    // sized to the machine and a pass gets slower past about a third of it —
+    // `examples/scheduled` gets this from the scheduler, and this one, which
+    // predates the scheduler, has to ask for it.
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(default_threads())
+        .build()
+        .expect("a thread pool");
+
     // ── the model, once, for the whole fleet ────────────────────────────
     let before_model = resident();
     let started = Instant::now();
@@ -372,7 +382,7 @@ async fn main() -> std::process::ExitCode {
         let before = resident();
         let mut session = Session::open(&model);
         let thinking = Instant::now();
-        let answer = match generate(&model, &mut session, argument, 32) {
+        let answer = match pool.install(|| generate(&model, &mut session, argument, 32)) {
             Ok(answer) => answer,
             Err(e) => {
                 println!("{name:<6}        : FAILED — {e}");
@@ -411,7 +421,7 @@ async fn main() -> std::process::ExitCode {
         match (arrived, granted) {
             (Some(()), true) => println!("{name:<6} guest  : the answer reached it — {want:?}"),
             (Some(()), false) => {
-                println!("{name:<6} guest  : refused, and it was told which request")
+                println!("{name:<6} guest  : refused, and it was told which request");
             }
             (None, true) => {
                 println!("{name:<6} guest  : FAILED — the answer never reached the sandbox");

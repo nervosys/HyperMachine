@@ -29,6 +29,9 @@ hv2-core = { path = "../hv2-core", version = "1.1.0" }
 # dev-dependency, not a dependency: the command graph decides who may invoke a
 # model and has no business knowing what one is.
 hv2-infer = { path = "../hv2-infer" }
+# The inference examples build a thread pool of the size a forward pass wants,
+# rather than inheriting rayon's global one, which is sized to the whole machine.
+rayon = "1.10"
 tokio = { workspace = true }
 # The vsock example holds a device the VM hands back behind this lock.
 parking_lot = { workspace = true }

@@ -182,6 +182,19 @@ impl Model {
         self.gguf.mapped_bytes()
     }
 
+    /// Bytes of tensor data, as stored.
+    ///
+    /// Not the file size: the header carries a 128,256-entry vocabulary and
+    /// 280,147 merge rules, which are several megabytes that no forward pass
+    /// ever reads. A rate computed against the file would flatter itself.
+    pub fn weight_bytes(&self) -> usize {
+        self.gguf
+            .tensors
+            .values()
+            .map(|t| t.quant.size_of(t.elements()))
+            .sum()
+    }
+
     fn block(&self, layer: usize) -> Result<Block<'_>, Error> {
         let norm = |name: &str| -> Result<Vec<f32>, Error> {
             let t = Tensor::find(&self.gguf, name)?;
@@ -245,6 +258,16 @@ impl Model {
 }
 
 /// One conversation: the key/value cache, and the scratch a pass needs.
+///
+/// # A caller using this directly should give it a thread pool
+///
+/// [`Session::forward`] spreads each matrix-vector product across rayon's
+/// current pool, which by default is sized to the whole machine — and a forward
+/// pass gets *slower* past about a third of this host's cores. Going through
+/// [`crate::Scheduler`] gets a pool of the right size; calling `forward` or
+/// [`crate::ask`] directly gets whatever the process happens to have, so wrap
+/// it: `pool.install(|| ask(..))`. `examples/generate` does exactly that, and
+/// `examples/throughput` is how the size was chosen.
 ///
 /// Per agent, by definition. The weights are shared and this is not — which is
 /// the whole shape of the arithmetic this project measured before it had a

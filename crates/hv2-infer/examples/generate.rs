@@ -23,6 +23,7 @@
 
 use std::time::Instant;
 
+use hv2_infer::schedule::default_threads;
 use hv2_infer::{ask, Model, Session};
 
 /// A question whose answer is not a matter of opinion, so that "it worked" is
@@ -46,6 +47,21 @@ fn main() -> std::process::ExitCode {
         vec![QUESTION]
     };
     let checking = args.len() < 2;
+
+    // A pool of the size the scheduler would choose. Without this the forward
+    // pass runs in rayon's global pool, which is sized to the whole machine —
+    // and on this host that is 2.2 times slower than a third of it. A caller
+    // using `Session` directly rather than through `Scheduler` has to do this
+    // for itself, which is worth demonstrating rather than hiding.
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(default_threads())
+        .build()
+        .expect("a thread pool");
+    println!(
+        "threads       : {} of {} the machine reports",
+        pool.current_num_threads(),
+        std::thread::available_parallelism().map_or(0, |n| n.get())
+    );
 
     let started = Instant::now();
     let model = match Model::load(path) {
@@ -88,7 +104,7 @@ fn main() -> std::process::ExitCode {
         println!();
         println!("you           : {question}");
         let turn = Instant::now();
-        last = match ask(&model, &mut session, question, 32) {
+        last = match pool.install(|| ask(&model, &mut session, question, 32)) {
             Ok(answer) => answer,
             Err(e) => {
                 eprintln!("generate      : FAILED — {e}");

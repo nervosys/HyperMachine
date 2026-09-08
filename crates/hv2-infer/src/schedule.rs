@@ -66,6 +66,30 @@ pub struct Limits {
     pub context_tokens: usize,
     /// The most tokens one answer may run to.
     pub answer_tokens: usize,
+    /// Threads one forward pass may spread across, or zero to choose.
+    ///
+    /// Not "all of them", which is what rayon's global pool does and what this
+    /// used to get. A pass stops getting faster at about a third of this
+    /// machine's cores and then gets *slower*; what limits it there has not
+    /// been established, and is deliberately not asserted here. Measured over
+    /// 1.25 GiB of weights, median of five runs of four passes:
+    ///
+    /// ```text
+    ///    1 thread   1589.7 ms   0.77 GiB/s
+    ///    2           799.3      1.53
+    ///    4           479.9      2.55
+    ///    8           346.5      3.53   <- the knee
+    ///   10           349.2      3.50
+    ///   12           412.0      2.97
+    ///   16           426.4      2.87
+    ///   24           434.9      2.81   <- what the default was doing
+    /// ```
+    ///
+    /// So using every core it could see gave up a quarter of the rate. Zero
+    /// here takes a third of the machine's parallelism, which is where the knee
+    /// sat — a heuristic shaped by one host, and `examples/throughput` takes a
+    /// thread count precisely so it can be re-measured on another.
+    pub threads: usize,
 }
 
 impl Default for Limits {
@@ -74,6 +98,7 @@ impl Default for Limits {
             workers: 1,
             context_tokens: 2048,
             answer_tokens: 32,
+            threads: 0,
         }
     }
 }
@@ -150,20 +175,50 @@ struct Inner<'m> {
     stats: Stats,
 }
 
+/// How many threads to spread a pass across, when the caller has not said.
+///
+/// A third of what the machine reports, which is where the knee was on the host
+/// this was measured on. Deliberately a fraction rather than a constant: the
+/// finding is not that eight is a good number, it is that all of them is a bad
+/// one.
+pub fn default_threads() -> usize {
+    let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
+    (cores / 3).max(1)
+}
+
 /// A model, a queue, and one conversation per agent.
 pub struct Scheduler<'m> {
     model: &'m Model,
     limits: Limits,
+    /// The pass runs here rather than in rayon's global pool, so the thread
+    /// count is a property of the scheduler and not of the process.
+    pool: rayon::ThreadPool,
     inner: Mutex<Inner<'m>>,
     turn: Condvar,
 }
 
 impl<'m> Scheduler<'m> {
     /// A scheduler over `model`.
+    ///
+    /// # Panics
+    ///
+    /// If a thread pool cannot be built, which means the process cannot spawn
+    /// threads and nothing below would work either.
     pub fn new(model: &'m Model, limits: Limits) -> Self {
+        let threads = if limits.threads == 0 {
+            default_threads()
+        } else {
+            limits.threads
+        };
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads)
+            .thread_name(|i| format!("infer-{i}"))
+            .build()
+            .expect("a thread pool");
         Self {
             model,
             limits,
+            pool,
             inner: Mutex::new(Inner {
                 waiting: VecDeque::new(),
                 running: 0,
@@ -178,6 +233,11 @@ impl<'m> Scheduler<'m> {
     /// The limits this scheduler enforces.
     pub fn limits(&self) -> Limits {
         self.limits
+    }
+
+    /// How many threads a forward pass actually spreads across.
+    pub fn threads(&self) -> usize {
+        self.pool.current_num_threads()
     }
 
     /// What the queue has done so far.
@@ -264,12 +324,17 @@ impl<'m> Scheduler<'m> {
         let waited = queued_at.elapsed();
 
         let started = Instant::now();
-        let answer = ask(
-            self.model,
-            &mut session,
-            question,
-            self.limits.answer_tokens,
-        );
+        // In the scheduler's own pool, not rayon's global one. The global pool
+        // is sized to the machine, and a forward pass wants a fraction of the
+        // machine — see `Limits::threads` for the measurement.
+        let answer = self.pool.install(|| {
+            ask(
+                self.model,
+                &mut session,
+                question,
+                self.limits.answer_tokens,
+            )
+        });
         let ran = started.elapsed();
 
         let context = session.len();

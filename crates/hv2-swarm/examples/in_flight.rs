@@ -495,7 +495,7 @@ async fn main() -> std::process::ExitCode {
     // And the peer's message must land before any of them.
     match (line_at(&console, "agent recv"), positions[0]) {
         (Some(recv), Some(first)) if recv < first => {
-            println!("busy          : the peer's message landed before any answer did")
+            println!("busy          : the peer's message landed before any answer did");
         }
         _ => {
             println!(

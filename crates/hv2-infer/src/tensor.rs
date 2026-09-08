@@ -86,13 +86,93 @@ impl<'a> Tensor<'a> {
     }
 }
 
+/// Whether this CPU has the instructions the wide dot product needs.
+///
+/// Decided once. `is_x86_feature_detected!` caches its answer, but this is
+/// called once per row of a matrix with up to 128,256 rows, and a branch that
+/// cheap is still worth not taking a hundred thousand times per token.
+///
+/// `HV2_INFER_SCALAR=1` forces the narrow path, which is how the two are
+/// compared on the same machine at the same moment — the only comparison worth
+/// making on a host whose load moves as much as this one's.
+#[cfg(target_arch = "x86_64")]
+static WIDE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    if std::env::var_os("HV2_INFER_SCALAR").is_some() {
+        return false;
+    }
+    is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma")
+});
+
 /// One `Q8_0` row dotted with `x`.
 ///
-/// A block is a 16-bit scale and thirty-two signed bytes. The scale comes out
-/// of the inner loop — every weight in a block shares it — so the loop is an
-/// integer multiply-accumulate over thirty-two bytes and one float multiply per
-/// block, which is why `Q8_0` costs about what reading the bytes costs.
+/// Dispatched at runtime rather than at build time. Compiling the whole crate
+/// with `-C target-cpu=native` is worth 1.29x on this host — 268 ms per forward
+/// pass against 347, back to back at the same thread count — and produces a
+/// binary that dies with an illegal instruction on an older machine. Detecting
+/// once and calling the wide version keeps both.
 fn dot_q8_0(row: &[u8], x: &[f32]) -> f32 {
+    #[cfg(target_arch = "x86_64")]
+    if *WIDE {
+        // SAFETY: `WIDE` is exactly the check that AVX2 and FMA are present.
+        return unsafe { dot_q8_0_wide(row, x) };
+    }
+    dot_q8_0_scalar(row, x)
+}
+
+/// The same product, eight lanes at a time.
+///
+/// A block's thirty-two bytes are widened to floats in four groups of eight,
+/// multiplied by their activations and summed into a vector accumulator; the
+/// block's shared scale is applied once at the end of the block rather than per
+/// weight, which is the whole reason `Q8_0` is cheap.
+///
+/// # Safety
+///
+/// The caller must have established that AVX2 and FMA are available.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+unsafe fn dot_q8_0_wide(row: &[u8], x: &[f32]) -> f32 {
+    use std::arch::x86_64::*;
+
+    let mut total = _mm256_setzero_ps();
+    let blocks = row.len() / Q8_BYTES;
+
+    for block in 0..blocks {
+        let at = block * Q8_BYTES;
+        let scale = f32::from(half::f16::from_le_bytes([row[at], row[at + 1]]));
+        let quants = row.as_ptr().add(at + 2);
+        let activations = x.as_ptr().add(block * Q8_BLOCK);
+
+        // Four groups of eight, which is what one AVX2 register holds.
+        let mut sum = _mm256_setzero_ps();
+        for group in 0..4 {
+            let eight = _mm_loadl_epi64(quants.add(group * 8) as *const __m128i);
+            let widened = _mm256_cvtepi32_ps(_mm256_cvtepi8_epi32(eight));
+            let a = _mm256_loadu_ps(activations.add(group * 8));
+            sum = _mm256_fmadd_ps(widened, a, sum);
+        }
+        total = _mm256_fmadd_ps(sum, _mm256_set1_ps(scale), total);
+    }
+
+    // Horizontal sum: fold the eight lanes down to one.
+    let high = _mm256_extractf128_ps(total, 1);
+    let low = _mm256_castps256_ps128(total);
+    let four = _mm_add_ps(low, high);
+    let two = _mm_add_ps(four, _mm_movehl_ps(four, four));
+    let one = _mm_add_ss(two, _mm_shuffle_ps(two, two, 0x55));
+    _mm_cvtss_f32(one)
+}
+
+/// One `Q8_0` row dotted with `x`, one weight at a time.
+///
+/// A block is a 16-bit scale and thirty-two signed bytes. The scale comes out
+/// of the inner loop — every weight in a block shares it — so the loop is a
+/// multiply-accumulate over thirty-two bytes and one float multiply per block,
+/// which is why `Q8_0` costs about what reading the bytes costs.
+///
+/// Kept as the definition of what the wide version must agree with, and used on
+/// anything that is not an x86-64 with AVX2.
+fn dot_q8_0_scalar(row: &[u8], x: &[f32]) -> f32 {
     let mut sum = 0.0f32;
     for (block, chunk) in row.chunks_exact(Q8_BYTES).zip(x.chunks(Q8_BLOCK)) {
         let scale = f32::from(half::f16::from_le_bytes([block[0], block[1]]));
@@ -161,5 +241,68 @@ pub fn softmax(values: &mut [f32]) {
     }
     for v in values.iter_mut() {
         *v /= total;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a `Q8_0` row of `blocks` blocks, and the activations to dot it
+    /// with, from a cheap deterministic sequence — a random-looking pattern
+    /// that is the same on every machine and in every run.
+    fn row_and_activations(blocks: usize) -> (Vec<u8>, Vec<f32>) {
+        let mut row = Vec::with_capacity(blocks * Q8_BYTES);
+        let mut x = Vec::with_capacity(blocks * Q8_BLOCK);
+        let mut state = 0x2BAD_B002u32;
+        let mut next = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            state
+        };
+        for block in 0..blocks {
+            // A scale that varies per block, including a small one, so that a
+            // version applying it in the wrong place is visible.
+            let scale = half::f16::from_f32(0.001 + block as f32 * 0.017);
+            row.extend_from_slice(&scale.to_le_bytes());
+            for _ in 0..Q8_BLOCK {
+                row.push((next() >> 24) as u8);
+                x.push((next() >> 16) as i32 as f32 / 65_536.0 - 0.5);
+            }
+        }
+        (row, x)
+    }
+
+    /// The wide version has to agree with the scalar one. It is the only test
+    /// that matters for a hand-written SIMD kernel: everything else it could
+    /// get wrong still produces a number.
+    #[test]
+    fn the_wide_dot_product_agrees_with_the_scalar_one() {
+        for blocks in [1, 2, 7, 64] {
+            let (row, x) = row_and_activations(blocks);
+            let scalar = dot_q8_0_scalar(&row, &x);
+            let dispatched = dot_q8_0(&row, &x);
+            let slack = scalar.abs().max(1.0) * 1e-4;
+            assert!(
+                (scalar - dispatched).abs() <= slack,
+                "{blocks} blocks: scalar {scalar}, dispatched {dispatched}"
+            );
+        }
+    }
+
+    /// Summing in a different order gives a different rounding, so the tolerance
+    /// above is real rather than decoration — but it must not be so loose that
+    /// a wrong answer fits inside it.
+    #[test]
+    fn the_tolerance_would_not_hide_a_wrong_answer() {
+        let (row, x) = row_and_activations(64);
+        let right = dot_q8_0_scalar(&row, &x);
+        // Dropping one block is the smallest plausible mistake a blocked kernel
+        // makes, and it has to be outside the tolerance the test above allows.
+        let short = dot_q8_0_scalar(&row[..63 * Q8_BYTES], &x[..63 * Q8_BLOCK]);
+        let slack = right.abs().max(1.0) * 1e-4;
+        assert!(
+            (right - short).abs() > slack,
+            "a missing block should not pass as agreement"
+        );
     }
 }

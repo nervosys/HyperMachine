@@ -383,12 +383,17 @@ async fn main() -> std::process::ExitCode {
         workers: 1,
         context_tokens: 96,
         answer_tokens: 24,
+        // Zero: let the scheduler choose, which is a third of the machine
+        // rather than all of it. On this host that is worth 2.2x against the
+        // global pool, and the reason is in `Limits::threads`.
+        threads: 0,
     };
     let scheduler = Scheduler::new(&model, limits);
     println!(
-        "scheduler     : {} worker, {} tokens of context per agent ({:.1} MiB of cache), {} \
-         tokens per answer",
+        "scheduler     : {} worker on {} of {} cores, {} tokens of context per agent ({:.1} MiB of cache), {} tokens per answer",
         limits.workers,
+        scheduler.threads(),
+        std::thread::available_parallelism().map_or(0, |n| n.get()),
         limits.context_tokens,
         (limits.context_tokens * model.cache_bytes_per_token()) as f64 / (1024.0 * 1024.0),
         limits.answer_tokens
@@ -546,7 +551,7 @@ async fn main() -> std::process::ExitCode {
     let over = scheduler.ask("alpha", RECALL);
     match over {
         Ok(Err(refused)) => {
-            println!("bound         : alpha asked again and was refused — {refused}")
+            println!("bound         : alpha asked again and was refused — {refused}");
         }
         Ok(Ok(_)) => {
             println!(

@@ -17,8 +17,9 @@ memmap2 = { workspace = true }
 
 # One row of a matrix-vector product is independent of every other row, and a
 # 1.2-billion-parameter forward pass is 1.3 GB of weight streaming per token.
-# Scalar and single-threaded it is seconds per token; this is what makes it
-# tenths.
+# Single-threaded it is one and a half seconds per token and eight threads make
+# it a third of one -- and twenty-four make it worse again, which is why the
+# scheduler builds its own pool rather than using the global one.
 rayon = "1.10"
 
 # GGUF stores Q8_0 block scales as IEEE half floats, and F16 tensors as halves
@@ -26,3 +27,6 @@ rayon = "1.10"
 half = "2.4"
 
 [dev-dependencies]
+# The throughput example builds its own pool, so a thread count can be swept
+# from the command line rather than through an environment variable.
+rayon = "1.10"
