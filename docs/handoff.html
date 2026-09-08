@@ -2261,6 +2261,16 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       later command failing the same way, so a batch of examples looks like a
       cascade of test failures. <code>wsl.exe --shutdown</code> recovers it, and
       the interrupted work has to be re-run rather than believed.
+      <br><br>
+      It happened again while this page was being written, and the second
+      presentation was different enough to be worth recording: not
+      <code>os error 30</code> but <code>/usr/bin/tee: Input/output error</code>
+      and then every example exiting 126, which is a shell saying it could not
+      execute the command at all. The diagnosis is one line &mdash;
+      <code>mount | grep ' / '</code> shows <code>emergency_ro</code> among the
+      options, which is <code>errors=remount-ro</code> having fired &mdash; and
+      it is worth knowing, because sixteen examples reporting 126 looks exactly
+      like sixteen broken examples.
     </li>
     <li>
       Paths through <code>wsl.exe</code> need <code>MSYS_NO_PATHCONV=1</code>, or
@@ -2389,15 +2399,23 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       the acceptance is dated 2023 and the tracking note has no expiry on it.
     </li>
     <li>
-      <strong>Nothing automated runs the examples.</strong> CI runs
+      <strong>Get the examples onto something that runs them.</strong> CI runs
       <code>cargo test</code> on Linux, Windows, macOS and ARM, plus rustfmt,
-      clippy and an MSRV check. It does not run a single one of the sixteen
-      examples &mdash; and the examples are where every claim on this page comes
-      from. hv1 hosting a guest, a model answering a sandbox, the queue
-      queueing: all of it is verified by one person on one machine, by hand,
-      because it needs <code>/dev/kvm</code>, a GGUF on a Linux filesystem, and
-      nested SVM. Anyone reading this list should know that the numbers above
-      have no automation behind them.
+      clippy, docs and an MSRV check. It does not run a single one of the
+      sixteen examples &mdash; and the examples are where every claim on this
+      page comes from. hv1 hosting a guest, a model answering a sandbox, the
+      queue queueing: all of it is verified by one person on one machine, by
+      hand. Anyone reading this list should know that the numbers above have no
+      automation behind them.
+      <br><br>
+      What it would take is a runner with <code>/dev/kvm</code>, nested SVM and
+      a GGUF on local disk &mdash; a self-hosted box, or one of the larger
+      hosted runners that expose nested virtualisation. Not all sixteen need it:
+      the four <code>hv2-infer</code> examples need only the model file, and the
+      swarm ones need only that plus KVM. Even a nightly job running the subset
+      that fits would move this page's numbers from "one person saw this" to
+      "this is still true", which is the difference the rest of the page spends
+      its length on.
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is: 5,268 tests across 88 test
