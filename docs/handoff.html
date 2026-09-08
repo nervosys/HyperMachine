@@ -275,24 +275,23 @@
 </style>
 
 <div class="wrap">
-
 <header>
   <p class="eyebrow">Engineering handoff · nervosys/HyperMachine · 7 September 2026</p>
   <h1>What Actually Ran</h1>
   <p class="standfirst">
-    A thousand hardware-isolated agents run at once under a command graph, a
-    unikernel reaches executing code in 2.67&nbsp;ms, and a sandbox costs
-    0.157&nbsp;MiB. Every one of those is measured. What is new is that the
-    path an <em>agent payload</em> would take is now closed end to end: a
-    unikernel written in Rust, compiled by the ordinary toolchain, booted by
-    Multiboot, receiving a swarm message over vsock — and shutting down
-    afterwards, which no VM had ever done. The Type-1 hypervisor has also now
-    <em>hosted a guest</em>, nested under the Type-2 one — a smaller claim than
-    bare metal and a much larger one than compiling.
+    A thousand hardware-isolated agents run at once under a command graph, at
+    0.221&nbsp;MiB each and 0.7% of one core between them; a unikernel written in
+    Rust reaches executing code in 3.6&nbsp;ms; a fleet shares one model
+    read-only and pays for it once. All of that is measured on this machine. What
+    is newest is the layer above it: the agent channel is now a framed protocol
+    with request ids, a refused tool call comes back <em>addressed</em>, and
+    every delivery claim is asserted inside the recipient's own VM. What has
+    still never happened is a model running inside one of these guests — every
+    figure here is the floor that would sit under one.
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>d6bf1de</dd></div>
+    <div class="fact"><dt>Master</dt><dd>319fc18</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.67 ms</dd></div>
@@ -301,11 +300,29 @@
     <div class="fact"><dt>Idle cost</dt><dd class="good">0.7% core</dd></div>
     <div class="fact"><dt>stop()</dt><dd class="good">0.7 ms</dd></div>
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust</dd></div>
-    <div class="fact"><dt>Transport</dt><dd class="good">vsock</dd></div>
-    <div class="fact"><dt>Type-1</dt><dd class="hold">ran a guest</dd></div>
-    <div class="fact"><dt>Suite</dt><dd class="good">green</dd></div>
+    <div class="fact"><dt>Transport</dt><dd class="good">vsock, framed</dd></div>
+    <div class="fact"><dt>Type-1</dt><dd class="hold">ran a guest, nested</dd></div>
+    <div class="fact"><dt>A model has run</dt><dd class="hold">never</dd></div>
   </dl>
 </header>
+
+<section>
+  <h2>How to read this page</h2>
+  <p>
+    Every claim here is tagged with what stands behind it:
+    <span class="tag ran">ran</span> means something executed and printed the
+    number quoted, <span class="tag typed">typed</span> means it compiles and has
+    never run, <span class="tag none">none</span> means it was not attempted. The
+    distinction is not pedantry — the three most expensive defects in this
+    repository all sat in code that compiled cleanly, was documented accurately,
+    and had never once been executed.
+  </p>
+  <p>
+    Measurements were taken on WSL2 with real KVM: kernel 6.18.33.2, 24 vCPUs,
+    45&nbsp;GB, AMD with nested virtualisation on. That is a virtualised host, so
+    proportions travel and absolutes are not bare-metal comparable.
+  </p>
+</section>
 
 <section>
   <h2>The one thing to read first</h2>
@@ -402,10 +419,63 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     figure has since been re-run and now ends by exiting: 59 seconds, all 1,000
     guests executed, 0.157&nbsp;MiB each, every <code>stop()</code> returned.
   </p>
+  <p>
+    It also unblocked a design choice. The first vsock driver polled the used
+    ring, which was tolerable only because a vCPU could now be kicked out of a
+    spin; before this fix a spinning guest would have been unstoppable rather
+    than merely expensive.
+  </p>
 </section>
 
 <section>
-  <h2>What shipped</h2>
+  <h2>Run any of it in one command</h2>
+  <p>
+    Nothing on this page is a benchmark harness or a saved log. Each row is an
+    example in the tree that boots real VMs, prints what it measured, and exits
+    non-zero if what it asserts did not hold. Everything except the Windows row
+    needs <code>/dev/kvm</code>; the guest examples also need
+    <code>rustup target add i686-unknown-linux-musl</code>.
+  </p>
+  <div class="scroll">
+  <table>
+    <caption>cargo run --release -p &lt;crate&gt; --example &lt;name&gt;</caption>
+    <thead><tr><th>Example</th><th>Crate</th><th>What it settles</th></tr></thead>
+    <tbody>
+      <tr><td><code>halt_stop_probe</code></td><td>hv2-core</td>
+          <td>That <code>stop()</code> returns, for three guest shapes that used to hang</td></tr>
+      <tr><td><code>unikernel_boot</code></td><td>hv2-core</td>
+          <td>Cold start, 73 hand-assembled bytes — 2.67&nbsp;ms median of nine</td></tr>
+      <tr><td><code>rust_unikernel</code></td><td>hv2-core</td>
+          <td>The same, for a guest a compiler produced — 3.6&nbsp;ms</td></tr>
+      <tr><td><code>multiboot_probe</code></td><td>hv2-core</td>
+          <td>One program built three ways; against this commit all three speak</td></tr>
+      <tr><td><code>vsock_echo</code></td><td>hv2-core</td>
+          <td>A framed round trip into a guest and back — 2.2&nbsp;ms, id echoed</td></tr>
+      <tr><td><code>shared_weights</code></td><td>hv2-core</td>
+          <td>A fleet on one read-only model, and the arithmetic over it</td></tr>
+      <tr><td><code>hv1_under_hv2</code></td><td>hv2-core</td>
+          <td>The Type-1 hypervisor initialising and then hosting a guest, nested</td></tr>
+      <tr><td><code>unikernel_swarm</code></td><td>hv2-swarm</td>
+          <td>1,000 sandboxes: memory, idle cost, and every <code>stop()</code></td></tr>
+      <tr><td><code>vsock_swarm</code></td><td>hv2-swarm</td>
+          <td>The command graph run over real guests — down, sideways, granted</td></tr>
+      <tr><td><code>tool_calls</code></td><td>hv2-swarm</td>
+          <td>Two identical agents, one grant; the tool runs once</td></tr>
+      <tr><td><code>agent_messages</code></td><td>hv2-swarm</td>
+          <td>An agent addressing another agent, and the graph refusing</td></tr>
+      <tr><td><code>cold_start</code></td><td>hv2-agent</td>
+          <td>Boot latency by percentile, decomposed into four phases</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section>
+  <h2>What shipped: the machine underneath</h2>
+  <p>
+    Four defects, each of which capped something the project claims. None was
+    found by reading.
+  </p>
 
   <h3>The cold start was never measured, and the first measurement found a 474× defect</h3>
   <p>
@@ -459,43 +529,75 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     measurement was not using, and only the measurement caught that.
   </p>
 
+  <h3>Quotas that refuse, at the point every VM operation crosses</h3>
+  <p>
+    <code>AgentPolicy</code> carried <code>quotas</code> and
+    <code>rate_limits</code> and neither did anything: <code>allows</code>
+    consults <code>enabled</code> and <code>permissions</code>, so a sixth VM
+    was created under a <code>max_vms</code> of five and nothing ever
+    constructed the <code>QuotaExceeded</code> that exists for the purpose. The
+    machinery to count was never missing — <code>RateLimiter</code> was already
+    in <code>limits.rs</code>. Somewhere to put the count that a caller could
+    not go around was.
+  </p>
+  <p>
+    <code>GovernedVmHost</code> is a <code>VmHost</code> that wraps another one,
+    and a refused operation never reaches the inner host. Every test counts what
+    arrived at the host underneath rather than reading the governor's answer,
+    because a governor that refuses correctly and delegates anyway is
+    indistinguishable from a working one until the host runs out of memory. The
+    same shape as <code>Swarm::send</code>, for the same reason.
+  </p>
+
+  <h3>Two failing tests, and neither was flaky</h3>
+  <p>
+    Both had been failing long enough to be read as background. That is the
+    dangerous state for a test to be in — noise a reader learns to ignore is how
+    a real failure gets ignored too — and neither turned out to be the flake it
+    was filed as.
+  </p>
+  <p>
+    <code>test_timer_frequency</code> already ran on a paused clock and still
+    counted 16 or 17 of 19 ticks, because the thing it counted did not:
+    <code>update_count</code> read <code>std::time::Instant</code> to decide how
+    far to advance the PIT, so under a paused clock it advanced by almost
+    nothing. The fix is not a tolerance band. <code>advance_by(Duration)</code>
+    takes the elapsed time from its caller and the periodic task passes its own
+    period — which is the more interesting half, because measuring the wall
+    clock meant a tick delayed by the executor advanced the emulated PIT by the
+    delay, and a guest reading its own timer learned how busy the host was.
+  </p>
+  <p>
+    <code>test_vm_creation_with_backend</code> asserted the backend was
+    <code>Tcg</code> or <code>Whpx</code> — the two it was written on. KVM
+    satisfies neither, so it passed everywhere it had ever run and failed the
+    moment a Linux host with <code>/dev/kvm</code> ran it. A test that names the
+    backends it was developed against fails when the code starts working
+    somewhere new.
+  </p>
+</section>
+
+<section>
+  <h2>What shipped: a guest worth putting an agent in</h2>
+  <p>
+    A hypervisor with no guest anyone can write for is a hypervisor with one
+    user. This is the path from "73 hand-assembled bytes" to a compiled Rust
+    unikernel that sleeps when idle, speaks over a socket, and has a heap.
+  </p>
+
   <h3>A unikernel boots, and having no kernel is the whole argument</h3>
   <p>
     <code>BootSource::Raw</code> named unikernels in its documentation and the
     only example using it loaded <code>examples/guest_code/hello.bin</code> — a
-    path that has never existed in this repository. It has never been runnable.
+    path that has never existed in this repository. It had never been runnable.
   </p>
   <p>
-    <code>hv2-core --example unikernel_boot</code> assembles its guest in-process
-    so it cannot rot into a missing asset: 73 bytes of 16-bit real mode that
-    write to COM1 and halt. First output at <strong>2.67&nbsp;ms median</strong>
-    over nine runs. Every <code>out</code> leaves the guest, is decoded here, and
-    lands in a device model, so the console line proves the whole path — which is
-    why the example prints the console rather than a success line.
-  </p>
-
-  <h3>An orchestration layer that enforces rather than describes</h3>
-  <p>
-    <code>hv2-swarm</code> is a command graph: down is a command to any
-    descendant, up is a report to the immediate parent only, sideways needs an
-    explicit one-way grant, everything else is refused with the rule named. A
-    message may also name a capability, and then the recipient must hold it —
-    and on a command, <strong>so must the sender</strong>. Authority delegates
-    downward but does not amplify; without that rule every capability in the
-    swarm belongs to anyone with a subordinate who holds it.
-  </p>
-  <p>
-    <code>Swarm::send</code> is the only way a message moves and consults the
-    graph inside it. The tests assert on <em>delivery</em>, not on verdicts: a
-    rule that returns "denied" while the message still arrives passes a verdict
-    test and fails the swarm. <code>hv2-core</code> is a dev-dependency, not a
-    dependency — the policy layer needs no hypervisor to decide who may talk.
-  </p>
-  <p>
-    <code>examples/guest_transport</code> carries a message across the
-    host/guest boundary over COM1 and watches the guest echo it, with the
-    refusal verified at the recipient's console rather than at the sender's
-    return value.
+    <code>unikernel_boot</code> assembles its guest in-process so it cannot rot
+    into a missing asset: 73 bytes of 16-bit real mode that write to COM1 and
+    halt. First output at <strong>2.67&nbsp;ms median</strong> over nine runs.
+    Every <code>out</code> leaves the guest, is decoded here, and lands in a
+    device model, so the console line proves the whole path — which is why the
+    example prints the console rather than a success line.
   </p>
 
   <h3>A Multiboot guest was not silent; it was executing its own file header</h3>
@@ -517,9 +619,9 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     otherwise — segments at <code>p_paddr</code>, the tail past
     <code>p_filesz</code> zeroed as <code>.bss</code> — falling back to
     flat-at-1&nbsp;MB only for an image that says neither.
-    <code>examples/multiboot_probe</code> runs one guest program built all three
-    ways; against this commit all three speak, against its parent only the flat
-    one does.
+    <code>multiboot_probe</code> runs one guest program built all three ways;
+    against this commit all three speak, against its parent only the flat one
+    does.
   </p>
 
   <h3>A guest a compiler produced, and what it proves that assembly cannot</h3>
@@ -528,8 +630,8 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     works and proves nothing about whether anyone can <em>write</em> a guest for
     it, which is the only question that matters for an agent payload.
     <code>crates/hv2-unikernel</code> is a <code>no_std</code> Rust binary: no
-    scheduler, no init, no allocator, no syscall boundary, because there is
-    nothing on the other side of one.
+    scheduler, no init, no syscall boundary, because there is nothing on the
+    other side of one.
   </p>
   <p>
     It prints a greeting, then <code>EAX</code> and <code>EBX</code>. The
@@ -559,20 +661,12 @@ spin-forever    : DID NOT RETURN within 20 s   →   returned in 0.7 ms   consol
     virtio-mmio bring-up, two split virtqueues, and the packet protocol.
   </p>
   <p>
-    <code>hv2-swarm --example vsock_swarm</code> boots three unikernels,
-    connects to each, and runs the command graph over them. A command from the
-    root reaches a worker and comes back echoed; a message between siblings is
-    refused <em>and does not arrive</em>, checked at the recipient, whose guest
-    echoed nothing and printed nothing; granting the edge makes the same bytes
-    arrive, which is what distinguishes an enforcing transport from a broken
-    one. Round trip 1.2&nbsp;ms.
-  </p>
-  <p>
-    The driver polled at first — no IDT, no handler, a spin on the used ring —
-    which was only tolerable because of the fix at the top of this page: before
-    <code>stop()</code> could kick a vCPU out of <code>KVM_RUN</code>, a
-    spinning driver would have been unstoppable rather than merely busy. It
-    sleeps now; the section below is what that took.
+    <code>vsock_swarm</code> boots three unikernels, connects to each, and runs
+    the command graph over them. A command from the root reaches a worker; a
+    message between siblings is refused <em>and does not arrive</em>, checked at
+    the recipient; granting the edge makes the same bytes arrive, which is what
+    distinguishes an enforcing transport from a broken one. Round trip
+    1.2&nbsp;ms.
   </p>
 
   <h3>An idle agent sleeps, and stops costing a core</h3>
@@ -623,12 +717,65 @@ sleeping   user 0.65 s, 0.37 s</pre>
     <code>iret</code>. The lesson is the ordering: fault reporting belongs
     <em>before</em> interrupt handling, because a guest that says "vector 13 at
     this address" can be debugged and a guest that stops mid-word can only be
-    bisected.
+    bisected. <code>install_fault_handlers()</code> is now the first line of
+    <code>kernel_main</code> for exactly that reason — it was moved there after
+    an SSE fault inside <code>enable_sse</code> stayed invisible for an hour,
+    the reporter having been installed after the code that faulted.
   </p>
 
-  <h3>And then a thousand of them, which is the measurement this is about</h3>
+  <h3>A heap, and the reason .bss is not free here</h3>
   <p>
-    The thousand-agent figure on this page has always come from
+    The guest had no allocator, which is why a tool request was assembled in a
+    128-byte array on the stack and anything longer was truncated. That is the
+    wrong failure for a tool call — a truncated argument is a different call,
+    not a refused one — and any real agent protocol needs one. It has
+    <code>linked_list_allocator</code> now, the shape
+    <code>hv1-multiboot</code> already carried.
+  </p>
+  <p>
+    The size was chosen from a measurement rather than a guess.
+    <code>.bss</code> is not free here the way it is on an ordinary kernel: the
+    Multiboot loader wrote zeros across it at load time, because guest RAM is
+    only reliably zero for a freshly created VM and a loader cannot assume it is
+    being used that way. So a heap cost its full size in resident memory
+    <em>per agent</em>, whether or not that agent allocated.
+  </p>
+  <pre>100 agents, before the heap : 0.231 MiB each
+100 agents, with the heap   : 0.302 MiB each
+100 agents, now             : 0.242 MiB each</pre>
+  <p>
+    The third line is the fix, and it arrived an hour after the problem. The
+    zeros were never wrong, only unnecessary — and only the caller can know
+    which, because guest RAM is zero for a freshly created VM and is not zero
+    for a snapshot restored into existing memory. The loader had no way to tell
+    those apart, so now it is told: <code>.bss</code> is carried as a
+    <em>range that must read as zero</em> rather than a block of zeros, and
+    <code>guest_memory_starts_zeroed</code> asks the backend which case it is
+    in. The default is <code>false</code>; KVM answers <code>true</code> because
+    its <code>create_vm</code> maps guest RAM with <code>MAP_ANONYMOUS</code>
+    and <code>load_boot</code> is the first thing to write to it.
+  </p>
+  <p>
+    So a 64&nbsp;KiB heap costs about 0.011&nbsp;MiB per agent — the pages it
+    actually touches — rather than its full size. Which is what made it
+    reasonable to raise the guest's heap to 256&nbsp;KiB for the framed
+    protocol: a decision with numbers under it rather than a guess.
+  </p>
+</section>
+
+<section>
+  <h2>What shipped: what a fleet of these costs</h2>
+  <p>
+    The agents these unikernels are for run small language models with
+    task-specific tools and talk to each other under a permission graph. That
+    changes the arithmetic every figure above rests on, and the change is large
+    enough to decide the architecture. These four measurements are the ones that
+    say what a node can hold.
+  </p>
+
+  <h3>A thousand agents that speak, not a thousand that halt</h3>
+  <p>
+    The thousand-agent figure on this page long came from
     <code>unikernel_swarm</code>, whose agents halt immediately and never speak
     — which measures the hypervisor rather than the swarm.
     <code>vsock_swarm</code> ran three that did speak, because a polling guest
@@ -661,7 +808,270 @@ stop          : 1000 halted guests in 612.7 ms</pre>
     connection.
   </p>
 
-  <h3>The Type-1 hypervisor executed, for the first time</h3>
+  <h3>A model costs a fleet once, not once each</h3>
+  <p>
+    An agent VM costs 0.221&nbsp;MiB because it holds nothing but its own code;
+    an agent that runs a model holds the model, and a 0.6-billion-parameter
+    model at four bits is around 350&nbsp;MB. A thousand private copies is
+    350&nbsp;GB, and "a thousand agents on a node" does not survive contact with
+    the thing the agents are for.
+  </p>
+  <p>
+    They do not need private copies. Every agent in a fleet runs the <em>same</em>
+    weights, reads them and never writes them, which is exactly a shared
+    read-only mapping. Measured, a thousand agents against a 350&nbsp;MiB region:
+  </p>
+  <pre>region        : 350 MiB filled — resident grew 350.1 MiB
+read the ROM  : 1000 of 1000 read 0xa7 at 0xe0000000, write refused
+resident      : 526.9 MiB total, 176.9 MiB from the agents
+per agent     : 0.177 MiB
+if copied     : 1000 x 350 MiB would be 341.8 GiB
+saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
+  <p>
+    Every VM in this process is backed by host memory in this process, so
+    handing several VMs the same host address for a memory slot copies nothing:
+    the pages behind them are the same physical pages. Read-only is enforced by
+    the hardware and checked from inside the guest rather than asserted here —
+    every guest writes to the region, reads it back and reports whether the
+    write took, because one writable copy shared by a thousand agents is a
+    thousand agents able to rewrite each other's model.
+  </p>
+  <p>
+    The guests read it too, for the reason this page always gives: a region that
+    is mapped and unreadable costs exactly the same and is worth nothing. That
+    check earned itself immediately — an unmapped guest-physical address reads
+    as <code>0xFF</code> rather than as zero, so a guest reading nothing and a
+    guest reading a region of zeroes are indistinguishable without a marker.
+  </p>
+
+  <h3>And what an agent costs once it holds a context</h3>
+  <p>
+    Sharing is the half a fleet does not pay for twice. The other half it pays
+    for per agent, and for a language model that is the KV cache — which cannot
+    be shared with another agent by definition, since it is that agent's
+    conversation. That number, not 0.221&nbsp;MiB, is what density now depends
+    on, so it is worth knowing whether private guest memory costs what it should
+    or carries a multiplier.
+  </p>
+  <p>
+    It does not. A hundred agents, a 350&nbsp;MiB shared model, 24&nbsp;MiB of
+    private working set each:
+  </p>
+  <pre>touched       : 24 MiB each — 24.184 MiB per agent, +0.184 MiB against what was asked for
+resident      : 2768.5 MiB total
+if copied     : 100 agents x 374 MiB would be 36.5 GiB
+saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
+  <p>
+    The overhead is 0.184&nbsp;MiB, which is what an agent costs holding
+    nothing. So the density of a fleet is
+    <strong>the model once, plus per agent exactly what that agent
+    touches</strong> — measured rather than assumed, because a hidden factor of
+    two would have halved how many agents fit on a node and nothing in the code
+    would have shown it.
+  </p>
+  <p>
+    Worth knowing for whoever sizes a node from this: a KV cache for a small
+    model is roughly 12&nbsp;KiB per token at two bytes per element, so a
+    2,000-token context is around 24&nbsp;MiB and an 8,000-token one around
+    96&nbsp;MiB. The formula is what this measures; the constant is the model's
+    and belongs to whoever picks it.
+  </p>
+
+  <h3>How fast a guest can stream weights, and what that rules out</h3>
+  <p>
+    Memory was the question that decided whether a fleet could hold a model.
+    Bandwidth is the one that decides whether it can use it. The loop a
+    quantised forward pass is made of — read a weight, multiply by an
+    activation, accumulate — run over the shared region, twice, reporting each
+    pass separately:
+  </p>
+  <pre>arithmetic : 13.20 cycles/byte cold, 1.66 warm</pre>
+  <p>
+    The two are separated because they answer different questions. The first
+    pass takes a nested-paging fault per page — 65,536 VM exits for
+    256&nbsp;MiB — and pays it once for the life of the VM. The second is the
+    steady state. A single number would have described a warm-up as a per-token
+    cost, which is a factor of eight in the wrong direction.
+  </p>
+  <p>
+    At 1.66&nbsp;cycles/byte a 350&nbsp;MiB model is about 0.6&nbsp;Gcycles of
+    weight streaming per token per agent — before any attention, softmax or
+    dequantisation. That is a floor rather than an estimate, and it is the
+    number worth having, because it rules something out:
+    <strong>a thousand agents inferring at once on one model would need
+    hundreds of GB/s of aggregate bandwidth, which no node has.</strong>
+  </p>
+  <p>
+    A thousand agents that are <em>mostly idle</em> is a completely different
+    proposition, and that one is already measured at 0.7% of a core. So the
+    fleet scales on the axis it was designed for — many sandboxes, cheap,
+    isolated, talking under a policy — and inference is a resource to be
+    scheduled across them rather than something every guest does simultaneously.
+    Whether that scheduling belongs in the guest, in the host, or in a
+    capability the guest invokes is a design decision this measurement informs
+    and does not make.
+  </p>
+</section>
+
+<section>
+  <h2>What shipped: the agent layer</h2>
+  <p>
+    A sandbox that cannot be told what to do, cannot reach a tool, and cannot
+    address a peer is a VM. This is what turns one into an agent, and every
+    piece of it is enforced rather than described.
+  </p>
+
+  <h3>An orchestration layer that enforces rather than describes</h3>
+  <p>
+    <code>hv2-swarm</code> is a command graph: down is a command to any
+    descendant, up is a report to the immediate parent only, sideways needs an
+    explicit one-way grant, everything else is refused with the rule named. A
+    message may also name a capability, and then the recipient must hold it —
+    and on a command, <strong>so must the sender</strong>. Authority delegates
+    downward but does not amplify; without that rule every capability in the
+    swarm belongs to anyone with a subordinate who holds it.
+  </p>
+  <p>
+    <code>Swarm::send</code> is the only way a message moves and consults the
+    graph inside it. The tests assert on <em>delivery</em>, not on verdicts: a
+    rule that returns "denied" while the message still arrives passes a verdict
+    test and fails the swarm. <code>hv2-core</code> is a dev-dependency, not a
+    dependency — the policy layer needs no hypervisor to decide who may talk.
+  </p>
+
+  <h3>An agent asks for a tool, and holding one is a permission</h3>
+  <p>
+    What makes a sandbox an agent is tools — reading a file, calling an API,
+    spending money — and what makes it safe is that holding a tool is a
+    permission rather than a property of the code. An agent that can decide
+    which tool to call can also decide to call one it should not have, and the
+    point of a hardware-isolated sandbox is that <em>deciding is not doing</em>.
+  </p>
+  <pre>trusted       : asked, allowed, tool returned "heimdall"
+untrusted     : asked, refused, tool not called
+untrusted says: agent denied #0x00000001 "refused"
+tool ran      : 1 time(s), for 2 agents that asked</pre>
+  <p>
+    Two agents, identical images, one grant between them. The assertion is the
+    last line, and it is counted <em>at the tool</em> rather than at the broker
+    that gates it: a gate that refuses and then calls anyway is
+    indistinguishable from a working one at the agent, and distinguishable
+    everywhere that matters. The third line is the newer half — a refusal the
+    agent is never told about is a hang, not a refusal, so the example waits for
+    the guest to print it.
+  </p>
+  <p>
+    The capability is checked where a request crosses from a guest into the host
+    — one place, consulted inside the thing that does the work.
+    <code>Capability</code> and <code>holds</code> already existed for messages
+    between agents; a tool call is the same question asked of a different edge.
+  </p>
+
+  <h3>An agent addresses another agent</h3>
+  <p>
+    Every message on this page up to here travelled <em>into</em> a guest. The
+    host decided to send it, the graph was consulted on the host's behalf, and
+    the guest could only answer on its own connection. That proves a transport
+    and is not a swarm: an agent that cannot address another agent is not
+    interacting with anything, it is being talked to.
+  </p>
+  <pre>a asks        : send to "b", 17 bytes
+refused       : ok — siblings, no grant, and b's guest never saw it
+granted       : ok — b's guest received it
+b     says    : agent recv #0x00000001 "the second message"</pre>
+  <p>
+    The refusal is checked at the recipient's console, inside the recipient's
+    VM, and the same message is sent again once the edge is granted — so a
+    silent recipient cannot be mistaken for a broken transport. Without that
+    second half a swarm whose delivery had simply failed would score identically
+    to one that was enforcing. The last line is the whole claim in one place: b
+    printed exactly one receipt, for the second message, under the id of the
+    delivery that produced it.
+  </p>
+
+  <h3>The agent protocol has a shape, and the reason is a bug it already caused</h3>
+  <p>
+    The channel between an agent and its host was four prefixes parsed by hand
+    — <code>do:</code>, <code>send:</code>, <code>tool:</code>,
+    <code>to:</code> — with no framing, no request ids, and no way to have two
+    things outstanding at once. That was the right amount of protocol for
+    proving each path exists, and it had already produced a wrong answer.
+  </p>
+  <p>
+    <code>agent_messages</code> appeared to deliver a message the graph had
+    <em>refused</em>. It had not: <code>peek</code> does not consume, so the
+    refused text was still sitting in the connection buffer and rode along
+    inside the next payload, which was permitted. A stream read as though it
+    were a sequence of messages will eventually read two of them as one, and
+    here it did — in the one demonstration whose entire point is that a refusal
+    is real.
+  </p>
+  <p>
+    <code>hv2-agent-proto</code> is a <code>no_std</code> crate with a
+    twelve-byte header — id, kind, length — and it is a <em>shared</em> crate
+    rather than two implementations that agree today. The guest encodes with the
+    same code the host decodes with, which is the arrangement the Multiboot
+    module list did not have and paid for. Six kinds, naming the six things that
+    actually happen:
+  </p>
+  <pre>Task       host  -&gt; agent   do this
+ToolCall   agent -&gt; host    invoke a tool
+ToolResult host  -&gt; agent   what it returned
+Send       agent -&gt; host    reach another agent
+Deliver    host  -&gt; agent   another agent reached you
+Error      either way       this could not be done, and why</pre>
+  <p>
+    The id is not decoration. An agent with tools has more than one thing in
+    flight — a tool call and a message from a peer can be answered in either
+    order — and without an id the only way to match a reply to its request is to
+    allow one at a time, which is a protocol decision masquerading as an
+    omission.
+  </p>
+  <p>Three consequences are visible rather than internal:</p>
+  <ul>
+    <li>
+      <strong>A refusal is now addressed.</strong> It comes back as an
+      <code>Error</code> under the refused request's own id, so an agent with
+      several calls outstanding knows which one was denied.
+    </li>
+    <li>
+      <strong>Delivery is asserted at the recipient, in all three cases.</strong>
+      The negative case always was; the two positive ones used to read a reply
+      from the sender's side. All three now read the recipient's own console
+      inside the recipient's own VM.
+    </li>
+    <li>
+      <strong>The guest stopped echoing.</strong> It used to answer everything
+      it was sent, which is a convenient thing for a test and a strange thing
+      for an agent. A <code>Deliver</code> is now received and not answered;
+      only a <code>Task</code> produces a reply.
+    </li>
+  </ul>
+  <pre>vsock_echo      : 2.203 ms round trip, id 1 echoed unchanged
+tool_calls      : tool ran 1 time for the 2 agents that asked,
+                  and the refused one printed  agent denied #0x1 "refused"
+agent_messages  : refused between siblings, delivered once granted,
+                  b's console shows exactly one receipt
+vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
+  <p>
+    What is deliberately absent from the format: versioning, negotiation,
+    compression, fragmentation. Both ends ship together, so there is no version
+    skew to negotiate, and every one of those would be surface on the single
+    interface a minimal sandbox exposes.
+  </p>
+  <p>
+    What is still a rule standing in for a decision is the guest's half: a task
+    beginning <code>send&nbsp;</code> becomes a <code>Send</code>, anything else
+    becomes a <code>ToolCall</code>. That is one line, and it is deliberately
+    one line — what is under test is the frame, the id and the permission around
+    them, none of which care how the decision was reached.
+  </p>
+</section>
+
+<section>
+  <h2>What shipped: the Type-1 hypervisor</h2>
+
+  <h3>It executed, for the first time</h3>
   <p>
     Every claim ever made about <code>hv1-core</code> was a claim about
     <code>rustc</code>. The reason never changed: it is a bare-metal hypervisor
@@ -682,15 +1092,6 @@ hv1   efer now 0x0000000000001500 SVME set — the CPU accepted SVM</pre>
     <code>initialize()</code> that returned success and enabled nothing would
     read as a pass and fail at the first <code>VMRUN</code>; the example calls
     that a failure.
-  </p>
-  <p>
-    <strong>What it does not prove.</strong> Not hardware: the layer underneath
-    is KVM, and a guest sees the CPU its hypervisor chose to show it. And not,
-    at this point in the afternoon, a working hypervisor — initialising is the
-    first step, and hosting anything was still ahead. That distance is said in
-    the example, in the guest, and in the pillars table above, because the gap
-    between "ran nested" and "runs on a machine" is exactly the kind this page
-    exists to keep open.
   </p>
   <p>
     Two pieces of machinery were needed. The image is an ELF64 and the
@@ -776,418 +1177,13 @@ hv1   guest exit 2 0x78 VMEXIT_HLT     — the guest halted</pre>
     now with a guard page under it, so the next overflow faults on its own
     address instead of quietly rewriting a translation.
   </p>
-
-  <h3>A model costs a fleet once, not once each</h3>
   <p>
-    The agents these unikernels are for run small language models with
-    task-specific tools, and talk to each other under the permission graph.
-    That changes the arithmetic that every figure on this page rests on. An
-    agent VM costs 0.221&nbsp;MiB because it holds nothing but its own code; an
-    agent that runs a model holds the model, and a 0.6-billion-parameter model
-    at four bits is around 350&nbsp;MB. A thousand private copies is 350&nbsp;GB,
-    and "a thousand agents on a node" does not survive contact with the thing
-    the agents are for.
-  </p>
-  <p>
-    They do not need private copies. Every agent in a fleet runs the <em>same</em>
-    weights, reads them and never writes them, which is exactly a shared
-    read-only mapping. Measured, a thousand agents against a 350&nbsp;MiB region:
-  </p>
-  <pre>region        : 350 MiB filled — resident grew 350.1 MiB
-read the ROM  : 1000 of 1000 read 0xa7 at 0xe0000000, write refused
-resident      : 526.9 MiB total, 176.9 MiB from the agents
-per agent     : 0.177 MiB
-if copied     : 1000 x 350 MiB would be 341.8 GiB
-saved         : 341.3 GiB, 99.85% of what copying would have cost</pre>
-  <p>
-    Every VM in this process is backed by host memory in this process, so
-    handing several VMs the same host address for a memory slot copies nothing:
-    the pages behind them are the same physical pages. Read-only is enforced by
-    the hardware and checked from inside the guest rather than asserted here —
-    every guest writes to the region, reads it back and reports whether the
-    write took, because one writable copy shared by a thousand agents is a
-    thousand agents able to rewrite each other's model.
-  </p>
-  <p>
-    The guests read it too, for the reason this page always gives: a region that
-    is mapped and unreadable costs exactly the same and is worth nothing. That
-    check earned itself immediately — an unmapped guest-physical address reads
-    as <code>0xFF</code> rather than as zero, so a guest reading nothing and a
-    guest reading a region of zeroes are indistinguishable without a marker.
-  </p>
-
-  <h3>And what an agent costs once it holds a context</h3>
-  <p>
-    Sharing is the half a fleet does not pay for twice. The other half it pays
-    for per agent, and for a language model that is the KV cache — which cannot
-    be shared with another agent by definition, since it is that agent's
-    conversation. That number, not 0.221&nbsp;MiB, is what density now depends
-    on, so it is worth knowing whether private guest memory costs what it should
-    or carries a multiplier.
-  </p>
-  <p>
-    It does not. A hundred agents, a 350&nbsp;MiB shared model, 24&nbsp;MiB of
-    private working set each:
-  </p>
-  <pre>touched       : 24 MiB each — 24.184 MiB per agent, +0.184 MiB against what was asked for
-resident      : 2768.5 MiB total
-if copied     : 100 agents x 374 MiB would be 36.5 GiB
-saved         : 33.8 GiB, 92.60% of what copying would have cost</pre>
-  <p>
-    The overhead is 0.184&nbsp;MiB, which is what an agent costs holding
-    nothing. So the density of a fleet is
-    <strong>the model once, plus per agent exactly what that agent
-    touches</strong> — measured rather than assumed, because a hidden factor of
-    two would have halved how many agents fit on a node and nothing in the code
-    would have shown it.
-  </p>
-  <p>
-    Worth knowing for whoever sizes a node from this: a KV cache for a small
-    model is roughly 12&nbsp;KiB per token at two bytes per element, so a
-    2,000-token context is around 24&nbsp;MiB and a 8,000-token one around
-    96&nbsp;MiB. The formula is what this measures; the constant is the model's
-    and belongs to whoever picks it.
-  </p>
-
-  <h3>An agent asks for a tool, and holding one is a permission</h3>
-  <p>
-    A sandbox that can only talk to other sandboxes is not much of an agent.
-    What makes it one is tools — reading a file, calling an API, spending money
-    — and what makes it safe is that holding a tool is a permission rather than
-    a property of the code. An agent that can decide which tool to call can also
-    decide to call one it should not have, and the point of a hardware-isolated
-    sandbox is that <em>deciding is not doing</em>.
-  </p>
-  <pre>trusted       : asked, allowed, tool returned "heimdall"
-untrusted     : asked, refused, tool not called
-tool ran      : 1 time(s), for 2 agents that asked</pre>
-  <p>
-    Two agents, identical images, one grant between them. The assertion is the
-    last line, and it is counted <em>at the tool</em> rather than at the broker
-    that gates it: a gate that refuses and then calls anyway is
-    indistinguishable from a working one at the agent, and distinguishable
-    everywhere that matters. Same reason the swarm's own tests assert on
-    delivery and not on verdicts.
-  </p>
-  <p>
-    The capability is checked where a request crosses from a guest into the host
-    — one place, consulted inside the thing that does the work.
-    <code>Capability</code> and <code>holds</code> already existed for messages
-    between agents; a tool call is the same question asked of a different edge.
-  </p>
-  <p>
-    <strong>What is honest about the agent here:</strong> nothing in the guest
-    decides anything. A task beginning <code>do:</code> is answered with
-    <code>tool:</code> and the rest, by one rule, standing in for a model
-    choosing a tool. What is under test is the path a decision travels and the
-    permission that governs it — neither of which cares how the decision was
-    reached, which is exactly why it can be measured before there is a model to
-    do the deciding.
-  </p>
-
-  <h3>An agent addresses another agent</h3>
-  <p>
-    Every message on this page so far travelled <em>into</em> a guest. The host
-    decided to send it, the graph was consulted on the host's behalf, and the
-    guest could only answer on its own connection. That proves a transport and
-    is not a swarm: an agent that cannot address another agent is not
-    interacting with anything, it is being talked to.
-  </p>
-  <pre>a asks        : send to "b", 17 bytes
-refused       : ok — siblings, no grant, and b's guest never saw it
-granted       : ok — b's guest received it</pre>
-  <p>
-    The refusal is checked at the recipient's console, inside the recipient's
-    VM, and the same message is sent again once the edge is granted — so a
-    silent recipient cannot be mistaken for a broken transport. Without that
-    second half a swarm whose delivery had simply failed would score identically
-    to one that was enforcing.
-  </p>
-  <p>
-    The guest's half is one rule: <code>send:b:hello</code> becomes
-    <code>to:b:hello</code>. It names a recipient and does not learn whether it
-    may reach one, which is deliberate — an agent that could tell in advance is
-    an agent that can plan around the answer.
-  </p>
-  <p>
-    <strong>The first run of this looked like a leak, and was not.</strong> The
-    example read the guest's replies with <code>peek</code>, which does not
-    consume, so the second request arrived concatenated to the first and carried
-    the refused text inside a payload that <em>was</em> permitted. It presented
-    exactly as the graph delivering something it had refused. A demonstration
-    that has to be right about a refusal cannot read its evidence with a
-    function that keeps the evidence around.
-  </p>
-
-  <h3>A heap, and the reason .bss is not free here</h3>
-  <p>
-    The guest had no allocator, which is why a tool request was assembled in a
-    128-byte array on the stack and anything longer was truncated. That is the
-    wrong failure for a tool call — a truncated argument is a different call,
-    not a refused one — and any real agent protocol needs one. It has 64 KiB of
-    <code>linked_list_allocator</code> now, the shape <code>hv1-multiboot</code>
-    already carried.
-  </p>
-  <p>
-    The size is small deliberately, and the reason is measured rather than
-    assumed. <code>.bss</code> is not free here the way it is on an ordinary
-    kernel: the Multiboot loader writes zeros across it at load time, because
-    guest RAM is only reliably zero for a freshly created VM and a loader cannot
-    assume it is being used that way. So a heap costs its full size in resident
-    memory <em>per agent</em>, whether or not that agent allocates.
-  </p>
-  <pre>100 agents, before the heap : 0.231 MiB each
-100 agents, with the heap   : 0.302 MiB each
-100 agents, now             : 0.242 MiB each</pre>
-  <p>
-    The third line is the fix, and it arrived an hour after the problem. The
-    zeros were never wrong, only unnecessary — and only the caller can know
-    which, because guest RAM is zero for a freshly created VM and is not zero
-    for a snapshot restored into existing memory. The loader had no way to tell
-    those apart, so now it is told: <code>.bss</code> is carried as a
-    <em>range that must read as zero</em> rather than a block of zeros, and
-    <code>guest_memory_starts_zeroed</code> asks the backend which case it is
-    in. The default is <code>false</code>; KVM answers <code>true</code> because
-    its <code>create_vm</code> maps guest RAM with <code>MAP_ANONYMOUS</code>
-    and <code>load_boot</code> is the first thing to write to it.
-  </p>
-  <p>
-    So the 64&nbsp;KiB heap costs about 0.011&nbsp;MiB per agent — the pages it
-    actually touches — rather than its full size. Which also means the heap
-    could now be considerably larger for very little, and that is a decision
-    with numbers under it rather than a guess.
-  </p>
-
-  <h3>The agent protocol has a shape, and the reason is a bug it already caused</h3>
-  <p>
-    The channel between an agent and its host was four prefixes parsed by hand
-    — <code>do:</code>, <code>send:</code>, <code>tool:</code>,
-    <code>to:</code> — with no framing, no request ids, and no way to have two
-    things outstanding at once. That was the right amount of protocol for
-    proving each path exists, and it had already produced a wrong answer.
-  </p>
-  <p>
-    <code>agent_messages</code> appeared to deliver a message the graph had
-    <em>refused</em>. It had not: <code>peek</code> does not consume, so the
-    refused text was still sitting in the connection buffer and rode along
-    inside the next payload, which was permitted. A stream read as though it
-    were a sequence of messages will eventually read two of them as one, and
-    here it did — in the one demonstration whose entire point is that a refusal
-    is real.
-  </p>
-  <p>
-    <code>hv2-agent-proto</code> is a <code>no_std</code> crate with a
-    twelve-byte header — id, kind, length — and it is a
-    <em>shared</em> crate rather than two implementations that agree today. The
-    guest encodes with the same code the host decodes with, which is the
-    arrangement the Multiboot module list did not have and paid for. Six kinds,
-    naming the six things that actually happen:
-  </p>
-  <pre>Task       host  -&gt; agent   do this
-ToolCall   agent -&gt; host    invoke a tool
-ToolResult host  -&gt; agent   what it returned
-Send       agent -&gt; host    reach another agent
-Deliver    host  -&gt; agent   another agent reached you
-Error      either way       this could not be done, and why</pre>
-  <p>
-    The id is not decoration. An agent with tools has more than one thing in
-    flight — a tool call and a message from a peer can be answered in either
-    order — and without an id the only way to match a reply to its request is to
-    allow one at a time, which is a protocol decision masquerading as an
-    omission.
-  </p>
-  <p>Three consequences are visible rather than internal:</p>
-  <ul>
-    <li>
-      <strong>A refusal is now addressed.</strong> It comes back as an
-      <code>Error</code> under the refused request's own id, so an agent with
-      several calls outstanding knows which one was denied.
-      <code>tool_calls</code> asserts the guest prints it, because a refusal
-      nobody is told about is indistinguishable from a hang.
-    </li>
-    <li>
-      <strong>Delivery is asserted at the recipient, in all three cases.</strong>
-      The negative case always was; the two positive ones used to read a reply
-      from the sender's side. All three now read the recipient's own console
-      inside the recipient's own VM, and the guest logs
-      <code>agent recv #&lt;id&gt;</code>, so the line names the delivery that
-      produced it.
-    </li>
-    <li>
-      <strong>The guest stopped echoing.</strong> It used to answer everything
-      it was sent, which is a convenient thing for a test and a strange thing
-      for an agent. A <code>Deliver</code> is now received and not answered;
-      only a <code>Task</code> produces a reply.
-    </li>
-  </ul>
-  <pre>vsock_echo      : 2.203 ms round trip, id 1 echoed unchanged
-tool_calls      : tool ran 1 time for the 2 agents that asked,
-                  and the refused one printed  agent denied #0x1 "refused"
-agent_messages  : refused between siblings, delivered once granted,
-                  b's console shows exactly one receipt
-vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
-  <p>
-    What is still a rule standing in for a decision is the guest's half: a task
-    beginning <code>send&nbsp;</code> becomes a <code>Send</code>, anything else
-    becomes a <code>ToolCall</code>. That is one line, and it is deliberately
-    one line — what is under test is the frame, the id and the permission around
-    them, none of which care how the decision was reached.
-  </p>
-
-  <h3>How fast a guest can stream weights, and what that rules out</h3>
-  <p>
-    Memory was the question that decided whether a fleet could hold a model.
-    Bandwidth is the one that decides whether it can use it. The loop a
-    quantised forward pass is made of — read a weight, multiply by an
-    activation, accumulate — run over the shared region, twice, reporting each
-    pass separately:
-  </p>
-  <pre>arithmetic : 13.20 cycles/byte cold, 1.66 warm</pre>
-  <p>
-    The two are separated because they answer different questions. The first
-    pass takes a nested-paging fault per page — 65,536 VM exits for
-    256&nbsp;MiB — and pays it once for the life of the VM. The second is the
-    steady state. A single number would have described a warm-up as a per-token
-    cost, which is a factor of eight in the wrong direction.
-  </p>
-  <p>
-    At 1.66&nbsp;cycles/byte a 350&nbsp;MiB model is about 0.6&nbsp;Gcycles of
-    weight streaming per token per agent — before any attention, softmax or
-    dequantisation. That is a floor rather than an estimate, and it is the
-    number worth having, because it rules something out:
-    <strong>a thousand agents inferring at once on one model would need
-    hundreds of GB/s of aggregate bandwidth, which no node has.</strong>
-  </p>
-  <p>
-    A thousand agents that are <em>mostly idle</em> is a completely different
-    proposition, and that one is already measured at 0.7% of a core. So the
-    fleet scales on the axis it was designed for — many sandboxes, cheap,
-    isolated, talking under a policy — and inference is a resource to be
-    scheduled across them rather than something every guest does simultaneously.
-    Whether that scheduling belongs in the guest, in the host, or in a
-    capability the guest invokes is a design decision this measurement informs
-    and does not make.
-  </p>
-
-  <h3>What that settles about the architecture, and what it does not</h3>
-  <p>
-    One thing is now measured and the rest follows from it or is still open.
-    Keeping those apart is the point of this page.
-  </p>
-  <div class="scroll">
-  <table>
-    <caption>An agentic unikernel, decided and undecided</caption>
-    <thead><tr><th>Question</th><th>Where it stands</th></tr></thead>
-    <tbody>
-      <tr>
-        <td>Can a fleet afford a model at all?</td>
-        <td><span class="tag ran">ran</span> Yes. Weights shared read-only:
-            1,000 agents on one 350&nbsp;MiB model for 527&nbsp;MiB, 99.85%
-            saved, writes refused by hardware</td>
-      </tr>
-      <tr>
-        <td>What does an agent then cost?</td>
-        <td><span class="tag ran">ran</span> Exactly what it touches, plus
-            0.18&nbsp;MiB. No multiplier on private guest memory, so a fleet is
-            the model once plus the sum of the agents' working sets</td>
-      </tr>
-      <tr>
-        <td>Can the guest do the arithmetic?</td>
-        <td><span class="tag ran">ran</span> Yes, at 1.66 cycles/byte warm once
-            SSE is enabled — which needed <code>CR0.EM</code> cleared and
-            <code>CR4.OSFXSR</code> set, and faulted silently until the fault
-            reporter was moved to the first line of <code>kernel_main</code></td>
-      </tr>
-      <tr>
-        <td>Can a fleet infer concurrently?</td>
-        <td><span class="tag ran">ran</span> No. A thousand agents at once on a
-            350 MiB model needs hundreds of GB/s. Idle they cost 0.7% of a core,
-            so the fleet scales and the inference has to be scheduled</td>
-      </tr>
-      <tr>
-        <td>Which architecture should the guest be?</td>
-        <td><span class="tag typed">open</span> It is 32-bit i686 today, chosen
-            because stable Rust ships a prebuilt <code>core</code> for it.
-            Inference wants AVX2 and 64-bit addressing, and
-            <code>hv1-multiboot</code> already shows the 64-bit shape</td>
-      </tr>
-      <tr>
-        <td>Does the guest need a heap?</td>
-        <td><span class="tag ran">ran</span> Yes, and it has one: 64 KiB costing
-            0.011 MiB per agent, once the loader stopped writing a
-            <code>.bss</code> the guest's memory already satisfied. Image 23 KB,
-            still readable end to end</td>
-      </tr>
-      <tr>
-        <td>Where do an agent's tools run?</td>
-        <td><span class="tag ran">ran</span> Proxied to the host over vsock and
-            gated on a capability, with the refusal verified at the tool: two
-            identical agents asked, one grant apart, and it ran once</td>
-      </tr>
-      <tr>
-        <td>Can agents talk to each other under a policy?</td>
-        <td><span class="tag ran">ran</span> Both directions. Into a guest, and
-            now <em>from</em> one: an agent names a recipient, the graph
-            decides, and a refused message is absent from the recipient's own
-            console</td>
-      </tr>
-    </tbody>
-  </table>
-  </div>
-  <p>
-    What is left open is the guest itself rather than the machine under it. The
-    hypervisor's side of an agentic fleet is now measured end to end: a model
-    shared once, a working set that costs what it is, a channel that reaches
-    inside the guest, a policy that refuses, and an idle agent that costs
-    nothing. What has never run is an agent — a model, a tokeniser, a tool
-    call — and everything above is the floor that sits under one.
-  </p>
-
-  <h3>Two failing tests, and neither was flaky</h3>
-  <p>
-    Both had been failing long enough to be read as background. That is the
-    dangerous state for a test to be in — noise a reader learns to ignore is how
-    a real failure gets ignored too — and neither turned out to be the flake it
-    was filed as.
-  </p>
-  <p>
-    <code>test_timer_frequency</code> already ran on a paused clock and still
-    counted 16 or 17 of 19 ticks, because the thing it counted did not:
-    <code>update_count</code> read <code>std::time::Instant</code> to decide how
-    far to advance the PIT, so under a paused clock it advanced by almost
-    nothing. The fix is not a tolerance band. <code>advance_by(Duration)</code>
-    takes the elapsed time from its caller and the periodic task passes its own
-    period — which is the more interesting half, because measuring the wall
-    clock meant a tick delayed by the executor advanced the emulated PIT by the
-    delay, and a guest reading its own timer learned how busy the host was.
-  </p>
-  <p>
-    <code>test_vm_creation_with_backend</code> asserted the backend was
-    <code>Tcg</code> or <code>Whpx</code> — the two it was written on. KVM
-    satisfies neither, so it passed everywhere it had ever run and failed the
-    moment a Linux host with <code>/dev/kvm</code> ran it. A test that names the
-    backends it was developed against fails when the code starts working
-    somewhere new.
-  </p>
-
-  <h3>Quotas that refuse, at the point every VM operation crosses</h3>
-  <p>
-    <code>AgentPolicy</code> carried <code>quotas</code> and
-    <code>rate_limits</code> and neither did anything: <code>allows</code>
-    consults <code>enabled</code> and <code>permissions</code>, so a sixth VM
-    was created under a <code>max_vms</code> of five and nothing ever
-    constructed the <code>QuotaExceeded</code> that exists for the purpose. The
-    machinery to count was never missing — <code>RateLimiter</code> was already
-    in <code>limits.rs</code>. Somewhere to put the count that a caller could
-    not go around was.
-  </p>
-  <p>
-    <code>GovernedVmHost</code> is a <code>VmHost</code> that wraps another one,
-    and a refused operation never reaches the inner host. Every test counts what
-    arrived at the host underneath rather than reading the governor's answer,
-    because a governor that refuses correctly and delegates anyway is
-    indistinguishable from a working one until the host runs out of memory. The
-    same shape as <code>Swarm::send</code>, for the same reason.
+    <strong>What none of this proves.</strong> Not hardware: the layer
+    underneath is KVM, and a guest sees the CPU its hypervisor chose to show it.
+    The firmware path, the real memory map, AP bring-up and every device are
+    hidden by the hypervisor beneath. That gap is stated in the example, in the
+    guest, and in the pillars table below, because it is exactly the kind this
+    page exists to keep open.
   </p>
 </section>
 
@@ -1196,10 +1192,7 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
   <p>
     CubeSandbox (Tencent, 11.7k stars, v0.7) publishes 60&nbsp;ms cold start and
     under 5&nbsp;MB per sandbox. Every HyperMachine figure below was measured on
-    this host, on WSL2 with real KVM — a virtualised host, so the proportions
-    travel and the absolutes are not bare-metal comparable. The compiled
-    unikernel, the guest channel and the quota rows are from 7 September; the
-    rest are unchanged from 3 September.
+    this host.
   </p>
 
   <div class="scroll">
@@ -1245,16 +1238,6 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
             99.85% of a copied fleet saved, writes refused</td>
       </tr>
       <tr>
-        <td>Agent-initiated message</td><td>—</td><td><strong>enforced</strong></td>
-        <td><span class="tag ran">ran</span> refused between siblings and absent
-            from the recipient; delivered once the edge was granted</td>
-      </tr>
-      <tr>
-        <td>Tool call, capability-gated</td><td>—</td><td><strong>enforced</strong></td>
-        <td><span class="tag ran">ran</span> refused calls counted at the tool,
-            not at the gate — it ran once for two agents that asked</td>
-      </tr>
-      <tr>
         <td>Overhead on an agent's own memory</td><td>—</td><td><strong>0.18 MiB</strong></td>
         <td><span class="tag ran">ran</span> 24 MiB asked for, 24.184 MiB paid —
             no multiplier</td>
@@ -1265,18 +1248,33 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
             being one nested-paging fault per page, paid once</td>
       </tr>
       <tr>
+        <td>Agent-initiated message</td><td>—</td><td><strong>enforced</strong></td>
+        <td><span class="tag ran">ran</span> refused between siblings and absent
+            from the recipient's console; delivered once the edge was granted</td>
+      </tr>
+      <tr>
+        <td>Tool call, capability-gated</td><td>—</td><td><strong>enforced</strong></td>
+        <td><span class="tag ran">ran</span> refused calls counted at the tool,
+            not at the gate — it ran once for two agents that asked</td>
+      </tr>
+      <tr>
         <td>Agent command graph</td><td>—</td><td>hierarchy + capabilities</td>
         <td><span class="tag ran">ran</span> 18 tests, and over 1,000 real VMs</td>
       </tr>
       <tr>
-        <td>Guest channel</td><td>—</td><td>vsock, guest-side driver</td>
-        <td><span class="tag ran">ran</span> 1.2 ms round trip; a refused message
-            did not arrive</td>
+        <td>Guest channel</td><td>—</td><td>vsock, framed protocol</td>
+        <td><span class="tag ran">ran</span> 2.2 ms round trip with the request
+            id echoed; 5 tests on the format itself</td>
       </tr>
       <tr>
         <td>Quota enforcement</td><td>—</td><td>per-process</td>
         <td><span class="tag ran">ran</span> refused operations never reached the
             host underneath</td>
+      </tr>
+      <tr>
+        <td>A model actually running</td><td>yes</td><td><strong>never</strong></td>
+        <td><span class="tag none">none</span> no weights, no tokeniser, no
+            forward pass — every figure here is the floor under one</td>
       </tr>
       <tr>
         <td>Windows host</td><td>x86_64 Linux + KVM only</td><td>WHP backend</td>
@@ -1309,7 +1307,8 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
         <td>Unikernel</td>
         <td><code>BootSource::Raw</code>, <code>::Multiboot</code></td>
         <td><span class="tag ran">ran</span> 73 hand-assembled bytes at 2.67 ms;
-            a compiled <code>no_std</code> Rust guest at 3.6 ms</td>
+            a compiled <code>no_std</code> Rust guest at 3.6 ms, with a driver,
+            an IDT and a heap</td>
       </tr>
       <tr>
         <td>Type-2 hosted</td><td><code>hv2-core</code>, KVM + WHP</td>
@@ -1344,13 +1343,23 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
   <h2>Open, with diagnosis</h2>
 
   <p>
-    Eight items that stood here have been closed. What is left is the one thing
-    this machine cannot do, two things that still compile and have never run,
-    and one honest edge of what shipped. Nothing on this list is a failing test:
-    the suite is green, which it had not been for a while.
+    Nothing on this list is a failing test — the suite is green. What is left is
+    one thing this machine cannot do, two things that compile and have never
+    run, and two honest edges of what shipped.
   </p>
 
-  <h3>1. <code>hv1</code> has still never run on hardware</h3>
+  <h3>1. No model has ever run inside one of these guests</h3>
+  <p>
+    This is the largest gap on the page and the one every measurement here
+    exists to serve. There are no weights, no tokeniser and no forward pass in
+    the tree. What has been measured is the floor a model would stand on: the
+    memory a fleet needs (the model once, plus what each agent touches), the
+    bandwidth a forward pass would have (1.66 cycles/byte warm), and the channel
+    and permissions a tool call would travel over. Everything about an agent
+    above that line is still a rule standing in for a decision.
+  </p>
+
+  <h3>2. <code>hv1</code> has still never run on hardware</h3>
   <p>
     It initialises and it hosts a guest, both nested under hv2, and that is as
     far as this machine goes. The layer under it is KVM, so it read a CPU that a
@@ -1365,17 +1374,17 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
     nested path, and none of which have been.
   </p>
 
-  <h3>2. ARM Type-1 has not executed at all</h3>
+  <h3>3. ARM Type-1 has not executed at all</h3>
   <p>
     <code>hv1-arm</code> — EL2, stage-2, vGIC — is where <code>hv1-core</code>
-    was a day ago: it compiles, on nightly with <code>-Zbuild-std</code>, and
-    nothing has run it. The trick that worked for x86 does not transfer, because
-    this host is x86: running it nested needs an AArch64 host, and emulating one
-    proves something about the emulator. The pillars table marks it typed for
-    that reason.
+    was a few days ago: it compiles, on nightly with <code>-Zbuild-std</code>,
+    and nothing has run it. The trick that worked for x86 does not transfer,
+    because this host is x86: running it nested needs an AArch64 host, and
+    emulating one proves something about the emulator. The pillars table marks
+    it typed for that reason.
   </p>
 
-  <h3>3. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
+  <h3>4. WHPX can be kicked and can boot Multiboot, and has done neither</h3>
   <p>
     <code>WhpxBackend::kick_vcpu</code> cancels the run with
     <code>WHvCancelRunVirtualProcessor</code>, and its Multiboot path now
@@ -1385,7 +1394,7 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
     marked as such, the same way Type-1 is.
   </p>
 
-  <h3>4. Quota usage does not survive a restart</h3>
+  <h3>5. Quota usage does not survive a restart</h3>
   <p>
     <code>GovernedVmHost</code> counts what it has admitted, in one process, for
     as long as it exists. A process that comes back up has admitted nothing and
@@ -1402,8 +1411,8 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
   <ul>
     <li>
       <strong>KVM works here.</strong> WSL2, kernel 6.18.33.2, API version 12, 24
-      vCPUs, 45&nbsp;GB. The user must be in the <code>kvm</code> group;
-      <code>sudo</code> blocks on a password, and
+      vCPUs, 45&nbsp;GB, AMD with <code>nested=1</code>. The user must be in the
+      <code>kvm</code> group; <code>sudo</code> blocks on a password, and
       <code>wsl -u root -e usermod -aG kvm $USER</code> does not.
     </li>
     <li>
@@ -1414,10 +1423,15 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
     </li>
     <li>
       <strong><code>protoc</code> is not installed in WSL</strong>, so
-      <code>hv2-api</code> does not build there and
-      <code>cargo test --workspace</code> fails on the Linux side. Per-crate runs
-      work: <code>hv2-core</code> is 2,167 passing with the one timer failure,
-      <code>hv2-swarm</code> 18.
+      <code>hv2-api</code> does not build there and a workspace-wide
+      <code>cargo check</code> fails on the Linux side. Per-crate runs work, and
+      the Windows host covers the workspace.
+    </li>
+    <li>
+      <strong>Check the exit status of the compiler, not of
+      <code>tail</code>.</strong> A broken commit reached master because
+      <code>cargo check | tail -3 &amp;&amp; git push</code> reports the
+      pipeline's last command. Use <code>${PIPESTATUS[0]}</code>.
     </li>
     <li>
       <strong>Windows Hypervisor Platform fails on this host</strong> with
@@ -1429,12 +1443,48 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
       <code>MSYS_NO_PATHCONV=1</code></strong>, or Git Bash rewrites
       <code>/var/tmp/...</code> into a Windows path.
     </li>
+    <li>
+      <strong>Pushes to master report a bypassed rule.</strong> Branch protection
+      requires a pull request, the push succeeds anyway, and announces that it
+      bypassed the rule. Somebody should decide which of the two is wrong.
+    </li>
   </ul>
 </section>
 
 <section>
   <h2>What to do next</h2>
   <ol>
+    <li>
+      <strong>Decide where inference runs.</strong> The bandwidth measurement
+      says a fleet cannot all infer at once, and says nothing about whether the
+      answer is scheduling in-guest inference or making inference a capability
+      the sandbox invokes and keeping the guest as small as it is. The second
+      keeps the property the sandbox exists for — minimal, and therefore
+      auditable — and the permission graph that would gate such a call already
+      exists and already refuses. The first keeps the isolation boundary around
+      the model. This is a product decision with the numbers now under it, and
+      it blocks the next item.
+    </li>
+    <li>
+      <strong>Then put something real behind whichever it is.</strong> Weights,
+      a tokeniser, a forward pass. Nothing on this page has run a model.
+    </li>
+    <li>
+      <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
+      Rust ships a prebuilt <code>core</code> for that target, which was the
+      right call for a guest that writes to a serial port and the wrong one for
+      a guest that does arithmetic: inference wants AVX2 and more than 4&nbsp;GB
+      of address space. <code>hv1-multiboot</code> is already the worked example
+      of the 64-bit shape, heap included.
+    </li>
+    <li>
+      <strong>Make an agent hold more than one thing at once.</strong> The
+      protocol has request ids and nothing yet uses two of them. Every example
+      sends one frame and waits for its answer, which is exactly the shape the
+      ids were added to escape — the next honest step is a guest with a tool
+      call pending while a peer's message arrives, and a host that answers them
+      out of order.
+    </li>
     <li>
       <strong>Give <code>hv1</code> a guest worth running.</strong> It hosts four
       bytes of real mode. An exit handler that does something with an exit, an
@@ -1452,80 +1502,42 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
       being hidden by a hypervisor underneath.
     </li>
     <li>
-      <strong>Decide where inference runs.</strong> The measurement above says a
-      fleet cannot all infer at once, and says nothing about whether the answer
-      is scheduling in-guest inference, or making inference a capability the
-      sandbox invokes and keeping the guest as small as it is. The second keeps
-      the property the sandbox exists for — minimal, and therefore auditable —
-      and the permission graph that would gate such a call already exists and
-      already refuses. The first keeps the isolation boundary around the model.
-      This is a product decision with the numbers now under it.
-    </li>
-    <li>
-      <strong>Then put something real behind whichever it is.</strong> Weights,
-      a tokeniser, a forward pass. Nothing on this page has run a model; every
-      figure here is the floor a model would sit on, and the tool call above is
-      a rule standing in for a decision.
-    </li>
-    <li>
-      <strong>Make an agent hold more than one thing at once.</strong> The
-      protocol now has request ids and nothing yet uses two of them. Every
-      example sends one frame and waits for its answer, which is exactly the
-      shape the ids were added to escape — the next honest step is a guest that
-      has a tool call pending while a peer's message arrives, and a host that
-      can answer them out of order.
-    </li>
-    <li>
-      <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
-      Rust ships a prebuilt <code>core</code> for that target, which was the
-      right call for a guest that writes to a serial port and the wrong one for
-      a guest that does arithmetic: inference wants AVX2 and more than 4&nbsp;GB
-      of address space. <code>hv1-multiboot</code> is already the worked example
-      of the 64-bit shape, heap included.
-    </li>
-    <li>
-      <strong>Make the agent payload do something.</strong> The guest answers
-      by rule, which was the right thing to prove and is not a workload. What an
-      agent
-      actually runs inside a unikernel — and whether it needs an allocator, a
-      heap, and therefore rather more than 8 KB of image — is the next real
-      design question, and it is now answerable by experiment rather than by
-      argument.
-    </li>
-    <li>
-      <strong>Keep the suite green.</strong> It is, as of today, and both tests
-      that were not turned out to be describing real defects rather than being
-      flaky. That is the usual outcome and the reason not to leave one sitting.
+      <strong>Keep the suite green.</strong> It is, and both tests that were not
+      turned out to be describing real defects rather than being flaky. That is
+      the usual outcome and the reason not to leave one sitting.
     </li>
   </ol>
+
+  <h3>The habit that found all of it</h3>
   <p>
-    One habit is worth carrying forward, because it has now earned its place
-    six times: <em>measure before claiming, and assert on the effect rather than
-    the verdict</em>. The memset was found by timing, not by reading. The
-    <code>run_single</code> ceiling was found because the fix that should have
-    worked changed nothing. The first regression test written for the VM-id
-    collision passed against the broken code, which is how the second came to
-    check entropy instead of luck. The <code>stop()</code> hang was a diagnosis
-    before it was a fix: <code>wchan = kvm_vcpu_block</code> on an otherwise
-    idle process ruled out every explanation involving scheduling and left only
-    reachability.
+    One rule has now earned its place seven times: <em>measure before claiming,
+    and assert on the effect rather than the verdict</em>. The memset was found
+    by timing, not by reading. The <code>run_single</code> ceiling was found
+    because the fix that should have worked changed nothing. The first
+    regression test written for the VM-id collision passed against the broken
+    code, which is how the second came to check entropy instead of luck. The
+    <code>stop()</code> hang was a diagnosis before it was a fix:
+    <code>wchan = kvm_vcpu_block</code> on an otherwise idle process ruled out
+    every explanation involving scheduling and left only reachability. And the
+    refused message that appeared to arrive was caught because the check read
+    the <em>recipient's</em> console rather than the sender's return value.
   </p>
   <p>
-    Twice more today, and both were the same mistake in different clothes. The
-    Multiboot guest was reported as silent, and running the same program built
-    three ways showed that only the ELF and the address-carrying image were
-    silent — which turned a vague symptom into <code>jns +0x45</code>. And the
-    first timing of the compiled unikernel said 12&nbsp;ms, then 31&nbsp;ms for
-    a <em>smaller</em> guest, which is the shape of a number that means nothing:
-    the cost was a cold read of the image over a 9p mount, 9.0&nbsp;ms against
-    0.02&nbsp;ms for everything else provisioning does with it. One run measures
-    whatever else the machine was doing. A median over nine does not.
+    Two were the same mistake in different clothes. The Multiboot guest was
+    reported as silent, and running the same program built three ways showed
+    that only the ELF and the address-carrying image were silent — which turned
+    a vague symptom into <code>jns +0x45</code>. And the first timing of the
+    compiled unikernel said 12&nbsp;ms, then 31&nbsp;ms for a <em>smaller</em>
+    guest, which is the shape of a number that means nothing: the cost was a
+    cold read of the image over a 9p mount, 9.0&nbsp;ms against 0.02&nbsp;ms for
+    everything else provisioning does with it. One run measures whatever else
+    the machine was doing. A median over nine does not.
   </p>
   <p>
-    The strongest case for the habit, though, is <code>svm_run</code>. It sat in
-    the tree looking like a working function — documented, plausible, the sort of
-    thing a review skims and accepts. Its inline assembly had no input operands
-    at all, so it read its two arguments from the wrong registers and handed
+    The strongest case, though, is <code>svm_run</code>. It sat in the tree
+    looking like a working function — documented, plausible, the sort of thing a
+    review skims and accepts. Its inline assembly had no input operands at all,
+    so it read its two arguments from the wrong registers and handed
     <code>VMRUN</code> an address that was not a VMCB. Nothing could have found
     that except running it, and nothing had run it, because running it needed a
     Multiboot loader that worked and a way to get from 32-bit to 64-bit — which
@@ -1537,11 +1549,12 @@ vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
 </section>
 
 <footer>
-  master d6bf1de · 0 open PRs · 0 open issues · suite green · a fleet costs the
-  model once plus what each agent touches · a tool is a permission, and a
-  refused one does not run · measured on WSL2 + KVM, not bare metal · a compiled Rust unikernel boots in 3.6&nbsp;ms and answers a swarm
-  message over vsock · Type-1 hosts a guest, nested, and has still never run on
-  a machine
+  master 319fc18 · 0 open PRs · 0 open issues · suite green · a compiled Rust
+  unikernel boots in 3.6&nbsp;ms, sleeps when idle, and speaks a framed protocol
+  over vsock · a fleet costs the model once plus what each agent touches · a
+  tool is a permission, a refused one does not run, and the agent is told which
+  one · Type-1 hosts a guest, nested, and has still never run on a machine · no
+  model has ever run inside any of this
 </footer>
 
 </div>
