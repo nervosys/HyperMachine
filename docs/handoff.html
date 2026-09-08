@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>661babf</dd></div>
+    <div class="fact"><dt>Master</dt><dd>00b7f01</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -1385,15 +1385,39 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     capability graph decides who may ask and says nothing about who goes first.
   </p>
 
-  <h3>5. The activations are floats, so VNNI cannot be used</h3>
+  <h3>5. VNNI is written, correct, and unmeasured</h3>
   <p>
-    AVX-512 is in now and worth 1.17× on the batched case. What is not is
-    <code>avx512_vnni</code>, which multiplies and accumulates <em>bytes</em> in
-    one instruction and is the exact shape of a <code>Q8_0</code> product — it
-    wants both operands as integers, and the activations here are `f32`.
-    Quantising them too is what every serious implementation does and it changes
-    what the model computes, so it needs the answers checked before and after
-    rather than a speed measurement.
+    Quantising the activations is what unlocks <code>vpdpbusd</code>, and it is
+    implemented — scalar and 512-bit. Two things about it are settled and one is
+    not.
+  </p>
+  <ul>
+    <li>
+      <strong>It does not change what the model says.</strong> Thirty-two tokens
+      of prose came back identical token for token against the float path, and
+      the four one-word answers survive. That was checked before any of the wide
+      code was written, which is the only order in which the check is worth
+      anything.
+    </li>
+    <li>
+      <strong>The wide kernel is right.</strong> It agrees with the scalar
+      integer path to within rounding, and that path is within 2% of the float
+      one — two tests, because "agrees with the other integer version" and "is a
+      recognisable approximation of the real product" are different claims.
+    </li>
+    <li>
+      <strong>Whether it is faster is unknown, and this host could not
+      say.</strong> The Windows side of this machine sat at 97% CPU while the
+      comparisons ran, and the same configuration measured 40.8, 54.3 and
+      58.9&nbsp;ms per token in three consecutive attempts. The difference
+      between the two paths is smaller than that spread, and the medians put the
+      integer path ahead in one round and behind in another.
+    </li>
+  </ul>
+  <p>
+    So the float path ships and this waits for a quiet machine. A default that
+    changes what the model computes needs a demonstrated benefit, and there is
+    not one yet. <code>HV2_INFER_QUANT_ACT=1</code> turns it on.
   </p>
 
   <h3>6. About a fifth of the memory rate is still unclaimed</h3>
@@ -1470,6 +1494,23 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       which one you got.
     </li>
     <li>
+      <strong>Check the Windows host before timing anything in WSL.</strong>
+      The VM's 24 vCPUs <em>are</em> the host's 24 logical CPUs, so a busy
+      desktop halves them with no signal inside Linux —
+      <code>/proc/loadavg</code> read 2.7 while the host was at 97%. One
+      PowerShell counter says which:
+      <code>Get-Counter '\Processor(_Total)\% Processor Time'</code>. Above
+      about 20% and an A/B comparison is not one.
+    </li>
+    <li>
+      <strong>WSL's root filesystem can go read-only mid-run.</strong> An I/O
+      error, not disk pressure — there were 349 GB free. It shows up as cargo
+      failing with <code>Read-only file system (os error 30)</code> and every
+      later command failing the same way, so a batch of examples looks like a
+      cascade of test failures. <code>wsl.exe --shutdown</code> recovers it, and
+      the interrupted work has to be re-run rather than believed.
+    </li>
+    <li>
       Paths through <code>wsl.exe</code> need <code>MSYS_NO_PATHCONV=1</code>, or
       Git Bash rewrites <code>/var/tmp/...</code> into a Windows path.
     </li>
@@ -1485,12 +1526,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   <h2>What to do next</h2>
   <ul>
     <li>
-      <strong>Quantise the activations, and check the answers before the
-      speed.</strong> That is what unlocks <code>avx512_vnni</code>, which does
-      a byte multiply-accumulate in one instruction and is the shape this
-      product actually is. It changes what the model computes, so the first
-      measurement is not tokens per second — it is whether Paris, Blue, Tokyo
-      and 8 still come back.
+      <strong>Re-measure VNNI on a quiet machine.</strong> The kernel is
+      written and correct and the answers survive it; what nobody knows is
+      whether it is faster, because the host was at 97% CPU on its other side
+      while the question was being asked. It is one environment variable and two
+      commands.
     </li>
     <li>
       <strong>Give hv1's guest a second vCPU and a device with a ring.</strong>
@@ -1586,7 +1626,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master 661babf · 0 open PRs · 0 open issues · suite green · a model answers
+  master 00b7f01 · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
   filling and emptying between token steps — 24.4&nbsp;ms per token across eight
