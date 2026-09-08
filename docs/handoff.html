@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>933888e</dd></div>
+    <div class="fact"><dt>Master</dt><dd>fe40d9c</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -302,7 +302,7 @@
     <div class="fact"><dt>Scheduling</dt><dd class="good">batched, bounded</dd></div>
     <div class="fact"><dt>A model has run</dt><dd class="good">yes</dd></div>
     <div class="fact"><dt>Per token</dt><dd class="good">24.4 ms</dd></div>
-    <div class="fact"><dt>Type-1</dt><dd class="hold">hosted, nested</dd></div>
+    <div class="fact"><dt>Type-1</dt><dd class="hold">2 vCPUs, nested</dd></div>
   </dl>
 </header>
 
@@ -1102,6 +1102,59 @@ hv1   &gt;  <b>and a reply through the same ring</b></pre>
     up mid-reply and reported the guest as never having returned. That is what
     real device models batch to avoid.
   </p>
+  <h3>And a second processor</h3>
+  <p>
+    A second vCPU is the first thing hv1 has been asked for that is a
+    hypervisor's own problem rather than a guest's. Two VMCBs, because a VMCB is
+    four kilobytes the hardware reads and writes while its guest runs and two
+    processors sharing one would be two processors sharing a register file — and
+    one physical processor underneath both of them, so somebody has to decide
+    which runs.
+  </p>
+  <pre>exit 070  VMEXIT_VMMCALL  -> a second processor, started where the first asked
+exit 071  VMEXIT_HLT      -> yielded — the other processor runs
+exit 072  VMEXIT_IOIO     -> COM1, emulated  <b>x43</b>
+exit 115  VMEXIT_VMMCALL  -> the second processor ran, and is done
+
+hv1   &gt;  <b>and this line is from the second processor</b>
+hv1   second cpu: started, ran, and the first processor saw its work through memory
+hv1   switches  : 2</pre>
+  <p>
+    The second processor's state is a copy of the first's — same segments, same
+    tables, same memory, which is what makes it a processor of the <em>same
+    guest</em> — with its own instruction pointer and its own stack, because two
+    processors on one stack is one processor with a corrupted one. The first
+    tells the hypervisor where to start it with a hypercall; on hardware that
+    would be INIT and SIPI through the local APIC, and the shortcut is labelled
+    where it is taken.
+  </p>
+  <p>
+    Scheduling is: run one until it halts, then run the other. <code>hlt</code>
+    is intercepted, so it is a <em>yield</em> rather than a stop — which is why
+    the first processor's wait loop halts instead of spinning. A busy loop would
+    never give the other one a turn.
+  </p>
+  <div class="callout">
+    <h3>Four things this cost, and all four were the apparatus</h3>
+    <p>
+      Two finished processors handed the CPU back and forth forever, until a
+      processor was marked finished when it made its last hypercall. The exit
+      counter printed <code>exit 100</code> as <code>;0</code>, which is
+      <code>b'0' + 10</code>. Sixty consecutive identical serial-port exits are
+      a wall rather than a log, and printing them overran the console — runs
+      collapse to one line and a count now. And the example waited for the
+      console to contain <code>"done"</code>, so it stopped reading partway
+      through the log the moment hv1 gained an exit description ending
+      <em>"and is done"</em>, reporting every later claim as absent.
+    </p>
+    <p>
+      That last one is the fourth time on this page that a measuring instrument
+      failed and was briefly read as a result. A sentinel that can appear inside
+      ordinary output is not a sentinel, and it is the same family of mistake as
+      timing one boot, summing bytes to measure a memory bus, and a bound on an
+      exit log that quietly truncated the evidence.
+    </p>
+  </div>
   <p>
     Two supporting changes. The guest is assembled by the toolchain in a
     <code>.code16</code> section rather than written out as hex — hand-assembly
@@ -1143,8 +1196,9 @@ hv1   &gt;  <b>and a reply through the same ring</b></pre>
     <strong>What none of this proves.</strong> Not hardware. The layer underneath
     is KVM, so hv1 read a CPU its own hypervisor chose to show it; the firmware
     path, the real memory map, AP bring-up and every real device are hidden by
-    that. And one vCPU is not an operating system either — a second vCPU is the
-    next step, and it can be taken on the nested path that already works.
+    that. And two processors running 32-bit code with one emulated port and one
+    ring is not an operating system either — what it now has is most of the
+    machinery a small kernel uses and none of the reasons to have one.
   </p>
 </section>
 
@@ -1365,8 +1419,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
           <td><span class="tag ran">ran</span> x86 hosted a guest nested under hv2: emulated its serial port,
               answered its hypercalls while it crossed into protected mode under its own descriptor tables,
               took a request through a descriptor ring and refused one pointing outside the guest's memory,
-              and delivered it an interrupt through its own gates; <span class="tag typed">typed</span> ARM
-              EL2, and no bare metal for either</td></tr>
+              delivered it an interrupt through its own gates, and scheduled two of its processors onto the
+              one it has; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -1573,13 +1627,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Give hv1's guest a second vCPU.</strong> It crosses into protected
-      mode under its own tables, drives a descriptor ring, and takes an injected
-      interrupt through its own gates — which is most of what a small kernel
-      does with one processor. A second means an AP bring-up path, two VMCBs,
-      and hv1 scheduling them onto the single processor it has, which is the
-      first thing it has been asked to do that is a hypervisor's own problem
-      rather than a guest's.
+      <strong>Start the second processor the way hardware does.</strong> It is
+      started by a hypercall, which is a shortcut past the part that is actually
+      hard: INIT and SIPI through a local APIC, an AP starting in real mode at a
+      vector the BSP chose, and the hypervisor emulating enough of an APIC to
+      carry it. That is the difference between two vCPUs and a guest that can
+      boot an ordinary kernel.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
@@ -1596,7 +1649,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       go.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is.
+      <strong>Keep the suite green.</strong> It is: 3,331 tests and all fifteen
+      examples, run together after the second processor landed.
     </li>
   </ul>
 </section>
@@ -1667,7 +1721,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master 933888e · 0 open PRs · 0 open issues · suite green · a model answers
+  master fe40d9c · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
   filling and emptying between token steps — 24.4&nbsp;ms per token across eight
@@ -1677,9 +1731,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   and the agent it belonged to is told · a compiled 64-bit Rust unikernel boots
   in 2.4&nbsp;ms, sleeps when idle, and holds three requests in the air at once
   · a fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
-  hosts a guest that builds its own descriptor tables, drives a ring, and is
-  refused when it points one at memory it does not have — nested, and still
-  never on a machine
+  builds its guest's descriptor tables, drives a ring, refuses one pointing at
+  memory it does not have, and schedules two guest processors onto the one it
+  has — nested, and still never on a machine
 </footer>
 
 </div>
