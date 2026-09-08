@@ -1640,13 +1640,50 @@ hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by<
       byte-identical.
     </p>
     <p>
-      Both checks are in that CI job now. Five jobs looked at, four of them red
-      or absent, and only two of the findings came from the work this page
-      describes. All of them were found by running the checks rather than by
-      reading them, which is the shape of the whole section: <em>the checks a
-      project does not run are the ones it fails.</em>
+      Both checks are in that CI job now.
     </p>
   </div>
+
+  <div class="callout stop">
+    <h3>And a security check that could not fail, over a vulnerability that is real</h3>
+    <p>
+      <code>cargo audit</code> reports one vulnerability in this tree:
+      <strong>RUSTSEC-2023-0071</strong>, the Marvin attack &mdash; potential
+      RSA key recovery through a timing sidechannel, severity 5.9, in
+      <code>rsa</code>&nbsp;0.9.10, with <em>no fixed upgrade available</em>.
+      <code>rsa</code> is a direct dependency of <code>hv2-core</code>, and
+      <code>crypto/asymmetric.rs</code> generates private keys and decrypts with
+      them, which is exactly the operation the advisory is about. It applies.
+    </p>
+    <p>
+      The security workflow runs on every push and every pull request and has
+      been green throughout. Its check was:
+    </p>
+    <pre>if grep -q "<b>V</b>ulnerability" audit-output.txt; then exit 1; fi</pre>
+    <p>
+      <code>cargo audit</code> writes <code>1 <b>v</b>ulnerability found!</code>,
+      in lower case. The condition could not be true. The step could not fail,
+      and did not, for as long as the advisory has existed. It uses the exit
+      status now, which is what <code>cargo audit</code> sets for precisely this
+      purpose, and the artifact uploads on failure too &mdash; the run where it
+      is worth reading.
+    </p>
+    <p>
+      <strong>This turns the job red, and that is the point rather than a side
+      effect.</strong> No suppression was added: whether to accept a known
+      unfixed advisory, drop the dependency, or vendor a mitigation is a
+      decision about this project's security posture and belongs to whoever owns
+      it. What was not acceptable was a check reporting success either way.
+    </p>
+  </div>
+
+  <p>
+    Six checks looked at, five of them red, broken or absent, and only two of
+    the findings came from the work this page describes. All of them were found
+    by running the checks rather than by reading them, which is the shape of the
+    whole section: <em>the checks a project does not run are the ones it fails
+    &mdash; and the ones it runs wrong are worse, because they answer.</em>
+  </p>
 
   <div class="callout stop">
     <h3>The way out exists in the architecture, and this platform does not deliver it</h3>
@@ -2006,11 +2043,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
               delivered it an interrupt through its own gates, and started a second processor through INIT
               and STARTUP on an emulated APIC page — refusing a startup that skipped the reset — then
               scheduled the two of them onto the one processor it has, both of which read their own
-              identity from one instruction at one address, one of which armed a timer and took three
-              ticks on the vector it chose itself, delivered while both were spinning by hv1 arming
-              its own real APIC, intercepting the interrupt, and taking the processor back from each
-              of them in turn &mdash; and could not take it back at all from one that cleared its
-              interrupt flag, which is measured rather than assumed; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+              identity from one instruction at one address, each of which armed a timer of its own and
+              took four ticks and three on the vectors they chose, delivered while both were spinning
+              by hv1 arming its own real APIC, intercepting the interrupt, and taking the processor
+              back from each of them in turn &mdash; and could not take it back at all from one that
+              cleared its interrupt flag, which is measured rather than assumed; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -2314,6 +2351,16 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       the scheduler should read it rather than invent one.
     </li>
     <li>
+      <strong>Decide what to do about RUSTSEC-2023-0071.</strong> The Marvin
+      attack, in <code>rsa</code>&nbsp;0.9.10, which <code>hv2-core</code>
+      depends on directly and uses for private-key decryption. There is no fixed
+      version to move to, so the options are to accept it explicitly with
+      <code>cargo audit --ignore</code> and a written reason, to stop depending
+      on <code>rsa</code>, or to route those operations somewhere else. The
+      security job fails until one of them is chosen, which is the correct state
+      for it to be in and the reason it is first on this list.
+    </li>
+    <li>
       <strong>Nothing automated runs the examples.</strong> CI runs
       <code>cargo test</code> on Linux, Windows, macOS and ARM, plus rustfmt,
       clippy and an MSRV check. It does not run a single one of the sixteen
@@ -2423,11 +2470,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   memory it does not have, and starts a second guest processor with INIT and
   STARTUP on a faulted APIC page, refuses a startup that skipped the reset,
   schedules both onto the one processor it has, tells them apart &mdash; one
-  instruction, one address, two answers &mdash; and delivers a guest's own timer
-  on each guest processor's own vector while both are spinning rather than
-  halted, taking the processor back from each in turn —
-  nested, and still never on a
-  machine
+  instruction, one address, two answers &mdash; and delivers each processor's
+  own timer on the vector that processor chose, while both are spinning rather
+  than halted, taking the machine back from each in turn &mdash; and cannot take
+  it back at all from one that clears its interrupt flag, which is measured here
+  and not assumed &mdash; nested, and still never on a machine
 </footer>
 
 </div>

@@ -43,18 +43,24 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit
 
+      # `cargo audit` exits non-zero when it finds a vulnerability, so use that
+      # rather than searching its prose.
+      #
+      # The previous version grepped the output for "Vulnerability" with a
+      # capital V, and cargo audit only ever writes "vulnerability" in lower
+      # case -- so the condition could not be true, the step could not fail, and
+      # it did not, while RUSTSEC-2023-0071 was present the whole time. A check
+      # that cannot fail is not a check.
       - name: Run cargo audit
         run: |
+          set -o pipefail
           cargo audit --json > audit-results.json || true
           cargo audit 2>&1 | tee audit-output.txt
-          
-          # Check for actual vulnerabilities (not warnings)
-          if grep -q "Vulnerability" audit-output.txt; then
-            echo "::error::Security vulnerabilities found!"
-            exit 1
-          fi
 
+      # Still uploaded when the step above fails, which is the run where the
+      # output is worth reading.
       - name: Upload audit results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cargo-audit-results
