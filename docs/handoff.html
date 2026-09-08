@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>d563e00</dd></div>
+    <div class="fact"><dt>Master</dt><dd>b554810</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -299,9 +299,9 @@
     <div class="fact"><dt>Concurrent</dt><dd class="good">1,000</dd></div>
     <div class="fact"><dt>Idle cost</dt><dd class="good">0.3% core</dd></div>
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust, 64-bit</dd></div>
-    <div class="fact"><dt>Scheduling</dt><dd class="good">queued, bounded</dd></div>
+    <div class="fact"><dt>Scheduling</dt><dd class="good">batched, bounded</dd></div>
     <div class="fact"><dt>A model has run</dt><dd class="good">yes</dd></div>
-    <div class="fact"><dt>Per token</dt><dd class="good">178 ms</dd></div>
+    <div class="fact"><dt>Per token</dt><dd class="good">58.6 ms</dd></div>
     <div class="fact"><dt>Type-1</dt><dd class="hold">hosted, nested</dd></div>
   </dl>
 </header>
@@ -449,8 +449,9 @@ forward passes: 51, for the 2 agents that were allowed — 1 asked and ran none<
   <p>
     <code>hv2-infer::schedule</code> is a first-in-first-out queue, a fixed
     number of passes in flight, and one session per agent kept between requests.
-    Two bounds, because they are two resources: <code>workers</code> bounds
-    bandwidth, and <code>context_tokens</code> bounds memory — at 64&nbsp;KiB of
+    Two bounds, because they are two resources: <code>batch</code> decides how
+    many conversations share a pass, and <code>context_tokens</code> bounds
+    memory — at 64&nbsp;KiB of
     key/value cache per token that is the figure a node is sized from, and it is
     the one thing an agent cannot share, because it is that agent's
     conversation. An agent over its bound is refused with the numbers in the
@@ -571,6 +572,80 @@ bound         : alpha asked again and was refused — holding 49 tokens,
 </section>
 
 <section>
+  <h2>What shipped: the fleet shares a pass, not just the weights</h2>
+  <p>
+    Sharing the weights read-only was the first arithmetic this project ever did
+    about fleets, and it was only half of the saving available. A forward pass
+    reads all 1.25&nbsp;GiB of those weights whether it produces one token or
+    eight — so a node with eight agents waiting was reading the model eight
+    times to produce eight tokens.
+  </p>
+  <p>
+    A batched matrix product reads each weight row once and dots it against
+    every lane. Everything that is <em>not</em> a weight — the norms, the
+    rotation, the attention over each conversation's own cache — stays per lane,
+    because none of it is shared and none of it is the expensive part.
+  </p>
+  <pre>lanes=1   3.59 tokens/s   278.9 ms per token
+lanes=2   7.60            131.5
+lanes=4  13.40             74.6
+lanes=8 <b>17.05</b>            <b>58.6</b>   — 4.7x</pre>
+  <p>
+    Sub-linear past four lanes, because once the weight read is amortised the
+    arithmetic starts to matter — which is the AVX2 finding from the other
+    direction and the same underlying fact about where the time goes.
+  </p>
+
+  <h3>What makes the speed worth having</h3>
+  <p>
+    A batch that quietly mixed two conversations together would run at exactly
+    the same speed and answer fluently with the wrong lane's answer. Throughput
+    cannot detect that; four different one-word answers can.
+    <code>examples/batched</code> asks the same four questions twice — once each
+    alone, once all four in one batch — and compares:
+  </p>
+  <pre>lane 0: "What is the capital of France"        alone <b>"Paris."</b>  batched <b>"Paris."</b>
+lane 1: "What colour is the sky on a clear day"       "Blue."           "Blue."
+lane 2: "What is the capital of Japan"               "Tokyo."          "Tokyo."
+lane 3: "How many legs does a spider have"                "8"               "8"
+
+one at a time : 24.5 s      all at once : 8.7 s      2.83x</pre>
+  <p>
+    It names that failure specifically if it sees an answer come back on the
+    wrong lane, because "an answer changed" and "the lanes are crossed" want
+    different fixes.
+  </p>
+
+  <h3>The knob was the wrong one, and the measurement said so</h3>
+  <p>
+    The scheduler's bound used to be <code>workers</code>: how many passes to
+    run at once. That is the wrong question. Two concurrent passes read the
+    model twice; a batch of two reads it once, for the same arithmetic and half
+    the memory traffic. So there is one pass at a time and its <em>width</em> is
+    the knob, and the fleet's figures move accordingly:
+  </p>
+  <pre>scheduler : batches of 4 on 8 of 24 cores
+batches   : 3 passes over the weights for 5 answers, largest carried 2
+time      : <b>16.2 s</b> of wall clock, 100% of it someone's share of a pass</pre>
+  <p>
+    Against 23.7&nbsp;s before batching and 61.3&nbsp;s before any of this
+    session's performance work, for the same five turns. There is no worker
+    thread: whichever caller finds no batch in flight runs one and wakes
+    everybody in it, which needs no spawning and no way for a thread to outlive
+    the model's borrow.
+  </p>
+  <p>
+    Two things this exposed. <strong>Per-request service time cannot be
+    summed</strong> — a batch's duration belongs to every request in it, so
+    adding them up reported 169% of the wall clock as "service"; what a request
+    cost is its batch divided by how many shared it. And <strong>two requests
+    from the same agent cannot share a batch</strong>, because they would need
+    the same conversation in two lanes of one pass; the second waits for the
+    next batch.
+  </p>
+</section>
+
+<section>
   <h2>Run any of it in one command</h2>
   <p>
     Nothing on this page is a benchmark harness or a saved log. Each row is an
@@ -592,6 +667,8 @@ bound         : alpha asked again and was refused — holding 49 tokens,
           <td>The forward pass on its own — weights, tokeniser, tokens per second</td></tr>
         <tr><td class="where">scheduled</td><td class="where">hv2-swarm</td>
           <td>A fleet queueing for one model, each agent holding its own conversation and bounded in how much of it</td></tr>
+        <tr><td class="where">batched</td><td class="where">hv2-infer</td>
+          <td>That four conversations in one pass give the same answers as four passes — the thing throughput cannot check</td></tr>
         <tr><td class="where">throughput</td><td class="where">hv2-infer</td>
           <td>What a forward pass costs, swept over thread count — how the numbers below were found</td></tr>
         <tr><td class="where">in_flight</td><td class="where">hv2-swarm</td>
@@ -996,8 +1073,10 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
         <tr><td class="claim">In-guest weight streaming</td><td>—</td><td>1.38 cyc/byte</td>
           <td><span class="tag ran">ran</span> warm; 12.38 cold, the difference being one nested-paging fault per page, paid once</td></tr>
         <tr><td class="claim"><strong>A model actually running</strong></td><td>yes</td><td><strong>yes</strong></td>
-          <td><span class="tag ran">ran</span> 1.24B parameters in Q8_0, 178 ms per token, answers checked</td></tr>
-        <tr><td class="claim">Inference scheduled across a fleet</td><td>—</td><td>queued, bounded</td>
+          <td><span class="tag ran">ran</span> 1.24B parameters in Q8_0, 58.6 ms per token across eight lanes and 178 ms alone, answers checked</td></tr>
+        <tr><td class="claim">Conversations per pass over the weights</td><td>—</td><td>up to 8</td>
+          <td><span class="tag ran">ran</span> 4.7× the tokens per second of one lane, and the answers are identical to running them separately</td></tr>
+        <tr><td class="claim">Inference scheduled across a fleet</td><td>—</td><td>batched, bounded</td>
           <td><span class="tag ran">ran</span> four sandboxes, one worker, first-in-first-out; an agent over its context bound refused before queueing</td></tr>
         <tr><td class="claim">An agent's conversation</td><td>—</td><td>its own, and only its own</td>
           <td><span class="tag ran">ran</span> two agents recalled what they were told; a third with the same capability and no first turn did not know it</td></tr>
@@ -1127,20 +1206,21 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     (<code>HRESULT 0x80370302</code>), so both are compilation results.
   </p>
 
-  <h3>4. There is a queue, and no batching</h3>
+  <h3>4. The batching is static, not continuous</h3>
   <p>
-    A queue, a bound on passes in flight and a bound on context now exist. What
-    does not is the thing that would actually make a fleet cheap: <em>batching</em>
-    several agents' tokens into one pass. A pass reads all 1.25&nbsp;GiB of
-    weights to produce one token for one agent; the same read could produce a
-    token for each of eight agents, and that is close to an eightfold gain that
-    no amount of tuning the current shape can reach. It needs the forward pass to
-    take a batch dimension it does not have.
+    A request that arrives while a batch is running waits for the next batch
+    rather than joining the current one at its next token. That costs a late
+    arrival some latency and costs throughput nothing, and it is a great deal
+    simpler — but it is why <code>scheduled</code>'s largest batch is two out of
+    four: the four agents' requests do not arrive together, because each has to
+    exchange a frame with its guest first. A continuously batched loop would
+    have carried all four.
   </p>
   <p>
     Also absent: priorities, preemption, and eviction of a cold conversation. An
     agent that stops asking holds its cache until something drops it, and
-    nothing does.
+    nothing does — so a node's memory is decided by how many agents have ever
+    asked rather than by how many are active.
   </p>
 
   <h3>5. What limits a pass past a third of the cores is not known</h3>
@@ -1233,13 +1313,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   <h2>What to do next</h2>
   <ul>
     <li>
-      <strong>Batch the forward pass.</strong> This is the largest number left
-      on the table by a wide margin. One pass reads 1.25&nbsp;GiB of weights to
-      produce one token for one agent; the same read could serve eight agents at
-      once, and a fleet is exactly the case where eight agents are waiting. It
-      needs a batch dimension through the matrix-vector products and the
-      attention, and the queue that would feed it already exists and already
-      knows who is waiting.
+      <strong>Make the batching continuous.</strong> A request that arrives
+      while a batch is running waits for the whole batch. Letting it join at the
+      next token is what turns "largest batch of two out of four" into "four",
+      and the queue already knows who is waiting — what it cannot do is admit
+      anyone once a pass has started.
     </li>
     <li>
       <strong>Let a conversation be evicted.</strong> An agent holds its cache
@@ -1265,7 +1343,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     <li>
       <strong>Find out what the thread knee is.</strong> Avoiding it was worth
       1.4×, and understanding it might be worth more — or might say the ceiling
-      is real and the answer is batching after all.
+      is real, in which case wider batches are the only lever left.
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is.
@@ -1328,13 +1406,14 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master d563e00 · 0 open PRs · 0 open issues · suite green · a model answers
-  from inside a sandbox that had to hold the capability to ask, at
-  178&nbsp;ms&nbsp;per&nbsp;token, and the one that did not caused no forward
-  pass · a fleet queues for it, each agent holding its own conversation and
-  bounded in how much of it, and no agent can name another's · a compiled 64-bit
-  Rust unikernel boots in 2.4&nbsp;ms, sleeps when idle, and holds three requests
-  in the air at once · a fleet costs the model once plus 64&nbsp;KiB per token of
+  master b554810 · 0 open PRs · 0 open issues · suite green · a model answers
+  from inside a sandbox that had to hold the capability to ask, and the one that
+  did not caused no forward pass · a fleet queues for it in batches that share
+  one pass over the weights — 58.6&nbsp;ms per token across eight lanes against
+  278.9 alone, and the same answers either way · each agent holds its own
+  conversation and no agent can name another's · a compiled 64-bit Rust
+  unikernel boots in 2.4&nbsp;ms, sleeps when idle, and holds three requests in
+  the air at once · a fleet costs the model once plus 64&nbsp;KiB per token of
   context · Type-1 hosts a guest that builds its own descriptor tables and
   crosses into protected mode, nested, and has still never run on a machine
 </footer>
