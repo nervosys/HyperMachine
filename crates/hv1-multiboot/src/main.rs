@@ -101,6 +101,12 @@ fn print(text: &str) {
     }
 }
 
+/// Write one byte to the console, as itself.
+pub(crate) fn print_byte(byte: u8) {
+    // SAFETY: COM1, as in `print`.
+    unsafe { outb(COM1, byte) };
+}
+
 fn print_hex(value: u64) {
     const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
     print("0x");
@@ -213,15 +219,18 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
         }
     }
 
-    // Initialising is not hosting. This is the first time anything has
-    // run *under* hv1: a VMCB the hardware accepts, a guest that
-    // executes, an exit that says why, and a second entry afterwards.
-    // One entry proves a guest ran; two prove a loop.
+    // Initialising is not hosting, and neither is entering a guest twice.
+    // What makes this a hypervisor is the loop below: an emulated serial
+    // port the guest writes a line to, hypercalls answered and stepped
+    // over, and an interrupt injected into a halted guest that its own
+    // handler receives and returns from.
     //
-    // The nested page tables are the ones the trampoline built, read
-    // back out of CR3 rather than passed down from it: this image is
-    // identity mapped, so the guest's physical address space is the
-    // host's, and CR3 is where that map already lives.
+    // The nested page tables are the guest's own now, and they translate:
+    // guest-physical zero is the base of a 2 MiB region this image owns,
+    // and everything above it is absent. They used to identity-map the
+    // first gigabyte, which was survivable only because a four-byte guest
+    // touches nothing -- this one has a stack and an interrupt table at
+    // its address zero.
     // SAFETY: `initialize()` returned Ok above, so EFER.SVME is set;
     // this is ring 0 and the address space is identity mapped.
     match unsafe { guest::run() } {
@@ -231,9 +240,42 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
 ",
             );
         }
-        guest::Outcome::Ran { first, second } => {
-            report_exit(1, &first);
-            report_exit(2, &second);
+        guest::Outcome::Ran(log) => {
+            for (n, exit) in log.exits[..log.count].iter().enumerate() {
+                report_exit(n + 1, exit);
+            }
+            print("hv1   stopped: ");
+            print(log.stopped);
+            print("
+");
+            guest::report(&log);
+
+            // The three claims, each separately checkable, in the order they
+            // have to happen in.
+            print("hv1   device    : ");
+            print(if log.console_len > 0 {
+                "the guest wrote to a port and this hypervisor was what answered"
+            } else {
+                "FAILED — the guest never reached its serial port"
+            });
+            print("
+");
+            print("hv1   interrupt : ");
+            print(if log.interrupt_handled {
+                "injected 0x20 while halted, and the guest's own handler ran"
+            } else {
+                "FAILED — the vector was injected and no handler ran"
+            });
+            print("
+");
+            print("hv1   resumed   : ");
+            print(if log.resumed {
+                "the handler's iret returned, and the guest carried on"
+            } else {
+                "FAILED — the guest never came back from its handler"
+            });
+            print("
+");
         }
     }
 
@@ -264,23 +306,26 @@ fn error_name(e: hv1_core::Error) -> &'static str {
     }
 }
 
-/// Print one guest exit.
-fn report_exit(n: u32, exit: &guest::Exit) {
-    print("hv1   guest exit ");
-    // SAFETY: COM1, as in `print`.
-    unsafe { outb(COM1, b'0' + n as u8) };
-    print(" ");
+/// Print one guest exit, and what the hypervisor did about it.
+///
+/// The answer is the half that matters. An exit log is a list of things that
+/// happened to a guest; a hypervisor is the column next to it.
+fn report_exit(n: usize, exit: &guest::Exit) {
+    print("hv1   exit ");
+    print_byte(b'0' + (n / 10) as u8);
+    print_byte(b'0' + (n % 10) as u8);
+    print("  ");
     print_hex(exit.code);
     print(" ");
     print(guest::exit_name(exit.code));
-    if exit.code == guest::VMEXIT_NPF {
-        print(" at ");
-        print_hex(exit.fault_addr);
-    }
-    print(
-        "
-",
-    );
+    print("  rip ");
+    print_hex(exit.rip);
+    print("  info ");
+    print_hex(exit.info);
+    print("  -> ");
+    print(exit.answer);
+    print("
+");
 }
 
 /// Read a model-specific register.

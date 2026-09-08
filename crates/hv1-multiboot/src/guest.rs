@@ -1,60 +1,107 @@
-//! Run a guest under `hv1-core`, which it had never done.
+//! Run a guest under `hv1-core`, and be a hypervisor to it.
 //!
-//! `initialize()` proved the hypervisor starts. Starting is not hosting: a
-//! hypervisor that enables SVM and never enters a guest has exercised one MSR
-//! write. What is under test here is `VMRUN` itself — a VMCB the hardware
-//! accepts, a guest that executes, an exit that says why, and a second entry
-//! afterwards, because one entry proves a guest ran and two prove a loop.
+//! `initialize()` proved the hypervisor starts. `VMRUN` proved a guest
+//! executes. Neither is *hosting*: a hypervisor that enters a guest twice and
+//! stops has run a guest the way a launcher runs a program. What separates the
+//! two is what happens on an exit — whether the thing above the guest can
+//! answer it, put something back, and let the guest carry on none the wiser.
+//!
+//! So this is an exit loop with a hypervisor behind it:
+//!
+//! - **A device.** The guest writes a line to COM1. Every byte is an
+//!   intercepted `out`, so there is no serial port on the other side of it —
+//!   there is `hv1`, decoding the port and the width out of the exit
+//!   information and putting the byte on its own console. That is emulation:
+//!   the guest cannot tell the difference, and the difference is the whole job.
+//! - **A hypercall.** `vmmcall` with a number in `EAX`, answered and stepped
+//!   over. The guest asks four times and gets four answers.
+//! - **An interrupt, delivered.** The guest halts. The hypervisor injects
+//!   vector 0x20 through the VMCB, the guest's own handler runs, says so with a
+//!   hypercall, and `iret`s back to where it was. That is the piece that cannot
+//!   be faked from outside: the only way that hypercall happens is if the CPU
+//!   really took the vector through the guest's own interrupt table.
 //!
 //! # The guest
 //!
-//! Three bytes, in real mode, chosen so that each exit is unambiguous:
+//! Assembled by the toolchain rather than written out as hex. Every guest this
+//! project has run until now was hand-assembled bytes — four of them here, and
+//! seventy-three in `hv2`'s first unikernel — and hand-assembly is why they
+//! stayed four bytes long. `.code16` in a section of its own costs nothing and
+//! removes the ceiling.
 //!
-//! ```text
-//!   0F 01 D9   vmmcall    -> VMEXIT_VMMCALL (0x81). Nothing else produces it.
-//!   F4         hlt        -> VMEXIT_HLT     (0x78)
-//! ```
+//! It is real mode, because a real-mode guest needs no page tables of its own
+//! and its interrupt table is four bytes per vector at physical zero. That is
+//! not a smaller demonstration of interrupt delivery than a protected-mode IDT
+//! would be; it is the same mechanism with less scaffolding in front of it.
 //!
-//! Real mode, not long mode, because a real-mode guest needs no page tables of
-//! its own: `CR0.PE` is clear, `CS.base` points at the code, and `RIP` starts
-//! at zero. Nested paging does the guest-physical to host-physical half.
+//! # The guest has its own memory now
 //!
-//! # The nested page tables, and the bit that is easy to miss
+//! It did not. The nested page tables identity-mapped the first gigabyte, so
+//! the guest's physical address space *was* the hypervisor's, and the only
+//! reason that was survivable is that a four-byte guest touches nothing. A
+//! guest with a stack, an interrupt table and a string does touch things — its
+//! table lives at address zero — and writing that through an identity map means
+//! writing over whatever the hypervisor has at zero.
 //!
-//! The first attempt handed the guest the page tables the trampoline had
-//! already built. This image is identity mapped, so guest-physical and
-//! host-physical are the same address, and it looked like the map was free.
-//! Every entry into the guest exited immediately with `VMEXIT_NPF` — a nested
-//! page fault on the very first instruction fetch, at an address that was
-//! plainly mapped.
+//! So the tables translate: guest-physical 0 is the base of a 2 MiB region this
+//! image owns, and everything above that region is unmapped. A guest that
+//! wanders takes a nested page fault instead of editing its hypervisor, which
+//! is what the tables were always supposed to be for.
+//!
+//! # The bit that is easy to miss
 //!
 //! A nested page walk is performed as a *user-mode* access, whatever the
-//! guest's own privilege level. So every level of the nested tables needs the
-//! U/S bit, and the host's tables do not have it — nothing in a kernel's own
-//! map is user-accessible, which is the entire point of that bit. Tables built
-//! for the host are therefore never usable as nested tables, however correct
-//! their addresses are.
+//! guest's own privilege level, so every level needs the U/S bit. The first
+//! attempt at this handed the guest the trampoline's own page tables — correct
+//! addresses, identity mapped — and every entry exited immediately with
+//! `VMEXIT_NPF` on the first instruction fetch, at an address that was plainly
+//! mapped. Nothing in a kernel's own map is user-accessible, which is that
+//! bit's entire purpose.
 //!
-//! These are built separately for that reason, and would be anyway: a
-//! hypervisor that hands a guest its own page tables has given the guest a map
-//! of the hypervisor.
+//! # What only running it found, again
 //!
-//! # Why the intercepts are set by hand
+//! Two defects, both invisible to review and both one line.
 //!
-//! `svm::setup_vmcb_controls` is the crate's own helper and sets `IOIO` and
-//! `MSR` intercepts. Both of those require their bitmaps: with `INTERCEPT_IOIO`
-//! set, the hardware reads a 12 KiB I/O permission map at `IOPM_BASE_PA`, and
-//! with `INTERCEPT_MSR` an 8 KiB map at `MSRPM_BASE_PA`. The helper sets neither
+//! **`mov ax, HANDLER_OFFSET` is a load, not an immediate.** In the Intel
+//! syntax the assembler uses, a bare symbol is an *address*: the guest was
+//! assembling to `mov ax, [0x42]` and putting whatever happened to be at that
+//! address into its interrupt vector, and `mov si, [0x4c]` for the message. It
+//! assembles without a warning and it reads plausibly. The symptom was a guest
+//! that printed nothing and then triple-faulted, and the diagnosis was
+//! `objdump -m i8086` over the section — the fix is `offset`.
+//!
+//! **`IDTR` is not a protected-mode register.** Real mode consults it too, and
+//! a reset CPU has base 0 with limit 0xFFFF; `Vmcb::new()` zeroes the save
+//! area, so the guest had a vector table with a limit of *zero*. Every vector
+//! is outside a table of that size, so the injected interrupt raised #GP, which
+//! is also outside it, which is a triple fault. It presented as
+//! `VMEXIT_SHUTDOWN` at exactly the RIP the hypervisor had just set — a fault
+//! during delivery rather than anything the guest executed, which is what said
+//! to look at the delivery machinery rather than at the handler.
+//!
+//! # Why the intercept bitmaps are set by hand
+//!
+//! `svm::setup_vmcb_controls` is the crate's own helper and sets the `IOIO` and
+//! `MSR` intercepts. Both require their bitmaps: with `INTERCEPT_IOIO` set the
+//! hardware reads a 12 KiB I/O permission map at `IOPM_BASE_PA`, and with
+//! `INTERCEPT_MSR` an 8 KiB map at `MSRPM_BASE_PA`. The helper sets neither
 //! address, so a VMCB built entirely by it fails `VMRUN`'s consistency check
-//! before the guest runs. Both maps are provided here, zeroed, which is what
-//! makes the helper usable — the alternative would be to not call it and prove
-//! nothing about it.
+//! before a guest instruction runs. Both are provided here — and the I/O map is
+//! no longer all zeros, because a zero map means *nothing* is intercepted and
+//! the guest's `out` would go past this hypervisor to whatever is underneath
+//! it.
 
 use hv1_core::svm::{self, HostSaveArea, Vmcb};
 use hv1_core::vcpu::GeneralRegisters;
 
+use crate::print;
+
 /// `VMEXIT_HLT`. The guest executed `hlt` and the hypervisor asked to know.
 pub const VMEXIT_HLT: u64 = 0x78;
+/// `VMEXIT_IOIO`. The guest touched a port the I/O permission map claims.
+pub const VMEXIT_IOIO: u64 = 0x7B;
+/// `VMEXIT_CPUID`.
+pub const VMEXIT_CPUID: u64 = 0x72;
 /// `VMEXIT_VMMCALL`. A guest asking its hypervisor for something, and the one
 /// exit reason no other instruction can produce.
 pub const VMEXIT_VMMCALL: u64 = 0x81;
@@ -65,26 +112,130 @@ pub const VMEXIT_INVALID: u64 = u64::MAX;
 /// page tables did not translate.
 pub const VMEXIT_NPF: u64 = 0x400;
 
-/// The guest program. `vmmcall`, then `hlt`.
-static GUEST_CODE: [u8; 4] = [0x0F, 0x01, 0xD9, 0xF4];
+// The guest, assembled rather than spelled out in hex.
+//
+// Placed in `.text.guest16` so the linker's ordinary `.text` rule keeps it in
+// the image; it is copied into the guest's memory before entry and never
+// executed where it is linked.
+//
+// Every address inside it is written as a distance from `guest_start`, because
+// the guest runs with `CS.base` at its own load address and `RIP` at zero. A
+// label used directly would be this image's link address, which is the kind of
+// mistake that assembles cleanly and jumps into nothing.
+core::arch::global_asm!(
+    r#"
+    .section .text.guest16, "ax"
+    .code16
 
-/// Where the guest's code is placed in guest-physical memory.
+    // Absolute constants, defined before they are used. Every address inside
+    // the guest has to be a distance from its own start, because it runs with
+    // CS.base at its load address and RIP at zero -- and the assembler will not
+    // accept that subtraction written at the point of use, where it is two
+    // symbols in one operand.
+    .set HANDLER_OFFSET, handler - guest_start
+    .set MESSAGE_OFFSET, message - guest_start
+
+    .global guest_start
+guest_start:
+    // Data and stack. `mov ax, cs` is the only way a real-mode program learns
+    // where it is, and it works here because the guest is loaded low enough for
+    // its base to be a selector -- which is why GUEST_CODE_ADDR is 0x1000 and
+    // not something more comfortable.
+    mov ax, cs
+    mov ds, ax
+    xor ax, ax
+    mov ss, ax
+    mov sp, 0xF00
+
+    // The interrupt table: four bytes per vector at physical zero, offset then
+    // segment. ES is zero, so this writes the guest's own table -- which is in
+    // the guest's own memory, since the nested tables translate rather than
+    // identity-map.
+    mov es, ax
+    mov ax, offset HANDLER_OFFSET
+    mov word ptr es:[0x20 * 4], ax
+    mov ax, cs
+    mov word ptr es:[0x20 * 4 + 2], ax
+    sti
+
+    // Say hello, one intercepted `out` at a time. There is no serial port here.
+    mov si, offset MESSAGE_OFFSET
+1:
+    mov al, [si]
+    test al, al
+    jz 2f
+    mov dx, 0x3F8
+    out dx, al
+    inc si
+    jmp 1b
+2:
+    // Hypercall 1: ready.
+    mov eax, 1
+    vmmcall
+
+    // Idle, and wait to be woken. Nothing in the guest arranges this: the
+    // hypervisor sees the halt and injects the vector.
+    hlt
+
+    // Hypercall 3: back from the handler, so the `iret` returned here.
+    mov eax, 3
+    vmmcall
+3:
+    hlt
+    jmp 3b
+
+    // Hypercall 2, from inside the interrupt handler. This is the line that
+    // cannot be faked: the only way it runs is if the CPU took vector 0x20
+    // through the table written above.
+handler:
+    mov eax, 2
+    vmmcall
+    iret
+
+message:
+    .asciz "hello from a guest of hv1\n"
+    .global guest_end
+guest_end:
+    .code64
+"#
+);
+
+extern "C" {
+    static guest_start: u8;
+    static guest_end: u8;
+}
+
+/// Where the guest's code sits in *guest*-physical memory.
 ///
-/// A fixed address rather than the address of `GUEST_CODE`, because a
-/// real-mode segment base has to be reachable as `base:0` and because copying
-/// makes the guest's memory unambiguously separate from the hypervisor's own
-/// image. Identity-mapped by the trampoline's tables, which are also the
-/// nested page tables, so this guest-physical address is a host-physical one.
-const GUEST_CODE_ADDR: u64 = 0x0040_0000;
+/// 0x1000: above the interrupt table and the area a real machine's BIOS uses,
+/// and low enough that its address divided by sixteen is a real-mode selector.
+/// That second constraint is the binding one — a guest loaded at 4 MiB cannot
+/// name its own segment.
+const GUEST_CODE_ADDR: u64 = 0x1000;
+
+/// How much memory the guest has.
+const GUEST_RAM_SIZE: usize = 2 * 1024 * 1024;
+
+/// The guest's memory: a 2 MiB region this image owns.
+///
+/// Aligned to its own size so it can be mapped by a single large page, and in
+/// `.bss`, so it costs nothing in the image and the loader guarantees it reads
+/// as zero — which matters here more than usual, since the guest's interrupt
+/// table is at its address zero and an unwritten vector should be an obvious
+/// null rather than whatever was in RAM.
+#[repr(C, align(2097152))]
+struct GuestRam([u8; GUEST_RAM_SIZE]);
+static mut GUEST_RAM: GuestRam = GuestRam([0; GUEST_RAM_SIZE]);
 
 /// The host state `VMRUN` saves into and `VMEXIT` restores from.
 static mut HOST_SAVE: HostSaveArea = HostSaveArea { data: [0; 4096] };
 
-/// The I/O permission map, all zero: nothing is trapped by port.
+/// The I/O permission map: one bit per port, set to intercept.
 ///
-/// 12 KiB and page-aligned, both required. The map exists because
-/// `setup_vmcb_controls` sets `INTERCEPT_IOIO`, and with that bit set the
-/// hardware reads this map whether or not anything in it is set.
+/// Not all zeros any more. A zero map with `INTERCEPT_IOIO` set means the
+/// hardware intercepts nothing, so the guest's `out` would be executed for real
+/// — past this hypervisor, to whatever is under it. Emulating a device starts
+/// with claiming its ports.
 #[repr(C, align(4096))]
 struct Iopm([u8; 12 * 1024]);
 static mut IOPM: Iopm = Iopm([0; 12 * 1024]);
@@ -101,33 +252,41 @@ static mut VMCB: Option<Vmcb> = None;
 #[repr(C, align(4096))]
 struct PageTable([u64; 512]);
 
-/// The guest's nested page tables: PML4, PDPT and one page directory, which
-/// between them identity-map the first gigabyte with 2 MiB pages.
 static mut NPT_PML4: PageTable = PageTable([0; 512]);
 static mut NPT_PDPT: PageTable = PageTable([0; 512]);
 static mut NPT_PD: PageTable = PageTable([0; 512]);
 
-/// Present, writable, and — the one that matters — user.
-///
-/// A nested page walk is a user-mode access regardless of the guest's CPL, so
-/// an entry without `U/S` faults for every guest at every privilege level.
 const PTE_PRESENT: u64 = 1 << 0;
 const PTE_WRITE: u64 = 1 << 1;
+/// The one that matters. A nested page walk is a user-mode access regardless of
+/// the guest's CPL, so an entry without this faults for every guest at every
+/// privilege level.
 const PTE_USER: u64 = 1 << 2;
 /// A page-directory entry that maps 2 MiB directly rather than pointing at
 /// another level.
 const PTE_LARGE: u64 = 1 << 7;
 
-/// How much guest-physical address space the tables below cover.
-const NPT_COVERAGE: u64 = 1 << 30;
-/// The page size those tables map with.
-const LARGE_PAGE: u64 = 2 * 1024 * 1024;
+/// The serial port the guest writes to, and this hypervisor answers.
+const COM1: u16 = 0x3F8;
+
+/// The vector the hypervisor injects while the guest is halted.
+const TIMER_VECTOR: u64 = 0x20;
+
+/// `EVENTINJ`: an external interrupt, and the bit that makes the field mean
+/// anything.
+const INJECT_TYPE_INTR: u64 = 0 << 8;
+const INJECT_VALID: u64 = 1 << 31;
 
 /// Build the guest's nested page tables and return the root's address.
 ///
+/// One 2 MiB page, and only one: guest-physical 0 to 2 MiB translates to the
+/// region this image owns, and every guest-physical address above that is
+/// absent. A guest that runs off the end takes a nested page fault instead of
+/// finding its hypervisor there.
+///
 /// # Safety
 ///
-/// Writes the three statics above, and must be called once, before `VMRUN`.
+/// Writes the statics above, and must be called once, before `VMRUN`.
 unsafe fn build_npt() -> u64 {
     let pml4 = core::ptr::addr_of_mut!(NPT_PML4);
     let pdpt = core::ptr::addr_of_mut!(NPT_PDPT);
@@ -135,16 +294,21 @@ unsafe fn build_npt() -> u64 {
 
     (*pml4).0[0] = pdpt as u64 | PTE_PRESENT | PTE_WRITE | PTE_USER;
     (*pdpt).0[0] = pd as u64 | PTE_PRESENT | PTE_WRITE | PTE_USER;
-
-    for (i, entry) in (*pd).0.iter_mut().enumerate() {
-        let frame = i as u64 * LARGE_PAGE;
-        if frame >= NPT_COVERAGE {
-            break;
-        }
-        *entry = frame | PTE_PRESENT | PTE_WRITE | PTE_USER | PTE_LARGE;
-    }
+    (*pd).0[0] =
+        core::ptr::addr_of!(GUEST_RAM) as u64 | PTE_PRESENT | PTE_WRITE | PTE_USER | PTE_LARGE;
 
     pml4 as u64
+}
+
+/// Claim a port in the I/O permission map, so that touching it exits.
+///
+/// # Safety
+///
+/// Writes `IOPM`, before `VMRUN`.
+unsafe fn intercept_port(port: u16) {
+    let iopm = core::ptr::addr_of_mut!(IOPM);
+    let index = port as usize / 8;
+    (*iopm).0[index] |= 1 << (port % 8);
 }
 
 /// What one entry into the guest did.
@@ -153,18 +317,46 @@ pub struct Exit {
     pub code: u64,
     /// Where the guest was when it exited.
     pub rip: u64,
-    /// The guest-physical address a nested page fault was for. Meaningless for
-    /// every other exit, and reported anyway on a fault because "it faulted"
-    /// and "it faulted *there*" are different amounts of help.
-    pub fault_addr: u64,
+    /// The hardware's first exit-information word, which means something
+    /// different for every exit and is worth printing for the ones this loop
+    /// does not understand — "an unexpected exit" and "an unexpected exit whose
+    /// information word was this" are different amounts of help.
+    pub info: u64,
+    /// What the hypervisor did about it.
+    pub answer: &'static str,
 }
 
 /// What running the guest amounted to.
 pub enum Outcome {
     /// SVM is not on, so there is nothing to run a guest with.
     NotEnabled,
-    /// `VMRUN` was executed. The exits are in the order they happened.
-    Ran { first: Exit, second: Exit },
+    /// The loop ran. Everything it saw, and everything it did.
+    Ran(Transcript),
+}
+
+/// How many exits are recorded before the loop stops recording.
+///
+/// A bound rather than a `Vec`, because there is no allocator worth using here
+/// and a hypervisor whose exit log can grow without limit is a hypervisor a
+/// guest can exhaust.
+const MAX_EXITS: usize = 64;
+
+/// What the hypervisor saw and said.
+pub struct Transcript {
+    pub exits: [Exit; MAX_EXITS],
+    pub count: usize,
+    /// Bytes the guest wrote to its serial port, and how many.
+    pub console: [u8; 128],
+    pub console_len: usize,
+    /// The hypercall numbers the guest made, in order.
+    pub calls: [u32; 16],
+    pub call_count: usize,
+    /// Whether the injected interrupt reached the guest's own handler.
+    pub interrupt_handled: bool,
+    /// Whether the guest resumed after the handler returned.
+    pub resumed: bool,
+    /// Why the loop stopped.
+    pub stopped: &'static str,
 }
 
 /// Attributes for a real-mode code segment: present, ring 0, code,
@@ -184,7 +376,33 @@ const EFER_SVME: u64 = 1 << 12;
 /// Flush the whole TLB on entry. Correct on a first entry and cheap after.
 const TLB_FLUSH_ALL: u8 = 1;
 
-/// Run the guest, twice.
+/// Instruction lengths, for stepping over an intercepted instruction when the
+/// hardware did not say how long it was.
+///
+/// `next_rip` is filled in by every AMD part that has the decode assists, and
+/// is used in preference; these are the fallback. Getting this wrong does not
+/// crash — it re-executes the instruction forever, which is the classic way an
+/// exit loop becomes an infinite one, so the guest's instructions are named
+/// rather than guessed at by a general decoder that is not here.
+const LEN_VMMCALL: u64 = 3;
+const LEN_HLT: u64 = 1;
+const LEN_CPUID: u64 = 2;
+
+/// Step over the instruction that exited.
+///
+/// `next_rip` when the hardware provided one, and the known length otherwise. A
+/// zero `next_rip` means the field was not written, not that the guest is about
+/// to execute at zero.
+fn step_over(vmcb: &Vmcb, fallback: u64) -> u64 {
+    let next = vmcb.control.next_rip;
+    if next > vmcb.save.rip {
+        next
+    } else {
+        vmcb.save.rip.wrapping_add(fallback)
+    }
+}
+
+/// Run the guest until it is done, answering everything it does.
 ///
 /// # Safety
 ///
@@ -196,14 +414,18 @@ pub unsafe fn run() -> Outcome {
         return Outcome::NotEnabled;
     }
 
-    // Copy the guest's program to where the guest will look for it. Not a
-    // reference to the static: a guest reading its own code out of the
-    // hypervisor's image would be a guest sharing memory with its hypervisor,
-    // which is the one thing this whole layer exists to prevent.
-    let dest = GUEST_CODE_ADDR as *mut u8;
-    for (i, byte) in GUEST_CODE.iter().enumerate() {
-        core::ptr::write_volatile(dest.add(i), *byte);
+    // Copy the guest into the guest's own memory. Not a reference to the
+    // section it was linked in: a guest executing out of its hypervisor's image
+    // is a guest sharing memory with its hypervisor, which is the one thing
+    // this layer exists to prevent.
+    let length = core::ptr::addr_of!(guest_end) as usize - core::ptr::addr_of!(guest_start) as usize;
+    let source = core::ptr::addr_of!(guest_start);
+    let dest = (core::ptr::addr_of_mut!(GUEST_RAM) as *mut u8).add(GUEST_CODE_ADDR as usize);
+    for i in 0..length {
+        core::ptr::write_volatile(dest.add(i), core::ptr::read_volatile(source.add(i)));
     }
+
+    intercept_port(COM1);
 
     // The host save area has to exist before VMRUN: it is where the CPU puts
     // the host's own state, and its address goes in an MSR rather than the
@@ -226,7 +448,7 @@ pub unsafe fn run() -> Outcome {
     vmcb.control.msrpm_base_pa = core::ptr::addr_of!(MSRPM) as u64;
     vmcb.control.tlb_control = TLB_FLUSH_ALL;
 
-    // Guest state: real mode, at GUEST_CODE_ADDR, with nothing else set up.
+    // Guest state: real mode, entered at GUEST_CODE_ADDR.
     let save = &mut vmcb.save;
     save.cs.selector = (GUEST_CODE_ADDR >> 4) as u16;
     save.cs.base = GUEST_CODE_ADDR;
@@ -246,8 +468,22 @@ pub unsafe fn run() -> Outcome {
         seg.attrib = DATA_ATTRIB;
     }
 
+    // The real-mode interrupt vector table. Real mode still consults IDTR --
+    // it is not a protected-mode-only register -- and a reset CPU has base 0
+    // with limit 0xFFFF. `Vmcb::new()` zeroes the save area, so leaving this
+    // alone gives a table with a *zero limit*: every vector is outside it, so
+    // the first interrupt delivered is a #GP, which has no vector either, which
+    // is a triple fault.
+    //
+    // That is exactly how it presented. The guest wrote its own vector, the
+    // hypervisor injected 0x20, and the next exit was VMEXIT_SHUTDOWN with the
+    // RIP the hypervisor had just set -- a fault during delivery rather than
+    // anything the guest executed.
+    save.idtr.base = 0;
+    save.idtr.limit = 0xFFFF;
+
     save.rip = 0;
-    save.rsp = 0;
+    save.rsp = 0xF00;
     save.rflags = 0x2;
     // ET, and no PE: a real-mode guest.
     save.cr0 = 0x10;
@@ -266,43 +502,176 @@ pub unsafe fn run() -> Outcome {
     // stopping mid-word, and is why this path is the one worth exercising.
     let mut regs = GeneralRegisters::default();
 
-    // ── First entry ─────────────────────────────────────────────────────
-    let _ = svm::svm_run(vmcb, &mut regs);
-    let first = Exit {
-        code: vmcb.control.exit_code,
-        rip: vmcb.save.rip,
-        fault_addr: vmcb.control.exit_info2,
+    let mut log = Transcript {
+        exits: core::array::from_fn(|_| Exit {
+            code: 0,
+            rip: 0,
+            info: 0,
+            answer: "",
+        }),
+        count: 0,
+        console: [0; 128],
+        console_len: 0,
+        calls: [0; 16],
+        call_count: 0,
+        interrupt_handled: false,
+        resumed: false,
+        stopped: "the guest halted with nothing left to do",
     };
+    let mut halts = 0usize;
 
-    // Step over the `vmmcall` and go back in. The hardware does not advance
-    // RIP past an intercepted instruction -- that is the hypervisor's job, and
-    // getting it wrong means re-executing the same instruction forever, which
-    // is the classic way an exit loop becomes an infinite one.
-    if first.code == VMEXIT_VMMCALL {
-        vmcb.save.rip = first.rip.wrapping_add(3);
+    while log.count < MAX_EXITS {
+        vmcb.control.vmcb_clean = 0;
+        let _ = svm::svm_run(vmcb, &mut regs);
+
+        let code = vmcb.control.exit_code;
+        let rip = vmcb.save.rip;
+        let info = vmcb.control.exit_info1;
+        let answer: &'static str;
+        let mut done = false;
+
+        match code {
+            VMEXIT_IOIO => {
+                // The port and the direction come out of the exit information;
+                // the byte itself is in the guest's RAX, which is the one
+                // register the VMCB carries.
+                let info = vmcb.control.exit_info1;
+                let port = (info >> 16) as u16;
+                let is_in = info & 1 != 0;
+                if is_in {
+                    // Nothing is behind this port to read. Zero, and say so:
+                    // an emulated device that invents data is worse than one
+                    // that admits it has none.
+                    vmcb.save.rax = 0;
+                    answer = "read as zero";
+                } else if port == COM1 {
+                    let byte = vmcb.save.rax as u8;
+                    if log.console_len < log.console.len() {
+                        log.console[log.console_len] = byte;
+                        log.console_len += 1;
+                    }
+                    answer = "COM1, emulated";
+                } else {
+                    answer = "a port with nothing behind it";
+                }
+                // For an I/O intercept the next instruction's address is in
+                // exit_info2, which is architecture rather than a decode
+                // assist, so it is used directly.
+                vmcb.save.rip = vmcb.control.exit_info2;
+            }
+            VMEXIT_VMMCALL => {
+                let call = vmcb.save.rax as u32;
+                if log.call_count < log.calls.len() {
+                    log.calls[log.call_count] = call;
+                    log.call_count += 1;
+                }
+                answer = match call {
+                    1 => "the guest says it is ready",
+                    2 => {
+                        log.interrupt_handled = true;
+                        "from inside the interrupt handler"
+                    }
+                    3 => {
+                        log.resumed = true;
+                        "the handler returned and the guest carried on"
+                    }
+                    _ => "a hypercall this hypervisor does not know",
+                };
+                vmcb.save.rip = step_over(vmcb, LEN_VMMCALL);
+            }
+            VMEXIT_HLT => {
+                halts += 1;
+                vmcb.save.rip = step_over(vmcb, LEN_HLT);
+                if halts == 1 {
+                    // Wake it, through its own interrupt table. Injection is
+                    // unconditional — it does not consult the guest's IF — so
+                    // this is the hypervisor putting a vector into a guest and
+                    // not merely permitting one.
+                    vmcb.control.event_inject = TIMER_VECTOR | INJECT_TYPE_INTR | INJECT_VALID;
+                    answer = "idle — injecting vector 0x20";
+                } else {
+                    answer = "idle, and nothing left to send it";
+                    done = true;
+                }
+            }
+            VMEXIT_CPUID => {
+                // Nothing this guest asks for, and answered rather than left
+                // to fault: a hypervisor that intercepts an instruction and has
+                // no answer for it has intercepted it by accident.
+                vmcb.save.rax = 0;
+                regs.rbx = 0;
+                regs.rcx = 0;
+                regs.rdx = 0;
+                vmcb.save.rip = step_over(vmcb, LEN_CPUID);
+                answer = "answered with zeros";
+            }
+            VMEXIT_NPF => {
+                answer = "a nested page fault — the guest left its own memory";
+                log.stopped = "the guest took a nested page fault";
+                done = true;
+            }
+            VMEXIT_INVALID => {
+                answer = "VMRUN refused the VMCB";
+                log.stopped = "VMRUN refused the VMCB; no guest instruction ran";
+                done = true;
+            }
+            _ => {
+                answer = "an exit this hypervisor has nothing to say about";
+                log.stopped = "an exit the loop does not handle";
+                done = true;
+            }
+        }
+
+        log.exits[log.count] = Exit {
+            code,
+            rip,
+            info,
+            answer,
+        };
+        log.count += 1;
+
+        if done {
+            break;
+        }
     }
-    vmcb.control.vmcb_clean = 0;
 
-    let _ = svm::svm_run(vmcb, &mut regs);
-    let second = Exit {
-        code: vmcb.control.exit_code,
-        rip: vmcb.save.rip,
-        fault_addr: vmcb.control.exit_info2,
-    };
+    if log.count == MAX_EXITS {
+        log.stopped = "the exit log filled up";
+    }
 
-    Outcome::Ran { first, second }
+    Outcome::Ran(log)
+}
+
+/// Print what the hypervisor and its guest said to each other.
+pub fn report(log: &Transcript) {
+    print("hv1   the guest's console, every byte of it an intercepted out:\n");
+    print("hv1   > ");
+    for byte in &log.console[..log.console_len] {
+        // The guest's own newline would break the prefix, so it ends the line
+        // and the loop stops there.
+        if *byte == b'\n' {
+            break;
+        }
+        crate::print_byte(*byte);
+    }
+    print("\n");
 }
 
 /// A name for an exit code, for a console with no formatter.
 pub fn exit_name(code: u64) -> &'static str {
     match code {
-        VMEXIT_HLT => "VMEXIT_HLT — the guest halted",
+        VMEXIT_HLT => "VMEXIT_HLT     — the guest halted",
+        VMEXIT_IOIO => "VMEXIT_IOIO    — the guest touched a port",
+        VMEXIT_CPUID => "VMEXIT_CPUID   — the guest asked what it is running on",
         VMEXIT_VMMCALL => "VMEXIT_VMMCALL — the guest called its hypervisor",
         VMEXIT_INVALID => "VMEXIT_INVALID — VMRUN refused the VMCB; no guest instruction ran",
         0x60 => "VMEXIT_INTR",
         0x61 => "VMEXIT_NMI",
-        0x40..=0x5F => "VMEXIT_EXCP — the guest faulted",
-        VMEXIT_NPF => "VMEXIT_NPF — a nested page fault",
+        0x40..=0x5F => "VMEXIT_EXCP    — the guest faulted",
+        VMEXIT_NPF => "VMEXIT_NPF     — a nested page fault",
+        0x7F => "VMEXIT_SHUTDOWN— the guest triple-faulted",
+        0x64 => "VMEXIT_VINTR",
+        0x65 => "VMEXIT_CR0_SEL_WRITE",
         _ => "an exit this demonstration did not expect",
     }
 }

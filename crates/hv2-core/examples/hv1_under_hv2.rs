@@ -182,6 +182,15 @@ async fn main() -> std::process::ExitCode {
     let guest_ran = console.contains("VMEXIT_VMMCALL");
     let guest_resumed = console.contains("VMEXIT_HLT");
 
+    // The three things that make the loop above a hypervisor rather than an
+    // exit log, each asserted from the guest's side of the boundary: the
+    // console line was written by the guest one intercepted `out` at a time,
+    // the handler line can only be reached by the CPU taking a vector through
+    // the guest's own table, and the third only by an `iret` returning from it.
+    let emulated_a_device = console.contains("hello from a guest of hv1");
+    let delivered_an_interrupt = console.contains("the guest's own handler ran");
+    let guest_carried_on = console.contains("the handler's iret returned");
+
     println!("long mode     : {}", yes_no(long_mode));
     println!("hv1 executed  : {}", yes_no(reached_hv1));
     println!("hv1 initialised: {}", yes_no(initialised));
@@ -196,6 +205,18 @@ async fn main() -> std::process::ExitCode {
     println!(
         "resumed it    : {}  (VMEXIT_HLT, after stepping past the vmmcall)",
         yes_no(guest_resumed)
+    );
+    println!(
+        "emulated a device: {}  (the guest's line arrived one intercepted `out` at a time)",
+        yes_no(emulated_a_device)
+    );
+    println!(
+        "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
+        yes_no(delivered_an_interrupt)
+    );
+    println!(
+        "and it carried on: {}  (the handler's `iret` returned and the guest kept going)",
+        yes_no(guest_carried_on)
     );
     println!();
 
@@ -242,14 +263,15 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
-    if initialised {
+    if initialised && emulated_a_device && delivered_an_interrupt && guest_carried_on {
         println!(
-            "result        : hv1-core initialised on a real CPU, entered a guest, took an \
-             exit the guest caused, resumed it past that instruction, and took a second. \
-             That is a hypervisor hosting something — and it is still not bare metal: the \
-             layer underneath is KVM, and one four-byte real-mode guest is not an \
-             operating system."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls, injected an interrupt into it while it was halted, and let it carry on from where its own handler returned. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, AP bring-up and every real device remain untested, and the guest is real mode with one emulated port rather than an operating system."
         );
+    } else if initialised {
+        println!(
+            "result        : hv1-core initialised and entered a guest, and at least one of the three things above did not happen. The exit log says which — an exit with no answer beside it is the one to read."
+        );
+        return std::process::ExitCode::FAILURE;
     } else {
         println!(
             "result        : hv1-core executed and declined to initialise. The line above \
