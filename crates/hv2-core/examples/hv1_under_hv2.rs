@@ -197,7 +197,15 @@ async fn main() -> std::process::ExitCode {
     let drove_a_ring = console.contains("a request through a ring");
     let ring_returned = console.contains("read the reply back out of the buffer it named");
     let refused_out_of_range = console.contains("outside the guest's own memory was not followed");
-    let second_processor = console.contains("the first processor saw its work through memory");
+    let second_processor = console.contains("the first processor saw its work in shared memory");
+    // The bring-up itself, not just its result: two writes to the APIC page,
+    // decoded out of the guest's own instruction stream. The second processor
+    // could not have reached 32-bit code any other way — it was started with
+    // CR0.PE clear at a page number, so the trampoline is the only thing that
+    // could have set it.
+    let bring_up = console.contains("INIT — the other processor is held at reset")
+        && console.contains("STARTUP — the other processor begins in real mode");
+    let half_a_start = console.contains("a startup that skipped the reset was refused");
     let delivered_an_interrupt = console.contains("the guest's own handler ran");
     let guest_carried_on = console.contains("the handler's iret returned");
 
@@ -237,8 +245,16 @@ async fn main() -> std::process::ExitCode {
         yes_no(refused_out_of_range)
     );
     println!(
-        "second processor: {}  (started where the first asked, and the first saw its work in shared memory)",
+        "second processor: {}  (the first saw its work in shared memory)",
         yes_no(second_processor)
+    );
+    println!(
+        "brought up      : {}  (INIT then STARTUP written to the local APIC page, decoded from the guest's instruction stream)",
+        yes_no(bring_up)
+    );
+    println!(
+        "refused half of it: {}  (a STARTUP for a processor that had never been reset did not start one)",
+        yes_no(half_a_start)
     );
     println!(
         "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
@@ -300,11 +316,13 @@ async fn main() -> std::process::ExitCode {
         && ring_returned
         && refused_out_of_range
         && second_processor
+        && bring_up
+        && half_a_start
         && delivered_an_interrupt
         && guest_carried_on
     {
         println!(
-            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor where the first one asked and scheduled the two of them onto the one it has, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, the real bring-up protocol and every real device remain untested."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, started a second processor the way hardware does — INIT and STARTUP written to the local APIC page, faulted out of the nested tables and decoded from the guest's own instruction stream, with the second processor beginning in real mode at the page the vector named — and scheduled the two of them onto the one it has, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, and the APIC is this hypervisor's rather than a real one, so the firmware path, the real memory map and every real device remain untested."
         );
     } else if initialised {
         println!(

@@ -20,6 +20,15 @@
 //!   hypercall, and `iret`s back to where it was. That is the piece that cannot
 //!   be faked from outside: the only way that hypercall happens is if the CPU
 //!   really took the vector through the guest's own interrupt table.
+//! - **A second processor, brought up the way hardware brings one up.** The
+//!   guest writes INIT and then STARTUP to the local APIC's page. That page is
+//!   outside the nested page tables, so the write faults out here; the
+//!   instruction is decoded out of the guest's own memory, and the processor it
+//!   names is put at reset and started in real mode at the page the startup
+//!   vector carries — because a page number is the only thing a processor
+//!   coming out of reset can be told. A startup that skipped the reset is
+//!   refused, which real parts do not do and a hypervisor that *is* the APIC
+//!   can.
 //!
 //! # The guest
 //!
@@ -163,6 +172,17 @@ core::arch::global_asm!(
     .set AP_ENTRY_LINEAR, GUEST_BASE + ap_entry - guest_start
     .set AP_MSG_LINEAR,   GUEST_BASE + ap_message - guest_start
     .set AP_STACK_TOP,    0x8000
+    // The page a startup message names. A startup vector is a page number and
+    // nothing else, so 0x09 means 0x9000 and the trampoline has to be there
+    // before the message is sent.
+    .set AP_VECTOR,       0x09
+    .set AP_TRAMPOLINE_ADDR, AP_VECTOR << 12
+    .set AP_TRAMPOLINE_SRC,  GUEST_BASE + ap_trampoline - guest_start
+    .set AP_TRAMPOLINE_LEN,  ap_trampoline_end - ap_trampoline
+    .set GDT_PTR_LINEAR,  GUEST_BASE + gdt_pointer - guest_start
+    // The local APIC, where the architecture puts it.
+    .set APIC_ICR_LOW,    0xFEE00300
+    .set APIC_ICR_HIGH,   0xFEE00310
     .set GDT_PTR_OFFSET, gdt_pointer - guest_start
     .set IDT_PTR_LINEAR, GUEST_BASE + idt_pointer - guest_start
     .set STACK_TOP,      GUEST_BASE + 0xF00
@@ -324,15 +344,40 @@ protected:
     vmmcall
 
     // ── A second processor ──────────────────────────────────────────────
-    // Hypercall 7 asks the hypervisor to start one, at the address in EBX.
-    // On hardware this would be INIT and SIPI through the local APIC; here it
-    // is a hypercall, which is a real shortcut and is labelled as one -- what
-    // is being shown is two guest processors sharing memory and a hypervisor
-    // scheduling them, not the bring-up protocol.
+    // The bring-up protocol, not a hypercall standing in for it. A processor
+    // coming out of reset is in real mode and knows one thing: the page number
+    // it was told to start at. So the trampoline goes to that page first --
+    // there is no way to hand a resetting processor an address, only a page.
+    mov esi, offset AP_TRAMPOLINE_SRC
+    mov edi, AP_TRAMPOLINE_ADDR
+    mov ecx, offset AP_TRAMPOLINE_LEN
+    rep movsb
+
     mov dword ptr [0x4000], 0
-    mov eax, 7
-    mov ebx, offset AP_ENTRY_LINEAR
-    vmmcall
+
+    // Who it is for: the other processor's local APIC identifier, in the high
+    // half of the interrupt command register. Written first, because writing
+    // the low half is what sends the message.
+    mov dword ptr [APIC_ICR_HIGH], 0x01000000
+
+    // Half the protocol first, deliberately: a startup for a processor that was
+    // never reset. Real parts do not police this and the guest would simply
+    // have started one out of an unknown state; a hypervisor that is the APIC
+    // can, and refusing it is worth showing before doing it properly.
+    mov edi, APIC_ICR_LOW
+    mov eax, 0x00004600 + AP_VECTOR
+    mov [edi], eax
+
+    // INIT, level asserted -- delivery mode 101 with bit 14 set. The processor
+    // it names goes to reset and holds there.
+    mov eax, 0x00004500
+    mov [edi], eax
+
+    // Startup, delivery mode 110, carrying the page. This is the message that
+    // makes the other processor begin executing, and it begins in real mode at
+    // the top of the page this vector names.
+    mov eax, 0x00004600 + AP_VECTOR
+    mov [edi], eax
 
     // Wait for it, yielding rather than spinning. There is one physical
     // processor under both of these, so a busy loop would never let the other
@@ -437,6 +482,34 @@ ap_entry:
 13:
     hlt
     jmp 13b
+
+    // Where the second processor actually begins: real mode, at the top of the
+    // page the startup vector named, with nothing set up. It is copied here
+    // from the guest's image and runs at AP_TRAMPOLINE_ADDR, so every address
+    // it uses is absolute -- a label of its own would be an address in the
+    // image it was assembled into, which is not where it is executing.
+    .code16
+ap_trampoline:
+    cli
+    // DS zero, so the absolute addresses below mean what they say. A processor
+    // out of reset has DS pointing at nothing in particular.
+    xor ax, ax
+    mov ds, ax
+
+    // The first processor's table. Sharing it is the point: these are two
+    // processors of one guest, and the descriptors are in memory both can see.
+    // Sixteen-bit `lgdt` loads a 24-bit base, which is enough because the
+    // table is below a megabyte -- and would silently truncate if it were not.
+    mov bx, offset GDT_PTR_LINEAR
+    lgdt [bx]
+
+    mov eax, cr0
+    or eax, 1
+    mov cr0, eax
+
+    ljmp 0x08, offset AP_ENTRY_LINEAR
+ap_trampoline_end:
+    .code32
 
 ap_message:
     .asciz "and this line is from the second processor
@@ -744,6 +817,8 @@ pub struct Transcript {
     pub ring_returned: bool,
     /// Whether a descriptor pointed outside the guest's own memory.
     pub ring_refused: bool,
+    /// Whether a startup message that skipped the reset was refused.
+    pub ap_refused: bool,
     /// Whether a second guest processor was started and ran.
     pub ap_started: bool,
     pub ap_ran: bool,
@@ -772,13 +847,89 @@ const EFER_SVME: u64 = 1 << 12;
 /// Flush the whole TLB on entry. Correct on a first entry and cheap after.
 const TLB_FLUSH_ALL: u8 = 1;
 
-/// Where the second processor's stack goes.
+/// The local APIC's page, where the architecture puts it.
 ///
-/// Above the ring's buffers and a long way from the first processor's, because
-/// two processors on one stack is one processor with a corrupted one. It has to
-/// match the guest's own idea of it, which is why the guest sets `esp` to the
-/// same number.
-const AP_STACK_TOP: u64 = 0x8000;
+/// It is outside the guest's nested page tables — those map two megabytes and
+/// stop — so a guest touching it takes a nested page fault, and that fault is
+/// how this hypervisor learns the guest wants an APIC. Nothing had to be
+/// arranged for that: the page was already absent.
+const APIC_BASE: u64 = 0xFEE0_0000;
+/// The interrupt command register. Writing the low half sends the message; the
+/// high half only says who it is for, which is why it is written first.
+const APIC_ICR_LOW: u64 = 0x300;
+const APIC_ICR_HIGH: u64 = 0x310;
+
+/// Delivery mode 101: hold the target processor at reset.
+const DELIVERY_INIT: u32 = 5;
+/// Delivery mode 110: start it, at the page in the low eight bits.
+const DELIVERY_STARTUP: u32 = 6;
+
+/// A store to the APIC page: which register, what value, and how long the
+/// instruction was so the guest can be stepped over it.
+struct Store {
+    offset: u64,
+    value: u32,
+    length: u64,
+}
+
+/// The value of one of the eight 32-bit general registers, by encoding.
+///
+/// `RAX` lives in the VMCB and the other seven live in the block `svm_run`
+/// saves, which is the whole reason this function exists rather than an index.
+/// Only `EAX` is read by this guest — it is the source of both command-register
+/// writes — so the other seven arms are a decoder table that this workload does
+/// not exercise.
+fn reg32(vmcb: &Vmcb, regs: &GeneralRegisters, which: u8) -> u32 {
+    let value = match which {
+        0 => vmcb.save.rax,
+        1 => regs.rcx,
+        2 => regs.rdx,
+        3 => regs.rbx,
+        4 => vmcb.save.rsp,
+        5 => regs.rbp,
+        6 => regs.rsi,
+        _ => regs.rdi,
+    };
+    value as u32
+}
+
+/// Decode the store that faulted on the APIC page.
+///
+/// The instruction is read out of the guest's own memory at `CS.base + RIP`,
+/// rather than out of the VMCB's fetched bytes, because the fetched bytes are a
+/// decode assist and a hypervisor that requires one does not work on the parts
+/// that lack it.
+///
+/// Two forms, because two forms are what the guest executes: a store of an
+/// immediate to an absolute address, and a store of a register through a
+/// register. Anything else returns `None` and is reported rather than guessed
+/// at — a decoder that invents a length re-executes the instruction forever.
+///
+/// # Safety
+///
+/// As `guest_slice`.
+unsafe fn decode_store(vmcb: &Vmcb, regs: &GeneralRegisters, gpa: u64) -> Option<Store> {
+    let at = vmcb.save.cs.base.wrapping_add(vmcb.save.rip);
+    let code = guest_slice(at, 10)?;
+    let offset = gpa - APIC_BASE;
+    match code[0] {
+        // C7 /0 with mod=00 rm=101: mov dword ptr [disp32], imm32.
+        0xC7 if code[1] == 0x05 => Some(Store {
+            offset,
+            value: u32::from_le_bytes([code[6], code[7], code[8], code[9]]),
+            length: 10,
+        }),
+        // 89 /r with mod=00 and an rm that is a plain register — not 100,
+        // which means a SIB byte follows, and not 101, which means a bare
+        // displacement: mov [reg], r32.
+        0x89 if code[1] >> 6 == 0 && code[1] & 7 != 4 && code[1] & 7 != 5 => Some(Store {
+            offset,
+            value: reg32(vmcb, regs, (code[1] >> 3) & 7),
+            length: 2,
+        }),
+        _ => None,
+    }
+}
 
 /// Instruction lengths, for stepping over an intercepted instruction when the
 /// hardware did not say how long it was.
@@ -791,6 +942,62 @@ const AP_STACK_TOP: u64 = 0x8000;
 const LEN_VMMCALL: u64 = 3;
 const LEN_HLT: u64 = 1;
 const LEN_CPUID: u64 = 2;
+
+/// Put a processor at reset and start it at the page a startup vector names.
+///
+/// Not a copy of the other processor's state. A processor that has just been
+/// reset is in real mode with nothing set up, and the only thing the startup
+/// message told it is a page number — so it gets a reset processor's registers,
+/// `CS` pointing at that page, and `RIP` zero. Everything it needs after that
+/// it has to find for itself, which is what the trampoline is for.
+///
+/// It shares what two processors of one guest share, and that sharing is in the
+/// controls rather than here: the same nested page tables, the same ASID, the
+/// same permission maps, all set before either of them ran.
+///
+/// # Safety
+///
+/// Zeroes the save area in place, which is what a reset is; the caller must not
+/// be running this processor at the time.
+unsafe fn start_at_reset(vmcb: &mut Vmcb, vector: u64) {
+    let save = &mut vmcb.save;
+    core::ptr::write_bytes(save as *mut _, 0, 1);
+
+    save.cs.selector = (vector << 8) as u16;
+    save.cs.base = vector << 12;
+    save.cs.limit = 0xFFFF;
+    save.cs.attrib = CODE_ATTRIB;
+
+    for seg in [
+        &mut save.ds,
+        &mut save.es,
+        &mut save.fs,
+        &mut save.gs,
+        &mut save.ss,
+    ] {
+        seg.selector = 0;
+        seg.base = 0;
+        seg.limit = 0xFFFF;
+        seg.attrib = DATA_ATTRIB;
+    }
+
+    // The real-mode vector table, for the same reason the first processor needs
+    // it: a zero limit makes the first interrupt a triple fault.
+    save.idtr.base = 0;
+    save.idtr.limit = 0xFFFF;
+
+    save.rip = 0;
+    save.rflags = 0x2;
+    save.cr0 = 0x10;
+    save.efer = EFER_SVME;
+    save.g_pat = DEFAULT_PAT;
+    save.dr6 = 0xFFFF_0FF0;
+    save.dr7 = 0x400;
+    save.cpl = 0;
+
+    vmcb.control.tlb_control = TLB_FLUSH_ALL;
+    vmcb.control.vmcb_clean = 0;
+}
 
 /// Step over the instruction that exited.
 ///
@@ -932,6 +1139,13 @@ pub unsafe fn run() -> Outcome {
     let mut runnable = [true, false];
     let mut finished = [false; VCPUS];
 
+    // The one piece of local APIC this hypervisor has: who the next command is
+    // for, and whether each processor has been held at reset. A startup message
+    // to a processor that was never reset is not the protocol, and is refused
+    // here rather than quietly obeyed.
+    let mut icr_high: u32 = 0;
+    let mut reset = [false; VCPUS];
+
     let mut log = Transcript {
         exits: core::array::from_fn(|_| Exit {
             code: 0,
@@ -952,6 +1166,7 @@ pub unsafe fn run() -> Outcome {
         ring_len: 0,
         ring_returned: false,
         ring_refused: false,
+        ap_refused: false,
         ap_started: false,
         ap_ran: false,
         ap_seen: false,
@@ -1059,24 +1274,6 @@ pub unsafe fn run() -> Outcome {
                         "the ring round trip finished"
                     }
                     6 => "and then asked for memory it does not have",
-                    7 => {
-                        // Start the second processor where the first one said.
-                        // Its state is the first one's, which is what makes it
-                        // a processor of the same guest: the same segments, the
-                        // same tables, the same memory. What differs is where
-                        // it starts and what it stands on.
-                        let entry = regs[current].rbx;
-                        let bsp = vmcb.save;
-                        let ap = vmcb_of(1);
-                        ap.save = bsp;
-                        ap.save.rip = entry;
-                        ap.save.rsp = AP_STACK_TOP;
-                        ap.save.rax = 0;
-                        ap.control.vmcb_clean = 0;
-                        runnable[1] = true;
-                        log.ap_started = true;
-                        "a second processor, started where the first one asked"
-                    }
                     9 => {
                         // Its last word. Marking it finished is what stops the
                         // yield loop below: two processors that have both said
@@ -1149,9 +1346,62 @@ pub unsafe fn run() -> Outcome {
                 answer = "answered with zeros";
             }
             VMEXIT_NPF => {
-                answer = "a nested page fault — the guest left its own memory";
-                log.stopped = "the guest took a nested page fault";
-                done = true;
+                // Two very different things arrive here. A fault on the APIC
+                // page is a device the guest is talking to and this hypervisor
+                // has to answer. A fault anywhere else is the guest off the end
+                // of its own memory, which is what the nested tables are for.
+                let gpa = vmcb.control.exit_info2;
+                if gpa & !0xFFF == APIC_BASE {
+                    match decode_store(vmcb, &regs[current], gpa) {
+                        None => {
+                            answer = "the APIC page, by an instruction this hypervisor cannot decode";
+                            log.stopped = "an APIC access this hypervisor cannot decode";
+                            done = true;
+                        }
+                        Some(store) => {
+                            answer = match store.offset {
+                                APIC_ICR_HIGH => {
+                                    icr_high = store.value;
+                                    "the command register's high half — who the next message is for"
+                                }
+                                APIC_ICR_LOW => {
+                                    let delivery = (store.value >> 8) & 7;
+                                    let target = (icr_high >> 24) as usize;
+                                    if target >= VCPUS {
+                                        "a message for a processor that does not exist"
+                                    } else if delivery == DELIVERY_INIT {
+                                        reset[target] = true;
+                                        "INIT — the other processor is held at reset"
+                                    } else if delivery == DELIVERY_STARTUP {
+                                        if reset[target] {
+                                            let vector = (store.value & 0xFF) as u64;
+                                            start_at_reset(vmcb_of(target), vector);
+                                            runnable[target] = true;
+                                            log.ap_started = true;
+                                            "STARTUP — the other processor begins in real mode at the page it names"
+                                        } else {
+                                            // Real parts do not enforce this;
+                                            // the protocol does, and a startup
+                                            // to a processor that was never
+                                            // reset means the guest skipped
+                                            // half of it.
+                                            log.ap_refused = true;
+                                            "STARTUP to a processor that was never reset — refused"
+                                        }
+                                    } else {
+                                        "a delivery mode this hypervisor does not implement"
+                                    }
+                                }
+                                _ => "an APIC register this hypervisor does not have",
+                            };
+                            vmcb.save.rip = vmcb.save.rip.wrapping_add(store.length);
+                        }
+                    }
+                } else {
+                    answer = "a nested page fault — the guest left its own memory";
+                    log.stopped = "the guest took a nested page fault";
+                    done = true;
+                }
             }
             VMEXIT_INVALID => {
                 answer = "VMRUN refused the VMCB";

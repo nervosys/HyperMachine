@@ -335,9 +335,17 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             });
             print("
 ");
+            print("hv1   half a start: ");
+            print(if log.ap_refused {
+                "a startup that skipped the reset was refused
+"
+            } else {
+                "FAILED — a startup that skipped the reset was obeyed
+"
+            });
             print("hv1   second cpu: ");
             if log.ap_started && log.ap_ran && log.ap_seen {
-                print("started, ran, and the first processor saw its work through memory
+                print("INIT and STARTUP through the APIC page, up through real mode, and the first processor saw its work in shared memory
 ");
             } else if log.ap_started {
                 print("FAILED — started and did not get where it was going

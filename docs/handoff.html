@@ -1111,22 +1111,66 @@ hv1   &gt;  <b>and a reply through the same ring</b></pre>
     one physical processor underneath both of them, so somebody has to decide
     which runs.
   </p>
-  <pre>exit 070  VMEXIT_VMMCALL  -> a second processor, started where the first asked
-exit 071  VMEXIT_HLT      -> yielded — the other processor runs
-exit 072  VMEXIT_IOIO     -> COM1, emulated  <b>x43</b>
-exit 115  VMEXIT_VMMCALL  -> the second processor ran, and is done
+  <pre>exit 074  VMEXIT_HLT      -> yielded — the other processor runs
+exit 075  VMEXIT_IOIO     -> COM1, emulated  <b>x43</b>
+exit 118  VMEXIT_VMMCALL  -> the second processor ran, and is done
 
 hv1   &gt;  <b>and this line is from the second processor</b>
-hv1   second cpu: started, ran, and the first processor saw its work through memory
-hv1   switches  : 2</pre>
+hv1   half a start: a startup that skipped the reset was refused
+hv1   second cpu : INIT and STARTUP through the APIC page, up through real mode,
+                   and the first processor saw its work in shared memory
+hv1   switches   : 2</pre>
   <p>
-    The second processor's state is a copy of the first's — same segments, same
-    tables, same memory, which is what makes it a processor of the <em>same
-    guest</em> — with its own instruction pointer and its own stack, because two
-    processors on one stack is one processor with a corrupted one. The first
-    tells the hypervisor where to start it with a hypercall; on hardware that
-    would be INIT and SIPI through the local APIC, and the shortcut is labelled
-    where it is taken.
+    It is started the way hardware starts one. The first processor writes to the
+    local APIC's page at <code>0xFEE00000</code>, which the nested page tables
+    do not map — they map two megabytes and stop — so the write faults out to
+    the hypervisor, and that fault is how hv1 learns the guest wants an APIC.
+    Nothing had to be arranged for it: the page was already absent.
+  </p>
+  <p>
+    What faults out is an address and a direction, not a value. So hv1 reads the
+    instruction back out of the guest's own memory at <code>CS.base + RIP</code>
+    and decodes it — not out of the VMCB's fetched bytes, because those are a
+    decode assist and a hypervisor that requires one does not work on the parts
+    that lack it. Two forms, because two forms are what this guest executes; a
+    third returns nothing and is reported, since a decoder that invents a length
+    re-executes the instruction forever.
+  </p>
+  <p>
+    Then the protocol. The high half of the command register says who; the low
+    half says what, and writing it is what sends the message. INIT holds the
+    other processor at reset. STARTUP carries a <em>page number</em> and nothing
+    else — which is the whole shape of the problem, because a processor coming
+    out of reset cannot be handed an address. So the first processor copies a
+    real-mode trampoline to the page it is about to name, and the second one
+    wakes at the top of that page in real mode with nothing set up, loads the
+    shared descriptor table, sets <code>CR0.PE</code> and far-jumps into the
+    32-bit code both of them run.
+  </p>
+  <p>
+    That last part is also the evidence. The second processor is started with
+    <code>CR0</code> at <code>0x10</code> — no <code>PE</code> — at a page
+    number, and the next thing seen from it is a serial write from a linear
+    address in 32-bit code. Nothing else could have set that bit.
+  </p>
+  <p>
+    And it refuses half a protocol. The guest deliberately sends a STARTUP for a
+    processor that was never reset, before doing it properly, and hv1 declines
+    to start one. Real parts do not police this; a hypervisor that <em>is</em>
+    the APIC can, and the refusal is in the log next to the bring-up that works
+    — the same shape as the descriptor pointing outside the guest's memory two
+    sections above.
+  </p>
+  <pre>exit 070  VMEXIT_NPF  -> the command register's high half — who the next message is for
+exit 071  VMEXIT_NPF  -> <b>STARTUP to a processor that was never reset — refused</b>
+exit 072  VMEXIT_NPF  -> INIT — the other processor is held at reset
+exit 073  VMEXIT_NPF  -> STARTUP — the other processor begins in real mode at the page it names</pre>
+  <p>
+    The rest is what two processors of one guest share, and it is in the
+    controls rather than in the bring-up: the same nested page tables, the same
+    ASID, the same permission maps, all set before either of them ran. Its stack
+    is its own, because two processors on one stack is one processor with a
+    corrupted one.
   </p>
   <p>
     Scheduling is: run one until it halts, then run the other. <code>hlt</code>
@@ -1148,11 +1192,34 @@ hv1   switches  : 2</pre>
       <em>"and is done"</em>, reporting every later claim as absent.
     </p>
     <p>
-      That last one is the fourth time on this page that a measuring instrument
-      failed and was briefly read as a result. A sentinel that can appear inside
+      The last of those is the fourth measuring instrument on this page to fail
+      and be briefly read as a result. A sentinel that can appear inside
       ordinary output is not a sentinel, and it is the same family of mistake as
       timing one boot, summing bytes to measure a memory bus, and a bound on an
       exit log that quietly truncated the evidence.
+    </p>
+    <p>
+      None of the four was in the hypervisor, and neither was anything else.
+      The whole APIC path — an absent page,
+      a hand-written decoder, a real-mode trampoline copied to a page number,
+      and a processor started at reset — ran correctly the first time it was
+      built. That is recorded because a page which only records failures is as
+      misleading as one which only records successes.
+    </p>
+    <p>
+      <strong>And then the sweep that was meant to confirm it did it again.</strong>
+      The verification script sums the <code>test result</code> lines with
+      <code>awk</code>. <code>protoc</code> is installed on Windows and not
+      inside WSL, so <code>hv2-api</code>'s build script failed, no test binary
+      ran, there were no lines to sum, and the summary printed
+      <code>" passed,  failed"</code> — which was briefly read as a pass, and the
+      run before it, which <em>did</em> print a number, printed 3,331 against a
+      full suite of 5,265. It had
+      been surviving on a cached build-script output from days earlier, which is
+      why it looked intermittent rather than broken. The fix is one environment
+      variable; the lesson is the same one this page keeps learning, and it is
+      now five for five: <em>an instrument that returns nothing must not be
+      allowed to look like a result.</em>
     </p>
   </div>
   <p>
@@ -1196,9 +1263,10 @@ hv1   switches  : 2</pre>
     <strong>What none of this proves.</strong> Not hardware. The layer underneath
     is KVM, so hv1 read a CPU its own hypervisor chose to show it; the firmware
     path, the real memory map, AP bring-up and every real device are hidden by
-    that. And two processors running 32-bit code with one emulated port and one
-    ring is not an operating system either — what it now has is most of the
-    machinery a small kernel uses and none of the reasons to have one.
+    that. And two processors running 32-bit code with one emulated port, one
+    ring and two APIC registers is not an operating system either — what it now
+    has is most of the machinery a small kernel uses and none of the reasons to
+    have one.
   </p>
 </section>
 
@@ -1419,8 +1487,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
           <td><span class="tag ran">ran</span> x86 hosted a guest nested under hv2: emulated its serial port,
               answered its hypercalls while it crossed into protected mode under its own descriptor tables,
               took a request through a descriptor ring and refused one pointing outside the guest's memory,
-              delivered it an interrupt through its own gates, and scheduled two of its processors onto the
-              one it has; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+              delivered it an interrupt through its own gates, and started a second processor through INIT
+              and STARTUP on an emulated APIC page — refusing a startup that skipped the reset — then
+              scheduled the two of them onto the one processor it has; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -1609,6 +1678,14 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       Git Bash rewrites <code>/var/tmp/...</code> into a Windows path.
     </li>
     <li>
+      <strong>WSL has no <code>protoc</code>, and Windows does.</strong>
+      <code>hv2-api</code>'s build script needs it, so a workspace test run
+      inside WSL fails there and runs <em>no tests at all</em> — while a cached
+      build-script output hides that for days.
+      <code>PROTOC=/var/tmp/protoc/bin/protoc</code>, and never the Windows
+      <code>protoc.exe</code>, which would be handed Linux paths.
+    </li>
+    <li>
       <strong>Pushes to master report a bypassed rule.</strong> Branch protection
       requires a pull request, the push succeeds anyway, and announces that it
       bypassed the rule. Somebody should decide which of the two is wrong.
@@ -1627,12 +1704,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Start the second processor the way hardware does.</strong> It is
-      started by a hypercall, which is a shortcut past the part that is actually
-      hard: INIT and SIPI through a local APIC, an AP starting in real mode at a
-      vector the BSP chose, and the hypervisor emulating enough of an APIC to
-      carry it. That is the difference between two vCPUs and a guest that can
-      boot an ordinary kernel.
+      <strong>Give the guest an APIC rather than two registers of one.</strong>
+      hv1 emulates the interrupt command register and nothing else, which is
+      exactly enough to start a processor and not enough to run one: no ID
+      register, no spurious vector, no timer, no end-of-interrupt. A guest that
+      reads its own APIC ID — which is how ordinary kernels tell their
+      processors apart — gets a fault this hypervisor reports and stops on.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
@@ -1649,8 +1726,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       go.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 3,331 tests and all fifteen
-      examples, run together after the second processor landed.
+      <strong>Keep the suite green.</strong> It is: 5,265 tests and all fifteen
+      examples, run together after the second processor came up through the
+      APIC. The count is higher than the 3,331 quoted an hour earlier because
+      that run had crates missing from it — which is the whole point of the
+      paragraph above.
     </li>
   </ul>
 </section>
@@ -1732,8 +1812,10 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   in 2.4&nbsp;ms, sleeps when idle, and holds three requests in the air at once
   · a fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
   builds its guest's descriptor tables, drives a ring, refuses one pointing at
-  memory it does not have, and schedules two guest processors onto the one it
-  has — nested, and still never on a machine
+  memory it does not have, and starts a second guest processor with INIT and
+  STARTUP on a faulted APIC page, refuses a startup that skipped the reset, and
+  schedules both onto the one processor it has — nested, and still never on a
+  machine
 </footer>
 
 </div>
