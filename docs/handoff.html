@@ -291,17 +291,17 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>1b7a024</dd></div>
+    <div class="fact"><dt>Master</dt><dd>d563e00</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
-    <div class="fact"><dt>Cold start</dt><dd class="good">3.1 ms</dd></div>
+    <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
     <div class="fact"><dt>Per sandbox</dt><dd class="good">0.157 MiB</dd></div>
     <div class="fact"><dt>Concurrent</dt><dd class="good">1,000</dd></div>
     <div class="fact"><dt>Idle cost</dt><dd class="good">0.3% core</dd></div>
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust, 64-bit</dd></div>
-    <div class="fact"><dt>In flight</dt><dd class="good">3 at once</dd></div>
+    <div class="fact"><dt>Scheduling</dt><dd class="good">queued, bounded</dd></div>
     <div class="fact"><dt>A model has run</dt><dd class="good">yes</dd></div>
-    <div class="fact"><dt>Per token</dt><dd class="good">417 ms</dd></div>
+    <div class="fact"><dt>Per token</dt><dd class="good">178 ms</dd></div>
     <div class="fact"><dt>Type-1</dt><dd class="hold">hosted, nested</dd></div>
   </dl>
 </header>
@@ -338,8 +338,8 @@
 model         : 16 layers, width 2048, 32 heads over 8 kv heads, vocab 128256 — 1260 MiB mapped
 agents        : 3 sandboxes, identical images — 2 hold tool:infer
 
-alpha         : "What is the capital of France? Answer in one word."   -> <b>"Paris."</b>  417 ms per token
-beta          : "What colour is the sky on a clear day? ..."           -> <b>"Blue."</b>   408 ms per token
+alpha         : "What is the capital of France? Answer in one word."   -> <b>"Paris."</b>  178 ms per token
+beta          : "What colour is the sky on a clear day? ..."           -> <b>"Blue."</b>   169 ms per token
 gamma         : asked, refused — <b>no forward pass was run</b>
 
 alpha  says   : agent done   #0x00000001 "infer: What is the capital of France?..." = "Paris."
@@ -438,6 +438,139 @@ forward passes: 51, for the 2 agents that were allowed — 1 asked and ran none<
 </section>
 
 <section>
+  <h2>What shipped: a queue, a conversation each, and a bound on both</h2>
+  <p>
+    Deciding <em>where</em> inference runs left the harder half open: a node
+    cannot run many passes at once, so somebody has to decide who goes next. The
+    first version served one agent at a time in a loop with a fresh conversation
+    per request, which is a fine proof that the parts connect and is not how a
+    node with a hundred agents on it behaves.
+  </p>
+  <p>
+    <code>hv2-infer::schedule</code> is a first-in-first-out queue, a fixed
+    number of passes in flight, and one session per agent kept between requests.
+    Two bounds, because they are two resources: <code>workers</code> bounds
+    bandwidth, and <code>context_tokens</code> bounds memory — at 64&nbsp;KiB of
+    key/value cache per token that is the figure a node is sized from, and it is
+    the one thing an agent cannot share, because it is that agent's
+    conversation. An agent over its bound is refused with the numbers in the
+    refusal and refused <em>before it takes a place in the queue</em>: a request
+    that cannot be served should not make anyone else wait for it.
+  </p>
+  <pre>scheduler     : 1 worker on 8 of 24 cores, 96 tokens of context per agent (6.0 MiB of cache)
+
+alpha  turn 1: "OK"   [waited  0.0 s, ran 4.5 s, context 23 tokens]
+alpha  turn 2: <b>"7"</b>    [waited 10.4 s, ran 4.6 s, context 49 tokens]
+beta   turn 1: "OK"   [waited 10.4 s, ran 4.5 s, context 23 tokens]
+beta   turn 2: <b>"7"</b>    [waited  4.6 s, ran 4.3 s, context 49 tokens]
+gamma  turn 1: <b>"0"</b>    [waited  4.5 s, ran 5.9 s, context 27 tokens]
+delta  turn 1: refused: no capability, never queued
+
+queue         : 5 admitted, 5 served, peak 2 waiting at once
+time          : 23.7 s of wall clock against 23.7 s of forward passes
+bound         : alpha asked again and was refused — holding 49 tokens,
+                this turn needs 48 more, and the cap is 96</pre>
+  <p>
+    <strong><code>gamma</code> is the assertion that matters.</strong> Alpha and
+    beta were each told a number and asked for it back in a second turn, and
+    answered from their own earlier turn — which is what a session kept between
+    requests is for. On its own that proves nothing: a model asked "what number
+    did I ask you to remember" might simply favour seven. So gamma holds the
+    same capability, is given only the <em>second</em> question, and does not
+    know. An agent cannot read another agent's context because there is no way
+    to name another agent's session, and this checks that rather than asserting
+    it.
+  </p>
+  <p>
+    The peak queue depth is reported and the example fails if it never exceeds
+    one. A scheduler that was never asked for two things at once has not been
+    tested, and a demonstration that quietly ran everything serially would
+    otherwise pass.
+  </p>
+</section>
+
+<section>
+  <h2>What shipped: 2.6× faster, and the obvious optimisation was not the one</h2>
+  <p>
+    The previous version of this page said to make the model faster or admit
+    what it costs. It is 2.6 times faster end to end — 470&nbsp;ms per token to
+    178 — and neither half of that came from where it was expected to.
+  </p>
+
+  <h3>Using every core was costing a quarter of the rate</h3>
+  <p>
+    A matrix-vector product spreads its rows across rayon's global pool, which
+    is sized to the machine. Over 1.25&nbsp;GiB of weights, median of five runs
+    of four passes:
+  </p>
+  <pre>   1 thread   1589.7 ms   0.77 GiB/s
+   2           799.3      1.53
+   4           479.9      2.55
+   8           346.5      3.53   <b>&lt;- the knee</b>
+  12           412.0      2.97
+  16           426.4      2.87
+  24           434.9      2.81   <b>&lt;- what the default was doing</b></pre>
+  <p>
+    It scales nearly linearly to a third of this machine's cores and then gets
+    <em>worse</em>. What limits it past there has not been established, and is
+    deliberately not asserted anywhere in the code — the finding is that all of
+    them is a bad number, not that eight is a good one. The scheduler builds its
+    own pool at a third of available parallelism, and
+    <code>examples/throughput</code> takes a thread count so the knee can be
+    found again on a different machine rather than inherited from this one.
+  </p>
+
+  <h3>AVX2 is worth 1.8×, but only once threads stop being the bottleneck</h3>
+  <p>
+    The first comparison said wider arithmetic bought nothing. It was taken at
+    24 threads, where the pass is limited by something else — so the measurement
+    was of the wrong thing, and it looked conclusive. At eight threads, same
+    moment, same process:
+  </p>
+  <div class="scroll">
+    <table>
+      <caption>One forward pass, median of five runs of four</caption>
+      <thead><tr><th></th><th>24 threads</th><th>8 threads</th></tr></thead>
+      <tbody>
+        <tr><td class="claim">scalar</td><td>388.9 ms</td><td>316.6 ms</td></tr>
+        <tr><td class="claim">AVX2 + FMA</td><td>401.9 ms</td><td><strong>176.9 ms</strong></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    So the two changes are not independent, and that is the whole lesson here:
+    widening the arithmetic is invisible until the thread count is fixed, which
+    is exactly why the first measurement of it was wrong. Two optimisations that
+    each look worthless can be worth 2.2× together, and the only way to find
+    that is to vary them together.
+  </p>
+  <p>
+    The kernel is dispatched at runtime against
+    <code>is_x86_feature_detected</code>, so a portable binary gets it and an
+    older machine still runs — <code>-C target-cpu=native</code> was the
+    alternative and produces something that dies with an illegal instruction
+    elsewhere. It is tested against the scalar version it replaces on four block
+    counts, and a second test checks the tolerance is tight enough that a single
+    dropped block would not pass as agreement. <code>HV2_INFER_SCALAR=1</code>
+    forces the narrow path, which is how the table above was measured on one
+    machine at one moment.
+  </p>
+  <div class="callout">
+    <h3>A gap this opened, and closed</h3>
+    <p>
+      The pool belongs to the scheduler, so anything calling
+      <code>Session::forward</code> directly still got the global one —
+      <code>generate</code> was still at 425&nbsp;ms per token after the fix that
+      was supposed to have halved it. Both examples now build a pool and
+      <code>Session</code>'s documentation says a direct caller has to. A
+      configuration fix applied at one layer is not applied at the layer above
+      it, and the only reason this was caught is that the end-to-end number was
+      re-measured rather than inferred from the component one.
+    </p>
+  </div>
+</section>
+
+<section>
   <h2>Run any of it in one command</h2>
   <p>
     Nothing on this page is a benchmark harness or a saved log. Each row is an
@@ -457,6 +590,10 @@ forward passes: 51, for the 2 agents that were allowed — 1 asked and ran none<
           <td>A real model answering agents that hold the capability, and refusing the one that does not</td></tr>
         <tr><td class="where">generate</td><td class="where">hv2-infer</td>
           <td>The forward pass on its own — weights, tokeniser, tokens per second</td></tr>
+        <tr><td class="where">scheduled</td><td class="where">hv2-swarm</td>
+          <td>A fleet queueing for one model, each agent holding its own conversation and bounded in how much of it</td></tr>
+        <tr><td class="where">throughput</td><td class="where">hv2-infer</td>
+          <td>What a forward pass costs, swept over thread count — how the numbers below were found</td></tr>
         <tr><td class="where">in_flight</td><td class="where">hv2-swarm</td>
           <td>Three requests outstanding at once, answered backwards, each settling its own</td></tr>
         <tr><td class="where">halt_stop_probe</td><td class="where">hv2-core</td>
@@ -648,6 +785,36 @@ hv1   &gt; <b>hello from a guest of hv1</b></pre>
     through the guest's own table, and the only way exit 30 happens is if an
     <code>iret</code> returned from it.
   </p>
+  <h3>And then the guest left real mode</h3>
+  <p>
+    A guest that stays in real mode is a program the hypervisor happens to be
+    running: its interrupt table is four bytes per vector at address zero, and
+    none of the machinery an operating system needs is present. So it builds
+    its own — a descriptor table, <code>CR0.PE</code>, a far jump into 32-bit
+    code, and then an interrupt table of thirty-three eight-byte gates, each
+    with a selector, a privilege level and a present bit. The thirty-two the
+    processor reserves point at a handler that reports, so a guest that faults
+    now says so with a hypercall instead of triple-faulting into a shutdown exit
+    with no diagnostic.
+  </p>
+  <pre>exit 27  VMEXIT_VMMCALL  rip 0x0000000000000021  -> real mode, about to leave it
+exit 28  VMEXIT_VMMCALL  rip <b>0x0000000000001060</b>  -> protected mode, GDT and IDT of its own
+exit 30  VMEXIT_VMMCALL  rip 0x0000000000001074  -> from inside the interrupt handler
+exit 31  VMEXIT_VMMCALL  rip 0x0000000000001069  -> the handler returned and it carried on</pre>
+  <p>
+    The RIP going from <code>0x21</code> to <code>0x1060</code> is the mode
+    change seen from outside, and nothing had to be asserted for it to be
+    visible: a real-mode RIP is an offset from a segment base of
+    <code>0x1000</code>, and a protected-mode one under a flat descriptor is the
+    linear address itself.
+  </p>
+  <p>
+    Once in protected mode the guest has to know where it was loaded, so that
+    address now exists twice — in the hypervisor and in the guest's assembly. A
+    mismatch would not fail to build; it would far-jump somewhere plausible and
+    die. The assembly exports its copy as an absolute symbol and the hypervisor
+    compares them before <code>VMRUN</code> and refuses.
+  </p>
   <p>
     Two supporting changes. The guest is assembled by the toolchain in a
     <code>.code16</code> section rather than written out as hex — hand-assembly
@@ -689,9 +856,10 @@ hv1   &gt; <b>hello from a guest of hv1</b></pre>
     <strong>What none of this proves.</strong> Not hardware. The layer underneath
     is KVM, so hv1 read a CPU its own hypervisor chose to show it; the firmware
     path, the real memory map, AP bring-up and every real device are hidden by
-    that, and this guest is real mode with one emulated port rather than an
-    operating system. Every one of those gaps can be closed on the nested path,
-    and none of them has been.
+    that. And one vCPU running 32-bit code with one emulated port is not an
+    operating system either — a second vCPU and a device with a ring in it are
+    the next two steps, and both can be taken on the nested path that already
+    works.
   </p>
 </section>
 
@@ -811,10 +979,10 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
     <table>
       <thead><tr><th>Metric</th><th>CubeSandbox</th><th>HyperMachine</th><th>Evidence</th></tr></thead>
       <tbody>
-        <tr><td class="claim">Cold start, compiled 64-bit unikernel</td><td>60 ms</td><td>3.1 ms</td>
-          <td><span class="tag ran">ran</span> median of 9 boots in one process; <code>no_std</code> Rust, <code>EAX</code> carried the loader's magic</td></tr>
-        <tr><td class="claim">Cold start, 73 hand-assembled bytes</td><td>60 ms</td><td>3.4–160 ms</td>
-          <td><span class="tag ran">ran</span> five runs, one boot per process — see the correction below</td></tr>
+        <tr><td class="claim">Cold start, compiled 64-bit unikernel</td><td>60 ms</td><td>2.4 ms</td>
+          <td><span class="tag ran">ran</span> median of 9 boots in one process, 2.1–2.6 across five invocations; <code>no_std</code> Rust, <code>EAX</code> carried the loader's magic</td></tr>
+        <tr><td class="claim">Cold start, 73 hand-assembled bytes</td><td>60 ms</td><td>2.0–3.9 ms</td>
+          <td><span class="tag ran">ran</span> median of 9, five invocations — <em>less steady than the compiled guest, not faster</em></td></tr>
         <tr><td class="claim">Cold start, Linux guest</td><td>60 ms</td><td>1,014 ms</td>
           <td><span class="tag ran">ran</span> 8 runs; 988 ms of it is kernel boot</td></tr>
         <tr><td class="claim">Memory per sandbox</td><td>&lt;5 MB</td><td>0.157 MiB</td>
@@ -828,7 +996,11 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
         <tr><td class="claim">In-guest weight streaming</td><td>—</td><td>1.38 cyc/byte</td>
           <td><span class="tag ran">ran</span> warm; 12.38 cold, the difference being one nested-paging fault per page, paid once</td></tr>
         <tr><td class="claim"><strong>A model actually running</strong></td><td>yes</td><td><strong>yes</strong></td>
-          <td><span class="tag ran">ran</span> 1.24B parameters in Q8_0, 417 ms per token, answers checked</td></tr>
+          <td><span class="tag ran">ran</span> 1.24B parameters in Q8_0, 178 ms per token, answers checked</td></tr>
+        <tr><td class="claim">Inference scheduled across a fleet</td><td>—</td><td>queued, bounded</td>
+          <td><span class="tag ran">ran</span> four sandboxes, one worker, first-in-first-out; an agent over its context bound refused before queueing</td></tr>
+        <tr><td class="claim">An agent's conversation</td><td>—</td><td>its own, and only its own</td>
+          <td><span class="tag ran">ran</span> two agents recalled what they were told; a third with the same capability and no first turn did not know it</td></tr>
         <tr><td class="claim">Inference gated by capability</td><td>—</td><td>enforced</td>
           <td><span class="tag ran">ran</span> refused agent caused no forward pass, counted at the model</td></tr>
         <tr><td class="claim">Requests in flight per agent</td><td>—</td><td>3, answered out of order</td>
@@ -860,11 +1032,20 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
       doing, not a VM booting.
     </p>
     <p>
-      The number that survives is <code>rust_unikernel</code>'s, because that
-      example boots nine times <em>inside one process</em> and takes the median
-      of those: 3.1&nbsp;ms. The page's own standing lesson — "one run measures
-      whatever else the machine was doing; a median over nine does not" — was
-      being applied to one example and not the other.
+      Both examples now boot nine times <em>inside one process</em> and print
+      the range beside the median, which is the half that would have caught the
+      original mistake. Three invocations of each:
+    </p>
+    <pre>73 hand-assembled bytes    2.0 - 3.9 ms median, outliers to 22 ms
+compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
+    <p>
+      Five invocations of each, spread over an afternoon on a host whose load
+      moves. The compiled guest is not slower than the hand-assembled one and is
+      considerably steadier — a firmer version of a claim
+      this project has been making since the Rust guest existed, and one that
+      needed the measurement fixed before it could be made at all. The spread is
+      almost entirely the provision phase, which ranges from 0.78 to
+      23.6&nbsp;ms across nine boots of the same image in the same process.
     </p>
   </div>
   <p>
@@ -884,15 +1065,18 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
       <tbody>
         <tr><td class="claim">Unikernel</td><td class="where">BootSource::Raw, ::Multiboot</td>
           <td><span class="tag ran">ran</span> 73 hand-assembled bytes at 2.67 ms; a compiled 64-bit
-              <code>no_std</code> Rust guest at 3.1 ms, with a driver, an IDT, a heap and a framed protocol</td></tr>
+              <code>no_std</code> Rust guest at 2.4 ms, with a driver, an IDT, a heap and a framed protocol</td></tr>
         <tr><td class="claim">Type-2 hosted</td><td class="where">hv2-core, KVM + WHP</td>
           <td><span class="tag ran">ran</span> Linux 6.6.52 booted, command run via the API</td></tr>
         <tr><td class="claim">Agent sandbox</td><td class="where">hv2-sandbox, hv2-swarm, hv2-infer</td>
           <td><span class="tag ran">ran</span> namespaces, pivot_root, cgroup v2, job objects — and a real
-              model answering agents that hold the capability</td></tr>
+              model, queued for and bounded, answering agents that hold the capability, each holding a
+              conversation no other agent can name</td></tr>
         <tr><td class="claim">Type-1 bare metal</td><td class="where">hv1-core, hv1-arm</td>
-          <td><span class="tag ran">ran</span> x86 hosted a guest nested under hv2, emulated its serial port
-              and delivered it an interrupt; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+          <td><span class="tag ran">ran</span> x86 hosted a guest nested under hv2: emulated its serial port,
+              answered its hypercalls while it crossed into protected mode under its own descriptor tables,
+              and delivered it an interrupt through its own gates; <span class="tag typed">typed</span> ARM
+              EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -943,18 +1127,34 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
     (<code>HRESULT 0x80370302</code>), so both are compilation results.
   </p>
 
-  <h3>4. Inference is one model, one request at a time</h3>
+  <h3>4. There is a queue, and no batching</h3>
   <p>
-    The measurement that decided where inference runs says a fleet has to
-    <em>schedule</em> it, and there is no scheduler: <code>inference</code> runs
-    each agent's forward pass in turn, on whatever thread asked. Batching,
-    a queue with a policy, and a bound on how much of a node's bandwidth one
-    agent may take are all absent, and they are the difference between this and
-    something a hundred agents could share. The permission graph that would gate
-    admission to such a queue already exists and already refuses.
+    A queue, a bound on passes in flight and a bound on context now exist. What
+    does not is the thing that would actually make a fleet cheap: <em>batching</em>
+    several agents' tokens into one pass. A pass reads all 1.25&nbsp;GiB of
+    weights to produce one token for one agent; the same read could produce a
+    token for each of eight agents, and that is close to an eightfold gain that
+    no amount of tuning the current shape can reach. It needs the forward pass to
+    take a batch dimension it does not have.
+  </p>
+  <p>
+    Also absent: priorities, preemption, and eviction of a cold conversation. An
+    agent that stops asking holds its cache until something drops it, and
+    nothing does.
   </p>
 
-  <h3>5. The tokeniser's pre-tokeniser is written out by hand</h3>
+  <h3>5. What limits a pass past a third of the cores is not known</h3>
+  <p>
+    Throughput scales nearly linearly to eight threads on this host and then
+    degrades. The scheduler avoids the bad region, which is enough to be worth
+    doing and is not the same as understanding it — it could be memory
+    bandwidth, cache contention between the shared weights and each agent's
+    activations, rayon's own scheduling, or the fact that this is a virtual
+    machine with 24 vCPUs on hardware it does not own. Nothing here distinguishes
+    those, and the code says so rather than picking one.
+  </p>
+
+  <h3>6. The tokeniser's pre-tokeniser is written out by hand</h3>
   <p>
     The reference expresses the cuts as one regular expression with a lookahead;
     the <code>regex</code> crate has no lookahead, so the six rules are
@@ -966,7 +1166,7 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
     machine to compare with.
   </p>
 
-  <h3>6. Quota usage does not survive a restart</h3>
+  <h3>7. Quota usage does not survive a restart</h3>
   <p>
     <code>GovernedVmHost</code> counts what it has admitted, in one process, for
     as long as it exists. A process that comes back up has admitted nothing and
@@ -1033,46 +1233,39 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
   <h2>What to do next</h2>
   <ul>
     <li>
-      <strong>Schedule inference across the fleet.</strong> This is the item the
-      bandwidth measurement asked for and the one the last handoff deferred by
-      asking where inference should run. It runs in the host; the next question
-      is who gets it when. A queue an agent is admitted to by capability, a bound
-      on how much of a node one conversation may take, and batching across agents
-      that are waiting anyway — the first two are policy the graph can already
-      express, and the third is where the throughput is.
+      <strong>Batch the forward pass.</strong> This is the largest number left
+      on the table by a wide margin. One pass reads 1.25&nbsp;GiB of weights to
+      produce one token for one agent; the same read could serve eight agents at
+      once, and a fleet is exactly the case where eight agents are waiting. It
+      needs a batch dimension through the matrix-vector products and the
+      attention, and the queue that would feed it already exists and already
+      knows who is waiting.
     </li>
     <li>
-      <strong>Make the model faster, or admit what it costs.</strong>
-      417&nbsp;ms per token is a scalar-plus-SSE dot product over 1.3&nbsp;GB,
-      parallel across rows. AVX2 and a blocked layout are the obvious factor of
-      two to four; whether that is worth doing here or whether the answer is a
-      GPU backend is a decision this measurement now informs.
+      <strong>Let a conversation be evicted.</strong> An agent holds its cache
+      until something drops it and nothing does, so a node's memory is decided
+      by how many agents have ever asked rather than by how many are active. The
+      bound refuses new turns; it does not reclaim old ones.
     </li>
     <li>
-      <strong>Let an agent hold a conversation.</strong> Each request opens a
-      fresh <code>Session</code> and drops it. An agent that remembers its own
-      context across tool calls is the thing the per-token cache figure was
-      measured for, and nothing yet keeps one alive between requests.
-    </li>
-    <li>
-      <strong>Give hv1's guest a mode and a device.</strong> It hosts real mode
-      with one emulated port. Protected or long mode, a second vCPU, and a device
-      with a ring in it are what stand between that and an operating system, and
-      every one can be built on the nested path — the two defects this session
-      found there were each invisible to review and obvious the moment something
-      executed.
+      <strong>Give hv1's guest a second vCPU and a device with a ring.</strong>
+      It crosses into protected mode under its own tables and takes an injected
+      interrupt through its own gates, which is most of what a small kernel
+      does. Two vCPUs means an AP bring-up path and a lock; a virtqueue means
+      the guest driving a device rather than writing a byte to a port. Both can
+      be built on the nested path that already works.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
       be done on this machine. It needs bare metal and a serial console, so it
-      needs somebody to decide to provide them.
+      needs somebody to decide to provide them — and it is where the firmware
+      path, the real memory map and every real device stop being hidden by a
+      hypervisor underneath.
     </li>
     <li>
-      <strong>Give <code>unikernel_boot</code> the same treatment as
-      <code>rust_unikernel</code>.</strong> Nine boots in one process and a
-      median, rather than one boot per process reported as a latency. It is a
-      few lines, and until it is done the 73-byte guest has no cold-start figure
-      worth quoting.
+      <strong>Find out what the thread knee is.</strong> Avoiding it was worth
+      1.4×, and understanding it might be worth more — or might say the ceiling
+      is real and the answer is batching after all.
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is.
@@ -1106,6 +1299,21 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
     aimed at the page tables had already appeared to confirm it.
   </p>
   <p>
+    Three more, and they are about measurement rather than about code. <strong>An
+    optimisation measured in the wrong configuration looks worthless.</strong>
+    AVX2 was tried at 24 threads, where the pass is limited by something else,
+    and bought nothing; at eight threads it is worth 1.8×. Two changes that each
+    look useless can be worth 2.2× together, and nothing but varying them
+    together finds that. <strong>A fix applied at one layer is not applied at the
+    layer above it.</strong> The thread pool belongs to the scheduler, so
+    <code>generate</code> was still slow after the fix that was supposed to have
+    halved it — caught only because the end-to-end number was re-measured
+    instead of inferred from the component one. And <strong>a positive result
+    needs a negative control.</strong> Two agents recalling a number they were
+    told proves nothing on its own; a third agent, same capability, never told,
+    answering something else is what makes it evidence.
+  </p>
+  <p>
     The strongest case is still <code>svm_run</code>, and it now has a companion.
     <code>svm_run</code>'s inline assembly had no input operands at all, so it
     read its two arguments from the wrong registers and handed <code>VMRUN</code>
@@ -1120,13 +1328,15 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
 </section>
 
 <footer>
-  master 1b7a024 · 0 open PRs · 0 open issues · suite green · a model answers
-  from inside a sandbox that had to hold the capability to ask, and the one that
-  did not caused no forward pass · a compiled 64-bit Rust unikernel boots in
-  3.1&nbsp;ms, sleeps when idle, and holds three requests in the air at once · a
-  fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
-  emulates a device for its guest and wakes it with an interrupt, nested, and has
-  still never run on a machine
+  master d563e00 · 0 open PRs · 0 open issues · suite green · a model answers
+  from inside a sandbox that had to hold the capability to ask, at
+  178&nbsp;ms&nbsp;per&nbsp;token, and the one that did not caused no forward
+  pass · a fleet queues for it, each agent holding its own conversation and
+  bounded in how much of it, and no agent can name another's · a compiled 64-bit
+  Rust unikernel boots in 2.4&nbsp;ms, sleeps when idle, and holds three requests
+  in the air at once · a fleet costs the model once plus 64&nbsp;KiB per token of
+  context · Type-1 hosts a guest that builds its own descriptor tables and
+  crosses into protected mode, nested, and has still never run on a machine
 </footer>
 
 </div>
