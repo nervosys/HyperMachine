@@ -515,6 +515,7 @@ jobs:
               uses: dtolnay/rust-toolchain@stable
               with:
                   targets: x86_64-unknown-none
+                  components: clippy
 
             - name: Cache cargo registry
               uses: actions/cache@v4
@@ -526,6 +527,19 @@ jobs:
                   key: ${{ runner.os }}-cargo-hv1-multiboot-${{ hashFiles('**/Cargo.lock') }}
                   restore-keys: |
                       ${{ runner.os }}-cargo-hv1-multiboot-
+
+            # This crate had neither clippy nor rustfmt anywhere: `hv1-clippy`
+            # covers hv1-core only, and the workspace jobs cannot see this one
+            # because it is excluded from the workspace -- so `--all` does not
+            # mean it. Most of the hypervisor's exit loop, its APIC and its
+            # scheduler live here, which put the gap in the wrong place.
+            - name: Check formatting
+              working-directory: crates/hv1-multiboot
+              run: cargo fmt -- --check
+
+            - name: Run clippy on the image
+              working-directory: crates/hv1-multiboot
+              run: cargo clippy --release -- -D warnings
 
             # From its own directory: cargo reads .cargo/config.toml from the
             # current directory upward rather than from the manifest, and this

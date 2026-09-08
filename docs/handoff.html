@@ -1617,10 +1617,34 @@ hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by<
       workspace clean, which was confirmed by installing it rather than assumed.
     </p>
     <p>
-      Four jobs looked at, three of them red, and not one of the failures was
-      introduced by the work this page describes. All four were found by running
-      them rather than by reading them. Which is the shape of the whole section:
-      <em>the checks a project does not run are the ones it fails.</em>
+      <strong>And then the crate this whole page is about turned out to have no
+      checks at all.</strong> <code>hv1-multiboot</code> is excluded from the
+      workspace &mdash; it builds for <code>x86_64-unknown-none</code> and has
+      no host build &mdash; so <code>--all</code> does not mean it. The
+      <code>hv1-clippy</code> job covers <code>hv1-core</code> only. Between
+      them, the file holding the exit loop, the APIC and the scheduler had
+      neither clippy nor rustfmt anywhere, in CI or locally.
+    </p>
+    <p>
+      Running them found three lints and thirty-two formatting deviations. Two
+      lints were mine: a constant that had gone dead because the assembly beside
+      it hard-coded the same address, and a <code>map_or(true, …)</code> that is
+      spelled <code>is_none_or</code>. The address is handed to the assembler as
+      a <code>const</code> operand now, so the number exists once instead of
+      twice. The formatting was mine too, and the cause was worth fixing rather
+      than papering over: the scripted edits had put <em>literal newlines</em>
+      inside string literals where <code>
+</code> belonged, and rustfmt's
+      answer to that is to wrap every one of those calls across four lines.
+      Thirty-two of them are escapes again, and the console output is
+      byte-identical.
+    </p>
+    <p>
+      Both checks are in that CI job now. Five jobs looked at, four of them red
+      or absent, and only two of the findings came from the work this page
+      describes. All of them were found by running the checks rather than by
+      reading them, which is the shape of the whole section: <em>the checks a
+      project does not run are the ones it fails.</em>
     </p>
   </div>
 

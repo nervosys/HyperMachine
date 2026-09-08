@@ -837,7 +837,9 @@ unsafe fn vmcb_of(index: usize) -> &'static mut Vmcb {
     if index == 0 {
         (*core::ptr::addr_of_mut!(VMCB)).as_mut().expect("vcpu 0")
     } else {
-        (*core::ptr::addr_of_mut!(VMCB_AP)).as_mut().expect("vcpu 1")
+        (*core::ptr::addr_of_mut!(VMCB_AP))
+            .as_mut()
+            .expect("vcpu 1")
     }
 }
 
@@ -912,7 +914,10 @@ unsafe fn guest_slice(at: u64, len: u64) -> Option<&'static [u8]> {
         return None;
     }
     let base = core::ptr::addr_of!(GUEST_RAM) as *const u8;
-    Some(core::slice::from_raw_parts(base.add(at as usize), len as usize))
+    Some(core::slice::from_raw_parts(
+        base.add(at as usize),
+        len as usize,
+    ))
 }
 
 /// Write `bytes` into guest-physical memory, if the whole of it fits.
@@ -1000,6 +1005,13 @@ pub struct Exit {
 }
 
 /// What running the guest amounted to.
+///
+/// `Ran` is much larger than the other two, which clippy notices. It is left
+/// that way on purpose: this is returned exactly once, by a function that has
+/// already built the `Transcript` on its own stack, so boxing it would add an
+/// allocation to a kernel path that currently makes none — and would do it for
+/// a value that is read once and dropped.
+#[allow(clippy::large_enum_variant)]
 pub enum Outcome {
     /// SVM is not on, so there is nothing to run a guest with.
     NotEnabled,
@@ -1503,7 +1515,8 @@ pub unsafe fn run() -> Outcome {
     // section it was linked in: a guest executing out of its hypervisor's image
     // is a guest sharing memory with its hypervisor, which is the one thing
     // this layer exists to prevent.
-    let length = core::ptr::addr_of!(guest_end) as usize - core::ptr::addr_of!(guest_start) as usize;
+    let length =
+        core::ptr::addr_of!(guest_end) as usize - core::ptr::addr_of!(guest_start) as usize;
     let source = core::ptr::addr_of!(guest_start);
     let dest = (core::ptr::addr_of_mut!(GUEST_RAM) as *mut u8).add(GUEST_CODE_ADDR as usize);
     for i in 0..length {
@@ -1759,8 +1772,7 @@ pub unsafe fn run() -> Outcome {
             && now() >= timer[current].due
             && vmcb.control.event_inject & INJECT_VALID == 0
         {
-            vmcb.control.event_inject =
-                timer[current].vector() | INJECT_TYPE_INTR | INJECT_VALID;
+            vmcb.control.event_inject = timer[current].vector() | INJECT_TYPE_INTR | INJECT_VALID;
             log.ticks[current] += 1;
             // How late it is. Zero when hv1 was running and could deliver on
             // time; whatever the other processor felt like when it was not.
@@ -1780,16 +1792,14 @@ pub unsafe fn run() -> Outcome {
         // there is more than one processor to give it to. One runnable
         // processor with no timer needs no interruption, and interrupting it
         // would be exits for nothing.
-        let others = (0..VCPUS)
-            .filter(|&i| runnable[i] && !finished[i])
-            .count();
+        let others = (0..VCPUS).filter(|&i| runnable[i] && !finished[i]).count();
         let mut wake: Option<u64> = if others > 1 { Some(slice_end) } else { None };
         for index in 0..VCPUS {
             if !runnable[index] || finished[index] || !timer[index].live() {
                 continue;
             }
             let due = timer[index].due;
-            if wake.map_or(true, |best| due < best) {
+            if wake.is_none_or(|best| due < best) {
                 wake = Some(due);
             }
         }
@@ -2067,7 +2077,8 @@ pub unsafe fn run() -> Outcome {
                 if gpa & !0xFFF == APIC_BASE {
                     match decode_access(vmcb, &regs[current], gpa) {
                         None => {
-                            answer = "the APIC page, by an instruction this hypervisor cannot decode";
+                            answer =
+                                "the APIC page, by an instruction this hypervisor cannot decode";
                             log.stopped = "an APIC access this hypervisor cannot decode";
                             done = true;
                         }
@@ -2093,7 +2104,9 @@ pub unsafe fn run() -> Outcome {
                                         },
                                     )
                                 }
-                                APIC_SPURIOUS => (spurious, "the spurious-interrupt vector register"),
+                                APIC_SPURIOUS => {
+                                    (spurious, "the spurious-interrupt vector register")
+                                }
                                 APIC_CURRENT => {
                                     let left = timer[current].remaining(now());
                                     if log.timer_first_read == 0 && log.timer_armed != 0 {
@@ -2104,11 +2117,13 @@ pub unsafe fn run() -> Outcome {
                                         "what is left on the timer, which is smaller every time it is asked",
                                     )
                                 }
-                                APIC_LVT_TIMER => (
-                                    timer[current].lvt,
-                                    "the timer's local vector table entry",
+                                APIC_LVT_TIMER => {
+                                    (timer[current].lvt, "the timer's local vector table entry")
+                                }
+                                _ => (
+                                    0,
+                                    "an APIC register this hypervisor does not have — read as zero",
                                 ),
-                                _ => (0, "an APIC register this hypervisor does not have — read as zero"),
                             };
                             answer = said;
                             set_reg32(vmcb, &mut regs[current], dest, value);

@@ -124,7 +124,7 @@ isr_timer:
     inc qword ptr [rip + HOST_TICKS]
     // End of interrupt. Without this the APIC leaves the vector in service and
     // never delivers another.
-    mov rdx, 0xFEE000B0
+    mov rdx, {eoi}
     xor eax, eax
     mov [rdx], eax
     pop rdx
@@ -158,7 +158,12 @@ isr_unexpected:
 1:
     hlt
     jmp 1b
-"#
+"#,
+    // The handler is assembly and cannot read a Rust constant, so the constant
+    // is handed to the assembler. Before this the address was written twice --
+    // once here as a literal and once above as `EOI` -- and the copy up there
+    // was dead, which is how clippy found it.
+    eoi = const MMIO + EOI
 );
 
 extern "C" {

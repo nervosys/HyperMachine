@@ -197,8 +197,10 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     // is a read of an architectural register.
     let id = unsafe { apic::read(apic::ID) } >> 24;
     print_dec(u64::from(id));
-    print("
-");
+    print(
+        "
+",
+    );
 
     // An interrupt table before anything can interrupt, then the APIC on, then
     // the one measurement that cannot be looked up: how fast its counter runs
@@ -218,8 +220,10 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
     print_dec(ratio.0);
     print(" timestamp ticks per ");
     print_dec(ratio.1);
-    print(" APIC ticks
-");
+    print(
+        " APIC ticks
+",
+    );
 
     // Can this processor produce an interrupt a guest cannot mask?
     //
@@ -273,8 +277,10 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
         // SAFETY: written once, before any guest runs.
         unsafe { CAN_PREEMPT_MASKED = nmi };
     } else {
-        print("the counter did not move — no unmaskable source
-");
+        print(
+            "the counter did not move — no unmaskable source
+",
+        );
     }
 
     // What the CPU says it can do, before asking hv1 what it made of it. These
@@ -361,8 +367,10 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             print_hex(asm);
             print(" and this module loads it at ");
             print_hex(rust);
-            print(" — a far jump into nothing, refused before it happened
-");
+            print(
+                " — a far jump into nothing, refused before it happened
+",
+            );
         }
         guest::Outcome::Ran(log) => {
             // Runs of identical exits are collapsed. A serial port written a
@@ -385,8 +393,10 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             }
             print("hv1   stopped: ");
             print(log.stopped);
-            print("
-");
+            print(
+                "
+",
+            );
             guest::report(&log);
 
             // The three claims, each separately checkable, in the order they
@@ -397,19 +407,25 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             } else {
                 "FAILED — the guest never reached its serial port"
             });
-            print("
-");
+            print(
+                "
+",
+            );
             print("hv1   protected : ");
             print(if log.protected_mode {
                 "the guest built a GDT and an IDT and crossed into 32-bit mode"
             } else {
                 "FAILED — the guest never reported reaching protected mode"
             });
-            print("
-");
+            print(
+                "
+",
+            );
             if log.faulted {
-                print("hv1   fault     : the guest took a processor exception of its own
-");
+                print(
+                    "hv1   fault     : the guest took a processor exception of its own
+",
+                );
             }
             print("hv1   ring      : ");
             if log.ring_len > 0 {
@@ -417,11 +433,15 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 for byte in &log.ring[..log.ring_len] {
                     print_byte(*byte);
                 }
-                print("\" through a descriptor it filled in
-");
+                print(
+                    "\" through a descriptor it filled in
+",
+                );
             } else {
-                print("FAILED — nothing arrived through the ring
-");
+                print(
+                    "FAILED — nothing arrived through the ring
+",
+                );
             }
             print("hv1   returned  : ");
             print(if log.ring_returned {
@@ -429,16 +449,20 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             } else {
                 "FAILED — the guest never came back from the ring"
             });
-            print("
-");
+            print(
+                "
+",
+            );
             print("hv1   refused   : ");
             print(if log.ring_refused {
                 "a descriptor pointing outside the guest's own memory was not followed"
             } else {
                 "FAILED — an out-of-range descriptor was followed, which is a guest reading its hypervisor"
             });
-            print("
-");
+            print(
+                "
+",
+            );
             print("hv1   apic      : ");
             print(if log.apic_enabled {
                 "software-enabled by the guest, "
@@ -458,23 +482,31 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             if log.ran_masked {
                 print("a processor ran ");
                 print_dec(log.max_in_guest);
-                print(" timestamp ticks without leaving, and hv1 could not take it back
-");
+                print(
+                    " timestamp ticks without leaving, and hv1 could not take it back
+",
+                );
                 print("hv1   late      : ");
                 print_dec(log.max_late);
-                print(" timestamp ticks, the most a tick was ever late by
-");
+                print(
+                    " timestamp ticks, the most a tick was ever late by
+",
+                );
             } else {
-                print("FAILED — no processor ever ran with interrupts off
-");
+                print(
+                    "FAILED — no processor ever ran with interrupts off
+",
+                );
             }
             print("hv1   timer     : ");
             if log.timer_counts && log.timer_served && log.ap_timer_served {
                 print_dec(log.ticks[0] as u64);
                 print(" ticks on the first processor and ");
                 print_dec(log.ticks[1] as u64);
-                print(" on the second, each on the vector it chose, both while spinning
-");
+                print(
+                    " on the second, each on the vector it chose, both while spinning
+",
+                );
                 // What used to be reported here -- the drop in the guest's
                 // own count between arming its timer and reading it back --
                 // was described as the cost of two nested exits, and stopped
@@ -492,11 +524,15 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 print_dec(log.arm_samples as u64);
                 print(" armings, ");
                 print_dec(log.arm_after_fire as u64);
-                print(" of them because its own one-shot had fired
-");
+                print(
+                    " of them because its own one-shot had fired
+",
+                );
             } else {
-                print("FAILED — the guest armed a timer and did not get what it asked for
-");
+                print(
+                    "FAILED — the guest armed a timer and did not get what it asked for
+",
+                );
             }
             print("hv1   half a start: ");
             print(if log.ap_refused {
@@ -511,32 +547,42 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 print("INIT and STARTUP through the APIC page, up through real mode, and the first processor saw its work in shared memory
 ");
             } else if log.ap_started {
-                print("FAILED — started and did not get where it was going
-");
+                print(
+                    "FAILED — started and did not get where it was going
+",
+                );
             } else {
-                print("FAILED — never started
-");
+                print(
+                    "FAILED — never started
+",
+                );
             }
             print("hv1   switches  : ");
             print_dec(log.switches as u64);
-            print(" times the hypervisor moved from one processor to the other
-");
+            print(
+                " times the hypervisor moved from one processor to the other
+",
+            );
             print("hv1   interrupt : ");
             print(if log.interrupt_handled {
                 "injected 0x20 while halted, and the guest's own handler ran"
             } else {
                 "FAILED — the vector was injected and no handler ran"
             });
-            print("
-");
+            print(
+                "
+",
+            );
             print("hv1   resumed   : ");
             print(if log.resumed {
                 "the handler's iret returned, and the guest carried on"
             } else {
                 "FAILED — the guest never came back from its handler"
             });
-            print("
-");
+            print(
+                "
+",
+            );
         }
     }
 
@@ -594,8 +640,10 @@ fn report_exit(n: usize, exit: &guest::Exit, run: usize) {
         print("  x");
         print_dec(run as u64);
     }
-    print("
-");
+    print(
+        "
+",
+    );
 }
 
 /// Read a model-specific register.
