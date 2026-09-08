@@ -2414,6 +2414,31 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
     test that would catch a validator that is merely strict.
   </p>
   <p>
+    And one more, in the other direction: not a missing check but a test that
+    was passing without running anything. <code>tensor.rs</code> has good
+    differential tests &mdash; every hand-written kernel has to agree with the
+    scalar one, which is the only property a SIMD kernel can be wrong about
+    while still producing a number &mdash; but they went through the
+    <em>dispatcher</em>, and the dispatcher picks exactly one. On a machine with
+    AVX-512 it picks <code>wider</code>, so <code>wide</code>, the AVX2 kernel,
+    was never executed by the suite here at all. The untested one is the one
+    that runs on somebody else's processor.
+  </p>
+  <p>
+    Each kernel is now called directly, under the same feature check the
+    dispatcher uses, and the test prints which it reached:
+  </p>
+  <pre>kernels exercised beyond the scalar one: ["avx2", "avx512", "avx512vnni"]</pre>
+  <p>
+    The VNNI case was worse than untested. <code>the_wide_integer_product_agrees_with_the_narrow_one</code>
+    compares <code>dot_q8_0_quant</code> against <code>dot_q8_0_quantised</code>,
+    and on a processor without VNNI the second <em>is</em> the first &mdash; so
+    the assertion is that a number equals itself, and it passes for free on
+    exactly the machines where the kernel it is named after does not exist. It
+    is left as it is, with that written above it, and the direct call is what
+    covers the kernel everywhere.
+  </p>
+  <p>
     None of this is reachable by an attacker in any sense that matters today:
     the file is a model a person names on the command line. It is worth having
     anyway, and worth stating why. A parser that aborts on a truncated file
@@ -2486,7 +2511,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,281 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,282 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current

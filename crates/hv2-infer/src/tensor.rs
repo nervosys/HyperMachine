@@ -709,6 +709,11 @@ mod tests {
     /// The integer path has to agree with the scalar integer path, which is a
     /// different question from whether either agrees with the float one.
     ///
+    /// Note what this is on a processor without VNNI: `dot_q8_0_quantised`
+    /// dispatches to `dot_q8_0_quant`, so it compares a function with itself
+    /// and passes for free. The test above calls the VNNI kernel directly under
+    /// its own feature check, which is the one that is not vacuous anywhere.
+    ///
     /// It will not match the float product — quantising the activations is a
     /// real loss of precision and pretending otherwise with a loose tolerance
     /// would hide the wide kernel being wrong. So the wide integer version is
@@ -746,6 +751,71 @@ mod tests {
             (exact - approx).abs() <= slack,
             "quantised {approx} against exact {exact}, which is not the same shape of number"
         );
+    }
+
+    /// Every kernel this processor can execute, not just the one it chooses.
+    ///
+    /// The tests above go through the dispatcher, which picks exactly one:
+    /// `wider` on a machine with AVX-512 and `wide` on a machine without. So on
+    /// any given machine one of the two hand-written kernels is never run by
+    /// the suite at all — and the one that is not run is the one whose bugs
+    /// would reach somebody else's processor rather than this one. This calls
+    /// each of them directly, under the same feature check the dispatcher uses.
+    #[test]
+    #[cfg(target_arch = "x86_64")]
+    fn every_kernel_this_processor_has_agrees_with_the_scalar_one() {
+        let mut ran = Vec::new();
+        for blocks in [1, 2, 7, 64] {
+            let (row, x) = row_and_activations(blocks);
+            let scalar = dot_q8_0_scalar(&row, &x);
+            let slack = scalar.abs().max(1.0) * 1e-4;
+
+            if is_x86_feature_detected!("avx2") && is_x86_feature_detected!("fma") {
+                // SAFETY: guarded by exactly the features it is compiled for.
+                let wide = unsafe { dot_q8_0_wide(&row, &x) };
+                assert!(
+                    (scalar - wide).abs() <= slack,
+                    "avx2, {blocks} blocks: scalar {scalar}, wide {wide}"
+                );
+                ran.push("avx2");
+            }
+            if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") {
+                // SAFETY: as above.
+                let wider = unsafe { dot_q8_0_wider(&row, &x) };
+                assert!(
+                    (scalar - wider).abs() <= slack,
+                    "avx512, {blocks} blocks: scalar {scalar}, wider {wider}"
+                );
+                ran.push("avx512");
+            }
+
+            // And the integer kernel, against the integer reference rather than
+            // the float one -- quantising the activations is a real loss of
+            // precision, and comparing across it would need a tolerance loose
+            // enough to hide a wrong kernel.
+            if is_x86_feature_detected!("avx512vnni")
+                && is_x86_feature_detected!("avx512vl")
+                && is_x86_feature_detected!("avx512bw")
+            {
+                let mut quantised = QuantAct::new();
+                quantised.fill(&x);
+                let narrow = dot_q8_0_quant(&row, &quantised);
+                // SAFETY: as above.
+                let vnni = unsafe { dot_q8_0_vnni(&row, &quantised) };
+                let slack = narrow.abs().max(1.0) * 1e-4;
+                assert!(
+                    (narrow - vnni).abs() <= slack,
+                    "vnni, {blocks} blocks: narrow {narrow}, vnni {vnni}"
+                );
+                ran.push("avx512vnni");
+            }
+        }
+        // Reported rather than asserted: a processor with neither is a real
+        // machine and this test is vacuous there, which is worth seeing in the
+        // output rather than passing silently.
+        ran.sort_unstable();
+        ran.dedup();
+        println!("kernels exercised beyond the scalar one: {ran:?}");
     }
 
     /// Summing in a different order gives a different rounding, so the tolerance
