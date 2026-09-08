@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>00b7f01</dd></div>
+    <div class="fact"><dt>Master</dt><dd>933888e</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -1061,6 +1061,47 @@ exit 31  VMEXIT_VMMCALL  rip 0x0000000000001069  -> the handler returned and it 
     die. The assembly exports its copy as an absolute symbol and the hypervisor
     compares them before <code>VMRUN</code> and refuses.
   </p>
+  <h3>And a device with a ring</h3>
+  <p>
+    Writing bytes to a port is a device in the sense that a doorbell is one: the
+    guest chooses nothing but the data. A ring is the other thing — the guest
+    picks where the buffer is, describes it in a structure of its own, and the
+    hypervisor walks what it finds there.
+  </p>
+  <pre>0x2000  avail index     requests the guest has published
+0x2002  used index      requests the device has completed
+0x2004  descriptor 0    address and length of the message going out
+0x200C  descriptor 1    address and length of the buffer for a reply</pre>
+  <p>
+    The guest copies its message into a buffer that has nothing to do with the
+    image it was assembled into — so the address in the descriptor is the only
+    way to find it — and rings a doorbell on an intercepted port. hv1 walks the
+    descriptors, reads the message out of guest memory, writes a reply into the
+    buffer the guest named, and marks the request used, all inside the exit the
+    doorbell caused.
+  </p>
+  <pre>hv1   ring     : the guest sent <b>"a request through a ring"</b> through a descriptor it filled in
+hv1   returned : the guest read the reply back out of the buffer it named
+hv1   &gt;  hello from a guest of hv1
+hv1   &gt;  <b>and a reply through the same ring</b></pre>
+  <p>
+    <strong>Every address in that paragraph came out of a structure the guest
+    wrote.</strong> A device model that follows one without checking is a guest
+    that can read and write its hypervisor's memory by putting a number in a
+    field: nested paging stops the guest reaching out on its own and does
+    nothing about the hypervisor being asked to reach out on its behalf. So the
+    guest asks for that too — a descriptor pointing at 10&nbsp;MiB, against a
+    guest that has two — and the example asserts the refusal alongside the
+    round trip, because a bounds check nobody has crossed is a bounds check
+    nobody has tested.
+  </p>
+  <p>
+    One number moved because of it: the exit log went from 64 entries to 160. A
+    serial port written a byte at a time costs one exit per character, so two
+    short lines of console are sixty exits on their own — the old bound filled
+    up mid-reply and reported the guest as never having returned. That is what
+    real device models batch to avoid.
+  </p>
   <p>
     Two supporting changes. The guest is assembled by the toolchain in a
     <code>.code16</code> section rather than written out as hex — hand-assembly
@@ -1102,10 +1143,8 @@ exit 31  VMEXIT_VMMCALL  rip 0x0000000000001069  -> the handler returned and it 
     <strong>What none of this proves.</strong> Not hardware. The layer underneath
     is KVM, so hv1 read a CPU its own hypervisor chose to show it; the firmware
     path, the real memory map, AP bring-up and every real device are hidden by
-    that. And one vCPU running 32-bit code with one emulated port is not an
-    operating system either — a second vCPU and a device with a ring in it are
-    the next two steps, and both can be taken on the nested path that already
-    works.
+    that. And one vCPU is not an operating system either — a second vCPU is the
+    next step, and it can be taken on the nested path that already works.
   </p>
 </section>
 
@@ -1325,6 +1364,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
         <tr><td class="claim">Type-1 bare metal</td><td class="where">hv1-core, hv1-arm</td>
           <td><span class="tag ran">ran</span> x86 hosted a guest nested under hv2: emulated its serial port,
               answered its hypercalls while it crossed into protected mode under its own descriptor tables,
+              took a request through a descriptor ring and refused one pointing outside the guest's memory,
               and delivered it an interrupt through its own gates; <span class="tag typed">typed</span> ARM
               EL2, and no bare metal for either</td></tr>
       </tbody>
@@ -1533,12 +1573,13 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Give hv1's guest a second vCPU and a device with a ring.</strong>
-      It crosses into protected mode under its own tables and takes an injected
-      interrupt through its own gates, which is most of what a small kernel
-      does. Two vCPUs means an AP bring-up path and a lock; a virtqueue means
-      the guest driving a device rather than writing a byte to a port. Both can
-      be built on the nested path that already works.
+      <strong>Give hv1's guest a second vCPU.</strong> It crosses into protected
+      mode under its own tables, drives a descriptor ring, and takes an injected
+      interrupt through its own gates — which is most of what a small kernel
+      does with one processor. A second means an AP bring-up path, two VMCBs,
+      and hv1 scheduling them onto the single processor it has, which is the
+      first thing it has been asked to do that is a hypervisor's own problem
+      rather than a guest's.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
@@ -1626,7 +1667,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master 00b7f01 · 0 open PRs · 0 open issues · suite green · a model answers
+  master 933888e · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
   filling and emptying between token steps — 24.4&nbsp;ms per token across eight
@@ -1636,8 +1677,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   and the agent it belonged to is told · a compiled 64-bit Rust unikernel boots
   in 2.4&nbsp;ms, sleeps when idle, and holds three requests in the air at once
   · a fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
-  hosts a guest that builds its own descriptor tables and crosses into protected
-  mode, nested, and has still never run on a machine
+  hosts a guest that builds its own descriptor tables, drives a ring, and is
+  refused when it points one at memory it does not have — nested, and still
+  never on a machine
 </footer>
 
 </div>
