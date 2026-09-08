@@ -391,6 +391,11 @@ async fn main() -> std::process::ExitCode {
         batch: 4,
         context_tokens: 96,
         answer_tokens: 24,
+        // No node-wide bound for the run above: the point of it is the queue
+        // and the conversations, and an eviction in the middle would be a
+        // second thing happening at once. The bound gets its own section at the
+        // end, where it is the only thing being shown.
+        cache_bytes: 0,
         // Zero: let the scheduler choose, which is a third of the machine
         // rather than all of it. On this host that is worth 2.2x against the
         // global pool, and the reason is in `Limits::threads`.
@@ -635,6 +640,88 @@ async fn main() -> std::process::ExitCode {
         }
     }
 
+    // ── the node's own bound, and who pays for it ───────────────────────
+    //
+    // `context_tokens` bounds one agent. This bounds the node, and they are
+    // different problems: an agent that behaves is still a problem if a
+    // thousand of them each hold a small conversation and nothing ever lets one
+    // go. A second scheduler, with room for about one conversation, over the
+    // same model — the weights are mapped once and neither scheduler copies
+    // them.
+    println!();
+    let tight = Limits {
+        batch: 2,
+        context_tokens: 96,
+        answer_tokens: 4,
+        // About one short conversation. The second fits; the third has to
+        // displace something.
+        cache_bytes: 24 * model.cache_bytes_per_token(),
+        threads: limits.threads,
+    };
+    let small = Scheduler::new(&model, tight);
+    println!(
+        "cache bound   : {:.1} MiB across the whole node — about {} tokens of context. A conversation in a lane cannot be dropped, so the total can sit above this while somebody is being served.",
+        tight.cache_bytes as f64 / (1024.0 * 1024.0),
+        tight.cache_bytes / model.cache_bytes_per_token()
+    );
+
+    // Five asks by three agents, arranged so the signal has to be right in
+    // both directions. `two` asks twice in a row, so its second answer must
+    // report `continued: true` — otherwise a flag that is always false would
+    // pass the eviction check below and mean nothing. `one` goes first and is
+    // therefore the least recently used when room is needed, so it is what gets
+    // dropped, and its last ask is where it finds out.
+    let mut kept_told = false;
+    let mut evicted_told = false;
+    for (round, who) in ["one", "two", "two", "three", "one"].iter().enumerate() {
+        match small.ask(who, "Say OK.") {
+            Ok(Ok(served)) => {
+                println!(
+                    "  ask {}         : {who} -> {:?}, continued {}, node now holding {:.1} MiB",
+                    round + 1,
+                    served.text.trim(),
+                    served.continued,
+                    small.cache_bytes() as f64 / (1024.0 * 1024.0)
+                );
+                // `two` asking twice in a row must continue; `one` asking at
+                // the end must not, because it was dropped to make room.
+                if round == 2 && served.continued {
+                    kept_told = true;
+                }
+                if round == 4 && !served.continued {
+                    evicted_told = true;
+                }
+            }
+            Ok(Err(refused)) => println!("  ask {}         : refused — {refused}", round + 1),
+            Err(e) => {
+                println!("  ask {}         : FAILED — {e}", round + 1);
+                ok = false;
+            }
+        }
+    }
+    let evictions = small.stats().evicted;
+    println!("evicted       : {evictions} conversation(s) dropped to stay inside the bound",);
+    if evictions == 0 {
+        println!("               FAILED — the bound was never enforced");
+        ok = false;
+    }
+    if !kept_told {
+        println!(
+            "               FAILED — an agent asked twice in a row and was told its conversation was new, so the flag is not reporting anything"
+        );
+        ok = false;
+    }
+    if !evicted_told {
+        println!(
+            "               FAILED — a conversation was dropped and the agent it belonged to was not told, which is the failure this signal exists to prevent"
+        );
+        ok = false;
+    } else {
+        println!(
+            "told          : `two` asking twice running got `continued: true`, and the agent whose context was dropped got `continued: false` — the flag distinguishes, which is what makes it worth reading"
+        );
+    }
+
     for plan in &PLANS {
         let _ = agents[plan.name].vm.stop().await;
     }
@@ -642,7 +729,7 @@ async fn main() -> std::process::ExitCode {
     println!();
     if ok {
         println!(
-            "result        : four sandboxes over one model, served from a first-in-first-out queue in batches that share one pass over the weights. Each kept its own conversation and could not see anyone else's; the one over its context bound was refused without taking a place in the queue, and the one without the capability never reached it."
+            "result        : four sandboxes over one model, served from a first-in-first-out queue whose lanes fill and empty between token steps. Each kept its own conversation and could not see anyone else's; the one over its own context bound was refused without taking a place in the queue; the one without the capability never reached it; and when the node's cache bound was reached, the least recently used conversation was dropped and the agent it belonged to was told."
         );
         std::process::ExitCode::SUCCESS
     } else {

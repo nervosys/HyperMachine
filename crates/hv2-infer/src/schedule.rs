@@ -85,6 +85,26 @@ pub struct Limits {
     pub context_tokens: usize,
     /// The most tokens one answer may run to.
     pub answer_tokens: usize,
+    /// How much key/value cache every conversation may hold between them, in
+    /// bytes, or zero for no bound at all.
+    ///
+    /// [`Limits::context_tokens`] bounds one agent. This bounds the node. They
+    /// are different problems: an agent that behaves is still a problem if a
+    /// thousand of them each hold a small conversation and nothing ever lets
+    /// one go. Without this, a node's memory is decided by how many agents have
+    /// *ever* asked rather than by how many are talking.
+    ///
+    /// When admitting a request would take the total past this, the
+    /// least-recently-used conversation that is not in a lane is dropped, and
+    /// dropped conversations are counted in [`Stats::evicted`]. An agent whose
+    /// conversation was dropped is not told in advance — it finds out because
+    /// its next answer comes back with [`Served::continued`] false, which is
+    /// the honest signal and the one an agent can act on.
+    ///
+    /// A gigabyte by default, which is a real number rather than "unbounded":
+    /// at 64 KiB of cache per token that is about sixteen thousand tokens of
+    /// context across the whole node.
+    pub cache_bytes: usize,
     /// Threads one forward pass may spread across, or zero to choose.
     ///
     /// Not "all of them", which is what rayon's global pool does and what this
@@ -117,6 +137,7 @@ impl Default for Limits {
             batch: 8,
             context_tokens: 2048,
             answer_tokens: 32,
+            cache_bytes: 1024 * 1024 * 1024,
             threads: 0,
         }
     }
@@ -167,6 +188,13 @@ pub struct Served {
     pub context: usize,
     /// How many conversations shared the batch this was answered in.
     pub batch: usize,
+    /// Whether this turn continued a conversation that was already there.
+    ///
+    /// False when the agent had never asked before — and, more interestingly,
+    /// false when its conversation had been evicted to make room for somebody
+    /// else's. An agent that expected to be remembered and was not learns it
+    /// here, which is the only place it could.
+    pub continued: bool,
 }
 
 /// What the queue has done.
@@ -192,6 +220,8 @@ pub struct Stats {
     /// join and leave between steps, so what there is a number of is *steps*.
     /// Against [`Stats::served`] this is what says whether batching happened.
     pub steps: usize,
+    /// Conversations dropped to keep the node inside its cache bound.
+    pub evicted: usize,
     /// The most conversations that ever shared one pass.
     ///
     /// With [`Stats::served`], this is what says whether batching happened. If
@@ -231,6 +261,12 @@ enum Stage {
     Retired,
 }
 
+/// A conversation nobody is currently using.
+struct Held {
+    session: Session,
+    last_used: Instant,
+}
+
 /// A request occupying a lane.
 struct Active {
     ticket: u64,
@@ -238,6 +274,8 @@ struct Active {
     queued_at: Instant,
     admitted_at: Instant,
     session: Session,
+    /// Whether the conversation was already going when this turn joined it.
+    continued: bool,
     turn: Vec<u32>,
     stage: Stage,
     position: usize,
@@ -256,8 +294,12 @@ struct Inner<'m> {
     /// Whether a token step is being run right now.
     stepping: bool,
     next_ticket: u64,
-    /// Conversations not currently in a lane.
-    sessions: BTreeMap<String, Session>,
+    /// Conversations not currently in a lane, and when each was last served.
+    ///
+    /// The timestamp is what makes eviction least-recently-used rather than
+    /// arbitrary: dropping whichever conversation the map happened to yield
+    /// first would be a policy nobody chose.
+    sessions: BTreeMap<String, Held>,
     /// The runner, taken by whoever is running the current step.
     runner: Option<Runner<'m>>,
     stats: Stats,
@@ -337,7 +379,31 @@ impl<'m> Scheduler<'m> {
             .expect("not poisoned")
             .sessions
             .get(agent)
-            .map_or(0, Session::len)
+            .map_or(0, |held| held.session.len())
+    }
+
+    /// Bytes of key/value cache every conversation is holding between them.
+    ///
+    /// Counts the conversations in lanes as well as the idle ones, because a
+    /// bound that ignored the ones being used would be a bound on the wrong
+    /// thing.
+    pub fn cache_bytes(&self) -> usize {
+        let inner = self.inner.lock().expect("not poisoned");
+        Self::held(&inner)
+    }
+
+    /// The same, without taking the lock.
+    fn held(inner: &Inner<'m>) -> usize {
+        inner
+            .sessions
+            .values()
+            .map(|held| held.session.cache_bytes())
+            .sum::<usize>()
+            + inner
+                .active
+                .iter()
+                .map(|lane| lane.session.cache_bytes())
+                .sum::<usize>()
     }
 
     /// Drop an agent's conversation, freeing its cache.
@@ -384,7 +450,10 @@ impl<'m> Scheduler<'m> {
         let queued_at = Instant::now();
         let ticket = {
             let mut inner = self.inner.lock().expect("not poisoned");
-            let held = inner.sessions.get(agent).map_or(0, Session::len);
+            let held = inner
+                .sessions
+                .get(agent)
+                .map_or(0, |held| held.session.len());
             if held + wanted > self.limits.context_tokens {
                 inner.stats.refused += 1;
                 return Ok(Err(Refused::ContextFull {
@@ -457,7 +526,13 @@ impl<'m> Scheduler<'m> {
                     // The pass failed. Put every conversation back and let the
                     // requests re-queue, which is all a caller could do anyway.
                     for lane in active.drain(..) {
-                        inner.sessions.insert(lane.agent.clone(), lane.session);
+                        inner.sessions.insert(
+                            lane.agent.clone(),
+                            Held {
+                                session: lane.session,
+                                last_used: Instant::now(),
+                            },
+                        );
                         inner.pending.push_back(Waiting {
                             ticket: lane.ticket,
                             agent: lane.agent,
@@ -472,7 +547,13 @@ impl<'m> Scheduler<'m> {
                         if matches!(lane.stage, Stage::Retired) {
                             let text = self.model.tokenizer.decode(&lane.produced);
                             let context = lane.session.len();
-                            inner.sessions.insert(lane.agent.clone(), lane.session);
+                            inner.sessions.insert(
+                                lane.agent.clone(),
+                                Held {
+                                    session: lane.session,
+                                    last_used: Instant::now(),
+                                },
+                            );
                             inner.done.insert(
                                 lane.ticket,
                                 Ok(Served {
@@ -483,6 +564,7 @@ impl<'m> Scheduler<'m> {
                                     ran: lane.admitted_at.elapsed(),
                                     context,
                                     batch: lane.shared,
+                                    continued: lane.continued,
                                 }),
                             );
                             inner.stats.served += 1;
@@ -517,10 +599,16 @@ impl<'m> Scheduler<'m> {
                 deferred.push_back(request);
                 continue;
             }
+            // Make room before taking the conversation, so that the agent
+            // being admitted is never the one evicted to admit it.
+            self.reclaim(inner, &request.agent);
+
             let session = inner
                 .sessions
                 .remove(&request.agent)
+                .map(|held| held.session)
                 .unwrap_or_else(|| Session::open(self.model));
+            let continued = !session.is_empty();
             let turn = chat_turn(self.model, &request.question, session.is_empty());
             let position = session.len();
             inner.active.push(Active {
@@ -529,6 +617,7 @@ impl<'m> Scheduler<'m> {
                 queued_at: request.queued_at,
                 admitted_at: Instant::now(),
                 session,
+                continued,
                 turn,
                 stage: Stage::Prompt(0),
                 position,
@@ -538,6 +627,38 @@ impl<'m> Scheduler<'m> {
         }
         while let Some(request) = deferred.pop_back() {
             inner.pending.push_front(request);
+        }
+    }
+
+    /// Drop least-recently-used conversations until the node is inside its
+    /// cache bound.
+    ///
+    /// Never one that is in a lane, and never `sparing` — the agent about to be
+    /// admitted, which would otherwise be able to evict itself and arrive with
+    /// its own context missing.
+    ///
+    /// If nothing is left to drop and the total is still over, the request is
+    /// admitted anyway. Refusing would be defensible and is not what this does:
+    /// the per-agent bound already caps any one conversation, so being over
+    /// here means the *live* conversations do not fit, and refusing service to
+    /// a fleet that is genuinely busy is worse than being over a soft bound.
+    fn reclaim(&self, inner: &mut Inner<'m>, sparing: &str) {
+        let cap = self.limits.cache_bytes;
+        if cap == 0 {
+            return;
+        }
+        while Self::held(inner) > cap {
+            let victim = inner
+                .sessions
+                .iter()
+                .filter(|(agent, held)| agent.as_str() != sparing && !held.session.is_empty())
+                .min_by_key(|(_, held)| held.last_used)
+                .map(|(agent, _)| agent.clone());
+            let Some(victim) = victim else {
+                return;
+            };
+            inner.sessions.remove(&victim);
+            inner.stats.evicted += 1;
         }
     }
 
