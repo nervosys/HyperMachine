@@ -2358,6 +2358,55 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     </p>
   </div>
 
+</section>
+
+<section>
+  <h2>The parser nobody had ever shown a bad file</h2>
+  <p>
+    The item below about the examples being the only verification has a sharper
+    version, and looking for it found something. <code>gguf.rs</code> is 409
+    lines that read a file header, a tensor table, and slices of a memory
+    mapping. It had <strong>no tests at all</strong>. Its entire exercise was
+    one person pointing it at one correct 1.2&nbsp;GB model.
+  </p>
+  <p>
+    So: seven files with headers that lie. Three of them made it panic.
+  </p>
+  <pre>a_string_longer_than_the_file      panicked: attempt to add with overflow   gguf.rs:213
+a_tensor_past_the_end              panicked: attempt to add with overflow   gguf.rs:398
+dimensions_that_overflow           panicked: attempt to multiply with overflow</pre>
+  <p>
+    All three are the same shape: a number is taken from the file and used in
+    arithmetic before anything checks it. <code>Cursor::take</code> computed
+    <code>self.at + n</code> and compared the result against the length &mdash;
+    so a string header claiming <code>u64::MAX - 16</code> bytes made the sum
+    wrap, the bounds test pass, and the slice that followed do whatever it
+    liked. <code>Gguf::bytes</code> added an offset from the file to the start
+    of the data section. <code>TensorInfo::elements</code> multiplied the
+    dimensions straight through.
+  </p>
+  <p>
+    They are checked now, and the two saturating cases saturate deliberately: a
+    corrupt tensor ends up claiming more bytes than any file holds, so it is
+    refused by the ordinary bounds check with <code>Truncated("tensor data")</code>
+    rather than by aborting the process. A fourth &mdash; <code>Vec::with_capacity(rank)</code>
+    on a <code>u32</code> read from the file, which is a 34&nbsp;GB request
+    before a single dimension has been read &mdash; did <em>not</em> panic when
+    tested, so it is capped rather than reported as a bug that was caught.
+  </p>
+  <p>
+    None of this is reachable by an attacker in any sense that matters today:
+    the file is a model a person names on the command line. It is worth having
+    anyway, and worth stating why. A parser that aborts on a truncated file
+    tells you nothing about which file or which field; every one of these now
+    returns an error naming what ran out. And this is the first code in the
+    inference stack that is checked by something other than a human running an
+    example, which is the whole point of the item below.
+  </p>
+
+</section>
+
+<section>
   <h2>What to do next</h2>
   <ul>
     <li>
@@ -2418,7 +2467,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,268 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,276 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current

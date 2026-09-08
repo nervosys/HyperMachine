@@ -164,7 +164,12 @@ impl Quant {
     /// Bytes needed for `elements` of this kind.
     pub const fn size_of(self, elements: usize) -> usize {
         let (per_block, bytes) = self.block();
-        elements / per_block * bytes
+        // Saturating for the same reason as `TensorInfo::elements`: the element
+        // count can be the saturated one, and multiplying it back up overflows.
+        match (elements / per_block).checked_mul(bytes) {
+            Some(size) => size,
+            None => usize::MAX,
+        }
     }
 }
 
@@ -183,8 +188,19 @@ pub struct TensorInfo {
 
 impl TensorInfo {
     /// Total elements.
+    ///
+    /// Saturating rather than wrapping: dimensions come out of the file, and a
+    /// corrupt set of them multiplied straight through panics under this
+    /// workspace's overflow checks. Saturating makes the tensor claim more
+    /// bytes than any file holds, so [`Gguf::bytes`] refuses it by the ordinary
+    /// path instead of by aborting.
     pub fn elements(&self) -> usize {
-        self.dims.iter().product::<u64>() as usize
+        let total = self
+            .dims
+            .iter()
+            .try_fold(1u64, |acc, &d| acc.checked_mul(d))
+            .unwrap_or(u64::MAX);
+        usize::try_from(total).unwrap_or(usize::MAX)
     }
 
     /// The length of one row: the fastest-varying dimension.
@@ -210,11 +226,16 @@ struct Cursor<'a> {
 
 impl<'a> Cursor<'a> {
     fn take(&mut self, n: usize, what: &'static str) -> Result<&'a [u8], Error> {
-        if self.at + n > self.bytes.len() {
-            return Err(Error::Truncated(what));
-        }
-        let out = &self.bytes[self.at..self.at + n];
-        self.at += n;
+        // Checked, because `n` comes out of the file. A string header claiming
+        // `u64::MAX - 16` bytes made this sum wrap, the comparison pass, and
+        // the slice below panic -- on a file, which is the one kind of input a
+        // reader should never be surprised by.
+        let end = match self.at.checked_add(n) {
+            Some(end) if end <= self.bytes.len() => end,
+            _ => return Err(Error::Truncated(what)),
+        };
+        let out = &self.bytes[self.at..end];
+        self.at = end;
         Ok(out)
     }
 
@@ -330,7 +351,12 @@ impl Gguf {
         for _ in 0..tensor_count {
             let name = cursor.string()?;
             let rank = cursor.u32()? as usize;
-            let mut dims = Vec::with_capacity(rank);
+            // Capped: `rank` is a `u32` from the file, and reserving for four
+            // billion dimensions is a 34 GB request before a single one has
+            // been read. Real ranks are one or two. The vector grows if a file
+            // genuinely has more, and the loop below runs out of file first if
+            // the number is a lie.
+            let mut dims = Vec::with_capacity(rank.min(16));
             for _ in 0..rank {
                 dims.push(cursor.u64()?);
             }
@@ -395,15 +421,214 @@ impl Gguf {
 
     /// The raw bytes of a tensor, inside the mapping.
     pub fn bytes(&self, info: &TensorInfo) -> Result<&[u8], Error> {
-        let start = self.data_at + info.offset as usize;
+        // Every one of these comes from the file: the offset, and the
+        // dimensions the length is derived from. An offset near `u64::MAX`
+        // made both of these sums wrap.
         let len = info.quant.size_of(info.elements());
-        self.map
-            .get(start..start + len)
-            .ok_or(Error::Truncated("tensor data"))
+        let start = usize::try_from(info.offset)
+            .ok()
+            .and_then(|offset| self.data_at.checked_add(offset));
+        let range = start
+            .and_then(|start| start.checked_add(len).map(|end| start..end))
+            .ok_or(Error::Truncated("tensor data"))?;
+        self.map.get(range).ok_or(Error::Truncated("tensor data"))
     }
 
     /// How large the mapping is, which is how large the model is.
     pub fn mapped_bytes(&self) -> usize {
         self.map.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// A GGUF file assembled a field at a time.
+    ///
+    /// The reader has only ever been pointed at one file: a 1.2 GB model that a
+    /// person supplies on the command line, which is correct, so nothing here
+    /// had ever been shown a header that lies. Every test below is a header
+    /// that lies.
+    #[derive(Default)]
+    struct Build {
+        bytes: Vec<u8>,
+    }
+
+    impl Build {
+        fn magic(mut self, magic: &[u8; 4]) -> Self {
+            self.bytes.extend_from_slice(magic);
+            self
+        }
+
+        fn u32(mut self, v: u32) -> Self {
+            self.bytes.extend_from_slice(&v.to_le_bytes());
+            self
+        }
+
+        fn u64(mut self, v: u64) -> Self {
+            self.bytes.extend_from_slice(&v.to_le_bytes());
+            self
+        }
+
+        fn string(self, s: &str) -> Self {
+            let mut me = self.u64(s.len() as u64);
+            me.bytes.extend_from_slice(s.as_bytes());
+            me
+        }
+
+        /// A string header claiming `len` bytes, with none of them present.
+        fn lying_string(self, len: u64) -> Self {
+            self.u64(len)
+        }
+
+        fn raw(mut self, bytes: &[u8]) -> Self {
+            self.bytes.extend_from_slice(bytes);
+            self
+        }
+
+        /// Pad to the default 32-byte alignment the reader assumes, so what
+        /// follows is where `data_at` will point.
+        fn align(mut self) -> Self {
+            while !self.bytes.len().is_multiple_of(32) {
+                self.bytes.push(0);
+            }
+            self
+        }
+
+        fn open(self) -> Result<Gguf, Error> {
+            static NEXT: AtomicU32 = AtomicU32::new(0);
+            let path = std::env::temp_dir().join(format!(
+                "hv2-infer-gguf-{}-{}.gguf",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let mut file = std::fs::File::create(&path).expect("a temporary file");
+            file.write_all(&self.bytes).expect("writing it");
+            drop(file);
+            let out = Gguf::open(&path);
+            let _ = std::fs::remove_file(&path);
+            out
+        }
+    }
+
+    #[test]
+    fn a_minimal_file_parses_and_its_tensor_can_be_read() {
+        // One F32 tensor of four elements, at offset 0 of the data section.
+        let gguf = empty_with(1, 0)
+            .string("weight")
+            .u32(1) // rank
+            .u64(4) // dims[0]
+            .u32(0) // F32
+            .u64(0) // offset
+            .align()
+            .raw(&[1u8; 16])
+            .open()
+            .expect("a well-formed file");
+
+        let info = gguf.tensor("weight").expect("the tensor");
+        assert_eq!(info.elements(), 4);
+        assert_eq!(gguf.bytes(info).expect("its bytes").len(), 16);
+    }
+
+    /// A header declaring `tensors` tensors and `kvs` metadata pairs, with
+    /// neither written yet. With both zero it is the smallest thing that is
+    /// still a GGUF file.
+    fn empty_with(tensors: u64, kvs: u64) -> Build {
+        Build::default().magic(b"GGUF").u32(3).u64(tensors).u64(kvs)
+    }
+
+    #[test]
+    fn something_that_is_not_a_gguf_is_refused() {
+        assert!(matches!(
+            Build::default().magic(b"ELF\0").u32(3).open(),
+            Err(Error::NotGguf)
+        ));
+    }
+
+    #[test]
+    fn a_version_this_reader_does_not_know_is_refused() {
+        assert!(matches!(
+            Build::default().magic(b"GGUF").u32(2).u64(0).u64(0).open(),
+            Err(Error::Version(2))
+        ));
+    }
+
+    #[test]
+    fn a_header_that_stops_early_is_refused() {
+        assert!(matches!(
+            Build::default().magic(b"GGUF").u32(3).u64(1).open(),
+            Err(Error::Truncated(_))
+        ));
+    }
+
+    /// A string header claiming more bytes than exist. The length is a `u64`
+    /// from the file and is added to the cursor position before anything checks
+    /// it, so a large enough one wraps and the bounds test passes.
+    #[test]
+    fn a_string_longer_than_the_file_is_refused_not_panicked() {
+        assert!(matches!(
+            empty_with(0, 1).lying_string(u64::MAX - 16).open(),
+            Err(Error::Truncated(_))
+        ));
+    }
+
+    /// A rank of four billion. `Vec::with_capacity` is called with it before a
+    /// single dimension has been read.
+    #[test]
+    fn an_absurd_rank_is_refused_not_allocated() {
+        assert!(matches!(
+            empty_with(1, 0)
+                .string("weight")
+                .u32(u32::MAX)
+                .u64(1)
+                .open(),
+            Err(Error::Truncated(_))
+        ));
+    }
+
+    /// Dimensions whose product does not fit. `elements()` multiplies them with
+    /// no check, and this workspace builds release with overflow checks on.
+    #[test]
+    fn dimensions_that_overflow_are_refused_not_multiplied() {
+        let gguf = empty_with(1, 0)
+            .string("weight")
+            .u32(3)
+            .u64(u64::MAX / 2)
+            .u64(4)
+            .u64(4)
+            .u32(0)
+            .u64(0)
+            .align()
+            .raw(&[0u8; 32])
+            .open();
+        match gguf {
+            // Either the file is refused outright, or it parses and the tensor
+            // reports honestly that it cannot be read.
+            Err(_) => {}
+            Ok(g) => {
+                let info = g.tensor("weight").expect("the tensor");
+                assert!(g.bytes(info).is_err(), "an unreadable tensor read as ok");
+            }
+        }
+    }
+
+    /// A tensor whose offset points past the end of the data section.
+    #[test]
+    fn a_tensor_past_the_end_is_refused_not_read() {
+        let gguf = empty_with(1, 0)
+            .string("weight")
+            .u32(1)
+            .u64(4)
+            .u32(0)
+            .u64(u64::MAX - 8) // offset
+            .align()
+            .raw(&[0u8; 16])
+            .open()
+            .expect("the header itself is well formed");
+        let info = gguf.tensor("weight").expect("the tensor");
+        assert!(matches!(gguf.bytes(info), Err(Error::Truncated(_))));
     }
 }
