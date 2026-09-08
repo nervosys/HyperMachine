@@ -1,0 +1,28 @@
+[package]
+name = "hv2-infer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A transformer forward pass over real weights, as the capability a sandbox invokes"
+publish = false
+
+[dependencies]
+# The model file is mapped, not read. That is the whole architectural point:
+# every agent in a fleet shares one read-only mapping of the weights, which is
+# the arrangement `shared_weights` measured before there were any weights to put
+# in it.
+memmap2 = { workspace = true }
+
+# One row of a matrix-vector product is independent of every other row, and a
+# 1.2-billion-parameter forward pass is 1.3 GB of weight streaming per token.
+# Scalar and single-threaded it is seconds per token; this is what makes it
+# tenths.
+rayon = "1.10"
+
+# GGUF stores Q8_0 block scales as IEEE half floats, and F16 tensors as halves
+# throughout. Converting by hand is twenty lines and a subnormal bug.
+half = "2.4"
+
+[dev-dependencies]

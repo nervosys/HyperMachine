@@ -2654,6 +2654,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hv2-infer"
+version = "1.1.0"
+dependencies = [
+ "half",
+ "memmap2",
+ "rayon",
+]
+
+[[package]]
 name = "hv2-net"
 version = "1.1.0"
 dependencies = [
@@ -2704,6 +2713,7 @@ version = "1.1.0"
 dependencies = [
  "hv2-agent-proto",
  "hv2-core",
+ "hv2-infer",
  "parking_lot",
  "serde",
  "thiserror 2.0.20",

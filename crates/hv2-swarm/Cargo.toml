@@ -25,6 +25,10 @@ tracing = { workspace = true }
 # guessing at it.
 hv2-agent-proto = { path = "../hv2-agent-proto" }
 hv2-core = { path = "../hv2-core", version = "1.1.0" }
+# The forward pass the `inference` example puts behind a capability. A
+# dev-dependency, not a dependency: the command graph decides who may invoke a
+# model and has no business knowing what one is.
+hv2-infer = { path = "../hv2-infer" }
 tokio = { workspace = true }
 # The vsock example holds a device the VM hands back behind this lock.
 parking_lot = { workspace = true }

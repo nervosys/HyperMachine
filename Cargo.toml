@@ -11,6 +11,7 @@ members = [
     "crates/hv2-sandbox",
     "crates/hv2-swarm",
     "crates/hv2-agent-proto",
+    "crates/hv2-infer",
     "crates/hv2-context",
     "crates/hv2-runtime",
     "crates/hv2-api",
@@ -32,7 +33,7 @@ members = [
 # in the HV1 jobs in ci.yml.
 #
 # hv2-unikernel is excluded for the same reason with a different cause: it is a
-# 32-bit bare-metal guest, so it has no host build at all. `hv2-core`'s
+# bare-metal guest, so it has no host build at all. `hv2-core`'s
 # `rust_unikernel` example builds it by name and boots it.
 exclude = ["crates/hv1-boot", "crates/hv2-unikernel", "crates/hv1-multiboot"]
 
