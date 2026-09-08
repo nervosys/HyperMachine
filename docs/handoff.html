@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>e00c7d5</dd></div>
+    <div class="fact"><dt>Master</dt><dd>661babf</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -301,7 +301,7 @@
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust, 64-bit</dd></div>
     <div class="fact"><dt>Scheduling</dt><dd class="good">batched, bounded</dd></div>
     <div class="fact"><dt>A model has run</dt><dd class="good">yes</dd></div>
-    <div class="fact"><dt>Per token</dt><dd class="good">27.3 ms</dd></div>
+    <div class="fact"><dt>Per token</dt><dd class="good">24.4 ms</dd></div>
     <div class="fact"><dt>Type-1</dt><dd class="hold">hosted, nested</dd></div>
   </dl>
 </header>
@@ -721,14 +721,15 @@ time      : <b>16.2 s</b> of wall clock, 100% of it someone's share of a pass</p
     counts with <em>no transformer</em> — just a sum over every byte of every
     tensor:
   </p>
-  <pre>threads  1   9.10 GiB/s      threads 12  15.01
-threads  2  13.42            threads 16  <b>15.93</b>
-threads  4  14.83            threads 24  15.83
-threads  8  14.95</pre>
+  <pre>threads  1  <b>18.74 GiB/s</b>     threads 12  18.78
+threads  2  18.25             threads 16  18.90
+threads  4  <b>20.63</b>             threads 24  19.01
+threads  6  18.47</pre>
   <p>
-    Plain reading climbs to 15&nbsp;GiB/s by four threads and stays there. It
-    does not knee. So the degradation was in how the work was handed out — and
-    the pass was running at 7&nbsp;GiB/s against a machine that reads at 15.9.
+    Reading is flat: a single thread already gets 18.7&nbsp;GiB/s and
+    twenty-four get no more. It does not knee at all. So the degradation was in
+    how the work was handed out — the pass was running at 7&nbsp;GiB/s against a
+    machine that reads at twenty.
   </p>
   <p>
     The cause was granularity. The matrix-vector product gave rayon one task per
@@ -750,9 +751,45 @@ threads  8  14.95</pre>
   </div>
   <p>
     The optimum moved from eight threads to four, and four reaches
-    15.74&nbsp;GiB/s against the 15.93 that reading alone manages. There is
-    nothing left in the single-lane case: it is memory-bound, and it is at the
-    bound.
+    17.0&nbsp;GiB/s against the 20.6 that reading alone manages — about 83%. So
+    the single-lane case is close to memory-bound with some headroom left, which
+    is a weaker claim than the one this page made first and is the one the
+    numbers support.
+  </p>
+  <div class="callout stop">
+    <h3>And that number is a correction too</h3>
+    <p>
+      This page said the pass was <em>at</em> the memory bus, against a probe
+      reporting 15.9&nbsp;GiB/s. Then the pass learned AVX-512 and came out at
+      17.0 — <em>faster than the ceiling</em>. A probe the thing under test can
+      outrun is not a ceiling, and that is how it was caught.
+    </p>
+    <p>
+      The probe summed bytes one at a time, which measures a scalar loop rather
+      than a memory system. Reading eight bytes at a time into four independent
+      accumulators: 20.6&nbsp;GiB/s at four threads, and 18.7 at <em>one</em>.
+      The instrument was the thing being measured, which is the same mistake as
+      timing one boot and calling it a cold start — twice in one page, in two
+      different disguises.
+    </p>
+  </div>
+
+  <h3>AVX-512, and a prediction that held</h3>
+  <p>
+    The previous version of this page put AVX-512 on the list with a prediction
+    attached: it should do nothing for one lane, which is limited by bytes, and
+    help the batched case, where the arithmetic had become the limit. It does.
+  </p>
+  <pre>8 lanes, 8 threads   AVX2 28.6 ms/token  ->  AVX-512 <b>24.4</b>   1.17x
+1 lane,  4 threads        73.1 ms/pass   ->          71.8   nothing</pre>
+  <p>
+    A <code>Q8_0</code> block is thirty-two weights, which is exactly two
+    512-bit registers. What it is deliberately <em>not</em> is a VNNI kernel,
+    though this CPU has <code>avx512_vnni</code> and that is the obvious shape
+    for a quantised product: VNNI wants both operands as integers and the
+    activations here are floats, so using it means quantising the activations
+    too — which changes what the model computes and belongs behind its own
+    measurement of whether the answers survive it.
   </p>
   <p>
     So the thread default now takes the batch width, because the two answers
@@ -764,7 +801,8 @@ threads  8  14.95</pre>
 lanes=8, 8 threads   <b>27.3 ms per token</b>, 36.7 tokens/s</pre>
   <p>
     Against 58.6&nbsp;ms per token before this change and 470&nbsp;ms at the
-    start of the work — seventeen times, for a fleet.
+    start of the work. AVX-512, below, takes it to 24.4 — nineteen times, for a
+    fleet.
   </p>
   <p>
     <strong>One number moved the wrong way and is worth saying so.</strong> This
@@ -1207,8 +1245,8 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
           <td><span class="tag ran">ran</span> 1.24B parameters in Q8_0, 58.6 ms per token across eight lanes and 178 ms alone, answers checked</td></tr>
         <tr><td class="claim">Conversations per pass over the weights</td><td>—</td><td>up to 8</td>
           <td><span class="tag ran">ran</span> 36.7 tokens/s across eight lanes against 11.9 on one, and the answers are identical to running them separately</td></tr>
-        <tr><td class="claim">How close a pass is to the memory bus</td><td>—</td><td>at it</td>
-          <td><span class="tag ran">ran</span> 15.74 GiB/s of weights against 15.93 GiB/s for reading the same bytes with no arithmetic</td></tr>
+        <tr><td class="claim">How close a pass is to the memory bus</td><td>—</td><td>~83%</td>
+          <td><span class="tag ran">ran</span> 17.0 GiB/s of weights against 20.6 GiB/s for reading the same bytes with no arithmetic</td></tr>
         <tr><td class="claim">Inference scheduled across a fleet</td><td>—</td><td>batched, bounded</td>
           <td><span class="tag ran">ran</span> four sandboxes, one worker, first-in-first-out; an agent over its context bound refused before queueing</td></tr>
         <tr><td class="claim">An agent's conversation</td><td>—</td><td>its own, and only its own</td>
@@ -1347,18 +1385,28 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     capability graph decides who may ask and says nothing about who goes first.
   </p>
 
-  <h3>5. AVX-512 is on this CPU and unused</h3>
+  <h3>5. The activations are floats, so VNNI cannot be used</h3>
   <p>
-    The dot product dispatches to AVX2. This machine is a Zen 5 and reports
-    <code>avx512f</code>, <code>avx512bw</code> and <code>avx512_vnni</code>,
-    the last of which multiplies and accumulates bytes in one instruction and is
-    exactly the shape of a <code>Q8_0</code> product. Untried — and the
-    single-lane case is already at the memory bus, so it would only help the
-    batched one, which is the case that matters. That is a prediction and not a
-    result, which is why it is on this list rather than in a table.
+    AVX-512 is in now and worth 1.17× on the batched case. What is not is
+    <code>avx512_vnni</code>, which multiplies and accumulates <em>bytes</em> in
+    one instruction and is the exact shape of a <code>Q8_0</code> product — it
+    wants both operands as integers, and the activations here are `f32`.
+    Quantising them too is what every serious implementation does and it changes
+    what the model computes, so it needs the answers checked before and after
+    rather than a speed measurement.
   </p>
 
-  <h3>6. The tokeniser's pre-tokeniser is written out by hand</h3>
+  <h3>6. About a fifth of the memory rate is still unclaimed</h3>
+  <p>
+    A pass reads at 17.0&nbsp;GiB/s and reading the same bytes and doing nothing
+    manages 20.6. That gap is small enough to be prefetching, the transpose
+    between the batched product and the lane-major buffers, or the per-lane work
+    that is not a matrix product at all — and nothing here distinguishes them.
+    Said as an open number rather than closed with a guess, which is what the
+    last two versions of this section got wrong.
+  </p>
+
+  <h3>7. The tokeniser's pre-tokeniser is written out by hand</h3>
   <p>
     The reference expresses the cuts as one regular expression with a lookahead;
     the <code>regex</code> crate has no lookahead, so the six rules are
@@ -1370,7 +1418,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     machine to compare with.
   </p>
 
-  <h3>7. Quota usage does not survive a restart</h3>
+  <h3>8. Quota usage does not survive a restart</h3>
   <p>
     <code>GovernedVmHost</code> counts what it has admitted, in one process, for
     as long as it exists. A process that comes back up has admitted nothing and
@@ -1437,12 +1485,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   <h2>What to do next</h2>
   <ul>
     <li>
-      <strong>Try AVX-512, and only for the batched case.</strong> This CPU has
-      <code>avx512_vnni</code>, which multiplies and accumulates bytes in one
-      instruction and is the exact shape of a <code>Q8_0</code> product. The
-      single-lane pass is already at the memory bus and cannot benefit; the
-      batched one is where the arithmetic became the limit, and it is the case a
-      fleet is in.
+      <strong>Quantise the activations, and check the answers before the
+      speed.</strong> That is what unlocks <code>avx512_vnni</code>, which does
+      a byte multiply-accumulate in one instruction and is the shape this
+      product actually is. It changes what the model computes, so the first
+      measurement is not tokens per second — it is whether Paris, Blue, Tokyo
+      and 8 still come back.
     </li>
     <li>
       <strong>Give hv1's guest a second vCPU and a device with a ring.</strong>
@@ -1538,16 +1586,16 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master e00c7d5 · 0 open PRs · 0 open issues · suite green · a model answers
+  master 661babf · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
-  filling and emptying between token steps — 27.3&nbsp;ms per token across eight
+  filling and emptying between token steps — 24.4&nbsp;ms per token across eight
   of them, and the same answers as running them alone · one lane runs at
-  15.74&nbsp;GiB/s against the 15.93 this machine can read at, so there is
-  nothing left in it · a conversation that has to be let go is let go, and the
-  agent it belonged to is told · a compiled 64-bit Rust unikernel boots in
-  2.4&nbsp;ms, sleeps when idle, and holds three requests in the air at once · a
-  fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
+  17.0&nbsp;GiB/s against the 20.6 this machine reads at, so most of it is
+  claimed and a fifth is not · a conversation that has to be let go is let go,
+  and the agent it belonged to is told · a compiled 64-bit Rust unikernel boots
+  in 2.4&nbsp;ms, sleeps when idle, and holds three requests in the air at once
+  · a fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
   hosts a guest that builds its own descriptor tables and crosses into protected
   mode, nested, and has still never run on a machine
 </footer>
