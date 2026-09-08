@@ -280,6 +280,34 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 print("hv1   fault     : the guest took a processor exception of its own
 ");
             }
+            print("hv1   ring      : ");
+            if log.ring_len > 0 {
+                print("the guest sent \"");
+                for byte in &log.ring[..log.ring_len] {
+                    print_byte(*byte);
+                }
+                print("\" through a descriptor it filled in
+");
+            } else {
+                print("FAILED — nothing arrived through the ring
+");
+            }
+            print("hv1   returned  : ");
+            print(if log.ring_returned {
+                "the guest read the reply back out of the buffer it named"
+            } else {
+                "FAILED — the guest never came back from the ring"
+            });
+            print("
+");
+            print("hv1   refused   : ");
+            print(if log.ring_refused {
+                "a descriptor pointing outside the guest's own memory was not followed"
+            } else {
+                "FAILED — an out-of-range descriptor was followed, which is a guest reading its hypervisor"
+            });
+            print("
+");
             print("hv1   interrupt : ");
             print(if log.interrupt_handled {
                 "injected 0x20 while halted, and the guest's own handler ran"

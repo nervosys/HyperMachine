@@ -189,6 +189,9 @@ async fn main() -> std::process::ExitCode {
     // the guest's own table, and the third only by an `iret` returning from it.
     let emulated_a_device = console.contains("hello from a guest of hv1");
     let crossed_to_protected = console.contains("crossed into 32-bit mode");
+    let drove_a_ring = console.contains("a request through a ring");
+    let ring_returned = console.contains("read the reply back out of the buffer it named");
+    let refused_out_of_range = console.contains("outside the guest's own memory was not followed");
     let delivered_an_interrupt = console.contains("the guest's own handler ran");
     let guest_carried_on = console.contains("the handler's iret returned");
 
@@ -214,6 +217,18 @@ async fn main() -> std::process::ExitCode {
     println!(
         "crossed modes : {}  (its own GDT, CR0.PE and a far jump — the RIP in the exit log goes from 0x21 to 0x1060, a linear address, so the segment is flat)",
         yes_no(crossed_to_protected)
+    );
+    println!(
+        "drove a ring  : {}  (a descriptor the guest filled in, followed to a buffer the guest chose)",
+        yes_no(drove_a_ring)
+    );
+    println!(
+        "and got a reply: {}  (written where the guest asked, read back, and put on the console)",
+        yes_no(ring_returned)
+    );
+    println!(
+        "refused a bad one: {}  (a descriptor pointing outside the guest's own memory)",
+        yes_no(refused_out_of_range)
     );
     println!(
         "delivered an interrupt: {}  (injected 0x20 into a halted guest; its own handler ran)",
@@ -271,11 +286,14 @@ async fn main() -> std::process::ExitCode {
     if initialised
         && emulated_a_device
         && crossed_to_protected
+        && drove_a_ring
+        && ring_returned
+        && refused_out_of_range
         && delivered_an_interrupt
         && guest_carried_on
     {
         println!(
-            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, injected an interrupt that the guest took through a gate in its own IDT, and let it carry on from where that handler returned. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, AP bring-up and every real device remain untested — and one vCPU running 32-bit code with one emulated port is not an operating system either."
+            "result        : hv1-core initialised on a real CPU and was a hypervisor to a guest. It emulated the serial port the guest wrote to, answered its hypercalls while the guest crossed from real mode into protected mode under its own GDT, took a request through a descriptor ring the guest filled in and left a reply where the guest asked for one, refused a descriptor pointing outside the guest's own memory, and injected an interrupt the guest took through a gate in its own IDT and returned from. Still not bare metal: the layer underneath is KVM, so the firmware path, the real memory map, AP bring-up and every real device remain untested — and one vCPU is not an operating system either."
         );
     } else if initialised {
         println!(

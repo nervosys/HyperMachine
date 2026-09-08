@@ -158,6 +158,8 @@ core::arch::global_asm!(
     // take a difference of two symbols written at the point of use, where it is
     // two symbols in one operand.
     .set MESSAGE_OFFSET, message - guest_start
+    .set RING_MSG_LINEAR, GUEST_BASE + ring_message - guest_start
+    .set RING_MSG_LEN,    ring_message_end - ring_message
     .set GDT_PTR_OFFSET, gdt_pointer - guest_start
     .set IDT_PTR_LINEAR, GUEST_BASE + idt_pointer - guest_start
     .set STACK_TOP,      GUEST_BASE + 0xF00
@@ -246,6 +248,77 @@ protected:
     // code at the right address.
     mov eax, 4
     vmmcall
+
+    // ── A device with a ring ────────────────────────────────────────────
+    // Everything above this point is the guest being told things. This is the
+    // guest *driving* something: it puts a message somewhere of its own
+    // choosing, describes where in a structure the device has to walk, and
+    // rings a doorbell. The hypervisor learns the address from the descriptor
+    // and from nowhere else.
+    //
+    //   0x2000  avail index     requests the guest has published
+    //   0x2002  used index      requests the device has completed
+    //   0x2004  descriptor 0    address and length of the message going out
+    //   0x200C  descriptor 1    address and length of the buffer for a reply
+    //
+    // The message is copied into a buffer that has nothing to do with the image
+    // it was assembled into, so the address in the descriptor is the only way
+    // to find it.
+    mov esi, offset RING_MSG_LINEAR
+    mov edi, 0x3000
+    mov ecx, offset RING_MSG_LEN
+    rep movsb
+
+    mov dword ptr [0x2004], 0x3000
+    mov dword ptr [0x2008], offset RING_MSG_LEN
+    mov dword ptr [0x200C], 0x3100
+    mov dword ptr [0x2010], 64
+    mov word ptr [0x2002], 0
+    mov word ptr [0x2000], 1
+
+    // The doorbell: an intercepted port, so the device runs inside the exit and
+    // has finished before the guest's next instruction.
+    mov dx, 0x100
+    xor al, al
+    out dx, al
+
+5:
+    mov ax, [0x2002]
+    cmp ax, 1
+    jne 5b
+
+    // Read the reply out of the buffer the *guest* named, and put it on the
+    // console — so the round trip is visible from outside rather than asserted.
+    mov esi, 0x3100
+6:
+    mov al, [esi]
+    test al, al
+    jz 7f
+    mov dx, 0x3F8
+    out dx, al
+    inc esi
+    jmp 6b
+7:
+    // Hypercall 5: the ring completed.
+    mov eax, 5
+    vmmcall
+
+    // And now a descriptor that points outside the guest's own memory. Nested
+    // paging stops this guest reaching there itself; it does nothing about the
+    // guest *asking its hypervisor* to reach there on its behalf, which is what
+    // a device model that trusts a descriptor would do.
+    //
+    // 10 MiB, against a guest that has two.
+    mov dword ptr [0x2004], 0x00A00000
+    mov dword ptr [0x2008], 16
+    mov word ptr [0x2000], 2
+    mov dx, 0x100
+    xor al, al
+    out dx, al
+
+    // Hypercall 6: asked for something out of range.
+    mov eax, 6
+    vmmcall
 3:
     hlt
     jmp 3b
@@ -305,6 +378,9 @@ idt_pointer:
 
 message:
     .asciz "hello from a guest of hv1\n"
+ring_message:
+    .ascii "a request through a ring"
+ring_message_end:
     .global guest_end
 guest_end:
     .code64
@@ -394,6 +470,29 @@ const PTE_LARGE: u64 = 1 << 7;
 /// The serial port the guest writes to, and this hypervisor answers.
 const COM1: u16 = 0x3F8;
 
+/// The doorbell the guest rings when it has put something in the ring.
+const NOTIFY: u16 = 0x100;
+
+/// Where the ring lives in guest-physical memory, and what is at each offset.
+///
+/// Fixed rather than negotiated. A real device tells its driver where to put
+/// these, through a register window the driver reads; that is a bring-up
+/// protocol and not the thing being shown here, which is a device walking
+/// structures the *guest* filled in and following addresses the guest chose.
+mod ring {
+    pub const AVAIL: u64 = 0x2000;
+    pub const USED: u64 = 0x2002;
+    /// Address and length, twice: one descriptor out, one for the reply.
+    pub const DESC0_ADDR: u64 = 0x2004;
+    pub const DESC0_LEN: u64 = 0x2008;
+    pub const DESC1_ADDR: u64 = 0x200C;
+    pub const DESC1_LEN: u64 = 0x2010;
+}
+
+/// What this hypervisor answers a request with.
+const RING_REPLY: &[u8] = b"and a reply through the same ring
+";
+
 /// The vector the hypervisor injects while the guest is halted.
 const TIMER_VECTOR: u64 = 0x20;
 
@@ -401,6 +500,63 @@ const TIMER_VECTOR: u64 = 0x20;
 /// anything.
 const INJECT_TYPE_INTR: u64 = 0 << 8;
 const INJECT_VALID: u64 = 1 << 31;
+
+/// Read `len` bytes of guest-physical memory, or nothing if that would leave
+/// the guest's own region.
+///
+/// The bounds check is the whole point of this function existing. Every address
+/// it is called with comes out of a descriptor the *guest* wrote, and a device
+/// model that follows one without checking is a guest that can read and write
+/// its hypervisor's memory by writing a number into a struct. Nested paging
+/// stops the guest reaching out on its own; it does nothing about the
+/// hypervisor being asked to reach out on the guest's behalf.
+///
+/// # Safety
+///
+/// Reads `GUEST_RAM`, which is this image's own memory.
+unsafe fn guest_slice(at: u64, len: u64) -> Option<&'static [u8]> {
+    let end = at.checked_add(len)?;
+    if end > GUEST_RAM_SIZE as u64 {
+        return None;
+    }
+    let base = core::ptr::addr_of!(GUEST_RAM) as *const u8;
+    Some(core::slice::from_raw_parts(base.add(at as usize), len as usize))
+}
+
+/// Write `bytes` into guest-physical memory, if the whole of it fits.
+///
+/// # Safety
+///
+/// Writes `GUEST_RAM`, bounded as above.
+unsafe fn guest_write(at: u64, bytes: &[u8]) -> bool {
+    let Some(end) = at.checked_add(bytes.len() as u64) else {
+        return false;
+    };
+    if end > GUEST_RAM_SIZE as u64 {
+        return false;
+    }
+    let base = core::ptr::addr_of_mut!(GUEST_RAM) as *mut u8;
+    for (i, byte) in bytes.iter().enumerate() {
+        core::ptr::write_volatile(base.add(at as usize + i), *byte);
+    }
+    true
+}
+
+/// Read a little-endian value out of guest memory.
+///
+/// # Safety
+///
+/// As `guest_slice`.
+unsafe fn guest_u16(at: u64) -> u16 {
+    guest_slice(at, 2).map_or(0, |b| u16::from_le_bytes([b[0], b[1]]))
+}
+
+/// # Safety
+///
+/// As `guest_slice`.
+unsafe fn guest_u32(at: u64) -> u32 {
+    guest_slice(at, 4).map_or(0, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+}
 
 /// Build the guest's nested page tables and return the root's address.
 ///
@@ -467,7 +623,12 @@ pub enum Outcome {
 /// A bound rather than a `Vec`, because there is no allocator worth using here
 /// and a hypervisor whose exit log can grow without limit is a hypervisor a
 /// guest can exhaust.
-const MAX_EXITS: usize = 64;
+///
+/// Sixty-four was enough until the guest had a reply to read back. A serial port
+/// written a byte at a time costs one exit per character, so two short lines of
+/// console are sixty exits on their own — which is the reason real device models
+/// batch, and the reason this number is what it is.
+const MAX_EXITS: usize = 160;
 
 /// What the hypervisor saw and said.
 pub struct Transcript {
@@ -487,6 +648,13 @@ pub struct Transcript {
     pub resumed: bool,
     /// Whether the guest took one of the processor's own exceptions.
     pub faulted: bool,
+    /// What the guest sent through the ring, and how much of it.
+    pub ring: [u8; 64],
+    pub ring_len: usize,
+    /// Whether the guest read the reply back and completed the round trip.
+    pub ring_returned: bool,
+    /// Whether a descriptor pointed outside the guest's own memory.
+    pub ring_refused: bool,
     /// Why the loop stopped.
     pub stopped: &'static str,
 }
@@ -569,6 +737,7 @@ pub unsafe fn run() -> Outcome {
     }
 
     intercept_port(COM1);
+    intercept_port(NOTIFY);
 
     // The host save area has to exist before VMRUN: it is where the CPU puts
     // the host's own state, and its address goes in an MSR rather than the
@@ -661,6 +830,10 @@ pub unsafe fn run() -> Outcome {
         interrupt_handled: false,
         resumed: false,
         faulted: false,
+        ring: [0; 64],
+        ring_len: 0,
+        ring_returned: false,
+        ring_refused: false,
         stopped: "the guest halted with nothing left to do",
     };
     let mut halts = 0usize;
@@ -689,6 +862,38 @@ pub unsafe fn run() -> Outcome {
                     // that admits it has none.
                     vmcb.save.rax = 0;
                     answer = "read as zero";
+                } else if port == NOTIFY {
+                    // The device. It runs here, inside the exit the doorbell
+                    // caused, so it has finished before the guest's next
+                    // instruction — which is why the guest's wait loop below
+                    // terminates on its first look.
+                    let published = guest_u16(ring::AVAIL);
+                    let completed = guest_u16(ring::USED);
+                    if published > completed {
+                        let out_at = u64::from(guest_u32(ring::DESC0_ADDR));
+                        let out_len = u64::from(guest_u32(ring::DESC0_LEN));
+                        let reply_at = u64::from(guest_u32(ring::DESC1_ADDR));
+                        let reply_len = u64::from(guest_u32(ring::DESC1_LEN));
+
+                        match guest_slice(out_at, out_len) {
+                            Some(bytes) => {
+                                let take = bytes.len().min(log.ring.len());
+                                log.ring[..take].copy_from_slice(&bytes[..take]);
+                                log.ring_len = take;
+                            }
+                            None => log.ring_refused = true,
+                        }
+
+                        // The reply goes where the guest asked, up to the length
+                        // the guest said it had room for — both from the
+                        // descriptor, both checked.
+                        let fits = reply_len as usize >= RING_REPLY.len();
+                        if !fits || !guest_write(reply_at, RING_REPLY) {
+                            log.ring_refused = true;
+                        }
+                        let _ = guest_write(ring::USED, &published.to_le_bytes());
+                    }
+                    answer = "the ring: a request taken and a reply left";
                 } else if port == COM1 {
                     let byte = vmcb.save.rax as u8;
                     if log.console_len < log.console.len() {
@@ -724,6 +929,11 @@ pub unsafe fn run() -> Outcome {
                         log.resumed = true;
                         "the handler returned and the guest carried on"
                     }
+                    5 => {
+                        log.ring_returned = true;
+                        "the ring round trip finished"
+                    }
+                    6 => "and then asked for memory it does not have",
                     0xFF => {
                         log.faulted = true;
                         log.stopped = "the guest took a processor exception and said so";
@@ -802,12 +1012,14 @@ pub fn report(log: &Transcript) {
     print("hv1   the guest's console, every byte of it an intercepted out:\n");
     print("hv1   > ");
     for byte in &log.console[..log.console_len] {
-        // The guest's own newline would break the prefix, so it ends the line
-        // and the loop stops there.
+        // The guest's newlines end a line and start the next with the same
+        // prefix, so a two-line console reads as two lines rather than as one
+        // with a break in the middle of it.
         if *byte == b'\n' {
-            break;
+            print("\nhv1   > ");
+        } else {
+            crate::print_byte(*byte);
         }
-        crate::print_byte(*byte);
     }
     print("\n");
 }
