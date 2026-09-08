@@ -78,15 +78,37 @@ impl<'a> Tensor<'a> {
 
         let row_bytes = self.quant.size_of(self.row);
         let quant = self.quant;
+
+        // Quantised once for the whole matrix, not once per row: the
+        // activations are the same vector for every row, and quantising them
+        // 128,256 times would cost more than the product.
+        let quantised = self.quantise_maybe(x);
         out.par_chunks_mut(ROWS_PER_TASK)
             .enumerate()
             .for_each(|(chunk, slots)| {
                 let first = chunk * ROWS_PER_TASK;
                 for (offset, slot) in slots.iter_mut().enumerate() {
                     let r = first + offset;
-                    *slot = dot(quant, &self.bytes[r * row_bytes..(r + 1) * row_bytes], x);
+                    let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
+                    *slot = match &quantised {
+                        Some(q) => dot_q8_0_quantised(row, q),
+                        None => dot(quant, row, x),
+                    };
                 }
             });
+    }
+
+    /// The activations in integer form, when that is wanted and possible.
+    ///
+    /// `Q8_0` only: the integer product needs both sides in the same shape, and
+    /// a float tensor has no block scale to multiply back in.
+    fn quantise_maybe(&self, x: &[f32]) -> Option<QuantAct> {
+        if !*QUANT_ACT || self.quant != Quant::Q8_0 || !self.row.is_multiple_of(Q8_BLOCK) {
+            return None;
+        }
+        let mut q = QuantAct::new();
+        q.fill(x);
+        Some(q)
     }
 
     /// `out[r * lanes + b] = row_r · x[b]`, for every row and every lane.
@@ -117,6 +139,23 @@ impl<'a> Tensor<'a> {
         let row_bytes = self.quant.size_of(self.row);
         let quant = self.quant;
         let width = self.row;
+        // One quantisation per lane, shared by every row — the same reasoning
+        // as the single-lane case, multiplied by the batch.
+        let quantised: Option<Vec<QuantAct>> =
+            if *QUANT_ACT && quant == Quant::Q8_0 && width.is_multiple_of(Q8_BLOCK) {
+                Some(
+                    (0..lanes)
+                        .map(|b| {
+                            let mut q = QuantAct::new();
+                            q.fill(&x[b * width..(b + 1) * width]);
+                            q
+                        })
+                        .collect(),
+                )
+            } else {
+                None
+            };
+
         out.par_chunks_mut(lanes * ROWS_PER_TASK)
             .enumerate()
             .for_each(|(chunk, slots)| {
@@ -125,7 +164,10 @@ impl<'a> Tensor<'a> {
                     let r = first + offset;
                     let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
                     for (b, cell) in cells.iter_mut().enumerate() {
-                        *cell = dot(quant, row, &x[b * width..(b + 1) * width]);
+                        *cell = match &quantised {
+                            Some(all) => dot_q8_0_quantised(row, &all[b]),
+                            None => dot(quant, row, &x[b * width..(b + 1) * width]),
+                        };
                     }
                 }
             });
@@ -164,6 +206,47 @@ static WIDER: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
     is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw")
 });
 
+/// Whether this CPU can do a byte multiply-accumulate in one instruction.
+#[cfg(target_arch = "x86_64")]
+static VNNI: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    is_x86_feature_detected!("avx512vnni")
+        && is_x86_feature_detected!("avx512vl")
+        && is_x86_feature_detected!("avx512bw")
+});
+
+/// Whether to quantise the activations and do the product in integers.
+///
+/// **Off**, and the reason is a measurement that did not come out.
+///
+/// Quantising the activations is what unlocks `vpdpbusd`, which multiplies and
+/// accumulates four bytes in one instruction and is the shape a `Q8_0` product
+/// actually is. It is implemented here, scalar and 512-bit, and two things
+/// about it are settled:
+///
+/// - **It does not change what the model says.** Thirty-two tokens of prose
+///   came back identical token for token against the float path, and
+///   `examples/batched`'s four answers survive. That was checked before any of
+///   the wide code was written, because it is the question that decides whether
+///   the speed would be worth having.
+/// - **The wide kernel is right.** It agrees with the scalar integer one to
+///   within rounding, which the tests check.
+///
+/// What is *not* settled is whether it is faster, and the honest reason is that
+/// this host could not answer. The Windows side of it sat at 97% CPU while the
+/// comparisons ran, and the same configuration measured 40.8, 54.3 and 58.9 ms
+/// per token in three consecutive attempts — the difference between the two
+/// paths is smaller than that. A default that changes what the model computes
+/// needs a demonstrated benefit and there is not one yet, so the float path
+/// ships and this waits for a quiet machine.
+///
+/// `HV2_INFER_QUANT_ACT=1` turns it on, which is how it should be re-measured.
+static QUANT_ACT: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+    matches!(
+        std::env::var("HV2_INFER_QUANT_ACT").ok().as_deref(),
+        Some("1") | Some("true")
+    )
+});
+
 /// Turn a `rows × lanes` result into `lanes × rows`.
 ///
 /// Small: a transpose of the *output* of a matrix product, which is the model's
@@ -178,6 +261,196 @@ pub fn to_lanes(rowmajor: &[f32], rows: usize, lanes: usize, out: &mut [f32]) {
             out[b * rows + r] = rowmajor[r * lanes + b];
         }
     }
+}
+
+/// Activations quantised into the same shape the weights are in.
+///
+/// A `Q8_0` product multiplies two numbers that are each a small integer times
+/// a per-block scale. The weights arrive that way; the activations do not, so
+/// every product so far has widened the weights to floats and done the work in
+/// floating point. Quantising the activations instead makes the inner loop an
+/// *integer* multiply-accumulate, which is what `avx512_vnni` does four at a
+/// time in one instruction.
+///
+/// It is not free and not exact: an activation vector is squeezed into 8 bits
+/// per element, which changes what the model computes. Whether that matters is
+/// a question about answers rather than about speed, and it is checked by
+/// asking the model things with known answers — see `examples/batched`.
+pub struct QuantAct {
+    /// One scale per 32-element block.
+    scales: Vec<f32>,
+    /// The sum of the quantised values in each block.
+    ///
+    /// Kept because the fast integer instruction wants one operand unsigned:
+    /// adding 128 to every weight makes it so, and `sum(w + 128) * x` is
+    /// `sum(w * x) + 128 * sum(x)`, so the correction needs this and is exact.
+    sums: Vec<i32>,
+    /// Thirty-two signed bytes per block.
+    values: Vec<i8>,
+}
+
+impl QuantAct {
+    /// An empty one, to be filled by [`QuantAct::fill`].
+    pub fn new() -> Self {
+        Self {
+            scales: Vec::new(),
+            sums: Vec::new(),
+            values: Vec::new(),
+        }
+    }
+
+    /// Quantise `x`, reusing whatever this already allocated.
+    ///
+    /// Symmetric and per block: the largest magnitude in each thirty-two
+    /// elements maps to 127, which is the same scheme the weights use and
+    /// therefore the one that loses least when the two are multiplied.
+    pub fn fill(&mut self, x: &[f32]) {
+        let blocks = x.len() / Q8_BLOCK;
+        self.scales.clear();
+        self.sums.clear();
+        self.values.clear();
+        self.scales.reserve(blocks);
+        self.sums.reserve(blocks);
+        self.values.reserve(blocks * Q8_BLOCK);
+
+        for block in x.chunks_exact(Q8_BLOCK) {
+            let peak = block.iter().fold(0.0f32, |a, v| a.max(v.abs()));
+            // A block of exact zeros has no scale to speak of; anything
+            // non-zero divided by 127 is one.
+            let scale = if peak > 0.0 { peak / 127.0 } else { 1.0 };
+            let inverse = 1.0 / scale;
+            let mut sum = 0i32;
+            for value in block {
+                let q = (value * inverse).round().clamp(-127.0, 127.0) as i8;
+                sum += i32::from(q);
+                self.values.push(q);
+            }
+            self.scales.push(scale);
+            self.sums.push(sum);
+        }
+    }
+}
+
+impl Default for QuantAct {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// One `Q8_0` row dotted with quantised activations, in integers.
+///
+/// The scalar spelling. It exists to answer the question that has to come
+/// first — whether squeezing the activations to 8 bits changes what the model
+/// says — without also introducing hand-written SIMD in the same step. If the
+/// answers survive this, the same arithmetic is worth writing wide.
+fn dot_q8_0_quant(row: &[u8], x: &QuantAct) -> f32 {
+    let mut total = 0.0f32;
+    for (block, (&scale, values)) in row
+        .chunks_exact(Q8_BYTES)
+        .zip(x.scales.iter().zip(x.values.chunks_exact(Q8_BLOCK)))
+    {
+        let weight_scale = f32::from(half::f16::from_le_bytes([block[0], block[1]]));
+        let mut acc = 0i32;
+        for (w, q) in block[2..].iter().zip(values) {
+            acc += i32::from(*w as i8) * i32::from(*q);
+        }
+        total += weight_scale * scale * acc as f32;
+    }
+    total
+}
+
+/// One `Q8_0` row dotted with quantised activations, in one instruction per
+/// thirty-two weights.
+///
+/// `vpdpbusd` multiplies four bytes and accumulates them into a 32-bit lane, so
+/// a whole `Q8_0` block is one instruction over eight lanes. It wants its first
+/// operand *unsigned*, and the weights are signed — flipping the top bit adds
+/// 128 to every one of them, and `sum((w + 128) * q)` is
+/// `sum(w * q) + 128 * sum(q)`, so the correction is exact and needs only the
+/// block sum that [`QuantAct`] already keeps.
+///
+/// The scales differ per block, so the products cannot simply be accumulated
+/// as integers. What is accumulated instead is the *scaled* eight-lane result,
+/// which keeps the one horizontal reduction at the end rather than per block —
+/// and that reduction, done per block, is what would have made this no faster
+/// than the float path it replaces.
+///
+/// # Safety
+///
+/// The caller must have established AVX-512 VNNI, VL and BW.
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512vnni,avx512vl,avx512bw,avx512f")]
+unsafe fn dot_q8_0_vnni(row: &[u8], x: &QuantAct) -> f32 {
+    use std::arch::x86_64::*;
+
+    let mut acc = _mm512_setzero_ps();
+    let mut correction = 0.0f32;
+    let flip = _mm512_set1_epi8(-128i8);
+    let blocks = row.len() / Q8_BYTES;
+
+    // Two blocks at a time, because a 512-bit register holds sixty-four bytes
+    // and a block is thirty-two. They cannot be loaded as one: a `Q8_0` block
+    // is its scale followed by its data, so two consecutive blocks' *weights*
+    // have two bytes of scale between them. Two 256-bit loads and an insert is
+    // what stitches them, and it is still far fewer instructions than widening
+    // every weight to a float.
+    let mut pair = 0;
+    while pair + 1 < blocks {
+        let a = pair * Q8_BYTES;
+        let b = (pair + 1) * Q8_BYTES;
+        let wa = _mm256_loadu_si256(row.as_ptr().add(a + 2) as *const __m256i);
+        let wb = _mm256_loadu_si256(row.as_ptr().add(b + 2) as *const __m256i);
+        let w = _mm512_inserti32x8(_mm512_castsi256_si512(wa), wb, 1);
+        let unsigned = _mm512_xor_si512(w, flip);
+
+        let qa = _mm256_loadu_si256(x.values.as_ptr().add(pair * Q8_BLOCK) as *const __m256i);
+        let qb = _mm256_loadu_si256(x.values.as_ptr().add((pair + 1) * Q8_BLOCK) as *const __m256i);
+        let q = _mm512_inserti32x8(_mm512_castsi256_si512(qa), qb, 1);
+
+        let dots = _mm512_dpbusd_epi32(_mm512_setzero_si512(), unsigned, q);
+
+        // The two blocks have different scales and their results sit in the two
+        // halves of the register, so the scale vector is built to match rather
+        // than the results being reduced apart.
+        let sa = f32::from(half::f16::from_le_bytes([row[a], row[a + 1]])) * x.scales[pair];
+        let sb = f32::from(half::f16::from_le_bytes([row[b], row[b + 1]])) * x.scales[pair + 1];
+        let scales = _mm512_insertf32x8(
+            _mm512_castps256_ps512(_mm256_set1_ps(sa)),
+            _mm256_set1_ps(sb),
+            1,
+        );
+        acc = _mm512_fmadd_ps(_mm512_cvtepi32_ps(dots), scales, acc);
+        correction += sa * x.sums[pair] as f32 + sb * x.sums[pair + 1] as f32;
+        pair += 2;
+    }
+
+    let mut total = _mm512_reduce_add_ps(acc);
+
+    // An odd last block, if the row has one.
+    for index in pair..blocks {
+        let at = index * Q8_BYTES;
+        let scale = f32::from(half::f16::from_le_bytes([row[at], row[at + 1]])) * x.scales[index];
+        let mut dot = 0i32;
+        for (w, q) in row[at + 2..at + Q8_BYTES]
+            .iter()
+            .zip(&x.values[index * Q8_BLOCK..(index + 1) * Q8_BLOCK])
+        {
+            dot += i32::from(*w as i8) * i32::from(*q);
+        }
+        total += scale * dot as f32;
+    }
+
+    total - 128.0 * correction
+}
+
+/// The integer product, wide where the CPU allows and scalar otherwise.
+fn dot_q8_0_quantised(row: &[u8], x: &QuantAct) -> f32 {
+    #[cfg(target_arch = "x86_64")]
+    if *VNNI {
+        // SAFETY: `VNNI` is exactly the check for the instructions used.
+        return unsafe { dot_q8_0_vnni(row, x) };
+    }
+    dot_q8_0_quant(row, x)
 }
 
 /// One row of any of the three kinds, dotted with `x`.
@@ -431,6 +704,48 @@ mod tests {
                 "{blocks} blocks: scalar {scalar}, dispatched {dispatched}"
             );
         }
+    }
+
+    /// The integer path has to agree with the scalar integer path, which is a
+    /// different question from whether either agrees with the float one.
+    ///
+    /// It will not match the float product — quantising the activations is a
+    /// real loss of precision and pretending otherwise with a loose tolerance
+    /// would hide the wide kernel being wrong. So the wide integer version is
+    /// checked against the narrow integer version, tightly, and whether the
+    /// *model* survives the quantisation is checked by asking it questions.
+    #[test]
+    fn the_wide_integer_product_agrees_with_the_narrow_one() {
+        for blocks in [1, 2, 7, 64] {
+            let (row, x) = row_and_activations(blocks);
+            let mut quantised = QuantAct::new();
+            quantised.fill(&x);
+            let narrow = dot_q8_0_quant(&row, &quantised);
+            let wide = dot_q8_0_quantised(&row, &quantised);
+            let slack = narrow.abs().max(1.0) * 1e-4;
+            assert!(
+                (narrow - wide).abs() <= slack,
+                "{blocks} blocks: narrow {narrow}, wide {wide}"
+            );
+        }
+    }
+
+    /// And the integer product has to be a recognisable approximation of the
+    /// float one. Not equal — it is 8-bit arithmetic — but a kernel with the
+    /// correction term missing or the wrong sign would be wildly out, and this
+    /// is what would catch that.
+    #[test]
+    fn the_integer_product_approximates_the_float_one() {
+        let (row, x) = row_and_activations(64);
+        let mut quantised = QuantAct::new();
+        quantised.fill(&x);
+        let exact = dot_q8_0_scalar(&row, &x);
+        let approx = dot_q8_0_quant(&row, &quantised);
+        let slack = exact.abs().max(1.0) * 0.02;
+        assert!(
+            (exact - approx).abs() <= slack,
+            "quantised {approx} against exact {exact}, which is not the same shape of number"
+        );
     }
 
     /// Summing in a different order gives a different rounding, so the tolerance
