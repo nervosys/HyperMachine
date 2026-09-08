@@ -139,17 +139,36 @@ async fn main() -> std::process::ExitCode {
     // exit description ending "and is done" — after which it stopped reading
     // partway through the log and reported every later claim as absent. A
     // sentinel that can appear inside ordinary output is not a sentinel.
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let mut console = String::new();
+    let mut finished = false;
     while Instant::now() < deadline {
         console = vm.console_output().await;
         if console.contains("hv1   done") {
+            finished = true;
             break;
         }
         tokio::time::sleep(Duration::from_millis(2)).await;
     }
     let elapsed = started.elapsed();
     let _ = vm.stop().await;
+
+    // A guest that never reached its last line has not disproved anything. Said
+    // separately, because the alternative is what this example used to do:
+    // carry on and report every claim as `no`, which reads as thirteen things
+    // being broken rather than one run not finishing.
+    if !finished {
+        println!("console       : {} bytes, and no final line", console.len());
+        for line in console.lines() {
+            println!("hv1 says      : {line}");
+        }
+        println!();
+        println!(
+            "result        : the guest did not reach its last line within {:?}. That is not a              failed claim -- it is no answer. Everything above is however far it got.",
+            deadline.saturating_duration_since(started)
+        );
+        return std::process::ExitCode::FAILURE;
+    }
 
     if console.is_empty() {
         println!("console       : nothing");
@@ -233,17 +252,24 @@ async fn main() -> std::process::ExitCode {
     // Both processors spin; neither halts; the count is how often hv1 moved
     // between them, and two is what it was when the only switches were yields.
     // And the limit of all of it, measured rather than asserted. One processor
-    // clears its interrupt flag and spins for fifty milliseconds; the other's
-    // tick is late by very nearly that, because an external-interrupt intercept
-    // produces an exit when the interrupt would be delivered and to a guest
+    // clears its interrupt flag and spins for fifty milliseconds, and hv1 does
+    // not get control back for any of them: an external-interrupt intercept
+    // produces an exit when the interrupt would be delivered, and to a guest
     // with IF clear it never would be. hv1 is not slow here -- it is not
     // running.
+    //
+    // The span measured is across `VMRUN` itself, so it contains no hypervisor
+    // work and does not depend on where any deadline fell. The first version of
+    // this asserted on how late the other processor's tick was instead, which
+    // is the same story told by a number that moves with the phase: it ranged
+    // from the whole window to a quarter of it and failed two runs in eight
+    // under load.
     let held_hostage = console
         .lines()
-        .find_map(|line| line.split("the other's tick was ").nth(1))
+        .find_map(|line| line.split("a processor ran ").nth(1))
         .and_then(|rest| rest.split_whitespace().next())
         .and_then(|n| n.parse::<u64>().ok())
-        .is_some_and(|late| late > 100_000_000);
+        .is_some_and(|span| span > 100_000_000);
     let scheduled = console
         .lines()
         .find_map(|line| line.split("switches  : ").nth(1))
@@ -324,7 +350,7 @@ async fn main() -> std::process::ExitCode {
         yes_no(scheduled)
     );
     println!(
-        "and could not preempt: {}  (a processor cleared IF and spun; the other's tick came late by very nearly the whole window, which is the limit of this mechanism)",
+        "and could not preempt: {}  (a processor cleared IF and spun; hv1 did not get control back for the whole window, which is the limit of this mechanism)",
         yes_no(held_hostage)
     );
     for (label, key) in [

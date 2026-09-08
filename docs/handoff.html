@@ -1444,11 +1444,46 @@ hv1   switches  : <b>14&ndash;18</b> times the hypervisor moved from one process
     </p>
     <p>
       It is gone rather than re-explained. What is left is the one taken
-      directly, with a timestamp on either side of the writes:
-      <strong>~140,000 ticks to arm hv1's own timer</strong>, two uncached
-      stores to a device the layer below emulates. The earlier figures stand for
-      the single-processor case they were taken in; they are simply no longer
-      measurable this way.
+      directly, with a timestamp on either side of the writes: the cost of
+      arming hv1's own timer. That number then had to be corrected twice, and
+      both corrections are below.
+    </p>
+  </div>
+
+  <div class="callout stop">
+    <h3>The arming cost was wrong, and then it was halved</h3>
+    <p>
+      <strong>First, the statistic.</strong> It was reported as
+      120,000&ndash;235,000 ticks, and that was the <em>first</em> arming of each
+      run. hv1 is itself a guest, so any single measurement can contain the host
+      deciding to run something else in the middle of it &mdash; and this one
+      ranged from 121,000 to 766,000 across runs with nothing changing. Taking
+      the <em>minimum</em> over a run instead gives 44,000&ndash;62,000, stable
+      to a few per cent. So the honest figure for two uncached device writes was
+      about <strong>53,000</strong>, not 140,000, and the earlier one was mostly
+      a measurement of contention.
+    </p>
+    <p>
+      <strong>Then the fix.</strong> Arming wrote the timer's vector table entry
+      and its count, every time &mdash; but the entry only has to change when
+      the timer goes from stopped to running or back, and writing the count is
+      what arms it. One write instead of two:
+    </p>
+    <pre>two writes   44,044   51,700   53,196   60,940   62,260
+one write    <b>24,068</b>   24,684   24,816   28,468   31,592</pre>
+    <p>
+      Halved, which is what one write instead of two should do and is therefore
+      the answer confirming the explanation rather than a surprise. It also puts
+      a number on the thing underneath: <strong>one uncached store to an
+      emulated APIC costs about 25,000 timestamp ticks</strong> &mdash; six
+      microseconds, for a single instruction.
+    </p>
+    <p>
+      Worth contrasting with the guard two paragraphs up, which was also
+      "remove a device write" and changed nothing. That one removed armings that
+      were not happening often; this one removed a write that happened on every
+      one. The difference is not cleverness, it is that the second was measured
+      first.
     </p>
   </div>
   <h3>And the one instruction that defeats all of it</h3>
@@ -1459,13 +1494,43 @@ hv1   switches  : <b>14&ndash;18</b> times the hypervisor moved from one process
     first processor now does exactly that, on purpose, and holds the machine for
     a measured fifty milliseconds while the second one's timer goes on running:
   </p>
-  <pre>hv1   masked    : a processor ran with interrupts off and hv1 could not preempt it
-                  &mdash; the other's tick was <b>191,502,568 timestamp ticks late</b></pre>
+  <pre>hv1   masked    : a processor ran <b>201,450,921 timestamp ticks without leaving</b>,
+                  and hv1 could not take it back
+hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by</pre>
   <p>
-    Against a window of 200,000,000. The second processor's clock was late by
-    very nearly exactly as long as the first one felt like being uninterruptible
-    &mdash; which is the number, and the number is the point. hv1 is not slow to
-    react here. It is not running.
+    Against a window of 200,000,000. hv1 is not slow to react here. It is not
+    running.
+  </p>
+  <div class="callout stop">
+    <h3>The first version of that measurement failed two runs in eight, and only under load</h3>
+    <p>
+      It asserted on the second number &mdash; how late the other processor's
+      tick was. That is a true statement about a tick and a bad measure of what
+      it was being used for: how late the late tick is depends on where in the
+      window its deadline happened to fall. Under contention the phase moves,
+      and it came out at 50,172,740 and 55,326,356 on two runs of eight, below
+      a threshold set from the quiet case.
+    </p>
+    <p>
+      It passed twelve times in a row when run alone, and failed in the sweep,
+      which is the only reason it was caught. So the measurement is now the
+      interval across <code>VMRUN</code> itself: no hypervisor work in it, no
+      dependence on phase, and a floor rather than a middle &mdash; contention
+      can only make it larger, never smaller. Ten runs under twenty-four
+      competing spinners give 200,309,776 to 306,915,670, and the window is
+      200,000,000.
+    </p>
+    <p>
+      That is the sixth instrument on this page to be wrong, and the second in
+      one section. The pattern by now is specific enough to name: <em>a number
+      that varies with something other than what you are measuring will agree
+      with you until the day it matters.</em>
+    </p>
+  </div>
+  <p>
+    The example also now distinguishes a guest that never reached its last line
+    from a guest that reached it with something false. It used to report the
+    first as thirteen broken claims rather than as one run that did not finish.
   </p>
   <p>
     The window is bounded because the point is to measure the gap rather than to
@@ -2050,13 +2115,13 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Make the tick cost less than the tick.</strong> Arming hv1's own
-      timer is two uncached writes to an emulated device and about half the cost
-      of a round trip through the exit loop. A real hypervisor on real hardware
-      writes to a real APIC and pays nothing like that, so the number here is
-      mostly a measurement of being nested &mdash; but it has never been
-      measured anywhere else, and until it is, that is an assumption rather than
-      a finding.
+      <strong>Stop arming at all when nothing has moved.</strong> The arming is
+      one uncached write now, ~25,000 ticks, and there are eighteen to
+      twenty-three of them in a run. Some are re-arming for a deadline that has
+      not changed but whose one-shot has been consumed, which is unavoidable;
+      others may not be. Nobody has counted which is which, and the instrument
+      to do it &mdash; a minimum over samples rather than a first sample &mdash;
+      now exists.
     </li>
     <li>
       <strong>Find out whether the NMI path works on hardware.</strong> It is

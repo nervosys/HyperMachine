@@ -1053,11 +1053,21 @@ pub struct Transcript {
     pub identified: [bool; VCPUS],
     /// How many end-of-interrupt writes the guest made.
     pub eois: usize,
-    /// What one arming of hv1's own timer costs, in timestamp ticks. Two
-    /// uncached writes to a device the layer below emulates, measured rather
-    /// than guessed at, because the round-trip cost tripled when this
-    /// mechanism arrived and something had to account for it.
+    /// What one arming of hv1's own timer costs, in timestamp ticks: uncached
+    /// writes to a device the layer below emulates, measured rather than
+    /// guessed at, because the round-trip cost tripled when this mechanism
+    /// arrived and something had to account for it.
+    ///
+    /// The *smallest* of them, not the first and not the mean. hv1 is itself a
+    /// guest, so any one measurement can include the host deciding to run
+    /// something else in the middle of it -- which is why the first-sample
+    /// version of this ranged from 121,000 to 766,000 on an idle change. The
+    /// minimum over a run is the one that is not contaminated, and it is stable
+    /// to a few per cent where the mean is not stable at all.
     pub arm_cost: u64,
+    /// How many armings that minimum is over, so a suspiciously small sample
+    /// is visible rather than implied.
+    pub arm_samples: usize,
     /// Whether the guest saw its timer's count go down on its own.
     pub timer_counts: bool,
     /// What the timer was armed with, and what the guest read back the first
@@ -1071,9 +1081,22 @@ pub struct Transcript {
     pub ran_masked: bool,
     /// The most a tick was ever late by, in timestamp ticks: the gap between
     /// when a processor's timer was due and when hv1 was next able to give that
-    /// processor the vector. It is a measure of the worst delay a guest can
-    /// impose, and here the guest imposes it deliberately.
+    /// processor the vector.
+    ///
+    /// Reported, not asserted on. How late the late tick is depends on where in
+    /// the window its deadline happened to fall, so under load it ranges from
+    /// the whole window down to a quarter of it -- which is a true number about
+    /// a tick and a bad measure of the thing it was being used for. It failed
+    /// two runs in eight before that was noticed.
     pub max_late: u64,
+    /// The longest a guest ran without leaving, in timestamp ticks.
+    ///
+    /// This is the measure of what a guest can take: it is the interval across
+    /// `VMRUN` itself, so it contains no hypervisor work and no scheduling
+    /// phase. Normally it is bounded by the slice or by whichever deadline is
+    /// next. When a processor clears its interrupt flag it is bounded by
+    /// nothing except that processor's patience.
+    pub max_in_guest: u64,
     /// Whether each processor's timer handler ran as often as it wanted.
     pub timer_served: bool,
     pub ap_timer_served: bool,
@@ -1639,13 +1662,15 @@ pub unsafe fn run() -> Outcome {
         apic_enabled: false,
         identified: [false; VCPUS],
         eois: 0,
-        arm_cost: 0,
+        arm_cost: u64::MAX,
+        arm_samples: 0,
         timer_counts: false,
         timer_armed: 0,
         timer_first_read: 0,
         ticks: [0; VCPUS],
         ran_masked: false,
         max_late: 0,
+        max_in_guest: 0,
         timer_served: false,
         ap_timer_served: false,
         ap_refused: false,
@@ -1762,9 +1787,8 @@ pub unsafe fn run() -> Outcome {
                 if armed_for != Some(due) {
                     let before = now();
                     crate::apic::arm_oneshot(to_apic_ticks(due.saturating_sub(now())));
-                    if log.arm_cost == 0 {
-                        log.arm_cost = now().wrapping_sub(before);
-                    }
+                    log.arm_cost = log.arm_cost.min(now().wrapping_sub(before));
+                    log.arm_samples += 1;
                     armed_for = Some(due);
                 }
             }
@@ -1776,7 +1800,9 @@ pub unsafe fn run() -> Outcome {
             }
         }
 
+        let entered = now();
         let _ = svm::svm_run(vmcb, &mut regs[current]);
+        log.max_in_guest = log.max_in_guest.max(now().wrapping_sub(entered));
 
         let code = vmcb.control.exit_code;
         let rip = vmcb.save.rip;

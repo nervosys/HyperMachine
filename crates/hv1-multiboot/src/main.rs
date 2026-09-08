@@ -456,9 +456,13 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
             });
             print("hv1   masked    : ");
             if log.ran_masked {
-                print("a processor ran with interrupts off and hv1 could not preempt it — the other's tick was ");
+                print("a processor ran ");
+                print_dec(log.max_in_guest);
+                print(" timestamp ticks without leaving, and hv1 could not take it back
+");
+                print("hv1   late      : ");
                 print_dec(log.max_late);
-                print(" timestamp ticks late
+                print(" timestamp ticks, the most a tick was ever late by
 ");
             } else {
                 print("FAILED — no processor ever ran with interrupts off
@@ -484,7 +488,9 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 // directly, with a timestamp on either side of the writes.
                 print("hv1   arm cost  : ");
                 print_dec(log.arm_cost);
-                print(" timestamp ticks for two uncached writes to hv1's own timer
+                print(" timestamp ticks, the smallest of ");
+                print_dec(log.arm_samples as u64);
+                print(" writes to hv1's own timer
 ");
             } else {
                 print("FAILED — the guest armed a timer and did not get what it asked for

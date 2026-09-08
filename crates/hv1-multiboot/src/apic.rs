@@ -263,6 +263,7 @@ pub unsafe fn enable() {
     write(DIVIDE, DIVIDE_BY_1);
     write(LVT_TIMER, u32::from(TIMER_VECTOR) | LVT_MASKED);
     write(INITIAL_COUNT, 0);
+    LVT_IS_ARMED = false;
 }
 
 /// How many timestamp-counter ticks one APIC tick takes.
@@ -304,14 +305,27 @@ pub unsafe fn calibrate() -> (u64, u64) {
     (tsc_ticks, apic_ticks)
 }
 
+/// Whether the timer's vector table entry currently says "one-shot, unmasked".
+///
+/// Every write here is an uncached store to a device the layer below emulates
+/// and costs an exit of hv1's own, so the one that says nothing new is worth
+/// not making: the entry only has to change when the timer goes from stopped to
+/// running or back.
+static mut LVT_IS_ARMED: bool = false;
+
 /// Arm the timer to fire once, `count` ticks from now.
 ///
 /// # Safety
 ///
 /// As [`enable`]. The vector must have a gate in the loaded table.
 pub unsafe fn arm_oneshot(count: u32) {
-    // Unmasked, one-shot: bits 17 and 18 clear.
-    write(LVT_TIMER, u32::from(TIMER_VECTOR));
+    // Unmasked, one-shot: bits 17 and 18 clear. Only when it is not already
+    // saying that -- writing the count is what arms it, and the mode has not
+    // changed since the last time.
+    if !LVT_IS_ARMED {
+        write(LVT_TIMER, u32::from(TIMER_VECTOR));
+        LVT_IS_ARMED = true;
+    }
     write(INITIAL_COUNT, count.max(1));
 }
 
@@ -323,6 +337,7 @@ pub unsafe fn arm_oneshot(count: u32) {
 pub unsafe fn disarm() {
     write(INITIAL_COUNT, 0);
     write(LVT_TIMER, u32::from(TIMER_VECTOR) | LVT_MASKED);
+    LVT_IS_ARMED = false;
 }
 
 /// Arm a performance counter to raise an NMI after `cycles` unhalted cycles.
