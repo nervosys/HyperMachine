@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>b554810</dd></div>
+    <div class="fact"><dt>Master</dt><dd>e00c7d5</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -301,7 +301,7 @@
     <div class="fact"><dt>Agent guest</dt><dd class="good">Rust, 64-bit</dd></div>
     <div class="fact"><dt>Scheduling</dt><dd class="good">batched, bounded</dd></div>
     <div class="fact"><dt>A model has run</dt><dd class="good">yes</dd></div>
-    <div class="fact"><dt>Per token</dt><dd class="good">58.6 ms</dd></div>
+    <div class="fact"><dt>Per token</dt><dd class="good">27.3 ms</dd></div>
     <div class="fact"><dt>Type-1</dt><dd class="hold">hosted, nested</dd></div>
   </dl>
 </header>
@@ -488,6 +488,46 @@ bound         : alpha asked again and was refused — holding 49 tokens,
     tested, and a demonstration that quietly ran everything serially would
     otherwise pass.
   </p>
+
+  <h3>And a conversation can be let go</h3>
+  <p>
+    <code>context_tokens</code> bounds one agent. Nothing bounded the node, so a
+    node's memory was decided by how many agents had <em>ever</em> asked rather
+    than by how many were talking. <code>cache_bytes</code> bounds it — a
+    gigabyte by default, because a real number is a better default than no
+    policy — and when admitting a request would take the total past it, the
+    least-recently-used conversation that is not in a lane is dropped.
+  </p>
+  <p>
+    Never the agent being admitted, which would otherwise evict itself and
+    arrive with its own context missing; and never one in a lane, which is why
+    the total can sit above the bound while somebody is being served. A soft
+    bound, said where it is printed rather than left for a reader to notice.
+  </p>
+  <p>
+    <strong>The reclaiming is the easy half.</strong> An evicted agent has
+    silently lost its memory, which is the same failure this project chased in
+    <code>gamma</code>: a model answering confidently from a context it does not
+    have. So an answer says whether it continued a conversation that was already
+    there, and an agent that expected to be remembered finds out there rather
+    than by being wrong later.
+  </p>
+  <pre>cache bound : 1.5 MiB across the whole node
+ask 1 : one   -> continued <b>false</b>, node holding 1.0 MiB
+ask 2 : two   -> continued <b>false</b>, node holding 2.0 MiB
+ask 3 : two   -> continued <b>true</b>,  node holding 1.9 MiB
+ask 4 : three -> continued <b>false</b>, node holding 1.0 MiB
+ask 5 : one   -> continued <b>false</b>, node holding 2.0 MiB
+evicted : 2</pre>
+  <p>
+    The first version of that demonstration was not one: every ask in it
+    reported <code>false</code>, so a flag hard-coded to false would have passed.
+    It now runs five asks by three agents so the flag has to be right in both
+    directions — <code>two</code> asks twice running and must say true, and
+    <code>one</code> is the least recently used when room is needed and must say
+    false when it comes back. The example fails on either, because a signal that
+    cannot say yes cannot be trusted when it says no.
+  </p>
 </section>
 
 <section>
@@ -512,13 +552,12 @@ bound         : alpha asked again and was refused — holding 49 tokens,
   16           426.4      2.87
   24           434.9      2.81   <b>&lt;- what the default was doing</b></pre>
   <p>
-    It scales nearly linearly to a third of this machine's cores and then gets
-    <em>worse</em>. What limits it past there has not been established, and is
-    deliberately not asserted anywhere in the code — the finding is that all of
-    them is a bad number, not that eight is a good one. The scheduler builds its
-    own pool at a third of available parallelism, and
-    <code>examples/throughput</code> takes a thread count so the knee can be
-    found again on a different machine rather than inherited from this one.
+    It scaled nearly linearly to a third of this machine's cores and then got
+    <em>worse</em>, and what limited it there was not established at the time.
+    It has been since, and it was not the machine: the section below on the knee
+    has the answer and the numbers it replaced. Everything in this section still
+    holds — it is the reason the thread count matters at all — but the figures
+    here are the ones from before that was understood.
   </p>
 
   <h3>AVX2 is worth 1.8×, but only once threads stop being the bottleneck</h3>
@@ -616,6 +655,26 @@ one at a time : 24.5 s      all at once : 8.7 s      2.83x</pre>
     different fixes.
   </p>
 
+  <h3>And the batching is continuous</h3>
+  <p>
+    A request that arrived while a batch was running used to wait for the whole
+    batch — which is why the largest batch was two out of four. The agents are
+    real sandboxes and each has to exchange a frame with its guest before it can
+    ask, so they do not arrive together, and the second pair missed the first
+    pair's batch entirely. Lanes are now filled from the queue at the top of
+    every token step and emptied as they finish:
+  </p>
+  <pre>                     static batching   continuous
+largest batch          2 of 3            <b>3 of 3</b>
+time in the queue      6 - 8 s           <b>0.1 s</b>
+wall clock            16.2 s            <b>10.9 s</b></pre>
+  <p>
+    Every lane's state lives in the scheduler rather than on the thread driving
+    it, which is what makes this simpler than it sounds: any waiter can take the
+    next step, and a thread whose own answer is ready stops driving and returns
+    rather than finishing everybody else's work.
+  </p>
+
   <h3>The knob was the wrong one, and the measurement said so</h3>
   <p>
     The scheduler's bound used to be <code>workers</code>: how many passes to
@@ -646,6 +705,76 @@ time      : <b>16.2 s</b> of wall clock, 100% of it someone's share of a pass</p
 </section>
 
 <section>
+  <h2>What shipped: the knee was ours, and removing it reached the memory bus</h2>
+  <div class="callout stop">
+    <h3>A correction to what this page said two sections ago.</h3>
+    <p>
+      It said a forward pass stopped getting faster at about a third of this
+      machine's cores and then got worse, and that what limited it there had not
+      been established. That was honest and it was also a place to stop looking.
+      The limit was not the machine, and finding that out took one experiment
+      that should have been run when the curve was first drawn.
+    </p>
+  </div>
+  <p>
+    <code>examples/bandwidth</code> reads the same bytes at the same thread
+    counts with <em>no transformer</em> — just a sum over every byte of every
+    tensor:
+  </p>
+  <pre>threads  1   9.10 GiB/s      threads 12  15.01
+threads  2  13.42            threads 16  <b>15.93</b>
+threads  4  14.83            threads 24  15.83
+threads  8  14.95</pre>
+  <p>
+    Plain reading climbs to 15&nbsp;GiB/s by four threads and stays there. It
+    does not knee. So the degradation was in how the work was handed out — and
+    the pass was running at 7&nbsp;GiB/s against a machine that reads at 15.9.
+  </p>
+  <p>
+    The cause was granularity. The matrix-vector product gave rayon one task per
+    matrix <em>row</em>: a couple of kilobytes read and a couple of thousand
+    multiply-accumulates, and 128,256 of them for the output head alone. Handing
+    out a hundred thousand tasks costs more the more threads are competing to
+    take one, which is the shape of the curve. Sixty-four rows to a task:
+  </p>
+  <div class="scroll">
+    <table>
+      <caption>One forward pass, one lane, median of five runs of four</caption>
+      <thead><tr><th>Threads</th><th>Before</th><th>After</th></tr></thead>
+      <tbody>
+        <tr><td class="claim">4</td><td>479.9 ms</td><td><strong>77.7 ms</strong> — 15.74 GiB/s</td></tr>
+        <tr><td class="claim">8</td><td>346.5 ms</td><td>127.3 ms</td></tr>
+        <tr><td class="claim">24</td><td>434.9 ms</td><td>232.2 ms</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The optimum moved from eight threads to four, and four reaches
+    15.74&nbsp;GiB/s against the 15.93 that reading alone manages. There is
+    nothing left in the single-lane case: it is memory-bound, and it is at the
+    bound.
+  </p>
+  <p>
+    So the thread default now takes the batch width, because the two answers
+    differ. One lane wants four threads — enough to saturate memory and no more.
+    Eight lanes want eight, because eight times the arithmetic per byte read
+    stops it being purely memory-bound.
+  </p>
+  <pre>lanes=1, 4 threads   84.0 ms per pass, 14.56 GiB/s, 11.9 tokens/s
+lanes=8, 8 threads   <b>27.3 ms per token</b>, 36.7 tokens/s</pre>
+  <p>
+    Against 58.6&nbsp;ms per token before this change and 470&nbsp;ms at the
+    start of the work — seventeen times, for a fleet.
+  </p>
+  <p>
+    <strong>One number moved the wrong way and is worth saying so.</strong> This
+    helped the unbatched path more than the batched one, so batching's
+    <em>relative</em> advantage shrank from 2.83× to 1.94× while both got
+    substantially faster. A speedup ratio is a ratio, and the denominator moved.
+  </p>
+</section>
+
+<section>
   <h2>Run any of it in one command</h2>
   <p>
     Nothing on this page is a benchmark harness or a saved log. Each row is an
@@ -669,6 +798,8 @@ time      : <b>16.2 s</b> of wall clock, 100% of it someone's share of a pass</p
           <td>A fleet queueing for one model, each agent holding its own conversation and bounded in how much of it</td></tr>
         <tr><td class="where">batched</td><td class="where">hv2-infer</td>
           <td>That four conversations in one pass give the same answers as four passes — the thing throughput cannot check</td></tr>
+        <tr><td class="where">bandwidth</td><td class="where">hv2-infer</td>
+          <td>What the machine can read the model at, with no transformer in the way — how the knee was diagnosed</td></tr>
         <tr><td class="where">throughput</td><td class="where">hv2-infer</td>
           <td>What a forward pass costs, swept over thread count — how the numbers below were found</td></tr>
         <tr><td class="where">in_flight</td><td class="where">hv2-swarm</td>
@@ -1075,7 +1206,9 @@ saved         : <b>341.2 GiB, 99.83%</b> of what copying would have cost</pre>
         <tr><td class="claim"><strong>A model actually running</strong></td><td>yes</td><td><strong>yes</strong></td>
           <td><span class="tag ran">ran</span> 1.24B parameters in Q8_0, 58.6 ms per token across eight lanes and 178 ms alone, answers checked</td></tr>
         <tr><td class="claim">Conversations per pass over the weights</td><td>—</td><td>up to 8</td>
-          <td><span class="tag ran">ran</span> 4.7× the tokens per second of one lane, and the answers are identical to running them separately</td></tr>
+          <td><span class="tag ran">ran</span> 36.7 tokens/s across eight lanes against 11.9 on one, and the answers are identical to running them separately</td></tr>
+        <tr><td class="claim">How close a pass is to the memory bus</td><td>—</td><td>at it</td>
+          <td><span class="tag ran">ran</span> 15.74 GiB/s of weights against 15.93 GiB/s for reading the same bytes with no arithmetic</td></tr>
         <tr><td class="claim">Inference scheduled across a fleet</td><td>—</td><td>batched, bounded</td>
           <td><span class="tag ran">ran</span> four sandboxes, one worker, first-in-first-out; an agent over its context bound refused before queueing</td></tr>
         <tr><td class="claim">An agent's conversation</td><td>—</td><td>its own, and only its own</td>
@@ -1206,32 +1339,23 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     (<code>HRESULT 0x80370302</code>), so both are compilation results.
   </p>
 
-  <h3>4. The batching is static, not continuous</h3>
+  <h3>4. There are no priorities and no preemption</h3>
   <p>
-    A request that arrives while a batch is running waits for the next batch
-    rather than joining the current one at its next token. That costs a late
-    arrival some latency and costs throughput nothing, and it is a great deal
-    simpler — but it is why <code>scheduled</code>'s largest batch is two out of
-    four: the four agents' requests do not arrive together, because each has to
-    exchange a frame with its guest first. A continuously batched loop would
-    have carried all four.
-  </p>
-  <p>
-    Also absent: priorities, preemption, and eviction of a cold conversation. An
-    agent that stops asking holds its cache until something drops it, and
-    nothing does — so a node's memory is decided by how many agents have ever
-    asked rather than by how many are active.
+    The queue is first-in-first-out and a lane runs to the end of its answer. An
+    agent that asks for thirty tokens delays one that wants three, and there is
+    no way to say that one agent's work matters more than another's. The
+    capability graph decides who may ask and says nothing about who goes first.
   </p>
 
-  <h3>5. What limits a pass past a third of the cores is not known</h3>
+  <h3>5. AVX-512 is on this CPU and unused</h3>
   <p>
-    Throughput scales nearly linearly to eight threads on this host and then
-    degrades. The scheduler avoids the bad region, which is enough to be worth
-    doing and is not the same as understanding it — it could be memory
-    bandwidth, cache contention between the shared weights and each agent's
-    activations, rayon's own scheduling, or the fact that this is a virtual
-    machine with 24 vCPUs on hardware it does not own. Nothing here distinguishes
-    those, and the code says so rather than picking one.
+    The dot product dispatches to AVX2. This machine is a Zen 5 and reports
+    <code>avx512f</code>, <code>avx512bw</code> and <code>avx512_vnni</code>,
+    the last of which multiplies and accumulates bytes in one instruction and is
+    exactly the shape of a <code>Q8_0</code> product. Untried — and the
+    single-lane case is already at the memory bus, so it would only help the
+    batched one, which is the case that matters. That is a prediction and not a
+    result, which is why it is on this list rather than in a table.
   </p>
 
   <h3>6. The tokeniser's pre-tokeniser is written out by hand</h3>
@@ -1313,17 +1437,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   <h2>What to do next</h2>
   <ul>
     <li>
-      <strong>Make the batching continuous.</strong> A request that arrives
-      while a batch is running waits for the whole batch. Letting it join at the
-      next token is what turns "largest batch of two out of four" into "four",
-      and the queue already knows who is waiting — what it cannot do is admit
-      anyone once a pass has started.
-    </li>
-    <li>
-      <strong>Let a conversation be evicted.</strong> An agent holds its cache
-      until something drops it and nothing does, so a node's memory is decided
-      by how many agents have ever asked rather than by how many are active. The
-      bound refuses new turns; it does not reclaim old ones.
+      <strong>Try AVX-512, and only for the batched case.</strong> This CPU has
+      <code>avx512_vnni</code>, which multiplies and accumulates bytes in one
+      instruction and is the exact shape of a <code>Q8_0</code> product. The
+      single-lane pass is already at the memory bus and cannot benefit; the
+      batched one is where the arithmetic became the limit, and it is the case a
+      fleet is in.
     </li>
     <li>
       <strong>Give hv1's guest a second vCPU and a device with a ring.</strong>
@@ -1341,9 +1460,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       hypervisor underneath.
     </li>
     <li>
-      <strong>Find out what the thread knee is.</strong> Avoiding it was worth
-      1.4×, and understanding it might be worth more — or might say the ceiling
-      is real, in which case wider batches are the only lever left.
+      <strong>Decide whether the queue needs a priority.</strong> It is
+      first-in-first-out and a lane runs to the end of its answer, so a long
+      answer delays a short one. Whether that matters is a product question the
+      capability graph does not answer, and the graph is where an answer would
+      go.
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is.
@@ -1392,6 +1513,17 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     answering something else is what makes it evidence.
   </p>
   <p>
+    And one more, which is the most expensive kind: <strong>the ceiling you
+    assume is the one you never measure.</strong> This page carried "what limits
+    it past there has not been established" as an honest admission, and an
+    honest admission is still a place to stop looking. One experiment — read the
+    same bytes with no transformer in the way — showed the machine reading at
+    twice what the pass was managing and not degrading at all, which said the
+    limit was ours. It was: a hundred thousand rayon tasks where six hundred
+    would do. The pass is now at the memory bus, and it took less work to find
+    that out than it took to write the paragraph explaining why it was unknown.
+  </p>
+  <p>
     The strongest case is still <code>svm_run</code>, and it now has a companion.
     <code>svm_run</code>'s inline assembly had no input operands at all, so it
     read its two arguments from the wrong registers and handed <code>VMRUN</code>
@@ -1406,16 +1538,18 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master b554810 · 0 open PRs · 0 open issues · suite green · a model answers
+  master e00c7d5 · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
-  did not caused no forward pass · a fleet queues for it in batches that share
-  one pass over the weights — 58.6&nbsp;ms per token across eight lanes against
-  278.9 alone, and the same answers either way · each agent holds its own
-  conversation and no agent can name another's · a compiled 64-bit Rust
-  unikernel boots in 2.4&nbsp;ms, sleeps when idle, and holds three requests in
-  the air at once · a fleet costs the model once plus 64&nbsp;KiB per token of
-  context · Type-1 hosts a guest that builds its own descriptor tables and
-  crosses into protected mode, nested, and has still never run on a machine
+  did not caused no forward pass · a fleet queues for it continuously, lanes
+  filling and emptying between token steps — 27.3&nbsp;ms per token across eight
+  of them, and the same answers as running them alone · one lane runs at
+  15.74&nbsp;GiB/s against the 15.93 this machine can read at, so there is
+  nothing left in it · a conversation that has to be let go is let go, and the
+  agent it belonged to is told · a compiled 64-bit Rust unikernel boots in
+  2.4&nbsp;ms, sleeps when idle, and holds three requests in the air at once · a
+  fleet costs the model once plus 64&nbsp;KiB per token of context · Type-1
+  hosts a guest that builds its own descriptor tables and crosses into protected
+  mode, nested, and has still never run on a machine
 </footer>
 
 </div>
