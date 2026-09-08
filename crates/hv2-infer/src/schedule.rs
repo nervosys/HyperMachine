@@ -40,24 +40,31 @@
 //! inference running in the host: agents cannot read each other's context
 //! because there is no way to name another agent's session.
 //!
+//! # Continuous
+//!
+//! Lanes are filled from the queue at the top of every token step and emptied
+//! as they finish, so a request arriving while others are being answered joins
+//! at the next token rather than waiting for them to end. That matters because
+//! agents do not arrive together: four sandboxes each have to exchange a frame
+//! with their guest first, and under batch-at-a-time scheduling that was enough
+//! to make the largest batch two out of four.
+//!
+//! Every lane's state lives in the scheduler rather than on the thread driving
+//! it, so any waiter can take the next step — and a thread whose own answer is
+//! ready stops driving and returns rather than finishing everybody else's work.
+//!
 //! # What is deliberately not here
 //!
-//! *Continuous* batching: a request that arrives while a batch is running waits
-//! for the next batch rather than joining the current one at its next token.
-//! That costs a late arrival some latency and costs throughput nothing, and it
-//! is a great deal simpler — there is no worker thread at all, because whichever
-//! caller finds no batch in flight runs one.
-//!
-//! Also absent: priorities, preemption, and eviction of a cold conversation. An
-//! agent that stops asking holds its cache until something drops it, and
-//! nothing does.
+//! Priorities, preemption, and eviction of a cold conversation. An agent that
+//! stops asking holds its cache until something drops it, and nothing does.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use crate::model::argmax;
 use crate::model::{Model, Runner, Session};
-use crate::{ask_many, chat_turn, Error};
+use crate::{chat_turn, Error};
 
 /// What a node will not let one agent take.
 #[derive(Debug, Clone, Copy)]
@@ -179,8 +186,12 @@ pub struct Stats {
     pub peak_waiting: usize,
     /// Time spent waiting, summed across requests.
     pub total_wait: Duration,
-    /// Batches run.
-    pub batches: usize,
+    /// Token steps run — passes over the whole model.
+    ///
+    /// With continuous batching there are no discrete batches to count: lanes
+    /// join and leave between steps, so what there is a number of is *steps*.
+    /// Against [`Stats::served`] this is what says whether batching happened.
+    pub steps: usize,
     /// The most conversations that ever shared one pass.
     ///
     /// With [`Stats::served`], this is what says whether batching happened. If
@@ -200,7 +211,7 @@ pub fn default_threads() -> usize {
     (cores / 3).max(1)
 }
 
-/// A request that has joined the queue and not been answered.
+/// A request that has joined the queue and not yet been given a lane.
 struct Waiting {
     ticket: u64,
     agent: String,
@@ -208,17 +219,46 @@ struct Waiting {
     queued_at: Instant,
 }
 
+/// What a lane is doing.
+enum Stage {
+    /// Still feeding the prompt, at this index into it.
+    Prompt(usize),
+    /// Generating, with this token to feed next.
+    Answering(u32),
+    /// Finished; feeding the marker that closes the turn in the cache.
+    Closing,
+    /// Done, and its answer is published.
+    Retired,
+}
+
+/// A request occupying a lane.
+struct Active {
+    ticket: u64,
+    agent: String,
+    queued_at: Instant,
+    admitted_at: Instant,
+    session: Session,
+    turn: Vec<u32>,
+    stage: Stage,
+    position: usize,
+    produced: Vec<u32>,
+    /// The most lanes that were ever busy alongside this one, itself included.
+    shared: usize,
+}
+
 struct Inner<'m> {
-    /// Requests admitted and not yet in a batch, oldest first.
+    /// Requests admitted to the queue and not yet in a lane, oldest first.
     pending: VecDeque<Waiting>,
+    /// Lanes in flight. Their conversations live here while they run.
+    active: Vec<Active>,
     /// Answers nobody has collected yet, by ticket.
     done: BTreeMap<u64, Result<Served, Refused>>,
-    /// Whether a batch is being run right now.
-    running: bool,
+    /// Whether a token step is being run right now.
+    stepping: bool,
     next_ticket: u64,
-    /// One conversation per agent, kept between requests.
+    /// Conversations not currently in a lane.
     sessions: BTreeMap<String, Session>,
-    /// The runner, taken by whoever is running the current batch.
+    /// The runner, taken by whoever is running the current step.
     runner: Option<Runner<'m>>,
     stats: Stats,
 }
@@ -259,8 +299,9 @@ impl<'m> Scheduler<'m> {
             pool,
             inner: Mutex::new(Inner {
                 pending: VecDeque::new(),
+                active: Vec::new(),
                 done: BTreeMap::new(),
-                running: false,
+                stepping: false,
                 next_ticket: 0,
                 sessions: BTreeMap::new(),
                 runner: Some(Runner::new(model, lanes)),
@@ -286,6 +327,10 @@ impl<'m> Scheduler<'m> {
     }
 
     /// How much context `agent` is holding.
+    ///
+    /// Zero while that agent is being served, because its conversation is in a
+    /// lane rather than in the map — which is a small lie and the reason the
+    /// bound is checked at admission rather than continuously.
     pub fn context_of(&self, agent: &str) -> usize {
         self.inner
             .lock()
@@ -304,24 +349,31 @@ impl<'m> Scheduler<'m> {
             .remove(agent);
     }
 
-    /// Ask on `agent`'s behalf, waiting for a turn.
+    /// Ask on `agent`'s behalf, waiting for an answer.
     ///
-    /// Blocks until a batch that includes this request has run. Returns
-    /// [`Refused`] without queueing if the agent is over its bound — whether the
-    /// agent is *allowed* to ask at all is not decided here, it is decided by
-    /// whoever holds the capability graph, before this is called.
+    /// Returns [`Refused`] without queueing if the agent is over its bound —
+    /// whether the agent is *allowed* to ask at all is not decided here, it is
+    /// decided by whoever holds the capability graph, before this is called.
     ///
-    /// # How the batch gets run
+    /// # How the work gets done
     ///
-    /// By whichever caller finds no batch in flight. There is no worker thread:
-    /// a thread that has nothing to do but wait may as well do the work, and a
-    /// spawned one would have to outlive the borrow of the model. Everyone else
-    /// waits and collects.
+    /// One token step at a time, by whichever waiting thread finds no step in
+    /// flight. There is no worker thread: a thread that has nothing to do but
+    /// wait may as well drive a step, and a spawned one would have to outlive
+    /// the borrow of the model.
     ///
-    /// What this does *not* do is continuous batching: a request that arrives
-    /// while a batch is running waits for the next one rather than joining the
-    /// current one at its next token. That costs latency for a late arrival and
-    /// no throughput, and it is a great deal simpler.
+    /// The batching is *continuous*: lanes are filled from the queue at the top
+    /// of every step and emptied as they finish, so a request that arrives
+    /// while others are being answered joins at the next token rather than
+    /// waiting for them to finish. That is the difference between a largest
+    /// batch of two and one of four when four agents ask at slightly different
+    /// times, which is what four agents talking to their own guests actually
+    /// do.
+    ///
+    /// Because the state of every lane lives in the scheduler rather than on
+    /// the driving thread, any waiter can drive the next step. A thread whose
+    /// own answer is ready stops driving and returns; the next step is taken by
+    /// somebody who is still waiting.
     pub fn ask(&self, agent: &str, question: &str) -> Result<Result<Served, Refused>, Error> {
         // Costed before queueing, so a request that cannot be served does not
         // make anyone else wait behind it. The tokeniser is shared and
@@ -357,118 +409,200 @@ impl<'m> Scheduler<'m> {
         self.turn.notify_all();
 
         loop {
-            let batch = {
+            let taken = {
                 let mut inner = self.inner.lock().expect("not poisoned");
                 if let Some(answer) = inner.done.remove(&ticket) {
                     return Ok(answer);
                 }
-                if inner.running || inner.pending.is_empty() {
-                    let _unused = self.turn.wait(inner).expect("not poisoned");
+                if inner.stepping {
+                    let _guard = self.turn.wait(inner).expect("not poisoned");
                     continue;
                 }
 
-                // Become the batcher. Take as many waiting requests as there
-                // are lanes — but never two from the same agent, because they
-                // would need the same conversation twice and a conversation
-                // cannot be in two lanes of one pass. The second one stays in
-                // the queue and goes in the next batch.
-                inner.running = true;
-                let lanes = self.limits.batch.max(1);
-                let mut taken: Vec<Waiting> = Vec::with_capacity(lanes);
-                let mut left: VecDeque<Waiting> = VecDeque::new();
-                while let Some(request) = inner.pending.pop_front() {
-                    let already = taken.iter().any(|w| w.agent == request.agent);
-                    if taken.len() < lanes && !already {
-                        taken.push(request);
-                    } else {
-                        left.push_back(request);
-                    }
-                }
-                inner.pending = left;
+                // Fill any free lane from the queue. Never two lanes for one
+                // agent: they would need the same conversation twice, and a
+                // conversation cannot be in two lanes of one pass.
+                self.admit(&mut inner);
 
+                if inner.active.is_empty() {
+                    // Nothing to do and our answer is not ready, which means
+                    // another thread is between publishing and notifying.
+                    let _guard = self.turn.wait(inner).expect("not poisoned");
+                    continue;
+                }
+
+                inner.stepping = true;
+                let active = core::mem::take(&mut inner.active);
                 let runner = inner
                     .runner
                     .take()
-                    .expect("the runner, since no batch is in flight");
-                let sessions: Vec<Session> = taken
-                    .iter()
-                    .map(|w| {
-                        inner
-                            .sessions
-                            .remove(&w.agent)
-                            .unwrap_or_else(|| Session::open(self.model))
-                    })
-                    .collect();
-                inner.stats.batches += 1;
-                inner.stats.largest_batch = inner.stats.largest_batch.max(taken.len());
-                for request in &taken {
-                    inner.stats.total_wait += request.queued_at.elapsed();
-                }
-                (taken, sessions, runner)
+                    .expect("the runner, since no step is running");
+                (active, runner)
             };
+            let (mut active, mut runner) = taken;
 
-            let (requests, mut sessions, mut runner) = batch;
-
-            let questions: Vec<&str> = requests.iter().map(|w| w.question.as_str()).collect();
-            let started = Instant::now();
-            let answers = {
-                let mut refs: Vec<&mut Session> = sessions.iter_mut().collect();
-                self.pool.install(|| {
-                    ask_many(
-                        &mut runner,
-                        &mut refs,
-                        &questions,
-                        self.limits.answer_tokens,
-                    )
-                })
-            };
-            let ran = started.elapsed();
+            let outcome = self.advance(&mut active, &mut runner);
 
             {
                 let mut inner = self.inner.lock().expect("not poisoned");
-                match answers {
-                    Ok(texts) => {
-                        for ((request, session), text) in requests.iter().zip(sessions).zip(texts) {
-                            let context = session.len();
-                            inner.sessions.insert(request.agent.clone(), session);
+                inner.stats.steps += 1;
+                inner.stats.largest_batch = inner.stats.largest_batch.max(
+                    active
+                        .iter()
+                        .filter(|lane| !matches!(lane.stage, Stage::Retired))
+                        .count(),
+                );
+
+                if outcome.is_err() {
+                    // The pass failed. Put every conversation back and let the
+                    // requests re-queue, which is all a caller could do anyway.
+                    for lane in active.drain(..) {
+                        inner.sessions.insert(lane.agent.clone(), lane.session);
+                        inner.pending.push_back(Waiting {
+                            ticket: lane.ticket,
+                            agent: lane.agent,
+                            question: String::new(),
+                            queued_at: lane.queued_at,
+                        });
+                    }
+                } else {
+                    // Publish and free every lane that finished.
+                    let mut still = Vec::with_capacity(active.len());
+                    for lane in active.drain(..) {
+                        if matches!(lane.stage, Stage::Retired) {
+                            let text = self.model.tokenizer.decode(&lane.produced);
+                            let context = lane.session.len();
+                            inner.sessions.insert(lane.agent.clone(), lane.session);
                             inner.done.insert(
-                                request.ticket,
+                                lane.ticket,
                                 Ok(Served {
                                     text,
-                                    // Saturating: the elapsed time includes
-                                    // the batch, so this is the wait before it
-                                    // — and a clock that went backwards should
-                                    // report zero rather than panic.
-                                    waited: request.queued_at.elapsed().saturating_sub(ran),
-                                    ran,
+                                    waited: lane
+                                        .admitted_at
+                                        .saturating_duration_since(lane.queued_at),
+                                    ran: lane.admitted_at.elapsed(),
                                     context,
-                                    batch: requests.len(),
+                                    batch: lane.shared,
                                 }),
                             );
                             inner.stats.served += 1;
+                            inner.stats.total_wait +=
+                                lane.admitted_at.saturating_duration_since(lane.queued_at);
+                        } else {
+                            still.push(lane);
                         }
                     }
-                    Err(_) => {
-                        // The pass failed, which is not something a caller can
-                        // do anything about per request. Put the conversations
-                        // back and let every waiter in this batch retry by
-                        // finding no answer and no batch running.
-                        for (request, session) in requests.iter().zip(sessions) {
-                            inner.sessions.insert(request.agent.clone(), session);
-                            inner.pending.push_back(Waiting {
-                                ticket: request.ticket,
-                                agent: request.agent.clone(),
-                                question: request.question.clone(),
-                                queued_at: request.queued_at,
-                            });
-                        }
-                    }
+                    inner.active = still;
                 }
+
                 inner.runner = Some(runner);
-                inner.running = false;
+                inner.stepping = false;
             }
             self.turn.notify_all();
         }
+    }
+
+    /// Move waiting requests into free lanes.
+    ///
+    /// Called at the top of every step, which is what makes the batching
+    /// continuous rather than one batch at a time.
+    fn admit(&self, inner: &mut Inner<'m>) {
+        let lanes = self.limits.batch.max(1);
+        let mut deferred: VecDeque<Waiting> = VecDeque::new();
+        while inner.active.len() < lanes {
+            let Some(request) = inner.pending.pop_front() else {
+                break;
+            };
+            if inner.active.iter().any(|lane| lane.agent == request.agent) {
+                deferred.push_back(request);
+                continue;
+            }
+            let session = inner
+                .sessions
+                .remove(&request.agent)
+                .unwrap_or_else(|| Session::open(self.model));
+            let turn = chat_turn(self.model, &request.question, session.is_empty());
+            let position = session.len();
+            inner.active.push(Active {
+                ticket: request.ticket,
+                agent: request.agent,
+                queued_at: request.queued_at,
+                admitted_at: Instant::now(),
+                session,
+                turn,
+                stage: Stage::Prompt(0),
+                position,
+                produced: Vec::new(),
+                shared: 0,
+            });
+        }
+        while let Some(request) = deferred.pop_back() {
+            inner.pending.push_front(request);
+        }
+    }
+
+    /// Advance every lane by one token.
+    fn advance(&self, active: &mut [Active], runner: &mut Runner<'m>) -> Result<(), Error> {
+        let busy = active
+            .iter()
+            .filter(|lane| !matches!(lane.stage, Stage::Retired))
+            .count();
+        for lane in active.iter_mut() {
+            if !matches!(lane.stage, Stage::Retired) {
+                lane.shared = lane.shared.max(busy);
+            }
+        }
+
+        let eot = self.model.tokenizer.id_of("<|eot_id|>");
+        let mut lanes: Vec<usize> = Vec::with_capacity(active.len());
+        {
+            let mut work: Vec<(&mut Session, u32, usize)> = Vec::with_capacity(active.len());
+            for (index, lane) in active.iter_mut().enumerate() {
+                let token = match lane.stage {
+                    Stage::Prompt(at) => lane.turn[at],
+                    Stage::Answering(token) => token,
+                    Stage::Closing => match eot {
+                        Some(eot) => eot,
+                        // No marker to close with, so there is nothing to feed
+                        // and the lane is finished.
+                        None => {
+                            lane.stage = Stage::Retired;
+                            continue;
+                        }
+                    },
+                    Stage::Retired => continue,
+                };
+                lanes.push(index);
+                work.push((&mut lane.session, token, lane.position));
+            }
+            if work.is_empty() {
+                return Ok(());
+            }
+            self.pool.install(|| runner.step(&mut work))?;
+        }
+
+        for (slot, &index) in lanes.iter().enumerate() {
+            let next = argmax(runner.logits(slot));
+            let lane = &mut active[index];
+            lane.position += 1;
+            lane.stage = match lane.stage {
+                Stage::Prompt(at) if at + 1 < lane.turn.len() => Stage::Prompt(at + 1),
+                // The prompt is in; `next` is the first token of the answer.
+                Stage::Prompt(_) | Stage::Answering(_) => {
+                    if self.model.stops.contains(&next)
+                        || lane.produced.len() >= self.limits.answer_tokens
+                    {
+                        Stage::Closing
+                    } else {
+                        lane.produced.push(next);
+                        Stage::Answering(next)
+                    }
+                }
+                Stage::Closing => Stage::Retired,
+                Stage::Retired => Stage::Retired,
+            };
+        }
+        Ok(())
     }
 }
 

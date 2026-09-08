@@ -491,6 +491,11 @@ async fn main() -> std::process::ExitCode {
 
     // ── the queue was a queue ───────────────────────────────────────────
     let stats = scheduler.stats();
+    // The ceiling: only agents holding the capability ever reach the queue, and
+    // a pass carries at most as many lanes as the scheduler was given. Saying
+    // what the ceiling is stops "3" reading as a shortfall when it is the whole
+    // fleet.
+    let possible = PLANS.iter().filter(|p| p.granted).count().min(limits.batch);
     // Per-request service time cannot be summed: a batch's duration belongs to
     // every request in it, so adding them up counts one pass several times and
     // reports more service than there was wall clock. What a request actually
@@ -508,14 +513,25 @@ async fn main() -> std::process::ExitCode {
         stats.admitted, stats.served, stats.refused, stats.peak_waiting
     );
     println!(
-        "batches       : {} passes over the weights for {} answers — the largest carried {} conversations at once",
-        stats.batches, stats.served, stats.largest_batch
+        "steps         : {} passes over the weights for {} answers — the most conversations one pass carried was {} of a possible {}",
+        stats.steps,
+        stats.served,
+        stats.largest_batch,
+        possible
     );
     if stats.largest_batch < 2 {
         println!(
             "               FAILED — every pass read the whole model to produce one token, so nothing was batched"
         );
         ok = false;
+    } else if stats.largest_batch < possible {
+        // Not a failure: the agents are real sandboxes and do not arrive in
+        // lockstep. Worth saying, because the gap between this and `possible`
+        // is exactly what continuous batching is for.
+        println!(
+            "               (they did not all overlap — {} of {possible} is what the timing              allowed)",
+            stats.largest_batch
+        );
     }
     println!(
         "time          : {:.1} s of wall clock, {:.1} s of it someone's share of a pass — {:.0}% busy",
