@@ -252,6 +252,9 @@ struct Turn {
     outcome: String,
     batch: usize,
     waited: Duration,
+    /// The same wait counted in token steps, which does not move when the host
+    /// is busy and is therefore the number the priority question is about.
+    waited_steps: usize,
     ran: Duration,
     context: usize,
     /// The answer text, empty if it was refused.
@@ -284,6 +287,7 @@ fn converse(
             turns.push(Turn {
                 outcome: "the guest never asked".to_string(),
                 waited: Duration::ZERO,
+                waited_steps: 0,
                 ran: Duration::ZERO,
                 context: 0,
                 batch: 0,
@@ -300,6 +304,7 @@ fn converse(
             turns.push(Turn {
                 outcome: "refused: no capability, never queued".to_string(),
                 waited: Duration::ZERO,
+                waited_steps: 0,
                 ran: Duration::ZERO,
                 context: 0,
                 batch: 0,
@@ -318,6 +323,7 @@ fn converse(
                 turns.push(Turn {
                     outcome: "served".to_string(),
                     waited: served.waited,
+                    waited_steps: served.waited_steps,
                     ran: served.ran,
                     context: served.context,
                     batch: served.batch,
@@ -329,6 +335,7 @@ fn converse(
                 turns.push(Turn {
                     outcome: format!("refused: {refused}"),
                     waited: Duration::ZERO,
+                    waited_steps: 0,
                     ran: Duration::ZERO,
                     context: 0,
                     batch: 0,
@@ -340,6 +347,7 @@ fn converse(
                 turns.push(Turn {
                     outcome: format!("FAILED — {e}"),
                     waited: Duration::ZERO,
+                    waited_steps: 0,
                     ran: Duration::ZERO,
                     context: 0,
                     batch: 0,
@@ -481,11 +489,12 @@ async fn main() -> std::process::ExitCode {
                 );
             } else {
                 println!(
-                    "{:<6} turn {}: {:?}  [waited {:.1} s, batch of {} ran {:.1} s, context {} tokens]",
+                    "{:<6} turn {}: {:?}  [waited {:.1} s = {} steps, batch of {} ran {:.1} s, context {} tokens]",
                     transcript.name,
                     turn + 1,
                     record.answer,
                     record.waited.as_secs_f64(),
+                    record.waited_steps,
                     record.batch,
                     record.ran.as_secs_f64(),
                     record.context

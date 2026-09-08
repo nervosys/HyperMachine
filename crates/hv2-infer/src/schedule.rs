@@ -177,6 +177,15 @@ pub struct Served {
     pub text: String,
     /// How long the request sat in the queue before its batch started.
     pub waited: Duration,
+    /// The same wait counted in token steps rather than in time.
+    ///
+    /// A step is one pass over the model, so this is how much work the node did
+    /// for other people before it started on this one. It is worth having
+    /// beside [`Served::waited`] because it does not move when the machine is
+    /// busy: on a host at 97% the duration triples and this does not change at
+    /// all. Whether a queue needs priorities is a question about this number,
+    /// and asking it in milliseconds gets an answer about the host.
+    pub waited_steps: usize,
     /// How long that batch took.
     ///
     /// Shared with everything else in the batch: this is the time for the whole
@@ -267,6 +276,8 @@ struct Waiting {
     agent: String,
     question: String,
     queued_at: Instant,
+    /// What the step counter read when this joined the queue.
+    queued_at_step: usize,
 }
 
 /// What a lane is doing.
@@ -293,6 +304,8 @@ struct Active {
     agent: String,
     queued_at: Instant,
     admitted_at: Instant,
+    /// Token steps that ran between joining the queue and getting a lane.
+    waited_steps: usize,
     session: Session,
     /// Whether the conversation was already going when this turn joined it.
     continued: bool,
@@ -485,11 +498,13 @@ impl<'m> Scheduler<'m> {
 
             let ticket = inner.next_ticket;
             inner.next_ticket += 1;
+            let queued_at_step = inner.stats.steps;
             inner.pending.push_back(Waiting {
                 ticket,
                 agent: agent.to_string(),
                 question: question.to_string(),
                 queued_at,
+                queued_at_step,
             });
             inner.stats.admitted += 1;
             inner.stats.peak_waiting = inner.stats.peak_waiting.max(inner.pending.len());
@@ -553,11 +568,18 @@ impl<'m> Scheduler<'m> {
                                 last_used: Instant::now(),
                             },
                         );
+                        // Its earlier wait is kept rather than reset: the
+                        // steps it already sat through happened, and a
+                        // re-queued request that reported zero would say the
+                        // failure had cost it nothing.
+                        let queued_at_step =
+                            inner.stats.steps.saturating_sub(lane.waited_steps);
                         inner.pending.push_back(Waiting {
                             ticket: lane.ticket,
                             agent: lane.agent,
                             question: String::new(),
                             queued_at: lane.queued_at,
+                            queued_at_step,
                         });
                     }
                 } else {
@@ -581,6 +603,7 @@ impl<'m> Scheduler<'m> {
                                     waited: lane
                                         .admitted_at
                                         .saturating_duration_since(lane.queued_at),
+                                    waited_steps: lane.waited_steps,
                                     ran: lane.admitted_at.elapsed(),
                                     context,
                                     batch: lane.shared,
@@ -636,6 +659,7 @@ impl<'m> Scheduler<'m> {
                 agent: request.agent,
                 queued_at: request.queued_at,
                 admitted_at: Instant::now(),
+                waited_steps: inner.stats.steps.saturating_sub(request.queued_at_step),
                 session,
                 continued,
                 turn,

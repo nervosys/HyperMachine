@@ -2123,6 +2123,71 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <section>
+</section>
+
+<section>
+  <h2>What a request waits for, and why the queue has no priority</h2>
+  <p>
+    The standing question was whether the queue needs a priority: it is
+    first-in-first-out, a lane runs to the end of its answer, and a request that
+    arrives when every lane is busy waits. Nobody had measured the wait, so
+    nobody could weigh the change. <code>examples/queueing</code> measures it:
+    two lanes, eight agents asking at once from their own threads.
+  </p>
+  <div class="callout">
+    <h3>Counted in steps, not seconds</h3>
+    <p>
+      A wait in milliseconds is a fact about the host. This machine has measured
+      40.8, 54.3 and 58.9&nbsp;ms per token in three consecutive runs of one
+      configuration because the Windows side was busy, and a queueing result
+      that moves by 40% with somebody else's build is not a result. A <em>step</em>
+      is one pass over the weights, so counting those makes the answer a
+      property of the scheduler. It comes out identical on a loaded machine and
+      an idle one, which is the whole reason to count them.
+    </p>
+  </div>
+  <pre>waits, in steps: <b>[0, 1, 19, 20, 38, 39, 57, 58]</b>
+                 <b>[0, 0, 19, 19, 38, 38, 57, 57]</b>   (a second run)
+                 longest 58, against 19 steps that one answer holds a lane</pre>
+  <p>
+    A staircase in treads of two &mdash; the lane count &mdash; rising by one
+    answer each time. The longest wait is 3.1 answers' worth, and
+    <em>askers/lanes&nbsp;&minus;&nbsp;1</em> predicts 3. The only thing that
+    moves between runs is the &plusmn;1 inside each tread: whether the two
+    threads of a pair reach the queue in the same step or one apart, which is a
+    race between eight threads and not a property of the scheduler. The treads
+    themselves &mdash; 0, 19, 38, 57 &mdash; are identical every time. That is
+    first-in-first-out doing exactly what it says: a request waits for a lane, a
+    lane frees when an answer finishes, nobody may jump, and the cost is spread
+    evenly because of it.
+  </p>
+  <p>
+    Which settles the engineering half and leaves the other half clean.
+    <strong>A priority would not make that wait smaller. It would move it from
+    the urgent request onto somebody else.</strong> Whether that trade is worth
+    making is a question about which agents are urgent — and that is the
+    capability graph's to answer, since it already decides who may ask at all.
+    What was missing was the size of the thing being traded, and it is three
+    answers.
+  </p>
+  <div class="callout stop">
+    <h3>The first version of the denominator was wrong, and it was the batching that hid it</h3>
+    <p>
+      It divided total steps by answers served: 77 steps, 8 answers, 9 steps
+      each. But with two lanes a step serves <em>two</em> answers, so that is the
+      batching-amortised cost, and dividing a wait by it overstated the wait by
+      the batch width — 6.4 answers' worth instead of 3.1. The figure a waiting
+      request actually waits for is how long an answer holds a <em>lane</em>,
+      which is steps divided by rounds of lanes: 77/4 = 19.
+    </p>
+    <p>
+      Caught because the corrected number had to agree with
+      <em>askers/lanes&nbsp;&minus;&nbsp;1</em> and the first one did not. It is
+      the seventh instrument on this page to be wrong and the first to be caught
+      by a prediction rather than by a failure.
+    </p>
+  </div>
+
   <h2>What to do next</h2>
   <ul>
     <li>
@@ -2148,17 +2213,18 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       hypervisor underneath.
     </li>
     <li>
-      <strong>Decide whether the queue needs a priority.</strong> The only open
-      item here that is not about hardware or about a quiet machine. It is
-      first-in-first-out and a lane runs to the end of its answer, so a long
-      answer delays a short one. Whether that matters is a product question the
-      capability graph does not answer, and the graph is where an answer would
-      go.
+      <strong>Give the capability graph a notion of urgency, or decide it has
+      none.</strong> The queueing cost is now measured &mdash; see below &mdash;
+      so what is left is genuinely the product question and not a hidden
+      engineering one: are some agents' requests more urgent than others'? If
+      the answer is no, the scheduler is already right. If it is yes, the
+      priority belongs in the graph that already decides who may ask at all, and
+      the scheduler should read it rather than invent one.
     </li>
     <li>
       <strong>Keep the suite green.</strong> It is: 5,268 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
-      all fifteen examples. That count came out at 93 on two earlier runs, and
+      all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current
       tree, including once with a <code>clippy --workspace</code> pass first,
       which was the only structural difference between the two shapes. There are
