@@ -103,9 +103,19 @@ pub struct NatConfig {
     /// typically the host's address on whatever interface reaches the
     /// destination.
     pub external_ip: Ipv4Addr,
-    /// Range of external ports available for dynamic allocation. Kept
-    /// small in tests; production use wants the ephemeral range
+    /// Range of external ports available for dynamic allocation, inclusive
+    /// and *in order*: `.0` must not exceed `.1`. [`NatTable::new`] checks it,
+    /// because the allocator's span arithmetic underflows on a reversed range
+    /// and the panic it produces points at the allocator rather than at the
+    /// caller who wrote the range backwards. A single-port range is fine and
+    /// is what the exhaustion test uses.
+    ///
+    /// Kept small in tests; production use wants the ephemeral range
     /// (49152..=65535) or similar.
+    ///
+    /// Ports inside this range may also carry a [`PortForward`]: the allocator
+    /// skips any port a forward has claimed, so the two never hand out the same
+    /// one. See [`NatTable::add_port_forward`].
     pub port_range: (u16, u16),
     /// A mapping with no traffic in either direction for this long is
     /// evicted by [`NatTable::age_entries`].
@@ -158,7 +168,20 @@ pub struct NatTable {
 }
 
 impl NatTable {
+    /// # Panics
+    ///
+    /// If `config.port_range` is reversed. `NatConfig`'s fields are public and
+    /// its range is a bare tuple, so writing it backwards is a plausible
+    /// mistake and one nothing else would catch: the allocator would subtract
+    /// the larger from the smaller. The config cannot be changed after this
+    /// point — `config()` hands out a shared reference — so checking here is
+    /// enough.
     pub fn new(config: NatConfig) -> Self {
+        assert!(
+            config.port_range.0 <= config.port_range.1,
+            "NatConfig::port_range is (lo, hi) and must have lo <= hi; got {:?}",
+            config.port_range
+        );
         let next_port = config.port_range.0;
         Self {
             config,
@@ -183,6 +206,19 @@ impl NatTable {
     }
 
     /// Add a static host-port → guest endpoint forwarding rule.
+    ///
+    /// The host port may fall inside [`NatConfig::port_range`]. It is not
+    /// rejected, because with the default range of 49152–65535 forwarding a
+    /// high port is a reasonable thing to want, and because this takes a port
+    /// number that may have come from a command line — a guard here would have
+    /// to either panic on user input or change this signature. Instead the
+    /// dynamic allocator skips forwarded ports, which is checked once per new
+    /// flow rather than once per packet and holds however the two are ordered.
+    ///
+    /// Without that, an inbound reply to a *guest-initiated* connection whose
+    /// external port happened to match a rule would be delivered to the rule's
+    /// target instead, because [`Self::translate_inbound`] consults the
+    /// forwards first. Silent misdelivery rather than an error.
     pub fn add_port_forward(&mut self, rule: PortForward) {
         self.forwards.push(rule);
     }
@@ -203,9 +239,17 @@ impl NatTable {
         let span = (hi - lo) as u32 + 1;
         for offset in 0..span {
             let candidate = lo + (((self.next_port - lo) as u32 + offset) % span) as u16;
-            if !self
-                .by_external
-                .contains_key(&(internal.protocol, candidate))
+            // Not already mapped, and not claimed by a static rule. The scan of
+            // `forwards` is a handful of entries and only runs when a flow is
+            // new -- an existing one returned from `by_internal` above.
+            let forwarded = self
+                .forwards
+                .iter()
+                .any(|r| r.protocol == internal.protocol && r.host_port == candidate);
+            if !forwarded
+                && !self
+                    .by_external
+                    .contains_key(&(internal.protocol, candidate))
             {
                 self.next_port = if candidate == hi { lo } else { candidate + 1 };
                 self.by_internal.insert(internal, candidate);
@@ -743,6 +787,89 @@ mod tests {
         assert_eq!(
             nat.translate_outbound(&mut b).unwrap_err(),
             NatError::PortsExhausted
+        );
+    }
+
+    /// Reported, and reproduced before being believed: it used to reach the
+    /// allocator and subtract the larger port from the smaller.
+    #[test]
+    #[should_panic(expected = "must have lo <= hi")]
+    fn reversed_port_range_is_refused_at_construction() {
+        let _ = NatTable::new(NatConfig {
+            port_range: (40100, 40000), // backwards
+            ..NatConfig::default()
+        });
+    }
+
+    /// A single-port range is not reversed, and has always worked. Here so the
+    /// check above cannot be tightened into rejecting it.
+    #[test]
+    fn a_single_port_range_is_allowed() {
+        let nat = NatTable::new(NatConfig {
+            port_range: (40000, 40000),
+            ..NatConfig::default()
+        });
+        assert_eq!(nat.config().port_range, (40000, 40000));
+    }
+
+    /// Also reported. Not a panic: a reply going to the wrong guest port.
+    #[test]
+    fn dynamic_allocation_does_not_collide_with_a_static_forward() {
+        let mut nat = NatTable::new(NatConfig {
+            port_range: (8080, 8080),
+            ..NatConfig::default()
+        });
+        let guest = ipv4_of(10, 0, 0, 2);
+        nat.add_port_forward(PortForward {
+            protocol: Protocol::Tcp,
+            host_port: 8080,
+            guest_ip: ipv4_of(10, 0, 0, 9),
+            guest_port: 80,
+        });
+
+        // The guest opens an outbound connection. The only port in the range
+        // is the one the forward owns, so there is nothing to hand out and the
+        // allocator has to say so rather than hand out a port twice.
+        let mut out = build_tcp_packet(guest, 51000, ipv4_of(8, 8, 8, 8), 443, b"hello");
+        assert_eq!(
+            nat.translate_outbound(&mut out).unwrap_err(),
+            NatError::PortsExhausted
+        );
+
+        // With one port beside it, that is the one it takes.
+        nat.remove_port_forward(Protocol::Tcp, 8080);
+        let mut wider = NatTable::new(NatConfig {
+            port_range: (8080, 8081),
+            ..NatConfig::default()
+        });
+        wider.add_port_forward(PortForward {
+            protocol: Protocol::Tcp,
+            host_port: 8080,
+            guest_ip: ipv4_of(10, 0, 0, 9),
+            guest_port: 80,
+        });
+        let mut nat = wider;
+        let mut out = build_tcp_packet(guest, 51000, ipv4_of(8, 8, 8, 8), 443, b"hello");
+        nat.translate_outbound(&mut out).unwrap();
+        let external = read_u16(&out, 20).unwrap();
+        assert_eq!(external, 8081, "the allocator handed out a forwarded port");
+
+        // And the reply comes back to the guest that opened the connection,
+        // not to the forward's target.
+        let mut back = build_tcp_packet(
+            ipv4_of(8, 8, 8, 8),
+            443,
+            nat.config().external_ip,
+            external,
+            b"world",
+        );
+        nat.translate_inbound(&mut back).unwrap();
+        let dst_ip = Ipv4Addr::new(back[16], back[17], back[18], back[19]);
+        let dst_port = read_u16(&back, 22).unwrap();
+        assert_eq!(
+            (dst_ip, dst_port),
+            (guest, 51000),
+            "the reply was delivered to the port-forward's target instead"
         );
     }
 
