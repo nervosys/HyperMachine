@@ -250,6 +250,7 @@ struct Transcript {
 
 struct Turn {
     outcome: String,
+    batch: usize,
     waited: Duration,
     ran: Duration,
     context: usize,
@@ -285,6 +286,7 @@ fn converse(
                 waited: Duration::ZERO,
                 ran: Duration::ZERO,
                 context: 0,
+                batch: 0,
                 answer: String::new(),
             });
             continue;
@@ -300,6 +302,7 @@ fn converse(
                 waited: Duration::ZERO,
                 ran: Duration::ZERO,
                 context: 0,
+                batch: 0,
                 answer: String::new(),
             });
             continue;
@@ -317,6 +320,7 @@ fn converse(
                     waited: served.waited,
                     ran: served.ran,
                     context: served.context,
+                    batch: served.batch,
                     answer: served.text.trim().to_string(),
                 });
             }
@@ -327,6 +331,7 @@ fn converse(
                     waited: Duration::ZERO,
                     ran: Duration::ZERO,
                     context: 0,
+                    batch: 0,
                     answer: String::new(),
                 });
             }
@@ -337,6 +342,7 @@ fn converse(
                     waited: Duration::ZERO,
                     ran: Duration::ZERO,
                     context: 0,
+                    batch: 0,
                     answer: String::new(),
                 });
             }
@@ -380,7 +386,9 @@ async fn main() -> std::process::ExitCode {
     // the bound is exercised rather than described. At 64 KiB of key/value
     // cache per token it is also a real memory figure: 96 tokens is 6 MiB.
     let limits = Limits {
-        workers: 1,
+        // Four lanes for four agents: one pass over the weights advances every
+        // conversation that is waiting.
+        batch: 4,
         context_tokens: 96,
         answer_tokens: 24,
         // Zero: let the scheduler choose, which is a third of the machine
@@ -390,8 +398,8 @@ async fn main() -> std::process::ExitCode {
     };
     let scheduler = Scheduler::new(&model, limits);
     println!(
-        "scheduler     : {} worker on {} of {} cores, {} tokens of context per agent ({:.1} MiB of cache), {} tokens per answer",
-        limits.workers,
+        "scheduler     : batches of {} on {} of {} cores, {} tokens of context per agent ({:.1} MiB of cache), {} tokens per answer",
+        limits.batch,
         scheduler.threads(),
         std::thread::available_parallelism().map_or(0, |n| n.get()),
         limits.context_tokens,
@@ -468,11 +476,12 @@ async fn main() -> std::process::ExitCode {
                 );
             } else {
                 println!(
-                    "{:<6} turn {}: {:?}  [waited {:.1} s, ran {:.1} s, context {} tokens]",
+                    "{:<6} turn {}: {:?}  [waited {:.1} s, batch of {} ran {:.1} s, context {} tokens]",
                     transcript.name,
                     turn + 1,
                     record.answer,
                     record.waited.as_secs_f64(),
+                    record.batch,
                     record.ran.as_secs_f64(),
                     record.context
                 );
@@ -482,10 +491,15 @@ async fn main() -> std::process::ExitCode {
 
     // ── the queue was a queue ───────────────────────────────────────────
     let stats = scheduler.stats();
+    // Per-request service time cannot be summed: a batch's duration belongs to
+    // every request in it, so adding them up counts one pass several times and
+    // reports more service than there was wall clock. What a request actually
+    // cost is its batch divided by how many shared it.
     let service: Duration = transcripts
         .iter()
         .flat_map(|t| t.turns.iter())
-        .map(|r| r.ran)
+        .filter(|r| r.batch > 0)
+        .map(|r| r.ran / r.batch as u32)
         .sum();
     println!();
     println!(
@@ -494,8 +508,17 @@ async fn main() -> std::process::ExitCode {
         stats.admitted, stats.served, stats.refused, stats.peak_waiting
     );
     println!(
-        "time          : {:.1} s of wall clock against {:.1} s of forward passes — {:.0}% of the \
-         wall was someone's turn",
+        "batches       : {} passes over the weights for {} answers — the largest carried {} conversations at once",
+        stats.batches, stats.served, stats.largest_batch
+    );
+    if stats.largest_batch < 2 {
+        println!(
+            "               FAILED — every pass read the whole model to produce one token, so nothing was batched"
+        );
+        ok = false;
+    }
+    println!(
+        "time          : {:.1} s of wall clock, {:.1} s of it someone's share of a pass — {:.0}% busy",
         wall.as_secs_f64(),
         service.as_secs_f64(),
         service.as_secs_f64() / wall.as_secs_f64() * 100.0
@@ -603,10 +626,7 @@ async fn main() -> std::process::ExitCode {
     println!();
     if ok {
         println!(
-            "result        : four sandboxes over one model, served one at a time from a \
-             first-in-first-out queue. Each kept its own conversation and could not see anyone \
-             else's; the one over its context bound was refused without taking a place in the \
-             queue, and the one without the capability never reached it."
+            "result        : four sandboxes over one model, served from a first-in-first-out queue in batches that share one pass over the weights. Each kept its own conversation and could not see anyone else's; the one over its context bound was refused without taking a place in the queue, and the one without the capability never reached it."
         );
         std::process::ExitCode::SUCCESS
     } else {

@@ -16,9 +16,12 @@
 //!
 //! Two bounds, and they are different resources.
 //!
-//! [`Limits::workers`] bounds *bandwidth*: how many passes may be in flight.
-//! One is the default, and the default is the argument — the second worker
-//! competes with the first for the same memory bus.
+//! [`Limits::batch`] decides how many conversations share a pass. It used to be
+//! `workers` — how many passes ran at once — and that was the wrong knob. A
+//! pass reads all 1.25 GiB of the weights whether it produces one token or
+//! eight, so two concurrent passes read the model twice and a batch of two
+//! reads it once. Eight lanes measured 4.7 times the tokens per second of one;
+//! eight concurrent passes measured slower than one.
 //!
 //! [`Limits::context_tokens`] bounds *memory*: how much key/value cache an
 //! agent may hold. That is the one thing an agent cannot share with another
@@ -39,29 +42,38 @@
 //!
 //! # What is deliberately not here
 //!
-//! Batching several agents' tokens into one pass, which is where the real
-//! throughput is and which needs the forward pass to take a batch dimension it
-//! does not have. Priorities, preemption, and eviction of a cold conversation.
-//! Each is a real thing a serving stack has; none of them can be added honestly
-//! before the thing they schedule exists, which it now does.
+//! *Continuous* batching: a request that arrives while a batch is running waits
+//! for the next batch rather than joining the current one at its next token.
+//! That costs a late arrival some latency and costs throughput nothing, and it
+//! is a great deal simpler — there is no worker thread at all, because whichever
+//! caller finds no batch in flight runs one.
+//!
+//! Also absent: priorities, preemption, and eviction of a cold conversation. An
+//! agent that stops asking holds its cache until something drops it, and
+//! nothing does.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::model::{Model, Runner, Session};
-use crate::{ask, chat_turn, Error};
+use crate::{ask_many, chat_turn, Error};
 
 /// What a node will not let one agent take.
 #[derive(Debug, Clone, Copy)]
 pub struct Limits {
-    /// Forward passes in flight at once.
+    /// Conversations one forward pass carries.
     ///
-    /// One, by default, and the default is the point: a forward pass is
-    /// memory-bandwidth-bound and already uses every core, so a second
-    /// concurrent pass competes with the first for the bus rather than for
-    /// idle time.
-    pub workers: usize,
+    /// This was `workers`: how many passes ran at once. That was the wrong knob
+    /// and the measurement says so. A pass reads all 1.25 GiB of the weights
+    /// whether it produces one token or eight, so two concurrent passes read
+    /// the model twice and a batch of two reads it once — same arithmetic, half
+    /// the memory traffic, and no contention between them. Eight lanes measured
+    /// 4.7 times the tokens per second of one; eight concurrent passes measured
+    /// slower than one.
+    ///
+    /// So there is one pass at a time and the width of it is the knob.
+    pub batch: usize,
     /// The most context an agent may hold, in tokens.
     pub context_tokens: usize,
     /// The most tokens one answer may run to.
@@ -95,7 +107,7 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            workers: 1,
+            batch: 8,
             context_tokens: 2048,
             answer_tokens: 32,
             threads: 0,
@@ -135,12 +147,19 @@ impl std::fmt::Display for Refused {
 pub struct Served {
     /// What the model said.
     pub text: String,
-    /// How long the request sat in the queue before a worker took it.
+    /// How long the request sat in the queue before its batch started.
     pub waited: Duration,
-    /// How long the forward passes took once it did.
+    /// How long that batch took.
+    ///
+    /// Shared with everything else in the batch: this is the time for the whole
+    /// pass, not this request's share of it. Dividing it by [`Served::batch`]
+    /// would be the per-answer cost, and saying so is the point of reporting
+    /// both.
     pub ran: Duration,
     /// Tokens the agent's conversation holds now.
     pub context: usize,
+    /// How many conversations shared the batch this was answered in.
+    pub batch: usize,
 }
 
 /// What the queue has done.
@@ -160,26 +179,14 @@ pub struct Stats {
     pub peak_waiting: usize,
     /// Time spent waiting, summed across requests.
     pub total_wait: Duration,
-}
-
-struct Inner<'m> {
-    /// Tickets waiting, oldest first.
-    waiting: VecDeque<u64>,
-    /// Forward passes in flight.
-    running: usize,
-    next_ticket: u64,
-    /// One conversation per agent, kept between requests. Taken out of the map
-    /// while it is being used, so a long forward pass does not hold the lock
-    /// every other agent needs to join the queue.
-    sessions: BTreeMap<String, Session>,
-    /// Runners not currently in use, one per worker.
+    /// Batches run.
+    pub batches: usize,
+    /// The most conversations that ever shared one pass.
     ///
-    /// The scratch a forward pass needs is per *worker*, not per agent: it used
-    /// to live in every session, so a thousand idle agents held 800 MiB of
-    /// buffers that only the one being served was using. A worker takes one
-    /// from here, runs, and puts it back.
-    runners: Vec<Runner<'m>>,
-    stats: Stats,
+    /// With [`Stats::served`], this is what says whether batching happened. If
+    /// it is one, every pass read the whole model to produce a single token and
+    /// the fleet paid for it.
+    pub largest_batch: usize,
 }
 
 /// How many threads to spread a pass across, when the caller has not said.
@@ -191,6 +198,29 @@ struct Inner<'m> {
 pub fn default_threads() -> usize {
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
     (cores / 3).max(1)
+}
+
+/// A request that has joined the queue and not been answered.
+struct Waiting {
+    ticket: u64,
+    agent: String,
+    question: String,
+    queued_at: Instant,
+}
+
+struct Inner<'m> {
+    /// Requests admitted and not yet in a batch, oldest first.
+    pending: VecDeque<Waiting>,
+    /// Answers nobody has collected yet, by ticket.
+    done: BTreeMap<u64, Result<Served, Refused>>,
+    /// Whether a batch is being run right now.
+    running: bool,
+    next_ticket: u64,
+    /// One conversation per agent, kept between requests.
+    sessions: BTreeMap<String, Session>,
+    /// The runner, taken by whoever is running the current batch.
+    runner: Option<Runner<'m>>,
+    stats: Stats,
 }
 
 /// A model, a queue, and one conversation per agent.
@@ -222,18 +252,18 @@ impl<'m> Scheduler<'m> {
             .thread_name(|i| format!("infer-{i}"))
             .build()
             .expect("a thread pool");
+        let lanes = limits.batch.max(1);
         Self {
             model,
             limits,
             pool,
             inner: Mutex::new(Inner {
-                waiting: VecDeque::new(),
-                running: 0,
+                pending: VecDeque::new(),
+                done: BTreeMap::new(),
+                running: false,
                 next_ticket: 0,
                 sessions: BTreeMap::new(),
-                runners: (0..limits.workers.max(1))
-                    .map(|_| Runner::new(model, 1))
-                    .collect(),
+                runner: Some(Runner::new(model, lanes)),
                 stats: Stats::default(),
             }),
             turn: Condvar::new(),
@@ -276,14 +306,26 @@ impl<'m> Scheduler<'m> {
 
     /// Ask on `agent`'s behalf, waiting for a turn.
     ///
-    /// Blocks until a worker is free and every earlier request has been taken.
-    /// Returns [`Refused`] without queueing if the agent is over its bound —
-    /// whether the agent is *allowed* to ask at all is not decided here, it is
-    /// decided by whoever holds the capability graph, before this is called.
+    /// Blocks until a batch that includes this request has run. Returns
+    /// [`Refused`] without queueing if the agent is over its bound — whether the
+    /// agent is *allowed* to ask at all is not decided here, it is decided by
+    /// whoever holds the capability graph, before this is called.
+    ///
+    /// # How the batch gets run
+    ///
+    /// By whichever caller finds no batch in flight. There is no worker thread:
+    /// a thread that has nothing to do but wait may as well do the work, and a
+    /// spawned one would have to outlive the borrow of the model. Everyone else
+    /// waits and collects.
+    ///
+    /// What this does *not* do is continuous batching: a request that arrives
+    /// while a batch is running waits for the next one rather than joining the
+    /// current one at its next token. That costs latency for a late arrival and
+    /// no throughput, and it is a great deal simpler.
     pub fn ask(&self, agent: &str, question: &str) -> Result<Result<Served, Refused>, Error> {
         // Costed before queueing, so a request that cannot be served does not
-        // make anyone else wait behind it. The tokeniser is shared and read-only,
-        // so this happens outside the lock.
+        // make anyone else wait behind it. The tokeniser is shared and
+        // read-only, so this happens outside the lock.
         let turn_tokens = chat_turn(self.model, question, self.context_of(agent) == 0).len();
         let wanted = turn_tokens + self.limits.answer_tokens;
 
@@ -302,76 +344,131 @@ impl<'m> Scheduler<'m> {
 
             let ticket = inner.next_ticket;
             inner.next_ticket += 1;
-            inner.waiting.push_back(ticket);
+            inner.pending.push_back(Waiting {
+                ticket,
+                agent: agent.to_string(),
+                question: question.to_string(),
+                queued_at,
+            });
             inner.stats.admitted += 1;
-            inner.stats.peak_waiting = inner.stats.peak_waiting.max(inner.waiting.len());
+            inner.stats.peak_waiting = inner.stats.peak_waiting.max(inner.pending.len());
             ticket
         };
-
-        // Wait for a worker and for every earlier ticket to have been taken.
-        // First-in-first-out, so a busy fleet becomes a longer queue rather
-        // than a lottery.
-        let (mut session, mut runner) = {
-            let mut inner = self.inner.lock().expect("not poisoned");
-            loop {
-                let mine = inner.waiting.front() == Some(&ticket);
-                if mine && inner.running < self.limits.workers {
-                    inner.waiting.pop_front();
-                    inner.running += 1;
-                    break;
-                }
-                inner = self.turn.wait(inner).expect("not poisoned");
-            }
-            inner.stats.total_wait += queued_at.elapsed();
-            // Out of the map for the duration. A forward pass is hundreds of
-            // milliseconds per token and holding the shared lock across it would
-            // stop every other agent from so much as joining the queue.
-            let session = inner
-                .sessions
-                .remove(agent)
-                .unwrap_or_else(|| Session::open(self.model));
-            let runner = inner
-                .runners
-                .pop()
-                .expect("a free runner, since a worker slot was taken");
-            (session, runner)
-        };
-        let waited = queued_at.elapsed();
-
-        let started = Instant::now();
-        // In the scheduler's own pool, not rayon's global one. The global pool
-        // is sized to the machine, and a forward pass wants a fraction of the
-        // machine — see `Limits::threads` for the measurement.
-        let answer = self.pool.install(|| {
-            ask(
-                &mut runner,
-                &mut session,
-                question,
-                self.limits.answer_tokens,
-            )
-        });
-        let ran = started.elapsed();
-
-        let context = session.len();
-        {
-            let mut inner = self.inner.lock().expect("not poisoned");
-            inner.sessions.insert(agent.to_string(), session);
-            inner.runners.push(runner);
-            inner.running -= 1;
-            if answer.is_ok() {
-                inner.stats.served += 1;
-            }
-        }
-        // Everyone, not one: the ticket that may now proceed is not necessarily
-        // the thread a targeted wake would reach.
         self.turn.notify_all();
 
-        Ok(Ok(Served {
-            text: answer?,
-            waited,
-            ran,
-            context,
-        }))
+        loop {
+            let batch = {
+                let mut inner = self.inner.lock().expect("not poisoned");
+                if let Some(answer) = inner.done.remove(&ticket) {
+                    return Ok(answer);
+                }
+                if inner.running || inner.pending.is_empty() {
+                    let _unused = self.turn.wait(inner).expect("not poisoned");
+                    continue;
+                }
+
+                // Become the batcher. Take as many waiting requests as there
+                // are lanes — but never two from the same agent, because they
+                // would need the same conversation twice and a conversation
+                // cannot be in two lanes of one pass. The second one stays in
+                // the queue and goes in the next batch.
+                inner.running = true;
+                let lanes = self.limits.batch.max(1);
+                let mut taken: Vec<Waiting> = Vec::with_capacity(lanes);
+                let mut left: VecDeque<Waiting> = VecDeque::new();
+                while let Some(request) = inner.pending.pop_front() {
+                    let already = taken.iter().any(|w| w.agent == request.agent);
+                    if taken.len() < lanes && !already {
+                        taken.push(request);
+                    } else {
+                        left.push_back(request);
+                    }
+                }
+                inner.pending = left;
+
+                let runner = inner
+                    .runner
+                    .take()
+                    .expect("the runner, since no batch is in flight");
+                let sessions: Vec<Session> = taken
+                    .iter()
+                    .map(|w| {
+                        inner
+                            .sessions
+                            .remove(&w.agent)
+                            .unwrap_or_else(|| Session::open(self.model))
+                    })
+                    .collect();
+                inner.stats.batches += 1;
+                inner.stats.largest_batch = inner.stats.largest_batch.max(taken.len());
+                for request in &taken {
+                    inner.stats.total_wait += request.queued_at.elapsed();
+                }
+                (taken, sessions, runner)
+            };
+
+            let (requests, mut sessions, mut runner) = batch;
+
+            let questions: Vec<&str> = requests.iter().map(|w| w.question.as_str()).collect();
+            let started = Instant::now();
+            let answers = {
+                let mut refs: Vec<&mut Session> = sessions.iter_mut().collect();
+                self.pool.install(|| {
+                    ask_many(
+                        &mut runner,
+                        &mut refs,
+                        &questions,
+                        self.limits.answer_tokens,
+                    )
+                })
+            };
+            let ran = started.elapsed();
+
+            {
+                let mut inner = self.inner.lock().expect("not poisoned");
+                match answers {
+                    Ok(texts) => {
+                        for ((request, session), text) in requests.iter().zip(sessions).zip(texts) {
+                            let context = session.len();
+                            inner.sessions.insert(request.agent.clone(), session);
+                            inner.done.insert(
+                                request.ticket,
+                                Ok(Served {
+                                    text,
+                                    // Saturating: the elapsed time includes
+                                    // the batch, so this is the wait before it
+                                    // — and a clock that went backwards should
+                                    // report zero rather than panic.
+                                    waited: request.queued_at.elapsed().saturating_sub(ran),
+                                    ran,
+                                    context,
+                                    batch: requests.len(),
+                                }),
+                            );
+                            inner.stats.served += 1;
+                        }
+                    }
+                    Err(_) => {
+                        // The pass failed, which is not something a caller can
+                        // do anything about per request. Put the conversations
+                        // back and let every waiter in this batch retry by
+                        // finding no answer and no batch running.
+                        for (request, session) in requests.iter().zip(sessions) {
+                            inner.sessions.insert(request.agent.clone(), session);
+                            inner.pending.push_back(Waiting {
+                                ticket: request.ticket,
+                                agent: request.agent.clone(),
+                                question: request.question.clone(),
+                                queued_at: request.queued_at,
+                            });
+                        }
+                    }
+                }
+                inner.runner = Some(runner);
+                inner.running = false;
+            }
+            self.turn.notify_all();
+        }
     }
 }
 
@@ -395,8 +492,14 @@ mod tests {
         assert!(said.contains("96"), "and the bound it broke");
     }
 
+    /// The default is a batch, not a single pass, and that is the whole
+    /// finding: one pass carrying eight conversations beats eight passes
+    /// carrying one, because the weights are read once either way.
     #[test]
-    fn one_worker_is_the_default_and_the_default_is_the_argument() {
-        assert_eq!(Limits::default().workers, 1);
+    fn the_default_is_a_batch() {
+        assert!(
+            Limits::default().batch > 1,
+            "a default of one would read the model once per token per agent"
+        );
     }
 }
