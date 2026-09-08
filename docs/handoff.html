@@ -958,6 +958,82 @@ granted       : ok — b's guest received it</pre>
     with numbers under it rather than a guess.
   </p>
 
+  <h3>The agent protocol has a shape, and the reason is a bug it already caused</h3>
+  <p>
+    The channel between an agent and its host was four prefixes parsed by hand
+    — <code>do:</code>, <code>send:</code>, <code>tool:</code>,
+    <code>to:</code> — with no framing, no request ids, and no way to have two
+    things outstanding at once. That was the right amount of protocol for
+    proving each path exists, and it had already produced a wrong answer.
+  </p>
+  <p>
+    <code>agent_messages</code> appeared to deliver a message the graph had
+    <em>refused</em>. It had not: <code>peek</code> does not consume, so the
+    refused text was still sitting in the connection buffer and rode along
+    inside the next payload, which was permitted. A stream read as though it
+    were a sequence of messages will eventually read two of them as one, and
+    here it did — in the one demonstration whose entire point is that a refusal
+    is real.
+  </p>
+  <p>
+    <code>hv2-agent-proto</code> is a <code>no_std</code> crate with a
+    twelve-byte header — id, kind, length — and it is a
+    <em>shared</em> crate rather than two implementations that agree today. The
+    guest encodes with the same code the host decodes with, which is the
+    arrangement the Multiboot module list did not have and paid for. Six kinds,
+    naming the six things that actually happen:
+  </p>
+  <pre>Task       host  -&gt; agent   do this
+ToolCall   agent -&gt; host    invoke a tool
+ToolResult host  -&gt; agent   what it returned
+Send       agent -&gt; host    reach another agent
+Deliver    host  -&gt; agent   another agent reached you
+Error      either way       this could not be done, and why</pre>
+  <p>
+    The id is not decoration. An agent with tools has more than one thing in
+    flight — a tool call and a message from a peer can be answered in either
+    order — and without an id the only way to match a reply to its request is to
+    allow one at a time, which is a protocol decision masquerading as an
+    omission.
+  </p>
+  <p>Three consequences are visible rather than internal:</p>
+  <ul>
+    <li>
+      <strong>A refusal is now addressed.</strong> It comes back as an
+      <code>Error</code> under the refused request's own id, so an agent with
+      several calls outstanding knows which one was denied.
+      <code>tool_calls</code> asserts the guest prints it, because a refusal
+      nobody is told about is indistinguishable from a hang.
+    </li>
+    <li>
+      <strong>Delivery is asserted at the recipient, in all three cases.</strong>
+      The negative case always was; the two positive ones used to read a reply
+      from the sender's side. All three now read the recipient's own console
+      inside the recipient's own VM, and the guest logs
+      <code>agent recv #&lt;id&gt;</code>, so the line names the delivery that
+      produced it.
+    </li>
+    <li>
+      <strong>The guest stopped echoing.</strong> It used to answer everything
+      it was sent, which is a convenient thing for a test and a strange thing
+      for an agent. A <code>Deliver</code> is now received and not answered;
+      only a <code>Task</code> produces a reply.
+    </li>
+  </ul>
+  <pre>vsock_echo      : 2.203 ms round trip, id 1 echoed unchanged
+tool_calls      : tool ran 1 time for the 2 agents that asked,
+                  and the refused one printed  agent denied #0x1 "refused"
+agent_messages  : refused between siblings, delivered once granted,
+                  b's console shows exactly one receipt
+vsock_swarm     : down / sideways / granted all pass at the recipient</pre>
+  <p>
+    What is still a rule standing in for a decision is the guest's half: a task
+    beginning <code>send&nbsp;</code> becomes a <code>Send</code>, anything else
+    becomes a <code>ToolCall</code>. That is one line, and it is deliberately
+    one line — what is under test is the frame, the id and the permission around
+    them, none of which care how the decision was reached.
+  </p>
+
   <h3>How fast a guest can stream weights, and what that rules out</h3>
   <p>
     Memory was the question that decided whether a fleet could hold a model.
@@ -1392,12 +1468,12 @@ granted       : ok — b's guest received it</pre>
       a rule standing in for a decision.
     </li>
     <li>
-      <strong>Give the agent protocol a shape.</strong> It is four prefixes
-      parsed by hand — <code>do:</code>, <code>send:</code>, <code>tool:</code>,
-      <code>to:</code> — with no framing, no request ids and no way to have two
-      things outstanding at once. That was the right amount of protocol for
-      proving each path exists and is the wrong amount for an agent that has a
-      conversation while a tool call is pending.
+      <strong>Make an agent hold more than one thing at once.</strong> The
+      protocol now has request ids and nothing yet uses two of them. Every
+      example sends one frame and waits for its answer, which is exactly the
+      shape the ids were added to escape — the next honest step is a guest that
+      has a tool call pending while a peer's message arrives, and a host that
+      can answer them out of order.
     </li>
     <li>
       <strong>Move the agent guest to 64-bit.</strong> It is i686 because stable
@@ -1408,8 +1484,9 @@ granted       : ok — b's guest received it</pre>
       of the 64-bit shape, heap included.
     </li>
     <li>
-      <strong>Make the agent payload do something.</strong> The guest echoes,
-      which was the right thing to prove and is not a workload. What an agent
+      <strong>Make the agent payload do something.</strong> The guest answers
+      by rule, which was the right thing to prove and is not a workload. What an
+      agent
       actually runs inside a unikernel — and whether it needs an allocator, a
       heap, and therefore rather more than 8 KB of image — is the next real
       design question, and it is now answerable by experiment rather than by
