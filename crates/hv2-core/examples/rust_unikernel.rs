@@ -211,8 +211,9 @@ async fn main() -> std::process::ExitCode {
         "guest          : {size} bytes of ELF64, compiled in {:.2} s",
         built.as_secs_f64()
     );
-    println!("timing         : {RUNS} boots, median. The compile is not part of it — a sandbox");
-    println!("                 boots an image someone already built.");
+    println!("timing         : {RUNS} boots in this process — median, and the spread. The");
+    println!("                 compile is not part of it: a sandbox boots an image");
+    println!("                 someone already built.");
     println!();
 
     let mut runs = Vec::with_capacity(RUNS);
@@ -232,9 +233,19 @@ async fn main() -> std::process::ExitCode {
         }
     }
 
+    // Median and range, not median alone. A median with no spread beside it
+    // invites the mistake that made this project's other cold-start figure
+    // wrong: on this host the provision phase varies by an order of magnitude
+    // run to run, and a reader who cannot see that will treat one number as
+    // repeatable when it is not.
     let report = |label: &str, pick: fn(&Phases) -> Duration, note: &str| {
         let values: Vec<f64> = runs.iter().map(|p| ms(pick(p))).collect();
-        println!("{label:<15}: {:>8.3} ms  {note}", median(values));
+        let low = values.iter().copied().fold(f64::INFINITY, f64::min);
+        let high = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        println!(
+            "{label:<15}: {:>8.3} ms   ({low:.3} to {high:.3})  {note}",
+            median(values)
+        );
     };
     report("VM::new", |p| p.created, "");
     report("provision", |p| p.provisioned, "(cumulative)");

@@ -42,8 +42,23 @@
 //! Needs a hypervisor backend: `/dev/kvm` on Linux, or Windows Hypervisor
 //! Platform. Without one it says so and exits non-zero rather than printing a
 //! time it did not measure.
+//!
+//! # Nine boots, in one process
+//!
+//! It used to boot once. One boot is not a latency: this host's provision phase
+//! alone varies by an order of magnitude run to run, so a single figure is a
+//! measurement of whatever else the machine was doing. Worse, nine
+//! *invocations* of the old version were once reported as a median of nine —
+//! which folds process startup and image staging into every sample, and read
+//! 3.4, 10.8, 12.4, 124 and 160 ms across five tries.
+//!
+//! So it boots nine times inside one process, as `rust_unikernel` does, and
+//! prints the median with the range beside it. The range is the more honest
+//! half: a median with no spread next to it invites exactly the mistake that
+//! made the old number wrong.
 
 use hv2_core::{BootSource, VMConfig, VM};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -77,6 +92,100 @@ fn assemble(text: &str) -> Vec<u8> {
     image
 }
 
+/// Cumulative timings for one boot, except `stopped`, which is its own.
+#[derive(Clone, Copy)]
+struct Phases {
+    created: Duration,
+    provisioned: Duration,
+    launched: Duration,
+    first_output: Duration,
+    stopped: Duration,
+}
+
+/// How many boots to time.
+///
+/// This example used to boot once and print that figure as the cold start. Nine
+/// invocations of it were then reported as "median of nine", which is a
+/// different measurement and a worse one: each invocation pays process startup,
+/// image staging and whatever else the machine was doing, and five runs on this
+/// host read 3.4, 10.8, 12.4, 124 and 160 ms. Nine boots *inside one process*
+/// is what `rust_unikernel` does and what makes a median mean anything.
+const RUNS: usize = 9;
+
+fn median(mut values: Vec<f64>) -> f64 {
+    values.sort_by(f64::total_cmp);
+    values[values.len() / 2]
+}
+
+fn ms(d: Duration) -> f64 {
+    d.as_secs_f64() * 1000.0
+}
+
+/// One boot, from `VM::new` to the guest's greeting.
+async fn boot_once(path: &Path) -> Result<(Phases, String), String> {
+    let started = Instant::now();
+
+    let config = VMConfig {
+        name: "unikernel".to_string(),
+        vcpu_count: 1,
+        // 16 MiB. A unikernel this size needs a page; the rest is here because
+        // a guest that faults outside its image should fault somewhere mapped
+        // rather than confusing a wrong jump with a missing region.
+        memory_size: 16 * 1024 * 1024,
+        boot: Some(BootSource::raw(path)),
+        ..Default::default()
+    };
+
+    let vm = Arc::new(VM::new(config).map_err(|e| {
+        format!(
+            "VM::new failed — {e}\nA hypervisor backend is required: /dev/kvm on Linux, or \
+             Windows Hypervisor Platform."
+        )
+    })?);
+    let created = started.elapsed();
+
+    vm.provision()
+        .await
+        .map_err(|e| format!("provision failed — {e}"))?;
+    let provisioned = started.elapsed();
+
+    vm.launch()
+        .await
+        .map_err(|e| format!("launch failed — {e}"))?;
+    let launched = started.elapsed();
+
+    // Poll for the guest's own output rather than sleeping a fixed time: the
+    // question is how long the guest took, and a sleep would answer how long
+    // the sleep was.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut console = String::new();
+    let mut first_output = None;
+    while Instant::now() < deadline {
+        console = vm.console_output().await;
+        if !console.is_empty() {
+            first_output.get_or_insert(started.elapsed());
+            if console.contains(GREETING.trim_end()) {
+                break;
+            }
+        }
+        tokio::time::sleep(Duration::from_micros(200)).await;
+    }
+
+    let stop_started = Instant::now();
+    let _ = vm.stop().await;
+
+    Ok((
+        Phases {
+            created,
+            provisioned,
+            launched,
+            first_output: first_output.ok_or("the guest produced nothing within 5 s")?,
+            stopped: stop_started.elapsed(),
+        },
+        console,
+    ))
+}
+
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     let image = assemble(GREETING);
@@ -96,92 +205,68 @@ async fn main() -> std::process::ExitCode {
         eprintln!("could not write {}: {e}", path.display());
         return std::process::ExitCode::FAILURE;
     }
+    println!("timing        : {RUNS} boots in this process — median, and the spread across them");
+    println!();
 
-    // Timed from here: everything a caller pays to get a running guest.
-    let started = Instant::now();
-
-    let config = VMConfig {
-        name: "unikernel".to_string(),
-        vcpu_count: 1,
-        // 16 MiB. A unikernel this size needs a page; the rest is here because
-        // a guest that faults outside its image should fault somewhere mapped
-        // rather than confusing a wrong jump with a missing region.
-        memory_size: 16 * 1024 * 1024,
-        boot: Some(BootSource::raw(&path)),
-        ..Default::default()
-    };
-
-    let vm = match VM::new(config) {
-        Ok(vm) => Arc::new(vm),
-        Err(e) => {
-            eprintln!("VM::new       : FAILED — {e}");
-            eprintln!(
-                "A hypervisor backend is required: /dev/kvm on Linux, or Windows Hypervisor \
-                 Platform."
-            );
-            return std::process::ExitCode::FAILURE;
-        }
-    };
-    let created = started.elapsed();
-
-    if let Err(e) = vm.provision().await {
-        eprintln!("provision     : FAILED — {e}");
-        return std::process::ExitCode::FAILURE;
-    }
-    let provisioned = started.elapsed();
-
-    if let Err(e) = vm.launch().await {
-        eprintln!("launch        : FAILED — {e}");
-        return std::process::ExitCode::FAILURE;
-    }
-    let launched = started.elapsed();
-
-    // Poll for the guest's own output rather than sleeping a fixed time: the
-    // question is how long the guest took, and a sleep would answer how long
-    // the sleep was.
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut runs = Vec::with_capacity(RUNS);
     let mut console = String::new();
-    let mut first_byte = None;
-    while Instant::now() < deadline {
-        console = vm.console_output().await;
-        if !console.is_empty() {
-            first_byte.get_or_insert(started.elapsed());
-            if console.contains(GREETING.trim_end()) {
-                break;
+    for _ in 0..RUNS {
+        match boot_once(&path).await {
+            Ok((phases, said)) => {
+                if console.is_empty() {
+                    console = said;
+                }
+                runs.push(phases);
+            }
+            Err(e) => {
+                eprintln!("boot          : FAILED — {e}");
+                return std::process::ExitCode::FAILURE;
             }
         }
-        tokio::time::sleep(Duration::from_micros(200)).await;
     }
 
-    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
-    println!("VM::new       : {:>8.3} ms", ms(created));
-    println!("provision     : {:>8.3} ms  (cumulative)", ms(provisioned));
-    println!("launch        : {:>8.3} ms  (cumulative)", ms(launched));
-    match first_byte {
-        Some(t) => println!("first output  : {:>8.3} ms  (cumulative)", ms(t)),
-        None => println!("first output  :   never"),
-    }
+    // Median and range, not median alone. A median hides the thing that made
+    // the old figure wrong: on this host the provision phase varies by an order
+    // of magnitude run to run, and a reader who cannot see that will treat one
+    // number as repeatable when it is not.
+    let report = |label: &str, pick: fn(&Phases) -> Duration, note: &str| {
+        let values: Vec<f64> = runs.iter().map(|p| ms(pick(p))).collect();
+        let low = values.iter().copied().fold(f64::INFINITY, f64::min);
+        let high = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        println!(
+            "{label:<14}: {:>8.3} ms   ({:.3} to {:.3})  {note}",
+            median(values),
+            low,
+            high
+        );
+    };
+    report("VM::new", |p| p.created, "");
+    report("provision", |p| p.provisioned, "(cumulative)");
+    report("launch", |p| p.launched, "(cumulative)");
+    report("first output", |p| p.first_output, "(cumulative)");
+    report("stop", |p| p.stopped, "");
 
-    let _ = vm.stop().await;
+    println!();
+    println!("console       : {console:?}");
+    println!();
 
     if console.contains(GREETING.trim_end()) {
-        println!("console       : {console:?}");
+        let first: Vec<f64> = runs.iter().map(|p| ms(p.first_output)).collect();
         println!(
-            "result        : the guest executed. {} bytes of guest code reached a usable state \
-             in {:.3} ms",
+            "result        : the guest executed on all {} boots. {} bytes of guest code reached \
+             a usable state in {:.3} ms, median of {RUNS} boots in one process.",
+            runs.len(),
             image.len(),
-            ms(first_byte.unwrap_or_default())
+            median(first)
         );
         std::process::ExitCode::SUCCESS
     } else if console.is_empty() {
-        println!("console       : EMPTY");
         println!(
             "result        : FAILED — nothing reached COM1, so no guest code ran. The image \
              loaded and the vCPU started, but neither is evidence on its own."
         );
         std::process::ExitCode::FAILURE
     } else {
-        println!("console       : {console:?}");
         println!(
             "result        : FAILED — the guest wrote something other than the greeting, so it \
              executed the wrong bytes"
