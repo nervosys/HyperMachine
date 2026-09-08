@@ -1669,12 +1669,43 @@ hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by<
       is worth reading.
     </p>
     <p>
-      <strong>This turns the job red, and that is the point rather than a side
-      effect.</strong> No suppression was added: whether to accept a known
-      unfixed advisory, drop the dependency, or vendor a mitigation is a
-      decision about this project's security posture and belongs to whoever owns
-      it. What was not acceptable was a check reporting success either way.
+      <strong>And then the reason it was never noticed turned out to be that it
+      had already been decided.</strong> <code>deny.toml</code> accepts
+      RUSTSEC-2023-0071 explicitly, with ten lines of reasoning beside it:
+      <code>rsa</code> is the only pure-Rust RSA implementation that supports
+      key generation, there is no fixed release upstream, the attack needs
+      precise timing of private-key operations on chosen inputs, and
+      HyperMachine does not expose RSA as an online decryption oracle. Tracked
+      for migration when a constant-time release ships.
     </p>
+    <p>
+      So the decision existed and was written down. What was missing is that
+      <code>cargo audit</code> had never been told about it, and the check that
+      would have shown the two tools disagreeing was the broken one. The
+      workflow reads the accepted list out of <code>deny.toml</code> now rather
+      than keeping a second copy &mdash; the same fix as the MSRV job two
+      paragraphs up, for the same reason, found the same afternoon. With those
+      applied, <code>cargo audit</code> exits clean, and it will now fail on the
+      next advisory nobody has looked at.
+    </p>
+    <div class="callout stop">
+      <h3>A correction, and it was mine</h3>
+      <p>
+        This section first said the choice belonged to whoever owns the
+        project's security posture, and that the job should stay red until they
+        made it. That was wrong in a specific and avoidable way: the choice had
+        been made, and the reasoning was sitting in a file in the repository
+        root that had not been read before the claim was written. Running
+        <code>cargo deny</code> &mdash; which passes, and passes <em>because</em>
+        of that file &mdash; is what surfaced it.
+      </p>
+      <p>
+        Which is the same lesson as the rest of the section pointed the other
+        way: it is not enough to run the check that is failing. The check that
+        <em>passes</em> is also telling you something, and here it was telling
+        you the answer.
+      </p>
+    </div>
   </div>
 
   <p>
@@ -2351,14 +2382,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       the scheduler should read it rather than invent one.
     </li>
     <li>
-      <strong>Decide what to do about RUSTSEC-2023-0071.</strong> The Marvin
-      attack, in <code>rsa</code>&nbsp;0.9.10, which <code>hv2-core</code>
-      depends on directly and uses for private-key decryption. There is no fixed
-      version to move to, so the options are to accept it explicitly with
-      <code>cargo audit --ignore</code> and a written reason, to stop depending
-      on <code>rsa</code>, or to route those operations somewhere else. The
-      security job fails until one of them is chosen, which is the correct state
-      for it to be in and the reason it is first on this list.
+      <strong>Migrate off <code>rsa</code> when a constant-time release
+      ships.</strong> That is what <code>deny.toml</code> says it is waiting
+      for, and RUSTSEC-2023-0071 is accepted until it happens. Nothing to do
+      until upstream moves; worth re-checking rather than forgetting, because
+      the acceptance is dated 2023 and the tracking note has no expiry on it.
     </li>
     <li>
       <strong>Nothing automated runs the examples.</strong> CI runs
@@ -2456,7 +2484,7 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <footer>
-  master c660712 · 0 open PRs · 0 open issues · suite green, security job red on RUSTSEC-2023-0071 · a model answers
+  master c660712 · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
   filling and emptying between token steps — 24.4&nbsp;ms per token across eight
