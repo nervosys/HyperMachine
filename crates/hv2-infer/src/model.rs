@@ -25,8 +25,9 @@
 //! and the format this file reads pairs `2i` with `2i + 1`, with the weights
 //! permuted at conversion time so that the two agree. A file converted by one
 //! convention and read by the other yields fluent-looking nonsense — so
-//! [`Rope`] names both and [`Model::detect_rope`] picks by measurement rather
-//! than by assumption.
+//! [`Rope`] names both and `Model::detect_rope` picks by measurement rather
+//! than by assumption. Not a link: it is private, and a helper should not be
+//! published to satisfy a cross-reference.
 //!
 //! **What it cannot check** is the long-context frequency scaling this model
 //! family applies above a few thousand tokens. The parameters for it are not in

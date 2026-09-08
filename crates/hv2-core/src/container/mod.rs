@@ -13,7 +13,7 @@
 //!
 //! # Running one of these specifications
 //!
-//! [`to_sandbox`] translates a [`runtime::ContainerSpec`] into the
+//! [`to_sandbox()`] translates a [`runtime::ContainerSpec`] into the
 //! [`SandboxSpec`](hv2_sandbox::SandboxSpec) and
 //! [`SandboxCommand`](hv2_sandbox::SandboxCommand) that `hv2-sandbox` enforces
 //! with namespaces, `pivot_root`, cgroup v2 and rlimits. That is the only path

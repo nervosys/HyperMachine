@@ -14,7 +14,7 @@
 //!
 //! ## Why this exists
 //!
-//! [`vswitch::VirtualSwitch`] operates at L2 (Ethernet/MAC) and has no
+//! [`crate::vswitch::VirtualSwitch`] operates at L2 (Ethernet/MAC) and has no
 //! concept of an external network at all — it only bridges ports that are
 //! already attached to the same switch. A guest that needs to reach an
 //! arbitrary host-routable TCP endpoint (a host-bound service, or the

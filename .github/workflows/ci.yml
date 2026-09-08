@@ -169,10 +169,20 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            # Read from Cargo.toml rather than pinned here. A hard-coded
+            # number drifts: this job pinned 1.87 while the workspace declared
+            # 1.95, so `cargo check` failed in the resolver -- egui 0.36
+            # requires 1.95 -- and had nothing to do with this repository's own
+            # code. Taking it from the manifest makes the two impossible to
+            # disagree.
+            - name: Read the MSRV from Cargo.toml
+              id: msrv
+              run: echo "version=$(grep -m1 '^rust-version' Cargo.toml | cut -d'\"' -f2)" >> "$GITHUB_OUTPUT"
+
             - name: Install MSRV toolchain
               uses: dtolnay/rust-toolchain@master
               with:
-                  toolchain: "1.87"
+                  toolchain: ${{ steps.msrv.outputs.version }}
 
             - name: Cache cargo registry
               uses: actions/cache@v4

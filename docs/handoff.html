@@ -1229,6 +1229,13 @@ exit 149  -> the timer's vector table entry &mdash; masked, so it delivers nothi
 hv1   timer     : <b>3 ticks on the vector the guest chose</b>, and its count went
                   down between two reads</pre>
   <p>
+    Those exit numbers and that count are from the build described here, where
+    there was one timer and one processor using it. Both change in the section
+    after next, when the second processor gets a timer of its own; they are left
+    as they were measured rather than quietly updated, because the paragraph
+    around them is about that state and not this one.
+  </p>
+  <p>
     Two things about it are honest rather than convenient. <strong>A tick is a
     timestamp-counter tick</strong>, because there is no bus clock to read here
     &mdash; which makes the period wrong by whatever the ratio is and the
@@ -1370,11 +1377,11 @@ exit 147  VMEXIT_INTR  rip <b>0x11C6</b>  -> hv1's own timer, while the guest wa
     runnable processors, one physical processor, and no cooperation from either:
     something has to take it away.
   </p>
-  <pre>hv1   timer     : <b>4 ticks on the first processor and 2 on the second</b>, each on
+  <pre>hv1   timer     : <b>4 ticks on the first processor and 3 on the second</b>, each on
                   the vector it chose, both while spinning
-hv1   switches  : <b>14&ndash;18</b> times the hypervisor moved from one processor to the other</pre>
+hv1   switches  : <b>14&ndash;22</b> times the hypervisor moved from one processor to the other</pre>
   <p>
-    Four and two, on periods of 20 and 40 million, over one window. One timer
+    Four and three, on periods of 20 and 40 million. One timer
     shared between them could not produce two different counts, and a hypervisor
     that ran them one after the other could not produce that ratio. Each waits
     on its own count rather than on a flag from the other, so what the numbers
@@ -1586,6 +1593,34 @@ hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by<
       removing it leaves clippy silent, so it was never suppressing anything
       &mdash; and it was five commits old and nothing local looked at it,
       because the local sweep had been running clippy against a single example.
+    </p>
+    <p>
+      <strong>And the documentation job was red as well, three times over.</strong>
+      <code>cargo doc --workspace --no-deps</code> with
+      <code>RUSTDOCFLAGS: -D warnings</code> failed on three broken intra-doc
+      links in three different crates: a link to a private helper
+      (<code>Model::detect_rope</code>), an ambiguous one where a name is both a
+      module and the function it exports (<code>to_sandbox</code>), and a
+      sibling-module path written without <code>crate::</code>
+      (<code>vswitch::VirtualSwitch</code>). They came out one at a time, because
+      <code>cargo doc</code> stops at the first crate that fails and the next one
+      is only visible once it does not.
+    </p>
+    <p>
+      <strong>And the MSRV job, which was failing on a number in the workflow
+      file.</strong> It installed 1.87 and ran <code>cargo check --workspace</code>,
+      while <code>Cargo.toml</code> declares <code>rust-version = "1.95"</code>
+      &mdash; so the resolver refused before compiling anything, because
+      <code>egui</code>&nbsp;0.36 needs 1.95. Somebody raised the manifest and
+      the workflow kept its own copy. It reads the version out of
+      <code>Cargo.toml</code> now, so the two cannot disagree; 1.95 checks the
+      workspace clean, which was confirmed by installing it rather than assumed.
+    </p>
+    <p>
+      Four jobs looked at, three of them red, and not one of the failures was
+      introduced by the work this page describes. All four were found by running
+      them rather than by reading them. Which is the shape of the whole section:
+      <em>the checks a project does not run are the ones it fails.</em>
     </p>
   </div>
 
