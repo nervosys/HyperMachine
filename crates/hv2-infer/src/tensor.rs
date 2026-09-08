@@ -19,6 +19,20 @@ use crate::gguf::{Gguf, Quant, TensorInfo};
 const Q8_BLOCK: usize = 32;
 const Q8_BYTES: usize = 34;
 
+/// Rows of a matrix given to one thread at a time.
+///
+/// One row was the obvious unit and the wrong one. A row is a couple of
+/// kilobytes read and a couple of thousand multiply-accumulates, and the
+/// embedding table has 128,256 of them — so a pass handed rayon a hundred
+/// thousand tasks each too small to pay for being one, and the cost of handing
+/// them out grew with the number of threads competing to take one.
+///
+/// That is what the knee was. Reading the same bytes with no arithmetic at all
+/// does not knee: `examples/bandwidth` climbs to 15 GiB/s by four threads and
+/// stays there through twenty-four, while a forward pass peaked at 7 and got
+/// worse. The machine was never the limit; the granularity was.
+const ROWS_PER_TASK: usize = 64;
+
 /// A tensor, as bytes inside the model's mapping plus what they mean.
 ///
 /// Borrowed rather than owned, so a fleet of sessions over one model shares one
@@ -62,27 +76,16 @@ impl<'a> Tensor<'a> {
         debug_assert_eq!(out.len(), self.rows);
 
         let row_bytes = self.quant.size_of(self.row);
-        match self.quant {
-            Quant::Q8_0 => out.par_iter_mut().enumerate().for_each(|(r, slot)| {
-                *slot = dot_q8_0(&self.bytes[r * row_bytes..(r + 1) * row_bytes], x);
-            }),
-            Quant::F32 => out.par_iter_mut().enumerate().for_each(|(r, slot)| {
-                let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
-                *slot = row
-                    .chunks_exact(4)
-                    .zip(x)
-                    .map(|(w, a)| f32::from_le_bytes([w[0], w[1], w[2], w[3]]) * a)
-                    .sum();
-            }),
-            Quant::F16 => out.par_iter_mut().enumerate().for_each(|(r, slot)| {
-                let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
-                *slot = row
-                    .chunks_exact(2)
-                    .zip(x)
-                    .map(|(w, a)| f32::from(half::f16::from_le_bytes([w[0], w[1]])) * a)
-                    .sum();
-            }),
-        }
+        let quant = self.quant;
+        out.par_chunks_mut(ROWS_PER_TASK)
+            .enumerate()
+            .for_each(|(chunk, slots)| {
+                let first = chunk * ROWS_PER_TASK;
+                for (offset, slot) in slots.iter_mut().enumerate() {
+                    let r = first + offset;
+                    *slot = dot(quant, &self.bytes[r * row_bytes..(r + 1) * row_bytes], x);
+                }
+            });
     }
 
     /// `out[r * lanes + b] = row_r · x[b]`, for every row and every lane.
@@ -113,25 +116,18 @@ impl<'a> Tensor<'a> {
         let row_bytes = self.quant.size_of(self.row);
         let quant = self.quant;
         let width = self.row;
-        out.par_chunks_mut(lanes).enumerate().for_each(|(r, slot)| {
-            let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
-            for (b, cell) in slot.iter_mut().enumerate() {
-                let lane = &x[b * width..(b + 1) * width];
-                *cell = match quant {
-                    Quant::Q8_0 => dot_q8_0(row, lane),
-                    Quant::F32 => row
-                        .chunks_exact(4)
-                        .zip(lane)
-                        .map(|(w, a)| f32::from_le_bytes([w[0], w[1], w[2], w[3]]) * a)
-                        .sum(),
-                    Quant::F16 => row
-                        .chunks_exact(2)
-                        .zip(lane)
-                        .map(|(w, a)| f32::from(half::f16::from_le_bytes([w[0], w[1]])) * a)
-                        .sum(),
-                };
-            }
-        });
+        out.par_chunks_mut(lanes * ROWS_PER_TASK)
+            .enumerate()
+            .for_each(|(chunk, slots)| {
+                let first = chunk * ROWS_PER_TASK;
+                for (offset, cells) in slots.chunks_mut(lanes).enumerate() {
+                    let r = first + offset;
+                    let row = &self.bytes[r * row_bytes..(r + 1) * row_bytes];
+                    for (b, cell) in cells.iter_mut().enumerate() {
+                        *cell = dot(quant, row, &x[b * width..(b + 1) * width]);
+                    }
+                }
+            });
     }
 }
 
@@ -165,6 +161,23 @@ pub fn to_lanes(rowmajor: &[f32], rows: usize, lanes: usize, out: &mut [f32]) {
         for b in 0..lanes {
             out[b * rows + r] = rowmajor[r * lanes + b];
         }
+    }
+}
+
+/// One row of any of the three kinds, dotted with `x`.
+fn dot(quant: Quant, row: &[u8], x: &[f32]) -> f32 {
+    match quant {
+        Quant::Q8_0 => dot_q8_0(row, x),
+        Quant::F32 => row
+            .chunks_exact(4)
+            .zip(x)
+            .map(|(w, a)| f32::from_le_bytes([w[0], w[1], w[2], w[3]]) * a)
+            .sum(),
+        Quant::F16 => row
+            .chunks_exact(2)
+            .zip(x)
+            .map(|(w, a)| f32::from(half::f16::from_le_bytes([w[0], w[1]])) * a)
+            .sum(),
     }
 }
 

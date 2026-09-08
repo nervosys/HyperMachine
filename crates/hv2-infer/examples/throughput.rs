@@ -57,19 +57,22 @@ fn main() -> std::process::ExitCode {
         .and_then(|n| n.parse().ok())
         .unwrap_or(DEFAULT_PASSES);
 
-    let threads = args
-        .get(2)
-        .and_then(|n| n.parse().ok())
-        .unwrap_or_else(hv2_infer::schedule::default_threads);
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(threads)
-        .build()
-        .expect("a thread pool");
-
     // Conversations carried by one pass. The whole question this example
     // exists to answer: a pass reads the entire model to produce a token, so
     // does producing eight tokens cost eight passes or one?
     let lanes = args.get(3).and_then(|n| n.parse().ok()).unwrap_or(1usize);
+
+    // Zero means "choose", the same as `Limits::threads` — otherwise it would
+    // ask rayon for a pool of no threads, which it answers by using all of
+    // them, which is the one setting this example exists to argue against.
+    let threads = match args.get(2).and_then(|n| n.parse::<usize>().ok()) {
+        Some(0) | None => hv2_infer::schedule::default_threads(lanes),
+        Some(n) => n,
+    };
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .expect("a thread pool");
 
     let model = match Model::load(path) {
         Ok(model) => model,

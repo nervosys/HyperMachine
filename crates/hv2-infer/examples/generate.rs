@@ -54,7 +54,7 @@ fn main() -> std::process::ExitCode {
     // using `Session` directly rather than through `Scheduler` has to do this
     // for itself, which is worth demonstrating rather than hiding.
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(default_threads())
+        .num_threads(default_threads(1))
         .build()
         .expect("a thread pool");
     println!(

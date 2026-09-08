@@ -232,13 +232,34 @@ pub struct Stats {
 
 /// How many threads to spread a pass across, when the caller has not said.
 ///
-/// A third of what the machine reports, which is where the knee was on the host
-/// this was measured on. Deliberately a fraction rather than a constant: the
-/// finding is not that eight is a good number, it is that all of them is a bad
-/// one.
-pub fn default_threads() -> usize {
+/// Two facts, both measured, pulling in opposite directions.
+///
+/// A pass over the weights is memory-bound, and a *small* number of threads
+/// saturates the memory system: on this host four threads reach 15.7 GiB/s, and
+/// `examples/bandwidth` says the machine tops out at 15.9 GiB/s reading the
+/// same bytes with no arithmetic at all. More threads past that do not help and
+/// measurably hurt.
+///
+/// But a wider batch does more arithmetic per byte read, so it stops being
+/// purely memory-bound: at eight lanes the best is eight threads, not four.
+///
+/// ```text
+///  lanes  threads  result
+///      1        4  77.7 ms per pass, 15.74 GiB/s   <- the machine's ceiling
+///      1        8  127.3 ms,          9.61
+///      1       24  232.2 ms,          5.27
+///      8        4  35.8 ms per token
+///      8        8  28.0 ms per token               <- best
+///      8       16  28.5 ms per token
+/// ```
+///
+/// So: enough threads to saturate memory, and more when the batch gives them
+/// something to do. The fraction is a guess calibrated on one machine, and
+/// `examples/throughput` takes both knobs precisely so the next machine can be
+/// measured rather than assumed.
+pub fn default_threads(lanes: usize) -> usize {
     let cores = std::thread::available_parallelism().map_or(1, |n| n.get());
-    (cores / 3).max(1)
+    (cores / 6).max(1).max(lanes.max(1)).min(cores)
 }
 
 /// A request that has joined the queue and not yet been given a lane.
@@ -324,8 +345,9 @@ impl<'m> Scheduler<'m> {
     /// If a thread pool cannot be built, which means the process cannot spawn
     /// threads and nothing below would work either.
     pub fn new(model: &'m Model, limits: Limits) -> Self {
+        let lanes = limits.batch.max(1);
         let threads = if limits.threads == 0 {
-            default_threads()
+            default_threads(lanes)
         } else {
             limits.threads
         };
@@ -334,7 +356,6 @@ impl<'m> Scheduler<'m> {
             .thread_name(|i| format!("infer-{i}"))
             .build()
             .expect("a thread pool");
-        let lanes = limits.batch.max(1);
         Self {
             model,
             limits,

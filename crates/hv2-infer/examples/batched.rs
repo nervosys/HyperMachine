@@ -57,7 +57,7 @@ fn main() -> std::process::ExitCode {
     };
 
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(default_threads())
+        .num_threads(default_threads(1))
         .build()
         .expect("a thread pool");
 
