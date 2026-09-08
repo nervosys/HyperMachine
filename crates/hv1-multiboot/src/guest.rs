@@ -1068,6 +1068,13 @@ pub struct Transcript {
     /// How many armings that minimum is over, so a suspiciously small sample
     /// is visible rather than implied.
     pub arm_samples: usize,
+    /// Of those, how many were forced by hv1's own one-shot having fired and
+    /// been consumed, rather than by a deadline that actually moved.
+    ///
+    /// The first kind cannot be avoided: a one-shot that has gone off has to be
+    /// set again to go off a second time. The second kind is the one worth
+    /// asking about, and the answer is only worth having as a count.
+    pub arm_after_fire: usize,
     /// Whether the guest saw its timer's count go down on its own.
     pub timer_counts: bool,
     /// What the timer was armed with, and what the guest read back the first
@@ -1636,6 +1643,9 @@ pub unsafe fn run() -> Outcome {
     // measured. It is kept because writing a device register for no reason is
     // still writing a device register for no reason. `None` means disarmed.
     let mut armed_for: Option<u64> = None;
+    // Whether the last exit was hv1's own timer going off, so the re-arming
+    // below can be attributed rather than guessed at.
+    let mut fired = false;
     // When the processor now running has to give it up even if nothing is due.
     let mut slice_end: u64 = now() + SLICE;
 
@@ -1664,6 +1674,7 @@ pub unsafe fn run() -> Outcome {
         eois: 0,
         arm_cost: u64::MAX,
         arm_samples: 0,
+        arm_after_fire: 0,
         timer_counts: false,
         timer_armed: 0,
         timer_first_read: 0,
@@ -1789,6 +1800,9 @@ pub unsafe fn run() -> Outcome {
                     crate::apic::arm_oneshot(to_apic_ticks(due.saturating_sub(now())));
                     log.arm_cost = log.arm_cost.min(now().wrapping_sub(before));
                     log.arm_samples += 1;
+                    if fired {
+                        log.arm_after_fire += 1;
+                    }
                     armed_for = Some(due);
                 }
             }
@@ -1801,6 +1815,7 @@ pub unsafe fn run() -> Outcome {
         }
 
         let entered = now();
+        fired = false;
         let _ = svm::svm_run(vmcb, &mut regs[current]);
         log.max_in_guest = log.max_in_guest.max(now().wrapping_sub(entered));
 
@@ -2027,6 +2042,7 @@ pub unsafe fn run() -> Outcome {
                 // Two flags have to be opened for the handler to run at all --
                 // see `apic::take_pending`, and the note there about `GIF`.
                 crate::apic::take_pending();
+                fired = true;
                 // The one-shot is spent. `armed_for` records which deadline was
                 // asked for, not whether the hardware is still counting, so
                 // without this the next entry sees the deadline it wanted

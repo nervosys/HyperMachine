@@ -490,7 +490,9 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
                 print_dec(log.arm_cost);
                 print(" timestamp ticks, the smallest of ");
                 print_dec(log.arm_samples as u64);
-                print(" writes to hv1's own timer
+                print(" armings, ");
+                print_dec(log.arm_after_fire as u64);
+                print(" of them because its own one-shot had fired
 ");
             } else {
                 print("FAILED — the guest armed a timer and did not get what it asked for

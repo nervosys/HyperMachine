@@ -1485,6 +1485,24 @@ one write    <b>24,068</b>   24,684   24,816   28,468   31,592</pre>
       one. The difference is not cleverness, it is that the second was measured
       first.
     </p>
+    <p>
+      <strong>And then the same question was asked once more and answered
+      no.</strong> The obvious next move is to arm less often, so each arming
+      was attributed: <em>seventeen or eighteen of about twenty per run are
+      forced by hv1's own one-shot having fired</em>, which cannot be avoided
+      &mdash; a one-shot that has gone off has to be set again to go off again.
+      The remaining two to four correspond to a deadline that really moved. So
+      there is nothing left to remove, only a different design: a
+      <em>periodic</em> host timer on a fixed grid would need no re-arming at
+      all, at the cost of serving every deadline late by up to one grid period.
+    </p>
+    <p>
+      That trade was priced rather than argued about. Twenty armings at ~30,000
+      ticks is 600,000 ticks a run &mdash; about 143&nbsp;&micro;s, against a run
+      of 255&ndash;400&nbsp;ms. <strong>0.03 to 0.04 per cent.</strong> Trading
+      timer precision for that is not worth doing, and the item is closed rather
+      than carried.
+    </p>
   </div>
   <h3>And the one instruction that defeats all of it</h3>
   <p>
@@ -2115,15 +2133,6 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       commands.
     </li>
     <li>
-      <strong>Stop arming at all when nothing has moved.</strong> The arming is
-      one uncached write now, ~25,000 ticks, and there are eighteen to
-      twenty-three of them in a run. Some are re-arming for a deadline that has
-      not changed but whose one-shot has been consumed, which is unavoidable;
-      others may not be. Nobody has counted which is which, and the instrument
-      to do it &mdash; a minimum over samples rather than a first sample &mdash;
-      now exists.
-    </li>
-    <li>
       <strong>Find out whether the NMI path works on hardware.</strong> It is
       the only way to preempt a guest that has cleared its interrupt flag, and
       on this platform the counter overflows and delivers nothing &mdash; which
@@ -2139,7 +2148,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       hypervisor underneath.
     </li>
     <li>
-      <strong>Decide whether the queue needs a priority.</strong> It is
+      <strong>Decide whether the queue needs a priority.</strong> The only open
+      item here that is not about hardware or about a quiet machine. It is
       first-in-first-out and a lane runs to the end of its answer, so a long
       answer delays a short one. Whether that matters is a product question the
       capability graph does not answer, and the graph is where an answer would
@@ -2148,9 +2158,14 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     <li>
       <strong>Keep the suite green.</strong> It is: 5,268 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
-      all fifteen examples. That count has also come out at 93 on another run of
-      the same command, and why has not been established; the guard below twenty
-      is what the sweep actually depends on. The sweep now refuses to print a
+      all fifteen examples. That count came out at 93 on two earlier runs, and
+      the difference is <em>not reproduced</em>: 88 three times on the current
+      tree, including once with a <code>clippy --workspace</code> pass first,
+      which was the only structural difference between the two shapes. There are
+      no conditionally-built test targets to explain five appearing or
+      disappearing. So it is recorded as a number that moved once and has not
+      moved since, which is not the same as a number that has been explained.
+      The guard below twenty is what the sweep actually depends on. The sweep now refuses to print a
       summary when it counts fewer than twenty binaries, because the run before
       last printed 3,331 with crates missing and the one before that printed
       nothing at all — which is the point of the paragraph above, applied to the
