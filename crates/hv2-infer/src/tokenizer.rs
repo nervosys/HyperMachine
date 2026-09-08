@@ -155,13 +155,12 @@ impl Tokenizer {
                 continue;
             };
             for ch in token.chars() {
-                match self.from_char.get(&ch) {
-                    Some(byte) => bytes.push(*byte),
-                    // A special token such as `<|eot_id|>` is not byte-level
-                    // text and has no reverse mapping. Skipped rather than
-                    // rendered, because printing the marker is not what the
-                    // model said.
-                    None => {}
+                // A character with no reverse mapping belongs to a special
+                // token such as `<|eot_id|>`, which is not byte-level text.
+                // Skipped rather than rendered, because printing the marker is
+                // not what the model said.
+                if let Some(byte) = self.from_char.get(&ch) {
+                    bytes.push(*byte);
                 }
             }
         }
