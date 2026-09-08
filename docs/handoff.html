@@ -1358,6 +1358,99 @@ exit 147  VMEXIT_INTR  rip <b>0x11C6</b>  -> hv1's own timer, while the guest wa
       is why they are quoted as ranges.
     </p>
   </div>
+  <h3>A timer each, and a hypervisor that has to choose</h3>
+  <p>
+    One timer for two processors is one processor's timer. Each has its own now
+    &mdash; the same register addresses, a different device behind them &mdash;
+    and the second processor arms its own at <em>twice</em> the period of the
+    first. Both then spin. Neither halts. Neither yields.
+  </p>
+  <p>
+    That is the first thing here that hv1 cannot dispatch its way out of. Two
+    runnable processors, one physical processor, and no cooperation from either:
+    something has to take it away.
+  </p>
+  <pre>hv1   timer     : <b>4 ticks on the first processor and 2 on the second</b>, each on
+                  the vector it chose, both while spinning
+hv1   switches  : <b>14&ndash;18</b> times the hypervisor moved from one processor to the other</pre>
+  <p>
+    Four and two, on periods of 20 and 40 million, over one window. One timer
+    shared between them could not produce two different counts, and a hypervisor
+    that ran them one after the other could not produce that ratio. Each waits
+    on its own count rather than on a flag from the other, so what the numbers
+    come out as is decided by the two timers and nothing else &mdash; they are
+    the same on every run.
+  </p>
+  <p>
+    The policy is two rules. A processor whose own tick is overdue runs next,
+    because it is the one with something waiting. Failing that, whoever has held
+    the processor for a slice &mdash; two milliseconds &mdash; gives it up. hv1
+    arms its own APIC for whichever comes first, the nearest deadline of any
+    runnable processor or the end of the slice, so the exit that arrives is
+    either a delivery or a preemption.
+  </p>
+
+  <div class="callout stop">
+    <h3>Three ways this hung, and every one of them was a thing that is true of real hardware</h3>
+    <p>
+      <strong>Deadlines alone are not a scheduler.</strong> The first version
+      ranked only processors that had <em>armed</em> a timer. A processor that
+      had not armed one was never chosen, and it had not armed one because it
+      had never run: hv1 sat in <code>VMRUN</code> on the second processor
+      forever while the first waited to be scheduled so it could set the flag
+      the second was spinning on. A policy that cannot schedule a task with no
+      deadline is not a policy.
+    </p>
+    <p>
+      <strong>A one-shot is consumed when it fires.</strong> hv1 remembered
+      which deadline it had asked its own timer for, and skipped re-arming when
+      the deadline had not changed &mdash; which is right while the timer is
+      still counting and wrong the moment it has fired. It went unnoticed while
+      the only deadline was a guest timer's, because delivering a tick always
+      produced a new one. A slice deadline outlives its own expiry.
+    </p>
+    <p>
+      <strong>And the second processor never enabled interrupts.</strong> The
+      interrupt table is memory and these two processors share their memory, but
+      <code>IDTR</code> and the interrupt flag are <em>registers</em>, and
+      registers are per processor. The second one came out of reset with the
+      real-mode vector table and interrupts off, and nothing the first one did
+      changed that. It now loads its own <code>IDTR</code> and sets its own
+      flag.
+    </p>
+    <p>
+      That last one did not present as a hang in the guest. It presented as a
+      hang in the <em>hypervisor</em>: an external-interrupt intercept produces
+      an exit when the interrupt would be delivered, and a guest with
+      <code>IF</code> clear is a guest to which it never would be. hv1 armed its
+      timer, entered that processor, and sat in <code>VMRUN</code> while the
+      deadline went past. Which is worth stating as a limitation rather than a
+      bug fixed: <strong>hv1 cannot currently preempt a guest that has disabled
+      interrupts.</strong> A real hypervisor reaches for a different intercept
+      for that, and this one has not needed to yet because its guest is
+      cooperative about the one thing it would take to defeat it.
+    </p>
+  </div>
+
+  <div class="callout">
+    <h3>And a number that stopped being true</h3>
+    <p>
+      The section above quotes ~124,000 timestamp ticks rising to ~380,000 for
+      one round trip through the exit loop, measured as the drop in the guest's
+      own timer count between arming it and reading it back. With two processors
+      to schedule, the other one now runs in the middle of that, so the number
+      grew to ~20,000,000 without anything getting slower &mdash; it had stopped
+      measuring what its name said.
+    </p>
+    <p>
+      It is gone rather than re-explained. What is left is the one taken
+      directly, with a timestamp on either side of the writes:
+      <strong>~140,000 ticks to arm hv1's own timer</strong>, two uncached
+      stores to a device the layer below emulates. The earlier figures stand for
+      the single-processor case they were taken in; they are simply no longer
+      measurable this way.
+    </p>
+  </div>
   <p>
     The rest is what two processors of one guest share, and it is in the
     controls rather than in the bring-up: the same nested page tables, the same
@@ -1684,8 +1777,9 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
               and STARTUP on an emulated APIC page — refusing a startup that skipped the reset — then
               scheduled the two of them onto the one processor it has, both of which read their own
               identity from one instruction at one address, one of which armed a timer and took three
-              ticks on the vector it chose itself, delivered while it was spinning by hv1 arming its own
-              real APIC and intercepting the interrupt; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
+              ticks on the vector it chose itself, delivered while both were spinning by hv1 arming
+              its own real APIC, intercepting the interrupt, and taking the processor back from each
+              of them in turn; <span class="tag typed">typed</span> ARM EL2, and no bare metal for either</td></tr>
       </tbody>
     </table>
   </div>
@@ -1909,11 +2003,12 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       a finding.
     </li>
     <li>
-      <strong>Give the second processor a timer too.</strong> There is one
-      <code>Timer</code> and it belongs to the first processor, because the
-      second one never arms its own &mdash; so a second would be an unexercised
-      one. Two guest processors that can each keep time independently is what a
-      scheduler needs and is the next thing this cannot do.
+      <strong>Preempt a guest that has turned interrupts off.</strong> hv1
+      cannot. Its external-interrupt intercept only produces an exit when the
+      interrupt would be delivered, so a guest that clears <code>IF</code> and
+      spins keeps the processor until it chooses not to &mdash; which is a
+      guest holding a hypervisor hostage with one instruction. The mechanism for
+      it exists in the architecture; hv1 does not use it yet.
     </li>
     <li>
       <strong>Then boot hv1 on hardware</strong>, the only item here that cannot
@@ -1930,8 +2025,11 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       go.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,269 tests across 93 test
-      binaries, and all fifteen examples. The sweep now refuses to print a
+      <strong>Keep the suite green.</strong> It is: 5,268 tests across 88 test
+      result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
+      all fifteen examples. That count has also come out at 93 on another run of
+      the same command, and why has not been established; the guard below twenty
+      is what the sweep actually depends on. The sweep now refuses to print a
       summary when it counts fewer than twenty binaries, because the run before
       last printed 3,331 with crates missing and the one before that printed
       nothing at all — which is the point of the paragraph above, applied to the
@@ -2021,7 +2119,8 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   STARTUP on a faulted APIC page, refuses a startup that skipped the reset,
   schedules both onto the one processor it has, tells them apart &mdash; one
   instruction, one address, two answers &mdash; and delivers a guest's own timer
-  on the guest's own vector while the guest is spinning rather than halted —
+  on each guest processor's own vector while both are spinning rather than
+  halted, taking the processor back from each in turn —
   nested, and still never on a
   machine
 </footer>

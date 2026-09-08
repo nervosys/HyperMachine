@@ -201,6 +201,9 @@ core::arch::global_asm!(
     .set APIC_CURRENT,    0xFEE00390
     .set APIC_DIVIDE,     0xFEE003E0
     .set TICKS_LINEAR,    0x4100
+    .set AP_TICKS_LINEAR, 0x4104
+    .set STOP_LINEAR,     0x4108
+    .set AP_TIMER_LINEAR, GUEST_BASE + ap_timer - guest_start
     .set APIC_TIMER_LINEAR, GUEST_BASE + apic_timer - guest_start
     .set WHOAMI_LINEAR,   GUEST_BASE + whoami - guest_start
     .set GDT_PTR_OFFSET, gdt_pointer - guest_start
@@ -459,19 +462,25 @@ protected:
     mov eax, 12
     vmmcall
 15:
-    // Wait for three of them by *spinning*. Not `hlt`: a halt is an exit, and a
+    // Wait for four of them by *spinning*. Not `hlt`: a halt is an exit, and a
     // hypervisor that only ever sees exits could notice the deadline there and
     // claim a timer. This loop never leaves the guest, so the only way the
     // count moves is if the interrupt arrives while the guest is running.
+    //
+    // The other processor is spinning on its own timer at half this rate at the
+    // same time. Neither yields, so hv1 has to take the processor away from one
+    // of them, which is the first thing here that is scheduling rather than
+    // dispatching.
     mov eax, [TICKS_LINEAR]
-    cmp eax, 3
+    cmp eax, 4
     jae 16f
     pause
     jmp 15b
 16:
     // Mask it, bit 16. A periodic timer nobody stops is a periodic timer.
     mov dword ptr [APIC_LVT_TIMER], 0x10021
-    // Hypercall 11: the guest's own timer fired, three times, on its vector.
+    // Hypercall 11: this processor's timer fired as often as it asked, on the
+    // vector it chose, while it was running.
     mov eax, 11
     vmmcall
 3:
@@ -514,6 +523,16 @@ apic_timer:
     mov eax, [TICKS_LINEAR]
     inc eax
     mov [TICKS_LINEAR], eax
+    mov dword ptr [APIC_EOI], 0
+    pop eax
+    iretd
+
+    // The second processor's tick, counting into its own word.
+ap_timer:
+    push eax
+    mov eax, [AP_TICKS_LINEAR]
+    inc eax
+    mov [AP_TICKS_LINEAR], eax
     mov dword ptr [APIC_EOI], 0
     pop eax
     iretd
@@ -568,12 +587,20 @@ idt:
     .byte 0
     .byte 0x8E
     .word (TIMER_LINEAR >> 16) & 0xFFFF
-    // 0x21, the vector the guest gave its own timer.
+    // 0x21, the vector the first processor gave its own timer.
     .word APIC_TIMER_LINEAR & 0xFFFF
     .word 0x08
     .byte 0
     .byte 0x8E
     .word (APIC_TIMER_LINEAR >> 16) & 0xFFFF
+    // 0x22, the second processor's. A different vector through the same table,
+    // because the table is memory and the two processors share their memory --
+    // what they do not share is which handler runs, and that is the point.
+    .word AP_TIMER_LINEAR & 0xFFFF
+    .word 0x08
+    .byte 0
+    .byte 0x8E
+    .word (AP_TIMER_LINEAR >> 16) & 0xFFFF
 idt_end:
 idt_pointer:
     .word idt_end - idt - 1
@@ -594,6 +621,21 @@ ap_entry:
     mov gs, ax
     mov esp, offset AP_STACK_TOP
 
+    // Its own IDTR, and its own interrupt flag. The *table* is shared -- it is
+    // memory, and these two processors share their memory -- but IDTR and the
+    // interrupt flag are registers, and registers are per processor. This
+    // processor came out of reset with the real-mode vector table and
+    // interrupts off, and nothing the other one did changed that.
+    //
+    // Leaving it out is not a hang in the guest. It is a hang in the
+    // *hypervisor*: an external interrupt intercept produces an exit when the
+    // interrupt would be delivered, and a guest with IF clear is a guest to
+    // which it never would be. hv1 armed its timer, entered this processor, and
+    // sat in VMRUN while the deadline went past.
+    mov ebx, offset IDT_PTR_LINEAR
+    lidt [ebx]
+    sti
+
     // The same call, at the same address, on the other processor.
     call whoami
 
@@ -611,6 +653,31 @@ ap_entry:
     mov dword ptr [0x4000], 1
     // Hypercall 9: the second processor ran.
     mov eax, 9
+    vmmcall
+
+    // ── This processor's own timer ──────────────────────────────────────
+    // Its own APIC, so its own registers: the same addresses, and a different
+    // device behind them. Twice the period of the other processor's, so the
+    // two tick counts are not interchangeable and a hypervisor keeping one
+    // timer for both would be visible in the numbers.
+    mov dword ptr [AP_TICKS_LINEAR], 0
+    mov dword ptr [APIC_DIVIDE], 0x0B
+    mov dword ptr [APIC_LVT_TIMER], 0x20022
+    mov dword ptr [APIC_INITIAL], 40000000
+17:
+    // Spin, like the other one, and stop after two of its own -- which is the
+    // same length of time, because its period is twice as long. Each processor
+    // waits on its own count rather than on a flag from the other, so what the
+    // two counts come out as is decided by the two timers and nothing else.
+    mov eax, [AP_TICKS_LINEAR]
+    cmp eax, 2
+    jae 18f
+    pause
+    jmp 17b
+18:
+    mov dword ptr [APIC_LVT_TIMER], 0x10022
+    // Hypercall 13: this processor is done, and here is what its timer did.
+    mov eax, 13
     vmmcall
 13:
     hlt
@@ -923,7 +990,7 @@ pub enum Outcome {
 /// written a byte at a time costs one exit per character, so two short lines of
 /// console are sixty exits on their own — which is the reason real device models
 /// batch, and the reason this number is what it is.
-const MAX_EXITS: usize = 200;
+const MAX_EXITS: usize = 256;
 
 /// What the hypervisor saw and said.
 pub struct Transcript {
@@ -968,10 +1035,11 @@ pub struct Transcript {
     /// rather than assumed.
     pub timer_armed: u32,
     pub timer_first_read: u32,
-    /// How many times the guest's own timer vector was delivered.
-    pub ticks: usize,
-    /// Whether the guest's timer handler ran as many times as it wanted.
+    /// How many times each processor's own timer vector was delivered.
+    pub ticks: [usize; VCPUS],
+    /// Whether each processor's timer handler ran as often as it wanted.
     pub timer_served: bool,
+    pub ap_timer_served: bool,
     /// Whether a startup message that skipped the reset was refused.
     pub ap_refused: bool,
     /// Whether a second guest processor was started and ran.
@@ -1121,6 +1189,15 @@ impl Timer {
         self.due = now + u64::from(self.initial) * self.divisor;
     }
 }
+
+/// How long a processor keeps the physical one before it has to give it up,
+/// in timestamp-counter ticks. About two milliseconds here.
+///
+/// Short enough that a processor waiting on the other one is not stuck behind a
+/// whole timer period, long enough that rotating is not most of what this loop
+/// does -- every rotation is an exit, and an exit here costs a few hundred
+/// thousand of these.
+const SLICE: u64 = 8_000_000;
 
 /// Convert a span of timestamp-counter ticks into APIC ticks.
 ///
@@ -1481,9 +1558,12 @@ pub unsafe fn run() -> Outcome {
     let mut icr_high: u32 = 0;
     let mut reset = [false; VCPUS];
     let mut spurious: u32 = 0;
-    // One timer, on the first processor. The second one never arms its own, so
-    // giving each a timer would be giving one of them an unexercised timer.
-    let mut timer = Timer::new();
+    // A timer each, because each processor's APIC is its own. hv1 has one real
+    // APIC underneath both of them, so it multiplexes: whichever deadline comes
+    // first among the processors that can run is what its own timer is set for,
+    // and the exit that produces is both the delivery and the chance to
+    // reschedule.
+    let mut timer = [Timer::new(); VCPUS];
     // What hv1's own timer is currently set for, so it is not reprogrammed on
     // every entry: each write to it is an uncached store to a device KVM
     // emulates, and costs an exit of hv1's own.
@@ -1496,6 +1576,8 @@ pub unsafe fn run() -> Outcome {
     // measured. It is kept because writing a device register for no reason is
     // still writing a device register for no reason. `None` means disarmed.
     let mut armed_for: Option<u64> = None;
+    // When the processor now running has to give it up even if nothing is due.
+    let mut slice_end: u64 = now() + SLICE;
 
     let mut log = Transcript {
         exits: core::array::from_fn(|_| Exit {
@@ -1524,8 +1606,9 @@ pub unsafe fn run() -> Outcome {
         timer_counts: false,
         timer_armed: 0,
         timer_first_read: 0,
-        ticks: 0,
+        ticks: [0; VCPUS],
         timer_served: false,
+        ap_timer_served: false,
         ap_refused: false,
         ap_started: false,
         ap_ran: false,
@@ -1538,42 +1621,117 @@ pub unsafe fn run() -> Outcome {
     while log.count < MAX_EXITS {
         // The processor being run this time round. Fetched here rather than
         // held across the loop, because which one it is changes.
+        // ── Scheduling ──────────────────────────────────────────────────
+        // Two processors that both spin never yield, so hv1 has to take the
+        // processor away from one of them. Two rules, and the first version had
+        // only the second:
+        //
+        // A processor whose own tick is overdue runs next, because it is the
+        // one with something waiting for it. And failing that, whoever has held
+        // the processor for a whole slice gives it up.
+        //
+        // Deadlines alone deadlocked. Ranking only processors that had *armed*
+        // a timer meant a processor that had not armed one yet was never
+        // chosen, and it had not armed one because it had never run: hv1 sat in
+        // `VMRUN` on the second processor forever while the first waited to be
+        // scheduled so it could set the flag the second was spinning on. A
+        // scheduling policy that cannot schedule a task with no deadline is not
+        // a scheduling policy.
+        let mut overdue: Option<usize> = None;
+        for index in 0..VCPUS {
+            if runnable[index]
+                && !finished[index]
+                && timer[index].live()
+                && now() >= timer[index].due
+            {
+                overdue = Some(index);
+                break;
+            }
+        }
+        let next = match overdue {
+            Some(index) => index,
+            None if now() >= slice_end || !runnable[current] || finished[current] => {
+                let mut candidate = current;
+                for step in 1..=VCPUS {
+                    let index = (current + step) % VCPUS;
+                    if runnable[index] && !finished[index] {
+                        candidate = index;
+                        break;
+                    }
+                }
+                candidate
+            }
+            None => current,
+        };
+        if next != current {
+            current = next;
+            log.switches += 1;
+        }
+        if now() >= slice_end {
+            slice_end = now() + SLICE;
+        }
+
         let vmcb = vmcb_of(current);
         vmcb.control.vmcb_clean = 0;
 
-        // The guest's timer, decided here rather than at whatever exit happens
-        // to come next. If it is due, the vector goes in before entry; if it is
-        // not, hv1 arms *its own* timer for the remaining span, so the
+        // This processor's timer, decided here rather than at whatever exit
+        // happens to come next. If it is due, the vector goes in before entry;
+        // if it is not, hv1 arms *its own* timer for the remaining span, so the
         // interrupt arrives while the guest is running and the intercept of it
-        // is the exit. That is the whole mechanism, and it is why the guest can
+        // is the exit. That is the whole mechanism, and it is why a guest can
         // spin rather than halt.
-        if timer.live() {
-            if now() >= timer.due && vmcb.control.event_inject & INJECT_VALID == 0 {
-                vmcb.control.event_inject =
-                    timer.vector() | INJECT_TYPE_INTR | INJECT_VALID;
-                log.ticks += 1;
-                if timer.lvt & LVT_PERIODIC != 0 {
-                    timer.arm(now());
-                } else {
-                    timer.initial = 0;
-                }
+        if timer[current].live()
+            && now() >= timer[current].due
+            && vmcb.control.event_inject & INJECT_VALID == 0
+        {
+            vmcb.control.event_inject =
+                timer[current].vector() | INJECT_TYPE_INTR | INJECT_VALID;
+            log.ticks[current] += 1;
+            if timer[current].lvt & LVT_PERIODIC != 0 {
+                timer[current].arm(now());
+            } else {
+                timer[current].initial = 0;
             }
-            if timer.live() {
-                if armed_for != Some(timer.due) {
+        }
+
+        // hv1's own timer is set for the nearest deadline of *any* processor
+        // that can run, not just the one about to. The other one's tick is
+        // still its own to receive, and the only way it can receive it is for
+        // this loop to get control back in time to switch to it.
+        // ...or the end of the slice, whichever comes first, and only while
+        // there is more than one processor to give it to. One runnable
+        // processor with no timer needs no interruption, and interrupting it
+        // would be exits for nothing.
+        let others = (0..VCPUS)
+            .filter(|&i| runnable[i] && !finished[i])
+            .count();
+        let mut wake: Option<u64> = if others > 1 { Some(slice_end) } else { None };
+        for index in 0..VCPUS {
+            if !runnable[index] || finished[index] || !timer[index].live() {
+                continue;
+            }
+            let due = timer[index].due;
+            if wake.map_or(true, |best| due < best) {
+                wake = Some(due);
+            }
+        }
+        match wake {
+            Some(due) => {
+                if armed_for != Some(due) {
                     let before = now();
-                    crate::apic::arm_oneshot(to_apic_ticks(timer.due.saturating_sub(now())));
+                    crate::apic::arm_oneshot(to_apic_ticks(due.saturating_sub(now())));
                     if log.arm_cost == 0 {
                         log.arm_cost = now().wrapping_sub(before);
                     }
-                    armed_for = Some(timer.due);
+                    armed_for = Some(due);
                 }
-            } else if armed_for.is_some() {
-                crate::apic::disarm();
-                armed_for = None;
             }
-        } else if armed_for.is_some() {
-            crate::apic::disarm();
-            armed_for = None;
+            None => {
+                if armed_for.is_some() {
+                    crate::apic::disarm();
+                    armed_for = None;
+                }
+            }
         }
 
         let _ = svm::svm_run(vmcb, &mut regs[current]);
@@ -1674,24 +1832,29 @@ pub unsafe fn run() -> Outcome {
                     }
                     6 => "and then asked for memory it does not have",
                     9 => {
-                        // Its last word. Marking it finished is what stops the
-                        // yield loop below: two processors that have both said
-                        // everything they have to say will otherwise hand the
-                        // one physical processor back and forth forever, which
-                        // is exactly what the first version of this did until
-                        // the exit log filled up.
+                        // Not its last word any more: it goes on to arm a timer
+                        // of its own and spin on it. What ends a processor is
+                        // hypercall 11 or 13, and something has to, because two
+                        // processors that have both said everything they have
+                        // to say will otherwise hand the one physical processor
+                        // back and forth forever -- which is exactly what the
+                        // first version of this did until the exit log filled.
                         log.ap_ran = true;
-                        finished[current] = true;
-                        "the second processor ran, and is done"
+                        "the second processor ran, and has its own work now"
                     }
                     10 => {
                         log.ap_seen = true;
-                        finished[current] = true;
                         "the first processor saw what the second one wrote"
                     }
                     11 => {
                         log.timer_served = true;
-                        "the guest's own timer fired as many times as it asked for"
+                        finished[current] = true;
+                        "the first processor's timer fired as often as it asked, and it is done"
+                    }
+                    13 => {
+                        log.ap_timer_served = true;
+                        finished[current] = true;
+                        "the second processor's timer did its own counting, and it is done"
                     }
                     12 => {
                         log.timer_counts = true;
@@ -1728,7 +1891,7 @@ pub unsafe fn run() -> Outcome {
                     continue;
                 }
 
-                if timer.live() {
+                if timer[current].live() {
                     // The guest asked for this one. Wait for it rather than
                     // deciding when it should arrive: the deadline is the
                     // guest's, and the only thing the hypervisor contributes is
@@ -1738,16 +1901,16 @@ pub unsafe fn run() -> Outcome {
                     // processor to do — the other one is finished and the guest
                     // is halted, which is exactly the case a real hypervisor
                     // would give the physical processor away in.
-                    while now() < timer.due {
+                    while now() < timer[current].due {
                         core::hint::spin_loop();
                     }
                     vmcb.control.event_inject =
-                        timer.vector() | INJECT_TYPE_INTR | INJECT_VALID;
-                    log.ticks += 1;
-                    if timer.lvt & LVT_PERIODIC != 0 {
-                        timer.arm(now());
+                        timer[current].vector() | INJECT_TYPE_INTR | INJECT_VALID;
+                    log.ticks[current] += 1;
+                    if timer[current].lvt & LVT_PERIODIC != 0 {
+                        timer[current].arm(now());
                     } else {
-                        timer.initial = 0;
+                        timer[current].initial = 0;
                     }
                     answer = "halted, waited for the guest's own timer, and delivered its vector";
                     log.exits[log.count] = Exit {
@@ -1792,6 +1955,18 @@ pub unsafe fn run() -> Outcome {
                 // Two flags have to be opened for the handler to run at all --
                 // see `apic::take_pending`, and the note there about `GIF`.
                 crate::apic::take_pending();
+                // The one-shot is spent. `armed_for` records which deadline was
+                // asked for, not whether the hardware is still counting, so
+                // without this the next entry sees the deadline it wanted
+                // already recorded and does not re-arm -- and nothing ever
+                // interrupts again.
+                //
+                // It went unnoticed while the only deadline was the guest
+                // timer's, because delivering a tick always produced a new one.
+                // A slice deadline outlives its own expiry, and hv1 sat in
+                // `VMRUN` on a spinning guest with a timer that had already
+                // fired.
+                armed_for = None;
                 answer = "hv1's own timer, while the guest was running";
                 vmcb.control.vmcb_clean = 0;
             }
@@ -1832,7 +2007,7 @@ pub unsafe fn run() -> Outcome {
                                 }
                                 APIC_SPURIOUS => (spurious, "the spurious-interrupt vector register"),
                                 APIC_CURRENT => {
-                                    let left = timer.remaining(now());
+                                    let left = timer[current].remaining(now());
                                     if log.timer_first_read == 0 && log.timer_armed != 0 {
                                         log.timer_first_read = left;
                                     }
@@ -1841,7 +2016,10 @@ pub unsafe fn run() -> Outcome {
                                         "what is left on the timer, which is smaller every time it is asked",
                                     )
                                 }
-                                APIC_LVT_TIMER => (timer.lvt, "the timer's local vector table entry"),
+                                APIC_LVT_TIMER => (
+                                    timer[current].lvt,
+                                    "the timer's local vector table entry",
+                                ),
                                 _ => (0, "an APIC register this hypervisor does not have — read as zero"),
                             };
                             answer = said;
@@ -1900,7 +2078,7 @@ pub unsafe fn run() -> Outcome {
                                     }
                                 }
                                 APIC_LVT_TIMER => {
-                                    timer.lvt = stored;
+                                    timer[current].lvt = stored;
                                     if stored & LVT_MASKED != 0 {
                                         "the timer's vector table entry — masked, so it delivers nothing"
                                     } else if stored & LVT_PERIODIC != 0 {
@@ -1910,12 +2088,12 @@ pub unsafe fn run() -> Outcome {
                                     }
                                 }
                                 APIC_DIVIDE => {
-                                    timer.divisor = divisor_of(stored);
+                                    timer[current].divisor = divisor_of(stored);
                                     "the timer's divide configuration"
                                 }
                                 APIC_INITIAL => {
-                                    timer.initial = stored;
-                                    timer.arm(now());
+                                    timer[current].initial = stored;
+                                    timer[current].arm(now());
                                     if log.timer_armed == 0 {
                                         log.timer_armed = stored;
                                     }

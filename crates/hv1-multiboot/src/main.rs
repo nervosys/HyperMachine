@@ -399,17 +399,26 @@ pub extern "C" fn kernel_main(magic: u32, info: u32) -> ! {
 "
             });
             print("hv1   timer     : ");
-            if log.timer_counts && log.timer_served {
-                print_dec(log.ticks as u64);
-                print(" ticks on the vector the guest chose, and its count went down between two reads
+            if log.timer_counts && log.timer_served && log.ap_timer_served {
+                print_dec(log.ticks[0] as u64);
+                print(" ticks on the first processor and ");
+                print_dec(log.ticks[1] as u64);
+                print(" on the second, each on the vector it chose, both while spinning
 ");
-                print("hv1   exit cost : ");
-                print_dec(u64::from(log.timer_armed - log.timer_first_read));
-                print(" timer ticks gone in the two nested exits it took to arm it and ask, of which
-");
+                // What used to be reported here -- the drop in the guest's
+                // own count between arming its timer and reading it back --
+                // was described as the cost of two nested exits, and stopped
+                // being that the moment there were two processors to schedule.
+                // The other one now runs in the middle of it, so the number
+                // includes a slice of somebody else's work and grew from
+                // ~380,000 to ~20,000,000 without anything getting slower.
+                //
+                // A measurement whose name stopped being true is worse than no
+                // measurement, so it is gone. What is left is the one taken
+                // directly, with a timestamp on either side of the writes.
                 print("hv1   arm cost  : ");
                 print_dec(log.arm_cost);
-                print(" were two uncached writes to hv1's own timer
+                print(" timestamp ticks for two uncached writes to hv1's own timer
 ");
             } else {
                 print("FAILED — the guest armed a timer and did not get what it asked for
