@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>9eefdfd</dd></div>
+    <div class="fact"><dt>Master</dt><dd>56120a9</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -2832,13 +2832,14 @@ Microsoft-Hyper-V-All             Enabled</pre>
       hypervisor underneath.
     </li>
     <li>
-      <strong>Give the capability graph a notion of urgency, or decide it has
-      none.</strong> The queueing cost is now measured &mdash; see below &mdash;
-      so what is left is genuinely the product question and not a hidden
-      engineering one: are some agents' requests more urgent than others'? If
-      the answer is no, the scheduler is already right. If it is yes, the
-      priority belongs in the graph that already decides who may ask at all, and
-      the scheduler should read it rather than invent one.
+      <strong>Urgency is built &mdash; and preemption is the part that was
+      left out.</strong> The graph now carries it and the scheduler reads it,
+      measured above. What is still open is the case urgency cannot serve: a
+      request that is urgent and arrives while every lane is busy still waits
+      for a lane, because a running pass is not interrupted. Whether that is
+      ever worth doing is the same shape of question, and the number to weigh it
+      against is the one already measured &mdash; nineteen steps, the time a
+      lane is held.
     </li>
     <li>
       <strong>Migrate off <code>rsa</code> when a constant-time release
@@ -2951,7 +2952,7 @@ Microsoft-Hyper-V-All             Enabled</pre>
 </section>
 
 <footer>
-  master 9eefdfd · 0 open PRs · 0 open issues · suite green · a model answers
+  master 56120a9 · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
   filling and emptying between token steps — 24.4&nbsp;ms per token across eight
