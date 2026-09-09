@@ -2927,18 +2927,30 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
  2  need a model that <b>answers</b>   batched, generate &mdash; they assert on "Paris" and on
                               the batched replies matching, so no fixture will do
  2  need only a <b>valid</b> model     <b>bandwidth, queueing</b></pre>
-      Those last two are the opening. Neither reads what the model
-      <em>says</em>: <code>bandwidth</code> measures weight streaming, and
-      <code>queueing</code> checks that everyone was served, that the queue
-      genuinely filled, and that urgent agents waited less than routine ones.
-      All of those are properties of the scheduler, so <strong>any structurally
-      valid llama GGUF works, at any size</strong> &mdash; no nested
-      virtualisation, no 1.2&nbsp;GB download, nothing this repository could not
-      carry itself.
+      That last pair looked like the opening, and <code>tools/mk-test-gguf.py</code>
+      was written to take it: a structurally real llama GGUF in
+      <strong>359&nbsp;KiB</strong>, deterministic to the byte, built out of the
+      fact that the tokeniser is byte-level, so a vocabulary of the 256
+      byte-characters with no merges at all encodes anything.
       <br><br>
-      Which means the first automated example could be the one that checks the
-      queue, and the urgency built this session, whose numbers are otherwise
-      exactly what this item warns about: one person, one machine, by hand.
+      <strong>It only holds for one of the two, and the other is the more
+      useful finding.</strong> <code>queueing</code> works exactly as hoped
+      &mdash; the whole run takes 0.2&nbsp;s instead of 9.3, everyone is served,
+      the queue fills, the staircase still lands on its
+      <code>askers/lanes&nbsp;&minus;&nbsp;1</code> prediction, and urgency
+      still shows: 37 steps against 136. Those are step counts, which are
+      scale-free. But <code>bandwidth</code> <em>runs</em> and <em>measures
+      nothing</em>: 359&nbsp;KiB fits in cache, so it reports 11.52&nbsp;GiB/s
+      and gets faster with fewer threads. Its own text warns about precisely
+      this &mdash; "a pass that comes out faster than this means the probe is
+      what is being measured".
+      <br><br>
+      So: <em>it runs</em> is not <em>it measures</em>, and the sorting above
+      had to be redone once the fixture existed to check it against. One example
+      is automatable, not two. That one is now
+      <code>example-queueing</code> in <code>ci.yml</code> &mdash; <strong>the
+      first of the sixteen that CI has ever run</strong>, and it happens to be
+      the one guarding the scheduler and the urgency built this session.
     </li>
     <li>
       <strong>Keep the suite green &mdash; and the count that "moved once" is

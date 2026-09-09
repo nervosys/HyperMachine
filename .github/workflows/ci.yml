@@ -268,6 +268,52 @@ jobs:
               env:
                   RUSTDOCFLAGS: -D warnings
 
+    example-queueing:
+        name: Example (queueing)
+        runs-on: ubuntu-latest
+        # The first example CI has ever run.
+        #
+        # All sixteen of them are where this project's measured claims come
+        # from, and none of them were automated: fourteen need /dev/kvm or a
+        # model that can actually answer, and a hosted runner has neither. This
+        # one is the exception, and the reason is worth stating -- `queueing`
+        # never reads a token of output. It asserts that everyone was served,
+        # that the queue really filled, and that urgent agents waited less than
+        # routine ones, which are properties of the scheduler and not of the
+        # weights. So a structurally valid llama GGUF is enough, and
+        # `tools/mk-test-gguf.py` writes one in 359 KiB.
+        #
+        # It is not a benchmark. The wait figures here are step counts, which
+        # are scale-free -- the staircase still comes out at askers/lanes - 1
+        # -- but the seconds are meaningless and nothing asserts on them.
+        # `bandwidth` was tried against the same fixture and deliberately left
+        # out: 359 KiB fits in cache, so it reports 11 GiB/s and measures the
+        # probe rather than the memory bus.
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: ${{ runner.os }}-cargo-example-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-example-
+                      ${{ runner.os }}-cargo-
+
+            - name: Build the test model
+              run: python3 tools/mk-test-gguf.py "${RUNNER_TEMP}/tiny-llama.gguf"
+
+            - name: Run the queueing example
+              run: |
+                  cargo run --release -p hv2-infer --example queueing --                       "${RUNNER_TEMP}/tiny-llama.gguf"
+
     build-cli:
         name: Build CLI
         runs-on: ${{ matrix.os }}
