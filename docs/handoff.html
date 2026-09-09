@@ -2613,8 +2613,70 @@ after    <b>74 passed; 0 failed; 0 ignored</b>   (hv2-core doc-tests, on Windows
 </section>
 
 <section>
+</section>
+
+<section>
+  <h2>The other half of this machine</h2>
+  <p>
+    Finding those sixteen took using something that had been sitting there all
+    along. Every measurement on this page was taken in WSL, because that is
+    where <code>/dev/kvm</code> is &mdash; and the consequence nobody had drawn
+    is that <em>the Windows half of this codebase had never been built here at
+    all</em>. It is a Windows machine. It has a toolchain.
+  </p>
+  <pre>cargo 1.98.0  rustc 1.98.0          (Windows, newer than WSL's 1.96.0)
+
+hv2-core unit tests   <b>2,230 passed; 0 failed</b>
+hv2-core doc-tests    <b>74 passed; 0 failed</b>   (16 of them previously fenced)
+clippy                clean</pre>
+  <p>
+    The unit tests were clean on the first try, which is worth saying as
+    plainly as the sixteen broken examples: the Windows <em>code</em> is in good
+    order. It was the Windows <em>documentation</em> that had rotted, and it
+    rotted precisely because it was the part nothing compiled.
+  </p>
+  <div class="callout">
+    <h3>And WHPX could almost run here</h3>
+    <p>
+      The obvious next question is whether the Windows backend can be
+      <em>executed</em> on this machine rather than merely compiled &mdash; the
+      Windows counterpart of what <code>hv1_under_hv2</code> does on Linux. The
+      answer is one feature flag away, and it was measured rather than guessed:
+    </p>
+    <pre>HypervisorPlatform                <b>Disabled</b>
+Microsoft-Hyper-V-Hypervisor      Enabled
+Microsoft-Hyper-V-All             Enabled</pre>
+    <p>
+      Hyper-V is on &mdash; it is what runs WSL2. <em>Windows Hypervisor
+      Platform</em> is the separate optional feature that lets a
+      non-Microsoft hypervisor use it, and it is off, so
+      <code>WhpxBackend::new()</code> cannot succeed here. That makes the
+      <code>#[ignore]</code> on the WHPX integration test correct on this
+      machine, which is now a measured statement rather than an assumption.
+    </p>
+    <p>
+      Turning it on is <code>Enable-WindowsOptionalFeature -Online -FeatureName
+      HypervisorPlatform</code>, an administrator and a reboot &mdash; a change
+      to somebody's machine rather than to this repository, so it has not been
+      made. But it is the cheapest untaken step on this page by a wide margin:
+      the Type-2 hypervisor has a second backend that has never run, and the
+      hardware to run it is already here.
+    </p>
+  </div>
+
+</section>
+
+<section>
   <h2>What to do next</h2>
   <ul>
+    <li>
+      <strong>Enable <code>HypervisorPlatform</code> and run the WHPX
+      backend.</strong> One optional Windows feature, an administrator and a
+      reboot, on this machine. It is the only "has never run" item on this list
+      whose hardware is already present &mdash; see above. Everything the WHPX
+      backend claims is currently a claim about <code>rustc</code>, which is
+      exactly where hv1 was before it was booted under hv2.
+    </li>
     <li>
       <strong>Re-measure VNNI on a quiet machine.</strong> The kernel is
       written and correct and the answers survive it; what nobody knows is
