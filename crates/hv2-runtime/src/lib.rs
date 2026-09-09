@@ -41,23 +41,21 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use hv2_runtime::{Runtime, RuntimeConfig, PoolConfig, WorkflowBuilder};
-//!
-//! // Create runtime with a warm pool of 4 VMs
-//! let config = RuntimeConfig::builder()
-//!     .pool(PoolConfig { min_warm: 4, max_size: 64, ..Default::default() })
-//!     .build();
-//! let runtime = Runtime::new(config).await?;
-//!
-//! // Submit a multi-step workflow
+//! ```
+//! use hv2_runtime::workflow::{StepSpec, WorkflowBuilder};
+//! # fn example() -> hv2_runtime::workflow::WorkflowResult<()> {
+//! // A step is a specification rather than a closure: a name, a command, and
+//! // what it waits for. The runtime decides where and when it runs, which is
+//! // the reason it is data and not a future.
 //! let workflow = WorkflowBuilder::new("data-pipeline")
-//!     .step("ingest", |ctx| async move { ctx.exec("download data").await })
-//!     .step("transform", |ctx| async move { ctx.exec("process data").await })
-//!     .step("export", |ctx| async move { ctx.exec("upload results").await })
-//!     .build();
+//!     .step(StepSpec::new("ingest", "download data"))
+//!     .step(StepSpec::new("transform", "process data").depends_on("ingest"))
+//!     .step(StepSpec::new("export", "upload results").depends_on("transform"))
+//!     .build()?;
 //!
-//! let result = runtime.submit_workflow(workflow).await?;
+//! assert_eq!(workflow.steps.len(), 3);
+//! # Ok(())
+//! # }
 //! ```
 
 #![allow(dead_code)]

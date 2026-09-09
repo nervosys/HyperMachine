@@ -18,9 +18,9 @@
 //!
 //! # Usage
 //!
-//! ```rust,ignore
+//! ```no_run
 //! use hv2_core::crypto::fips::{FipsCrypto, FipsMode};
-//!
+//! # fn example() -> hv2_core::crypto::fips::CryptoResult<()> {
 //! // Initialize FIPS module
 //! let crypto = FipsCrypto::new(FipsMode::Enabled)?;
 //!
@@ -28,8 +28,14 @@
 //! let mut key = [0u8; 32];
 //! crypto.random_bytes(&mut key)?;
 //!
-//! // Encrypt data
-//! let ciphertext = crypto.aes_gcm_encrypt(&key, &plaintext, &aad)?;
+//! // Encrypt data, with whatever is being protected and whatever is being
+//! // authenticated alongside it but not encrypted.
+//! let plaintext = b"the thing to protect";
+//! let aad = b"the thing to authenticate";
+//! let ciphertext = crypto.aes_gcm_encrypt(&key, plaintext, aad)?;
+//! # let _ = ciphertext;
+//! # Ok(())
+//! # }
 //! ```
 
 use std::fmt;

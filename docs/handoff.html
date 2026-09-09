@@ -2512,9 +2512,24 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       <code>await</code>s three methods that are synchronous, passes two
       arguments to a method that takes three and another that takes four, and
       calls <code>get_vm_status</code>, which does not exist. It is rewritten
-      and now runs. Of the rest, one compiles as it stands and was fenced for no
-      reason; five do not, and are left fenced with what is wrong with them
-      written down rather than guessed at.
+      and now runs. Two more were the same shape and are fixed the same way:
+      <code>hv2-runtime</code>'s workflow example builds steps out of
+      <em>closures</em>, and <code>WorkflowBuilder::step</code> takes a
+      <code>StepSpec</code> &mdash; a name, a command and what it waits for,
+      which is data rather than a future precisely because the runtime decides
+      where and when it runs. <code>hv2-core</code>'s FIPS example was not stale
+      at all: it simply never bound the <code>plaintext</code> and
+      <code>aad</code> it encrypts, so it had never been anything a reader could
+      copy.
+    </p>
+    <p>
+      One more compiled as it stood and was fenced for no reason. That leaves
+      two, both in <code>hv2-agent</code>, still fenced with what is wrong with
+      them written down rather than guessed at. Of the seven fences the crates
+      carry outside <code>whpx.rs</code>, <strong>five now compile and are
+      checked on every run, where one did before</strong> &mdash; and
+      <code>hv2-core</code> and <code>hv2-runtime</code> report zero ignored
+      doc-tests where they reported six and one.
     </p>
     <div class="callout stop">
       <h3>And the count of which ones compiled was wrong, because it was inferred rather than measured</h3>
@@ -2607,7 +2622,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,295 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,297 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current
