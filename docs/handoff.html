@@ -1563,158 +1563,6 @@ hv1   late      : 165,037,493 timestamp ticks, the most a tick was ever late by<
     A guest that meant harm would not bound it.
   </p>
 
-  <div class="callout stop">
-    <h3>And the sweep that checks all of it was not checking rustfmt</h3>
-    <p>
-      Every Rust edit in this stretch of work was made by script &mdash; python
-      substituting into source files &mdash; and that produces code
-      <code>rustfmt</code> rejects: a <code>let</code> binding that now fits on
-      one line, a closure that no longer needs wrapping. Three violations across
-      three files accumulated before anything checked, and
-      <code>cargo fmt --all -- --check</code> is a CI job, so those commits would
-      have failed there while the local sweep called itself green.
-    </p>
-    <p>
-      The sweep runs it first now, before the slow parts, and clippy runs with
-      <code>--all-targets</code> rather than against one example &mdash; the
-      narrow form misses examples and tests, which is exactly where scripted
-      edits land. Eighth instrument, and the first one that was not measuring
-      anything: it was simply not there.
-    </p>
-    <p>
-      <strong>And widening clippy immediately found that the CI job was
-      failing.</strong> <code>crates/hv2-net/src/nat.rs</code> carried
-      <code>#[allow(clippy::chunks_exact_to_as_chunks)]</code> &mdash; a lint
-      name that does not exist, so it raises <code>unknown_lints</code>, and CI
-      runs <code>cargo clippy --workspace --all-targets -- -D warnings</code>.
-      Both the repository and CI take <code>channel = "stable"</code>, so it is
-      the same command against the same channel and the warning is
-      deterministic: that job has been red. The suppression was dead &mdash;
-      removing it leaves clippy silent, so it was never suppressing anything
-      &mdash; and it was five commits old and nothing local looked at it,
-      because the local sweep had been running clippy against a single example.
-    </p>
-    <p>
-      <strong>And the documentation job was red as well, three times over.</strong>
-      <code>cargo doc --workspace --no-deps</code> with
-      <code>RUSTDOCFLAGS: -D warnings</code> failed on three broken intra-doc
-      links in three different crates: a link to a private helper
-      (<code>Model::detect_rope</code>), an ambiguous one where a name is both a
-      module and the function it exports (<code>to_sandbox</code>), and a
-      sibling-module path written without <code>crate::</code>
-      (<code>vswitch::VirtualSwitch</code>). They came out one at a time, because
-      <code>cargo doc</code> stops at the first crate that fails and the next one
-      is only visible once it does not.
-    </p>
-    <p>
-      <strong>And the MSRV job, which was failing on a number in the workflow
-      file.</strong> It installed 1.87 and ran <code>cargo check --workspace</code>,
-      while <code>Cargo.toml</code> declares <code>rust-version = "1.95"</code>
-      &mdash; so the resolver refused before compiling anything, because
-      <code>egui</code>&nbsp;0.36 needs 1.95. Somebody raised the manifest and
-      the workflow kept its own copy. It reads the version out of
-      <code>Cargo.toml</code> now, so the two cannot disagree; 1.95 checks the
-      workspace clean, which was confirmed by installing it rather than assumed.
-    </p>
-    <p>
-      <strong>And then the crate this whole page is about turned out to have no
-      checks at all.</strong> <code>hv1-multiboot</code> is excluded from the
-      workspace &mdash; it builds for <code>x86_64-unknown-none</code> and has
-      no host build &mdash; so <code>--all</code> does not mean it. The
-      <code>hv1-clippy</code> job covers <code>hv1-core</code> only. Between
-      them, the file holding the exit loop, the APIC and the scheduler had
-      neither clippy nor rustfmt anywhere, in CI or locally.
-    </p>
-    <p>
-      Running them found three lints and thirty-two formatting deviations. Two
-      lints were mine: a constant that had gone dead because the assembly beside
-      it hard-coded the same address, and a <code>map_or(true, …)</code> that is
-      spelled <code>is_none_or</code>. The address is handed to the assembler as
-      a <code>const</code> operand now, so the number exists once instead of
-      twice. The formatting was mine too, and the cause was worth fixing rather
-      than papering over: the scripted edits had put <em>literal newlines</em>
-      inside string literals where <code>
-</code> belonged, and rustfmt's
-      answer to that is to wrap every one of those calls across four lines.
-      Thirty-two of them are escapes again, and the console output is
-      byte-identical.
-    </p>
-    <p>
-      Both checks are in that CI job now.
-    </p>
-  </div>
-
-  <div class="callout stop">
-    <h3>And a security check that could not fail, over a vulnerability that is real</h3>
-    <p>
-      <code>cargo audit</code> reports one vulnerability in this tree:
-      <strong>RUSTSEC-2023-0071</strong>, the Marvin attack &mdash; potential
-      RSA key recovery through a timing sidechannel, severity 5.9, in
-      <code>rsa</code>&nbsp;0.9.10, with <em>no fixed upgrade available</em>.
-      <code>rsa</code> is a direct dependency of <code>hv2-core</code>, and
-      <code>crypto/asymmetric.rs</code> generates private keys and decrypts with
-      them, which is exactly the operation the advisory is about. It applies.
-    </p>
-    <p>
-      The security workflow runs on every push and every pull request and has
-      been green throughout. Its check was:
-    </p>
-    <pre>if grep -q "<b>V</b>ulnerability" audit-output.txt; then exit 1; fi</pre>
-    <p>
-      <code>cargo audit</code> writes <code>1 <b>v</b>ulnerability found!</code>,
-      in lower case. The condition could not be true. The step could not fail,
-      and did not, for as long as the advisory has existed. It uses the exit
-      status now, which is what <code>cargo audit</code> sets for precisely this
-      purpose, and the artifact uploads on failure too &mdash; the run where it
-      is worth reading.
-    </p>
-    <p>
-      <strong>And then the reason it was never noticed turned out to be that it
-      had already been decided.</strong> <code>deny.toml</code> accepts
-      RUSTSEC-2023-0071 explicitly, with ten lines of reasoning beside it:
-      <code>rsa</code> is the only pure-Rust RSA implementation that supports
-      key generation, there is no fixed release upstream, the attack needs
-      precise timing of private-key operations on chosen inputs, and
-      HyperMachine does not expose RSA as an online decryption oracle. Tracked
-      for migration when a constant-time release ships.
-    </p>
-    <p>
-      So the decision existed and was written down. What was missing is that
-      <code>cargo audit</code> had never been told about it, and the check that
-      would have shown the two tools disagreeing was the broken one. The
-      workflow reads the accepted list out of <code>deny.toml</code> now rather
-      than keeping a second copy &mdash; the same fix as the MSRV job two
-      paragraphs up, for the same reason, found the same afternoon. With those
-      applied, <code>cargo audit</code> exits clean, and it will now fail on the
-      next advisory nobody has looked at.
-    </p>
-    <div class="callout stop">
-      <h3>A correction, and it was mine</h3>
-      <p>
-        This section first said the choice belonged to whoever owns the
-        project's security posture, and that the job should stay red until they
-        made it. That was wrong in a specific and avoidable way: the choice had
-        been made, and the reasoning was sitting in a file in the repository
-        root that had not been read before the claim was written. Running
-        <code>cargo deny</code> &mdash; which passes, and passes <em>because</em>
-        of that file &mdash; is what surfaced it.
-      </p>
-      <p>
-        Which is the same lesson as the rest of the section pointed the other
-        way: it is not enough to run the check that is failing. The check that
-        <em>passes</em> is also telling you something, and here it was telling
-        you the answer.
-      </p>
-    </div>
-  </div>
-
-  <p>
-    Six checks looked at, five of them red, broken or absent, and only two of
-    the findings came from the work this page describes. All of them were found
-    by running the checks rather than by reading them, which is the shape of the
-    whole section: <em>the checks a project does not run are the ones it fails
-    &mdash; and the ones it runs wrong are worse, because they answer.</em>
-  </p>
 
   <div class="callout stop">
     <h3>The way out exists in the architecture, and this platform does not deliver it</h3>
@@ -2201,6 +2049,173 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
     will admit a full quota again. Persisting it needs a store and an answer to
     what happens when the store disagrees with the host's inventory, which is a
     larger decision than the enforcement was.
+  </p>
+</section>
+
+<section>
+  <h2>Six checks, five of them wrong</h2>
+  <p>
+    None of this belongs to any one thing that shipped. It is the state of
+    the machinery that is supposed to notice when something is broken, and
+    it was found by running each check rather than by reading it &mdash;
+    which is the only way any of it could have been found, because a check
+    that cannot fail looks exactly like a check that passes.
+  </p>
+  <p>
+    Most of what follows was already here before this session started, and is
+    counted where it is counted rather than summarised again at the top.
+  </p>
+  <div class="callout stop">
+    <h3>And the sweep that checks all of it was not checking rustfmt</h3>
+    <p>
+      Every Rust edit in this stretch of work was made by script &mdash; python
+      substituting into source files &mdash; and that produces code
+      <code>rustfmt</code> rejects: a <code>let</code> binding that now fits on
+      one line, a closure that no longer needs wrapping. Three violations across
+      three files accumulated before anything checked, and
+      <code>cargo fmt --all -- --check</code> is a CI job, so those commits would
+      have failed there while the local sweep called itself green.
+    </p>
+    <p>
+      The sweep runs it first now, before the slow parts, and clippy runs with
+      <code>--all-targets</code> rather than against one example &mdash; the
+      narrow form misses examples and tests, which is exactly where scripted
+      edits land. Eighth instrument, and the first one that was not measuring
+      anything: it was simply not there.
+    </p>
+    <p>
+      <strong>And widening clippy immediately found that the CI job was
+      failing.</strong> <code>crates/hv2-net/src/nat.rs</code> carried
+      <code>#[allow(clippy::chunks_exact_to_as_chunks)]</code> &mdash; a lint
+      name that does not exist, so it raises <code>unknown_lints</code>, and CI
+      runs <code>cargo clippy --workspace --all-targets -- -D warnings</code>.
+      Both the repository and CI take <code>channel = "stable"</code>, so it is
+      the same command against the same channel and the warning is
+      deterministic: that job has been red. The suppression was dead &mdash;
+      removing it leaves clippy silent, so it was never suppressing anything
+      &mdash; and it was five commits old and nothing local looked at it,
+      because the local sweep had been running clippy against a single example.
+    </p>
+    <p>
+      <strong>And the documentation job was red as well, three times over.</strong>
+      <code>cargo doc --workspace --no-deps</code> with
+      <code>RUSTDOCFLAGS: -D warnings</code> failed on three broken intra-doc
+      links in three different crates: a link to a private helper
+      (<code>Model::detect_rope</code>), an ambiguous one where a name is both a
+      module and the function it exports (<code>to_sandbox</code>), and a
+      sibling-module path written without <code>crate::</code>
+      (<code>vswitch::VirtualSwitch</code>). They came out one at a time, because
+      <code>cargo doc</code> stops at the first crate that fails and the next one
+      is only visible once it does not.
+    </p>
+    <p>
+      <strong>And the MSRV job, which was failing on a number in the workflow
+      file.</strong> It installed 1.87 and ran <code>cargo check --workspace</code>,
+      while <code>Cargo.toml</code> declares <code>rust-version = "1.95"</code>
+      &mdash; so the resolver refused before compiling anything, because
+      <code>egui</code>&nbsp;0.36 needs 1.95. Somebody raised the manifest and
+      the workflow kept its own copy. It reads the version out of
+      <code>Cargo.toml</code> now, so the two cannot disagree; 1.95 checks the
+      workspace clean, which was confirmed by installing it rather than assumed.
+    </p>
+    <p>
+      <strong>And then the crate this whole page is about turned out to have no
+      checks at all.</strong> <code>hv1-multiboot</code> is excluded from the
+      workspace &mdash; it builds for <code>x86_64-unknown-none</code> and has
+      no host build &mdash; so <code>--all</code> does not mean it. The
+      <code>hv1-clippy</code> job covers <code>hv1-core</code> only. Between
+      them, the file holding the exit loop, the APIC and the scheduler had
+      neither clippy nor rustfmt anywhere, in CI or locally.
+    </p>
+    <p>
+      Running them found three lints and thirty-two formatting deviations. Two
+      lints were mine: a constant that had gone dead because the assembly beside
+      it hard-coded the same address, and a <code>map_or(true, …)</code> that is
+      spelled <code>is_none_or</code>. The address is handed to the assembler as
+      a <code>const</code> operand now, so the number exists once instead of
+      twice. The formatting was mine too, and the cause was worth fixing rather
+      than papering over: the scripted edits had put <em>literal newlines</em>
+      inside string literals where <code>
+</code> belonged, and rustfmt's
+      answer to that is to wrap every one of those calls across four lines.
+      Thirty-two of them are escapes again, and the console output is
+      byte-identical.
+    </p>
+    <p>
+      Both checks are in that CI job now.
+    </p>
+  </div>
+
+  <div class="callout stop">
+    <h3>And a security check that could not fail, over a vulnerability that is real</h3>
+    <p>
+      <code>cargo audit</code> reports one vulnerability in this tree:
+      <strong>RUSTSEC-2023-0071</strong>, the Marvin attack &mdash; potential
+      RSA key recovery through a timing sidechannel, severity 5.9, in
+      <code>rsa</code>&nbsp;0.9.10, with <em>no fixed upgrade available</em>.
+      <code>rsa</code> is a direct dependency of <code>hv2-core</code>, and
+      <code>crypto/asymmetric.rs</code> generates private keys and decrypts with
+      them, which is exactly the operation the advisory is about. It applies.
+    </p>
+    <p>
+      The security workflow runs on every push and every pull request and has
+      been green throughout. Its check was:
+    </p>
+    <pre>if grep -q "<b>V</b>ulnerability" audit-output.txt; then exit 1; fi</pre>
+    <p>
+      <code>cargo audit</code> writes <code>1 <b>v</b>ulnerability found!</code>,
+      in lower case. The condition could not be true. The step could not fail,
+      and did not, for as long as the advisory has existed. It uses the exit
+      status now, which is what <code>cargo audit</code> sets for precisely this
+      purpose, and the artifact uploads on failure too &mdash; the run where it
+      is worth reading.
+    </p>
+    <p>
+      <strong>And then the reason it was never noticed turned out to be that it
+      had already been decided.</strong> <code>deny.toml</code> accepts
+      RUSTSEC-2023-0071 explicitly, with ten lines of reasoning beside it:
+      <code>rsa</code> is the only pure-Rust RSA implementation that supports
+      key generation, there is no fixed release upstream, the attack needs
+      precise timing of private-key operations on chosen inputs, and
+      HyperMachine does not expose RSA as an online decryption oracle. Tracked
+      for migration when a constant-time release ships.
+    </p>
+    <p>
+      So the decision existed and was written down. What was missing is that
+      <code>cargo audit</code> had never been told about it, and the check that
+      would have shown the two tools disagreeing was the broken one. The
+      workflow reads the accepted list out of <code>deny.toml</code> now rather
+      than keeping a second copy &mdash; the same fix as the MSRV job two
+      paragraphs up, for the same reason, found the same afternoon. With those
+      applied, <code>cargo audit</code> exits clean, and it will now fail on the
+      next advisory nobody has looked at.
+    </p>
+    <div class="callout stop">
+      <h3>A correction, and it was mine</h3>
+      <p>
+        This section first said the choice belonged to whoever owns the
+        project's security posture, and that the job should stay red until they
+        made it. That was wrong in a specific and avoidable way: the choice had
+        been made, and the reasoning was sitting in a file in the repository
+        root that had not been read before the claim was written. Running
+        <code>cargo deny</code> &mdash; which passes, and passes <em>because</em>
+        of that file &mdash; is what surfaced it.
+      </p>
+      <p>
+        Which is the same lesson as the rest of the section pointed the other
+        way: it is not enough to run the check that is failing. The check that
+        <em>passes</em> is also telling you something, and here it was telling
+        you the answer.
+      </p>
+    </div>
+  </div>
+
+  <p>
+    Six checks looked at, five of them red, broken or absent, and only two of
+    the findings came from the work this page describes. All of them were found
+    by running the checks rather than by reading them, which is the shape of the
+    whole section: <em>the checks a project does not run are the ones it fails
+    &mdash; and the ones it runs wrong are worse, because they answer.</em>
   </p>
 </section>
 
