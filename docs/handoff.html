@@ -2626,9 +2626,11 @@ after    <b>74 passed; 0 failed; 0 ignored</b>   (hv2-core doc-tests, on Windows
   </p>
   <pre>cargo 1.98.0  rustc 1.98.0          (Windows, newer than WSL's 1.96.0)
 
-hv2-core unit tests   <b>2,230 passed; 0 failed</b>
-hv2-core doc-tests    <b>74 passed; 0 failed</b>   (16 of them previously fenced)
-clippy                clean</pre>
+hv2-core        <b>2,230 unit tests</b>, every integration target, <b>74 doc-tests</b>
+                examples build, including the Windows-only pic_timer_interrupts
+hv2-agent       520 + 7 doc      hv2-runtime  1,016 + 2 doc      hv2-api  15
+clippy          clean
+failures        <b>none, anywhere</b>; one test ignored, and correctly &mdash; see below</pre>
   <p>
     The unit tests were clean on the first try, which is worth saying as
     plainly as the sixteen broken examples: the Windows <em>code</em> is in good
