@@ -2832,21 +2832,48 @@ Microsoft-Hyper-V-All             Enabled</pre>
       hypervisor underneath.
     </li>
     <li>
-      <strong>Urgency is built &mdash; and preemption is the part that was
-      left out.</strong> The graph now carries it and the scheduler reads it,
-      measured above. What is still open is the case urgency cannot serve: a
-      request that is urgent and arrives while every lane is busy still waits
-      for a lane, because a running pass is not interrupted. Whether that is
-      ever worth doing is the same shape of question, and the number to weigh it
-      against is the one already measured &mdash; nineteen steps, the time a
-      lane is held.
+      <strong>Preemption: the arithmetic says no, and here it is.</strong>
+      Urgency is built and the residual it leaves is exactly one lane-hold.
+      Measured: the two urgent agents asked sixth and seventh of eight and
+      waited 19 steps where arrival order would have given them 38 and 57, so
+      reordering already removed 19 and 38 steps. What preemption could remove
+      is the 19 that is left &mdash; and it would pay for that by discarding a
+      pass that is partly done. A lane is held about 19 steps, so a preempted
+      one loses ~10 on average, and it loses them in <em>memory bandwidth</em>,
+      which is the scarce resource on this path and the reason batching exists
+      at all. So the trade is: up to 19 steps off the urgent request, against
+      ~10 steps of pure waste plus a longer wait for whoever was interrupted.
+      <br><br>
+      There are two cheaper levers before that one, and both are already knobs.
+      The residual <em>is</em> the lane-hold, so anything that shortens a
+      lane-hold shortens it: a wider <code>batch</code> (four lanes rather than
+      two would roughly halve it) or fewer <code>answer_tokens</code>. Neither
+      throws away work. Preemption is worth revisiting only if some agent's
+      answer is worth more than another agent's whole pass, which is a claim
+      about the fleet rather than about the scheduler &mdash; and it would be
+      the capability graph's to make, like urgency itself.
     </li>
     <li>
-      <strong>Migrate off <code>rsa</code> when a constant-time release
-      ships.</strong> That is what <code>deny.toml</code> says it is waiting
-      for, and RUSTSEC-2023-0071 is accepted until it happens. Nothing to do
-      until upstream moves; worth re-checking rather than forgetting, because
-      the acceptance is dated 2023 and the tracking note has no expiry on it.
+      <strong>Migrate off <code>rsa</code>: the release is in candidate now,
+      and this is a direct dependency, not an inherited one.</strong> Both of
+      those were checked rather than assumed, and both change the item.
+      <code>cargo info rsa</code> reports <code>0.9.10 (latest
+      0.10.0-rc.18)</code>, so the line that carries the constant-time work
+      exists and is eighteen release candidates in; and <code>cargo tree
+      -i rsa</code> shows it arriving through <code>hv2-core</code>'s own
+      <code>Cargo.toml</code> rather than through somebody else's tree. So this
+      is not "wait for the dependency graph to move" &mdash; it is a version
+      bump this repository controls, gated only on 0.10 going final.
+      <br><br>
+      The surface is small enough to price: one file,
+      <code>crypto/asymmetric.rs</code>, using key generation, PKCS#1&nbsp;v1.5
+      and PSS signing and verification. The acceptance in
+      <code>deny.toml</code> stands in the meantime and its reasoning is still
+      the right one &mdash; RUSTSEC-2023-0071 needs an adversary who can time
+      private-key operations on chosen inputs, and nothing here is an online
+      decryption oracle. What has changed is that the thing it is waiting for is
+      now visible, so the note should be re-read when 0.10.0 ships rather than
+      left to age.
     </li>
     <li>
       <strong>Get the examples onto something that runs them.</strong> CI runs
@@ -2868,20 +2895,37 @@ Microsoft-Hyper-V-All             Enabled</pre>
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,311 tests across 88 test
-      result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
-      all sixteen examples. That count came out at 93 on two earlier runs, and
-      the difference is <em>not reproduced</em>: 88 three times on the current
-      tree, including once with a <code>clippy --workspace</code> pass first,
-      which was the only structural difference between the two shapes. There are
-      no conditionally-built test targets to explain five appearing or
-      disappearing. So it is recorded as a number that moved once and has not
-      moved since, which is not the same as a number that has been explained.
-      The guard below twenty is what the sweep actually depends on. The sweep now refuses to print a
-      summary when it counts fewer than twenty binaries, because the run before
-      last printed 3,331 with crates missing and the one before that printed
-      nothing at all — which is the point of the paragraph above, applied to the
-      thing that checks everything else.
+      <strong>Keep the suite green &mdash; and the count that "moved once" is
+      explained now.</strong> It is 5,311 tests across <strong>88</strong>
+      result lines, and that number is no longer observed, it is
+      <em>derived</em>. <code>cargo metadata</code> gives the whole inventory:
+      18 library targets, 48 integration tests, 5 binaries, 48 examples, 6
+      benches.
+      <pre>18 lib unittests + 48 integration + 4 bin unittests + 18 doc-suites = <b>88</b></pre>
+      Four binaries, not five, and that is the first correction: this page said
+      there were <em>no</em> conditionally-built test targets. There is exactly
+      one. <code>hv1-core</code>'s <code>hv1-kernel</code> carries
+      <code>required-features = ["bootloader_api"]</code>, so a default build
+      never produces it &mdash; which is why cargo runs 70 binaries where 71
+      exist.
+      <br><br>
+      That makes <strong>89</strong> the ceiling for this command, with the
+      feature on. <strong>So 93 was never reachable</strong>, and the earlier
+      figure cannot have been a property of a moving tree: no integration test
+      file has been added or removed in the last sixty commits; all six benches
+      set <code>harness = false</code>, so they emit no result line at all; and
+      <code>hv1-multiboot</code>, the one crate outside the workspace, has no
+      tests and a single binary. Nothing in reach adds five. Whatever produced
+      93 was a different command &mdash; one that swept in examples, most
+      likely, since there are 48 of them &mdash; and it was recorded against
+      this one. A number that was filed as unexplained turns out to have been
+      mis-attributed, which is the better outcome and the less comfortable one.
+      <br><br>
+      The guard below twenty is still what the sweep depends on: it refuses to
+      print a summary when it counts fewer than twenty binaries, because one run
+      printed 3,331 with crates missing and another printed nothing at all. The
+      derivation above is what that guard should eventually check against &mdash;
+      88 is now a number the sweep could assert rather than merely report.
     </li>
   </ul>
 </section>
