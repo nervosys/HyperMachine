@@ -15,24 +15,31 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use hv2_agent::mcp::{McpServer, AgentSession};
-//!
+//! ```
+//! use hv2_agent::mcp::{AgentCapabilities, McpServer, ToolCallRequest};
+//! use serde_json::json;
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create MCP server
 //! let server = McpServer::new();
 //!
-//! // Register an agent session
-//! let session = server.create_session("agent-1", AgentCapabilities::full()).await?;
+//! // Register an agent session. Synchronous: the registry is behind a lock.
+//! let session = server.create_session("agent-1", AgentCapabilities::full())?;
 //!
-//! // Agent can discover available tools
-//! let tools = session.list_tools().await?;
+//! // What this agent may see, which is a function of its capabilities.
+//! let tools = session.list_tools(&server);
 //!
-//! // Agent calls a tool
-//! let result = session.call_tool("vm.create", json!({
-//!     "name": "test-vm",
-//!     "cpu_cores": 4,
-//!     "memory_gb": 8
-//! })).await?;
+//! // A call is a request rather than arguments, so it can carry an id and a
+//! // timeout as well as parameters. `call_tool` is on the server and takes the
+//! // session, because the server is what holds the tools.
+//! let request = ToolCallRequest {
+//!     id: "1".to_string(),
+//!     tool: "vm.create".to_string(),
+//!     parameters: json!({ "name": "test-vm", "cpu_cores": 4, "memory_gb": 8 }),
+//!     timeout: None,
+//! };
+//! # let _ = (tools, request, session);
+//! # Ok(())
+//! # }
 //! ```
 
 use serde::{Deserialize, Serialize};

@@ -17,22 +17,27 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
-//! use hv2_agent::{McpServer, AgentCapabilities, AgentOrchestrator};
-//!
+//! ```
+//! use hv2_agent::orchestration::AgentRole;
+//! use hv2_agent::{AgentCapabilities, AgentOrchestrator, McpServer};
+//! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create MCP server for tool-use interface
 //! let mcp = McpServer::new();
 //!
 //! // Register an AI agent with operator capabilities
 //! let session = mcp.create_session("ai-assistant", AgentCapabilities::operator())?;
 //!
-//! // Agent can discover available tools
+//! // What that agent may see. The server holds the tools and the session holds
+//! // the capabilities, so the filtering happens where both are known.
 //! let tools = session.list_tools(&mcp);
 //!
 //! // For multi-agent scenarios, use the orchestrator
 //! let orchestrator = AgentOrchestrator::new();
 //! orchestrator.register_agent("agent-1", "Operator", AgentRole::Operator)?;
 //! orchestrator.register_agent("agent-2", "Monitor", AgentRole::Monitor)?;
+//! # let _ = tools;
+//! # Ok(())
+//! # }
 //! ```
 
 #![allow(dead_code)]

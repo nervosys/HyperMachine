@@ -2262,6 +2262,17 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       cascade of test failures. <code>wsl.exe --shutdown</code> recovers it, and
       the interrupted work has to be re-run rather than believed.
       <br><br>
+      A third failure mode of the same apparatus, seen later still: the harness
+      killed every background task at once, sweep included, because the machine
+      was low on memory. Not WSL's doing &mdash; it had 44&nbsp;GB available a
+      minute afterwards &mdash; but a dozen accumulated waiter shells plus two
+      concurrent <code>cargo</code> builds, which is a self-inflicted shape
+      rather than an environmental one. A sweep that is killed reports nothing,
+      and nothing reads like success, which is the same lesson as two paragraphs
+      down and the reason the sweep ends with an explicit
+      <code>SWEEPDONE</code> now: a run that printed no marker did not finish.
+    </p>
+    <p>
       It happened again while this page was being written, and the second
       presentation was different enough to be worth recording: not
       <code>os error 30</code> but <code>/usr/bin/tee: Input/output error</code>
@@ -2523,13 +2534,22 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       copy.
     </p>
     <p>
-      One more compiled as it stood and was fenced for no reason. That leaves
-      two, both in <code>hv2-agent</code>, still fenced with what is wrong with
-      them written down rather than guessed at. Of the seven fences the crates
-      carry outside <code>whpx.rs</code>, <strong>five now compile and are
-      checked on every run, where one did before</strong> &mdash; and
-      <code>hv2-core</code> and <code>hv2-runtime</code> report zero ignored
-      doc-tests where they reported six and one.
+      One more compiled as it stood and was fenced for no reason. The last two
+      were <code>hv2-agent</code>'s, and the same shape again: a sample that
+      used <code>AgentRole</code> without importing it, and one that
+      <code>await</code>ed two synchronous methods and called
+      <code>call_tool</code> on the session rather than on the server that holds
+      the tools.
+    </p>
+    <p>
+      <strong>All seven now compile and are checked on every run, where one did
+      before.</strong> Every crate that carries a fence outside
+      <code>whpx.rs</code> &mdash; <code>hv2-core</code>,
+      <code>hv2-agent</code>, <code>hv2-api</code>, <code>hv2-runtime</code>
+      &mdash; reports zero ignored doc-tests, against six, three, one and one
+      when this started. Six of the seven were describing an API that had moved
+      or had never been complete; not one of them could have said so, because
+      nothing compiled them.
     </p>
     <div class="callout stop">
       <h3>And the count of which ones compiled was wrong, because it was inferred rather than measured</h3>
@@ -2622,7 +2642,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,297 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,299 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current
