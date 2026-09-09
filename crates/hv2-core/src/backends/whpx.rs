@@ -30,14 +30,14 @@
 //! # Usage
 //!
 //! ```no_run
-//! use hv2_core::backends::whpx::WhpxBackend;
+//! use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
 //! use hv2_core::hypervisor::HypervisorBackend;
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut backend = WhpxBackend::new()?;
 //! backend.init().await?;
 //!
-//! let vm = backend.create_vm(4, 1024 * 1024 * 1024).await?; // 4 vCPUs, 1GB RAM
+//! let vm = WhpxVm::new(4, 1024 * 1024 * 1024)?; // 4 vCPUs, 1GB RAM
 //! # Ok(())
 //! # }
 //! ```
@@ -621,11 +621,11 @@ impl WhpxVm {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::*;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// // Write bootloader code to 0x7C00
     /// let bootloader = [0xF4, 0xEB, 0xFD]; // HLT; JMP $
     /// vm.write_guest_memory(0x7C00, &bootloader)?;
@@ -691,11 +691,11 @@ impl WhpxVm {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::*;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// // Read 512 bytes from 0x7C00 (MBR location)
     /// let mbr = vm.read_guest_memory(0x7C00, 512)?;
     /// # Ok(())
@@ -758,11 +758,11 @@ impl WhpxVm {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::*;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// // Register handler for serial port COM1 (0x3F8)
     /// vm.register_io_handler(0x3F8, Box::new(|port, is_write, size, data| {
     ///     if is_write {
@@ -802,11 +802,11 @@ impl WhpxVm {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::*;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// // Register MMIO handler for device at 0xFED00000-0xFED00FFF
     /// vm.register_mmio_handler(
     ///     0xFED00000,
@@ -1519,8 +1519,9 @@ impl WhpxVcpu {
     ///
     /// # Examples
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
+    /// # use hv2_core::VmExit;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
     /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
@@ -1534,7 +1535,7 @@ impl WhpxVcpu {
     /// // Run with handlers - I/O exits processed automatically
     /// loop {
     ///     match vcpu.run_with_handlers(&vm)? {
-    ///         crate::exit::VmExit::Hlt => break,
+    ///         VmExit::Hlt => break,
     ///         other => println!("Unhandled exit: {:?}", other),
     ///     }
     /// }
@@ -2868,12 +2869,12 @@ impl WhpxVcpu {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::*;
     /// # use std::path::Path;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// // Load bootloader and boot at standard 0x7C00
     /// vcpu.load_and_boot_binary(
@@ -2962,12 +2963,12 @@ impl WhpxVcpu {
     /// - **CR8**: Task priority register (64-bit mode only)
     ///
     /// # Example
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// let cr = vcpu.get_control_registers()?;
     /// println!("CR0: 0x{:016X}", cr.cr0);
@@ -3054,12 +3055,12 @@ impl WhpxVcpu {
     /// properly initialized before mode transitions.
     ///
     /// # Example
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// // Read current control registers
     /// let mut cr = vcpu.get_control_registers()?;
@@ -3163,12 +3164,12 @@ impl WhpxVcpu {
     /// 4. Perform far jump to reload CS (in guest code)
     ///
     /// # Example
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// // Guest should have set up GDT first
     /// vcpu.enable_protected_mode()?;
@@ -3220,12 +3221,12 @@ impl WhpxVcpu {
     /// - Paging must be disabled (CR0.PG = 0)
     ///
     /// # Example
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// // Ensure paging is disabled first
     /// vcpu.disable_paging()?;
@@ -3299,12 +3300,12 @@ impl WhpxVcpu {
     /// - **5-level paging**: CR0.PG=1, CR4.PAE=1, CR4.LA57=1, IA32_EFER.LME=1
     ///
     /// # Example
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// // Enable protected mode first
     /// vcpu.enable_protected_mode()?;
@@ -3376,12 +3377,12 @@ impl WhpxVcpu {
     /// Disables virtual memory paging, returning to physical addressing.
     ///
     /// # Example
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVcpu, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # async fn example() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 1024 * 1024)?;
     /// # let vcpu = vm.create_vcpu(0)?;
     /// vcpu.disable_paging()?;
     ///
@@ -3452,13 +3453,13 @@ impl WhpxVcpu {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # #[tokio::main]
     /// # async fn main() -> hv2_core::Result<()> {
     /// let backend = WhpxBackend::new()?;
-    /// let vm = backend.create_vm(1, 4 * 1024 * 1024).await?;
+    /// let vm = WhpxVm::new(1, 4 * 1024 * 1024)?;
     /// let vcpu = vm.create_vcpu(0)?;
     ///
     /// // Setup 4-level page tables at 0x10000
@@ -3570,13 +3571,13 @@ impl WhpxVcpu {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # #[tokio::main]
     /// # async fn main() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 4 * 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 4 * 1024 * 1024)?;
     /// let vcpu = vm.create_vcpu(0)?;
     ///
     /// // In long mode...
@@ -3653,13 +3654,13 @@ impl WhpxVcpu {
     ///
     /// # Example
     ///
-    /// ```ignore
-    /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
+    /// ```no_run
+    /// # use hv2_core::backends::whpx::{CpuMode, WhpxBackend, WhpxVm};
     /// # use hv2_core::HypervisorBackend;
     /// # #[tokio::main]
     /// # async fn main() -> hv2_core::Result<()> {
     /// # let backend = WhpxBackend::new()?;
-    /// # let vm = backend.create_vm(1, 4 * 1024 * 1024).await?;
+    /// # let vm = WhpxVm::new(1, 4 * 1024 * 1024)?;
     /// let vcpu = vm.create_vcpu(0)?;
     ///
     /// let mode = vcpu.get_cpu_mode()?;
@@ -3743,13 +3744,13 @@ impl WhpxVcpu {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
     /// # use hv2_core::backends::whpx::{WhpxBackend, WhpxVm};
     /// # use hv2_core::{GdtBuilder, DESC_DPL_0, HypervisorBackend};
     /// # #[tokio::main]
     /// # async fn main() -> hv2_core::Result<()> {
     /// let backend = WhpxBackend::new()?;
-    /// let vm = backend.create_vm(1, 4 * 1024 * 1024).await?;
+    /// let vm = WhpxVm::new(1, 4 * 1024 * 1024)?;
     /// let vcpu = vm.create_vcpu(0)?;
     ///
     /// // Build a minimal 64-bit GDT

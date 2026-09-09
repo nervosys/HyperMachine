@@ -2542,7 +2542,38 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       the tools.
     </p>
     <p>
-      <strong>All seven now compile and are checked on every run, where one did
+      <strong>And then the sixteen that could not be checked here, were.</strong>
+      They are fenced because <code>whpx.rs</code> is Windows-only and this work
+      happens in WSL &mdash; but the machine underneath WSL <em>is</em> Windows,
+      with its own toolchain, and nobody had thought to use it.
+      <code>cargo test --doc -p hv2-core</code> run natively compiles that
+      module for the first time in this session, and <strong>all sixteen
+      failed</strong>.
+    </p>
+    <p>
+      One cause, sixteen times: every example opened with
+      <code>backend.create_vm(n, size).await?</code> and then called
+      <code>vm.create_vcpu(0)</code>. <code>create_vm</code> does exist &mdash;
+      as a <em>trait</em> method that returns a <code>HypervisorVm</code>, which
+      has no <code>create_vcpu</code>. The concrete <code>WhpxVm::new(n, size)</code>
+      is what the rest of each example needs, and it is not async. The
+      remainder were imports the samples never made, and one
+      <code>crate::exit::VmExit</code> &mdash; a path that means the
+      doc-test's own crate rather than this one, so it can only ever have
+      worked from inside.
+    </p>
+    <pre>before   16 fenced, 0 compiled
+after    <b>74 passed; 0 failed; 0 ignored</b>   (hv2-core doc-tests, on Windows)</pre>
+    <p>
+      Which makes <strong>twenty-three of twenty-three</strong>, and the whole
+      documented surface of the Windows backend &mdash; guest memory, I/O and
+      MMIO handlers, control registers, protected mode, long mode, paging, the
+      GDT &mdash; goes from uncompilable to checked by the
+      <code>test-core-windows</code> job that already exists and already runs
+      <code>cargo test -p hv2-core</code>.
+    </p>
+    <p>
+      <strong>All seven of the others compile too, where one did
       before.</strong> Every crate that carries a fence outside
       <code>whpx.rs</code> &mdash; <code>hv2-core</code>,
       <code>hv2-agent</code>, <code>hv2-api</code>, <code>hv2-runtime</code>
