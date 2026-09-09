@@ -9,8 +9,14 @@
 //! the cache the shared model depends on.
 //!
 //! So inference is scheduled. A fixed, small number of forward passes run at
-//! once, everyone else waits in a queue, and the queue is first-in-first-out so
-//! that a busy fleet degrades into a longer wait rather than into starvation.
+//! once and everyone else waits in a queue.
+//!
+//! The queue was first-in-first-out, and the reason was starvation: a busy
+//! fleet should degrade into a longer wait for everyone rather than into some
+//! agent never being served at all. It now orders by urgency as well, and
+//! keeps that property — see [`Limits::patience`]. The scheduler does not
+//! decide who is urgent; it is told, by whoever holds the capability graph, in
+//! the same call that already decided the agent may ask.
 //!
 //! # What one agent may take
 //!
@@ -55,8 +61,11 @@
 //!
 //! # What is deliberately not here
 //!
-//! Priorities, preemption, and eviction of a cold conversation. An agent that
-//! stops asking holds its cache until something drops it, and nothing does.
+//! Preemption. A request that has a lane keeps it until its answer is done,
+//! however urgent something arriving behind it is — urgency reorders the
+//! queue, it does not interrupt a pass. Making it interrupt one would mean
+//! abandoning work already paid for in memory traffic, which is the expensive
+//! thing here, so the queue is the right place for it and the lane is not.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Condvar, Mutex};
@@ -105,6 +114,35 @@ pub struct Limits {
     /// at 64 KiB of cache per token that is about sixteen thousand tokens of
     /// context across the whole node.
     pub cache_bytes: usize,
+    /// Token steps a waiting request must sit before it gains a rank of
+    /// urgency, or zero to age nothing.
+    ///
+    /// This is what keeps urgency from becoming starvation. Ordering strictly
+    /// by urgency means a fleet with a steady supply of urgent work never
+    /// serves a routine request at all, and the queue was first-in-first-out
+    /// precisely to avoid that. So a request's *effective* rank improves the
+    /// longer it waits: after `patience` steps a routine request is as good as
+    /// an urgent one, and ties are broken by arrival, so it goes first against
+    /// anything that arrived later.
+    ///
+    /// That gives a bound rather than a hope. A request at rank `r` cannot be
+    /// overtaken by newly-arriving urgent work for longer than
+    /// `r * patience` steps, whatever else the fleet is doing, and
+    /// `urgency_bounded_by_patience` in this module is the test that says so.
+    ///
+    /// **Choose it against how long a lane is held, not against the clock.**
+    /// The first default here was sixteen steps, picked as "a second or two",
+    /// and `examples/queueing` measured it into a no-op: one answer holds a
+    /// lane for about nineteen steps, so every routine request had already aged
+    /// to the top rank before a lane ever freed, every request was tied, and
+    /// the queue collapsed back to first-in-first-out. Urgent agents came out
+    /// at a mean wait of 29.0 steps against 29.0 for routine ones — the feature
+    /// present, wired, and worth exactly nothing.
+    ///
+    /// So: 256, which is on the order of a dozen answers rather than one. Large
+    /// enough that an urgent request beats work that is genuinely still
+    /// waiting, small enough to remain a bound somebody could sit through.
+    pub patience: usize,
     /// Threads one forward pass may spread across, or zero to choose.
     ///
     /// Not "all of them", which is what rayon's global pool does and what this
@@ -138,6 +176,7 @@ impl Default for Limits {
             context_tokens: 2048,
             answer_tokens: 32,
             cache_bytes: 1024 * 1024 * 1024,
+            patience: 256,
             threads: 0,
         }
     }
@@ -278,6 +317,26 @@ struct Waiting {
     queued_at: Instant,
     /// What the step counter read when this joined the queue.
     queued_at_step: usize,
+    /// The urgency this request was admitted with, smaller being sooner.
+    ///
+    /// Handed in by the caller and never derived here. The scheduler orders by
+    /// this number; what it means, and which agent deserves which, is the
+    /// capability graph's business — `hv2_swarm::Urgency::rank` is what
+    /// produces it in this workspace.
+    urgency: u8,
+}
+
+impl Waiting {
+    /// The rank this request should be ordered by *now*, which improves the
+    /// longer it has waited. See [`Limits::patience`].
+    fn effective_urgency(&self, step: usize, patience: usize) -> u8 {
+        if patience == 0 {
+            return self.urgency;
+        }
+        let waited = step.saturating_sub(self.queued_at_step);
+        let earned = (waited / patience).min(u8::MAX as usize) as u8;
+        self.urgency.saturating_sub(earned)
+    }
 }
 
 /// What a lane is doing.
@@ -301,6 +360,9 @@ struct Held {
 /// A request occupying a lane.
 struct Active {
     ticket: u64,
+    /// The urgency this request was admitted with, so a lane that has to be
+    /// re-queued goes back at the rank it came in at.
+    urgency: u8,
     agent: String,
     queued_at: Instant,
     admitted_at: Instant,
@@ -474,6 +536,39 @@ impl<'m> Scheduler<'m> {
     /// own answer is ready stops driving and returns; the next step is taken by
     /// somebody who is still waiting.
     pub fn ask(&self, agent: &str, question: &str) -> Result<Result<Served, Refused>, Error> {
+        self.ask_at(agent, question, Self::ROUTINE)
+    }
+
+    /// The urgency [`Scheduler::ask`] uses: an agent with nothing said about it.
+    ///
+    /// The absolute number means nothing — only comparisons between waiting
+    /// requests do — but it has to agree with whatever scheme the caller uses,
+    /// and it is one because that is
+    /// `hv2_swarm::Urgency::Routine.rank()`. A caller with a different scheme
+    /// should use [`Scheduler::ask_at`] for every request rather than mixing
+    /// the two.
+    pub const ROUTINE: u8 = 1;
+
+    /// Ask on `agent`'s behalf at a stated urgency, smaller being served sooner.
+    ///
+    /// Identical to [`Scheduler::ask`] except that the request takes its place
+    /// in the queue by urgency rather than purely by arrival.
+    ///
+    /// **The number is not decided here.** It comes from whoever holds the
+    /// capability graph — the same caller that already decided this agent may
+    /// ask at all — and in this workspace it is
+    /// `hv2_swarm::Urgency::rank()`. A scheduler that decided for itself which
+    /// agents matter would be a second, quieter policy sitting underneath the
+    /// one that is written down.
+    ///
+    /// Urgency reorders the queue; it does not interrupt a lane, and it cannot
+    /// starve anything. See [`Limits::patience`] for the bound.
+    pub fn ask_at(
+        &self,
+        agent: &str,
+        question: &str,
+        urgency: u8,
+    ) -> Result<Result<Served, Refused>, Error> {
         // Costed before queueing, so a request that cannot be served does not
         // make anyone else wait behind it. The tokeniser is shared and
         // read-only, so this happens outside the lock.
@@ -505,6 +600,7 @@ impl<'m> Scheduler<'m> {
                 question: question.to_string(),
                 queued_at,
                 queued_at_step,
+                urgency,
             });
             inner.stats.admitted += 1;
             inner.stats.peak_waiting = inner.stats.peak_waiting.max(inner.pending.len());
@@ -579,6 +675,10 @@ impl<'m> Scheduler<'m> {
                             question: String::new(),
                             queued_at: lane.queued_at,
                             queued_at_step,
+                            // Kept for the same reason the wait is kept: a
+                            // request does not become ordinary because a step
+                            // it was in failed.
+                            urgency: lane.urgency,
                         });
                     }
                 } else {
@@ -632,15 +732,33 @@ impl<'m> Scheduler<'m> {
     /// continuous rather than one batch at a time.
     fn admit(&self, inner: &mut Inner<'m>) {
         let lanes = self.limits.batch.max(1);
-        let mut deferred: VecDeque<Waiting> = VecDeque::new();
+        let step = inner.stats.steps;
+        let patience = self.limits.patience;
         while inner.active.len() < lanes {
-            let Some(request) = inner.pending.pop_front() else {
+            // The best waiting request that is not already in a lane: lowest
+            // effective urgency, and among equals the one that arrived first.
+            // Scanning rather than popping is what lets urgency matter at all,
+            // and the ticket tiebreak is what makes an aged request beat a
+            // newly-arrived urgent one rather than merely draw with it.
+            let choice = {
+                let active = &inner.active;
+                inner
+                    .pending
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, waiting)| !active.iter().any(|lane| lane.agent == waiting.agent))
+                    .min_by_key(|(_, waiting)| {
+                        (waiting.effective_urgency(step, patience), waiting.ticket)
+                    })
+                    .map(|(index, _)| index)
+            };
+            let Some(index) = choice else {
                 break;
             };
-            if inner.active.iter().any(|lane| lane.agent == request.agent) {
-                deferred.push_back(request);
-                continue;
-            }
+            let request = inner
+                .pending
+                .remove(index)
+                .expect("an index just read from this queue");
             // Make room before taking the conversation, so that the agent
             // being admitted is never the one evicted to admit it.
             self.reclaim(inner, &request.agent);
@@ -656,6 +774,7 @@ impl<'m> Scheduler<'m> {
             inner.active.push(Active {
                 ticket: request.ticket,
                 agent: request.agent,
+                urgency: request.urgency,
                 queued_at: request.queued_at,
                 admitted_at: Instant::now(),
                 waited_steps: inner.stats.steps.saturating_sub(request.queued_at_step),
@@ -667,9 +786,6 @@ impl<'m> Scheduler<'m> {
                 produced: Vec::new(),
                 shared: 0,
             });
-        }
-        while let Some(request) = deferred.pop_back() {
-            inner.pending.push_front(request);
         }
     }
 
@@ -799,5 +915,85 @@ mod tests {
             Limits::default().batch > 1,
             "a default of one would read the model once per token per agent"
         );
+    }
+
+    /// A request built for the ordering tests. Only the fields the ordering
+    /// reads are meaningful.
+    fn waiting(ticket: u64, urgency: u8, queued_at_step: usize) -> Waiting {
+        Waiting {
+            ticket,
+            agent: format!("agent-{ticket}"),
+            question: String::new(),
+            queued_at: Instant::now(),
+            queued_at_step,
+            urgency,
+        }
+    }
+
+    #[test]
+    fn a_fresh_request_is_ordered_at_the_urgency_it_was_given() {
+        let w = waiting(1, 2, 100);
+        assert_eq!(w.effective_urgency(100, 16), 2);
+    }
+
+    /// Waiting earns rank, one step of urgency per `patience` steps.
+    #[test]
+    fn waiting_earns_rank() {
+        let w = waiting(1, 2, 0);
+        assert_eq!(w.effective_urgency(15, 16), 2, "not yet");
+        assert_eq!(w.effective_urgency(16, 16), 1, "one patience, one rank");
+        assert_eq!(w.effective_urgency(32, 16), 0, "two, and it is at the top");
+        assert_eq!(w.effective_urgency(10_000, 16), 0, "and cannot go past it");
+    }
+
+    /// The property the FIFO queue used to give for free, now stated as a
+    /// bound: a request cannot be overtaken by newly-arriving urgent work for
+    /// longer than `urgency * patience` steps.
+    ///
+    /// Checked by simulating the selection key rather than the whole
+    /// scheduler, which would need a model: at the moment the bound elapses,
+    /// the waiting request must sort ahead of an urgent request that has just
+    /// arrived.
+    #[test]
+    fn urgency_bounded_by_patience() {
+        const PATIENCE: usize = 16;
+        for urgency in 0..=3u8 {
+            let old = waiting(1, urgency, 0);
+            let bound = urgency as usize * PATIENCE;
+
+            // An urgent request arriving at exactly that step.
+            let fresh = waiting(999, 0, bound);
+            let key = |w: &Waiting, step: usize| (w.effective_urgency(step, PATIENCE), w.ticket);
+            assert!(
+                key(&old, bound) <= key(&fresh, bound),
+                "a request at urgency {urgency} was still behind newer urgent work                  after {bound} steps"
+            );
+        }
+    }
+
+    /// Zero patience means no ageing at all, which is strict priority and can
+    /// starve. It is an option rather than the default, and the test says so
+    /// out loud so that nobody sets it by accident and wonders.
+    #[test]
+    fn zero_patience_never_ages() {
+        let w = waiting(1, 2, 0);
+        assert_eq!(w.effective_urgency(1_000_000, 0), 2);
+    }
+
+    /// Among requests of equal effective urgency the older one wins, which is
+    /// what keeps the queue first-in-first-out when nobody is urgent.
+    #[test]
+    fn equal_urgency_is_still_first_in_first_out() {
+        let first = waiting(1, 1, 0);
+        let second = waiting(2, 1, 0);
+        let key = |w: &Waiting| (w.effective_urgency(0, 16), w.ticket);
+        assert!(key(&first) < key(&second));
+    }
+
+    /// The default is not strict priority. If it were, this crate would have
+    /// swapped a queue that cannot starve for one that can, silently.
+    #[test]
+    fn the_default_ages() {
+        assert!(Limits::default().patience > 0);
     }
 }

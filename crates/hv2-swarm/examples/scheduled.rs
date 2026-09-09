@@ -48,7 +48,7 @@ use hv2_agent_proto::{parse, Header, Kind, HEADER_LEN};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_core::{BootSource, VMConfig, VM};
 use hv2_infer::{Limits, Model, Refused, Scheduler};
-use hv2_swarm::{AgentId, Capability, Swarm};
+use hv2_swarm::{AgentId, Capability, Swarm, Urgency};
 
 const GUEST_TARGET: &str = "x86_64-unknown-none";
 const HOST_PORT: u32 = 1024;
@@ -74,29 +74,39 @@ struct Plan {
     granted: bool,
     /// Whether the last answer should contain the number.
     expects_recall: bool,
+    /// How urgent this agent is, as a fact recorded in the swarm rather than
+    /// passed to the scheduler by hand. `beta` is urgent here to show the path
+    /// works end to end; with four agents and eight lanes nothing queues, so
+    /// this demonstrates the wiring and `hv2-infer/examples/queueing` is where
+    /// the effect on waits is measured.
+    urgency: Urgency,
 }
 
 const PLANS: [Plan; 4] = [
     Plan {
         name: "alpha",
+        urgency: Urgency::Routine,
         questions: &[REMEMBER, RECALL],
         granted: true,
         expects_recall: true,
     },
     Plan {
         name: "beta",
+        urgency: Urgency::Urgent,
         questions: &[REMEMBER, RECALL],
         granted: true,
         expects_recall: true,
     },
     Plan {
         name: "gamma",
+        urgency: Urgency::Routine,
         questions: &[RECALL],
         granted: true,
         expects_recall: false,
     },
     Plan {
         name: "delta",
+        urgency: Urgency::Routine,
         questions: &[RECALL],
         granted: false,
         expects_recall: false,
@@ -313,7 +323,11 @@ fn converse(
             continue;
         }
 
-        match scheduler.ask(plan.name, argument) {
+        // Read off the graph, not decided here and not decided by the
+        // scheduler: the same object that said this agent may ask also says how
+        // soon.
+        let urgency = swarm.urgency_of(&id).rank();
+        match scheduler.ask_at(plan.name, argument, urgency) {
             Ok(Ok(served)) => {
                 wire.send(&frame(
                     request,
@@ -404,6 +418,10 @@ async fn main() -> std::process::ExitCode {
         // second thing happening at once. The bound gets its own section at the
         // end, where it is the only thing being shown.
         cache_bytes: 0,
+        // The default. Nothing queues in this run — four lanes for four agents
+        // — so ageing has nothing to act on here; it is the queueing example
+        // that exercises it.
+        patience: Limits::default().patience,
         // Zero: let the scheduler choose, which is a third of the machine
         // rather than all of it. On this host that is worth 2.2x against the
         // global pool, and the reason is in `Limits::threads`.
@@ -449,6 +467,11 @@ async fn main() -> std::process::ExitCode {
         if plan.granted {
             swarm.grant_capability(&AgentId::new(plan.name), format!("tool:{TOOL}"));
         }
+        // Urgency lives beside the capability, in the graph, for the same
+        // reason: both are statements about the agent rather than about the
+        // request it happens to be making.
+        swarm.set_urgency(&AgentId::new(plan.name), plan.urgency);
+        {}
     }
     println!(
         "agents        : {} sandboxes — {} hold tool:{TOOL}",
@@ -665,6 +688,7 @@ async fn main() -> std::process::ExitCode {
         // About one short conversation. The second fits; the third has to
         // displace something.
         cache_bytes: 24 * model.cache_bytes_per_token(),
+        patience: limits.patience,
         threads: limits.threads,
     };
     let small = Scheduler::new(&model, tight);

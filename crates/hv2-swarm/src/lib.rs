@@ -137,6 +137,65 @@ impl Capability {
     }
 }
 
+/// How soon an agent's requests should be served, relative to other agents'.
+///
+/// A third fact about an agent's standing, alongside its position in the tree
+/// and the capabilities it holds, and it lives here for the same reason they
+/// do: it is a statement about who the agent *is*, not about the work it
+/// happens to be asking for. A scheduler is told this; it does not decide it,
+/// the same way it does not decide whether the agent may ask at all.
+///
+/// The order is deliberate and the derive depends on it: `Background` is least
+/// urgent and `Urgent` is most. [`Urgency::rank`] inverts that into the
+/// direction a queue wants, where a smaller number is served sooner.
+///
+/// What this does **not** promise is that an urgent agent always goes first.
+/// A queue that honoured urgency strictly would starve routine work in a fleet
+/// that always has something urgent in it, and a scheduler reading this is
+/// expected to bound that — see `hv2_infer::Scheduler`, which ages a waiting
+/// request until it outranks newer urgent ones.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Serialize, Deserialize,
+)]
+pub enum Urgency {
+    /// Yields to everything else. For work that should happen when the fleet
+    /// is otherwise idle and should never delay work that someone is waiting on.
+    Background,
+    /// What an agent has unless somebody says otherwise.
+    #[default]
+    Routine,
+    /// Served ahead of routine work. For an agent whose answer someone is
+    /// blocked on, rather than for an agent that would simply prefer to be
+    /// quick.
+    Urgent,
+}
+
+impl Urgency {
+    /// This urgency as a queue key, where **smaller is served sooner**.
+    ///
+    /// The inversion is here rather than at the seam so that both sides cannot
+    /// disagree about which direction means "first". A scheduler is handed this
+    /// number and orders by it; it never sees the enum, which is what keeps
+    /// this crate out of its dependencies.
+    pub fn rank(self) -> u8 {
+        match self {
+            Self::Urgent => 0,
+            Self::Routine => 1,
+            Self::Background => 2,
+        }
+    }
+}
+
+impl fmt::Display for Urgency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Background => "background",
+            Self::Routine => "routine",
+            Self::Urgent => "urgent",
+        })
+    }
+}
+
 impl fmt::Display for Capability {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -354,6 +413,7 @@ struct Node {
     parent: Option<AgentId>,
     children: BTreeSet<AgentId>,
     capabilities: BTreeSet<Capability>,
+    urgency: Urgency,
 }
 
 /// A swarm: the agents, the tree that orders them, and the only way to send.
@@ -393,6 +453,7 @@ impl<T: Transport> Swarm<T> {
                 parent: None,
                 children: BTreeSet::new(),
                 capabilities: BTreeSet::new(),
+                urgency: Urgency::default(),
             },
         );
         self.root = Some(id);
@@ -425,6 +486,7 @@ impl<T: Transport> Swarm<T> {
                 parent: Some(parent.clone()),
                 children: BTreeSet::new(),
                 capabilities: BTreeSet::new(),
+                urgency: Urgency::default(),
             },
         );
         if let Some(node) = self.nodes.get_mut(&parent) {
@@ -458,6 +520,27 @@ impl<T: Transport> Swarm<T> {
         if let Some(node) = self.nodes.get_mut(agent) {
             node.capabilities.remove(capability);
         }
+    }
+
+    /// Say how urgent `agent`'s requests are. Ignored if the agent is not in
+    /// the swarm, the same as granting a capability to an absent agent.
+    ///
+    /// Deliberately not inherited down the tree. A supervisor being urgent
+    /// says nothing about its workers: urgency is about who is waiting on an
+    /// answer, and that is not a property that delegates the way authority
+    /// does.
+    pub fn set_urgency(&mut self, agent: &AgentId, urgency: Urgency) {
+        if let Some(node) = self.nodes.get_mut(agent) {
+            node.urgency = urgency;
+        }
+    }
+
+    /// How urgent `agent`'s requests are, or the default for an agent that is
+    /// not in the swarm — an unknown agent is ordinary rather than special.
+    pub fn urgency_of(&self, agent: &AgentId) -> Urgency {
+        self.nodes
+            .get(agent)
+            .map_or_else(Urgency::default, |n| n.urgency)
     }
 
     /// Whether `agent` holds `capability`.
@@ -974,5 +1057,56 @@ mod tests {
         assert_eq!(message.under, Relation::Descendant);
         assert_eq!(message.from, id("supervisor"));
         assert_eq!(message.payload, b"command");
+    }
+
+    #[test]
+    fn an_agent_is_routine_until_somebody_says_otherwise() {
+        let mut swarm = Swarm::new(LocalTransport::default());
+        swarm.add_root("root").unwrap();
+        assert_eq!(swarm.urgency_of(&AgentId::new("root")), Urgency::Routine);
+    }
+
+    #[test]
+    fn an_agent_nobody_has_heard_of_is_ordinary_rather_than_special() {
+        let swarm = Swarm::new(LocalTransport::default());
+        assert_eq!(swarm.urgency_of(&AgentId::new("nobody")), Urgency::Routine);
+    }
+
+    #[test]
+    fn urgency_is_set_and_read_back() {
+        let mut swarm = Swarm::new(LocalTransport::default());
+        swarm.add_root("root").unwrap();
+        let root = AgentId::new("root");
+        swarm.set_urgency(&root, Urgency::Urgent);
+        assert_eq!(swarm.urgency_of(&root), Urgency::Urgent);
+        swarm.set_urgency(&root, Urgency::Background);
+        assert_eq!(swarm.urgency_of(&root), Urgency::Background);
+    }
+
+    /// Authority delegates downward; being waited on does not.
+    #[test]
+    fn urgency_does_not_descend_to_children() {
+        let mut swarm = Swarm::new(LocalTransport::default());
+        swarm.add_root("boss").unwrap();
+        swarm.add_agent("hand", "boss").unwrap();
+        swarm.set_urgency(&AgentId::new("boss"), Urgency::Urgent);
+        assert_eq!(swarm.urgency_of(&AgentId::new("hand")), Urgency::Routine);
+    }
+
+    /// The enum orders least-urgent-first; the queue key is the other way
+    /// round, and something has to assert which is which.
+    #[test]
+    fn the_rank_inverts_the_ordering() {
+        assert!(Urgency::Urgent > Urgency::Routine);
+        assert!(Urgency::Routine > Urgency::Background);
+        assert!(Urgency::Urgent.rank() < Urgency::Routine.rank());
+        assert!(Urgency::Routine.rank() < Urgency::Background.rank());
+    }
+
+    #[test]
+    fn setting_urgency_on_an_absent_agent_is_ignored() {
+        let mut swarm = Swarm::new(LocalTransport::default());
+        swarm.set_urgency(&AgentId::new("ghost"), Urgency::Urgent);
+        assert_eq!(swarm.len(), 0);
     }
 }

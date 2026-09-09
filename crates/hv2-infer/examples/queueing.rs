@@ -1,10 +1,16 @@
 //! What a request actually waits for when the lanes are full.
 //!
-//! The scheduler is first-in-first-out and a lane runs to the end of its
-//! answer, so the standing question has been whether it needs a priority — a
-//! way for an urgent request to go before one that merely arrived earlier.
-//! That is a product question, but it has a measurable part, and the measurable
-//! part had never been measured: *how long is the wait?*
+//! A lane runs to the end of its answer, so the standing question has been
+//! whether the queue needs a priority — a way for an urgent request to go
+//! before one that merely arrived earlier. That is a product question, but it
+//! has a measurable part, and the measurable part had never been measured:
+//! *how long is the wait?*
+//!
+//! The product question has since been answered yes, so this now measures the
+//! other half as well: **does saying an agent is urgent actually change what it
+//! waits?** Two of the eight agents here are urgent, and the run is a failure
+//! if their waits are not shorter than everyone else's — a priority that does
+//! not show up in the numbers is not a priority.
 //!
 //! # Why this counts steps and not seconds
 //!
@@ -20,7 +26,12 @@
 //! More agents ask at once than there are lanes, each from its own thread, so
 //! the queue is genuinely over-subscribed rather than nominally so. Every
 //! request reports the steps that ran between it joining the queue and it
-//! getting a lane.
+//! getting a lane, and the report splits those by urgency.
+//!
+//! The urgency is passed to [`Scheduler::ask_at`] rather than decided by the
+//! scheduler. Here it comes from a constant because this example has no swarm;
+//! in `hv2-swarm/examples/scheduled` it comes from the capability graph, which
+//! is where it belongs.
 //!
 //! ```text
 //! cargo run --release -p hv2-infer --example queueing -- <model.gguf>
@@ -41,6 +52,17 @@ const ASKERS: usize = 8;
 /// Short, so the run is bounded and every answer costs about the same number of
 /// steps — which is what makes the waits comparable to each other.
 const ANSWER_TOKENS: usize = 24;
+
+/// Which of the agents are urgent. Two of eight, so there is something for
+/// them to go ahead of.
+const URGENT: [usize; 2] = [5, 6];
+
+/// The two ranks this example uses, matching `hv2_swarm::Urgency`: smaller is
+/// served sooner. Deliberately the *late* askers are the urgent ones — agents
+/// 5 and 6 of 8 — because an urgent agent that also happened to arrive first
+/// would prove nothing about ordering.
+const URGENT_RANK: u8 = 0;
+const ROUTINE_RANK: u8 = 1;
 
 fn main() -> std::process::ExitCode {
     let Some(path) = std::env::args().nth(1) else {
@@ -73,9 +95,11 @@ fn main() -> std::process::ExitCode {
             .map(|i| {
                 let scheduler = Arc::clone(&scheduler);
                 scope.spawn(move || {
+                    let urgent = URGENT.contains(&i);
                     let agent = format!("agent-{i}");
-                    let answer = scheduler.ask(&agent, "Name one colour. One word.");
-                    (agent, answer)
+                    let rank = if urgent { URGENT_RANK } else { ROUTINE_RANK };
+                    let answer = scheduler.ask_at(&agent, "Name one colour. One word.", rank);
+                    (agent, urgent, answer)
                 })
             })
             .collect();
@@ -87,20 +111,28 @@ fn main() -> std::process::ExitCode {
     let elapsed = started.elapsed();
 
     let mut waits: Vec<usize> = Vec::new();
-    for (agent, outcome) in &served {
+    let mut urgent_waits: Vec<usize> = Vec::new();
+    let mut routine_waits: Vec<usize> = Vec::new();
+    for (agent, urgent, outcome) in &served {
+        let mark = if *urgent { "urgent " } else { "routine" };
         match outcome {
             Ok(Ok(answer)) => {
                 println!(
-                    "{agent:<9}: waited {:>3} steps ({:>5.1} s), shared a pass with {} others, said {:?}",
+                    "{agent:<9} {mark}: waited {:>3} steps ({:>5.1} s), shared a pass with {} others, said {:?}",
                     answer.waited_steps,
                     answer.waited.as_secs_f64(),
                     answer.batch.saturating_sub(1),
                     answer.text.trim()
                 );
                 waits.push(answer.waited_steps);
+                if *urgent {
+                    urgent_waits.push(answer.waited_steps);
+                } else {
+                    routine_waits.push(answer.waited_steps);
+                }
             }
-            Ok(Err(refused)) => println!("{agent:<9}: refused — {refused}"),
-            Err(e) => println!("{agent:<9}: FAILED — {e}"),
+            Ok(Err(refused)) => println!("{agent:<9} {mark}: refused — {refused}"),
+            Err(e) => println!("{agent:<9} {mark}: FAILED — {e}"),
         }
     }
 
@@ -148,18 +180,50 @@ fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
+    let mean = |v: &[usize]| -> f64 {
+        if v.is_empty() {
+            0.0
+        } else {
+            v.iter().sum::<usize>() as f64 / v.len() as f64
+        }
+    };
+    let urgent_mean = mean(&urgent_waits);
+    let routine_mean = mean(&routine_waits);
+    urgent_waits.sort_unstable();
+    routine_waits.sort_unstable();
+    println!("urgent waits  : {urgent_waits:?}  mean {urgent_mean:.1} steps");
+    println!("routine waits : {routine_waits:?}  mean {routine_mean:.1} steps");
+    println!();
+
+    // The point of the whole change has to show up here. A priority that does
+    // not move the number is not a priority, and a run that cannot tell the
+    // difference should fail rather than reassure.
+    if urgent_waits.is_empty() || routine_waits.is_empty() {
+        println!("result        : FAILED — one of the two groups was never served.");
+        return std::process::ExitCode::FAILURE;
+    }
+    if urgent_mean >= routine_mean {
+        println!(
+            "result        : FAILED — urgent agents waited {urgent_mean:.1} steps against \
+             {routine_mean:.1} for routine ones, so the urgency never reached the queue."
+        );
+        return std::process::ExitCode::FAILURE;
+    }
+
     println!(
         "result        : with {LANES} lanes and {ASKERS} askers, the longest wait was {longest} \
          steps, against {per_answer} steps that one answer holds a lane — {:.1} answers' worth, \
-         where askers/lanes - 1 predicts {}. The waits come out as a staircase in treads of \
-         {LANES}, which is first-in-first-out doing exactly what it says: a request waits for a \
-         lane, a lane frees when an answer finishes, and nobody may jump. A priority would not \
-         make that wait smaller — it would move it from the urgent request onto somebody else. \
-         Whether that trade is worth making is a question about which agents are urgent, which is \
-         the capability graph's to answer and not the scheduler's; what was missing was the size \
-         of the thing being traded, and it is the number above.",
+         where askers/lanes - 1 predicts {}. That is what a request waits for: a lane, freed when \
+         an answer finishes. The two urgent agents asked fifth and sixth of eight and waited \
+         {urgent_mean:.1} steps against {routine_mean:.1} for the rest, so urgency reordered the \
+         queue rather than merely being recorded in it. The wait it saved did not vanish — it \
+         moved onto the routine agents, which is the trade, and the capability graph is where the \
+         decision to make it lives. Nothing starves for making it: a waiting request gains a rank \
+         every {} steps, so it cannot be overtaken by newly-arriving urgent work for longer than \
+         its rank times that.",
         longest as f64 / per_answer.max(1) as f64,
-        ASKERS / LANES - 1
+        ASKERS / LANES - 1,
+        limits.patience
     );
     std::process::ExitCode::SUCCESS
 }

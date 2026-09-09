@@ -2322,13 +2322,20 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <section>
-  <h2>What a request waits for, and why the queue has no priority</h2>
+  <h2>What a request waits for, and the priority the queue now has</h2>
   <p>
-    The standing question was whether the queue needs a priority: it is
+    The standing question was whether the queue needs a priority: it was
     first-in-first-out, a lane runs to the end of its answer, and a request that
     arrives when every lane is busy waits. Nobody had measured the wait, so
     nobody could weigh the change. <code>examples/queueing</code> measures it:
     two lanes, eight agents asking at once from their own threads.
+  </p>
+  <p>
+    <strong>The question has since been answered yes, and the priority is
+    built.</strong> It is in the capability graph rather than in the scheduler,
+    which is the shape the rest of this section argued for: the object that
+    decides an agent may ask at all is the one that says how soon. See
+    <em>Urgency, and the default that made it worth nothing</em> below.
   </p>
   <div class="callout">
     <h3>Counted in steps, not seconds</h3>
@@ -2383,6 +2390,87 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       by a prediction rather than by a failure.
     </p>
   </div>
+
+</section>
+
+<section>
+  <h2>Urgency, and the default that made it worth nothing</h2>
+  <p>
+    The product question on the list &mdash; <em>are some agents' requests more
+    urgent than others?</em> &mdash; was answered yes, so the priority got
+    built. Where it went matters more than that it exists.
+  </p>
+  <p>
+    It went in <strong>the capability graph</strong>. <code>hv2_swarm::Urgency</code>
+    sits beside an agent's capabilities, because both are statements about who
+    the agent <em>is</em> rather than about the request it happens to be making,
+    and because the graph is already the thing that decides an agent may ask at
+    all. The scheduler is <em>told</em> a rank and orders by it. It never sees
+    the enum &mdash; <code>hv2-infer</code> and <code>hv2-swarm</code> are
+    independent libraries that meet only in examples, and the seam is a
+    <code>u8</code> whose direction is fixed in one place,
+    <code>Urgency::rank</code>, so the two sides cannot disagree about which way
+    means "first". A scheduler that decided for itself which agents matter would
+    be a second, quieter policy underneath the one that is written down.
+  </p>
+  <p>
+    Urgency is not inherited down the tree, which is the one place it parts
+    company with authority. A supervisor being urgent says nothing about its
+    workers: urgency is about who is waiting on an answer, and that does not
+    delegate the way permission does.
+  </p>
+  <div class="callout stop">
+    <h3>The first default made the whole feature a no-op, and the example said so</h3>
+    <p>
+      Ordering strictly by urgency starves: a fleet with a steady supply of
+      urgent work never serves a routine request at all, and the queue was
+      first-in-first-out precisely to avoid that. So a waiting request ages
+      &mdash; its effective rank improves every <code>Limits::patience</code>
+      steps &mdash; which turns starvation into a bound: nothing can be
+      overtaken by newly-arriving urgent work for longer than its rank times
+      that.
+    </p>
+    <p>
+      <code>patience</code> was set to sixteen steps, on the reasoning that it
+      was "a second or two". That reasoning never touched the timescale it
+      actually operates on. One answer holds a lane for about
+      <strong>nineteen</strong> steps, so every routine request had aged to the
+      top rank before a lane ever freed, every request was tied, and the queue
+      collapsed straight back into first-in-first-out:
+    </p>
+    <pre>waits, in steps: [0, 1, 19, 20, 38, 39, 57, 58]
+urgent  : [1, 57]                 mean <b>29.0</b>
+routine : [0, 19, 20, 38, 39, 58] mean <b>29.0</b>
+result  : FAILED &mdash; the urgency never reached the queue</pre>
+    <p>
+      One of the two urgent agents jumped from sixth to second; the other got
+      nothing at all. The mechanism worked and the tuning erased it, which is
+      the kind of thing that passes a unit test comfortably &mdash; every
+      assertion about ageing was true &mdash; and shows up only when something
+      runs the whole path and checks the number it cares about. So the example
+      fails the run rather than reporting it: a priority that does not move the
+      wait is not a priority.
+    </p>
+    <p>
+      At 256 steps, on the order of a dozen answers rather than one:
+    </p>
+    <pre>waits, in steps: [0, 0, 19, 19, 38, 38, 57, 57]
+urgent  : [19, 19]                mean <b>19.0</b>
+routine : [0, 0, 38, 38, 57, 57]  mean <b>31.7</b></pre>
+    <p>
+      The two urgent agents asked <em>sixth and seventh of eight</em> and came
+      out in the second tread. The wait they saved did not vanish &mdash; the
+      routine mean went from 29.0 to 31.7 &mdash; and that transfer is the whole
+      trade, which is why the decision to make it belongs in the graph and not
+      down here.
+    </p>
+  </div>
+  <p>
+    What is deliberately still absent is <em>preemption</em>. Urgency reorders
+    the queue; it does not interrupt a lane. A pass that is already running has
+    been paid for in memory traffic, which is the expensive thing on this path,
+    and abandoning it to start another would spend that twice.
+  </p>
 
 </section>
 
@@ -2779,7 +2867,7 @@ Microsoft-Hyper-V-All             Enabled</pre>
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,299 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,311 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current
