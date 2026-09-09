@@ -2882,15 +2882,30 @@ paired    -14.0  -25.2   +4.9  +19.0   +8.3   -0.1</pre>
       is not "wait for the dependency graph to move" &mdash; it is a version
       bump this repository controls, gated only on 0.10 going final.
       <br><br>
-      The surface is small enough to price: one file,
-      <code>crypto/asymmetric.rs</code>, using key generation, PKCS#1&nbsp;v1.5
-      and PSS signing and verification. The acceptance in
-      <code>deny.toml</code> stands in the meantime and its reasoning is still
-      the right one &mdash; RUSTSEC-2023-0071 needs an adversary who can time
-      private-key operations on chosen inputs, and nothing here is an online
-      decryption oracle. What has changed is that the thing it is waiting for is
-      now visible, so the note should be re-read when 0.10.0 ships rather than
-      left to age.
+      The surface is one file, <code>crypto/asymmetric.rs</code> &mdash; key
+      generation, PKCS#1&nbsp;v1.5 and PSS signing and verification &mdash; and
+      the bump was <em>tried</em>, on a scratch target directory, to find out
+      what it costs. It does not compile, and the way it fails is the
+      interesting part:
+      <pre>unresolved import `rsa::BigUint`                    &mdash; no BigUint in the root
+cannot find value `OsRng` in crate `rsa::rand_core`
+no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n()</pre>
+      <strong>0.10 replaces <code>num-bigint</code> with
+      <code>crypto_bigint</code>'s <code>BoxedUint</code>, and that substitution
+      <em>is</em> the fix</strong> &mdash; a constant-time bignum is what closes
+      a timing sidechannel, so the breaking change and the mitigation are the
+      same change. It cannot arrive as a version bump, and the cost is now known
+      rather than guessed: port the key-component round trip
+      (<code>from_components</code>, <code>n()</code>,
+      <code>to_bytes_be</code>) onto <code>BoxedUint</code>, and update the RNG
+      for rand_core 0.9. Confined to that one file.
+      <br><br>
+      The acceptance in <code>deny.toml</code> stands meanwhile and its
+      reasoning is still right &mdash; RUSTSEC-2023-0071 needs an adversary who
+      can time private-key operations on chosen inputs, and nothing here is an
+      online decryption oracle. What has changed is that this is no longer a
+      wait: it is a scheduled port whose size has been measured, gated on 0.10.0
+      leaving candidate.
     </li>
     <li>
       <strong>Get the examples onto something that runs them.</strong> CI runs
