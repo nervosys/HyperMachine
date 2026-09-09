@@ -2810,11 +2810,28 @@ Microsoft-Hyper-V-All             Enabled</pre>
       exactly where hv1 was before it was booted under hv2.
     </li>
     <li>
-      <strong>Re-measure VNNI on a quiet machine.</strong> The kernel is
-      written and correct and the answers survive it; what nobody knows is
-      whether it is faster, because the host was at 97% CPU on its other side
-      while the question was being asked. It is one environment variable and two
-      commands.
+      <strong>Re-measure VNNI on a quiet machine &mdash; and it is now known
+      how quiet.</strong> The kernel is written and correct and the answers
+      survive it; what nobody knows is whether it is faster. The first attempt
+      failed because two separate runs on a loaded host cannot be compared, so
+      the obvious repair was tried: <em>interleave</em> them, alternating float
+      and integer so that whatever the host is doing hits both conditions
+      equally, and compare pairwise. Six pairs, alternating:
+      <pre>float    119.5  121.6   83.8   89.4   86.2  105.4     median 97.4
+integer  105.5   96.4   88.7  108.4   94.5  105.3     median 100.8
+paired    -14.0  -25.2   +4.9  +19.0   +8.3   -0.1</pre>
+      <strong>Mean paired difference &minus;1.2&nbsp;ms, or &minus;1.2%, with a
+      standard deviation of 16&nbsp;ms across the pairs and three of six signs
+      each way.</strong> That is not a result; it is a coin. The reason is in
+      the float row alone, which drifts from 121.6 down to 83.8 over the same
+      six runs &mdash; <strong>45% within one condition</strong>, while the
+      difference being looked for is on the order of one.
+      <br><br>
+      So pairing was the right technique and it was not enough, which is worth
+      knowing before somebody tries it again. The bar this measurement needs is
+      now a number rather than an adjective: the host's drift has to be well
+      under a percent across the run, against 45% here. That is a machine doing
+      nothing else at all, and this one had eight of its own processes on it.
     </li>
     <li>
       <strong>Find out whether the NMI path works on hardware.</strong> It is
@@ -2923,9 +2940,21 @@ Microsoft-Hyper-V-All             Enabled</pre>
       <br><br>
       The guard below twenty is still what the sweep depends on: it refuses to
       print a summary when it counts fewer than twenty binaries, because one run
-      printed 3,331 with crates missing and another printed nothing at all. The
-      derivation above is what that guard should eventually check against &mdash;
-      88 is now a number the sweep could assert rather than merely report.
+      printed 3,331 with crates missing and another printed nothing at all.
+      <strong>It asserts 88 now rather than reporting it</strong>, with the
+      derivation in a comment beside the number, so a target that appears or
+      vanishes fails the run instead of moving a figure nobody rechecks.
+      <br><br>
+      And the sweep is <strong>in the repository</strong> at
+      <code>tools/sweep.sh</code>. Until now it existed only in a session
+      transcript &mdash; the procedure that checks every claim on this page was
+      itself unversioned, and each run of it was reconstructed from memory,
+      which is how it came to be missing rustfmt for a while. Several of its
+      steps are things CI does not do: <code>clippy --all-targets</code>,
+      <code>hv1-multiboot</code> at all, and the sixteen examples. It ends with
+      <code>SWEEP OK</code> or <code>SWEEP FAILED</code> and nothing else, so a
+      killed run is distinguishable from a passing one, which three results this
+      session were nearly not.
     </li>
   </ul>
 </section>

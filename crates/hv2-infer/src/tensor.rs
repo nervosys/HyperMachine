@@ -239,7 +239,17 @@ static VNNI: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
 /// needs a demonstrated benefit and there is not one yet, so the float path
 /// ships and this waits for a quiet machine.
 ///
-/// `HV2_INFER_QUANT_ACT=1` turns it on, which is how it should be re-measured.
+/// Pairing was tried and was not enough. Running the two paths *interleaved*
+/// — float, integer, float, integer — so that whatever the host is doing hits
+/// both equally is the right repair for a noisy machine, and six such pairs
+/// came out at a mean difference of −1.2%, standard deviation 16 ms, three of
+/// six signs each way. The float column alone drifted 45% over the same six
+/// runs. The effect being looked for is smaller than that by more than an order
+/// of magnitude.
+///
+/// So the bar is now a number rather than an adjective: the host's drift has to
+/// be well under a percent across the run. `HV2_INFER_QUANT_ACT=1` turns it on,
+/// which is how it should be re-measured when there is such a machine.
 static QUANT_ACT: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
     matches!(
         std::env::var("HV2_INFER_QUANT_ACT").ok().as_deref(),
