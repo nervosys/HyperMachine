@@ -14,7 +14,7 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```no_run
 //! use hv2_core::hv_tracing::{
 //!     TracerProvider, InMemorySpanExporter, Context,
 //!     CpuProfiler, FlameGraphBuilder,

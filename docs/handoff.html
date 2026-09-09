@@ -2482,7 +2482,9 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       stale &mdash; <code>no_run</code> compiles without executing and
       <code>text</code> says plainly that it is not code, and either would be a
       more honest thing for a sample to be. That has not been changed here: it
-      is twenty fences across four crates.
+      is twenty-three fences across eight files &mdash; not twenty, which was
+      an earlier count of this same page's that missed the ones written
+      <code>```rust,ignore</code> rather than <code>```ignore</code>.
     </p>
     <p>
       <strong>Four of them were then measured rather than left to a decision,
@@ -2502,10 +2504,35 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       That is the module-level documentation of <em>how to boot a guest</em>,
       and a reader following it would have written code that does not compile.
       All four are rewritten against the API as it is and are now checked on
-      every run: hv2-core's doc-tests went from <strong>29 passing and 6
-      ignored to 33 passing and 2 ignored</strong>. The two that remain are the
-      Windows ones, which is what the fence is for.
+      every run.
     </p>
+    <p>
+      Then the same to the seven fences the other crates carry, and one of them
+      was the same story again: <code>hv2-agent</code>'s orchestration example
+      <code>await</code>s three methods that are synchronous, passes two
+      arguments to a method that takes three and another that takes four, and
+      calls <code>get_vm_status</code>, which does not exist. It is rewritten
+      and now runs. Of the rest, one compiles as it stands and was fenced for no
+      reason; five do not, and are left fenced with what is wrong with them
+      written down rather than guessed at.
+    </p>
+    <div class="callout stop">
+      <h3>And the count of which ones compiled was wrong, because it was inferred rather than measured</h3>
+      <p>
+        The first pass said four of the seven compiled. It did not: only one
+        does. <code>cargo test --doc</code> was run across four crates at once,
+        it failed in <code>hv2-agent</code> and stopped, and the crates it never
+        reached were read as having passed. They had not been tried.
+      </p>
+      <p>
+        Which is the same error as the aborted sweep two sections up, made by
+        the same hand within the hour, and it is worth being exact about the
+        shape of it: <em>a run that stops early does not report failures for the
+        work it did not do. It reports nothing, and nothing reads like
+        success.</em> Running each crate separately gives four answers instead
+        of one, and that is what the numbers above are.
+      </p>
+    </div>
   </div>
   <p>
     None of this is reachable by an attacker in any sense that matters today:
@@ -2580,7 +2607,7 @@ dimensions_that_overflow           panicked: attempt to multiply with overflow</
       its length on.
     </li>
     <li>
-      <strong>Keep the suite green.</strong> It is: 5,293 tests across 88 test
+      <strong>Keep the suite green.</strong> It is: 5,295 tests across 88 test
       result lines &mdash; 70 test binaries and 18 doc-test suites &mdash; and
       all sixteen examples. That count came out at 93 on two earlier runs, and
       the difference is <em>not reproduced</em>: 88 three times on the current

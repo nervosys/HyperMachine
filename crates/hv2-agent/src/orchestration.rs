@@ -27,21 +27,27 @@
 //!
 //! # Example
 //!
-//! ```rust,ignore
+//! ```
 //! use hv2_agent::orchestration::{AgentOrchestrator, AgentRole};
-//!
-//! // Create orchestrator
+//! # fn example() -> Result<(), hv2_agent::orchestration::OrchestrationError> {
 //! let orchestrator = AgentOrchestrator::new();
 //!
-//! // Register agents with different roles
-//! orchestrator.register_agent("agent-1", AgentRole::Operator).await?;
-//! orchestrator.register_agent("agent-2", AgentRole::Monitor).await?;
+//! // Register agents with different roles. Synchronous: the state is behind a
+//! // lock rather than an await point.
+//! orchestrator.register_agent("agent-1", "operator", AgentRole::Operator)?;
+//! orchestrator.register_agent("agent-2", "monitor", AgentRole::Monitor)?;
 //!
-//! // Agent 1 claims a VM for exclusive access
-//! orchestrator.claim_vm("agent-1", "vm-1").await?;
+//! // Agent 1 claims a VM for exclusive access, optionally saying why and for
+//! // how long.
+//! orchestrator.claim_vm("agent-1", "vm-1", Some("migrating"), None)?;
 //!
-//! // Agent 2 can still read VM status (observer access)
-//! let status = orchestrator.get_vm_status("agent-2", "vm-1").await?;
+//! // Agent 2 may still read it: `can_access_vm` answers for a given kind of
+//! // access rather than handing back state, so the claim decides and the
+//! // caller does not have to know who holds it.
+//! assert!(orchestrator.can_access_vm("agent-2", "vm-1", false)?);
+//! assert!(!orchestrator.can_access_vm("agent-2", "vm-1", true)?);
+//! # Ok(())
+//! # }
 //! ```
 
 use serde::{Deserialize, Serialize};
