@@ -2588,6 +2588,24 @@ after    <b>74 passed; 0 failed; 0 ignored</b>   (hv2-core doc-tests, on Windows
       <code>cargo test -p hv2-core</code>.
     </p>
     <p>
+      That last sentence was a claim when it was written, so it was checked:
+      <code>cargo test -p hv2-core</code> does emit
+      <code>Doc-tests hv2_core</code>, and does run all seventy-four. Worth
+      checking, because the workspace's <em>other</em> doc-test step &mdash;
+      <code>cargo test --doc --workspace</code> &mdash; runs on the Linux job,
+      where <code>whpx.rs</code> does not compile and those sixteen do not
+      exist. Had the Windows job been the one without doc-tests, this work would
+      have fixed sixteen examples that nothing would ever check again.
+    </p>
+    <p>
+      The same question, asked of this session's own new code:
+      <code>hv2-infer</code>'s tests build a GGUF file, map it, and delete it,
+      which on Windows means deleting a file that is currently mapped. They pass
+      there &mdash; 26, as on Linux &mdash; and leave nothing behind, because
+      Rust's <code>File::open</code> asks for <code>FILE_SHARE_DELETE</code>.
+      Checked rather than assumed, since CI's Windows job runs that crate too.
+    </p>
+    <p>
       <strong>All seven of the others compile too, where one did
       before.</strong> Every crate that carries a fence outside
       <code>whpx.rs</code> &mdash; <code>hv2-core</code>,
