@@ -135,8 +135,15 @@ MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled through
 #   linux_boot_probe      wants a bzImage argument
 #   guest_exec_probe      wants a bzImage and an initramfs
 #
-#   advanced              pause a vCPU that was never started:
-#   basic                 "Cannot pause vCPU 0 in state Uninitialized"
+#   advanced              pause a VM that has no guest. Both build with a
+#   basic                 name, cores and memory and no boot source, so there
+#                         is never a running vCPU, and pause() refuses:
+#                         "Cannot pause vCPU 0 in state Uninitialized". The
+#                         refusal is correct -- what is wrong is the lifecycle
+#                         the examples demonstrate. Calling launch() instead of
+#                         start() does not help; there is nothing to launch.
+#                         Note that start() returns Ok and state() reports
+#                         Running throughout, which is how this went unnoticed.
 #
 #   agent_mcp_workflow    expects a snapshot host to be installed. The library
 #                         refuses correctly -- "an identifier handed back here
