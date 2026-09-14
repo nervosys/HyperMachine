@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>fa6bb6e</dd></div>
+    <div class="fact"><dt>Master</dt><dd>eafaa93</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -2908,7 +2908,23 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       leaving candidate.
     </li>
     <li>
-      <strong>Get the examples onto something that runs them.</strong> CI runs
+      <strong>Get the examples onto something that runs them &mdash; and note
+      that "the sixteen" was never the whole set.</strong> <code>cargo
+      metadata</code> reports <strong>49</strong> example targets. The sweep
+      ran a hand-written list of sixteen, and the gap surfaced the way these
+      always do: somebody added a seventeenth and the sweep kept reporting
+      success without it. The list is discovered from cargo now and the default
+      is to run, so <strong>35 run and 14 are skipped, each with its reason</strong>.
+      Of the ones that had never been run: 19 were fine, eight are long-running
+      demos, two want a <code>&lt;bzImage&gt;</code>, one is Windows-gated, and
+      <strong>three are broken</strong> &mdash; <code>exit_handling</code>,
+      <code>interrupt_demo</code> and <code>vm_with_interrupts</code> inject
+      into a <code>VCpu::new(0)</code> descriptor that no <code>create_vm</code>
+      ever registered. Supplying the missing call moves the error to ENXIO
+      rather than fixing it: they want a guest and an irqchip too.
+    </li>
+    <li>
+      <strong>The original item stands for what is left.</strong> CI runs
       <code>cargo test</code> on Linux, Windows, macOS and ARM, plus rustfmt,
       clippy, docs and an MSRV check. It does not run a single one of the
       sixteen examples &mdash; and the examples are where every claim on this
@@ -3085,7 +3101,7 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
 </section>
 
 <footer>
-  master fa6bb6e · 0 open PRs · 0 open issues · suite green · a model answers
+  master eafaa93 · 0 open PRs · 0 open issues · suite green · a model answers
   from inside a sandbox that had to hold the capability to ask, and the one that
   did not caused no forward pass · a fleet queues for it continuously, lanes
   filling and emptying between token steps — 24.4&nbsp;ms per token across eight
