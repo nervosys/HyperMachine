@@ -2394,6 +2394,84 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <section>
+  <h2>A memory limit a workload could swap straight through</h2>
+  <p>
+    <code>hv2-sandbox</code> is built around one rule, stated in its own
+    documentation: <em>a sandbox that silently drops a control is worse than no
+    sandbox</em>. It reports what this host can enforce and refuses rather than
+    downgrading. The design is right, and its confinement tests are the right
+    ones &mdash; a memory cap that stops an allocation, a network-isolated
+    workload with only loopback, a root a workload cannot see past.
+  </p>
+  <p>
+    <strong>Every test that exercised memory or process count was
+    <code>#[cfg(windows)]</code>.</strong> <code>linux.rs</code> &mdash; the
+    namespaces, the <code>pivot_root</code>, the cgroup v2 caps &mdash; had no
+    test of its own at all. So on Linux <code>Control::Memory</code> was
+    reported as enforced on the strength of a successful write to
+    <code>memory.max</code>, which is exactly the shape of evidence the Windows
+    test had been written to replace.
+  </p>
+  <p>
+    Writing the missing test found two things, and the second is the serious
+    one.
+  </p>
+  <div class="callout stop">
+    <h3>First: the cgroup could never have controllers, on any ordinary host</h3>
+    <p>
+      The sandbox created its cgroup as a child of the caller's own. cgroup v2
+      refuses to enable a controller in <code>cgroup.subtree_control</code> for
+      any cgroup holding processes &mdash; the no-internal-process rule &mdash;
+      and the caller's cgroup holds, at minimum, the caller. So the child could
+      never have <code>memory.max</code>. The diagnostic said <em>"enable it in
+      the parent's cgroup.subtree_control"</em>, which is precisely what the
+      kernel forbids; <code>/init.scope</code> holds fourteen processes here and
+      the write is refused.
+    </p>
+    <p>
+      It falls back to a <strong>sibling</strong> now &mdash; a child of the
+      parent, which holds no processes and therefore can delegate. On this host
+      that moves the sandbox from <strong>6 of 8 controls to 8 of 8</strong>,
+      without the caller having to relocate itself into the root cgroup. An
+      unprivileged caller is unaffected and still reports both as unenforced,
+      because creating the directory needs write permission it does not have.
+    </p>
+  </div>
+  <div class="callout stop">
+    <h3>Then: the limit did not limit</h3>
+    <p>
+      With the controller finally delegated, the new test ran and <em>failed</em>.
+      A workload asked to touch <strong>512&nbsp;MiB under a 64&nbsp;MiB
+      cap</strong> finished normally and reported success.
+    </p>
+    <p>
+      <code>memory.max</code> bounds resident memory. Pages past it are swapped,
+      not refused &mdash; and this machine has 12&nbsp;GiB of swap, so the
+      workload walked through its limit by being slightly slower about it. The
+      sandbox never set <code>memory.swap.max</code>.
+      <code>Control::Memory</code> is documented as "a hard ceiling on the
+      memory the workload may commit", and it was not one on any host with swap
+      enabled, which is nearly all of them.
+    </p>
+    <p>
+      It sets <code>memory.swap.max&nbsp;=&nbsp;0</code> alongside the cap now,
+      and the probe reports <code>Control::Memory</code> as enforced only when
+      <em>both</em> can be written &mdash; a cap without a swap bound is not the
+      control this crate says it is. With that, the 512&nbsp;MiB workload is
+      killed and the 16&nbsp;MiB one under a 256&nbsp;MiB cap still finishes,
+      which is what makes it evidence rather than a machine that happened to be
+      out of memory.
+    </p>
+  </div>
+  <p>
+    Both tests skip honestly where the controller is not delegated, and say
+    which one. Unprivileged, the suite still passes with the two skips visible;
+    privileged, it is 30 of 30 with the confinement actually demonstrated.
+  </p>
+
+</section>
+
+<section>
   <h2>An interrupt path that cannot work, and the three examples that said so</h2>
   <p>
     Running the examples nobody ran turned up three that fail

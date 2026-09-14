@@ -4,7 +4,7 @@
 //!
 //! | Control | Mechanism |
 //! | --- | --- |
-//! | [`Control::Memory`] | `memory.max` in a cgroup v2 the workload is placed in before `exec` |
+//! | [`Control::Memory`] | `memory.max` *and* `memory.swap.max` in a cgroup v2 the workload is placed in before `exec` |
 //! | [`Control::ProcessCount`] | `pids.max` in the same cgroup, plus `RLIMIT_NPROC` |
 //! | [`Control::CpuTime`] | `RLIMIT_CPU`, which the kernel turns into `SIGKILL` |
 //! | [`Control::WallClock`] | this crate, killing the process group |
@@ -130,8 +130,11 @@ pub(super) fn probe() -> Controls {
             } else {
                 controls.without(
                     Control::Memory,
-                    "the memory controller is not delegated to this cgroup; enable it in the \
-                     parent's cgroup.subtree_control",
+                    "the memory controller is not delegated here. Enabling it in the \
+                     caller's own cgroup.subtree_control will not work -- cgroup v2 \
+                     refuses that for any cgroup holding processes -- so either run \
+                     from a cgroup that already delegates it, or grant write access \
+                     to a parent that does",
                 )
             };
             controls = if available.pids {
@@ -139,8 +142,11 @@ pub(super) fn probe() -> Controls {
             } else {
                 controls.without(
                     Control::ProcessCount,
-                    "the pids controller is not delegated to this cgroup; enable it in the \
-                     parent's cgroup.subtree_control",
+                    "the pids controller is not delegated here. Enabling it in the \
+                     caller's own cgroup.subtree_control will not work -- cgroup v2 \
+                     refuses that for any cgroup holding processes -- so either run \
+                     from a cgroup that already delegates it, or grant write access \
+                     to a parent that does",
                 )
             };
         }
@@ -800,18 +806,66 @@ impl CgroupScope {
         Ok(root.join(relative))
     }
 
-    /// Create a fresh child cgroup.
+    /// Create a fresh cgroup for one sandboxed workload.
+    ///
+    /// A child of our own cgroup first, which is what a delegated subtree wants
+    /// -- a container runtime hands you a directory and everything you make
+    /// belongs inside it.
+    ///
+    /// That placement cannot work on an ordinary host, though, and the reason
+    /// is a kernel rule rather than a misconfiguration. cgroup v2 refuses to
+    /// enable a controller in `cgroup.subtree_control` for any cgroup that
+    /// holds processes -- the "no internal process" rule -- and the cgroup a
+    /// caller is sitting in holds, at minimum, the caller. So a child of it can
+    /// never have `memory.max`. On this machine `/init.scope` holds fourteen
+    /// processes and the kernel refuses the write outright.
+    ///
+    /// So: fall back to a *sibling*, a child of the parent. The parent holds no
+    /// processes of its own in the usual arrangement, which is exactly the
+    /// condition that lets it delegate. This is what makes memory and
+    /// process-count limits available on a normal systemd host instead of only
+    /// to a caller who has moved itself into the root cgroup.
+    ///
+    /// Neither attempt escapes anything: creating a cgroup requires write
+    /// permission on the directory, so an unprivileged caller that cannot write
+    /// the parent simply gets the same honest "not delegated" report it got
+    /// before.
     fn create() -> std::io::Result<Self> {
         let seq = SCRATCH_SEQ.fetch_add(1, Ordering::Relaxed);
-        let path = Self::current()?.join(format!("hv2-sandbox-{}-{seq}", std::process::id()));
-        std::fs::create_dir_all(&path)?;
-        Ok(Self { path })
+        let name = format!("hv2-sandbox-{}-{seq}", std::process::id());
+        let current = Self::current()?;
+
+        let child = current.join(&name);
+        if std::fs::create_dir_all(&child).is_ok() {
+            let scope = Self { path: child };
+            // Delegated or not is decided by whether the controls can be
+            // written, not by where the directory is. A child that cannot take
+            // a limit is no better than no child.
+            if scope.write("memory.max", "max").is_ok() || scope.write("pids.max", "max").is_ok() {
+                return Ok(scope);
+            }
+            let _ = std::fs::remove_dir(&scope.path);
+        }
+
+        let parent = current
+            .parent()
+            .filter(|p| p.starts_with("/sys/fs/cgroup"))
+            .ok_or_else(|| std::io::Error::other("no parent cgroup to place a sibling in"))?;
+        let sibling = parent.join(&name);
+        std::fs::create_dir_all(&sibling)?;
+        Ok(Self { path: sibling })
     }
 
     /// Find out which controllers a fresh cgroup can actually use.
     fn probe() -> std::io::Result<Delegated> {
         let scope = Self::create()?;
-        let memory = scope.write("memory.max", "max").is_ok();
+        // Both halves, because a cap without a swap bound is not the control
+        // this crate says it is. A host that can write one and not the other
+        // reports `Control::Memory` as unenforced rather than as a limit a
+        // workload can swap around.
+        let memory = scope.write("memory.max", "max").is_ok()
+            && (!scope.path.join("memory.swap.max").exists()
+                || scope.write("memory.swap.max", "max").is_ok());
         let pids = scope.write("pids.max", "max").is_ok();
         Ok(Delegated { memory, pids })
     }
@@ -857,6 +911,30 @@ pub(super) fn run(
                     source: e,
                 }
             })?;
+            // `memory.max` on its own is not a ceiling, it is a ceiling on
+            // *resident* memory. Pages pushed past it are swapped rather than
+            // refused, so on any host with swap a workload walks straight
+            // through its limit: 512 MiB touched under a 64 MiB cap finished
+            // normally and reported success, on a machine with 12 GiB of swap.
+            //
+            // `memory.swap.max` is what makes it hard. Zero, because a limit a
+            // workload can exceed by being slow about it is not what
+            // `Control::Memory` says it is -- "a hard ceiling on the memory the
+            // workload may commit".
+            //
+            // A kernel built without swap accounting has no such file. That is
+            // not a silent downgrade: with no swap controller there is no swap
+            // to escape into on the paths this runs on, and the write is
+            // allowed to fail only for that reason.
+            let swap = scope.path.join("memory.swap.max");
+            if swap.exists() {
+                scope.write("memory.swap.max", "0").map_err(|e| {
+                    SandboxError::ConfinementFailed {
+                        control: Control::Memory,
+                        source: e,
+                    }
+                })?;
+            }
         }
         if let Some(max) = spec.max_processes {
             scope.write("pids.max", &max.to_string()).map_err(|e| {

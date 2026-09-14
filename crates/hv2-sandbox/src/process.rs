@@ -439,6 +439,122 @@ mod tests {
         sandbox.run(&command, &spec).expect("run")
     }
 
+    /// Turns this test binary into a memory hog when the Linux memory-limit
+    /// test re-executes it.
+    ///
+    /// It *touches* what it allocates, which is the whole point on Linux:
+    /// `memory.max` does not refuse a mapping, it accounts pages as they are
+    /// faulted in and kills the cgroup when the charge exceeds the cap. A
+    /// helper that only called `malloc` would sail past any limit.
+    #[cfg(target_os = "linux")]
+    const HOG_HELPER_MIB: &str = "HV2_SANDBOX_HOG_HELPER_MIB";
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn hog_helper() {
+        let Ok(requested) = std::env::var(HOG_HELPER_MIB) else {
+            return;
+        };
+        let mib: usize = requested.parse().expect("a megabyte count");
+        let mut held: Vec<Vec<u8>> = Vec::new();
+        for _ in 0..mib {
+            // One megabyte at a time, written to, so every page is charged to
+            // the cgroup rather than left as an untouched reservation.
+            let mut chunk = vec![0u8; 1024 * 1024];
+            for page in chunk.chunks_mut(4096) {
+                page[0] = 1;
+            }
+            held.push(chunk);
+        }
+        println!("COMMITTED {mib}");
+    }
+
+    /// Run [`hog_helper`] under `cap` bytes, asking it to touch `ask` MiB.
+    #[cfg(target_os = "linux")]
+    fn hog_confined(sandbox: &ProcessSandbox, cap: u64, ask: usize) -> SandboxOutput {
+        let exe = std::env::current_exe().expect("this test binary's own path");
+        let command = SandboxCommand::new(exe.to_string_lossy())
+            .args(["--exact", "process::tests::hog_helper", "--nocapture"])
+            .env(HOG_HELPER_MIB, ask.to_string());
+        let spec = SandboxSpec {
+            memory_bytes: Some(cap),
+            wall_clock: Some(Duration::from_secs(60)),
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+        sandbox.run(&command, &spec).expect("run")
+    }
+
+    /// The Linux half of the memory limit, which had no test at all.
+    ///
+    /// `linux.rs` implements namespaces, `pivot_root` and the cgroup v2 caps,
+    /// and every confinement test in this module that touches memory or
+    /// process count was `#[cfg(windows)]`. So `Control::Memory` was reported
+    /// as enforced here on the strength of a successful write to `memory.max`
+    /// and nothing else -- the same shape of evidence the Windows test was
+    /// written to replace.
+    ///
+    /// Skips honestly where the controller is not delegated, which is most
+    /// unprivileged hosts; see `CgroupScope::create` for why that happens and
+    /// what it now does about it.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_memory_limit_kills_a_workload_that_touches_past_it() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::Memory) {
+            eprintln!("skipping: the memory controller is not delegated to this cgroup");
+            return;
+        }
+
+        // Well over the cap, and touched, so the charge is real.
+        let over = hog_confined(&sandbox, 64 * 1024 * 1024, 512);
+        assert!(
+            !String::from_utf8_lossy(&over.stdout).contains("COMMITTED"),
+            "a workload 8x over its cap should not have finished: {over:?}"
+        );
+        assert!(
+            over.signal.is_some() || over.exit_code.is_some_and(|c| c != 0),
+            "it should have been killed or have failed, not succeeded: {over:?}"
+        );
+
+        // The other direction, and the reason this is evidence rather than a
+        // coincidence: the same helper under a cap above what it asks for is
+        // allowed to finish. A one-sided test also passes on a machine that
+        // simply could not allocate.
+        let under = hog_confined(&sandbox, 256 * 1024 * 1024, 16);
+        assert!(
+            String::from_utf8_lossy(&under.stdout).contains("COMMITTED 16"),
+            "16 MiB under a 256 MiB cap should have been allowed: {under:?}"
+        );
+    }
+
+    /// The pids controller, same reasoning.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_limit_stops_the_workload_spawning_past_it_on_linux() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::ProcessCount) {
+            eprintln!("skipping: the pids controller is not delegated to this cgroup");
+            return;
+        }
+
+        // `sh` itself is one process; the `sh -c` it tries to start is the
+        // second, and pids.max=1 is what refuses it. Nothing in this crate is
+        // consulted at that moment, which is the point.
+        let command = SandboxCommand::new("/bin/sh").args(["-c", "/bin/sh -c 'echo nested'"]);
+        let spec = SandboxSpec {
+            max_processes: Some(1),
+            wall_clock: Some(Duration::from_secs(30)),
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+        let out = sandbox.run(&command, &spec).expect("run");
+        assert!(
+            !String::from_utf8_lossy(&out.stdout).contains("nested"),
+            "the nested shell should not have run under pids.max=1: {out:?}"
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn a_memory_limit_stops_the_workload_allocating_past_it() {
