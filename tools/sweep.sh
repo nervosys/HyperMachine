@@ -125,16 +125,29 @@ EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-49}"
 MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled throughput "
 
 # Known not to run unattended here, each with its reason. This is the one place
-# a failure can hide, so every entry names why rather than just listing a name,
-# and three of them are defects rather than requirements.
+# a failure can hide, so every entry names why, and the reasons were measured
+# rather than assumed -- an earlier version of this list called eight of these
+# "long-running demos" on the strength of a 90-second timeout that was being
+# spent on rustc rather than on the example. Built first, they all finish
+# inside a second, five of them cleanly. Those five run now.
+#
 #   pic_timer_interrupts  Windows-gated; tools/sweep.ps1 builds it
 #   linux_boot_probe      wants a bzImage argument
 #   guest_exec_probe      wants a bzImage and an initramfs
+#
+#   advanced              pause a vCPU that was never started:
+#   basic                 "Cannot pause vCPU 0 in state Uninitialized"
+#
+#   agent_mcp_workflow    expects a snapshot host to be installed. The library
+#                         refuses correctly -- "an identifier handed back here
+#                         would refer to nothing" -- and the example expect()s
+#                         success rather than handling it.
+#
 #   exit_handling         inject_interrupt cannot work on KVM -- see below
 #   interrupt_demo        same
 #   vm_with_interrupts    same
 #
-# Those three are one defect, not three. `create_vm` calls
+# Those last three are one defect, not three. `create_vm` calls
 # `kvm_create_irqchip`, so the PIC is in the kernel, and `inject_interrupt`
 # issues KVM_INTERRUPT, which KVM only accepts when the irqchip is in
 # userspace -- it returns ENXIO otherwise, which is what they print. Guest
@@ -142,12 +155,8 @@ MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled through
 # (KVM_IRQ_LINE), which is correct for an in-kernel irqchip. Fixing these
 # means choosing which of the two irqchips is real, so it is a decision
 # rather than a patch.
-#   advanced agent_boots_a_vm agent_mcp_workflow agent_runtime agent_script
-#   basic cold_start agent_vm_workflow
-#                         long-running demos; they do not terminate on their own
-SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe exit_handling \
-interrupt_demo vm_with_interrupts advanced agent_boots_a_vm agent_mcp_workflow \
-agent_runtime agent_script basic cold_start agent_vm_workflow "
+SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe advanced basic \
+agent_mcp_workflow exit_handling interrupt_demo vm_with_interrupts "
 
 examples=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
     python3 -c "
