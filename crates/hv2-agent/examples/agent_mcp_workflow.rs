@@ -22,6 +22,31 @@ use serde_json::{json, Value};
 ///
 /// Written as a macro so it expands inline in the async `main` (keeping the
 /// `.await` in scope) without needing to name internal session types.
+/// A call that is *expected* to be refused, and prints the refusal.
+///
+/// `call!` asserts success, which is right for a tool that works. It is wrong
+/// for one the project deliberately refuses: the panic hides the reason, which
+/// is the only interesting thing about it.
+macro_rules! try_call {
+    ($server:expr, $session:expr, $tool:expr, $params:expr) => {{
+        let response = $session.call_tool(&$server, $tool, $params).await;
+        if response.success {
+            println!(
+                "  → {:<16} {}",
+                $tool,
+                response.result.clone().unwrap_or(Value::Null)
+            );
+        } else {
+            println!(
+                "  → {:<16} refused: {}",
+                $tool,
+                response.error.clone().unwrap_or_default()
+            );
+        }
+        response
+    }};
+}
+
 macro_rules! call {
     ($server:expr, $session:expr, $tool:expr, $params:expr) => {{
         let response = $session.call_tool(&$server, $tool, $params).await;
@@ -120,21 +145,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     call!(server, session, "vm.metrics", json!({ "vm_id": vm_id }));
     call!(server, session, "vm.status", json!({ "vm_id": vm_id }));
 
-    // 6. Snapshot before a risky change.
+    // 6. Snapshot before a risky change -- and this is where the workflow
+    //    stops being a demonstration and becomes a finding.
+    //
+    //    There is no snapshot host in this project. `snapshot.create` used to
+    //    mint an identifier, record a name and a timestamp, and capture no
+    //    memory, no disk and no device state; the id looked real enough to hand
+    //    to `snapshot.restore`. So the agent plan below -- snapshot, try the
+    //    risky thing, roll back if it fails -- was a no-op that reported
+    //    success at every step, which is worse than not having it.
+    //
+    //    It refuses now, and the refusal is the thing worth showing.
     println!("\n[snapshot]");
-    let snap = call!(
+    let snap = try_call!(
         server,
         session,
         "snapshot.create",
         json!({ "vm_id": vm_id, "snapshot_name": "pre-scale" })
     );
-    let snapshot_id = snap["snapshot_id"]
-        .as_str()
-        .expect("snapshot.create returns a snapshot_id")
+    let snapshot_id = snap
+        .result
+        .as_ref()
+        .and_then(|r| r["snapshot_id"].as_str())
+        .unwrap_or("no-snapshot-was-taken")
         .to_string();
 
-    // 7. Scale up, then roll back to the snapshot — demonstrating safe,
-    //    reversible agent-driven changes.
+    // 7. Scale up, then attempt the rollback. The resize is real; the
+    //    rollback is refused for the reason above, so what this section
+    //    actually demonstrates is that a change made here is *not* reversible
+    //    on this build. An agent planning around that needs to know it.
     println!("\n[scale + rollback]");
     call!(
         server,
@@ -142,7 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "vm.resize",
         json!({ "vm_id": vm_id, "cpu_cores": 16, "memory_gb": 64 })
     );
-    call!(
+    try_call!(
         server,
         session,
         "snapshot.restore",
@@ -164,6 +203,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    println!("\n✅ workload complete — provisioned, ran, snapshotted, scaled, rolled back, and cleaned up.");
+    // Deliberately not a tick. The workflow ran end to end and two of its
+    // steps were refused, which the audit above records as ok=false. A
+    // closing line claiming it "snapshotted and rolled back" would
+    // contradict the log printed immediately before it, which is the exact
+    // failure this example now exists to show rather than commit.
+    let refused = audit.iter().filter(|e| !e.success).count();
+    println!(
+        "\nworkload complete \u{2014} provisioned, ran, scaled and cleaned up; {refused} of {} steps refused, and nothing was rolled back because nothing was captured.",
+        audit.len()
+    );
     Ok(())
 }

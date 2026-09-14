@@ -145,11 +145,6 @@ MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled through
 #                         Note that start() returns Ok and state() reports
 #                         Running throughout, which is how this went unnoticed.
 #
-#   agent_mcp_workflow    expects a snapshot host to be installed. The library
-#                         refuses correctly -- "an identifier handed back here
-#                         would refer to nothing" -- and the example expect()s
-#                         success rather than handling it.
-#
 #   exit_handling         inject_interrupt cannot work on KVM -- see below
 #   interrupt_demo        same
 #   vm_with_interrupts    same
@@ -163,7 +158,7 @@ MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled through
 # means choosing which of the two irqchips is real, so it is a decision
 # rather than a patch.
 SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe advanced basic \
-agent_mcp_workflow exit_handling interrupt_demo vm_with_interrupts "
+exit_handling interrupt_demo vm_with_interrupts "
 
 examples=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
     python3 -c "
