@@ -2394,6 +2394,77 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
 </section>
 
 <section>
+  <h2>The cold start was 57% two device probes</h2>
+  <p>
+    <code>examples/cold_start</code> had been reporting <em>"usable: not
+    measured &mdash; supply a kernel and an initramfs"</em>, so the figure
+    comparable to a published cold start did not exist. Both artefacts turned
+    out to be sitting in <code>/var/tmp/kbuild</code>, built in some earlier
+    session, at exactly the paths the example's own documentation names. One
+    environment variable:
+  </p>
+  <pre>launch     17.86 ms      the hypervisor's share
+ready     942.49 ms      the guest becoming answerable
+usable    <b>960.75 ms</b>      P50 938, P95 1045</pre>
+  <p>
+    So <strong>98% of an agent's cold start was the guest</strong>, not this
+    project. Against a published microVM cold start of roughly 125&nbsp;ms that
+    is worth attacking, and the guest's own log says where:
+  </p>
+  <pre>260.8 ms   Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+258.9 ms   i8042: If AUX port is really absent please use 'i8042.noaux'
+------
+519.7 ms   of a 914 ms kernel boot &mdash; <b>57%</b>, spent looking for a PS/2
+           controller that is not there and three UARTs that are not either</pre>
+  <p>
+    The kernel prints the remedy for the second one itself. Applying it moved
+    the cold start to <strong>705.60&nbsp;ms, a saving of 255&nbsp;ms or
+    26.6%</strong>, with the hypervisor's own <code>running</code> figure
+    unchanged at 18&nbsp;ms &mdash; which is the control, because only the guest
+    was touched.
+  </p>
+  <div class="callout">
+    <h3>The half that did not work, and the run that had to be thrown away</h3>
+    <p>
+      <code>8250.nr_uarts=1</code> takes the reported ports from four to one and
+      saves <em>nothing</em>: the 260&nbsp;ms is a fixed cost inside the probe of
+      the single port that remains. <code>8250.skip_txen_test=1</code> saves
+      nothing either (257&nbsp;ms against 262). Whether that cost belongs to the
+      kernel or to this project's own 8250 emulation is not established, and it
+      is the obvious next 260&nbsp;ms.
+    </p>
+    <p>
+      The confirmation run after moving the flags into the library came out at
+      877&nbsp;ms with a P95 of 1716, and was discarded rather than reported:
+      the <code>running</code> phase, which no change here touches, had moved
+      from 18.2&nbsp;ms to 32.2&nbsp;ms. A control that moves 76% means the run
+      measured the host. The host was at 68&ndash;100% at the time. What the
+      refactor <em>can</em> be shown to preserve is the command line itself,
+      which is byte-identical to the one that produced 705.60&nbsp;ms &mdash; an
+      equivalence by construction, which is better evidence than a benchmark
+      taken on a busy machine.
+    </p>
+  </div>
+  <p>
+    The arguments live in <code>BootSource::MICROVM_FAST_BOOT_ARGS</code> with
+    that measurement beside them, rather than in the example that happened to
+    find them. They are not applied automatically: a caller that wants a PS/2
+    device should get one. Before this, every caller supplied its own command
+    line and would have had to rediscover half a second of probe time
+    independently.
+  </p>
+  <p>
+    <strong>Lightweight</strong> needed no work and is worth stating next to
+    this. Ten concurrent unikernels cost <strong>0.195&nbsp;MiB each</strong>
+    &mdash; 0.182 marginal &mdash; over a 3.10&nbsp;MiB baseline, with
+    10&nbsp;GiB of address space reserved and almost none of it resident. The
+    example also checks that all ten guests actually executed, because a VM that
+    never ran is not a sandbox and its cost is not an overhead figure.
+  </p>
+
+</section>
+
+<section>
   <h2>A memory limit a workload could swap straight through</h2>
   <p>
     <code>hv2-sandbox</code> is built around one rule, stated in its own

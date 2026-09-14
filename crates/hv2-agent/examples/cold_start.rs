@@ -163,7 +163,13 @@ async fn one(opts: Arc<Options>, index: usize) -> Result<Sample, String> {
         (Some(kernel), initrd) => builder.boot_linux(
             kernel,
             initrd.as_ref(),
-            "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0",
+            // `MICROVM_FAST_BOOT_ARGS` is what the second half of this line
+            // is for, and why it is worth 255 ms; the measurement is beside
+            // the constant.
+            format!(
+                "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}",
+                hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS
+            ),
         ),
         (None, _) => builder,
     };

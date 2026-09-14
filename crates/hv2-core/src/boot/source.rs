@@ -148,6 +148,58 @@ impl BootSource {
         self
     }
 
+    /// Kernel arguments that stop a guest probing hardware a microVM does not
+    /// have.
+    ///
+    /// Measured on a 6.6.52 guest under this hypervisor, timestamps from the
+    /// guest's own log, from power-on to `rdinit`:
+    ///
+    /// ```text
+    ///   260.8 ms  Serial: 8250/16550 driver, 4 ports, IRQ sharing enabled
+    ///   258.9 ms  i8042: If AUX port is really absent please use 'i8042.noaux'
+    ///   ------
+    ///   519.7 ms  of a 914 ms boot -- 57% of it, spent looking for a PS/2
+    ///             controller that is not there and three UARTs that are not
+    ///             either
+    /// ```
+    ///
+    /// These arguments remove the second of those. End to end, the agent
+    /// cold start went from **960.75 ms to 705.60 ms** -- 26.6% -- with the
+    /// hypervisor's own share unchanged at 18 ms, which is the control: only
+    /// the guest was touched.
+    ///
+    /// The first is *not* fixed by these, and the reason is written down
+    /// because it cost an experiment to find out: `8250.nr_uarts=1` reduces
+    /// the reported ports from four to one and saves nothing, and
+    /// `8250.skip_txen_test=1` saves nothing either. The 260 ms is a fixed
+    /// cost inside the probe of the one port that remains, and whether it
+    /// belongs to the kernel or to this project's own 8250 emulation is not
+    /// yet established.
+    ///
+    /// Not applied automatically. A caller who wants a PS/2 device, or four
+    /// UARTs, should get them.
+    pub const MICROVM_FAST_BOOT_ARGS: &'static str =
+        "8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd";
+
+    /// Append [`BootSource::MICROVM_FAST_BOOT_ARGS`] to the command line.
+    ///
+    /// Separate from [`BootSource::with_cmdline`] so that the arguments are a
+    /// decision a caller makes rather than something that happens to its
+    /// guest.
+    #[must_use]
+    pub fn with_fast_microvm_probes(mut self) -> Self {
+        match &mut self {
+            Self::Linux { cmdline, .. } | Self::Multiboot { cmdline, .. } => {
+                if !cmdline.is_empty() {
+                    cmdline.push(' ');
+                }
+                cmdline.push_str(Self::MICROVM_FAST_BOOT_ARGS);
+            }
+            Self::Raw { .. } => {}
+        }
+        self
+    }
+
     /// Set the kernel command line (Linux and Multiboot; ignored by `Raw`).
     #[must_use]
     pub fn with_cmdline(mut self, line: impl Into<String>) -> Self {
