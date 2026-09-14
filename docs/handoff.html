@@ -2926,8 +2926,8 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
     <li>
       <strong>The original item stands for what is left.</strong> CI runs
       <code>cargo test</code> on Linux, Windows, macOS and ARM, plus rustfmt,
-      clippy, docs and an MSRV check. It does not run a single one of the
-      sixteen examples &mdash; and the examples are where every claim on this
+      clippy, docs and an MSRV check. Of the <strong>49</strong> examples it
+      runs exactly one &mdash; and the examples are where every claim on this
       page comes from. hv1 hosting a guest, a model answering a sandbox, the
       queue queueing: all of it is verified by one person on one machine, by
       hand. Anyone reading this list should know that the numbers above have no
@@ -2935,8 +2935,9 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       <br><br>
       What it would take is a runner with <code>/dev/kvm</code>, nested SVM and
       a GGUF on local disk &mdash; a self-hosted box, or one of the larger
-      hosted runners that expose nested virtualisation. But the sixteen do not
-      all need the same thing, and sorting them says where to start:
+      hosted runners that expose nested virtualisation. But they do not all
+      need the same thing, and sorting the sixteen this page's measurements
+      come from says where to start:
       <pre>10  need /dev/kvm            the six hv2-core, and tool_calls, agent_messages,
                               vsock_swarm, in_flight
  2  need /dev/kvm and a model inference, scheduled
@@ -2965,7 +2966,7 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       had to be redone once the fixture existed to check it against. One example
       is automatable, not two. That one is now
       <code>example-queueing</code> in <code>ci.yml</code> &mdash; <strong>the
-      first of the sixteen that CI has ever run</strong>, and it happens to be
+      first of the 49 that CI has ever run</strong>, and it happens to be
       the one guarding the scheduler and the urgency built this session.
     </li>
     <li>
@@ -3008,7 +3009,7 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       itself unversioned, and each run of it was reconstructed from memory,
       which is how it came to be missing rustfmt for a while. Several of its
       steps are things CI does not do: <code>clippy --all-targets</code>,
-      <code>hv1-multiboot</code> at all, and the sixteen examples. It ends with
+      <code>hv1-multiboot</code> at all, and 35 of the 49 examples. It ends with
       <code>SWEEP OK</code> or <code>SWEEP FAILED</code> and nothing else, so a
       killed run is distinguishable from a passing one, which three results this
       session were nearly not.
