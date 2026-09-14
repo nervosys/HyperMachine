@@ -108,40 +108,94 @@ fi
 rm -f "$log"
 
 step "examples"
-# CI runs none of these, and they are where every measured claim comes from.
+# Discovered, not listed.
+#
+# This was a hardcoded list of sixteen, and the flaw showed up the way these
+# things do: somebody added a seventeenth example and the sweep went on
+# reporting success without it. Worse, the sixteen were never all of them --
+# `cargo metadata` reports 49 example targets, so a list maintained by hand was
+# covering a third of them and saying nothing about the rest.
+#
+# So the set is read from cargo, and anything new is run by default. That is the
+# safe direction: a new example should have to opt *out* of being checked, not
+# opt in.
+EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-49}"
+
+# The ones that take a model path. Everything else is run with no arguments.
+MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled throughput "
+
+# Known not to run unattended here, each with its reason. This is the one place
+# a failure can hide, so every entry names why rather than just listing a name,
+# and three of them are defects rather than requirements.
+#   pic_timer_interrupts  Windows-gated; tools/sweep.ps1 builds it
+#   linux_boot_probe      wants a bzImage argument
+#   guest_exec_probe      wants a bzImage and an initramfs
+#   exit_handling         stale: needs a guest loaded, not just a vCPU
+#   interrupt_demo        stale: injection returns ENXIO with no irqchip
+#   vm_with_interrupts    stale: same as exit_handling
+#   advanced agent_boots_a_vm agent_mcp_workflow agent_runtime agent_script
+#   basic cold_start agent_vm_workflow
+#                         long-running demos; they do not terminate on their own
+SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe exit_handling \
+interrupt_demo vm_with_interrupts advanced agent_boots_a_vm agent_mcp_workflow \
+agent_runtime agent_script basic cold_start agent_vm_workflow "
+
+examples=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
+    python3 -c "
+import json,sys
+md = json.load(sys.stdin)
+for p in md['packages']:
+    for t in p['targets']:
+        if t['kind'] == ['example']:
+            print(p['name'], t['name'])
+" | sort -k2)
+
+found=$(printf '%s\n' "$examples" | grep -c .)
+echo "  $found example targets"
+if [ "$found" -ne "$EXPECT_EXAMPLES" ]; then
+    bad "expected $EXPECT_EXAMPLES example targets, found $found -- an example
+       was added or removed. Run it, decide which list it belongs in, and move
+       this number."
+fi
+
 run() {
     local name="$1"
     shift
-    local out code
+    local out code failed
     out=$(timeout 600 cargo run --release "$@" 2>&1)
     code=$?
-    local failed
     failed=$(echo "$out" | grep -c FAILED)
-    printf '  %-16s exit=%d FAILED=%d\n' "$name" "$code" "$failed"
+    printf '  %-24s exit=%d FAILED=%d\n' "$name" "$code" "$failed"
     { [ "$code" -eq 0 ] && [ "$failed" -eq 0 ]; } || bad "example $name"
 }
 
-run unikernel_boot -p hv2-core --example unikernel_boot
-run rust_unikernel -p hv2-core --example rust_unikernel
-run multiboot_probe -p hv2-core --example multiboot_probe
-run vsock_echo -p hv2-core --example vsock_echo
-run halt_stop_probe -p hv2-core --example halt_stop_probe
-run hv1_under_hv2 -p hv2-core --example hv1_under_hv2
-run tool_calls -p hv2-swarm --example tool_calls
-run agent_messages -p hv2-swarm --example agent_messages
-run vsock_swarm -p hv2-swarm --example vsock_swarm
-run in_flight -p hv2-swarm --example in_flight
+ran=0
+skipped=0
+while read -r pkg name; do
+    [ -z "$name" ] && continue
+    case "$SKIP" in *" $name "*) skipped=$((skipped + 1)); continue ;; esac
+    case "$MODEL_EXAMPLES" in
+        *" $name "*)
+            if [ -n "$MODEL" ] && [ -f "$MODEL" ]; then
+                run "$name" -p "$pkg" --example "$name" -- "$MODEL"
+                ran=$((ran + 1))
+            else
+                skipped=$((skipped + 1))
+            fi
+            ;;
+        *)
+            run "$name" -p "$pkg" --example "$name"
+            ran=$((ran + 1))
+            ;;
+    esac
+done <<EOF
+$examples
+EOF
 
-if [ -n "$MODEL" ] && [ -f "$MODEL" ]; then
-    run bandwidth -p hv2-infer --example bandwidth -- "$MODEL"
-    run batched -p hv2-infer --example batched -- "$MODEL"
-    run generate -p hv2-infer --example generate -- "$MODEL"
-    run queueing -p hv2-infer --example queueing -- "$MODEL"
-    run inference -p hv2-swarm --example inference -- "$MODEL"
-    run scheduled -p hv2-swarm --example scheduled -- "$MODEL"
-else
-    echo "  (six examples skipped: no model given, so nothing here checked"
-    echo "   inference, the queue, or a swarm with weights in it)"
+echo "  ran $ran, skipped $skipped of $found"
+if [ -z "$MODEL" ] || [ ! -f "$MODEL" ]; then
+    echo "  (no model given, so nothing here checked inference, the queue, or a"
+    echo "   swarm with weights in it)"
 fi
 
 # A killed or truncated run prints no marker, and a run that printed no marker

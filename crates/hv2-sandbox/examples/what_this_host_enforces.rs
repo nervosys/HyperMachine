@@ -21,7 +21,11 @@ fn main() {
     let enforced = sandbox.controls();
 
     println!("backend: {}", sandbox.name());
-    println!("host:    {} / {}", std::env::consts::OS, std::env::consts::ARCH);
+    println!(
+        "host:    {} / {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
     println!();
 
     let mut have = Vec::new();
@@ -59,7 +63,10 @@ fn main() {
         Control::ProcessIsolation,
         Control::NoNewPrivileges,
     ];
-    let contained = containment.iter().filter(|c| enforced.enforces(**c)).count();
+    let contained = containment
+        .iter()
+        .filter(|c| enforced.enforces(**c))
+        .count();
     println!(
         "containment: {contained} of {} — {}",
         containment.len(),
