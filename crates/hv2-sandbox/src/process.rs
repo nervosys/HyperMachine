@@ -1023,6 +1023,69 @@ mod tests {
         }
     }
 
+    /// A deadline that kills the workload has to kill what the workload
+    /// started, or an agent platform accumulates orphans.
+    ///
+    /// The existing deadline test runs a single `sleep` and checks that it
+    /// dies. That says nothing about a workload with children, which is the
+    /// case that leaks: the shell is killed, the process it forked is
+    /// reparented to init, and nothing is left holding a reference to it. Ten
+    /// thousand agent runs later the host has ten thousand strays.
+    ///
+    /// Marked with a distinctive argument so the check can find exactly the
+    /// process this test started and nothing else on the machine.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_deadline_kill_takes_the_workload_s_children_with_it() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::WallClock) {
+            eprintln!("skipping: this host does not enforce a wall-clock deadline");
+            return;
+        }
+
+        // The marker is the *duration*, not an extra argument: `sleep` treats
+        // anything after the interval as another interval and exits, so a
+        // workload tagged that way dies instantly and the deadline never
+        // fires. An implausible number of seconds, derived from this process
+        // so two test runs cannot collide, is both unique and something sleep
+        // will accept.
+        let marker = 30_000 + (std::process::id() % 10_000);
+        // A shell that forks a child and then waits. The deadline fires while
+        // both are alive.
+        let script = format!("/bin/sleep {marker} & /bin/sleep {marker}");
+        let command = SandboxCommand::new("/bin/sh").args(["-c", &script]);
+        let spec = SandboxSpec {
+            wall_clock: Some(Duration::from_millis(300)),
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+
+        let out = sandbox.run(&command, &spec).expect("run");
+        assert_eq!(
+            out.killed_by,
+            Some(Control::WallClock),
+            "the workload should have been killed by its deadline: {out:?}"
+        );
+
+        // Give the kernel a moment to reap, then look for anything left.
+        std::thread::sleep(Duration::from_millis(400));
+        let survivors = std::process::Command::new("/bin/ps")
+            .args(["-eo", "args"])
+            .output()
+            .expect("ps");
+        let listing = String::from_utf8_lossy(&survivors.stdout);
+        let strays: Vec<&str> = listing
+            .lines()
+            .filter(|l| l.contains(&marker.to_string()) && !l.contains("ps -eo"))
+            .collect();
+        assert!(
+            strays.is_empty(),
+            "the deadline killed the workload and left {} of its processes \
+             behind: {strays:?}",
+            strays.len()
+        );
+    }
+
     #[test]
     fn a_workload_that_overruns_its_deadline_is_killed_and_says_so() {
         let sandbox = ProcessSandbox::new();

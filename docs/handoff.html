@@ -2539,6 +2539,26 @@ usable    <b>960.75 ms</b>      P50 938, P95 1045</pre>
     which one. Unprivileged, the suite still passes with the two skips visible;
     privileged, it is 30 of 30 with the confinement actually demonstrated.
   </p>
+  <p>
+    <strong>Reliability got the same treatment.</strong> The existing deadline
+    test runs a single <code>sleep</code> and checks it dies, which says nothing
+    about the case that actually leaks: a workload with children. The shell is
+    killed, the process it forked is reparented to init, and nothing holds a
+    reference to it &mdash; ten thousand agent runs later the host has ten
+    thousand strays. It <em>does</em> take its children with it, and there is a
+    test saying so now rather than an assumption. Cleanup is clean too: after
+    every privileged run in this section, including the ones that create cgroups
+    as siblings under the root, <code>/sys/fs/cgroup/hv2-sandbox-*</code> is
+    empty.
+  </p>
+  <p>
+    That test was wrong twice before it was right, which is worth one line: the
+    first version tagged its processes with a marker passed as an argument to
+    <code>sleep</code>, and <code>sleep</code> treats anything after the
+    interval as another interval &mdash; so the workload exited instantly, the
+    deadline never fired, and the failure looked like the sandbox's. The marker
+    is the duration now.
+  </p>
 
 </section>
 
