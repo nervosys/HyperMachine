@@ -130,9 +130,18 @@ MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled through
 #   pic_timer_interrupts  Windows-gated; tools/sweep.ps1 builds it
 #   linux_boot_probe      wants a bzImage argument
 #   guest_exec_probe      wants a bzImage and an initramfs
-#   exit_handling         stale: needs a guest loaded, not just a vCPU
-#   interrupt_demo        stale: injection returns ENXIO with no irqchip
-#   vm_with_interrupts    stale: same as exit_handling
+#   exit_handling         inject_interrupt cannot work on KVM -- see below
+#   interrupt_demo        same
+#   vm_with_interrupts    same
+#
+# Those three are one defect, not three. `create_vm` calls
+# `kvm_create_irqchip`, so the PIC is in the kernel, and `inject_interrupt`
+# issues KVM_INTERRUPT, which KVM only accepts when the irqchip is in
+# userspace -- it returns ENXIO otherwise, which is what they print. Guest
+# interrupt delivery is unaffected: `vm.rs` uses `set_irq_line`
+# (KVM_IRQ_LINE), which is correct for an in-kernel irqchip. Fixing these
+# means choosing which of the two irqchips is real, so it is a decision
+# rather than a patch.
 #   advanced agent_boots_a_vm agent_mcp_workflow agent_runtime agent_script
 #   basic cold_start agent_vm_workflow
 #                         long-running demos; they do not terminate on their own

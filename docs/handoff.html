@@ -291,7 +291,7 @@
   </p>
 
   <dl class="facts">
-    <div class="fact"><dt>Master</dt><dd>eafaa93</dd></div>
+    <div class="fact"><dt>Master</dt><dd>6b75b1b</dd></div>
     <div class="fact"><dt>Open PRs</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Open issues</dt><dd class="good">0</dd></div>
     <div class="fact"><dt>Cold start</dt><dd class="good">2.4 ms</dd></div>
@@ -2390,6 +2390,73 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
       by a prediction rather than by a failure.
     </p>
   </div>
+
+</section>
+
+<section>
+  <h2>An interrupt path that cannot work, and the three examples that said so</h2>
+  <p>
+    Running the examples nobody ran turned up three that fail
+    identically, and chasing why led somewhere further than stale example
+    code. <strong><code>HypervisorBackend::inject_interrupt</code> cannot
+    succeed on the KVM backend at all.</strong>
+  </p>
+  <p>
+    The chain is short and each link is in the tree:
+  </p>
+  <ul>
+    <li>
+      <code>KvmBackend::create_vm</code> calls <code>kvm_create_irqchip</code>,
+      so the PIC, IOAPIC and LAPIC live <em>in the kernel</em>.
+    </li>
+    <li>
+      <code>KvmVcpu::inject_interrupt</code> issues <code>KVM_INTERRUPT</code>,
+      which KVM accepts only when the irqchip is in <em>userspace</em>. With an
+      in-kernel one it returns <code>ENXIO</code>.
+    </li>
+    <li>
+      Which is exactly what the examples print:
+      <code>Failed to inject interrupt 32 into vCPU 0: No such device or address
+      (os error 6)</code>.
+    </li>
+  </ul>
+  <p>
+    So the examples fail <em>because</em> the irqchip was created successfully.
+    The comment beside that call reads "Non-fatal: some setups work without IRQ
+    chip" &mdash; and on a setup where it had failed, injection would have
+    worked. The healthy path is the one that breaks them.
+  </p>
+  <div class="callout">
+    <h3>What this does not mean</h3>
+    <p>
+      <strong>Guest interrupt delivery is fine.</strong> The VM path does not go
+      near <code>inject_interrupt</code>: <code>vm.rs</code> raises and lowers
+      lines through <code>set_irq_line</code>, which issues
+      <code>KVM_IRQ_LINE</code> &mdash; the correct ioctl for an in-kernel
+      irqchip, and the one the kernel PIC is waiting for. Every example that
+      boots a guest and takes interrupts, <code>hv1_under_hv2</code> included,
+      runs through that and passes.
+    </p>
+    <p>
+      What is dead is a second, vestigial entry point. On KVM its only callers
+      are the three broken examples and
+      <code>inject_exception</code>, whose default implementation delegates to
+      it &mdash; so exception injection inherits the same fault, and nothing
+      calls that either. The one test that covers
+      <code>inject_interrupt</code> exercises the TCG backend, which has its own
+      implementation and passes, which is why a green suite never mentioned any
+      of this.
+    </p>
+  </div>
+  <p>
+    The fix is a decision rather than a patch, which is why it is not made here.
+    A vector is not an IRQ line, so <code>inject_interrupt</code> cannot simply
+    forward to <code>set_irq_line</code>; either the examples move to the line
+    API and stop emulating a PIC that the kernel is already emulating, or the
+    backend stops creating an in-kernel irqchip and the userspace one becomes
+    real. Both are defensible and they are opposite. What is no longer true is
+    that nobody knew.
+  </p>
 
 </section>
 
