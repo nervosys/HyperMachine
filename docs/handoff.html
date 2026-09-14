@@ -2981,10 +2981,10 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       ran a hand-written list of sixteen, and the gap surfaced the way these
       always do: somebody added a seventeenth and the sweep kept reporting
       success without it. The list is discovered from cargo now and the default
-      is to run, so <strong>40 run and 9 are skipped, each with a measured
-      reason</strong>.
+      is to run, so <strong>41 run and 8 are skipped, each with a measured
+      reason</strong> &mdash; against sixteen when this started.
       <br><br>
-      Getting to 40 from 35 meant correcting this page's own survey. Eight
+      Getting there meant correcting this page's own survey twice. Eight
       examples were filed as "long-running demos that never terminate", which
       was inferred from a 90-second timeout wrapped around <code>cargo run</code>
       &mdash; so the clock was being spent on <code>rustc</code>, and anything
@@ -2995,6 +2995,27 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       started, and <code>agent_mcp_workflow</code> aborts because it expects a
       snapshot host to be installed &mdash; the library refuses correctly, and
       the example does not handle the refusal.
+      <br><br>
+      The last one recovered is worth its own line, because it was not a
+      missing feature. <code>agent_mcp_workflow</code> aborted on
+      <code>snapshot.create</code>, which this project <em>deliberately
+      refuses</em>: the tool used to mint an identifier, record a name and a
+      timestamp, and capture no memory, no disk and no device state, so an
+      agent's recovery plan &mdash; snapshot, try the risky thing, roll back
+      &mdash; was a no-op reporting success at every step. Somebody replaced
+      that receipt with an honest refusal and the example was never updated;
+      its step 7 is still headed "demonstrating safe, reversible agent-driven
+      changes", which this build cannot do. It shows the refusal now rather
+      than dying on it.
+      <br><br>
+      Fixing that crash created a second untruth in the same run, caught only
+      by reading the output: the example ended
+      <code>&#x2705; workload complete &mdash; provisioned, ran, snapshotted,
+      scaled, rolled back, and cleaned up</code>, two lines below an audit log
+      reading <code>snapshot.create ok=false</code>. The closing line is
+      computed from the audit now &mdash; "2 of 11 steps refused, and nothing
+      was rolled back because nothing was captured" &mdash; and there is no
+      tick on it.
       <br><br>
       Of the rest that had never been run: most were fine, two want a
       <code>&lt;bzImage&gt;</code>, one is Windows-gated, and
@@ -3090,7 +3111,7 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       itself unversioned, and each run of it was reconstructed from memory,
       which is how it came to be missing rustfmt for a while. Several of its
       steps are things CI does not do: <code>clippy --all-targets</code>,
-      <code>hv1-multiboot</code> at all, and 40 of the 49 examples. It ends with
+      <code>hv1-multiboot</code> at all, and 41 of the 49 examples. It ends with
       <code>SWEEP OK</code> or <code>SWEEP FAILED</code> and nothing else, so a
       killed run is distinguishable from a passing one, which three results this
       session were nearly not.
