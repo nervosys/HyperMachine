@@ -55,12 +55,21 @@ if cargo fmt --all -- --check >/dev/null 2>&1; then
 else
     bad "cargo fmt --all -- --check"
 fi
-# Not a workspace member, so --all does not reach it.
-if (cd crates/hv1-multiboot && cargo fmt -- --check >/dev/null 2>&1); then
-    echo "  hv1-multiboot clean"
-else
-    bad "cargo fmt in crates/hv1-multiboot"
-fi
+# The three crates in the root manifest's `exclude` list. `--all` means "every
+# workspace member", so none of them is reached by the command above, and until
+# this loop existed only hv1-multiboot was checked by anything: hv2-unikernel
+# was silently unformatted, and hv1-boot's manifest could not be parsed at all.
+#
+# rustfmt is the one check that works on all three. They target bare metal, so
+# there is no host build to run clippy against, and CI builds them by name with
+# their own targets and toolchains.
+for excluded in hv1-multiboot hv2-unikernel hv1-boot; do
+    if cargo fmt --manifest-path "crates/$excluded/Cargo.toml" -- --check >/dev/null 2>&1; then
+        echo "  $excluded clean"
+    else
+        bad "cargo fmt in crates/$excluded (a manifest that will not parse fails here too)"
+    fi
+done
 
 step "clippy"
 # --all-targets, which is what CI does not do: it is how tests, examples and

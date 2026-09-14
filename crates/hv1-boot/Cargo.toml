@@ -1,16 +1,27 @@
+# These are spelled out rather than inherited with `.workspace = true`.
+#
+# This package is in the root manifest's `exclude` list, and cargo will not let
+# a non-member inherit `workspace.package.*` -- so every cargo invocation
+# against this manifest, including the one in ci.yml, failed at parse time with
+# "error inheriting `rust-version` ... failed to find a workspace root". The CI
+# step carries `continue-on-error: true` and a comment attributing the failure
+# to nightly drift, so it has been reported as a known-flaky toolchain problem
+# rather than as a manifest that cannot be read at all.
+#
+# `hv2-unikernel`, excluded for the same reason, already spells its values out.
 [package]
 name = "hv1-boot"
-version.workspace = true
+version = "1.1.0"
 edition = "2024"  # stable since Rust 1.85; the nightly requirement here is
                   # the `bootloader` build script, which passes -Z flags
-rust-version.workspace = true
+rust-version = "1.95"
 publish = false
-authors.workspace = true
-license.workspace = true
-repository.workspace = true
-homepage.workspace = true
-keywords.workspace = true
-categories.workspace = true
+authors = ["HyperMachine Contributors"]
+license = "AGPL-3.0-only OR LicenseRef-Commercial"
+repository = "https://github.com/nervosys/HyperMachine"
+homepage = "https://github.com/nervosys/HyperMachine"
+keywords = ["hypervisor", "virtualization", "kvm", "ai-agent", "vm"]
+categories = ["virtualization", "os", "hardware-support"]
 description = "HyperMachine Type-1 Hypervisor Bootable Image"
 
 [[bin]]
@@ -37,5 +48,27 @@ default = ["intel", "amd"]
 intel = []
 amd = []
 
-[lints]
-workspace = true
+# Copied from the workspace rather than inherited, for the reason at the
+# top of this file: an excluded package cannot say `workspace = true`.
+[lints.rust]
+# Note: unsafe_code intentionally not warned — unsafe is inherent to hypervisor code.
+# unreachable_pub and unused_qualifications omitted — too noisy for internal crate items.
+unused_import_braces = "warn"
+
+[lints.clippy]
+# Correctness
+manual_clamp = "warn"
+manual_range_contains = "warn"
+needless_range_loop = "warn"
+useless_format = "warn"
+# Style
+single_match = "warn"
+let_and_return = "warn"
+map_entry = "warn"
+collapsible_if = "warn"
+doc_markdown = "allow"
+semicolon_if_nothing_returned = "warn"
+inefficient_to_string = "warn"
+# Complexity thresholds (allow via #[allow] where justified)
+type_complexity = "warn"
+too_many_arguments = "warn"

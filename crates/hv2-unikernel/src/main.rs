@@ -319,7 +319,6 @@ pub extern "C" fn kernel_main(magic: u64, info: u64) -> ! {
         }
     }
 
-
     // Everything above proves the guest was booted. Everything below is the
     // guest being an agent: a swarm message arrives over vsock, and the
     // answer goes back the same way.
@@ -681,7 +680,9 @@ fn payload_bytes(packet: &vsock::Packet) -> Vec<u8> {
     for i in 0..packet.payload_len {
         // SAFETY: inside the receive buffer the device wrote, bounded by the
         // length it reported.
-        out.push(unsafe { core::ptr::read_volatile((packet.payload_at + i as usize) as *const u8) });
+        out.push(unsafe {
+            core::ptr::read_volatile((packet.payload_at + i as usize) as *const u8)
+        });
     }
     out
 }

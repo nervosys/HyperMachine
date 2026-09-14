@@ -130,6 +130,34 @@ impl MicroVmSandbox {
         }
     }
 
+    /// Whether a requested memory ceiling is one this backend actually keeps
+    /// on a VM of `vm_bytes`.
+    ///
+    /// An associated function for the reason `declared_controls` is one: the
+    /// defect it guards was unreachable from a test while it lived inside
+    /// `run`, which needs a booted VM.
+    ///
+    /// **Exactly one value works.** This backend forwards a program, its
+    /// arguments and a deadline to the guest agent and nothing else, so a
+    /// number smaller than the VM's own memory never leaves the host and the
+    /// guest goes on using the whole VM. A number larger than it is not a
+    /// limit either. What the hardware keeps is the VM's size, and that is the
+    /// only ceiling this backend can honestly report.
+    pub fn memory_ceiling(requested: u64, vm_bytes: u64) -> Result<(), String> {
+        match requested {
+            r if r > vm_bytes => Err(format!(
+                "a {requested}-byte ceiling is larger than the VM's own {vm_bytes} bytes of \
+                 memory, so it would not be a limit"
+            )),
+            r if r < vm_bytes => Err(format!(
+                "a {requested}-byte ceiling is smaller than the VM's own {vm_bytes} bytes of \
+                 memory, and this backend cannot bound the guest below its own size: build the \
+                 VM with {requested} bytes, or set best_effort and read `unenforced`"
+            )),
+            _ => Ok(()),
+        }
+    }
+
     /// The VM this sandbox runs workloads in.
     pub fn vm(&self) -> Arc<AgentVM> {
         Arc::clone(&self.vm)
@@ -163,12 +191,12 @@ impl Sandbox for MicroVmSandbox {
             return Err(SandboxError::InvalidSpec("no program to run".to_string()));
         }
         if let Some(bytes) = spec.memory_bytes {
-            if bytes > self.memory_bytes {
-                return Err(SandboxError::InvalidSpec(format!(
-                    "a {bytes}-byte ceiling is larger than the VM's own {} bytes of memory, so \
-                     it would not be a limit",
-                    self.memory_bytes
-                )));
+            // A caller that said `best_effort` is asking to be told rather than
+            // refused; `unenforced` below is where it is told.
+            if let Err(why) = Self::memory_ceiling(bytes, self.memory_bytes) {
+                if !spec.best_effort {
+                    return Err(SandboxError::InvalidSpec(why));
+                }
             }
         }
         if let FilesystemPolicy::Isolated { .. } = spec.filesystem {
@@ -182,7 +210,18 @@ impl Sandbox for MicroVmSandbox {
                     .to_string(),
             ));
         }
-        let unenforced = spec.reconcile(&self.controls())?;
+        let mut unenforced = spec.reconcile(&self.controls())?;
+        // `controls()` cannot see the spec, so a ceiling below the VM's size is
+        // reported here instead: without this, `best_effort` came back with an
+        // empty list, which this crate defines as "every requested control was
+        // applied".
+        if spec
+            .memory_bytes
+            .is_some_and(|bytes| bytes < self.memory_bytes)
+            && !unenforced.contains(&Control::Memory)
+        {
+            unenforced.push(Control::Memory);
+        }
         debug_assert!(
             spec.network == NetworkPolicy::Host || !self.networked || spec.best_effort,
             "reconcile should have refused a network-isolated spec on a networked VM"
@@ -401,6 +440,38 @@ mod tests {
         assert!(
             controls.reason(Control::ProcessCount).is_some(),
             "and it must say why, rather than leaving the control silently absent"
+        );
+    }
+
+    /// The ceiling this backend reports has to be one it keeps.
+    ///
+    /// `Control::Memory` was claimed for any request at or below the VM's own
+    /// memory, and only the VM's size is kept: the cap never reaches the guest.
+    /// So a caller asking for 64 MiB on a 1 GiB VM got `unenforced` back empty,
+    /// which this crate defines as "every requested control was applied". The
+    /// same mistake `process_count_is_reported_as_unenforced_rather_than_claimed`
+    /// exists to prevent, one control over.
+    #[test]
+    fn a_ceiling_below_the_vm_s_own_memory_is_not_one_this_backend_keeps() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+
+        assert!(
+            MicroVmSandbox::memory_ceiling(GIB, GIB).is_ok(),
+            "a ceiling at the VM's own size is what the hardware keeps"
+        );
+
+        let under = MicroVmSandbox::memory_ceiling(64 * 1024 * 1024, GIB)
+            .expect_err("a 64 MiB ceiling on a 1 GiB VM is not kept by anything");
+        assert!(
+            under.contains("smaller") && under.contains("best_effort"),
+            "the refusal should say what is wrong and what to do instead: {under}"
+        );
+
+        let over = MicroVmSandbox::memory_ceiling(2 * GIB, GIB)
+            .expect_err("a ceiling larger than the VM is not a limit");
+        assert!(
+            over.contains("larger"),
+            "and the other direction should still say so: {over}"
         );
     }
 
