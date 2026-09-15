@@ -3035,6 +3035,101 @@ Microsoft-Hyper-V-All             Enabled</pre>
 </section>
 
 <section>
+  <h2>A guest with a network, and the one piece of it nobody had noticed</h2>
+  <p>
+    A consumer reported (<a
+    href="https://github.com/nervosys/HyperMachine/issues/95">#95</a>) that the
+    host side was further along than expected: <code>hv2-core</code> already
+    had a full virtio-net device model, tested, and nothing wired it to a
+    running VM. Three pieces left, on that reading &mdash; an
+    <code>attach_net</code> following <code>attach_vsock</code>, a guest
+    driver, and the glue to <code>hv2_net::nat</code> and a TAP device.
+  </p>
+  <p>
+    It was four, and the extra one is the interesting part. <em>Neither
+    existing <code>VirtioNet</code> can ride the transport
+    <code>attach_vsock</code> uses.</em>
+  </p>
+  <pre>VirtioMmioTransport::new  takes  Arc&lt;Mutex&lt;dyn VirtioMmioDevice&gt;&gt;
+                          and a VirtioMmioDevice keeps GuestQueues:
+                          descriptor, available and used ring <b>addresses</b>,
+                          walked in guest memory on every kick
+
+devices::virtio::VirtioNet implements the older VirtioDevice, and keeps
+                          rings as Vec&lt;VirtqDesc&gt; &mdash; host-side copies,
+                          with a tx_buffer its own comment marks "for testing".
+                          A guest writing its ring in guest memory would not
+                          be talking to it at all.
+
+hv2_net::virtio::VirtioNet  has guest memory, but behind hv2_net's own
+                          GuestMemory <b>trait</b> rather than this crate's
+                          type, and implements neither virtio trait here.</pre>
+  <p>
+    Before this, <code>VsockDevice</code> was the only non-stub
+    <code>VirtioMmioDevice</code> in the tree &mdash; the only device a guest
+    could really drive. So the first piece was a second one:
+    <code>VirtioNetMmio</code>, deliberately the same shape, so that two
+    devices differ in what they carry rather than in how they are built. Its
+    tests drive real rings in guest memory, which is the whole distinction
+    from the two models above.
+  </p>
+  <p>
+    The other three then went as the issue said they would.
+    <code>VM::attach_net</code> is <code>attach_vsock_at</code> with the
+    device swapped, down to the delivery thread &mdash; the piece worth not
+    rediscovering, since a frame queued by the host sits in the device until
+    something moves it into a buffer the driver posted, and on an idle guest
+    nothing ever does. That lesson had already cost vsock a published API
+    which queued a connection request no guest saw and then reported the guest
+    was not running.
+  </p>
+  <pre>window  0xd002_0000   past both vsock windows, so a VM can carry both
+IRQ     6             <b>not</b> the vsock line: a shared line wakes each driver
+                      for the other's traffic, and a driver that finds
+                      nothing often enough looks like one that does not work</pre>
+  <p>
+    The guest driver is <code>vsock.rs</code> with three differences worth
+    reading: a twelve-byte header rather than forty-four, buffers sized for a
+    frame, and both feature banks written with something &mdash; the MAC bit
+    is in the low bank, where vsock had nothing to say. The MAC is negotiated
+    rather than merely read, because configuration space carries it only if
+    <code>VIRTIO_NET_F_MAC</code> was accepted. <strong>No offloads are
+    accepted</strong>, and that is correctness rather than economy: a driver
+    that tells a device it can checksum sends frames with the checksum left
+    out, and nothing on the other side fills them in.
+  </p>
+  <p>
+    The bridge polls in one direction and not the other, and the asymmetry is
+    real. A frame the host offers wakes the guest, through the hook
+    <code>attach_net</code> installs. A frame the guest sends arrives during
+    the guest's own kick &mdash; on the vCPU thread, inside the device lock,
+    with nothing that could be notified from there. A frame NAT declines is
+    dropped and counted rather than passed through, because an untranslated
+    frame carries the guest's private source address onto the host's network,
+    where the reply has nowhere to come back to: a link that works for
+    everything except what it was built for, intermittently.
+  </p>
+  <div class="callout">
+    <h3>What of this has actually been run</h3>
+    <p>
+      Twenty-three tests &mdash; nine on the device, nine on the attach, five
+      on the bridge &mdash; and the ones that matter drive real virtqueues in
+      guest memory rather than asserting on host-side structures. The guest
+      driver has none, and cannot: the unikernel is a freestanding binary with
+      no test harness, so everything it claims is a claim about
+      <code>rustc</code>. What has <em>not</em> happened is any of it carrying
+      a packet: no guest has booted this driver, and no frame has crossed a real
+      TAP device, which needs <code>CAP_NET_ADMIN</code> and a configured host
+      interface. The device, the attach, the driver and the bridge are each
+      verified against the piece on either side of them, and the chain as a
+      whole is not verified at all. That is the same gap this page's last two
+      sections describe, arriving in a new place.
+    </p>
+  </div>
+
+</section>
+
+<section>
   <h2>What to do next</h2>
   <ul>
     <li>
@@ -3193,6 +3288,18 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       into a <code>VCpu::new(0)</code> descriptor that no <code>create_vm</code>
       ever registered. Supplying the missing call moves the error to ENXIO
       rather than fixing it: they want a guest and an irqchip too.
+    </li>
+    <li>
+      <strong>Boot the net driver and put a packet through it.</strong> Four
+      pieces now exist and none has carried a frame end to end &mdash; see
+      above. Two separate things are wanted and they are not the same
+      difficulty: booting the unikernel with <code>attach_net</code> and
+      watching the link-layer echo come back needs only a host with
+      <code>/dev/kvm</code>, which this one has; joining the bridge to a real
+      TAP device needs <code>CAP_NET_ADMIN</code> and an interface somebody
+      configured, which is a change to a machine rather than to this
+      repository. Do the first before the second: an echo that never returns
+      localises the fault to the guest, and doing them together does not.
     </li>
     <li>
       <strong>The original item stands for what is left.</strong> CI runs
