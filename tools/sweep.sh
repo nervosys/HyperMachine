@@ -158,16 +158,18 @@ MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled through
 #   interrupt_demo        same
 #   vm_with_interrupts    same
 #
-# Those last three are one defect, not three. `create_vm` calls
-# `kvm_create_irqchip`, so the PIC is in the kernel, and `inject_interrupt`
-# issues KVM_INTERRUPT, which KVM only accepts when the irqchip is in
-# userspace -- it returns ENXIO otherwise, which is what they print. Guest
-# interrupt delivery is unaffected: `vm.rs` uses `set_irq_line`
-# (KVM_IRQ_LINE), which is correct for an in-kernel irqchip. Fixing these
-# means choosing which of the two irqchips is real, so it is a decision
-# rather than a patch.
-SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe advanced basic \
-exit_handling interrupt_demo vm_with_interrupts "
+# `exit_handling`, `interrupt_demo` and `vm_with_interrupts` used to be here,
+# as one defect rather than three: `create_vm` calls `kvm_create_irqchip`, so
+# the PIC is in the kernel, and `inject_interrupt` issues KVM_INTERRUPT, which
+# KVM accepts only when the irqchip is in userspace. Fixing them meant deciding
+# which of the two irqchips is real.
+#
+# It is the in-kernel one, and that was not close: `create_vm` builds it on
+# every VM, `vm.rs` delivers every device interrupt through `set_irq_line`, and
+# every example that runs a guest depends on it. So the three examples were
+# wrong, not the hypervisor, and they now raise lines instead of vectors. They
+# run.
+SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe advanced basic "
 
 examples=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
     python3 -c "

@@ -708,6 +708,15 @@ pub struct KvmVm {
     vcpus: RwLock<Vec<Arc<KvmVcpu>>>,
     /// Size of kvm_run mmap region
     run_mmap_size: usize,
+    /// Whether `KVM_CREATE_IRQCHIP` succeeded, so the PIC, IOAPIC and LAPIC
+    /// are inside the kernel.
+    ///
+    /// Recorded rather than assumed because it decides which of two mutually
+    /// exclusive ways of delivering an interrupt is the one that works, and
+    /// the failure when they are confused is `ENXIO` from an ioctl several
+    /// layers below whoever made the choice. See
+    /// [`KvmVcpu::inject_interrupt`].
+    irqchip_in_kernel: bool,
 }
 
 impl KvmVm {
@@ -805,10 +814,14 @@ impl KvmVm {
             }
 
             // Create IRQ chip (PIC, IOAPIC, LAPIC)
-            if let Err(e) = kvm_create_irqchip(vm_fd) {
-                tracing::warn!("Failed to create IRQ chip: {}. Interrupts may not work.", e);
-                // Non-fatal: some setups work without IRQ chip
-            }
+            let irqchip_in_kernel = match kvm_create_irqchip(vm_fd) {
+                Ok(_) => true,
+                Err(e) => {
+                    tracing::warn!("Failed to create IRQ chip: {}. Interrupts may not work.", e);
+                    // Non-fatal: some setups work without IRQ chip
+                    false
+                }
+            };
 
             // Create PIT (timer)
             let pit_config = kvm_pit_config {
@@ -828,6 +841,7 @@ impl KvmVm {
                 guest_memory,
                 vcpus: RwLock::new(Vec::new()),
                 run_mmap_size,
+                irqchip_in_kernel,
             })
         }
     }
@@ -841,7 +855,12 @@ impl KvmVm {
             )));
         }
 
-        let vcpu = Arc::new(KvmVcpu::new(self.vm_fd, vcpu_id, self.run_mmap_size)?);
+        let vcpu = Arc::new(KvmVcpu::new(
+            self.vm_fd,
+            vcpu_id,
+            self.run_mmap_size,
+            self.irqchip_in_kernel,
+        )?);
 
         // A freshly created vCPU has no CPUID configuration at all, and KVM
         // does not supply one: the guest's CPUID instruction reports a CPU with
@@ -1196,6 +1215,13 @@ pub struct KvmVcpu {
     /// Set by [`KvmVcpu::kick`]; read by the `EINTR` arm of [`KvmVcpu::run`]
     /// before it retries the ioctl.
     kick: AtomicBool,
+    /// Whether this VM's interrupt controller is in the kernel, copied from
+    /// the VM that made this vCPU.
+    ///
+    /// Carried here rather than reached for through the VM because
+    /// [`KvmVcpu::inject_interrupt`] is the one place it decides anything, and
+    /// a vCPU that could not answer the question would have to refuse or guess.
+    irqchip_in_kernel: bool,
     /// The thread currently inside `KVM_RUN`, or `0` when none is.
     ///
     /// Cleared on the way out so a kick can never signal a thread that has
@@ -1216,7 +1242,7 @@ impl Drop for TidGuard<'_> {
 
 impl KvmVcpu {
     /// Create a new vCPU
-    fn new(vm_fd: RawFd, vcpu_id: u32, mmap_size: usize) -> Result<Self> {
+    fn new(vm_fd: RawFd, vcpu_id: u32, mmap_size: usize, irqchip_in_kernel: bool) -> Result<Self> {
         // SAFETY: `vm_fd` is a valid KVM VM fd. We create a vCPU via ioctl,
         // then mmap the `kvm_run` structure (shared with the kernel). The
         // mmap region is `MAP_SHARED` so the kernel can update exit info.
@@ -1268,6 +1294,7 @@ impl KvmVcpu {
                 vcpu_id,
                 run,
                 mmap_size,
+                irqchip_in_kernel,
                 kick: AtomicBool::new(false),
                 tid: AtomicI32::new(0),
             })
@@ -1566,8 +1593,39 @@ impl KvmVcpu {
         }
     }
 
-    /// Inject an interrupt
+    /// Inject an interrupt directly into this vCPU.
+    ///
+    /// # This cannot work on a VM with an in-kernel irqchip
+    ///
+    /// `KVM_INTERRUPT` puts a vector into a vCPU's own interrupt queue, which
+    /// KVM permits only when the interrupt controller lives in *userspace*.
+    /// With the controller in the kernel &mdash; which is what
+    /// `KvmVm::new` creates, and what every VM this backend builds has
+    /// &mdash; the kernel owns the vectoring, and the ioctl answers `ENXIO`.
+    ///
+    /// The two are not a preference. A vector is what a *controller* produces
+    /// from a line, and which vector a line produces is the guest's choice:
+    /// it programs the PIC's offset. So a host holding a line number cannot
+    /// convert it to a vector, and a host holding a vector is describing a
+    /// decision the in-kernel controller has already made differently.
+    ///
+    /// What works instead is to raise the *line* and let the controller do its
+    /// job: [`HypervisorBackend::set_irq_line`],
+    /// which is what `vm.rs` uses for every device in this repository.
+    ///
+    /// # Errors
+    ///
+    /// Refuses, naming the alternative, when the irqchip is in the kernel.
+    /// Otherwise propagates what `KVM_INTERRUPT` says.
     pub fn inject_interrupt(&self, vector: u8) -> Result<()> {
+        if self.irqchip_in_kernel {
+            return Err(Error::Hypervisor(format!(
+                "cannot inject vector {vector:#x} directly: this VM's interrupt controller is \
+                 in the kernel, so KVM_INTERRUPT is refused (ENXIO). Raise the interrupt line \
+                 instead -- set_irq_line(irq, true) -- and let the in-kernel PIC decide the \
+                 vector, which is the guest's choice rather than the host's"
+            )));
+        }
         // SAFETY: `self.vcpu_fd` is a valid vCPU fd. The `kvm_interrupt`
         // struct is stack-allocated and properly initialized with the vector.
         unsafe {

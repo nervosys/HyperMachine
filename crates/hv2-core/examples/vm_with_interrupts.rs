@@ -7,32 +7,46 @@
 //! 4. Injects interrupts into the guest when pending
 
 use hv2_core::{
-    hypervisor::create_backend, Device, HypervisorBackend, Pic8259, SerialDevice, TimerDevice,
-    VMConfig, VmExit, VM,
+    hypervisor::create_backend, HypervisorBackend, Pic8259, SerialDevice, TimerDevice, VMConfig, VM,
 };
 use std::sync::Arc;
 use tracing::{info, Level};
 
-async fn initialize_pic(pic: &mut Pic8259) -> Result<(), Box<dyn std::error::Error>> {
+/// Where `initialize_pic` below remaps the master PIC's lines.
+///
+/// Named because two places depend on it and they must not drift: the ICW2
+/// written into the controller, and the subtraction that recovers a line
+/// number from a vector.
+const PIC_VECTOR_BASE: u8 = 0x20;
+
+/// Program the controller: remap the lines and unmask them.
+///
+/// Through `write_port`, which takes `&self`, rather than the `Device::write`
+/// this used before. That mattered for a reason beyond taste: `Device::write`
+/// needs `&mut self`, an `Arc<Pic8259>` cannot give one, and so the only
+/// controller this function could be pointed at was a fresh one it owned --
+/// never the VM's. The interior mutability was already there; the `&mut`
+/// receiver was what hid it.
+async fn initialize_pic(pic: &Pic8259) -> Result<(), Box<dyn std::error::Error>> {
     // ICW1: Start initialization
-    pic.write(0x20, &[0x11]).await?;
-    pic.write(0xA0, &[0x11]).await?;
+    pic.write_port(0x20, 0x11).await?;
+    pic.write_port(0xA0, 0x11).await?;
 
     // ICW2: Set base interrupt vectors
-    pic.write(0x21, &[0x20]).await?; // Master: 0x20-0x27
-    pic.write(0xA1, &[0x28]).await?; // Slave: 0x28-0x2F
+    pic.write_port(0x21, PIC_VECTOR_BASE).await?; // Master: 0x20-0x27
+    pic.write_port(0xA1, 0x28).await?; // Slave: 0x28-0x2F
 
     // ICW3: Configure cascade
-    pic.write(0x21, &[0x04]).await?; // Master: IRQ2 has slave
-    pic.write(0xA1, &[0x02]).await?; // Slave: cascade identity
+    pic.write_port(0x21, 0x04).await?; // Master: IRQ2 has slave
+    pic.write_port(0xA1, 0x02).await?; // Slave: cascade identity
 
     // ICW4: Set mode
-    pic.write(0x21, &[0x01]).await?; // 8086 mode
-    pic.write(0xA1, &[0x01]).await?;
+    pic.write_port(0x21, 0x01).await?; // 8086 mode
+    pic.write_port(0xA1, 0x01).await?;
 
     // OCW1: Unmask all interrupts
-    pic.write(0x21, &[0x00]).await?;
-    pic.write(0xA1, &[0x00]).await?;
+    pic.write_port(0x21, 0x00).await?;
+    pic.write_port(0xA1, 0x00).await?;
 
     Ok(())
 }
@@ -45,8 +59,23 @@ async fn vm_execution_loop(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("--- VM Execution Loop with Interrupts ---\n");
 
-    let vcpu = vm.vcpu(0).unwrap();
     let pic = vm.pic();
+
+    // A VM on the backend, because an interrupt line belongs to one. Without
+    // this the calls below reach a backend that has created nothing, and the
+    // answer is "vCPU 0 not found" rather than anything about interrupts.
+    //
+    // This is a second, bare VM beside the `VM` above, which is what this
+    // example has always done -- it holds a `VM` for its devices and a
+    // backend for its hypervisor, and the two were never joined.
+    let backend_vm = match backend.create_vm(1, 16 * 1024 * 1024).await {
+        Ok(vm) => Some(vm),
+        Err(e) => {
+            info!("No hypervisor VM: {e}");
+            info!("Device interrupts will be shown on the model only.\n");
+            None
+        }
+    };
 
     // Enable timer interrupts
     timer.set_interrupt_enabled(true);
@@ -70,9 +99,24 @@ async fn vm_execution_loop(
         if let Some(vector) = pic.get_pending_interrupt() {
             info!("  → Pending interrupt: vector {:#x}", vector);
 
-            // Inject interrupt into guest
-            backend.inject_interrupt(&vcpu, vector).await?;
-            info!("  → Interrupt injected into guest");
+            // Back to the line the vector came from. This program can do that
+            // only because it programmed the controller itself, a few lines
+            // up: the offset is its own choice. A host that had not made that
+            // choice could not perform this subtraction, which is the whole
+            // reason a vector cannot be handed to a hypervisor whose
+            // controller lives in the kernel.
+            let irq = u32::from(vector).saturating_sub(u32::from(PIC_VECTOR_BASE));
+
+            if backend_vm.is_some() {
+                // Asserted and released. The devices behind these lines are
+                // edge-like -- a UART that transmits instantly is always ready
+                // to send -- so holding the line would re-interrupt forever.
+                backend.set_irq_line(irq, true).await?;
+                backend.set_irq_line(irq, false).await?;
+                info!("  → IRQ {irq} pulsed on the in-kernel controller");
+            } else {
+                info!("  → IRQ {irq} would be pulsed, if a VM existed to own it");
+            }
 
             // Acknowledge interrupt (CPU would do this after handling)
             pic.acknowledge_interrupt(vector)?;
@@ -83,60 +127,10 @@ async fn vm_execution_loop(
             info!("  → EOI sent (simulated by guest)");
         }
 
-        // Run vCPU (simulated - would normally execute guest code)
-        match backend.run_vcpu(&vcpu).await? {
-            VmExit::Hlt => {
-                info!("  Guest executed HLT");
-                // Check for interrupts to wake from halt
-                if pic.get_pending_interrupt().is_some() {
-                    info!("  → Waking from HLT for interrupt");
-                    continue;
-                }
-                // No interrupt, just continue
-            }
-
-            VmExit::Io {
-                port,
-                direction,
-                size,
-                data,
-            } => {
-                info!(
-                    "  Guest I/O: port={:#x}, direction={:?}, size={}, data={:#x}",
-                    port, direction, size, data
-                );
-
-                // Handle PIC I/O ports
-                if port == 0x20 || port == 0x21 || port == 0xA0 || port == 0xA1 {
-                    info!("    → PIC register access");
-                }
-            }
-
-            VmExit::Mmio {
-                phys_addr,
-                is_write,
-                len,
-                ..
-            } => {
-                info!(
-                    "  Guest MMIO: addr={:#x}, write={}, len={}",
-                    phys_addr, is_write, len
-                );
-            }
-
-            VmExit::Shutdown => {
-                info!("  Guest requested shutdown");
-                break;
-            }
-
-            VmExit::InterruptWindow => {
-                info!("  Interrupt window opened");
-            }
-
-            exit => {
-                info!("  Other exit: {:?}", exit);
-            }
-        }
+        // No `run_vcpu` here. There is no guest code in this VM, so running it
+        // would execute whatever zeroed memory decodes to, and the exit it
+        // produced would say nothing about interrupts. The examples that run a
+        // real guest are `hv1_under_hv2`, `vsock_echo` and `net_echo`.
 
         // Small delay to make output readable
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
@@ -173,9 +167,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pic = vm.pic();
     info!("PIC available from VM");
 
-    // Initialize PIC
-    let mut pic_mut = Pic8259::new();
-    initialize_pic(&mut pic_mut).await?;
+    // Initialize the VM's PIC -- the one the devices below are wired to.
+    //
+    // This used to build a fresh `Pic8259`, program *that*, and drop it. So
+    // the controller the timer and serial port actually raise lines on was
+    // left masked and un-remapped, and `get_pending_interrupt` on it could
+    // never return anything: the interrupt branch of the loop below had
+    // never once been entered, in an example whose subject is interrupts.
+    initialize_pic(&pic).await?;
     info!("PIC initialized\n");
 
     // Create hypervisor backend

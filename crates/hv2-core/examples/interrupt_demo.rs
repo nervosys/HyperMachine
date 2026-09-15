@@ -3,7 +3,7 @@
 //! This example demonstrates the Intel 8259 PIC (Programmable Interrupt Controller)
 //! and how hardware interrupts work in HyperMachine.
 
-use hv2_core::{hypervisor::create_backend, Device, Pic8259, VCpu};
+use hv2_core::{hypervisor::create_backend, Device, Pic8259};
 use tracing::{info, Level};
 
 #[tokio::main]
@@ -182,37 +182,81 @@ async fn demonstrate_slave_interrupts(pic: &mut Pic8259) -> Result<(), Box<dyn s
     Ok(())
 }
 
+/// Raise a device interrupt the way this hypervisor actually raises one.
+///
+/// This function used to ask the backend to inject a *vector*, and it could
+/// never have worked. `create_vm` calls `KVM_CREATE_IRQCHIP`, so the PIC,
+/// IOAPIC and LAPIC are inside the kernel; `KVM_INTERRUPT` puts a vector into
+/// a vCPU's queue and KVM permits it only when the controller is in
+/// userspace. It answers `ENXIO` otherwise. (Before that it did not even get
+/// far enough to be told so: the vCPU came from `VCpu::new(0)`, which no
+/// `create_vm` had ever registered, so the backend reported "vCPU 0 not
+/// found".)
+///
+/// The two are not a matter of taste. A vector is what a *controller* makes
+/// out of a line, and which vector a given line produces is the guest's
+/// choice -- it programs the PIC's offset, and the guest in this repository's
+/// unikernel picks `0x20`. A host that holds a line number cannot know the
+/// vector, and a host that holds a vector is asserting a decision the
+/// in-kernel controller has already made for itself.
+///
+/// So the line is raised and lowered, and the controller does its job. This
+/// is what `vm.rs` does for every real device -- the serial port, vsock, and
+/// now virtio-net.
 async fn demonstrate_vm_interrupt_loop(
     pic: &mut Pic8259,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("--- VM Interrupt Loop (Simulated) ---\n");
+    info!("--- VM Interrupt Loop ---\n");
 
     let backend = create_backend()?;
-    let vcpu = VCpu::new(0);
 
-    info!("Simulating VM execution with interrupts...\n");
+    // A real VM, because an IRQ line belongs to one. This is also what
+    // registers a vCPU: the version of this example that skipped it failed
+    // with "vCPU 0 not found" before it could reach anything interesting.
+    let vm = match backend.create_vm(1, 16 * 1024 * 1024).await {
+        Ok(vm) => vm,
+        Err(e) => {
+            info!("No VM could be created: {e}");
+            info!("Interrupt lines belong to a VM, so there is nothing to raise here.");
+            return Ok(());
+        }
+    };
+    let _ = &vm;
+
+    info!("Raising IRQ 0 five times, through the interrupt controller\n");
 
     for tick in 0..5 {
         info!("Tick {}", tick);
 
-        // Simulate timer interrupt every tick
+        // The host's own model, which is what a device in this repository
+        // talks to when the controller is *not* in the hypervisor.
         pic.raise_irq(0)?;
-        info!("  Timer raised IRQ 0");
+        info!("  Timer raised IRQ 0 on the userspace model");
 
-        // Check for pending interrupts
+        // And the line itself. Asserted and then deasserted, because the
+        // virtio line is level-triggered: a line raised and left raised is
+        // re-entered forever, which is the defect this pair prevents.
+        match backend.set_irq_line(0, true).await {
+            Ok(()) => {
+                backend.set_irq_line(0, false).await?;
+                info!("  IRQ 0 asserted and deasserted on the in-kernel controller");
+                info!("  The vector is the controller's to choose, not this program's");
+            }
+            Err(e) => {
+                // A backend with no irqchip says so rather than dropping it.
+                info!("  This backend cannot drive an interrupt line: {e}");
+            }
+        }
+
+        // The userspace model still has to be told the interrupt was taken,
+        // or its next `get_pending_interrupt` reports the same one.
         if let Some(vector) = pic.get_pending_interrupt() {
-            info!("  Injecting interrupt vector {:#x}", vector);
-
-            // Inject interrupt into vCPU
-            backend.inject_interrupt(&vcpu, vector).await?;
-
-            // Acknowledge interrupt
             pic.acknowledge_interrupt(vector)?;
-
-            // In a real VM, the guest would handle the interrupt
-            // and send EOI when done
             pic.write(0x20, &[0x20]).await?;
-            info!("  Interrupt delivered and EOI'd");
+            info!(
+                "  Userspace model: vector {:#x} acknowledged and EOI'd",
+                vector
+            );
         }
 
         info!("");

@@ -5,7 +5,7 @@
 
 use hv2_core::{
     hypervisor::{create_backend, HypervisorBackend},
-    IoDirection, VCpu, VmExit,
+    IoDirection, VmExit,
 };
 use tracing::{info, Level};
 
@@ -80,17 +80,43 @@ async fn demonstrate_exit_loop(
 ) -> Result<(), Box<dyn std::error::Error>> {
     info!("\n--- VM Execution Loop (Simulated) ---\n");
 
-    // Create a dummy vCPU
-    let vcpu = VCpu::new(0);
+    // The exits a guest produces, and what each one is answered with.
+    //
+    // These are named here rather than run out of a vCPU, and that is a
+    // correction rather than a shortcut. This loop used to call
+    // `backend.run_vcpu(&vcpu)` on a `VCpu::new(0)` that no `create_vm` had
+    // ever registered, so it failed at the first iteration with "vCPU 0 not
+    // found" and none of the handling below had ever executed. Giving it a
+    // real VM would fix the error and produce a different lie: a VM with no
+    // guest image in it runs whatever zeroed memory decodes to, and the exit
+    // that comes back says nothing about the case it is standing in for.
+    //
+    // What this example is actually for is the mapping from exit to response.
+    // So the exits are stated, and the mapping is real. The examples that run
+    // a guest and take its exits for real are `hv1_under_hv2`, `vsock_echo`
+    // and `net_echo`.
+    let exits = vec![
+        VmExit::Hlt,
+        VmExit::Io {
+            port: 0x3f8,
+            direction: IoDirection::Out,
+            size: 1,
+            data: u32::from(b'h'),
+        },
+        VmExit::Mmio {
+            phys_addr: 0xd000_0000,
+            data: [0; 8],
+            len: 4,
+            is_write: false,
+        },
+        VmExit::InterruptWindow,
+        VmExit::Shutdown,
+    ];
 
-    info!("Starting VM execution loop...");
+    info!("Walking the exits a guest produces...");
 
-    // Simulate a few iterations of the VM execution loop
-    for iteration in 0..5 {
+    for (iteration, exit) in exits.into_iter().enumerate() {
         info!("\nIteration {}", iteration + 1);
-
-        // Run vCPU until it exits
-        let exit = backend.run_vcpu(&vcpu).await?;
         info!("  Exit reason: {}", exit);
 
         // Handle the exit
@@ -140,17 +166,22 @@ async fn demonstrate_exit_loop(
             }
 
             VmExit::Hlt => {
-                info!("  Guest halted, checking for pending interrupts...");
-                // In real implementation:
-                // if let Some(vector) = interrupt_controller.get_pending() {
-                //     backend.inject_interrupt(&vcpu, vector).await?;
-                // } else {
-                //     tokio::time::sleep(Duration::from_millis(1)).await;
-                // }
-
-                // For demo, just simulate injecting an interrupt
-                info!("  Injecting simulated timer interrupt (vector 32)");
-                backend.inject_interrupt(&vcpu, 32).await?;
+                info!("  Guest halted, so something must wake it");
+                // A halted vCPU is woken by an interrupt, and an interrupt
+                // reaches it through the controller. Not `inject_interrupt`,
+                // which this used to call: that hands a *vector* to a vCPU,
+                // and KVM permits it only when the controller is in userspace.
+                // Every VM this backend builds has one in the kernel, so the
+                // ioctl answers ENXIO. The line is what the host holds; the
+                // vector is the controller's to produce.
+                info!("  Pulsing IRQ 0, the timer line");
+                match backend.set_irq_line(0, true).await {
+                    Ok(()) => {
+                        backend.set_irq_line(0, false).await?;
+                        info!("  The controller decides which vector that becomes");
+                    }
+                    Err(e) => info!("  This backend drives no interrupt line: {e}"),
+                }
             }
 
             VmExit::Shutdown => {
@@ -206,13 +237,6 @@ async fn demonstrate_exit_loop(
             _ => {
                 info!("  Unhandled exit: {:?}", exit);
             }
-        }
-
-        // In a real implementation, we would continue the loop
-        // For this demo, we'll break after showing the pattern
-        if iteration >= 2 {
-            info!("\n  (Demo complete - would continue running in production)");
-            break;
         }
     }
 
