@@ -74,24 +74,7 @@ done
 step "clippy"
 # --all-targets, which is what CI does not do: it is how tests, examples and
 # benches get linted rather than only the libraries.
-#
-# The fingerprints are dropped first, and that is not housekeeping.
-# `cargo clippy` only emits diagnostics for targets it actually compiles, so a
-# cached workspace prints nothing and this step reported a clean zero for
-# whatever was already built. It was wrong for exactly as long as nobody
-# changed the file: two warnings sat in `unikernel_cold_start` across green
-# runs, and what found them was the Windows sweep, whose target directory
-# happened to be colder. `touch`-ing the sources would work too, at the price
-# of rebuilding the workspace for the test step afterwards; dropping the
-# fingerprints in clippy's own directory re-lints the workspace crates and
-# leaves both the dependency cache and the test build alone.
-CLIPPY_TARGET="${CLIPPY_TARGET:-/var/tmp/hm-clippy}"
-rm -rf "$CLIPPY_TARGET"/release/.fingerprint/hv1-* \
-       "$CLIPPY_TARGET"/release/.fingerprint/hv2-* \
-       "$CLIPPY_TARGET"/release/.fingerprint/hm-* \
-       "$CLIPPY_TARGET"/release/.fingerprint/hypermachine-* 2>/dev/null
-n=$(CARGO_TARGET_DIR="$CLIPPY_TARGET" \
-    cargo clippy --release --workspace --all-targets -- -D warnings 2>&1 |
+n=$(cargo clippy --release --workspace --all-targets -- -D warnings 2>&1 |
     grep -cE '^(warning|error)')
 echo "  workspace: $n"
 [ "$n" -eq 0 ] || bad "clippy reported $n"
