@@ -65,12 +65,29 @@ pub struct TapLink {
 impl TapLink {
     /// Open the TAP device described by `config`.
     ///
+    /// The frames either side of this are bare Ethernet, so `vnet_hdr` must be
+    /// off. `TapConfig` defaults it *on*, which is right for a caller handing
+    /// the kernel virtio frames whole and wrong here: the device has already
+    /// stripped the header on the way out and puts one back on the way in. A
+    /// mismatch is not an error anything reports -- every frame is simply
+    /// offset by twelve bytes, in both directions, and looks like corruption.
+    /// So it is refused rather than quietly corrected, because a caller who
+    /// set it meant something by it.
+    ///
     /// # Errors
     ///
-    /// Propagates whatever the platform says about creating the interface —
-    /// which on Linux is usually a permissions answer, since `/dev/net/tun`
-    /// needs `CAP_NET_ADMIN` or an interface someone already made.
+    /// Refuses a config with `vnet_hdr` set. Otherwise propagates whatever the
+    /// platform says about the interface — on Linux usually a permissions
+    /// answer, since creating one needs `CAP_NET_ADMIN`. An interface someone
+    /// already made persistent and owns needs no privilege at all, which is
+    /// the arrangement worth having.
     pub async fn open(config: crate::tap::TapConfig) -> Result<Self> {
+        if config.vnet_hdr {
+            return Err(crate::NetError::Config(
+                "a bridge carries bare Ethernet frames, so this TAP device must be opened                  without a vnet header: TapConfig::with_vnet_hdr(false)"
+                    .to_string(),
+            ));
+        }
         let mut tap = crate::tap::TapDevice::new(config);
         tap.create().await?;
         Ok(Self { tap })

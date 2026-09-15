@@ -3136,10 +3136,43 @@ round trip    :   17.4 ms</pre>
       So the chain from host to guest and back is verified end to end, on
       hardware, and the two devices coexist in a running machine rather than
       only in a unit test. What remains unverified is the last link: no frame
-      has crossed a real TAP device, which needs <code>CAP_NET_ADMIN</code>
-      and an interface somebody configured &mdash; a change to a machine
-      rather than to this repository, like <code>HypervisorPlatform</code>
-      above.
+      has crossed a real TAP device.
+    </p>
+    <p>
+      That one is <em>smaller</em> than it looked, and the reason is worth
+      knowing. Creating a TAP interface needs <code>CAP_NET_ADMIN</code>;
+      <em>opening</em> one that already exists and is owned by the calling user
+      needs nothing at all. So the privileged part is two lines, once, and
+      every run after them is ordinary:
+    </p>
+    <pre>sudo ip tuntap add dev hm0 mode tap user "$USER"
+sudo ip link set hm0 up</pre>
+    <p>
+      <code>tap_bridge</code> is the example waiting for that. Without the
+      interface it prints those two lines and exits successfully, because a
+      host with no TAP device is a fact about the host &mdash; the same shape
+      as the examples needing <code>/dev/kvm</code>. It was run here and took
+      that path, on a measured <code>EPERM</code> rather than a guessed one.
+      <strong>Its other path has never run</strong>, which puts it in exactly
+      the category the rest of this page complains about, and it is said here
+      rather than left to be discovered.
+    </p>
+    <p>
+      One thing it will not claim even then: the return direction against a
+      real peer. Reading a TAP fd yields frames the <em>kernel</em> transmits
+      out that interface, and a kernel with no address and no route on it
+      transmits nothing. That needs an addressed, routed interface and is a
+      different claim.
+    </p>
+    <p>
+      A defect fell out of writing it, before any interface existed to find it
+      the expensive way. <code>TapConfig</code> defaults
+      <code>vnet_hdr</code> to <em>true</em>, and a bridge carries bare
+      Ethernet &mdash; the device strips the virtio header on the way out and
+      puts one back on the way in. Nothing reports a mismatch: every frame is
+      simply offset by twelve bytes in both directions and looks like memory
+      corruption. <code>TapLink::open</code> now refuses such a config rather
+      than quietly correcting it, because a caller who set it meant something.
     </p>
   </div>
 
@@ -3306,16 +3339,16 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       rather than fixing it: they want a guest and an irqchip too.
     </li>
     <li>
-      <strong>Join the bridge to a real TAP device.</strong> The half of this
-      that needed only <code>/dev/kvm</code> is done &mdash;
-      <code>net_echo</code> boots the driver and a frame makes the round trip
-      in 17&nbsp;ms, see above. What is left is the outside world:
-      <code>TapLink</code> has never opened a TAP device, so everything from
-      <code>hv2_net::nat</code> outward is still a claim about
-      <code>rustc</code>. It needs <code>CAP_NET_ADMIN</code> and a configured
-      host interface. Worth doing in that order precisely because it was:
-      an echo that failed would have been the guest, and there is now no
-      question left about the guest.
+      <strong>Run the two <code>ip tuntap</code> lines, then
+      <code>tap_bridge</code>.</strong> Everything that needed only
+      <code>/dev/kvm</code> is done &mdash; <code>net_echo</code> boots the
+      driver and a frame makes the round trip in 17&nbsp;ms. What is left is
+      the outside world, and it now costs two commands rather than a project:
+      a persistent TAP device owned by the user, after which nothing needs
+      privilege. The example is written and takes its skip path here on a
+      measured <code>EPERM</code>; its success path has never run. That is the
+      last thing on this page about networking that is still a claim about
+      <code>rustc</code>, and it is one <code>sudo</code> away from not being.
     </li>
     <li>
       <strong>The original item stands for what is left.</strong> CI runs

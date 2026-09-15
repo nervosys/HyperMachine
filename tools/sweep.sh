@@ -122,13 +122,13 @@ step "examples"
 # This was a hardcoded list of sixteen, and the flaw showed up the way these
 # things do: somebody added a seventeenth example and the sweep went on
 # reporting success without it. Worse, the sixteen were never all of them --
-# `cargo metadata` reports 50 example targets, so a list maintained by hand was
+# `cargo metadata` reports 51 example targets, so a list maintained by hand was
 # covering a third of them and saying nothing about the rest.
 #
 # So the set is read from cargo, and anything new is run by default. That is the
 # safe direction: a new example should have to opt *out* of being checked, not
 # opt in.
-EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-50}"
+EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-51}"
 
 # The ones that take a model path. Everything else is run with no arguments.
 MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled throughput "
