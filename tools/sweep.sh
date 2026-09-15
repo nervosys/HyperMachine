@@ -89,6 +89,22 @@ n=$(RUSTDOCFLAGS="-D warnings" CARGO_TARGET_DIR=/var/tmp/hm-doc \
 echo "  errors: $n"
 [ "$n" -eq 0 ] || bad "rustdoc reported $n errors"
 
+step "unreachable states"
+# A guard that requires a state nothing ever writes. rustc cannot see this on a
+# `pub` enum, and the one it hid -- VM::pause(), which could never succeed on
+# any VM -- was found by hand. This is that search, kept.
+if command -v python3 >/dev/null 2>&1; then
+    out=$(python3 tools/find-unreachable-states.py 2>&1)
+    code=$?
+    echo "$out" | sed -n '2p' | sed 's/^/  /'
+    [ "$code" -eq 0 ] || {
+        echo "$out" | grep '^NEW' | sed 's/^/  /'
+        bad "a guard requires a state nothing constructs; see tools/find-unreachable-states.py"
+    }
+else
+    echo "  skipped: no python3"
+fi
+
 step "tests"
 log="$(mktemp)"
 cargo test --release --workspace >"$log" 2>&1

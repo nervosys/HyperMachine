@@ -907,12 +907,31 @@ impl Workflow {
         self.tasks.push(task);
     }
 
-    /// Get ready tasks (dependencies satisfied)
+    /// The tasks whose dependencies are all satisfied and which have not been
+    /// taken up yet.
+    ///
+    /// # What this used to do
+    ///
+    /// It also required `state == TaskState::Ready`, which made it circular:
+    /// nothing in this crate ever sets `Ready`, so the answer was whatever the
+    /// caller had already marked ready -- and marking a task ready means
+    /// having decided the question this function exists to answer. A caller
+    /// who built tasks as `Pending`, which is what the state is called for a
+    /// task nobody has looked at, got an empty list forever.
+    ///
+    /// So readiness is computed rather than demanded. `Ready` is still
+    /// accepted, because a caller who marked a task ready is entitled to see
+    /// it come back; it is no longer required.
+    ///
+    /// A dependency naming a task that is not in this workflow holds the
+    /// dependent back indefinitely. That is deliberate: the alternative is to
+    /// treat an unknown id as satisfied, and a typo in a dependency list would
+    /// then run the task early rather than not at all.
     pub fn get_ready_tasks(&self) -> Vec<&WorkflowTask> {
         self.tasks
             .iter()
             .filter(|t| {
-                t.state == TaskState::Ready
+                matches!(t.state, TaskState::Pending | TaskState::Ready)
                     && t.dependencies.iter().all(|dep| {
                         self.tasks
                             .iter()
@@ -940,6 +959,93 @@ impl Workflow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn task(id: &str, state: TaskState, deps: &[&str]) -> WorkflowTask {
+        WorkflowTask {
+            id: id.to_string(),
+            name: id.to_string(),
+            description: String::new(),
+            required_role: AgentRole::Monitor,
+            dependencies: deps.iter().map(|d| (*d).to_string()).collect(),
+            input: JsonValue::Null,
+            state,
+            assigned_to: None,
+            result: None,
+        }
+    }
+
+    /// The defect this function had: a task nobody has looked at is exactly
+    /// the task a scheduler is asking for, and it was the one answer that
+    /// could not come back.
+    #[test]
+    fn a_pending_task_with_no_dependencies_is_ready() {
+        let mut wf = Workflow::new("w");
+        wf.add_task(task("a", TaskState::Pending, &[]));
+
+        let ready: Vec<_> = wf.get_ready_tasks().iter().map(|t| &t.id).collect();
+        assert_eq!(ready, ["a"], "a task with nothing to wait for is ready");
+    }
+
+    /// And the half that was always right: a dependency that has not finished
+    /// still holds its dependent back.
+    #[test]
+    fn a_task_waiting_on_an_unfinished_dependency_is_not_ready() {
+        let mut wf = Workflow::new("w");
+        wf.add_task(task("first", TaskState::Running, &[]));
+        wf.add_task(task("second", TaskState::Pending, &["first"]));
+
+        let ready: Vec<_> = wf.get_ready_tasks().iter().map(|t| &t.id).collect();
+        assert_eq!(
+            ready, ["second"; 0],
+            "nothing may start behind a running task"
+        );
+
+        wf.update_task_state("first", TaskState::Completed);
+        let ready: Vec<_> = wf.get_ready_tasks().iter().map(|t| &t.id).collect();
+        assert_eq!(
+            ready,
+            ["second"],
+            "and it is released when that one finishes"
+        );
+    }
+
+    /// A caller who marked a task ready is entitled to see it back, so the
+    /// old usage keeps working.
+    #[test]
+    fn a_task_already_marked_ready_still_comes_back() {
+        let mut wf = Workflow::new("w");
+        wf.add_task(task("a", TaskState::Ready, &[]));
+        assert_eq!(wf.get_ready_tasks().len(), 1);
+    }
+
+    /// Work already taken up is not offered a second time.
+    #[test]
+    fn a_task_that_is_running_or_finished_is_not_offered_again() {
+        let mut wf = Workflow::new("w");
+        for state in [
+            TaskState::Assigned,
+            TaskState::Running,
+            TaskState::Completed,
+            TaskState::Failed,
+            TaskState::Cancelled,
+        ] {
+            wf.add_task(task(&format!("{state:?}"), state, &[]));
+        }
+        assert!(
+            wf.get_ready_tasks().is_empty(),
+            "only Pending and Ready are work nobody holds"
+        );
+    }
+
+    /// A dependency on a task that does not exist holds its dependent
+    /// indefinitely, rather than being treated as satisfied -- a typo should
+    /// stall a workflow, not run something early.
+    #[test]
+    fn a_dependency_that_names_nothing_is_never_satisfied() {
+        let mut wf = Workflow::new("w");
+        wf.add_task(task("a", TaskState::Pending, &["typo"]));
+        assert!(wf.get_ready_tasks().is_empty());
+    }
 
     #[test]
     fn test_agent_registration() {
