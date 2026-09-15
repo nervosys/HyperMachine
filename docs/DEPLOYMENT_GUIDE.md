@@ -87,53 +87,76 @@ Create `/etc/hypermachine/config.toml` (Linux) or `C:\HyperMachine\config.toml` 
 
 ```toml
 [server]
-# API server configuration
-bind_address = "0.0.0.0"
-http_port = 8080
+host = "0.0.0.0"
+rest_port = 8080
 grpc_port = 50051
-tls_enabled = true
-tls_cert = "/etc/hypermachine/cert.pem"
-tls_key = "/etc/hypermachine/key.pem"
+enable_runtime = true
+enable_events = true
+pre_warm_count = 2
+shutdown_timeout_secs = 30
 
-[auth]
-# Authentication settings
-enabled = true
-api_key_header = "X-API-Key"
-jwt_secret = "GENERATE_WITH_openssl_rand_base64_32"
-jwt_expiry_hours = 24
+# TLS is on when both of these are set, and off when either is missing.
+# There is no `tls_enabled` switch.
+tls_cert_path = "/etc/hypermachine/cert.pem"
+tls_key_path = "/etc/hypermachine/key.pem"
 
-[vm]
-# VM defaults
-default_cpus = 2
-default_memory_mb = 2048
-max_vms = 100
-storage_path = "/var/lib/hypermachine/vms"
+[runtime.pool]
+min_warm = 2
+max_size = 64          # the cap on running VMs
+default_vcpus = 2
+default_memory = 2147483648
 
-[network]
-# Network configuration
-default_network = "nat"
-bridge_interface = "hm-bridge0"
-dhcp_range = "10.0.0.100-10.0.0.200"
+[middleware]
+enable_api_key_auth = true
+enable_rate_limit = true
+enable_audit_log = true
+enable_security_headers = true
 
-[security]
-# Security features
-secure_boot_default = true
-vtpm_default = true
-memory_encryption = "sev"  # sev, tdx, or none
-
-[telemetry]
-# Metrics and logging
-log_level = "info"
-metrics_enabled = true
-metrics_port = 9090
-prometheus_path = "/metrics"
-
-[agent]
-# AI agent configuration
-ontology_enabled = true
-rate_limit_rpm = 600
-allowed_origins = ["*"]
+[middleware.api_key]
+keys = ["GENERATE_WITH_openssl_rand_base64_32"]
 ```
+
+`hv2 config init` writes a complete file with every supported key at its
+default, which is the authoritative list — the excerpt above is a useful
+subset, not the whole schema.
+
+### What this build actually reads
+
+Three sections: `[server]`, `[runtime]`, `[middleware]` (with their
+subsections). **Anything else is ignored silently.** The schema is lax on
+purpose, so that a config shared with a newer build still loads, which means
+an unrecognised key is not an error and never has been.
+
+That is worth knowing because earlier revisions of this guide documented
+settings that do not exist. Run:
+
+```bash
+hv2 config check /etc/hypermachine/config.toml
+```
+
+It lists every key the build will not read before it reports the file valid.
+If you configured TLS from an older copy of this page and TLS never came on,
+that is why, and this is how to see it.
+
+Several of those settings were real features under different names:
+
+| Documented before | What the build actually reads |
+|---|---|
+| `server.bind_address` | `server.host` |
+| `server.http_port` | `server.rest_port` |
+| `server.tls_enabled`, `tls_cert`, `tls_key` | `server.tls_cert_path` + `server.tls_key_path` |
+| `auth.enabled`, `auth.api_key_header` | `middleware.enable_api_key_auth`, `[middleware.api_key]` |
+| `agent.rate_limit_rpm` | `middleware.enable_rate_limit`, `[middleware.rate_limit]` |
+| `vm.default_cpus`, `vm.default_memory_mb` | `runtime.pool.default_vcpus`, `runtime.pool.default_memory` |
+| `vm.max_vms` | `runtime.pool.max_size` |
+
+And several had no implementation behind them at all. There is no
+configuration file support for JWT authentication, `[storage]` backends
+(including the ceph settings below), `[cluster]` replication, `[network]`
+bridge and DHCP settings, `[telemetry]` metrics ports, or the `[security]`
+secure-boot, vTPM and memory-encryption switches. The remaining TOML on this
+page describes intent rather than behaviour; treat it as a roadmap and check
+anything you rely on with `hv2 config check`.
 
 ### Environment Variables
 
