@@ -3110,20 +3110,36 @@ IRQ     6             <b>not</b> the vsock line: a shared line wakes each driver
     everything except what it was built for, intermittently.
   </p>
   <div class="callout">
-    <h3>What of this has actually been run</h3>
+    <h3>A frame went in and came back</h3>
     <p>
       Twenty-three tests &mdash; nine on the device, nine on the attach, five
       on the bridge &mdash; and the ones that matter drive real virtqueues in
       guest memory rather than asserting on host-side structures. The guest
-      driver has none, and cannot: the unikernel is a freestanding binary with
+      driver has none and cannot: the unikernel is a freestanding binary with
       no test harness, so everything it claims is a claim about
-      <code>rustc</code>. What has <em>not</em> happened is any of it carrying
-      a packet: no guest has booted this driver, and no frame has crossed a real
-      TAP device, which needs <code>CAP_NET_ADMIN</code> and a configured host
-      interface. The device, the attach, the driver and the bridge are each
-      verified against the piece on either side of them, and the chain as a
-      whole is not verified at all. That is the same gap this page's last two
-      sections describe, arriving in a new place.
+      <code>rustc</code>.
+    </p>
+    <p>
+      Which is exactly what this page says about the WHPX backend, so the
+      claim was taken off <code>rustc</code> and put on a running machine. The
+      new <code>net_echo</code> example builds the guest, gives the VM both
+      devices, boots it under KVM, hands the device an Ethernet frame and
+      waits for the driver to send it back with its two addresses exchanged
+      &mdash; compared byte for byte, because a frame of the right length that
+      is not the frame sent would otherwise pass.
+    </p>
+    <pre>guest driver  : up in   35.5 ms
+frame sent    : 57 bytes
+echo          : 57 bytes back, addresses swapped
+round trip    :   17.4 ms</pre>
+    <p>
+      So the chain from host to guest and back is verified end to end, on
+      hardware, and the two devices coexist in a running machine rather than
+      only in a unit test. What remains unverified is the last link: no frame
+      has crossed a real TAP device, which needs <code>CAP_NET_ADMIN</code>
+      and an interface somebody configured &mdash; a change to a machine
+      rather than to this repository, like <code>HypervisorPlatform</code>
+      above.
     </p>
   </div>
 
@@ -3290,16 +3306,16 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       rather than fixing it: they want a guest and an irqchip too.
     </li>
     <li>
-      <strong>Boot the net driver and put a packet through it.</strong> Four
-      pieces now exist and none has carried a frame end to end &mdash; see
-      above. Two separate things are wanted and they are not the same
-      difficulty: booting the unikernel with <code>attach_net</code> and
-      watching the link-layer echo come back needs only a host with
-      <code>/dev/kvm</code>, which this one has; joining the bridge to a real
-      TAP device needs <code>CAP_NET_ADMIN</code> and an interface somebody
-      configured, which is a change to a machine rather than to this
-      repository. Do the first before the second: an echo that never returns
-      localises the fault to the guest, and doing them together does not.
+      <strong>Join the bridge to a real TAP device.</strong> The half of this
+      that needed only <code>/dev/kvm</code> is done &mdash;
+      <code>net_echo</code> boots the driver and a frame makes the round trip
+      in 17&nbsp;ms, see above. What is left is the outside world:
+      <code>TapLink</code> has never opened a TAP device, so everything from
+      <code>hv2_net::nat</code> outward is still a claim about
+      <code>rustc</code>. It needs <code>CAP_NET_ADMIN</code> and a configured
+      host interface. Worth doing in that order precisely because it was:
+      an echo that failed would have been the guest, and there is now no
+      question left about the guest.
     </li>
     <li>
       <strong>The original item stands for what is left.</strong> CI runs
