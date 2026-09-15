@@ -2,6 +2,7 @@
 
 #![allow(dead_code)]
 
+pub mod bridge;
 pub mod nat;
 pub mod tap;
 pub mod virtio;
