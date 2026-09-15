@@ -90,12 +90,13 @@ pub const MAX_FRAME_LEN: usize = 1514;
 /// frame queued by the host sits in `rx_pending` until a driver kick happens to
 /// arrive, and on an idle guest that may be never. Whoever attaches this device
 /// installs a hook that gets the VM to service the receive queue.
-pub trait FrameWake: Send + Sync {
+pub trait FrameWake: Send + Sync + std::fmt::Debug {
     /// A frame is waiting for the guest.
     fn wake(&self);
 }
 
 /// A virtio-net device backed by guest-memory virtqueues.
+#[derive(Debug)]
 pub struct VirtioNetMmio {
     mac: [u8; 6],
     acked_features: u64,
@@ -186,6 +187,30 @@ impl VirtioNetMmio {
     /// Frames dropped for a full backlog, receive and transmit.
     pub fn dropped(&self) -> (u64, u64) {
         (self.dropped_rx, self.dropped_tx)
+    }
+
+    /// Put waiting frames into the receive buffers the driver has posted.
+    ///
+    /// The host side's entry point, and the counterpart to `notify`: a frame
+    /// that arrives while the guest is idle has no kick behind it, so nothing
+    /// would move it without this. Returns whether anything was published,
+    /// which is what decides whether an interrupt is owed.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a guest-memory or queue error.
+    pub fn deliver_pending(&mut self, mem: &GuestMemory) -> Result<bool> {
+        self.flush_rx(mem)
+    }
+
+    /// Whether any frame is waiting for the guest.
+    ///
+    /// Distinct from "nothing was published": a frame can wait because the
+    /// driver posted no buffer, and telling the two apart is the difference
+    /// between a quiet link and a stalled one.
+    #[must_use]
+    pub fn has_pending(&self) -> bool {
+        !self.rx_pending.is_empty()
     }
 
     /// Move everything the driver has put on the transmit queue into

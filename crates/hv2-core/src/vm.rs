@@ -307,6 +307,20 @@ impl crate::devices::virtio_vsock::PendingWake for QueuedPackets {
     }
 }
 
+/// Tells the delivery thread that a frame is waiting for the guest.
+///
+/// The same shape and the same reason as [`QueuedPackets`].
+#[derive(Debug)]
+struct QueuedFrames {
+    sender: std::sync::mpsc::Sender<()>,
+}
+
+impl crate::devices::virtio_net_mmio::FrameWake for QueuedFrames {
+    fn wake(&self) {
+        let _ = self.sender.send(());
+    }
+}
+
 /// What one I/O access produced.
 ///
 /// Two separate things, and conflating them is how a device interrupt gets
@@ -375,6 +389,13 @@ pub struct VM {
     /// outside the device manager — an agent opening a channel to a program in
     /// the guest needs the device itself, not an MMIO handle.
     vsock: RwLock<Option<AttachedVsock>>,
+    /// The network device attached by [`VM::attach_net`], if any.
+    ///
+    /// Held for the same reason `vsock` is: the host side of a link is reached
+    /// from outside the device manager. Something has to take the frames the
+    /// guest transmits and hand it the ones addressed to it, and that
+    /// something needs the device, not an MMIO handle.
+    net: RwLock<Option<AttachedNet>>,
     /// The PCI root complex the guest reads through the 0xCF8 window.
     ///
     /// Held here rather than inside the machine model because attaching a PCI
@@ -382,6 +403,20 @@ pub struct VM {
     /// the guest enumerates, and there is no way to reach one the model built
     /// for itself.
     pci_root: Arc<parking_lot::RwLock<crate::pci::PciRootComplex>>,
+}
+
+/// A network device and where the guest will find it.
+///
+/// The same shape as [`AttachedVsock`] and for the same reason: the address
+/// travels with the device because the kernel argument has to name the window
+/// that was actually mapped.
+#[derive(Clone)]
+struct AttachedNet {
+    device: Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>,
+    /// Kept so the host side can signal the used queue after it publishes.
+    transport: Arc<tokio::sync::RwLock<crate::devices::VirtioMmioTransport>>,
+    base_address: u64,
+    irq: u8,
 }
 
 /// A vsock device and where the guest will find it.
@@ -537,6 +572,7 @@ impl VM {
             image_registry: RwLock::new(None),
             shared_roms: RwLock::new(Vec::new()),
             vsock: RwLock::new(None),
+            net: RwLock::new(None),
         })
     }
 
@@ -1337,6 +1373,193 @@ impl VM {
         Ok(device)
     }
 
+    /// Guest physical address of the network register window, by default.
+    ///
+    /// Past [`Self::VSOCK_PCI_BAR_BASE`] and its window, so a VM can carry a
+    /// vsock device over either transport and a network device at once. Two
+    /// windows at one address is the failure this constant exists to avoid.
+    pub const NET_MMIO_BASE: u64 = 0xd002_0000;
+
+    /// Interrupt line the network device raises, by default.
+    ///
+    /// Not [`Self::VSOCK_IRQ`]: a shared line would have the vsock driver woken
+    /// for every frame and the net driver for every packet, and each would find
+    /// nothing often enough to look like a device that does not work.
+    pub const NET_IRQ: u8 = 6;
+
+    /// Attach a virtio-net device with MAC address `mac`.
+    ///
+    /// Registers a [`VirtioMmioTransport`](crate::devices::VirtioMmioTransport)
+    /// at [`Self::NET_MMIO_BASE`] so a guest driver can find it, and keeps the
+    /// device so [`Self::net`] can hand it back.
+    ///
+    /// This attaches a device, not a network. Nothing here is connected to a
+    /// host interface: frames the guest transmits collect in the device until
+    /// something takes them, and the guest receives only what something hands
+    /// to `VirtioNetMmio::queue_received`. Connecting that to a TAP device or
+    /// to NAT is a separate piece, and belongs outside the VM for the same
+    /// reason the vsock backend does.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a network device is already attached, or if the
+    /// register window would overlap guest RAM.
+    pub async fn attach_net(
+        self: &Arc<Self>,
+        mac: [u8; 6],
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        self.attach_net_at(mac, Self::NET_MMIO_BASE, Self::NET_IRQ)
+            .await
+    }
+
+    /// Attach a network device at an explicit address and interrupt line.
+    ///
+    /// The general form of [`Self::attach_net`], for a guest whose memory map
+    /// does not leave the default window free.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::attach_net`].
+    pub async fn attach_net_at(
+        self: &Arc<Self>,
+        mac: [u8; 6],
+        base_address: u64,
+        irq: u8,
+    ) -> Result<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        use crate::devices::virtio_mmio::{VirtioMmioTransport, VIRTIO_MMIO_REGION_SIZE};
+        use crate::devices::virtio_net_mmio::VirtioNetMmio;
+
+        if self.net.read().is_some() {
+            return Err(Error::Device(
+                "this VM already has a network device; a second at the same window would \
+                 give the guest two drivers writing one set of rings"
+                    .to_string(),
+            ));
+        }
+
+        // The register window is not RAM, for the reason given at the same
+        // check in `attach_vsock_at`.
+        if base_address < self.memory.total_size() {
+            return Err(Error::Device(format!(
+                "network register window at {base_address:#x} overlaps {} bytes of guest RAM",
+                self.memory.total_size()
+            )));
+        }
+
+        let device = Arc::new(parking_lot::Mutex::new(VirtioNetMmio::new(mac)));
+        let transport = Arc::new(tokio::sync::RwLock::new(
+            VirtioMmioTransport::new("virtio-net", base_address, self.memory(), device.clone())
+                .with_interrupt(self.pic(), irq),
+        ));
+
+        self.devices
+            .register_device("virtio-net", transport.clone())
+            .await?;
+        self.devices
+            .register_mmio_region(
+                "virtio-net".to_string(),
+                base_address,
+                VIRTIO_MMIO_REGION_SIZE,
+            )
+            .await?;
+
+        // Tell the guest where to look. virtio-mmio has no enumeration: an
+        // unnamed window is a window nothing probes.
+        self.extra_cmdline
+            .lock()
+            .push(Self::virtio_mmio_kernel_args_for(base_address, irq));
+
+        // Deliver frames as they arrive rather than when a caller remembers to
+        // ask -- the lesson `attach_vsock_at` records below, which cost a
+        // published API that timed out saying the guest was not running.
+        let (frame_tx, frame_rx) = std::sync::mpsc::channel();
+        device
+            .lock()
+            .set_frame_wake(Arc::new(QueuedFrames { sender: frame_tx }));
+
+        let pump_vm = Arc::clone(self);
+        let handle = tokio::runtime::Handle::current();
+        std::thread::Builder::new()
+            .name(format!("hv2-net-{}", self.config.name))
+            .spawn(move || {
+                while frame_rx.recv().is_ok() {
+                    handle.block_on(async {
+                        if let Err(e) = pump_vm.notify_net().await {
+                            tracing::debug!(
+                                "virtio-net: a queued frame could not be delivered: {e}"
+                            );
+                        }
+                    });
+                }
+            })
+            .map_err(|e| Error::Config(format!("could not start the net delivery thread: {e}")))?;
+
+        *self.net.write() = Some(AttachedNet {
+            device: device.clone(),
+            transport,
+            base_address,
+            irq,
+        });
+        tracing::info!(
+            "VM '{}': network device attached at {:#x} (MAC {}, IRQ {irq}) -- no backend",
+            self.config.name,
+            base_address,
+            mac.iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<Vec<_>>()
+                .join(":"),
+        );
+        Ok(device)
+    }
+
+    /// Publish frames queued for the guest, and tell it.
+    ///
+    /// The network counterpart to [`Self::notify_vsock`], and the same two
+    /// steps in the same order for the same reason: publishing without
+    /// signalling leaves frames in a ring the guest has no reason to read.
+    ///
+    /// Returns whether anything was published.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a queue error, or a failure to raise the interrupt.
+    pub async fn notify_net(&self) -> Result<bool> {
+        let attached = {
+            let guard = self.net.read();
+            match guard.as_ref() {
+                Some(net) => (net.device.clone(), Arc::clone(&net.transport)),
+                None => return Ok(false),
+            }
+        };
+        let published = attached.0.lock().deliver_pending(&self.memory)?;
+        if published {
+            attached.1.read().await.signal_used_queue()?;
+        }
+        Ok(published)
+    }
+
+    /// The network device attached to this VM, if any.
+    ///
+    /// `None` means no device exists, which is distinct from a device with
+    /// nothing on the other end of it -- and at present every attached device
+    /// is the second of those until a backend is wired to it.
+    pub fn net(
+        &self,
+    ) -> Option<Arc<parking_lot::Mutex<crate::devices::virtio_net_mmio::VirtioNetMmio>>> {
+        self.net.read().as_ref().map(|n| n.device.clone())
+    }
+
+    /// Kernel command-line arguments that make a Linux guest probe the network
+    /// device attached by [`Self::attach_net`].
+    ///
+    /// Returns `None` when no device is attached.
+    pub fn net_kernel_args(&self) -> Option<String> {
+        self.net
+            .read()
+            .as_ref()
+            .map(|n| Self::virtio_mmio_kernel_args_for(n.base_address, n.irq))
+    }
+
     /// Attach a vsock device at an explicit address and interrupt line.
     ///
     /// The general form of [`Self::attach_vsock`], for a guest whose memory
@@ -1523,6 +1746,19 @@ impl VM {
     /// address with nothing at it and reports nothing at all.
     #[must_use]
     pub fn vsock_kernel_args_for(base_address: u64, irq: u8) -> String {
+        Self::virtio_mmio_kernel_args_for(base_address, irq)
+    }
+
+    /// The argument a guest needs to find any virtio-mmio window at
+    /// `base_address`.
+    ///
+    /// Nothing in the string is specific to a device: the transport is what
+    /// the guest is being pointed at, and which device answers is read out of
+    /// the registers once it looks. So this is the single producer, and
+    /// [`Self::vsock_kernel_args_for`] is the name the vsock callers already
+    /// use for it.
+    #[must_use]
+    pub fn virtio_mmio_kernel_args_for(base_address: u64, irq: u8) -> String {
         format!("virtio_mmio.device=4K@{base_address:#x}:{irq}")
     }
 
@@ -2684,6 +2920,179 @@ mod tests {
             ..Default::default()
         })
         .map(Arc::new)
+    }
+
+    fn net_vm() -> Option<Arc<VM>> {
+        vm_or_skip(VMConfig {
+            name: "net-vm".to_string(),
+            vcpu_count: 1,
+            memory_size: 64 * 1024 * 1024,
+            ..Default::default()
+        })
+        .map(Arc::new)
+    }
+
+    const TEST_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+
+    #[tokio::test]
+    async fn a_vm_has_no_network_device_until_one_is_attached() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        assert!(vm.net().is_none());
+        assert!(vm.net_kernel_args().is_none());
+
+        let device = vm.attach_net(TEST_MAC).await.expect("attach");
+        assert_eq!(device.lock().mac(), TEST_MAC);
+        assert!(vm.net().is_some());
+    }
+
+    #[tokio::test]
+    async fn attaching_a_network_device_maps_it_where_the_guest_will_look() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net(TEST_MAC).await.expect("attach");
+
+        // The same rule as vsock: virtio-mmio has no enumeration, so an
+        // unnamed window is one nothing probes.
+        assert_eq!(
+            vm.net_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xd0020000:6")
+        );
+        assert!(
+            vm.extra_kernel_args()
+                .iter()
+                .any(|a| a.contains("0xd0020000")),
+            "the argument has to reach the command line, not just be reportable"
+        );
+
+        // And the MMIO exit path has to find it, or the mapping is decoration.
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::NET_MMIO_BASE)
+            .await
+            .expect("the window should be registered");
+        assert_eq!(handle.device_name(), "virtio-net");
+        assert_eq!(
+            handle.read_register(0, 4).await.expect("magic"),
+            crate::devices::virtio_mmio::VIRTIO_MMIO_MAGIC
+        );
+    }
+
+    /// The device a guest driver finds has to say it is a network card. Read
+    /// through the transport rather than off the device, because the register
+    /// is what the driver actually sees.
+    #[tokio::test]
+    async fn the_guest_reads_a_network_device_id_out_of_the_window() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net(TEST_MAC).await.expect("attach");
+        let handle = vm
+            .devices()
+            .find_mmio_device(VM::NET_MMIO_BASE)
+            .await
+            .expect("registered");
+
+        // Offset 8 is DEVICE_ID. 1 is a network card.
+        assert_eq!(handle.read_register(8, 4).await.expect("device id"), 1);
+    }
+
+    /// A network device and a vsock device on one VM, which is the arrangement
+    /// an agent VM wants: a channel to the host and a link to the world.
+    #[tokio::test]
+    async fn a_network_device_and_a_vsock_device_do_not_collide() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_vsock(3).await.expect("vsock");
+        vm.attach_net(TEST_MAC).await.expect("net");
+
+        // Two windows, two lines, and the guest told about both.
+        assert_ne!(VM::NET_MMIO_BASE, VM::VSOCK_MMIO_BASE);
+        assert_ne!(VM::NET_IRQ, VM::VSOCK_IRQ);
+        let args = vm.extra_kernel_args();
+        assert_eq!(args.len(), 2, "both devices name their window: {args:?}");
+    }
+
+    #[tokio::test]
+    async fn a_second_network_device_is_refused() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net(TEST_MAC).await.expect("attach");
+
+        // Two devices at one window would have one driver's rings written by
+        // two devices, which is not a state a guest recovers from.
+        let err = vm
+            .attach_net(TEST_MAC)
+            .await
+            .expect_err("a second must refuse");
+        assert!(err.to_string().contains("already has a network device"));
+    }
+
+    #[tokio::test]
+    async fn a_network_window_inside_guest_ram_is_refused() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        // Below 64 MiB is RAM. Mapping registers there gives one address two
+        // meanings, and the failure surfaces as memory corruption.
+        let err = vm
+            .attach_net_at(TEST_MAC, 0x1000, 6)
+            .await
+            .expect_err("a window inside RAM must refuse");
+        assert!(err.to_string().contains("overlaps"));
+    }
+
+    #[tokio::test]
+    async fn a_custom_network_window_is_the_one_the_guest_is_told_about() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        vm.attach_net_at(TEST_MAC, 0xe100_0000, 10)
+            .await
+            .expect("attach");
+        assert_eq!(
+            vm.net_kernel_args().as_deref(),
+            Some("virtio_mmio.device=4K@0xe1000000:10")
+        );
+    }
+
+    /// Nothing is published to a guest that has posted no buffer, and the
+    /// frame is not lost either. This is `notify_net` reporting honestly
+    /// rather than a link that silently drops.
+    #[tokio::test]
+    async fn a_frame_queued_for_a_guest_with_no_buffers_is_kept_not_published() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        let device = vm.attach_net(TEST_MAC).await.expect("attach");
+
+        assert!(
+            !vm.notify_net().await.expect("notify"),
+            "nothing queued yet"
+        );
+        assert!(device.lock().queue_received(vec![1, 2, 3, 4]));
+        assert!(
+            !vm.notify_net().await.expect("notify"),
+            "the driver has published no rings, so nothing can be published to it"
+        );
+        assert!(
+            device.lock().has_pending(),
+            "and the frame waits rather than vanishing"
+        );
+    }
+
+    /// `notify_net` on a VM with no device is a no-op, not an error: a caller
+    /// pumping frames should not have to ask first.
+    #[tokio::test]
+    async fn notifying_a_vm_with_no_network_device_does_nothing() {
+        let Some(vm) = net_vm() else {
+            return;
+        };
+        assert!(!vm.notify_net().await.expect("notify"));
     }
 
     #[tokio::test]
