@@ -3231,6 +3231,79 @@ sudo ip link set hm0 up</pre>
 </section>
 
 <section>
+  <h2><code>pause()</code> could never have worked, on any VM</h2>
+  <p>
+    Two examples, <code>advanced</code> and <code>basic</code>, were skipped
+    with a reason this page recorded confidently: <em>"pause a VM that has no
+    guest &mdash; there is never a running vCPU"</em>. It was wrong, and the
+    shape of the error is worth more than the fix.
+  </p>
+  <p>
+    It has nothing to do with the guest. <code>VM::pause</code> pauses each
+    vCPU, <code>VCpu::pause</code> requires <code>VCpuState::Running</code>,
+    and <strong>nothing in this repository has ever written that
+    state</strong>. It occurs exactly once in the tree:
+  </p>
+  <pre>$ rg 'VCpuState::Running' crates/
+crates/hv2-core/src/vcpu.rs:478:        if *state != VCpuState::Running {   <b>the rejection itself</b>
+
+$ rg 'set_state\(' crates/ | grep vcpu
+crates/hv2-core/src/vcpu.rs:549:        vcpu.set_state(VCpuState::Stopped);  <b>the only writer</b></pre>
+  <p>
+    So the first vCPU always refused, for every VM. A VM with a fully booted
+    guest would have failed in exactly the same way. The skip note blamed the
+    condition the two examples happened to share, and the condition was not the
+    cause &mdash; which is what makes a plausible diagnosis expensive: it ended
+    the investigation.
+  </p>
+  <p>
+    Confirming it turned up two more, each hidden behind the first:
+  </p>
+  <pre>resume()  set the <b>VM's</b> state back to Running and never touched the vCPUs.
+          It could not have: no VCpu::resume exists. Had pause ever
+          succeeded, a resumed VM would report Running with every vCPU
+          still marked Paused, and nothing would have said so.
+
+pause()   returned from inside its loop, after pausing the vCPUs before
+          the one that refused. A multi-vCPU VM failing at vCPU 1 is left
+          half-paused with its own state still Running.</pre>
+  <p>
+    And none of it would have suspended a guest regardless. A vCPU blocks
+    inside <code>KVM_RUN</code> and is released by the <code>running</code>
+    <code>AtomicBool</code>, which <code>pause</code> never touched. Pausing
+    the bookkeeping while the guest keeps executing is <em>worse</em> than
+    refusing: a caller who believes a guest is frozen may act on that, and it
+    would not be.
+  </p>
+  <div class="callout">
+    <h3>Refusing honestly is not the same as fixing</h3>
+    <p>
+      Both now return <code>NotSupported</code> and say why. That is not a
+      behaviour change &mdash; <code>pause()</code> already returned an error
+      every single time &mdash; it is the same failure with a message that
+      points at the missing facility instead of at vCPU bookkeeping, which is
+      where the old message sent every reader.
+    </p>
+    <p>
+      <strong>Implementing suspend-and-continue is still open.</strong> It
+      means kicking each vCPU out of <code>KVM_RUN</code>, holding it outside,
+      and putting it back &mdash; machinery <code>stop()</code> already has
+      half of, since that is how a spinning guest was made interruptible. It is
+      a feature and a decision, not a repair, so it has not been made.
+    </p>
+  </div>
+  <p>
+    The examples print the refusal rather than propagating it, and run. Keeping
+    the calls beats deleting them: a lifecycle example that quietly omitted the
+    two operations people reach for first would mislead more than one that
+    shows them being turned down with a reason. <strong>44 of 51 examples now
+    run in the sweep</strong>, up from 36 earlier today; the 7 that remain want
+    a <code>bzImage</code>, an initramfs, trained weights, or Windows.
+  </p>
+
+</section>
+
+<section>
   <h2>What to do next</h2>
   <ul>
     <li>
@@ -3393,6 +3466,16 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       raise interrupt lines instead of injecting vectors, and they are out of
       the skip list. Two further defects were hiding behind the first, which
       is the argument for running a thing rather than reading it.
+    </li>
+    <li>
+      <strong>Decide what <code>pause()</code> is.</strong> It has never worked
+      on any VM &mdash; see above &mdash; and now says so instead of failing
+      with a message about vCPU state. Either implement suspend-and-continue
+      (kick each vCPU out of <code>KVM_RUN</code>, hold it, put it back, which
+      is half of what <code>stop()</code> does already), or delete the pair and
+      the REST and gRPC endpoints that forward to them. What should not stand
+      is a published API in three surfaces that returns an error by
+      construction.
     </li>
     <li>
       <strong>Run the two <code>ip tuntap</code> lines, then
