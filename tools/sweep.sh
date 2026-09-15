@@ -171,19 +171,14 @@ SYNTHETIC_OK=" bandwidth queueing throughput "
 #   linux_boot_probe      wants a bzImage argument
 #   guest_exec_probe      wants a bzImage and an initramfs
 #
-#   advanced              pause a VM that has no guest. Both build with a
-#   basic                 name, cores and memory and no boot source, so there
-#                         is never a running vCPU, and pause() refuses:
-#                         "Cannot pause vCPU 0 in state Uninitialized". The
-#                         refusal is correct -- what is wrong is the lifecycle
-#                         the examples demonstrate. Calling launch() instead of
-#                         start() does not help; there is nothing to launch.
-#                         Note that start() returns Ok and state() reports
-#                         Running throughout, which is how this went unnoticed.
-#
-#   exit_handling         inject_interrupt cannot work on KVM -- see below
-#   interrupt_demo        same
-#   vm_with_interrupts    same
+# `advanced` and `basic` used to be here, blamed on "pause a VM that has no
+# guest". That diagnosis was wrong, and the way it was wrong is worth keeping.
+# It is not about the guest: `VM::pause` pauses each vCPU, `VCpu::pause`
+# requires `VCpuState::Running`, and **nothing in this repository ever writes
+# that state** -- it appears exactly once, in the comparison that rejects. So
+# pause() could never succeed for any VM, and none ever has been paused. Both
+# examples now print the refusal instead of propagating it, and pause/resume
+# say plainly that suspend-and-continue is unimplemented. They run.
 #
 # `exit_handling`, `interrupt_demo` and `vm_with_interrupts` used to be here,
 # as one defect rather than three: `create_vm` calls `kvm_create_irqchip`, so
@@ -196,7 +191,7 @@ SYNTHETIC_OK=" bandwidth queueing throughput "
 # every example that runs a guest depends on it. So the three examples were
 # wrong, not the hypervisor, and they now raise lines instead of vectors. They
 # run.
-SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe advanced basic "
+SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe "
 
 examples=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
     python3 -c "

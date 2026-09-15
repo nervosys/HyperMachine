@@ -946,43 +946,73 @@ impl VM {
         Ok(())
     }
 
-    /// Pause the VM
+    /// Suspend the guest, leaving it able to continue.
+    ///
+    /// # This is not implemented, and could never have worked
+    ///
+    /// It refuses, and the refusal is the honest form of what it already did.
+    /// Three things were wrong with it, and they compound:
+    ///
+    /// 1. It paused each vCPU, and [`VCpu::pause`](crate::VCpu::pause) requires
+    ///    the vCPU be in [`VCpuState::Running`](crate::VCpuState::Running).
+    ///    **Nothing in this repository ever puts a vCPU in that state** --
+    ///    `VCpuState::Running` is written nowhere, and the only call to
+    ///    `set_state` outside its own definition writes `Stopped`. So the first
+    ///    vCPU always refused and no VM has ever been paused.
+    /// 2. The refusal named the vCPU's state, which sent every reader to look
+    ///    at vCPU bookkeeping. The cause is that the state is never set at all.
+    /// 3. It returned that error from inside the loop, after pausing the
+    ///    vCPUs before it -- so a VM that somehow got past vCPU 0 and failed at
+    ///    vCPU 1 would be left half-paused, with its own state still `Running`.
+    ///
+    /// And if all three were fixed it would still not suspend a guest. A vCPU
+    /// runs in a loop that blocks in `KVM_RUN` and consults `self.running`, an
+    /// `AtomicBool` this never touched. Pausing the bookkeeping while the guest
+    /// keeps executing is worse than refusing: a caller who believes a guest is
+    /// frozen may act on that, and it is not.
+    ///
+    /// Implementing it means kicking each vCPU out of `KVM_RUN`, holding it
+    /// outside, and putting it back -- the mechanism [`Self::stop`] already has
+    /// half of. That is a feature and a decision, not a repair, so it is not
+    /// made here. What is fixed is that this no longer reports a vCPU state
+    /// problem for a facility that does not exist.
+    ///
+    /// # Errors
+    ///
+    /// Always. [`Error::NotSupported`], naming [`Self::stop`], which does work.
     pub async fn pause(&self) -> Result<()> {
-        let mut state = self.state.write();
-
-        if *state != VMState::Running {
-            return Err(Error::InvalidState(format!(
-                "Cannot pause VM in state {:?}",
-                *state
-            )));
-        }
-
-        // Pause all vCPUs
-        for vcpu in &self.vcpus {
-            vcpu.pause()?;
-        }
-
-        *state = VMState::Paused;
-        tracing::info!("VM '{}' paused", self.config.name);
-
-        Ok(())
+        Err(Error::NotSupported(format!(
+            "VM '{}' cannot be paused: nothing suspends a running vCPU in this hypervisor. \
+             A vCPU blocks inside KVM_RUN and is released by the `running` flag, which no \
+             pause ever set, and no vCPU is ever marked Running for one to act on. Use \
+             stop() to end the VM; suspend-and-continue is unimplemented rather than \
+             broken here.",
+            self.config.name
+        )))
     }
 
-    /// Resume the VM
+    /// Continue a guest suspended by [`Self::pause`].
+    ///
+    /// # Also not implemented
+    ///
+    /// The counterpart to [`Self::pause`], and it refuses for the same reason:
+    /// there is nothing to continue, because nothing suspends.
+    ///
+    /// This one was additionally asymmetric. `pause` set each vCPU to `Paused`;
+    /// this set only the *VM's* state back to `Running` and never touched the
+    /// vCPUs -- and it could not have, because no `VCpu::resume` exists. Had
+    /// pause ever succeeded, the VM would have reported `Running` afterwards
+    /// with every vCPU still marked `Paused`, and nothing would have said so.
+    ///
+    /// # Errors
+    ///
+    /// Always. [`Error::NotSupported`].
     pub async fn resume(&self) -> Result<()> {
-        let mut state = self.state.write();
-
-        if *state != VMState::Paused {
-            return Err(Error::InvalidState(format!(
-                "Cannot resume VM in state {:?}",
-                *state
-            )));
-        }
-
-        *state = VMState::Running;
-        tracing::info!("VM '{}' resumed", self.config.name);
-
-        Ok(())
+        Err(Error::NotSupported(format!(
+            "VM '{}' cannot be resumed: pause() is unimplemented, so there is never a \
+             suspended guest to continue.",
+            self.config.name
+        )))
     }
 
     /// Stop the VM

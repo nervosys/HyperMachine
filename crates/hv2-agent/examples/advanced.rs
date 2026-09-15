@@ -155,14 +155,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => println!("✗ Error: {}\n", e),
     }
 
-    // Pause the VM
+    // Pause and resume, which this hypervisor does not implement.
+    //
+    // This example had never reached the line below it: `VM::pause` requires
+    // every vCPU to be in `VCpuState::Running`, and nothing in this repository
+    // ever puts a vCPU in that state, so every VM refuses. The refusal is
+    // printed rather than propagated, because what it says is the point.
     println!("\n⏸️  Pausing VM...");
-    vm.pause().await?;
+    if let Err(e) = vm.pause().await {
+        println!("   refused, and correctly: {e}");
+    }
     sleep(Duration::from_millis(500)).await;
 
-    // Resume the VM
     println!("▶️  Resuming VM...");
-    vm.resume().await?;
+    if let Err(e) = vm.resume().await {
+        println!("   refused, and correctly: {e}");
+    }
     sleep(Duration::from_millis(500)).await;
 
     // Stop the VM

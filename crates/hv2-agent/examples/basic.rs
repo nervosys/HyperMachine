@@ -1,4 +1,15 @@
 //! Example: Basic VM creation and management
+//!
+//! Create a VM, start it, read its metrics, stop it. The lifecycle this shows
+//! is the one that exists.
+//!
+//! It used to call `pause` and `resume` between those, and it had never once
+//! got past the `pause`: `VM::pause` requires each vCPU to be in
+//! `VCpuState::Running`, and nothing in this repository has ever put a vCPU in
+//! that state. Every VM refused, not just this one. The call is kept below,
+//! with its refusal printed rather than propagated, because a lifecycle
+//! example that silently omitted the two operations people ask for first would
+//! be the more misleading of the two options.
 
 use anyhow::Result;
 use hv2_agent::AgentVM;
@@ -39,15 +50,20 @@ async fn main() -> Result<()> {
         metrics.memory_size / (1024 * 1024 * 1024)
     );
 
-    // Pause the VM
+    // Pause and resume, which this hypervisor does not implement. Shown
+    // rather than hidden: the refusal is the useful part, and it is the same
+    // refusal any VM gives -- see the note at the top of this file.
     println!("\nPausing VM...");
-    vm.pause().await?;
-    println!("VM paused! State: {:?}", vm.state());
+    match vm.pause().await {
+        Ok(()) => println!("VM paused! State: {:?}", vm.state()),
+        Err(e) => println!("  refused, and correctly: {e}"),
+    }
 
-    // Resume the VM
     println!("\nResuming VM...");
-    vm.resume().await?;
-    println!("VM resumed! State: {:?}", vm.state());
+    match vm.resume().await {
+        Ok(()) => println!("VM resumed! State: {:?}", vm.state()),
+        Err(e) => println!("  refused, and correctly: {e}"),
+    }
 
     // Stop the VM
     println!("\nStopping VM...");
