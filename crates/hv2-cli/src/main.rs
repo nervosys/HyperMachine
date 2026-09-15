@@ -380,6 +380,42 @@ async fn main() -> Result<()> {
             ConfigCommands::Check { path } => match hv2_api::config::ConfigFile::load(&path)? {
                 Some(mut cfg) => {
                     cfg.apply_env();
+
+                    // Keys this build does not understand, before the verdict.
+                    //
+                    // Loading is lax by design, so a file may carry anything
+                    // and still parse. That is how a config can be reported
+                    // valid while most of it is inert -- the deployment guide
+                    // documents fourteen sections and three exist. A check
+                    // that cannot say so is not checking the thing an operator
+                    // came here to have checked.
+                    //
+                    // Not an error: an unknown key is expected when a config
+                    // is shared with a newer build. It is a warning, and the
+                    // exit status stays zero.
+                    let text = std::fs::read_to_string(&path).unwrap_or_default();
+                    match hv2_api::config::ConfigFile::unknown_keys(&text) {
+                        Ok(unknown) if !unknown.is_empty() => {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "! {} key(s) this build does not read, and which therefore \
+                                     do nothing:",
+                                    unknown.len()
+                                )
+                                .yellow()
+                            );
+                            for key in &unknown {
+                                eprintln!("{}", format!("    {key}").yellow());
+                            }
+                        }
+                        Ok(_) => {}
+                        Err(e) => eprintln!(
+                            "{}",
+                            format!("! could not check for unknown keys: {e}").yellow()
+                        ),
+                    }
+
                     match cfg.validate() {
                         Ok(()) => {
                             println!(

@@ -738,6 +738,72 @@ impl ConfigFile {
         Ok(toml::from_str(s)?)
     }
 
+    /// The keys in `toml_text` that this schema does not understand, as dotted
+    /// paths, sorted.
+    ///
+    /// # Why this exists
+    ///
+    /// Loading is deliberately lax: the schema is `#[serde(default)]` with no
+    /// `deny_unknown_fields`, so a file may carry keys this build has never
+    /// heard of and still load. That is the right behaviour for rolling
+    /// upgrades and for a config shared between versions -- and it is also how
+    /// an operator ends up with settings that do nothing at all.
+    ///
+    /// `docs/DEPLOYMENT_GUIDE.md` documents fourteen sections. Three exist.
+    /// An operator who follows it writes `[auth] jwt_secret`, `[security]
+    /// tls_enabled` and `[cluster] enabled`, the file parses without
+    /// complaint, `config check` reports it valid, and none of it is read.
+    /// Nothing anywhere said so, which is what this is for: laxity is fine as
+    /// long as it is *visible*.
+    ///
+    /// The comparison is a round trip. What the text contains, against what
+    /// the schema keeps after parsing it. A key the schema dropped is a key
+    /// nothing will act on, which is exactly the question being asked, and it
+    /// stays correct as fields are added without a second list to maintain.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a TOML parse or serialization failure.
+    pub fn unknown_keys(toml_text: &str) -> ConfigResult<Vec<String>> {
+        let given: toml::Value = toml::from_str(toml_text)?;
+        let kept: toml::Value = toml::Value::try_from(Self::parse(toml_text)?)?;
+
+        /// Every leaf path in `given` that `kept` has no entry for.
+        ///
+        /// Recurses only where both sides are tables. A value the schema keeps
+        /// as a different shape -- a string where the file has a table -- is
+        /// reported at that point rather than descended into, because every
+        /// key beneath it is unreachable for the same one reason and listing
+        /// them separately would bury it.
+        fn walk(given: &toml::Value, kept: &toml::Value, prefix: &str, out: &mut Vec<String>) {
+            let (Some(given), Some(kept)) = (given.as_table(), kept.as_table()) else {
+                return;
+            };
+            for (key, value) in given {
+                let path = if prefix.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                match kept.get(key) {
+                    None => out.push(path),
+                    Some(kept_value) => {
+                        if value.is_table() && kept_value.is_table() {
+                            walk(value, kept_value, &path, out);
+                        } else if value.is_table() != kept_value.is_table() {
+                            out.push(path);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut unknown = Vec::new();
+        walk(&given, &kept, "", &mut unknown);
+        unknown.sort();
+        Ok(unknown)
+    }
+
     /// Serialize to a TOML string.
     pub fn to_toml(&self) -> ConfigResult<String> {
         Ok(toml::to_string_pretty(self)?)
@@ -1846,6 +1912,90 @@ mod tests {
         let toml = config.to_toml().unwrap();
         let parsed = ConfigFile::parse(&toml).unwrap();
         assert!(!parsed.middleware.enable_fallback);
+    }
+
+    /// The config `docs/DEPLOYMENT_GUIDE.md` tells an operator to write, in the
+    /// guide's own words, against the schema that actually exists.
+    ///
+    /// Every key here is ignored. The file loads, `validate()` passes, and
+    /// `config check` calls it valid -- so the only thing that can tell an
+    /// operator their TLS and their cluster replication are inert is this.
+    #[test]
+    fn the_deployment_guide_s_own_config_is_almost_entirely_ignored() {
+        let from_the_guide = r#"
+[storage]
+type = "shared"
+backend = "ceph"
+ceph_pool = "hypermachine-vms"
+ceph_conf = "/etc/ceph/ceph.conf"
+
+[cluster]
+enabled = true
+node_id = "hm-node-1"
+
+[auth.jwt]
+jwt_secret = "change-me"
+jwt_expiry_hours = 24
+"#;
+
+        let unknown = ConfigFile::unknown_keys(from_the_guide).expect("parse");
+        assert_eq!(
+            unknown,
+            ["auth", "cluster", "storage",],
+            "three whole sections the schema has never heard of"
+        );
+
+        // And the part that makes it dangerous rather than merely untidy.
+        let cfg = ConfigFile::parse(from_the_guide).expect("parse");
+        assert!(cfg.validate().is_ok(), "it is accepted as valid");
+    }
+
+    /// A section that exists, with one key inside it that does not. The
+    /// unknown key has to be reported at its own path rather than swallowed
+    /// because its parent was recognised.
+    #[test]
+    fn an_unknown_key_inside_a_known_section_is_named_in_full() {
+        let unknown = ConfigFile::unknown_keys(
+            r#"
+[server]
+host = "0.0.0.0"
+port = 8080
+tls_enabled = true
+"#,
+        )
+        .expect("parse");
+
+        assert_eq!(
+            unknown,
+            ["server.port", "server.tls_enabled"],
+            "`tls_enabled` is the guide's spelling; the real knobs are \
+             tls_cert_path and tls_key_path, and writing the wrong one is \
+             silence rather than an error"
+        );
+    }
+
+    /// A config using only real keys reports nothing, or the check is noise
+    /// and will be ignored.
+    #[test]
+    fn a_config_the_schema_understands_reports_nothing() {
+        let unknown = ConfigFile::unknown_keys(
+            r#"
+[server]
+host = "127.0.0.1"
+rest_port = 8080
+grpc_port = 50051
+tls_cert_path = "/etc/hm/cert.pem"
+tls_key_path = "/etc/hm/key.pem"
+"#,
+        )
+        .expect("parse");
+        assert!(unknown.is_empty(), "unexpected: {unknown:?}");
+    }
+
+    /// An empty file is not an error and has nothing unknown in it.
+    #[test]
+    fn an_empty_config_has_no_unknown_keys() {
+        assert!(ConfigFile::unknown_keys("").expect("parse").is_empty());
     }
 
     #[test]
