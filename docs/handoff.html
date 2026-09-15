@@ -2618,14 +2618,66 @@ usable    <b>960.75 ms</b>      P50 938, P95 1045</pre>
     </p>
   </div>
   <p>
-    The fix is a decision rather than a patch, which is why it is not made here.
-    A vector is not an IRQ line, so <code>inject_interrupt</code> cannot simply
-    forward to <code>set_irq_line</code>; either the examples move to the line
-    API and stop emulating a PIC that the kernel is already emulating, or the
-    backend stops creating an in-kernel irqchip and the userspace one becomes
-    real. Both are defensible and they are opposite. What is no longer true is
-    that nobody knew.
+    The fix is a decision rather than a patch: a vector is not an IRQ line, so
+    <code>inject_interrupt</code> cannot simply forward to
+    <code>set_irq_line</code>. Either the examples move to the line API and
+    stop emulating a PIC the kernel is already emulating, or the backend stops
+    creating an in-kernel irqchip and the userspace one becomes real.
   </p>
+  <div class="callout">
+    <h3>Decided: the in-kernel one, and it was not close</h3>
+    <p>
+      <code>create_vm</code> builds an in-kernel irqchip on every VM it makes.
+      <code>vm.rs</code> delivers every device interrupt through
+      <code>set_irq_line</code>. Every example that runs a real guest &mdash;
+      <code>hv1_under_hv2</code>, <code>vsock_echo</code>,
+      <code>net_echo</code> &mdash; depends on that path. Nothing depends on
+      the userspace one. So the three examples were wrong, not the
+      hypervisor, and they raise lines now.
+    </p>
+    <p>
+      The reason the two cannot be bridged is worth keeping: <em>which vector
+      a line produces is the guest's choice</em>. It programs the controller's
+      offset &mdash; this repository's own unikernel picks
+      <code>0x20</code>. A host holding a line number cannot compute the
+      vector, and a host holding a vector is asserting a decision the
+      in-kernel controller has already made for itself.
+      <code>KvmVcpu::inject_interrupt</code> now says that, up front, instead
+      of passing up an <code>ENXIO</code> from an ioctl several layers below
+      whoever made the choice.
+    </p>
+    <p>
+      Running the three turned up two more defects that had been hidden behind
+      the first, because neither example had ever got past its opening call:
+    </p>
+    <pre>vm_with_interrupts  built a fresh Pic8259, programmed <b>that</b>, and dropped it.
+                    The controller its timer and serial port actually raise
+                    lines on was left masked and un-remapped, so
+                    get_pending_interrupt could never return anything: the
+                    interrupt branch of an example about interrupts had
+                    never once been entered.
+
+exit_handling       ran a vCPU that no create_vm had registered.</pre>
+    <p>
+      The first could not have been written correctly as it stood.
+      <code>Device::write</code> takes <code>&amp;mut self</code>, an
+      <code>Arc&lt;Pic8259&gt;</code> cannot give one, and the throwaway
+      controller was the workaround. The interior mutability was there all
+      along behind <code>write_port</code>, which takes <code>&amp;self</code>;
+      the <code>&amp;mut</code> receiver was what hid it.
+    </p>
+    <p>
+      The second cannot be repaired by supplying a VM, because a VM with no
+      guest image runs whatever zeroed memory decodes to and the exit that
+      comes back stands for nothing. What that example is <em>for</em> is the
+      mapping from exit to response, so the exits are now stated plainly and
+      the mapping is real &mdash; and it names the examples that take a
+      guest's exits for real.
+    </p>
+    <p>
+      39 of 51 examples now run in the sweep, up from 36.
+    </p>
+  </div>
 
 </section>
 
@@ -3332,11 +3384,15 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       <br><br>
       Of the rest that had never been run: most were fine, two want a
       <code>&lt;bzImage&gt;</code>, one is Windows-gated, and
-      <strong>three are broken</strong> &mdash; <code>exit_handling</code>,
-      <code>interrupt_demo</code> and <code>vm_with_interrupts</code> inject
+      <strong>three were broken</strong> &mdash; <code>exit_handling</code>,
+      <code>interrupt_demo</code> and <code>vm_with_interrupts</code> injected
       into a <code>VCpu::new(0)</code> descriptor that no <code>create_vm</code>
-      ever registered. Supplying the missing call moves the error to ENXIO
-      rather than fixing it: they want a guest and an irqchip too.
+      ever registered, and supplying the missing call only moved the error to
+      ENXIO. <strong>Fixed.</strong> The decision behind them has been made
+      &mdash; the in-kernel irqchip is the real one, see above &mdash; so they
+      raise interrupt lines instead of injecting vectors, and they are out of
+      the skip list. Two further defects were hiding behind the first, which
+      is the argument for running a thing rather than reading it.
     </li>
     <li>
       <strong>Run the two <code>ip tuntap</code> lines, then
