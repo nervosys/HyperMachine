@@ -184,30 +184,24 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 
 ### API Authentication
 
+A flat list of accepted keys, sent as `X-API-Key`. A key is accepted or
+refused; there are no per-key permissions, so a "readonly" key is not something
+this layer can issue.
+
 ```toml
-[auth]
-enabled = true
-methods = ["api_key", "jwt", "mtls"]
+[middleware]
+enable_api_key_auth = true
 
-# API Key configuration
-[auth.api_key]
-header = "X-API-Key"
-keys = [
-    { key = "hm_prod_xxx", name = "production", permissions = ["*"] },
-    { key = "hm_ro_xxx", name = "readonly", permissions = ["read"] },
-]
-
-# JWT configuration
-[auth.jwt]
-issuer = "hypermachine"
-audience = "hypermachine-api"
-secret_file = "/etc/hypermachine/jwt.secret"
-
-# mTLS configuration
-[auth.mtls]
-ca_cert = "/etc/hypermachine/ca.pem"
-require_client_cert = true
+[middleware.api_key]
+keys = ["hm_prod_xxx", "hm_ro_xxx"]
+excluded_paths = ["/health", "/agentic"]
 ```
+
+`HV2_API_KEYS` sets the same list from the environment, comma-separated, and
+turns authentication on when it is non-empty.
+
+JWT and mTLS are **not implemented**. No issuer, audience, secret file, client
+CA or `require_client_cert` setting is read from anywhere.
 
 ### Firewall Rules
 
@@ -250,25 +244,15 @@ backend hm_servers
 
 ### Shared Storage
 
-For VM migration support:
-
-```toml
-[storage]
-type = "shared"
-backend = "ceph"  # ceph, nfs, iscsi
-ceph_pool = "hypermachine-vms"
-ceph_conf = "/etc/ceph/ceph.conf"
-```
+**Not implemented.** There is no `[storage]` configuration and no ceph, NFS or
+iSCSI backend in the code; `ceph` does not appear in it at all. Live migration
+is likewise unimplemented (`docs/architecture.md` lists it unchecked), so there
+is currently nothing for shared storage to support.
 
 ### State Replication
 
-```toml
-[cluster]
-enabled = true
-node_id = "hm-node-1"
-peers = ["10.0.1.11:7946", "10.0.1.12:7946"]
-consensus = "raft"
-```
+**Not implemented.** There is no `[cluster]` configuration, no peer list and no
+consensus implementation. Each server is independent.
 
 ---
 
@@ -327,17 +311,13 @@ groups:
 
 ### Log Aggregation
 
-```toml
-[logging]
-format = "json"
-output = "stdout"
-level = "info"
+**Not implemented as configuration.** There is no `[logging]` section: format,
+level and destination are not read from the config file, and nothing forwards
+to fluentd, Loki or Elasticsearch. Logging is `tracing` to stderr, and its
+verbosity comes from `RUST_LOG`.
 
-# Forward to external systems
-[logging.forward]
-enabled = true
-type = "fluentd"  # fluentd, loki, elasticsearch
-endpoint = "http://fluentd:24224"
+```bash
+RUST_LOG=info hv2 serve
 ```
 
 ---

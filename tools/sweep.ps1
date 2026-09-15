@@ -47,7 +47,7 @@ if ($protoc) { $env:PROTOC = $protoc }
 # same reason the Linux sweep asserts 88: a figure that drifts quietly is how a
 # run with whole crates missing once got reported as a pass.
 $EXPECT_CORE_LINES = 21
-$EXPECT_REST_LINES = 67
+$EXPECT_REST_LINES = 68
 
 Step 'core (mirrors CI job "Test Core (Windows)")'
 # This is the only place the WHPX backend is compiled, and `cargo test -p` runs
