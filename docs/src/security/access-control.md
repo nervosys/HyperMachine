@@ -1,51 +1,81 @@
 # Access Control
 
-HyperMachine uses capability-based access control for fine-grained permissions.
+Two separate things are described here, and an earlier version of this page ran
+them together: the HTTP API's authentication, which is a flat list of keys, and
+the agent layer's capabilities, which are per-agent and not configured in the
+server's TOML at all.
 
-## API Key Permissions
+## API keys
+
+Authentication for the REST and gRPC surface. Keys are accepted or refused;
+**there is no per-key permission set and no per-key quota.** Any accepted key
+can call anything that is not on the excluded list.
 
 ```toml
-# config.toml
-[[api_keys]]
-key = "prod-key-xxxxx"
-name = "Production"
-permissions = ["vm.create", "vm.start", "vm.stop", "vm.list"]
-quotas = { max_vms = 10, max_memory_gb = 64 }
+[middleware]
+enable_api_key_auth = true
 
-[[api_keys]]
-key = "dev-key-xxxxx"
-name = "Development"
-permissions = ["*"]  # Full access
-quotas = { max_vms = 5, max_memory_gb = 32 }
+[middleware.api_key]
+keys = ["prod-key-xxxxx", "dev-key-xxxxx"]
+excluded_paths = ["/health", "/agentic"]
 ```
 
-## Permission Categories
+Or by environment, which also turns authentication on when the list is
+non-empty:
 
-| Category         | Permissions                                     |
+```bash
+export HV2_API_KEYS="prod-key-xxxxx,dev-key-xxxxx"
+```
+
+Two keys differ only in the string. If one of them should be able to do less
+than the other, that distinction does not exist at this layer, and issuing a
+"read-only" key here does not make one.
+
+## Rate limiting
+
+A token bucket over the whole surface, not a per-operation budget:
+
+```toml
+[middleware]
+enable_rate_limit = true
+
+[middleware.rate_limit]
+capacity = 100        # burst size
+refill_rate = 10.0    # tokens per second
+excluded_paths = ["/health"]
+```
+
+`vm.create` cannot be given a different allowance from `vm.list`; the bucket
+does not know which endpoint spent the token.
+
+## Agent capabilities
+
+Names of the form `vm.create`, `vm.exec`, `snapshot.restore` are **MCP tool
+names**, and the agent layer does gate them per agent — capabilities together
+with VM ownership are what decide whether an agent's call is permitted. That
+machinery lives in `hv2-agent` and is granted programmatically when an agent is
+created. It is not read from the server's configuration file, and it does not
+scope an HTTP API key.
+
+| Category         | Tools                                           |
 | ---------------- | ----------------------------------------------- |
 | **VM Lifecycle** | `vm.create`, `vm.delete`, `vm.start`, `vm.stop` |
 | **VM Info**      | `vm.list`, `vm.get`                             |
 | **Execution**    | `vm.exec`, `vm.upload`, `vm.download`           |
 | **Snapshots**    | `snapshot.create`, `snapshot.restore`           |
 | **GPU**          | `gpu.attach`, `gpu.detach`                      |
-| **Admin**        | `admin.config`, `admin.users`                   |
 
-## Resource Quotas
+## Not implemented
 
-```toml
-[quotas.default]
-max_vms = 5
-max_cpu_cores = 16
-max_memory_gb = 32
-max_disk_gb = 500
-max_gpu = 1
-```
+Configuration this page used to document. None of it is read; a file
+containing it parses, validates, and does nothing. `hv2 config check <file>`
+names every such key.
 
-## Rate Limiting
-
-```toml
-[rate_limits]
-default_rpm = 120  # Requests per minute
-vm_create_rpm = 10
-vm_exec_rpm = 100
-```
+- **`[[api_keys]]`** with `permissions` and `quotas` per key. The real model is
+  the flat `keys` list above. An operator who wrote this got no API-key
+  authentication at all, because `[middleware.api_key].keys` stayed empty.
+- **`[quotas.default]`** — `max_vms`, `max_cpu_cores`, `max_memory_gb`,
+  `max_disk_gb`, `max_gpu`. There is a quota mechanism in the agent layer, but
+  it is not populated from the server's configuration file.
+- **`[rate_limits]`** with `default_rpm`, `vm_create_rpm`, `vm_exec_rpm`. Rate
+  limiting is the token bucket above, and it is not per-operation.
