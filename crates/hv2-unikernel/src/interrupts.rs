@@ -39,6 +39,7 @@
 
 use core::arch::{asm, global_asm};
 
+use crate::net;
 use crate::vsock;
 
 /// Where the master PIC is remapped to. 0x20 is the first vector above the
@@ -51,6 +52,16 @@ const VSOCK_IRQ: u8 = 5;
 
 /// The vector that IRQ arrives on once the PIC is remapped.
 const VSOCK_VECTOR: usize = (PIC_VECTOR_BASE + VSOCK_IRQ) as usize;
+
+/// The IRQ line `VM::attach_net` gives the device.
+///
+/// Not the vsock line. One line shared between two devices would have each
+/// driver woken for the other's traffic and finding nothing, often enough to
+/// look like a device that does not work.
+const NET_IRQ: u8 = 6;
+
+/// The vector the network IRQ arrives on once the PIC is remapped.
+const NET_VECTOR: usize = (PIC_VECTOR_BASE + NET_IRQ) as usize;
 
 /// Master PIC ports.
 const PIC1_COMMAND: u16 = 0x20;
@@ -165,6 +176,39 @@ vsock_isr:
     mov rbp, rsp
     and rsp, -16
     call vsock_interrupt
+    mov rsp, rbp
+    pop rbp
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rax
+    iretq
+"#
+);
+
+global_asm!(
+    r#"
+    .section .text
+    .global net_isr
+net_isr:
+    push rax
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
+    call net_interrupt
     mov rsp, rbp
     pop rbp
     pop r11
@@ -380,6 +424,7 @@ fault_stub_table:
 
 extern "C" {
     fn vsock_isr();
+    fn net_isr();
     /// Thirty-two stub addresses, indexed by vector.
     static fault_stub_table: [u64; 32];
 }
@@ -413,6 +458,19 @@ pub extern "C" fn vsock_interrupt() {
     unsafe { outb(PIC1_COMMAND, PIC_EOI) };
 }
 
+/// What the network interrupt actually does.
+///
+/// The same two acknowledgements in the same order and for the same reason as
+/// [`vsock_interrupt`]. Nothing is drained here: a handler that walked a ring
+/// would be doing it with the main loop's view of that ring half-formed.
+#[no_mangle]
+pub extern "C" fn net_interrupt() {
+    net::ack_interrupt_raw();
+
+    // SAFETY: as in `vsock_interrupt`.
+    unsafe { outb(PIC1_COMMAND, PIC_EOI) };
+}
+
 /// Write one byte to an I/O port.
 ///
 /// # Safety
@@ -427,7 +485,7 @@ unsafe fn outb(port: u16, value: u8) {
     );
 }
 
-/// Program the PIC and unmask only the vsock line.
+/// Program the PIC and unmask the lines this guest has handlers for.
 ///
 /// The initialisation sequence is four control words to each chip, in a fixed
 /// order, and the pair has to be done together: the master is told which of its
@@ -453,10 +511,11 @@ unsafe fn init_pic() {
     outb(PIC1_DATA, 0x01);
     outb(PIC2_DATA, 0x01);
 
-    // Masks. Everything off except the one line this guest has a handler for:
-    // an unmasked line with no handler is a fault, and this guest has exactly
-    // one device.
-    outb(PIC1_DATA, !(1 << VSOCK_IRQ));
+    // Masks. Everything off except the lines this guest has handlers for: an
+    // unmasked line with no handler is a fault, and this guest has two
+    // devices, either of which may be absent -- a line no device asserts
+    // costs nothing.
+    outb(PIC1_DATA, !((1 << VSOCK_IRQ) | (1 << NET_IRQ)));
     outb(PIC2_DATA, 0xFF);
 }
 
@@ -542,10 +601,10 @@ pub unsafe fn enable_sse() {
 ///
 /// Requires [`install_fault_handlers`] to have run.
 pub unsafe fn init() {
-    let handler = vsock_isr as *const () as u64;
     let idt = core::ptr::addr_of_mut!(IDT);
 
-    (*idt)[VSOCK_VECTOR] = Gate::to(handler);
+    (*idt)[VSOCK_VECTOR] = Gate::to(vsock_isr as *const () as u64);
+    (*idt)[NET_VECTOR] = Gate::to(net_isr as *const () as u64);
 
     init_pic();
 

@@ -68,6 +68,7 @@ extern crate alloc;
 mod boot;
 mod interrupts;
 mod mem;
+mod net;
 mod vsock;
 
 use alloc::vec::Vec;
@@ -142,6 +143,19 @@ pub(crate) fn print_hex(value: u32) {
         let nibble = ((value >> (shift * 4)) & 0xF) as usize;
         // SAFETY: as above.
         unsafe { outb(COM1, DIGITS[nibble]) };
+    }
+}
+
+/// Write one byte as two hex digits, with no `0x`.
+///
+/// [`print_hex`] would render a MAC address as six eight-digit numbers with a
+/// prefix on each, which is the same information and unreadable.
+pub(crate) fn print_hex_byte(value: u8) {
+    const DIGITS: &[u8; 16] = b"0123456789ABCDEF";
+    // SAFETY: as in `print`.
+    unsafe {
+        outb(COM1, DIGITS[(value >> 4) as usize]);
+        outb(COM1, DIGITS[(value & 0xF) as usize]);
     }
 }
 
@@ -335,7 +349,29 @@ pub extern "C" fn kernel_main(magic: u64, info: u64) -> ! {
             unsafe { interrupts::init() };
             print("idle mode: hlt\n");
 
-            serve(&mut device)
+            // A network device if there is one. Absent is not an error: a VM
+            // with a channel to its host and no link to the world is the
+            // ordinary case, and saying which one this is beats a guest that
+            // silently has no network.
+            let link = match net::Net::init() {
+                Ok(link) => {
+                    print("net mac ");
+                    let mac = link.mac();
+                    for byte in mac {
+                        print_hex_byte(byte);
+                    }
+                    print("\n");
+                    Some(link)
+                }
+                Err(e) => {
+                    print("net ");
+                    print(e.as_str());
+                    print("\n");
+                    None
+                }
+            };
+
+            serve(&mut device, link)
         }
         Err(e) => {
             // Not fatal. A VM with no vsock device attached is a perfectly
@@ -589,7 +625,7 @@ impl Agent {
 /// loop goes back to reading — which is why a tool call and a peer's message
 /// can be outstanding at the same time, and why the host may answer them in
 /// whichever order it likes.
-fn serve(device: &mut vsock::Vsock) -> ! {
+fn serve(device: &mut vsock::Vsock, mut link: Option<net::Net>) -> ! {
     let mut agent = Agent::new();
 
     loop {
@@ -602,6 +638,14 @@ fn serve(device: &mut vsock::Vsock) -> ! {
         // seconds of latency and nothing else.
         // SAFETY: re-enabled below, on both paths.
         unsafe { interrupts::disable() };
+
+        // Frames first, and before the halt below, because a frame that
+        // arrived while the vsock ring was empty would otherwise wait for the
+        // next vsock packet to wake the loop.
+        if let Some(link) = link.as_mut() {
+            link.ack_interrupt();
+            echo_frames(link);
+        }
 
         let Some(packet) = device.recv() else {
             // Nothing waiting, so stop asking. A halted vCPU is a thread
@@ -643,6 +687,34 @@ fn serve(device: &mut vsock::Vsock) -> ! {
         }
 
         device.release(&packet);
+    }
+}
+
+/// Send every received frame back with its two addresses swapped.
+///
+/// A link-layer echo and nothing more: no ARP, no IP, no checksums. It exists
+/// because a driver that only receives proves half of itself, and the shortest
+/// thing that drives both halves is to bounce what arrives. Anything that
+/// looks at the payload belongs in a stack, and there is no stack here.
+///
+/// A frame under fourteen bytes has no addresses to swap, so it is dropped —
+/// the buffer still goes back, because a buffer the driver keeps is one the
+/// device never sees again.
+fn echo_frames(link: &mut net::Net) {
+    while let Some(frame) = link.recv() {
+        if frame.len >= 14 {
+            let mut out = [0u8; net::MAX_FRAME_LEN];
+            let len = (frame.len as usize).min(out.len());
+            for (i, byte) in out[..len].iter_mut().enumerate() {
+                *byte = frame.byte(i);
+            }
+            // Destination and source, the first twelve bytes, exchanged.
+            for i in 0..6 {
+                out.swap(i, i + 6);
+            }
+            link.send(&out[..len]);
+        }
+        link.release(&frame);
     }
 }
 
