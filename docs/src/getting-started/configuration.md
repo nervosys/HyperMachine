@@ -1,192 +1,134 @@
 # Configuration
 
-HyperMachine can be configured through configuration files, environment variables, or command-line arguments.
+The API server, `hv2`, is configured by a TOML file, environment variables, or
+command-line flags. The `hm` CLI is a different binary and reads no
+configuration file at all — see [The `hm` CLI](#the-hm-cli) below.
 
-## Configuration File
+## Configuration file
 
-The default configuration file location is:
+There is no search path and no per-user location. `hv2 serve` reads
+**`hv2.toml` in the working directory**, or the file given to `--config`:
 
-- **Linux/macOS:** `~/.config/hypermachine/config.toml`
-- **Windows:** `%APPDATA%\hypermachine\config.toml`
+```bash
+hv2 serve                          # reads ./hv2.toml if it exists
+hv2 serve --config /etc/hv2.toml   # reads exactly this
+```
 
-### Example Configuration
+A missing `./hv2.toml` is not an error — the server starts on defaults. A
+missing `--config` path is.
+
+Write a complete file, with every supported key at its default, with:
+
+```bash
+hv2 config init --output hv2.toml
+```
+
+That command is the authoritative list of what exists. Check one you already
+have with:
+
+```bash
+hv2 config check hv2.toml
+```
+
+which names every key the build does not read *before* it reports the file
+valid. Unknown keys are not an error — the schema is lax so that a file shared
+with a newer build still loads — so this is the only thing that will tell you a
+setting does nothing.
+
+### The sections that exist
+
+Three, plus their subsections: `[server]`, `[runtime]`, `[middleware]`.
 
 ```toml
-[general]
-log_level = "info"  # trace, debug, info, warn, error
-data_dir = "/var/lib/hypermachine"
-
 [server]
-host = "127.0.0.1"
-port = 8080
-api_key = "your-secret-key"  # Or use HM_API_KEY env var
-tls_enabled = true
-tls_cert = "/etc/hypermachine/cert.pem"
-tls_key = "/etc/hypermachine/key.pem"
+host = "0.0.0.0"
+rest_port = 8080
+grpc_port = 50051
+enable_runtime = true
+enable_events = true
+pre_warm_count = 2
+shutdown_timeout_secs = 30
 
-[vm.defaults]
-cpu_cores = 2
-memory_mb = 4096
-enable_gpu = false
-network_mode = "nat"  # nat, bridge, host
+# TLS is on when both paths are set and off when either is missing.
+# There is no `tls_enabled` switch.
+tls_cert_path = "/etc/hypermachine/cert.pem"
+tls_key_path = "/etc/hypermachine/key.pem"
 
-[hypervisor]
-backend = "auto"  # auto, kvm, whpx, hvf
-nested_virtualization = false
+[runtime]
+instance_id = ""
 
-[gpu]
-enabled = true
-passthrough = false
-virtual_gpu = true
-vulkan_enabled = true
+[runtime.pool]
+min_warm = 2
+max_size = 64
+default_vcpus = 2
+default_memory = 2147483648
 
-[network]
-default_bridge = "hm0"
-dns_servers = ["8.8.8.8", "8.8.4.4"]
-enable_ipv6 = true
+[middleware]
+enable_api_key_auth = true
+enable_rate_limit = true
+enable_audit_log = true
+enable_security_headers = true
 
-[security]
-seccomp_enabled = true
-capability_mode = "strict"  # strict, permissive
-audit_logging = true
-audit_log_path = "/var/log/hypermachine/audit.log"
-
-[crypto]
-fips_mode = false
-default_cipher = "aes-256-gcm"
-key_derivation = "hkdf-sha256"
-
-[mcp]
-enabled = true
-max_concurrent_operations = 100
-operation_timeout_secs = 300
+[middleware.api_key]
+keys = ["GENERATE_WITH_openssl_rand_base64_32"]
 ```
 
-## Environment Variables
+`[middleware]` is much larger than this excerpt — CORS, body limits, idempotency,
+circuit breaking, response caching and more. `hv2 config init` writes them all.
 
-| Variable         | Description                | Default           |
-| ---------------- | -------------------------- | ----------------- |
-| `HM_API_KEY`     | API key for authentication | None              |
-| `HM_LOG_LEVEL`   | Logging verbosity          | `info`            |
-| `HM_DATA_DIR`    | Data storage directory     | Platform-specific |
-| `HM_CONFIG_FILE` | Custom config file path    | Default location  |
-| `HM_HYPERVISOR`  | Force hypervisor backend   | `auto`            |
-| `HM_TLS_CERT`    | TLS certificate path       | None              |
-| `HM_TLS_KEY`     | TLS private key path       | None              |
+## Environment variables
 
-## Command-Line Arguments
+Read by `hv2` at startup, after the file and before the CLI flags. Every one is
+prefixed `HV2_`:
 
-All configuration options can be overridden via CLI:
+| Variable                | Sets                              |
+| ----------------------- | --------------------------------- |
+| `HV2_HOST`              | `server.host`                     |
+| `HV2_REST_PORT`         | `server.rest_port`                |
+| `HV2_GRPC_PORT`         | `server.grpc_port`                |
+| `HV2_PRE_WARM`          | `server.pre_warm_count`           |
+| `HV2_ENABLE_RUNTIME`    | `server.enable_runtime`           |
+| `HV2_ENABLE_EVENTS`     | `server.enable_events`            |
+| `HV2_SHUTDOWN_TIMEOUT`  | `server.shutdown_timeout_secs`    |
+| `HV2_INSTANCE_ID`       | `runtime.instance_id`             |
+| `HV2_API_KEYS`          | `middleware.api_key.keys`, comma-separated; also turns API-key auth on |
+| `HV2_CORS_ORIGINS`      | `middleware.cors.allowed_origins`, comma-separated |
+| `HV2_BODY_LIMIT`        | `middleware.body_limit.max_bytes` |
 
-```bash
-# Override server port
-hm mcp serve --port 9090
+Booleans accept `true` or `1`. A value that does not parse is ignored rather
+than rejected.
 
-# Override log level
-hm --log-level debug t2 list
+## The `hm` CLI
 
-# Use custom config file
-hm --config /path/to/config.toml t2 create --name test
+`hm` is a separate binary from `hv2` and **reads no configuration file at
+all** — there is no `--config` flag and no TOML anywhere in it. It has one
+environment variable, `HM_API_KEY`, used by `hm mcp serve` for authentication;
+without it that server logs a warning and runs unauthenticated.
 
-# Multiple overrides
-hm mcp serve \
-  --port 8443 \
-  --tls-cert /etc/ssl/cert.pem \
-  --tls-key /etc/ssl/key.pem \
-  --api-key "production-key"
-```
+Global flags are `--verbose` and the per-command options in `hm <command>
+--help`.
 
-## VM-Specific Configuration
 
-Each VM can have its own configuration in `<data_dir>/vms/<vm-name>/config.toml`:
+## Not implemented
 
-```toml
-[vm]
-name = "my-vm"
-uuid = "550e8400-e29b-41d4-a716-446655440000"
+Earlier revisions of this page documented two more mechanisms. Neither exists,
+and both are listed here rather than deleted so that anyone who followed them
+can find out why nothing happened.
 
-[hardware]
-cpu_cores = 4
-memory_mb = 8192
-cpu_model = "host"  # host, qemu64, max
+**Per-VM configuration files.** A `config.toml` under
+`<data_dir>/vms/<vm-name>/` describing `[vm]`, `[hardware]`, `[storage]`,
+`[network]`, `[gpu]` and `[boot]`. Nothing reads a file at that path, or at any
+per-VM path. A VM is described by the arguments given when it is created.
 
-[gpu]
-enabled = true
-passthrough_device = "0000:01:00.0"  # PCI address for passthrough
+**Security profiles.** `hm t2 create --security-profile high|development|
+ai-sandbox`. There is no `--security-profile` flag; `hm t2 create --help` lists
+what the command does take.
 
-[storage]
-[[storage.disks]]
-path = "disk0.qcow2"
-format = "qcow2"
-size_gb = 100
+The same applies to the sections a previous version of this page showed in the
+main config file — `[general]`, `[vm]`, `[network]`, `[security]`, `[gpu]`,
+`[hypervisor]`, `[mcp]` and `[crypto]`. None of them is read. `hv2 config
+check` will say so for any file you already have.
 
-[[storage.disks]]
-path = "/dev/nvme0n1"
-format = "raw"
-readonly = false
-
-[network]
-[[network.interfaces]]
-type = "virtio"
-mode = "nat"
-mac = "52:54:00:12:34:56"
-
-[[network.interfaces]]
-type = "virtio"
-mode = "bridge"
-bridge = "br0"
-
-[boot]
-firmware = "uefi"  # bios, uefi
-secure_boot = true
-boot_order = ["disk", "network"]
-```
-
-## Security Profiles
-
-Pre-defined security profiles for different use cases:
-
-```bash
-# High security (production)
-hm t2 create --name secure-vm --security-profile high
-
-# Development (more permissive)
-hm t2 create --name dev-vm --security-profile development
-
-# AI sandbox (isolated with network access)
-hm t2 create --name ai-vm --security-profile ai-sandbox
-```
-
-### Profile Definitions
-
-**high:**
-```toml
-[security]
-seccomp_enabled = true
-capability_mode = "strict"
-network_isolation = true
-audit_logging = true
-```
-
-**development:**
-```toml
-[security]
-seccomp_enabled = false
-capability_mode = "permissive"
-network_isolation = false
-audit_logging = false
-```
-
-**ai-sandbox:**
-```toml
-[security]
-seccomp_enabled = true
-capability_mode = "strict"
-network_isolation = false  # AI needs network
-audit_logging = true
-resource_limits.cpu_percent = 80
-resource_limits.memory_percent = 75
-```
 
 ## Next Steps
 
