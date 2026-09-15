@@ -133,6 +133,33 @@ EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-51}"
 # The ones that take a model path. Everything else is run with no arguments.
 MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled throughput "
 
+# Of those, the ones a *synthetic* model is enough for.
+#
+# Without a real model all seven used to be skipped, and the run said so --
+# honest, but it left a seventh of the examples unchecked on every CI machine
+# that has no 1.2 GB GGUF on it. `tools/mk-test-gguf.py` writes a 359 KiB llama
+# that loads and runs and says nothing sensible, which is exactly enough for
+# the three below: they assert on the machinery, not on the answer. Queue
+# fairness, streaming bandwidth and forward-pass rate do not care whether the
+# weights were ever trained.
+#
+# Measured, not assumed -- each of these was run against the fixture and exits
+# 0, and the other four were run against it too and fail correctly:
+#
+#   generate   FAILED -- the model produced tokens and not the answer
+#   batched    FAILED -- the batched answer is not "8"
+#   inference  asserts "Paris" and "Blue" at each guest's own console
+#   scheduled  asserts an agent recalled a number from its own first turn
+#
+# Those four want weights that were actually trained, and no fixture fixes
+# that. They stay skipped unless a real model is passed.
+#
+# The numbers `throughput` and `bandwidth` print with the fixture are
+# meaningless -- a 359 KiB model measures the loop overhead and nothing else.
+# What they check here is that the code path runs, which is what a sweep is
+# for. Benchmarks are quoted from a real model or not at all.
+SYNTHETIC_OK=" bandwidth queueing throughput "
+
 # Known not to run unattended here, each with its reason. This is the one place
 # a failure can hide, so every entry names why, and the reasons were measured
 # rather than assumed -- an earlier version of this list called eight of these
@@ -200,6 +227,23 @@ run() {
     { [ "$code" -eq 0 ] && [ "$failed" -eq 0 ]; } || bad "example $name"
 }
 
+# A stand-in model, when no real one was given. Written to the target
+# directory rather than the repository: it is a build artifact, it is
+# deterministic, and a 359 KiB binary in git would be a 359 KiB binary in every
+# clone forever.
+FIXTURE=""
+if [ -z "$MODEL" ] || [ ! -f "$MODEL" ]; then
+    candidate="$CARGO_TARGET_DIR/tiny-llama.gguf"
+    if [ -f "$candidate" ]; then
+        FIXTURE="$candidate"
+    elif command -v python3 >/dev/null 2>&1 &&
+        python3 tools/mk-test-gguf.py "$candidate" >/dev/null 2>&1; then
+        FIXTURE="$candidate"
+    else
+        echo "  (no python3, so no synthetic model either)"
+    fi
+fi
+
 ran=0
 skipped=0
 while read -r pkg name; do
@@ -210,6 +254,14 @@ while read -r pkg name; do
             if [ -n "$MODEL" ] && [ -f "$MODEL" ]; then
                 run "$name" -p "$pkg" --example "$name" -- "$MODEL"
                 ran=$((ran + 1))
+            elif [ -n "$FIXTURE" ]; then
+                case "$SYNTHETIC_OK" in
+                    *" $name "*)
+                        run "$name" -p "$pkg" --example "$name" -- "$FIXTURE"
+                        ran=$((ran + 1))
+                        ;;
+                    *) skipped=$((skipped + 1)) ;;
+                esac
             else
                 skipped=$((skipped + 1))
             fi
@@ -224,9 +276,16 @@ $examples
 EOF
 
 echo "  ran $ran, skipped $skipped of $found"
-if [ -z "$MODEL" ] || [ ! -f "$MODEL" ]; then
-    echo "  (no model given, so nothing here checked inference, the queue, or a"
-    echo "   swarm with weights in it)"
+if [ -n "$MODEL" ] && [ -f "$MODEL" ]; then
+    :
+elif [ -n "$FIXTURE" ]; then
+    echo "  (a synthetic model stood in, so the queue and the forward pass were"
+    echo "   exercised but nothing checked that the weights can answer; the four"
+    echo "   examples that need trained weights were skipped, and any rate"
+    echo "   printed above is the fixture's, not this machine's)"
+else
+    echo "  (no model given and no fixture could be built, so nothing here"
+    echo "   checked inference, the queue, or a swarm with weights in it)"
 fi
 
 # A killed or truncated run prints no marker, and a run that printed no marker
