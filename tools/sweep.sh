@@ -89,6 +89,22 @@ n=$(RUSTDOCFLAGS="-D warnings" CARGO_TARGET_DIR=/var/tmp/hm-doc \
 echo "  errors: $n"
 [ "$n" -eq 0 ] || bad "rustdoc reported $n errors"
 
+step "docs against code"
+# Documented API names that do not exist. Four surfaces were audited by hand
+# and the spread was wide -- 40 of 41 REST routes correct, 0 of 13 gRPC
+# methods -- which tracks how likely each is to be run rather than only read.
+if command -v python3 >/dev/null 2>&1; then
+    out=$(python3 tools/check-docs-against-code.py 2>&1)
+    code=$?
+    echo "$out" | grep -E '^  (routes|tools):' | sed 's/^ */  /'
+    [ "$code" -eq 0 ] || {
+        echo "$out" | grep '^  NEW' | sed 's/^ */  /'
+        bad "documentation names an API that does not exist; see tools/check-docs-against-code.py"
+    }
+else
+    echo "  skipped: no python3"
+fi
+
 step "unreachable states"
 # A guard that requires a state nothing ever writes. rustc cannot see this on a
 # `pub` enum, and the one it hid -- VM::pause(), which could never succeed on
