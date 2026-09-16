@@ -921,7 +921,10 @@ async fn pause_vm(
 
     vm.pause().await.map_err(|e| {
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            // 501, not 500: suspend-and-continue is unimplemented in this
+            // hypervisor rather than broken in this request. 500 tells a
+            // caller to retry something that cannot succeed on any attempt.
+            StatusCode::NOT_IMPLEMENTED,
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "PAUSE_FAILED".to_string(),
@@ -956,7 +959,10 @@ async fn resume_vm(
 
     vm.resume().await.map_err(|e| {
         (
-            StatusCode::INTERNAL_SERVER_ERROR,
+            // 501, not 500: suspend-and-continue is unimplemented in this
+            // hypervisor rather than broken in this request. 500 tells a
+            // caller to retry something that cannot succeed on any attempt.
+            StatusCode::NOT_IMPLEMENTED,
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "RESUME_FAILED".to_string(),
