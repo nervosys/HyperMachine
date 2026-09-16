@@ -162,17 +162,28 @@ Command-line interface:
 ## Performance Optimizations
 
 - **Memory**: mmap-backed zero-copy guest memory
-- **CPU**: Hot path optimization, SIMD instructions
-- **I/O**: io_uring for async disk I/O (Linux)
-- **Network**: Kernel bypass with AF_XDP (planned)
-- **GPU**: Direct GPU memory access, shader caching
+- **CPU**: Hot path optimization, SIMD instructions (AVX2/AVX-512 dispatch in
+  `hv2-infer`)
+- **I/O**: synchronous `std::fs` (`devices/disk_image.rs`). This line claimed
+  io_uring; `io_uring` appears nowhere in the workspace, and neither does
+  `tokio::fs` — there is no asynchronous file I/O of any kind.
+- **Network**: Kernel bypass with AF_XDP (planned; no implementation)
+- **GPU**: Direct GPU memory access, shader caching (`hv2-gpu`'s vGPU caches
+  render pipelines by shader id)
 
 ## Future Roadmap
 
-- [ ] JIT compilation for hot code paths
-- [ ] Snapshot/restore functionality
-- [ ] Live migration support
-- [ ] Multi-VM orchestration
+- [x] Snapshot/restore functionality — `hv2-core`'s `SnapshotManager`, exposed
+      over REST by `hv2-api`'s `snapshot_routes`
+- [x] Multi-VM orchestration — `hv2-runtime::fleet` and
+      `hv2-agent::orchestration`. In-process: it tracks per-host state rather
+      than dispatching across a network, as the README's note says.
+- [ ] JIT compilation for hot code paths — nothing implements a CPU JIT, and
+      the README records that the claim was removed rather than deferred
+- [ ] Live migration support — `hv2-core::migration` exists and is tested in
+      isolation, but nothing outside that module calls it, so no VM migrates
+- [ ] Suspend and resume a running guest — `VM::pause` and `VM::resume` exist
+      and refuse; see their documentation for why
 - [ ] Natural language VM control
 - [ ] Integration with LangChain/AutoGPT
 - [ ] Cloud-native deployment (K8s operator)
