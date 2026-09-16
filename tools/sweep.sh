@@ -31,14 +31,14 @@ export PROTOC="${PROTOC:-/var/tmp/protoc/bin/protoc}"
 # How many test-result lines a healthy run produces, derived rather than
 # observed:
 #
-#   18 lib unittests + 49 integration + 4 bin unittests + 18 doc-suites = 89
+#   18 lib unittests + 50 integration + 4 bin unittests + 18 doc-suites = 90
 #
 # Four binaries and not five because hv1-core's `hv1-kernel` carries
 # `required-features = ["bootloader_api"]`, so a default build never makes it.
 # `cargo metadata` is the source for all of these. If this number is wrong the
 # run says so: a count that drifts silently is how 3,331 tests once got
 # reported as a pass with whole crates missing from the run.
-EXPECT_RESULT_LINES="${EXPECT_RESULT_LINES:-89}"
+EXPECT_RESULT_LINES="${EXPECT_RESULT_LINES:-90}"
 
 # Below this many test binaries something is structurally wrong -- a crate
 # failed to build, or the invocation was not what it looked like -- and no

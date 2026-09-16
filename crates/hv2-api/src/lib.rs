@@ -19,6 +19,7 @@ pub mod ontology;
 pub mod permission_middleware;
 pub mod rest;
 pub mod runtime_routes;
+pub mod sandbox_proxy;
 pub mod server;
 pub mod snapshot_routes;
 pub mod tls;

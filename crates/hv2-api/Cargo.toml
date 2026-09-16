@@ -41,6 +41,10 @@ axum = { workspace = true }
 tower = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+# Body types for the sandbox proxy: the backend's stream is passed through,
+# and its own short error replies need a body that is not `Incoming`.
+http-body-util = "0.1"
+bytes = "1"
 uuid = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }
