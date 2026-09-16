@@ -147,11 +147,13 @@ curl http://localhost:8080/agentic/ontology
 | DELETE | `/api/v1/vms/{id}`         | Delete a VM        |
 | POST   | `/api/v1/vms/{id}/start`   | Start a VM         |
 | POST   | `/api/v1/vms/{id}/stop`    | Stop a VM          |
-| POST   | `/api/v1/vms/{id}/pause`   | Pause a VM         |
-| POST   | `/api/v1/vms/{id}/resume`  | Resume a paused VM |
+| POST   | `/api/v1/vms/{id}/pause`   | **Not implemented** — always 500 |
+| POST   | `/api/v1/vms/{id}/resume`  | **Not implemented** — always 500 |
 | GET    | `/api/v1/vms/{id}/metrics` | Get VM metrics     |
 | GET    | `/api/v1/vms/{id}/console` | Read guest console |
 | POST   | `/api/v1/vms/{id}/script`  | Execute a script   |
+
+The pause and resume endpoints exist and always fail, with `500 RESUME_FAILED` or `500 PAUSE_FAILED`. Nothing in this hypervisor suspends a running vCPU: a vCPU blocks inside `KVM_RUN` and is released by a flag no pause ever set, and no vCPU is ever marked running for one to act on. Use stop and create rather than pause and resume. (500 is the wrong status for a facility that does not exist — 501 would be right — but changing it is an API change rather than a documentation fix.)
 
 `GET /api/v1/vms/{id}/console` returns `{ "id", "attached", "output" }`. It
 does not consume the buffer, so polling returns the whole log each time rather

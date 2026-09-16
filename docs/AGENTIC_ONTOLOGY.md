@@ -114,8 +114,10 @@ Control VM execution state.
 **Operations:**
 - `start_vm` - Start a stopped VM
 - `stop_vm` - Gracefully stop a running VM
-- `pause_vm` - Pause a running VM
-- `resume_vm` - Resume a paused VM
+- `pause_vm` - **Not implemented.** Always fails; nothing suspends a
+  running vCPU. See the note under VM lifecycle in `docs/handoff.html`.
+- `resume_vm` - **Not implemented.** There is never a suspended guest to
+  continue.
 - `snapshot_vm` - Create a snapshot
 - `restore_vm` - Restore from snapshot
 
