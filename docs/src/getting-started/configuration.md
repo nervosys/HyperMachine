@@ -126,8 +126,17 @@ what the command does take.
 
 The same applies to the sections a previous version of this page showed in the
 main config file — `[general]`, `[vm]`, `[network]`, `[security]`, `[gpu]`,
-`[hypervisor]`, `[mcp]` and `[crypto]`. None of them is read. `hv2 config
-check` will say so for any file you already have.
+`[hypervisor]`, `[mcp]` and `[crypto]`. `hv2 config check` will list them for
+any file you already have.
+
+One qualification, for anyone who goes looking in the source and finds them.
+There is a *second* schema: `hv2_core::Config` deserializes `[vm]`,
+`[network]`, `[gpu]`, `[agent]` and `[observability]`, with its own keys —
+`[vm]` is `name`, `vcpus` and `memory_mb`, not the `default_cpus` and `max_vms`
+that were documented. It has a `Config::from_file`, and **nothing in this
+repository calls it** outside its own tests. So those section names exist as a
+type, no program loads a file into it, and the keys that were documented are
+not its keys either.
 
 
 ## Next Steps

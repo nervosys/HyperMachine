@@ -259,24 +259,23 @@ impl GpuScheduler {
 
 ## Configuration
 
+`hv2_core::Config` can deserialize a `[gpu]` section with three keys:
+
 ```toml
-# config.toml
 [gpu]
-mode = "passthrough"  # passthrough, vgpu, software
-
-[gpu.passthrough]
-device = "0000:01:00.0"
-iommu_group = 1
-
-[gpu.vgpu]
-vram_mb = 4096
-max_vms = 4
-scheduling = "fair"  # fair, priority
-
-[gpu.vulkan]
-enabled = true
-validation_layers = false
+enabled = false
+device = "default"
+passthrough = false
 ```
+
+**No binary in this repository loads such a file.** `Config::from_file` exists
+and nothing outside its own tests calls it, so these values come from whatever
+constructs `GpuConfig` in code. They are not read from the API server's
+`hv2.toml` either, which has no `[gpu]` section at all.
+
+An earlier version of this page documented `mode`, `[gpu.passthrough]` with a
+PCI address and IOMMU group, `[gpu.vgpu]` with vRAM and scheduling policy, and
+`[gpu.vulkan]`. None of those keys exists in either schema.
 
 ## Next Steps
 

@@ -36,7 +36,18 @@ const PAGES: &[&str] = &[
     "docs/DEPLOYMENT_GUIDE.md",
     "docs/src/getting-started/configuration.md",
     "docs/src/security/access-control.md",
+    "docs/src/security/audit-logging.md",
+    "docs/src/api/grpc.md",
 ];
+
+// Deliberately absent: `docs/src/architecture/gpu.md`.
+//
+// Its block is `hv2_core::Config` -- a second, separate TOML schema with
+// `[vm]`, `[network]`, `[gpu]`, `[agent]` and `[observability]` -- not the API
+// server's `hv2.toml`. Checking it here would fail for the right reason and
+// the wrong schema. (Nothing in the repository calls `Config::from_file`, so
+// no file is loaded into that one either, but that is a different problem
+// from the one this test is about.)
 
 fn repo_root() -> PathBuf {
     // CARGO_MANIFEST_DIR is crates/hv2-api.

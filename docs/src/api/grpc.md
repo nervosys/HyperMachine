@@ -196,15 +196,17 @@ while let Some(response) = stream.message().await? {
 
 ## Configuration
 
-```toml
-[grpc]
-enabled = true
-port = 50051
-max_message_size_mb = 16
-keepalive_secs = 60
+The gRPC server takes one setting, its port:
 
-[grpc.tls]
-enabled = true
-cert = "/etc/hypermachine/grpc-cert.pem"
-key = "/etc/hypermachine/grpc-key.pem"
+```toml
+[server]
+grpc_port = 50051
 ```
+
+`HV2_GRPC_PORT` sets the same thing from the environment.
+
+Nothing else about it is configurable. `grpc::serve` is handed an address and
+nothing more, so there is no maximum message size, no keepalive interval, and
+**no TLS on the gRPC listener** — an earlier version of this page documented
+`[grpc]` and `[grpc.tls]` sections, and neither is read. The `tls_cert_path`
+and `tls_key_path` under `[server]` apply to the REST listener.
