@@ -580,13 +580,47 @@ with the stderr attached, and listing a path that is not there becomes the
 SDK's own typed `FileNotFoundException` — which found a real bug on the way,
 since `ListDir` had been reporting a missing directory as `internal`.
 
-**What the run needed that a deployment would not, stated plainly.** The
-SDK wraps every command in `/bin/bash -l -c`, and the test initramfs has
-busybox only, so a `/bin/bash` wrapper script was added to it; a real
-template ships a real bash. `E2B_DEBUG=true` was set, which makes the SDK
-use `http://localhost:49983` rather than `https://{port}-{id}.{domain}` —
-the hostname path is verified separately (see the routing table above) but
-was not the path this run took, because the test has no certificate.
+**And again over the path a deployment actually uses.** The run above set
+`E2B_DEBUG=true`, which makes the SDK talk to `http://localhost:49983` and
+skip both TLS and hostname routing. Repeating it without that — a CA and a
+leaf for `*.hm.local`, the proxy on 443 with the leaf, `E2B_DOMAIN` set, the
+SDK told to trust the CA through `SSL_CERT_FILE` — worked:
+
+```text
+connected: sbx-18d5ec42a320f4e4
+host it will use: 49983-sbx-18d5ec42a320f4e4.hm.local
+OK   files.make_dir('/tmp/tls'): True
+OK   files.list('/tmp'): [EntryInfo(name='tls', type=DIR, path='/tmp/tls', ...)]
+OK   commands.run('echo over tls'): CommandResult(stdout='over tls\n', exit_code=0)
+```
+
+Getting there cost four real defects, none of which the debug-mode run could
+have shown:
+
+- **`POST /sandboxes/{id}/connect` did not exist.** The SDK calls it on
+  every `Sandbox.connect()` outside debug mode. Added, answering with the
+  same descriptor `POST /sandboxes` returned rather than a second one
+  assembled from parts.
+- **Error bodies were not JSON.** The SDK's generated client parses the body
+  of every non-2xx reply *before* it looks at the status, so a missing route
+  surfaced as a `JSONDecodeError` from inside its parser, naming nothing.
+  Every error, including the router's fallback, is now
+  `{"code", "message"}`.
+- **`envdVersion` has to be a version.** The honest string this returned
+  — `"hv2-guest-agentd/0 (not envd)"` — made `Sandbox.connect()` raise
+  `InvalidVersion` before doing anything. It is now `0.6.3`, with the
+  capability table that number claims, and which parts of it are real,
+  written out beside the constant.
+- **Sandbox ids contained an underscore,** which is not legal in a DNS
+  label. `sbx_...` produced a hostname the SDK's own resolver refused:
+  "Label contains invalid characters". Now `sbx-...`; the proxy splits on
+  the first hyphen, so the rest is harmless.
+
+**What still differs from a deployment:** the SDK wraps every command in
+`/bin/bash -l -c` and the test initramfs has busybox only, so a `/bin/bash`
+wrapper script was added to that fixture; a real template ships a real bash.
+There is no wildcard DNS here either, so the one hostname the run needed
+went in `/etc/hosts` rather than being resolved.
 
 One deviation worth knowing about: `pbjson-types` renders a `Timestamp` as
 `1970-01-01T00:01:40+00:00` where protobuf-JSON's spec says `Z`. Both are

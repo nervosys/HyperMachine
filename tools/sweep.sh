@@ -38,7 +38,7 @@ export PROTOC="${PROTOC:-/var/tmp/protoc/bin/protoc}"
 # `cargo metadata` is the source for all of these. If this number is wrong the
 # run says so: a count that drifts silently is how 3,331 tests once got
 # reported as a pass with whole crates missing from the run.
-EXPECT_RESULT_LINES="${EXPECT_RESULT_LINES:-91}"
+EXPECT_RESULT_LINES="${EXPECT_RESULT_LINES:-92}"
 
 # Below this many test binaries something is structurally wrong -- a crate
 # failed to build, or the invocation was not what it looked like -- and no

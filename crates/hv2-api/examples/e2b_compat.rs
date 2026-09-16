@@ -76,6 +76,35 @@ const PROCESS_PORT_BASE: u16 = 9000;
 /// so an SDK asks for it by name and should not have to know what it became.
 const ENVD_PORT: u16 = 49983;
 
+/// What `envdVersion` reports.
+///
+/// It has to be a version number, not a description: the SDK parses this
+/// with PEP 440 and compares it against thresholds to decide which features
+/// to use. The honest string this used to return -- "hv2-guest-agentd/0 (not
+/// envd)" -- made every `Sandbox.connect()` raise `InvalidVersion` before it
+/// did anything else.
+///
+/// A single number cannot be accurate, because what is implemented here is
+/// not a prefix of envd's history. The SDK's own thresholds, against what
+/// this actually does:
+///
+/// | threshold | feature | here |
+/// | --- | --- | --- |
+/// | 0.1.4 | recursive watch | yes |
+/// | 0.3.0 | stdin on commands | yes |
+/// | 0.4.0 | default user | no users at all; the field is ignored |
+/// | 0.5.2 | CloseStdin | yes |
+/// | 0.5.7 | octet-stream upload | **no** -- no file-upload route exists |
+/// | 0.6.2 | xattr file metadata | **no** -- `metadata` is always empty |
+/// | 0.6.3 | entry info on watch events | yes |
+///
+/// 0.6.3 is chosen because the alternative is worse: a lower number would
+/// turn off watch entry info, which really works, to avoid claiming upload
+/// and xattrs, which fail gracefully anyway -- upload has no route at any
+/// version, and absent metadata reads as empty rather than as an error.
+/// Claiming less would cost a working feature and buy nothing.
+const ENVD_VERSION: &str = "0.6.3";
+
 struct Options {
     port: u16,
     proxy_port: u16,
@@ -149,6 +178,13 @@ fn parse_options() -> Result<Options, String> {
 struct LiveSandbox {
     vm: Arc<AgentVM>,
     process_shutdown: tokio::sync::oneshot::Sender<()>,
+    /// What `POST /sandboxes` answered with.
+    ///
+    /// Kept so `POST /sandboxes/{id}/connect` can answer with exactly the
+    /// same thing. The SDK calls that on every `Sandbox.connect()` and reads
+    /// the reply as the sandbox's identity; reconstructing it from parts
+    /// would be two descriptions of one sandbox, free to drift apart.
+    descriptor: SandboxResponse,
 }
 
 struct AppState {
@@ -172,7 +208,7 @@ struct NewSandbox {
     template_id: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 struct SandboxResponse {
     #[serde(rename = "templateID")]
     template_id: String,
@@ -180,6 +216,9 @@ struct SandboxResponse {
     sandbox_id: String,
     #[serde(rename = "clientID")]
     client_id: String,
+    /// A version number, because the SDK parses it as one. See
+    /// [`ENVD_VERSION`] for which capabilities that claims and which of
+    /// those are real.
     #[serde(rename = "envdVersion")]
     envd_version: String,
     /// Not a real E2B field. Real E2B routes to a per-sandbox envd through
@@ -198,6 +237,60 @@ struct SandboxResponse {
     envd_host: String,
     #[serde(rename = "proxyPort")]
     proxy_port: u16,
+}
+
+/// An error in the shape E2B's own API returns.
+///
+/// `{"code": ..., "message": ...}`, which is what the SDK's generated client
+/// parses for *every* non-2xx status. A body of any other shape -- including
+/// axum's own plain-text 404 -- makes it raise a `JSONDecodeError` from
+/// inside its parser rather than reporting the status, which is how a missing
+/// route here first showed up: as a stack trace ending in `json.decoder`,
+/// naming nothing.
+fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
+    (
+        status,
+        Json(json!({ "code": status.as_u16(), "message": message.to_string() })),
+    )
+        .into_response()
+}
+
+/// What `Sandbox.connect()` sends. Nothing here is used -- a sandbox that
+/// already exists has its own timeout and memory -- but the SDK always sends
+/// a body, and a handler that refused to decode one would refuse every
+/// connect.
+#[derive(Debug, Deserialize)]
+struct ConnectSandbox {
+    #[allow(dead_code)]
+    timeout: Option<u64>,
+    #[allow(dead_code)]
+    memory: Option<u64>,
+}
+
+/// `POST /sandboxes/{id}/connect` -- attach to a sandbox that already exists.
+///
+/// The SDK calls this before anything else, so without it every
+/// `Sandbox.connect()` fails, and the failure surfaced as a JSON parse error
+/// rather than a 404 because the 404 body was not JSON.
+async fn connect_sandbox(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    body: Option<Json<ConnectSandbox>>,
+) -> Response {
+    // The body is accepted and ignored, but a malformed one is still a
+    // malformed request: `Option` here means "the SDK sent nothing", not
+    // "anything goes".
+    let _ = body;
+    let descriptor = state
+        .sandboxes
+        .lock()
+        .get(&sandbox_id)
+        .map(|live| live.descriptor.clone());
+
+    match descriptor {
+        Some(descriptor) => (StatusCode::OK, Json(descriptor)).into_response(),
+        None => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -221,7 +314,12 @@ async fn create_sandbox(
     Json(req): Json<NewSandbox>,
 ) -> Response {
     let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
-    let sandbox_id = format!("sbx_{}", uuid_like());
+    // A hyphen, not an underscore. This id becomes a DNS label -- the SDK
+    // addresses a sandbox as `{port}-{sandboxID}.{domain}` -- and an
+    // underscore is not legal in one. With `sbx_...` the SDK built a name its
+    // own resolver then refused: "Label contains invalid characters". The
+    // proxy splits on the *first* hyphen, so further hyphens are harmless.
+    let sandbox_id = format!("sbx-{}", uuid_like());
 
     let cid = {
         let mut next = state.next_cid.lock();
@@ -316,30 +414,28 @@ async fn create_sandbox(
         .routes
         .insert(&sandbox_id, ENVD_PORT, local_process_addr);
 
+    // Built once and kept, so `POST /sandboxes/{id}/connect` answers with the
+    // same description rather than a second one assembled from parts.
+    let descriptor = SandboxResponse {
+        template_id,
+        sandbox_id: sandbox_id.clone(),
+        client_id: sandbox_id.clone(),
+        envd_version: ENVD_VERSION.to_string(),
+        process_port,
+        envd_host: format!("{ENVD_PORT}-{sandbox_id}"),
+        proxy_port: state.opts.proxy_port,
+    };
+
     state.sandboxes.lock().insert(
-        sandbox_id.clone(),
+        sandbox_id,
         LiveSandbox {
             vm,
             process_shutdown: shutdown_tx,
+            descriptor: descriptor.clone(),
         },
     );
 
-    // Built before the response moves `sandbox_id` into `client_id`.
-    let envd_host = format!("{ENVD_PORT}-{sandbox_id}");
-
-    (
-        StatusCode::CREATED,
-        Json(SandboxResponse {
-            template_id,
-            sandbox_id: sandbox_id.clone(),
-            client_id: sandbox_id,
-            envd_version: "hv2-guest-agentd/0 (not envd)".to_string(),
-            process_port,
-            envd_host,
-            proxy_port: state.opts.proxy_port,
-        }),
-    )
-        .into_response()
+    (StatusCode::CREATED, Json(descriptor)).into_response()
 }
 
 async fn exec(
@@ -410,11 +506,7 @@ async fn destroy_sandbox(
             }
             StatusCode::NO_CONTENT.into_response()
         }
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(json!({ "error": format!("no sandbox {sandbox_id}") })),
-        )
-            .into_response(),
+        None => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
     }
 }
 
@@ -513,8 +605,14 @@ async fn main() -> std::process::ExitCode {
 
     let app = Router::new()
         .route("/sandboxes", post(create_sandbox))
+        .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
         .route("/sandboxes/{sandboxID}", delete(destroy_sandbox))
+        // Even "no such route" has to be JSON: the SDK parses the body of
+        // every non-2xx reply before it looks at the status.
+        .fallback(|uri: axum::http::Uri| async move {
+            api_error(StatusCode::NOT_FOUND, format!("no route {uri}"))
+        })
         .with_state(state);
 
     let addr = format!("0.0.0.0:{port}");
@@ -526,6 +624,10 @@ async fn main() -> std::process::ExitCode {
     println!(
         "  POST   /sandboxes/{{id}}/exec     -- NOT E2B's envd protocol; a real exec_in_guest \
          (simpler than grpcurl-ing processPort)"
+    );
+    println!(
+        "  POST   /sandboxes/{{id}}/connect  -- attach to an existing sandbox; what the E2B SDK's \
+         Sandbox.connect() calls"
     );
     println!("  DELETE /sandboxes/{{id}}          -- stop the VM and its process.Process listener");
     println!();

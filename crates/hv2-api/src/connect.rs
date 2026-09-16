@@ -732,11 +732,32 @@ pub async fn serve(
     addr: std::net::SocketAddr,
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
-    let process = EnvdProcess::new(Arc::clone(&vm));
-    let filesystem = EnvdFilesystem::new(vm);
-    let service = shared_service(process, filesystem);
-
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    serve_on(
+        listener,
+        EnvdProcess::new(Arc::clone(&vm)),
+        EnvdFilesystem::new(vm),
+        shutdown,
+    )
+    .await
+}
+
+/// As [`serve`], on a listener the caller already holds.
+///
+/// Split out so a test can bind port 0 and still know where to connect: the
+/// kernel picks the port, and only the listener knows which.
+///
+/// # Errors
+///
+/// Fails only if accepting stops working. A failure on one connection is
+/// logged and dropped.
+pub async fn serve_on(
+    listener: tokio::net::TcpListener,
+    process: EnvdProcess,
+    filesystem: EnvdFilesystem,
+    shutdown: tokio::sync::oneshot::Receiver<()>,
+) -> std::io::Result<()> {
+    let service = shared_service(process, filesystem);
     let mut shutdown = shutdown;
 
     loop {
