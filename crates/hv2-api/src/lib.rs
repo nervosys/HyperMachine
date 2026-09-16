@@ -6,6 +6,8 @@
 
 pub mod agent_runtime_routes;
 pub mod config;
+pub mod envd_filesystem;
+pub mod envd_process;
 pub mod events;
 pub mod gpu_fabric_routes;
 pub mod grpc;

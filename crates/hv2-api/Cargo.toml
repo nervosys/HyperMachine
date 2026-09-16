@@ -32,6 +32,9 @@ parking_lot = { workspace = true }
 tonic = { workspace = true }
 tonic-prost = { workspace = true }
 prost = { workspace = true }
+# For filesystem.proto's `google.protobuf.Timestamp` (envd_filesystem.rs).
+# Not in [workspace.dependencies]; versioned in lockstep with prost itself.
+prost-types = "0.14"
 
 # REST API
 axum = { workspace = true }

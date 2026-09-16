@@ -2533,6 +2533,7 @@ dependencies = [
  "hyper-util",
  "parking_lot",
  "prost",
+ "prost-types",
  "reqwest",
  "rustls",
  "rustls-pki-types",
