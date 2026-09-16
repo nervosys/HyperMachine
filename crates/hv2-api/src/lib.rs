@@ -6,6 +6,7 @@
 
 pub mod agent_runtime_routes;
 pub mod config;
+pub mod connect;
 pub mod envd_filesystem;
 pub mod envd_process;
 pub mod events;

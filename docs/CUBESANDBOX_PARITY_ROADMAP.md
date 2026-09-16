@@ -448,9 +448,9 @@ needed, since this particular `sudo` did not have a live credential and a
 non-interactive shell has no way to supply a password. Same approach for
 `grpcurl`, needed only for this verification, not a runtime dependency.
 
-**Exit criterion (still open):** an existing E2B SDK client (Python or JS,
-unmodified) successfully runs against a HyperMachine-backed endpoint by
-changing only its base URL.
+**Exit criterion — met.** An existing E2B SDK client (Python, unmodified)
+runs against a HyperMachine-backed endpoint by changing only where it
+points. The run, and the two caveats it came with, are below.
 
 Every `process.Process` RPC but `Update`, every `filesystem.Filesystem` RPC
 including all four watch RPCs, and domain routing are built and
@@ -498,10 +498,9 @@ Code.UNKNOWN: invalid content-type: 'application/json';
               expecting 'application/connect+json'
 ```
 
-So the thing that actually blocks the exit criterion is a Connect-protocol
-surface, not domain routing and not any missing RPC. That is a real piece
-of work — protobuf-JSON mapping, Connect's error shape, and its streaming
-envelope — and it is the next thing Phase 1 needs. It is not started.
+So the thing that blocked the exit criterion was a Connect-protocol
+surface, not domain routing and not any missing RPC. **That is now built**
+(`hv2_api::connect`), and the criterion is met — see below.
 
 **Two real bugs in the proxy, both found by this and both fixed.**
 
@@ -538,9 +537,67 @@ Code.INTERNAL: invalid content-type: 'application/grpc'; expecting 'application/
 
 That single line is the whole remaining gap, isolated.
 
+#### The Connect surface, and the criterion met
+
+`hv2_api::connect` is a second surface over the *same* service objects, not
+a second implementation: `EnvdProcess` and `EnvdFilesystem` clone into
+shared state, so a process started over gRPC is visible to a `List` over
+Connect. gRPC and Connect share every path, so the dispatch is by
+content-type — `application/grpc*` to tonic, Connect's own media types to
+this — on one port per sandbox, over HTTP/1.1 or HTTP/2 as the client
+prefers.
+
+Three pieces were needed. Protobuf-JSON, which is a specified mapping and
+not what `#[derive(Serialize)]` produces (lowerCamelCase fields, 64-bit
+integers as strings, enums by name, `Timestamp` as RFC 3339); `pbjson-build`
+generates it from the descriptor set the tonic build already had to emit.
+Connect's error shape, where the HTTP status and the code in the body both
+have to be right. And its streaming envelope — a flags byte and a
+big-endian length — whose last frame carries the end-of-stream metadata,
+which is where a stream that fails *after* its first message has to report
+it, the status having been sent long before.
+
+**The exit criterion, run:** `e2b` 2.50.0 from PyPI, unmodified, against
+`e2b_compat`:
+
+```text
+OK   files.make_dir('/tmp/sdk'): True
+OK   files.list('/tmp'): [EntryInfo(name='sdk', type=<FileType.DIR: 'dir'>,
+       path='/tmp/sdk', size=40, mode=493, permissions='755',
+       modified_time=datetime.datetime(2026, 9, 16, 20, 1, 47, tzinfo=utc))]
+OK   files.exists('/tmp/sdk'): True
+OK   commands.run('echo hello from the sdk'):
+       CommandResult(stderr='', stdout='hello from the sdk\n', exit_code=0)
+OK   files.remove('/tmp/sdk'): None
+OK   background start: pid 80     # Start, server-streaming
+OK   send_stdin: None             # SendInput
+OK   kill: True                   # SendSignal
+```
+
+and the two calls that raise, raising correctly: a command exiting 3 with
+output on stderr becomes `CommandExitException: Command exited with code 3`
+with the stderr attached, and listing a path that is not there becomes the
+SDK's own typed `FileNotFoundException` — which found a real bug on the way,
+since `ListDir` had been reporting a missing directory as `internal`.
+
+**What the run needed that a deployment would not, stated plainly.** The
+SDK wraps every command in `/bin/bash -l -c`, and the test initramfs has
+busybox only, so a `/bin/bash` wrapper script was added to it; a real
+template ships a real bash. `E2B_DEBUG=true` was set, which makes the SDK
+use `http://localhost:49983` rather than `https://{port}-{id}.{domain}` —
+the hostname path is verified separately (see the routing table above) but
+was not the path this run took, because the test has no certificate.
+
+One deviation worth knowing about: `pbjson-types` renders a `Timestamp` as
+`1970-01-01T00:01:40+00:00` where protobuf-JSON's spec says `Z`. Both are
+the same instant and RFC 3339, the SDK parses it into a `datetime`
+correctly, and a stricter protobuf-JSON parser could still object.
+
 Remaining gaps beyond Connect: `Update` and anything else wanting a PTY (a
 program started in the guest gets pipes, so there is no terminal to
-resize), and output that is polled rather than pushed.
+resize), output that is polled rather than pushed, and compression —
+`connect-accept-encoding` is ignored and nothing is compressed, which the
+protocol allows and which costs bandwidth on a large `ListDir`.
 
 ### Phase 2 — Snapshot/clone (CubeCoW-equivalent)
 
