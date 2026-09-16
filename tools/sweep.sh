@@ -84,8 +84,12 @@ echo "  hv1-multiboot: $n"
 [ "$n" -eq 0 ] || bad "clippy reported $n in hv1-multiboot"
 
 step "doc"
+# --document-private-items because a broken link in a private item is
+# still a broken link, and without it rustdoc never looks at one: a
+# dangling [`VmHost`] in rest.rs sat here unreported through every
+# previous sweep.
 n=$(RUSTDOCFLAGS="-D warnings" CARGO_TARGET_DIR=/var/tmp/hm-doc \
-    cargo doc --workspace --no-deps 2>&1 | grep -cE '^error')
+    cargo doc --workspace --no-deps --document-private-items 2>&1 | grep -cE '^error')
 echo "  errors: $n"
 [ "$n" -eq 0 ] || bad "rustdoc reported $n errors"
 
@@ -139,12 +143,24 @@ else
         awk '{s+=$1} END {print s+0}')
     echo "  $p passed, $f failed, $i ignored, across $lines result lines"
     [ "$code" -eq 0 ] || bad "cargo test exited $code"
-    [ "$f" -eq 0 ] || bad "$f tests failed"
+    if [ "$f" -ne 0 ]; then
+        bad "$f tests failed"
+        # Which ones. A summary saying only "1 failed" cost a whole
+        # investigation once: the log was a mktemp that had already been
+        # deleted by the time anyone looked, and the failure did not
+        # reproduce, so the test could not even be named.
+        sed -n '/^failures:$/,/^test result/p' "$log" |
+            grep -E '^    [a-zA-Z0-9_:]+$' | sort -u | sed 's/^/    /'
+    fi
     if [ "$lines" -ne "$EXPECT_RESULT_LINES" ]; then
         bad "expected $EXPECT_RESULT_LINES result lines, saw $lines -- a target
        appeared or vanished, which is a fact about the build and not about the
        tests. Check \`cargo metadata\` before changing the expectation."
     fi
+fi
+if [ "$fail" -eq 1 ]; then
+    kept=/var/tmp/sweep-tests-$(date +%Y%m%d-%H%M%S).log
+    cp "$log" "$kept" 2>/dev/null && echo "  full test log kept at $kept"
 fi
 rm -f "$log"
 

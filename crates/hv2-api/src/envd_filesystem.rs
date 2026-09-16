@@ -19,9 +19,27 @@
 //! # What's implemented and what isn't
 //!
 //! `Stat`, `MakeDir`, `Move`, `ListDir`, `Remove` -- all real, all exec
-//! into the guest. `WatchDir`/`CreateWatcher`/`GetWatcherEvents`/
-//! `RemoveWatcher` are `unimplemented`: watching needs a long-lived guest
-//! process reporting back over a channel this design doesn't have yet.
+//! into the guest.
+//!
+//! `WatchDir`/`CreateWatcher`/`GetWatcherEvents`/`RemoveWatcher` are real
+//! too, now that the guest agent can start a program and keep it (see
+//! `crate::envd_process`). A watcher is a small `sh` loop in the guest that
+//! prints a `find`+`stat` snapshot of the tree whenever it differs from the
+//! previous one; the host keeps the last snapshot it saw and turns the
+//! difference into events. That is a poll, not `inotify` -- this guest's
+//! busybox has no `inotifyd` -- with the consequences said plainly:
+//!
+//! - **Changes faster than the interval are collapsed.** A file created and
+//!   deleted between two snapshots produces no event at all. What the events
+//!   describe is how the tree differs now from how it last looked, not every
+//!   step in between.
+//! - **A rename reads as a remove plus a create,** so `EVENT_TYPE_RENAME` is
+//!   never emitted. Nothing in a snapshot ties the old name to the new one.
+//! - **`allow_network_mounts` is ignored, and that is correct here.** The
+//!   flag exists in real envd because `inotify` is unreliable on NFS/CIFS
+//!   mounts; polling `find` is not, so the hazard it guards against does not
+//!   apply to this implementation.
+//!
 //! `EntryInfo::metadata` (xattr-derived, per the proto's own comment) is
 //! always empty -- reading `user.e2b.*` xattrs would need another guest
 //! round trip (`getfattr`) this pass didn't add.
@@ -31,9 +49,12 @@
 //! `depth = N > 1` as `find -maxdepth N`, which is the most literal reading
 //! available without a reference implementation to check against.
 
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use parking_lot::Mutex;
 use tonic::{Request, Response, Status};
 
 use hv2_agent::AgentVM;
@@ -51,22 +72,88 @@ pub mod filesystem_proto {
 use filesystem_proto::filesystem_server::Filesystem;
 pub use filesystem_proto::filesystem_server::FilesystemServer;
 use filesystem_proto::{
-    CreateWatcherRequest, CreateWatcherResponse, EntryInfo, FileType, GetWatcherEventsRequest,
-    GetWatcherEventsResponse, ListDirRequest, ListDirResponse, MakeDirRequest, MakeDirResponse,
-    MoveRequest, MoveResponse, RemoveRequest, RemoveResponse, RemoveWatcherRequest,
-    RemoveWatcherResponse, StatRequest, StatResponse, WatchDirRequest, WatchDirResponse,
+    CreateWatcherRequest, CreateWatcherResponse, EntryInfo, EventType, FileType, FilesystemEvent,
+    GetWatcherEventsRequest, GetWatcherEventsResponse, ListDirRequest, ListDirResponse,
+    MakeDirRequest, MakeDirResponse, MoveRequest, MoveResponse, RemoveRequest, RemoveResponse,
+    RemoveWatcherRequest, RemoveWatcherResponse, StatRequest, StatResponse, WatchDirRequest,
+    WatchDirResponse,
 };
 
 const EXEC_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// How often the guest-side loop compares the tree against its last
+/// snapshot. One `find`+`stat` sweep per interval per watcher, so it buys
+/// latency with guest CPU over however many files are being watched.
+const WATCH_INTERVAL_SECS: u64 = 1;
+
+/// How often `WatchDir` drains its watcher. Shorter than the guest's own
+/// interval on purpose: the guest decides when there is something to report,
+/// and this only decides how long a report waits to be picked up.
+const WATCH_DRAIN: Duration = Duration::from_millis(500);
+
+/// How long a `WatchDir` stream may go silent before it sends a keepalive.
+/// The proto has a `KeepAlive` event precisely because a watch on a quiet
+/// directory is indistinguishable from a dead connection otherwise.
+const WATCH_KEEPALIVE: Duration = Duration::from_secs(20);
+
+/// Markers the guest loop wraps each snapshot in.
+///
+/// Two of them, rather than one separator, so a snapshot still being written
+/// when the host polls is recognisably incomplete and waits for the rest
+/// instead of being diffed half-formed -- which would report every file not
+/// yet printed as removed.
+///
+/// Each carries its leading newline, so a match is only ever a whole line.
+/// A file *named* `---HM-WATCH-END---` would otherwise cut its own
+/// snapshot short; with the newline required, a stat line (which always
+/// contains `|`) can never be mistaken for a marker.
+const SNAP_BEGIN: &str = "\n---HM-WATCH-BEGIN---";
+const SNAP_END: &str = "\n---HM-WATCH-END---";
+
+/// One entry as a snapshot records it.
+///
+/// Only what the guest's `stat` prints, which is what the diff can compare.
+/// Deliberately not an `EntryInfo`: that carries a symlink target this does
+/// not read, and building one per entry per snapshot would allocate for
+/// every unchanged file on every sweep.
+#[derive(Clone, PartialEq, Eq)]
+struct Snap {
+    mode_hex: String,
+    size: String,
+    perms: String,
+    owner: String,
+    group: String,
+    mtime: String,
+}
+
+/// A running watcher: the guest process producing snapshots, and what the
+/// host needs to turn the next one into events.
+struct Watcher {
+    /// The guest pid of the `sh` loop. Killing this is what stops watching.
+    pid: u32,
+    /// Output read from the guest that does not yet form a whole snapshot.
+    buffer: String,
+    /// The last complete snapshot. `None` until the first one arrives --
+    /// which is why a fresh watcher reports no events for files that already
+    /// existed, rather than announcing the whole tree as created.
+    baseline: Option<HashMap<String, Snap>>,
+    include_entry: bool,
+}
+
 /// One VM's `filesystem.Filesystem` service.
 pub struct EnvdFilesystem {
     vm: Arc<AgentVM>,
+    watchers: Arc<Mutex<HashMap<String, Watcher>>>,
+    next_watcher: AtomicU64,
 }
 
 impl EnvdFilesystem {
     pub fn new(vm: Arc<AgentVM>) -> Self {
-        Self { vm }
+        Self {
+            vm,
+            watchers: Arc::new(Mutex::new(HashMap::new())),
+            next_watcher: AtomicU64::new(1),
+        }
     }
 
     /// `stat` (mode/size/owner/group/mtime) plus `readlink`, in one guest
@@ -162,6 +249,292 @@ impl EnvdFilesystem {
         self.stat_entry(path)
             .await?
             .ok_or_else(|| Status::not_found(format!("no such path: {path}")))
+    }
+
+    /// Start a watcher in the guest and register it.
+    ///
+    /// Shared by `CreateWatcher` and `WatchDir`, which differ only in how
+    /// they hand the events back.
+    async fn open_watcher(
+        &self,
+        path: &str,
+        recursive: bool,
+        include_entry: bool,
+    ) -> Result<String, Status> {
+        // Refusing up front so a caller watching a typo gets `not_found` now
+        // rather than a watcher id that silently never reports anything.
+        let entry = self.require_entry(path).await?;
+        if entry.r#type != FileType::Directory as i32 {
+            return Err(Status::invalid_argument(format!(
+                "{path} is not a directory, so there is nothing to watch inside it"
+            )));
+        }
+
+        // `-maxdepth 1` for a shallow watch; no bound for a recursive one.
+        let depth = if recursive { "" } else { "-maxdepth 1" };
+        // The markers without their leading newline: the script prints that
+        // itself, so the two spellings cannot drift apart.
+        let begin = &SNAP_BEGIN[1..];
+        let end = &SNAP_END[1..];
+        // `sort` so two snapshots of an unchanged tree compare equal --
+        // `find` gives no order guarantee, and without this every sweep
+        // would look like a change and print a fresh snapshot forever.
+        let script = format!(
+            "prev=''; \
+             while :; do \
+               cur=$(find '{path}' -mindepth 1 {depth} 2>/dev/null | \
+                     while read f; do stat -c '%n|%f|%s|%a|%U|%G|%Y' \"$f\" 2>/dev/null; done | sort); \
+               if [ \"$cur\" != \"$prev\" ]; then \
+                 printf '\\n%s\\n' '{begin}'; \
+                 [ -n \"$cur\" ] && printf '%s\\n' \"$cur\"; \
+                 printf '%s\\n' '{end}'; \
+                 prev=$cur; \
+               fi; \
+               sleep {WATCH_INTERVAL_SECS}; \
+             done"
+        );
+
+        let pid = self
+            .vm
+            .start_in_guest("/bin/sh", &["-c".to_string(), script], None, EXEC_TIMEOUT)
+            .await
+            .map_err(|e| Status::internal(format!("could not start a watcher: {e}")))?;
+
+        let id = format!("w{}", self.next_watcher.fetch_add(1, Ordering::Relaxed));
+        self.watchers.lock().insert(
+            id.clone(),
+            Watcher {
+                pid,
+                buffer: String::new(),
+                baseline: None,
+                include_entry,
+            },
+        );
+        Ok(id)
+    }
+
+    /// Collect whatever the watcher has reported since the last drain.
+    async fn drain_watcher(&self, id: &str) -> Result<Vec<FilesystemEvent>, Status> {
+        let (pid, include_entry) = {
+            let watchers = self.watchers.lock();
+            let w = watchers
+                .get(id)
+                .ok_or_else(|| Status::not_found(format!("no watcher {id}")))?;
+            (w.pid, w.include_entry)
+        };
+
+        let output = self
+            .vm
+            .poll_in_guest(pid, EXEC_TIMEOUT)
+            .await
+            .map_err(|e| Status::internal(format!("polling watcher {id}: {e}")))?;
+
+        if !output.running {
+            self.watchers.lock().remove(id);
+            return Err(Status::aborted(format!(
+                "watcher {id} stopped in the guest (exit {:?}, signal {:?})",
+                output.exit_code, output.signal
+            )));
+        }
+
+        let mut watchers = self.watchers.lock();
+        let Some(watcher) = watchers.get_mut(id) else {
+            // Removed while this call was awaiting the guest.
+            return Err(Status::not_found(format!("no watcher {id}")));
+        };
+        watcher.buffer.push_str(&output.stdout);
+
+        let mut events = Vec::new();
+        for block in take_snapshots(&mut watcher.buffer) {
+            let snapshot = parse_snapshot(&block);
+            match watcher.baseline.replace(snapshot) {
+                // The first snapshot is the baseline, not a burst of
+                // creations for every file that was already there.
+                None => {}
+                Some(previous) => {
+                    let current = watcher.baseline.as_ref().expect("just set");
+                    diff_into(&previous, current, include_entry, &mut events);
+                }
+            }
+        }
+        Ok(events)
+    }
+
+    /// Stop a watcher's guest process and forget it.
+    async fn close_watcher(&self, id: &str) -> Result<(), Status> {
+        let pid = self
+            .watchers
+            .lock()
+            .remove(id)
+            .map(|w| w.pid)
+            .ok_or_else(|| Status::not_found(format!("no watcher {id}")))?;
+        // A watcher loops forever, so it has to be killed rather than waited
+        // for. SIGKILL and not SIGTERM because `sh` running a `while` loop
+        // does not reliably act on SIGTERM between commands.
+        self.vm
+            .signal_in_guest(pid, 9, EXEC_TIMEOUT)
+            .await
+            .map_err(|e| Status::internal(format!("stopping watcher {id}: {e}")))
+    }
+}
+
+/// Split whole snapshots off the front of `buffer`, leaving any partial one.
+fn take_snapshots(buffer: &mut String) -> Vec<String> {
+    let mut blocks = Vec::new();
+    loop {
+        let Some(start) = buffer.find(SNAP_BEGIN) else {
+            // No snapshot has begun. Anything here is a marker torn across
+            // two reads at worst, so keep only that much rather than letting
+            // unrecognised output accumulate for the life of the watcher.
+            if buffer.len() > SNAP_BEGIN.len() {
+                let keep = buffer.len() - SNAP_BEGIN.len();
+                buffer.drain(..keep);
+            }
+            break;
+        };
+        let body_at = start + SNAP_BEGIN.len();
+        let Some(offset) = buffer[body_at..].find(SNAP_END) else {
+            // Still being written; wait for the rest.
+            buffer.drain(..start);
+            break;
+        };
+        blocks.push(buffer[body_at..body_at + offset].to_string());
+        let consumed = body_at + offset + SNAP_END.len();
+        buffer.drain(..consumed);
+    }
+    blocks
+}
+
+/// Parse one snapshot into path -> entry.
+fn parse_snapshot(block: &str) -> HashMap<String, Snap> {
+    let mut snapshot = HashMap::new();
+    for line in block.lines().filter(|l| !l.trim().is_empty()) {
+        // From the right, because a path may contain `|` and the six stat
+        // fields never do.
+        let mut fields = line.rsplitn(7, '|');
+        let (
+            Some(mtime),
+            Some(group),
+            Some(owner),
+            Some(perms),
+            Some(size),
+            Some(mode_hex),
+            Some(path),
+        ) = (
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+            fields.next(),
+        )
+        else {
+            // A line this malformed means the guest's stat printed something
+            // unexpected. Skipping it loses one entry; failing the whole
+            // drain would lose every event for every other entry too.
+            continue;
+        };
+        snapshot.insert(
+            path.to_string(),
+            Snap {
+                mode_hex: mode_hex.to_string(),
+                size: size.to_string(),
+                perms: perms.to_string(),
+                owner: owner.to_string(),
+                group: group.to_string(),
+                mtime: mtime.to_string(),
+            },
+        );
+    }
+    snapshot
+}
+
+/// Turn the difference between two snapshots into events.
+fn diff_into(
+    previous: &HashMap<String, Snap>,
+    current: &HashMap<String, Snap>,
+    include_entry: bool,
+    events: &mut Vec<FilesystemEvent>,
+) {
+    let entry_for = |path: &str, snap: &Snap| {
+        if include_entry {
+            Some(entry_from_snap(path, snap))
+        } else {
+            None
+        }
+    };
+
+    for (path, snap) in current {
+        match previous.get(path) {
+            None => events.push(FilesystemEvent {
+                name: path.clone(),
+                r#type: EventType::Create as i32,
+                entry: entry_for(path, snap),
+            }),
+            Some(before) => {
+                if before.size != snap.size || before.mtime != snap.mtime {
+                    events.push(FilesystemEvent {
+                        name: path.clone(),
+                        r#type: EventType::Write as i32,
+                        entry: entry_for(path, snap),
+                    });
+                }
+                // Reported separately from a write, because they are
+                // separate events in the proto and a chmod changes no
+                // content. A single sweep can legitimately see both.
+                if before.perms != snap.perms {
+                    events.push(FilesystemEvent {
+                        name: path.clone(),
+                        r#type: EventType::Chmod as i32,
+                        entry: entry_for(path, snap),
+                    });
+                }
+            }
+        }
+    }
+
+    for path in previous.keys() {
+        if !current.contains_key(path) {
+            events.push(FilesystemEvent {
+                name: path.clone(),
+                // No entry: the proto's own comment says it is not set for a
+                // removal, and there is nothing left in the guest to stat.
+                r#type: EventType::Remove as i32,
+                entry: None,
+            });
+        }
+    }
+}
+
+/// An `EntryInfo` from what a snapshot recorded.
+///
+/// Missing `symlink_target` compared with [`EnvdFilesystem::stat_entry`]: a
+/// snapshot does not `readlink`, and doing so would be a guest round trip
+/// per changed entry.
+fn entry_from_snap(path: &str, snap: &Snap) -> EntryInfo {
+    let raw_mode = u32::from_str_radix(&snap.mode_hex, 16).unwrap_or(0);
+    let file_type = match raw_mode & 0o170000 {
+        0o100000 => FileType::File,
+        0o040000 => FileType::Directory,
+        0o120000 => FileType::Symlink,
+        _ => FileType::Unspecified,
+    };
+    EntryInfo {
+        name: path.rsplit('/').next().unwrap_or(path).to_string(),
+        r#type: file_type as i32,
+        path: path.to_string(),
+        size: snap.size.parse().unwrap_or(0),
+        mode: raw_mode & 0o7777,
+        permissions: snap.perms.clone(),
+        owner: snap.owner.clone(),
+        group: snap.group.clone(),
+        modified_time: Some(prost_types::Timestamp {
+            seconds: snap.mtime.parse().unwrap_or(0),
+            nanos: 0,
+        }),
+        symlink_target: None,
+        metadata: Default::default(),
     }
 }
 
@@ -279,32 +652,322 @@ impl Filesystem for EnvdFilesystem {
 
     async fn watch_dir(
         &self,
-        _request: Request<WatchDirRequest>,
+        request: Request<WatchDirRequest>,
     ) -> Result<Response<Self::WatchDirStream>, Status> {
-        Err(Status::unimplemented(
-            "watching needs a long-lived guest-side watcher reporting over a channel this \
-             design doesn't have yet",
-        ))
+        let req = request.into_inner();
+        let id = self
+            .open_watcher(&req.path, req.recursive, req.include_entry)
+            .await?;
+
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let service = EnvdFilesystem {
+            vm: Arc::clone(&self.vm),
+            watchers: Arc::clone(&self.watchers),
+            // Only `open_watcher` mints ids, and this clone never calls it.
+            next_watcher: AtomicU64::new(0),
+        };
+        let watcher_id = id.clone();
+
+        tokio::spawn(async move {
+            // The client is told watching has begun before any event, so a
+            // caller can tell "connected, nothing has happened" apart from
+            // "not connected yet".
+            if tx
+                .send(Ok(WatchDirResponse {
+                    event: Some(filesystem_proto::watch_dir_response::Event::Start(
+                        filesystem_proto::watch_dir_response::StartEvent {},
+                    )),
+                }))
+                .await
+                .is_err()
+            {
+                let _ = service.close_watcher(&watcher_id).await;
+                return;
+            }
+
+            let mut quiet_since = std::time::Instant::now();
+            loop {
+                tokio::time::sleep(WATCH_DRAIN).await;
+                let events = match service.drain_watcher(&watcher_id).await {
+                    Ok(events) => events,
+                    Err(status) => {
+                        let _ = tx.send(Err(status)).await;
+                        break;
+                    }
+                };
+
+                let quiet = events.is_empty();
+                for event in events {
+                    if tx
+                        .send(Ok(WatchDirResponse {
+                            event: Some(filesystem_proto::watch_dir_response::Event::Filesystem(
+                                event,
+                            )),
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        // The client hung up. Nothing else will ever read
+                        // this watcher, so stop paying for it in the guest.
+                        let _ = service.close_watcher(&watcher_id).await;
+                        return;
+                    }
+                }
+
+                if quiet {
+                    if quiet_since.elapsed() >= WATCH_KEEPALIVE {
+                        quiet_since = std::time::Instant::now();
+                        if tx
+                            .send(Ok(WatchDirResponse {
+                                event: Some(
+                                    filesystem_proto::watch_dir_response::Event::Keepalive(
+                                        filesystem_proto::watch_dir_response::KeepAlive {},
+                                    ),
+                                ),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            let _ = service.close_watcher(&watcher_id).await;
+                            return;
+                        }
+                    }
+                } else {
+                    quiet_since = std::time::Instant::now();
+                }
+            }
+
+            let _ = service.close_watcher(&watcher_id).await;
+        });
+
+        Ok(Response::new(Box::pin(
+            tokio_stream::wrappers::ReceiverStream::new(rx),
+        )))
     }
 
     async fn create_watcher(
         &self,
-        _request: Request<CreateWatcherRequest>,
+        request: Request<CreateWatcherRequest>,
     ) -> Result<Response<CreateWatcherResponse>, Status> {
-        Err(Status::unimplemented("watching is not implemented"))
+        let req = request.into_inner();
+        let watcher_id = self
+            .open_watcher(&req.path, req.recursive, req.include_entry)
+            .await?;
+        Ok(Response::new(CreateWatcherResponse { watcher_id }))
     }
 
     async fn get_watcher_events(
         &self,
-        _request: Request<GetWatcherEventsRequest>,
+        request: Request<GetWatcherEventsRequest>,
     ) -> Result<Response<GetWatcherEventsResponse>, Status> {
-        Err(Status::unimplemented("watching is not implemented"))
+        let events = self.drain_watcher(&request.into_inner().watcher_id).await?;
+        Ok(Response::new(GetWatcherEventsResponse { events }))
     }
 
     async fn remove_watcher(
         &self,
-        _request: Request<RemoveWatcherRequest>,
+        request: Request<RemoveWatcherRequest>,
     ) -> Result<Response<RemoveWatcherResponse>, Status> {
-        Err(Status::unimplemented("watching is not implemented"))
+        self.close_watcher(&request.into_inner().watcher_id).await?;
+        Ok(Response::new(RemoveWatcherResponse {}))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One snapshot as the guest prints it, markers and all.
+    fn block(lines: &[&str]) -> String {
+        let mut out = String::from(SNAP_BEGIN);
+        out.push('\n');
+        for line in lines {
+            out.push_str(line);
+            out.push('\n');
+        }
+        // The end marker's leading newline is the previous line's trailing
+        // one, exactly as the guest script produces it.
+        out.push_str(&SNAP_END[1..]);
+        out.push('\n');
+        out
+    }
+
+    const A: &str = "/w/a.txt|81a4|4|644|root|root|100";
+    const B: &str = "/w/b.txt|81a4|9|644|root|root|100";
+
+    #[test]
+    fn a_snapshot_still_being_written_is_left_alone() {
+        // The guest prints a snapshot over however many reads it takes. A
+        // half-read one diffed as if complete would report every entry not
+        // yet printed as removed -- events for deletions that never happened.
+        let whole = block(&[A, B]);
+        // Up to the last byte of the end marker itself. The guest prints a
+        // newline after it, but the host does not wait for that -- the marker
+        // is what makes the snapshot complete.
+        let complete_at = whole.len() - 1;
+        for cut in 1..complete_at {
+            let mut buffer = whole[..cut].to_string();
+            assert!(
+                take_snapshots(&mut buffer).is_empty(),
+                "{cut} of {} bytes should not yield a snapshot",
+                whole.len()
+            );
+        }
+        let mut buffer = whole.clone();
+        assert_eq!(take_snapshots(&mut buffer).len(), 1);
+    }
+
+    #[test]
+    fn several_snapshots_in_one_read_come_back_in_order() {
+        // Each drain can cover more than one guest interval, and applying
+        // them out of order would diff against the wrong baseline.
+        let mut buffer = format!("{}{}{}", block(&[A]), block(&[A, B]), block(&[B]));
+        let taken = take_snapshots(&mut buffer);
+        assert_eq!(taken.len(), 3);
+        assert!(taken[0].contains("a.txt") && !taken[0].contains("b.txt"));
+        assert!(taken[1].contains("a.txt") && taken[1].contains("b.txt"));
+        assert!(!taken[2].contains("a.txt") && taken[2].contains("b.txt"));
+    }
+
+    #[test]
+    fn a_file_named_like_the_end_marker_does_not_cut_its_snapshot_short() {
+        // The reason the markers carry their newline: an unanchored search
+        // would find the marker inside this path and truncate the snapshot,
+        // losing every entry after it.
+        let evil = "/w/---HM-WATCH-END---|81a4|1|644|root|root|100";
+        let mut buffer = block(&[evil, B]);
+        let taken = take_snapshots(&mut buffer);
+        assert_eq!(taken.len(), 1);
+        let snapshot = parse_snapshot(&taken[0]);
+        assert_eq!(snapshot.len(), 2, "both entries should survive");
+        assert!(snapshot.contains_key("/w/---HM-WATCH-END---"));
+    }
+
+    #[test]
+    fn an_empty_snapshot_parses_as_an_empty_tree() {
+        // An empty watched directory is not a parse failure, and treating it
+        // as one would make the first removal from a one-file directory an
+        // error instead of an event.
+        let mut buffer = block(&[]);
+        let taken = take_snapshots(&mut buffer);
+        assert_eq!(taken.len(), 1);
+        assert!(parse_snapshot(&taken[0]).is_empty());
+    }
+
+    #[test]
+    fn a_path_containing_a_pipe_survives_parsing() {
+        // Fields are split from the right precisely so a path may contain the
+        // separator. Splitting from the left would read `a` as the path and
+        // the rest as garbage.
+        let snapshot = parse_snapshot("/w/a|b.txt|81a4|4|644|root|root|100");
+        assert!(
+            snapshot.contains_key("/w/a|b.txt"),
+            "{:?}",
+            snapshot.keys().collect::<Vec<_>>()
+        );
+    }
+
+    fn kinds(previous: &str, current: &str) -> Vec<(String, i32)> {
+        let mut events = Vec::new();
+        diff_into(
+            &parse_snapshot(previous),
+            &parse_snapshot(current),
+            false,
+            &mut events,
+        );
+        let mut out: Vec<(String, i32)> = events.into_iter().map(|e| (e.name, e.r#type)).collect();
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn each_kind_of_change_becomes_its_own_event() {
+        let created = kinds(A, &format!("{A}\n{B}"));
+        assert_eq!(
+            created,
+            vec![("/w/b.txt".to_string(), EventType::Create as i32)]
+        );
+
+        let removed = kinds(&format!("{A}\n{B}"), A);
+        assert_eq!(
+            removed,
+            vec![("/w/b.txt".to_string(), EventType::Remove as i32)]
+        );
+
+        // Size and mtime both mean the content changed.
+        let written = kinds(A, "/w/a.txt|81a4|7|644|root|root|101");
+        assert_eq!(
+            written,
+            vec![("/w/a.txt".to_string(), EventType::Write as i32)]
+        );
+
+        let chmodded = kinds(A, "/w/a.txt|81a4|4|600|root|root|100");
+        assert_eq!(
+            chmodded,
+            vec![("/w/a.txt".to_string(), EventType::Chmod as i32)]
+        );
+    }
+
+    #[test]
+    fn a_write_and_a_chmod_in_one_sweep_are_both_reported() {
+        // Collapsing them would hide whichever the caller cared about, and
+        // the proto has a distinct event type for each.
+        let both = kinds(A, "/w/a.txt|81a4|7|600|root|root|101");
+        // Sorted by (name, type), and Write is 2 to Chmod's 5.
+        assert_eq!(
+            both,
+            vec![
+                ("/w/a.txt".to_string(), EventType::Write as i32),
+                ("/w/a.txt".to_string(), EventType::Chmod as i32),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unchanged_tree_produces_nothing() {
+        assert!(kinds(&format!("{A}\n{B}"), &format!("{A}\n{B}")).is_empty());
+    }
+
+    #[test]
+    fn a_rename_reads_as_a_remove_and_a_create() {
+        // Documented in this module's header rather than papered over: a
+        // snapshot carries nothing tying the old name to the new one, so
+        // EVENT_TYPE_RENAME is never emitted and this is what a caller sees.
+        let renamed = kinds(A, "/w/renamed.txt|81a4|4|644|root|root|100");
+        assert_eq!(
+            renamed,
+            vec![
+                ("/w/a.txt".to_string(), EventType::Remove as i32),
+                ("/w/renamed.txt".to_string(), EventType::Create as i32),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_removal_carries_no_entry_even_when_one_was_asked_for() {
+        // The proto's own comment: entry is not set for a removal. There is
+        // nothing left in the guest to describe.
+        let mut events = Vec::new();
+        diff_into(&parse_snapshot(A), &HashMap::new(), true, &mut events);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].r#type, EventType::Remove as i32);
+        assert!(events[0].entry.is_none());
+    }
+
+    #[test]
+    fn include_entry_describes_the_entry_that_changed() {
+        let mut events = Vec::new();
+        diff_into(
+            &HashMap::new(),
+            &parse_snapshot("/w/sub|41ed|40|755|root|root|100"),
+            true,
+            &mut events,
+        );
+        let entry = events[0].entry.as_ref().expect("include_entry was set");
+        assert_eq!(entry.name, "sub");
+        assert_eq!(entry.path, "/w/sub");
+        assert_eq!(entry.r#type, FileType::Directory as i32);
+        assert_eq!(entry.mode, 0o755);
+        assert_eq!(entry.permissions, "755");
     }
 }

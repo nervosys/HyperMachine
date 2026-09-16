@@ -136,7 +136,7 @@ pub fn create_router() -> Router {
     create_router_with_state(AppState::new())
 }
 
-/// Exposes the REST server's VM inventory as a [`VmHost`].
+/// Exposes the REST server's VM inventory as a [`hv2_agent::VmHost`].
 ///
 /// The ontology's plan executor and the `/api/v1/vms` endpoints have to act on
 /// the *same* VMs — a plan that creates a VM the REST API cannot see, or stops

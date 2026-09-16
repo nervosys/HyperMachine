@@ -339,9 +339,17 @@ file-read/stat primitive, so every RPC shells into the guest via
 `mkdir -p`, `mv`, `rm -rf`, `find`) — slower and more fragile than a real
 envd's direct syscalls, and said so in the module's own doc comment rather
 than presented as equivalent. `Stat`, `MakeDir`, `Move`, `ListDir`,
-`Remove` are real; `WatchDir`/`CreateWatcher`/`GetWatcherEvents`/
-`RemoveWatcher` are `unimplemented` (would need a long-lived guest-side
-watcher this design has nowhere to report through yet).
+`Remove` are real, and so are `WatchDir`/`CreateWatcher`/
+`GetWatcherEvents`/`RemoveWatcher`, once the guest agent could keep a
+long-lived process: a watcher is an `sh` loop in the guest printing a
+`find`+`stat` snapshot whenever the tree differs from the previous one,
+and the host diffs consecutive snapshots into events. That is a poll, not
+`inotify` — this guest's busybox has no `inotifyd` — with the costs stated
+in the module's doc comment: changes faster than the interval are
+collapsed, and a rename reads as a remove plus a create, so
+`EVENT_TYPE_RENAME` is never emitted. `allow_network_mounts` is ignored,
+and correctly so: it exists because `inotify` is unreliable on NFS/CIFS,
+which polling `find` is not.
 
 Verified live, all five, against the real guest:
 
@@ -443,8 +451,8 @@ endpoint by changing only its base URL. `Start`, `List`, and the core
 `filesystem.Filesystem` RPCs (`Stat`/`MakeDir`/`Move`/`ListDir`/`Remove`)
 are now real and live-verified, on one per-sandbox port the control plane
 wires up automatically, as are `Connect`/`StreamInput`/`SendInput`/
-`SendSignal`/`CloseStdin`. What's left: `Update` and anything else needing a
-PTY, watch RPCs, pushed rather than 50ms-polled output,
+`SendSignal`/`CloseStdin` and all four watch RPCs. What's left: `Update`
+and anything else needing a PTY, pushed rather than polled output,
 and — the part that actually blocks trying a real SDK, not just
 `grpcurl` — routing by domain the way E2B's own `CubeProxy`-equivalent
 would, since `processPort` is not a field any real SDK looks for.
