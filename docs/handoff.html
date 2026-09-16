@@ -3231,7 +3231,7 @@ sudo ip link set hm0 up</pre>
 </section>
 
 <section>
-  <h2><code>pause()</code> could never have worked, on any VM</h2>
+  <h2><code>pause()</code> could never have worked — and now does</h2>
   <p>
     Two examples, <code>advanced</code> and <code>basic</code>, were skipped
     with a reason this page recorded confidently: <em>"pause a VM that has no
@@ -3276,20 +3276,41 @@ pause()   returned from inside its loop, after pausing the vCPUs before
     would not be.
   </p>
   <div class="callout">
-    <h3>Refusing honestly is not the same as fixing</h3>
+    <h3>Now implemented, and the machinery was already here</h3>
     <p>
-      Both now return <code>NotSupported</code> and say why. That is not a
-      behaviour change &mdash; <code>pause()</code> already returned an error
-      every single time &mdash; it is the same failure with a message that
-      points at the missing facility instead of at vCPU bookkeeping, which is
-      where the old message sent every reader.
+      Suspend-and-continue works. <code>pause()</code> sends every vCPU
+      <code>VCpuMessage::Pause</code> and kicks it out of <code>KVM_RUN</code>,
+      which is the same kick <code>stop()</code> needs and for the same reason:
+      a thread blocked in that ioctl never reaches the top of its loop to read
+      a message.
     </p>
     <p>
-      <strong>Implementing suspend-and-continue is still open.</strong> It
-      means kicking each vCPU out of <code>KVM_RUN</code>, holding it outside,
-      and putting it back &mdash; machinery <code>stop()</code> already has
-      half of, since that is how a spinning guest was made interruptible. It is
-      a feature and a decision, not a repair, so it has not been made.
+      The surprise was how little there was to write. <strong>The vCPU loop had
+      handled <code>VCpuMessage::Pause</code> since it was written</strong>
+      &mdash; it sets a flag and parks on <code>rx.recv().await</code> until
+      Resume. Nothing ever sent the message. What looked like a missing feature
+      was a missing three lines between two halves that both already existed,
+      which is worth remembering the next time something is called unimplemented
+      on the strength of its entry point failing.
+    </p>
+    <p>
+      Verified against a guest rather than a state field, because
+      <em>returns Ok</em> would have been a weaker claim than it looks. The
+      first version of the test watched the console for output and asserted a
+      paused guest stops producing it &mdash; but this guest <code>hlt</code>s
+      when idle, so a <em>running</em> idle guest produces nothing either. That
+      test passed its pause assertion for the wrong reason and then failed its
+      resume assertion for the same one. What distinguishes suspended from idle
+      is whether the guest can be <em>woken</em>: the test now opens a vsock
+      connection to a paused guest, which cannot answer it, and resumes, after
+      which it does.
+    </p>
+    <p>
+      The REST and gRPC endpoints follow: <code>409 Conflict</code> and
+      <code>FAILED_PRECONDITION</code>, since the only remaining error is a VM
+      in the wrong state. They had been changed to 501 earlier the same day, on
+      the correct reasoning that a facility which does not exist should not
+      answer 500 &mdash; and that reasoning stopped being true an hour later.
     </p>
   </div>
   <p>
@@ -3553,15 +3574,6 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       is the argument for running a thing rather than reading it.
     </li>
     <li>
-      <strong>Decide what <code>pause()</code> is.</strong> It has never worked
-      on any VM &mdash; see above &mdash; and now says so instead of failing
-      with a message about vCPU state. Either implement suspend-and-continue
-      (kick each vCPU out of <code>KVM_RUN</code>, hold it, put it back, which
-      is half of what <code>stop()</code> does already), or delete the pair and
-      the REST and gRPC endpoints that forward to them. What should not stand
-      is a published API in three surfaces that returns an error by
-      construction.
-    </li>
     <li>
       <strong>Run the two <code>ip tuntap</code> lines, then
       <code>tap_bridge</code>.</strong> Everything that needed only

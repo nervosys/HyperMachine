@@ -147,13 +147,13 @@ curl http://localhost:8080/agentic/ontology
 | DELETE | `/api/v1/vms/{id}`         | Delete a VM        |
 | POST   | `/api/v1/vms/{id}/start`   | Start a VM         |
 | POST   | `/api/v1/vms/{id}/stop`    | Stop a VM          |
-| POST   | `/api/v1/vms/{id}/pause`   | **Not implemented** — always 501 |
-| POST   | `/api/v1/vms/{id}/resume`  | **Not implemented** — always 501 |
+| POST   | `/api/v1/vms/{id}/pause`   | Suspend a running VM |
+| POST   | `/api/v1/vms/{id}/resume`  | Continue a suspended VM |
 | GET    | `/api/v1/vms/{id}/metrics` | Get VM metrics     |
 | GET    | `/api/v1/vms/{id}/console` | Read guest console |
 | POST   | `/api/v1/vms/{id}/script`  | Execute a script   |
 
-The pause and resume endpoints exist and always fail, with `501 PAUSE_FAILED` or `501 RESUME_FAILED`. Nothing in this hypervisor suspends a running vCPU: a vCPU blocks inside `KVM_RUN` and is released by a flag no pause ever set, and no vCPU is ever marked running for one to act on. Use stop and create rather than pause and resume. 
+Pause suspends the guest: every vCPU is told to pause and kicked out of `KVM_RUN`, where it parks until resumed. A suspended guest executes nothing — it cannot answer a request sent while it is paused, and answers once resumed. Both return `409` when the VM is in the wrong state for them: not running, or not paused. 
 
 `GET /api/v1/vms/{id}/console` returns `{ "id", "attached", "output" }`. It
 does not consume the buffer, so polling returns the whole log each time rather

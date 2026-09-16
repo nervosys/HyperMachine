@@ -124,12 +124,11 @@ impl VmService for VMServiceImpl {
             .ok_or_else(|| Status::not_found("VM not found"))?
             .clone();
 
-        // `unimplemented`, not `internal`: nothing suspends a running vCPU
-        // here, so this fails identically on every call and a client should
-        // not treat it as a transient server fault.
+        // `failed_precondition`: suspending works, so an error here means
+        // the VM is in the wrong state for it, which the caller can fix.
         vm.pause()
             .await
-            .map_err(|e| Status::unimplemented(e.to_string()))?;
+            .map_err(|e| Status::failed_precondition(e.to_string()))?;
 
         Ok(Response::new(PauseVmResponse { success: true }))
     }
@@ -148,12 +147,11 @@ impl VmService for VMServiceImpl {
             .ok_or_else(|| Status::not_found("VM not found"))?
             .clone();
 
-        // `unimplemented`, not `internal`: nothing suspends a running vCPU
-        // here, so this fails identically on every call and a client should
-        // not treat it as a transient server fault.
+        // `failed_precondition`: suspending works, so an error here means
+        // the VM is in the wrong state for it, which the caller can fix.
         vm.resume()
             .await
-            .map_err(|e| Status::unimplemented(e.to_string()))?;
+            .map_err(|e| Status::failed_precondition(e.to_string()))?;
 
         Ok(Response::new(ResumeVmResponse { success: true }))
     }

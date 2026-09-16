@@ -172,7 +172,7 @@ Scripts are subject to capability checks. Agents must have the required capabili
 | Capability      | Description                   |
 | --------------- | ----------------------------- |
 | `VmRead`        | Read VM state and metrics     |
-| `VmControl`     | Start and stop a VM. Pause and resume are not implemented — see below |
+| `VmControl`     | Start, stop, pause and resume a VM            |
 | `VmModify`      | Change VM configuration       |
 | `MemoryAccess`  | Read/write guest memory       |
 | `Network`       | Network operations            |
@@ -181,12 +181,6 @@ Scripts are subject to capability checks. Agents must have the required capabili
 | `GuestExec`     | Execute commands in guest     |
 | `Snapshot`      | Create/restore snapshots      |
 | `Metrics`       | Access metrics and monitoring |
-
-`VmControl` grants pause and resume as well, but neither does anything:
-`VM::pause` requires a vCPU state nothing in this hypervisor ever sets, so it
-fails for every VM, and `VM::resume` has nothing to continue. Granting the
-capability is not the same as the operation working, and this is the one place
-in the table where the two differ.
 
 ### Setting Capabilities
 

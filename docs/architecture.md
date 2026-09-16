@@ -182,8 +182,9 @@ Command-line interface:
       the README records that the claim was removed rather than deferred
 - [ ] Live migration support — `hv2-core::migration` exists and is tested in
       isolation, but nothing outside that module calls it, so no VM migrates
-- [ ] Suspend and resume a running guest — `VM::pause` and `VM::resume` exist
-      and refuse; see their documentation for why
+- [x] Suspend and resume a running guest — `VM::pause` kicks every vCPU out
+      of `KVM_RUN` and parks it; verified against a guest that cannot answer
+      while suspended and does once resumed
 - [ ] Natural language VM control
 - [ ] Integration with LangChain/AutoGPT
 - [ ] Cloud-native deployment (K8s operator)

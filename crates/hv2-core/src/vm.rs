@@ -948,71 +948,96 @@ impl VM {
 
     /// Suspend the guest, leaving it able to continue.
     ///
-    /// # This is not implemented, and could never have worked
+    /// Every vCPU is told to pause and then kicked out of `KVM_RUN`, because a
+    /// thread blocked in that ioctl never reaches the top of its loop to read
+    /// the message -- the same reason [`Self::stop`] kicks, and the reason
+    /// `stop()` once never returned for any guest.
     ///
-    /// It refuses, and the refusal is the honest form of what it already did.
-    /// Three things were wrong with it, and they compound:
+    /// Returns once the message is sent and the kick delivered, not once every
+    /// vCPU has actually parked. A vCPU reaches its park a moment later, when
+    /// `KVM_RUN` returns; waiting for that would mean waiting on a thread that
+    /// may be mid-exit for an unrelated reason.
     ///
-    /// 1. It paused each vCPU, and [`VCpu::pause`](crate::VCpu::pause) requires
-    ///    the vCPU be in [`VCpuState::Running`](crate::VCpuState::Running).
-    ///    **Nothing in this repository ever puts a vCPU in that state** --
-    ///    `VCpuState::Running` is written nowhere, and the only call to
-    ///    `set_state` outside its own definition writes `Stopped`. So the first
-    ///    vCPU always refused and no VM has ever been paused.
-    /// 2. The refusal named the vCPU's state, which sent every reader to look
-    ///    at vCPU bookkeeping. The cause is that the state is never set at all.
-    /// 3. It returned that error from inside the loop, after pausing the
-    ///    vCPUs before it -- so a VM that somehow got past vCPU 0 and failed at
-    ///    vCPU 1 would be left half-paused, with its own state still `Running`.
+    /// # What this used to do
     ///
-    /// And if all three were fixed it would still not suspend a guest. A vCPU
-    /// runs in a loop that blocks in `KVM_RUN` and consults `self.running`, an
-    /// `AtomicBool` this never touched. Pausing the bookkeeping while the guest
-    /// keeps executing is worse than refusing: a caller who believes a guest is
-    /// frozen may act on that, and it is not.
-    ///
-    /// Implementing it means kicking each vCPU out of `KVM_RUN`, holding it
-    /// outside, and putting it back -- the mechanism [`Self::stop`] already has
-    /// half of. That is a feature and a decision, not a repair, so it is not
-    /// made here. What is fixed is that this no longer reports a vCPU state
-    /// problem for a facility that does not exist.
+    /// It called `VCpu::pause`, which requires the vCPU be in
+    /// `VCpuState::Running` -- a state nothing in this repository has ever
+    /// written. So it failed on the first vCPU for every VM, and no VM was
+    /// ever paused. The machinery it needed was already here: the vCPU loop
+    /// has handled `VCpuMessage::Pause` by parking on its channel since it was
+    /// written, and nothing sent that message.
     ///
     /// # Errors
     ///
-    /// Always. [`Error::NotSupported`], naming [`Self::stop`], which does work.
+    /// Returns an error if the VM is not running. A vCPU that cannot be kicked
+    /// is logged rather than failing the call: the message is still queued,
+    /// and the vCPU reads it at its next exit.
     pub async fn pause(&self) -> Result<()> {
-        Err(Error::NotSupported(format!(
-            "VM '{}' cannot be paused: nothing suspends a running vCPU in this hypervisor. \
-             A vCPU blocks inside KVM_RUN and is released by the `running` flag, which no \
-             pause ever set, and no vCPU is ever marked Running for one to act on. Use \
-             stop() to end the VM; suspend-and-continue is unimplemented rather than \
-             broken here.",
-            self.config.name
-        )))
+        {
+            let state = self.state.read();
+            if *state != VMState::Running {
+                return Err(Error::InvalidState(format!(
+                    "Cannot pause VM in state {:?}",
+                    *state
+                )));
+            }
+        }
+
+        {
+            let tasks = self.vcpu_tasks.read();
+            if tasks.is_empty() {
+                return Err(Error::InvalidState(
+                    "this VM has no running vCPU tasks; it was started but never launched, so \
+                     there is nothing to suspend"
+                        .into(),
+                ));
+            }
+            for task in tasks.iter() {
+                let _ = task.tx.try_send(VCpuMessage::Pause);
+            }
+        }
+
+        for vcpu in &self.vcpus {
+            if let Err(e) = self.backend.kick_vcpu(vcpu).await {
+                tracing::warn!("failed to kick vCPU {} for pause: {}", vcpu.id(), e);
+            }
+        }
+
+        *self.state.write() = VMState::Paused;
+        tracing::info!("VM '{}' paused", self.config.name);
+        Ok(())
     }
 
     /// Continue a guest suspended by [`Self::pause`].
     ///
-    /// # Also not implemented
-    ///
-    /// The counterpart to [`Self::pause`], and it refuses for the same reason:
-    /// there is nothing to continue, because nothing suspends.
-    ///
-    /// This one was additionally asymmetric. `pause` set each vCPU to `Paused`;
-    /// this set only the *VM's* state back to `Running` and never touched the
-    /// vCPUs -- and it could not have, because no `VCpu::resume` exists. Had
-    /// pause ever succeeded, the VM would have reported `Running` afterwards
-    /// with every vCPU still marked `Paused`, and nothing would have said so.
+    /// No kick is needed in this direction: a paused vCPU is parked in
+    /// `rx.recv().await`, waiting for exactly this message, rather than inside
+    /// `KVM_RUN`.
     ///
     /// # Errors
     ///
-    /// Always. [`Error::NotSupported`].
+    /// Returns an error if the VM is not paused.
     pub async fn resume(&self) -> Result<()> {
-        Err(Error::NotSupported(format!(
-            "VM '{}' cannot be resumed: pause() is unimplemented, so there is never a \
-             suspended guest to continue.",
-            self.config.name
-        )))
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "Cannot resume VM in state {:?}",
+                    *state
+                )));
+            }
+        }
+
+        {
+            let tasks = self.vcpu_tasks.read();
+            for task in tasks.iter() {
+                let _ = task.tx.try_send(VCpuMessage::Resume);
+            }
+        }
+
+        *self.state.write() = VMState::Running;
+        tracing::info!("VM '{}' resumed", self.config.name);
+        Ok(())
     }
 
     /// Stop the VM

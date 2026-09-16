@@ -921,10 +921,12 @@ async fn pause_vm(
 
     vm.pause().await.map_err(|e| {
         (
-            // 501, not 500: suspend-and-continue is unimplemented in this
-            // hypervisor rather than broken in this request. 500 tells a
-            // caller to retry something that cannot succeed on any attempt.
-            StatusCode::NOT_IMPLEMENTED,
+            // 409, not 500 or 501: suspend-and-continue works now, so the
+            // only way here is a VM in the wrong state -- not running, or not
+            // paused, or launched without vCPU tasks. That is a conflict with
+            // current state, which a caller can resolve, rather than a server
+            // fault or a missing facility.
+            StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "PAUSE_FAILED".to_string(),
@@ -959,10 +961,12 @@ async fn resume_vm(
 
     vm.resume().await.map_err(|e| {
         (
-            // 501, not 500: suspend-and-continue is unimplemented in this
-            // hypervisor rather than broken in this request. 500 tells a
-            // caller to retry something that cannot succeed on any attempt.
-            StatusCode::NOT_IMPLEMENTED,
+            // 409, not 500 or 501: suspend-and-continue works now, so the
+            // only way here is a VM in the wrong state -- not running, or not
+            // paused, or launched without vCPU tasks. That is a conflict with
+            // current state, which a caller can resolve, rather than a server
+            // fault or a missing facility.
+            StatusCode::CONFLICT,
             Json(ErrorResponse {
                 error: e.to_string(),
                 code: "RESUME_FAILED".to_string(),
