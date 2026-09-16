@@ -15,7 +15,7 @@ Thank you for your interest in contributing to HyperMachine! This document provi
 
 ### Prerequisites
 
-- Rust 1.87 or later (see `rust-toolchain.toml`)
+- Rust 1.95 or later (`rust-version` in the workspace `Cargo.toml`; `rust-toolchain.toml` pins the channel, not the version)
 - Linux, macOS, or Windows with WSL2
 - Optional: KVM/QEMU for testing
 

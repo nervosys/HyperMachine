@@ -4,7 +4,7 @@ Set up a development environment for contributing to HyperMachine.
 
 ## Prerequisites
 
-- Rust 1.87+
+- Rust 1.95+
 - Linux with KVM, Windows with WHPX, or macOS with HVF
 - Git
 

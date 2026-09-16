@@ -5,7 +5,7 @@
 [![CI](https://github.com/nervosys/HyperMachine/actions/workflows/ci.yml/badge.svg)](https://github.com/nervosys/HyperMachine/actions)
 [![codecov](https://codecov.io/gh/nervosys/HyperMachine/branch/master/graph/badge.svg)](https://codecov.io/gh/nervosys/HyperMachine)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--only%20OR%20Commercial-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.87%2B-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.95%2B-orange.svg)](https://www.rust-lang.org)
 
 A high-performance hypervisor framework in Rust with first-class AI agent support. Type-1 bare-metal and Type-2 hosted modes.
 
@@ -101,7 +101,7 @@ The REST API ships with 28 composable middleware layers out of the box: rate lim
 
 ## Requirements
 
-- **Rust** 1.87+ (stable) for Type-2 crates; nightly for Type-1 (`hv1-core`, `hv1-boot`)
+- **Rust** 1.95+ (stable) for Type-2 crates; nightly for Type-1 (`hv1-core`, `hv1-boot`)
 - **Hypervisor backend** (Type-2 mode): KVM (Linux), WHPX (Windows), or HVF (macOS)
 - **protoc** (Protocol Buffers compiler) for building gRPC components
 
