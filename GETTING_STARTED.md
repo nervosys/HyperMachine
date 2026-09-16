@@ -178,6 +178,12 @@ use hv2_core::Config;
 let config = Config::from_file("config.toml")?;
 ```
 
+This file is read by *your* code, at the call above, and by nothing else: no
+HyperMachine binary loads it on startup. It is also a different schema from the
+API server's — `hv2 serve` reads `hv2.toml` with `[server]`, `[runtime]` and
+`[middleware]`, documented in `docs/src/getting-started/configuration.md`. The
+two do not share keys, and `hv2 config check` understands only the second.
+
 ## Advanced Features
 
 ### GPU Passthrough (Type 2)
