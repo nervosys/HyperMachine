@@ -63,6 +63,51 @@ async fn spawn_backend() -> SocketAddr {
     addr
 }
 
+/// Send one h2 request to `proxy` asking for `authority`, declaring itself
+/// gRPC, and return the status plus the gRPC status header if there is one.
+async fn grpc_through_proxy(
+    proxy: SocketAddr,
+    authority: &str,
+) -> (StatusCode, Option<String>, Option<String>, usize) {
+    let stream = TcpStream::connect(proxy).await.expect("connect to proxy");
+    let (mut sender, connection) =
+        hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(stream))
+            .await
+            .expect("h2 handshake with proxy");
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+
+    let request = Request::builder()
+        .method("POST")
+        .uri(format!("http://{authority}/process.Process/Start"))
+        .header("content-type", "application/grpc")
+        .body(Empty::<Bytes>::new())
+        .expect("build request");
+
+    let response = sender.send_request(request).await.expect("send");
+    let status = response.status();
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
+    let grpc_status = header("grpc-status");
+    let grpc_message = header("grpc-message");
+    // The body length matters: a gRPC client decodes a body as length-prefixed
+    // messages, so an error must carry none.
+    let body_len = response
+        .into_body()
+        .collect()
+        .await
+        .expect("collect")
+        .to_bytes()
+        .len();
+    (status, grpc_status, grpc_message, body_len)
+}
+
 /// Send one h2 request to `proxy` asking for `authority`.
 async fn through_proxy(proxy: SocketAddr, authority: &str, path: &str) -> (StatusCode, String) {
     let stream = TcpStream::connect(proxy).await.expect("connect to proxy");
@@ -195,4 +240,63 @@ async fn a_sandbox_whose_listener_is_gone_answers_bad_gateway() {
 
     let (status, _) = through_proxy(proxy, "49983-sbx_dead.local", "/x").await;
     assert_eq!(status, StatusCode::BAD_GATEWAY);
+}
+
+/// A gRPC client cannot read an HTTP status. Refusing one with a bare 404
+/// reaches it as `Unimplemented ... malformed header: missing HTTP
+/// content-type`, which names neither the problem nor the sandbox -- observed
+/// with grpcurl against a sandbox that had just been deleted.
+#[tokio::test]
+async fn a_grpc_client_is_refused_in_grpc_terms() {
+    let routes = Arc::new(PortMap::new());
+    let (proxy, _shutdown) = spawn_proxy(Arc::clone(&routes)).await;
+
+    // Unknown sandbox: NOT_FOUND is 5.
+    let (status, grpc_status, message, body_len) =
+        grpc_through_proxy(proxy, "49983-sbx_gone.local").await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "gRPC carries its status in a header"
+    );
+    assert_eq!(grpc_status.as_deref(), Some("5"));
+    assert!(
+        message.unwrap_or_default().contains("no sandbox"),
+        "and says which problem it was"
+    );
+    assert_eq!(
+        body_len, 0,
+        "a gRPC error carries no body: a client decodes one as a length-prefixed          message and reports a nonsense length"
+    );
+
+    // A name that is not a sandbox at all: INVALID_ARGUMENT is 3.
+    let (_, grpc_status, _, _) = grpc_through_proxy(proxy, "api.local").await;
+    assert_eq!(grpc_status.as_deref(), Some("3"));
+}
+
+/// A sandbox whose listener has gone is UNAVAILABLE rather than NOT_FOUND:
+/// the name resolved, so telling a client the sandbox does not exist would
+/// send it to create another one.
+#[tokio::test]
+async fn a_dead_listener_is_unavailable_not_missing() {
+    let dead = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let dead_addr = dead.local_addr().expect("addr");
+    drop(dead);
+
+    let routes = Arc::new(PortMap::new());
+    routes.insert("sbx_dead", 49983, dead_addr);
+    let (proxy, _shutdown) = spawn_proxy(Arc::clone(&routes)).await;
+
+    let (_, grpc_status, _, _) = grpc_through_proxy(proxy, "49983-sbx_dead.local").await;
+    assert_eq!(grpc_status.as_deref(), Some("14"));
+}
+
+/// A non-gRPC client still gets the HTTP status, since that is what it reads.
+#[tokio::test]
+async fn a_plain_http_client_still_gets_an_http_status() {
+    let routes = Arc::new(PortMap::new());
+    let (proxy, _shutdown) = spawn_proxy(Arc::clone(&routes)).await;
+
+    let (status, _) = through_proxy(proxy, "49983-sbx_gone.local", "/x").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

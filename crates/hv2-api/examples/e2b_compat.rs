@@ -60,6 +60,7 @@ use serde_json::json;
 
 use hv2_agent::{AgentVM, Capability, CapabilitySet};
 use hv2_api::envd_process::serve_for_sandbox;
+use hv2_api::sandbox_proxy::{self, PortMap};
 
 const GUEST_CID_BASE: u64 = 100;
 /// First port handed to a sandbox's own `process.Process` listener.
@@ -67,8 +68,17 @@ const GUEST_CID_BASE: u64 = 100;
 /// need to handle exhaustion and reuse.
 const PROCESS_PORT_BASE: u16 = 9000;
 
+/// The port an E2B client asks for when it wants a sandbox's envd.
+///
+/// Not a port anything here binds: it is the number in the hostname
+/// `{port}-{sandboxID}.{domain}`, which the proxy resolves to whichever local
+/// port that sandbox's listener actually got. E2B's own envd listens on this,
+/// so an SDK asks for it by name and should not have to know what it became.
+const ENVD_PORT: u16 = 49983;
+
 struct Options {
     port: u16,
+    proxy_port: u16,
     kernel: String,
     initrd: String,
     memory_gb: u64,
@@ -87,6 +97,7 @@ fn parse_options() -> Result<Options, String> {
 
     let mut opts = Options {
         port: 3980,
+        proxy_port: 3981,
         kernel,
         initrd,
         memory_gb: 1,
@@ -105,6 +116,9 @@ fn parse_options() -> Result<Options, String> {
         };
         match args[i].as_str() {
             "--port" => opts.port = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--proxy-port" => {
+                opts.proxy_port = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+            }
             "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--help" | "-h" => {
@@ -134,6 +148,10 @@ struct AppState {
     sandboxes: Mutex<HashMap<String, LiveSandbox>>,
     next_cid: Mutex<u64>,
     next_process_port: Mutex<u16>,
+    /// What the proxy resolves a sandbox hostname to. Shared with the proxy
+    /// task, which only reads it; every write happens here, on create and
+    /// destroy, so a name stops resolving the moment its VM goes away.
+    routes: Arc<PortMap>,
 }
 
 // ── E2B wire shapes -- field names taken directly from e2b-dev/E2B's
@@ -162,6 +180,16 @@ struct SandboxResponse {
     /// that proxy isn't built here.
     #[serde(rename = "processPort")]
     process_port: u16,
+    /// The hostname to send this sandbox's gRPC to, and where to send it.
+    ///
+    /// Both non-standard, like `processPort`. A real deployment would put the
+    /// proxy behind DNS for `*.{domain}` and an SDK would need neither; with
+    /// no DNS here, a client has to be told the authority to ask for and the
+    /// address to connect to.
+    #[serde(rename = "envdHost")]
+    envd_host: String,
+    #[serde(rename = "proxyPort")]
+    proxy_port: u16,
 }
 
 #[derive(Debug, Deserialize)]
@@ -262,13 +290,23 @@ async fn create_sandbox(
     };
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
     let process_vm = Arc::clone(&vm);
-    let process_addr = format!("0.0.0.0:{process_port}").parse().unwrap();
+    let process_addr: std::net::SocketAddr = format!("0.0.0.0:{process_port}").parse().unwrap();
+    // What the proxy dials. The listener binds 0.0.0.0; the proxy reaches it
+    // over loopback, and 0.0.0.0 is not an address you can connect *to*.
+    let local_process_addr: std::net::SocketAddr =
+        format!("127.0.0.1:{process_port}").parse().unwrap();
     let process_sandbox_id = sandbox_id.clone();
     tokio::spawn(async move {
         if let Err(e) = serve_for_sandbox(process_vm, process_addr, shutdown_rx).await {
             tracing::warn!("process.Process listener for {process_sandbox_id} stopped: {e}");
         }
     });
+
+    // Resolvable by name before the sandbox is announced, so a client that
+    // uses the response immediately does not race the registration.
+    state
+        .routes
+        .insert(&sandbox_id, ENVD_PORT, local_process_addr);
 
     state.sandboxes.lock().insert(
         sandbox_id.clone(),
@@ -278,6 +316,9 @@ async fn create_sandbox(
         },
     );
 
+    // Built before the response moves `sandbox_id` into `client_id`.
+    let envd_host = format!("{ENVD_PORT}-{sandbox_id}");
+
     (
         StatusCode::CREATED,
         Json(SandboxResponse {
@@ -286,6 +327,8 @@ async fn create_sandbox(
             client_id: sandbox_id,
             envd_version: "hv2-guest-agentd/0 (not envd)".to_string(),
             process_port,
+            envd_host,
+            proxy_port: state.opts.proxy_port,
         }),
     )
         .into_response()
@@ -349,6 +392,10 @@ async fn destroy_sandbox(
     let removed = state.sandboxes.lock().remove(&sandbox_id);
     match removed {
         Some(live) => {
+            // Stop resolving the name first: a request that arrives during
+            // teardown should fail to route rather than be sent at a VM that
+            // is in the middle of stopping.
+            state.routes.remove_sandbox(&sandbox_id);
             let _ = live.process_shutdown.send(());
             if let Err(e) = live.vm.stop().await {
                 tracing::warn!("stopping sandbox {sandbox_id}: {e}");
@@ -393,12 +440,37 @@ async fn main() -> std::process::ExitCode {
         }
     };
     let port = opts.port;
+    let proxy_port = opts.proxy_port;
 
+    let routes = Arc::new(PortMap::new());
     let state = Arc::new(AppState {
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
         next_process_port: Mutex::new(PROCESS_PORT_BASE),
+        routes: Arc::clone(&routes),
+    });
+
+    // The proxy, on its own port beside the control plane.
+    //
+    // `_proxy_shutdown` is load-bearing despite the name: a oneshot receiver
+    // resolves when its sender is dropped, so dropping this stops the proxy.
+    // Holding it until `main` returns is what keeps the proxy up. Deleting the
+    // binding as unused would take the proxy down before the first request --
+    // which is exactly how the proxy's own tests failed the first time they
+    // were written.
+    let (_proxy_shutdown, proxy_rx) = tokio::sync::oneshot::channel();
+    let proxy_addr: std::net::SocketAddr = match format!("0.0.0.0:{proxy_port}").parse() {
+        Ok(addr) => addr,
+        Err(e) => {
+            eprintln!("e2b_compat: bad proxy port {proxy_port}: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    tokio::spawn(async move {
+        if let Err(e) = sandbox_proxy::serve(proxy_addr, routes, proxy_rx).await {
+            tracing::error!("sandbox proxy on {proxy_addr} stopped: {e}");
+        }
     });
 
     let app = Router::new()
@@ -418,6 +490,17 @@ async fn main() -> std::process::ExitCode {
          (simpler than grpcurl-ing processPort)"
     );
     println!("  DELETE /sandboxes/{{id}}          -- stop the VM and its process.Process listener");
+    println!();
+    println!(
+        "sandbox proxy on 0.0.0.0:{proxy_port} -- HTTP/2, routed by the authority a client asks \
+         for, as {ENVD_PORT}-<sandboxID>.<anything>"
+    );
+    println!(
+        "  grpcurl -plaintext -authority {ENVD_PORT}-$SBX.local -import-path \
+         crates/hv2-api/proto -proto process.proto \\"
+    );
+    println!("      -d '{{\"process\":{{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}}}' \\");
+    println!("      localhost:{proxy_port} process.Process/Start");
 
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,

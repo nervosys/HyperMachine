@@ -52,14 +52,72 @@ use tokio::net::{TcpListener, TcpStream};
 type ProxyBody =
     http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
-fn message(status: StatusCode, text: &str) -> Response<ProxyBody> {
-    let mut response = Response::new(
-        Full::new(Bytes::from(text.to_owned()))
-            .map_err(|never| match never {})
-            .boxed(),
-    );
+/// Refuse a request in the shape its client can read.
+///
+/// A gRPC client does not interpret HTTP status codes: a 404 reaches it as
+/// `Unimplemented ... malformed header: missing HTTP content-type`, which
+/// names neither the problem nor the sandbox. gRPC carries its own status in
+/// headers on a 200, so a request that arrived as gRPC is refused that way and
+/// everything else gets the HTTP code.
+///
+/// Observed rather than assumed: deleting a sandbox and calling its old
+/// hostname produced exactly that `Unimplemented` from `grpcurl`, which is why
+/// this distinction exists.
+fn refuse(is_grpc: bool, status: StatusCode, grpc_status: u8, text: &str) -> Response<ProxyBody> {
+    let body = Full::new(Bytes::from(text.to_owned()))
+        .map_err(|never| match never {})
+        .boxed();
+
+    if is_grpc {
+        // "Trailers-only": status in the headers and *no body at all*. A gRPC
+        // client reads a body as length-prefixed messages, so prose sent under
+        // `application/grpc` is decoded as a frame header -- grpcurl reported
+        // `received message larger than max (1864397665 vs 4194304)`, which is
+        // this sentence's first four bytes read as a length. Found by running
+        // it; the first version of the test checked the headers and not
+        // whether a client could read the response.
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE, "application/grpc")
+            .header("grpc-status", grpc_status.to_string())
+            .header("grpc-message", text)
+            .body(
+                http_body_util::Empty::<Bytes>::new()
+                    .map_err(|never| match never {})
+                    .boxed(),
+            )
+            .unwrap_or_else(|_| {
+                let mut fallback = Response::new(
+                    Full::new(Bytes::from_static(b"proxy error"))
+                        .map_err(|never| match never {})
+                        .boxed(),
+                );
+                *fallback.status_mut() = status;
+                fallback
+            });
+    }
+
+    let mut response = Response::new(body);
     *response.status_mut() = status;
     response
+}
+
+/// Whether a request arrived as gRPC, by the content type it declared.
+fn is_grpc(req: &Request<Incoming>) -> bool {
+    req.headers()
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/grpc"))
+}
+
+/// gRPC status codes, from the canonical list, for the three refusals here.
+mod grpc_status {
+    /// The authority was missing or not a sandbox name.
+    pub const INVALID_ARGUMENT: u8 = 3;
+    /// No sandbox is serving that name.
+    pub const NOT_FOUND: u8 = 5;
+    /// The sandbox is known but its listener did not answer.
+    pub const UNAVAILABLE: u8 = 14;
 }
 
 /// Where a sandbox's listener actually is.
@@ -195,23 +253,31 @@ async fn proxy(
                 .map(str::to_owned)
         });
 
+    let grpc = is_grpc(&req);
+
     let Some(authority) = authority else {
-        return Ok(message(
+        return Ok(refuse(
+            grpc,
             StatusCode::BAD_REQUEST,
+            grpc_status::INVALID_ARGUMENT,
             "no :authority and no Host header; nothing to route on",
         ));
     };
 
     let Some((port, sandbox)) = route_of(&authority) else {
-        return Ok(message(
+        return Ok(refuse(
+            grpc,
             StatusCode::BAD_REQUEST,
+            grpc_status::INVALID_ARGUMENT,
             "authority is not {port}-{sandboxID}.{domain}",
         ));
     };
 
     let Some(target) = routes.resolve(sandbox, port) else {
-        return Ok(message(
+        return Ok(refuse(
+            grpc,
             StatusCode::NOT_FOUND,
+            grpc_status::NOT_FOUND,
             "no sandbox is serving that name and port",
         ));
     };
@@ -220,8 +286,10 @@ async fn proxy(
         Ok(stream) => stream,
         Err(e) => {
             tracing::warn!("sandbox proxy: {sandbox} port {port} at {target}: {e}");
-            return Ok(message(
+            return Ok(refuse(
+                grpc,
                 StatusCode::BAD_GATEWAY,
+                grpc_status::UNAVAILABLE,
                 "the sandbox's listener did not accept a connection",
             ));
         }
@@ -234,8 +302,10 @@ async fn proxy(
             Ok(pair) => pair,
             Err(e) => {
                 tracing::warn!("sandbox proxy: h2 handshake with {target} failed: {e}");
-                return Ok(message(
+                return Ok(refuse(
+                    grpc,
                     StatusCode::BAD_GATEWAY,
+                    grpc_status::UNAVAILABLE,
                     "the sandbox's listener is not speaking HTTP/2",
                 ));
             }
@@ -260,7 +330,12 @@ async fn proxy(
         Ok(uri) => uri,
         Err(e) => {
             tracing::warn!("sandbox proxy: could not build a target URI: {e}");
-            return Ok(message(StatusCode::BAD_REQUEST, "unroutable request path"));
+            return Ok(refuse(
+                grpc,
+                StatusCode::BAD_REQUEST,
+                grpc_status::INVALID_ARGUMENT,
+                "unroutable request path",
+            ));
         }
     };
 
@@ -275,8 +350,10 @@ async fn proxy(
         }
         Err(e) => {
             tracing::warn!("sandbox proxy: forwarding to {target} failed: {e}");
-            Ok(message(
+            Ok(refuse(
+                grpc,
                 StatusCode::BAD_GATEWAY,
+                grpc_status::UNAVAILABLE,
                 "the sandbox's listener did not answer",
             ))
         }
