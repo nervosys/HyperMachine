@@ -270,8 +270,18 @@ pub fn tls_config(
 ) -> std::io::Result<rustls::ServerConfig> {
     use std::io::{Error, ErrorKind};
 
-    let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(cert_pem)?))
-        .collect::<Result<Vec<_>, _>>()?;
+    // `rustls_pki_types`, not `rustls_pemfile`: that crate is unmaintained
+    // (RUSTSEC-2025-0134), and this manifest already carried a comment saying
+    // so and naming this replacement. The first version of this function used
+    // it anyway, adding the dependency immediately above the comment warning
+    // against it. Caught by running `cargo audit`, which is what an audit is
+    // for.
+    use rustls_pki_types::pem::PemObject;
+
+    let certs = rustls_pki_types::CertificateDer::pem_file_iter(cert_pem)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
     if certs.is_empty() {
         return Err(Error::new(
             ErrorKind::InvalidData,
@@ -279,14 +289,8 @@ pub fn tls_config(
         ));
     }
 
-    let key =
-        rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(key_pem)?))?
-            .ok_or_else(|| {
-            Error::new(
-                ErrorKind::InvalidData,
-                format!("{} contains no private key", key_pem.display()),
-            )
-        })?;
+    let key = rustls_pki_types::PrivateKeyDer::from_pem_file(key_pem)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
 
     // rustls 0.23 will not pick a crypto provider for you when the crate is
     // built with explicit features: without this it panics at the first

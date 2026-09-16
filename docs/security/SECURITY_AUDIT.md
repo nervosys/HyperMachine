@@ -1,5 +1,11 @@
 # HyperMachine Security Audit Report
 
+> **Superseded by [`SECURITY_AUDIT_2026-09-16.md`](SECURITY_AUDIT_2026-09-16.md).**
+> This report is kept unedited as a record of 2026-02-02. Two of its statements
+> are not true of the current tree: the `[workspace.metadata.security]` block it
+> documents does not exist in `Cargo.toml`, and the minimum Rust version is 1.95,
+> not 1.87.0. The newer report says what is true now.
+
 **Document Version:** 1.0.0  
 **Audit Date:** 2026-02-02  
 **Classification:** PUBLIC  
