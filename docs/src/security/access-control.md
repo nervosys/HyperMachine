@@ -61,9 +61,13 @@ scope an HTTP API key.
 | ---------------- | ----------------------------------------------- |
 | **VM Lifecycle** | `vm.create`, `vm.delete`, `vm.start`, `vm.stop` |
 | **VM Info**      | `vm.list`, `vm.get`                             |
-| **Execution**    | `vm.exec`, `vm.upload`, `vm.download`           |
+| **Execution**    | `vm.exec`, `guest.exec`                         |
 | **Snapshots**    | `snapshot.create`, `snapshot.restore`           |
-| **GPU**          | `gpu.attach`, `gpu.detach`                      |
+| **GPU**          | `gpu.attach`, `gpu.detach`, `gpu.list`          |
+
+Registered in `hv2-agent`'s MCP server (41 tools) and `hm-cli`'s ontology
+(8). `vm.upload` and `vm.download` were in this table and are in neither: no
+file transfer to or from a guest exists, by any name.
 
 ## Not implemented
 

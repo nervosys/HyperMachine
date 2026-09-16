@@ -157,24 +157,13 @@ POST /api/v1/vms/{vm_id}/snapshots/{snapshot_id}/restore
 
 ### Files
 
-#### Upload File
+**Not implemented.** This section documented `POST` and `GET` on
+`/api/v1/vms/{vm_id}/files`. No such route is registered, so both return 404,
+and there is no file transfer to or from a guest by any other name either --
+`vm.upload` and `vm.download` appear nowhere in the codebase.
 
-```http
-POST /api/v1/vms/{vm_id}/files
-Content-Type: application/json
-
-{
-  "path": "/home/user/data.txt",
-  "content": "file contents here",
-  "encoding": "utf-8"
-}
-```
-
-#### Download File
-
-```http
-GET /api/v1/vms/{vm_id}/files?path=/home/user/data.txt
-```
+What exists for getting data in and out of a guest is command execution:
+`POST /api/v1/vms/{id}/script`, and the `vm.exec` and `guest.exec` MCP tools.
 
 ## Error Responses
 
