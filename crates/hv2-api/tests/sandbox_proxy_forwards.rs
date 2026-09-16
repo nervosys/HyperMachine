@@ -1,9 +1,10 @@
-//! Does the proxy actually carry an HTTP/2 request to the right sandbox?
+//! Does the proxy actually carry a request to the right sandbox?
 //!
 //! The unit tests next to `sandbox_proxy` check the parsing, which is the part
 //! that is easy to check and not the part that would embarrass anyone. This
 //! runs the thing: a real HTTP/2 backend on one port, the proxy on another,
-//! and a real h2 client asking for a hostname.
+//! and a real client asking for a sandbox -- over h2 by hostname, and over
+//! HTTP/1.1 by header, which is how E2B's own SDK addresses one.
 //!
 //! No VM and no gRPC service, deliberately. What is under test is the routing
 //! and the forwarding; putting a guest behind it would make the test need
@@ -298,5 +299,95 @@ async fn a_plain_http_client_still_gets_an_http_status() {
     let (proxy, _shutdown) = spawn_proxy(Arc::clone(&routes)).await;
 
     let (status, _) = through_proxy(proxy, "49983-sbx_gone.local", "/x").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// Send an ordinary HTTP/1.1 request, the way E2B's own SDK does.
+///
+/// Separate from [`through_proxy`] because the version is the whole point: an
+/// h2 client cannot show that an h1 one is served.
+async fn through_proxy_h1(proxy: SocketAddr, headers: &[(&str, &str)]) -> (StatusCode, String) {
+    let stream = TcpStream::connect(proxy).await.expect("connect to proxy");
+    let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
+        .await
+        .expect("h1 handshake with proxy");
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+
+    let mut request = Request::builder()
+        .method("POST")
+        .uri("/filesystem.Filesystem/ListDir")
+        .header(hyper::header::HOST, "localhost:49983");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let response = sender
+        .send_request(request.body(Empty::<Bytes>::new()).expect("build request"))
+        .await
+        .expect("send through proxy");
+
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("collect body")
+        .to_bytes();
+    (status, String::from_utf8_lossy(&body).into_owned())
+}
+
+/// The bug this guards against: the proxy served HTTP/2 with prior knowledge
+/// only, so an HTTP/1.1 client was rejected at the connection preface, before
+/// any routing ran. Every test above uses an h2 client and so all of them
+/// passed while E2B's own SDK could not make a single request.
+#[tokio::test]
+async fn an_http1_client_is_served_and_routed() {
+    let backend = spawn_backend().await;
+
+    let routes = Arc::new(PortMap::new());
+    routes.insert("sbx_test", 49983, backend);
+    let (proxy, _shutdown) = spawn_proxy(Arc::clone(&routes)).await;
+
+    let (status, body) = through_proxy_h1(
+        proxy,
+        &[
+            ("e2b-sandbox-id", "sbx_test"),
+            ("e2b-sandbox-port", "49983"),
+        ],
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "body: {body}");
+    assert!(
+        body.contains("path=/filesystem.Filesystem/ListDir"),
+        "the path must survive the hop: {body}"
+    );
+}
+
+/// The SDK names the sandbox in headers and addresses the proxy as plain
+/// `localhost:49983`, so there is no hostname carrying the sandbox at all.
+#[tokio::test]
+async fn the_sdks_headers_route_when_the_hostname_cannot() {
+    let backend = spawn_backend().await;
+    let routes = Arc::new(PortMap::new());
+    routes.insert("sbx_test", 49983, backend);
+    let (proxy, _shutdown) = spawn_proxy(Arc::clone(&routes)).await;
+
+    // Without the header there is nothing to route on: `localhost:49983` is
+    // the proxy's own address and names no sandbox.
+    let (status, body) = through_proxy_h1(proxy, &[]).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "body: {body}");
+
+    // With it, the same request reaches the sandbox.
+    let (status, _) = through_proxy_h1(proxy, &[("e2b-sandbox-id", "sbx_test")]).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the port should default to envd's when only the id is given"
+    );
+
+    // And a header naming nothing is a 404, not someone else's sandbox.
+    let (status, _) = through_proxy_h1(proxy, &[("e2b-sandbox-id", "sbx_other")]).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

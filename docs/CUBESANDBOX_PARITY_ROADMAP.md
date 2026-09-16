@@ -405,8 +405,11 @@ shutdown_rx)`), shared by both `envd_process.rs` (still the standalone,
 one-VM case) and `e2b_compat.rs`. `POST /sandboxes` now also spawns a
 per-sandbox `process.Process` gRPC listener on its own port (starting at
 9000, incrementing) and returns it as a non-standard `processPort` field
-— not a real E2B field (real E2B routes to a per-sandbox envd through a
-shared proxy keyed by domain, not built here), but a real, working port.
+— not a real E2B field, but a real, working port. Real E2B routes to a
+per-sandbox envd through a shared proxy keyed by domain; that is
+`hv2_api::sandbox_proxy`, added later and described under the exit
+criterion below, so `processPort` is now the direct route and the hostname
+is the one an SDK would use.
 `DELETE /sandboxes/{id}` shuts that listener down via a oneshot channel.
 
 Verified the full loop live:
@@ -445,17 +448,99 @@ needed, since this particular `sudo` did not have a live credential and a
 non-interactive shell has no way to supply a password. Same approach for
 `grpcurl`, needed only for this verification, not a runtime dependency.
 
-**Exit criterion (still open, but closer):** an existing E2B SDK client
-(Python or JS, unmodified) successfully runs against a HyperMachine-backed
-endpoint by changing only its base URL. `Start`, `List`, and the core
-`filesystem.Filesystem` RPCs (`Stat`/`MakeDir`/`Move`/`ListDir`/`Remove`)
-are now real and live-verified, on one per-sandbox port the control plane
-wires up automatically, as are `Connect`/`StreamInput`/`SendInput`/
-`SendSignal`/`CloseStdin` and all four watch RPCs. What's left: `Update`
-and anything else needing a PTY, pushed rather than polled output,
-and — the part that actually blocks trying a real SDK, not just
-`grpcurl` — routing by domain the way E2B's own `CubeProxy`-equivalent
-would, since `processPort` is not a field any real SDK looks for.
+**Exit criterion (still open):** an existing E2B SDK client (Python or JS,
+unmodified) successfully runs against a HyperMachine-backed endpoint by
+changing only its base URL.
+
+Every `process.Process` RPC but `Update`, every `filesystem.Filesystem` RPC
+including all four watch RPCs, and domain routing are built and
+live-verified. `hv2_api::sandbox_proxy` terminates HTTP/2 on one port,
+reads the authority the client asked for, and forwards to the sandbox's own
+listener — it has to terminate rather than splice, because the authority
+lives in an HPACK-compressed HEADERS frame that no TCP-level forwarder can
+read. `e2b_compat` wires it up, with TLS and `h2` over ALPN, which a gRPC
+client will not negotiate without.
+
+#### What happened when a real SDK was finally pointed at it
+
+The E2B Python SDK (`e2b` 2.50.0, unmodified, from PyPI) was run against
+`e2b_compat` with `E2B_API_URL` and `E2B_DOMAIN` set and nothing else
+changed. `Sandbox.connect()` succeeded. Every call after it failed, and not
+for any of the reasons listed above.
+
+**The SDK does not speak gRPC.** It speaks the **Connect protocol**, over
+HTTP/1.1. Captured from the wire, byte for byte:
+
+```
+POST /filesystem.Filesystem/ListDir HTTP/1.1
+  user-agent: connectrpc/0.11.1
+  connect-protocol-version: 1
+  content-type: application/json
+  e2b-sandbox-id: sbx_test
+  e2b-sandbox-port: 49983
+  [body 25 bytes] b'{"path": "/", "depth": 1}'
+
+POST /process.Process/Start HTTP/1.1
+  user-agent: connectrpc/0.11.1
+  content-type: application/connect+json
+  transfer-encoding: chunked
+```
+
+The service and method names match ours exactly — the protos are right. But
+a unary call is an ordinary HTTP/1.1 POST carrying **protobuf-JSON**, and a
+streaming call uses Connect's own enveloped framing under
+`application/connect+json`. `tonic` serves `application/grpc`: HTTP/2,
+length-prefixed binary protobuf. The two do not interoperate, and the SDK
+says so itself when handed a gRPC-shaped reply:
+
+```
+Code.UNKNOWN: invalid content-type: 'application/json';
+              expecting 'application/connect+json'
+```
+
+So the thing that actually blocks the exit criterion is a Connect-protocol
+surface, not domain routing and not any missing RPC. That is a real piece
+of work — protobuf-JSON mapping, Connect's error shape, and its streaming
+envelope — and it is the next thing Phase 1 needs. It is not started.
+
+**Two real bugs in the proxy, both found by this and both fixed.**
+
+First, the SDK addresses a sandbox as plain `localhost:49983` in its
+default mode and puts the identity in `e2b-sandbox-id` /
+`e2b-sandbox-port` headers — there is no hostname to route on at all.
+`sandbox_proxy` now routes on those headers when present, falling back to
+the `{port}-{sandboxID}.{domain}` authority.
+
+Second, and worse: **the proxy only spoke HTTP/2 with prior knowledge.**
+Its own comment said so, reasoning that "gRPC clients send the h2 preface
+directly, and there is no h1 traffic to this port". That reasoning was
+wrong about the one client that matters. Every SDK request was rejected at
+the connection preface, before any routing ran, and the only trace was a
+debug line reading `http2 error`. It now uses hyper's auto builder and
+sniffs the preface, serving either.
+
+Neither would have been found by reading the code — the header routing
+added *before* this test was written would have looked correct and never
+once run. With both fixed, routing is verified against the real SDK:
+
+| request | result |
+| --- | --- |
+| no headers, unroutable host | `400` — nothing to route on |
+| `e2b-sandbox-id` of a live sandbox | `200` — reached its listener |
+| `e2b-sandbox-id: sbx_nope` | `404` — no such sandbox |
+
+and the SDK's own call now gets all the way to the sandbox's real service,
+where exactly one thing is left to disagree about:
+
+```
+Code.INTERNAL: invalid content-type: 'application/grpc'; expecting 'application/json'
+```
+
+That single line is the whole remaining gap, isolated.
+
+Remaining gaps beyond Connect: `Update` and anything else wanting a PTY (a
+program started in the guest gets pipes, so there is no terminal to
+resize), and output that is polled rather than pushed.
 
 ### Phase 2 — Snapshot/clone (CubeCoW-equivalent)
 

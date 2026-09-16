@@ -14,7 +14,7 @@
 //! authority the client asked for, and forward the request to whichever local
 //! listener belongs to that sandbox.
 //!
-//! # Why it terminates HTTP/2 rather than forwarding bytes
+//! # Why it terminates the connection rather than forwarding bytes
 //!
 //! The authority is inside the HEADERS frame of an HTTP/2 stream, compressed
 //! with HPACK against a table that is per-connection state. There is no way to
@@ -203,6 +203,39 @@ pub fn route_of(authority: &str) -> Option<(u16, &str)> {
     Some((port.parse().ok()?, sandbox))
 }
 
+/// The port a sandbox's envd listens on, when a client names a sandbox but
+/// not a port. E2B's own default, and what its SDK assumes.
+pub const ENVD_PORT: u16 = 49983;
+
+/// The sandbox a request names through E2B's own headers.
+///
+/// Captured from the real Python SDK (`connectrpc/0.11.1`), which sends
+/// `e2b-sandbox-id` and `e2b-sandbox-port` on every request to a sandbox --
+/// including when it addresses the sandbox as plain `localhost:49983` and
+/// there is no routable hostname at all. Routing on the headers is what lets
+/// one proxy serve an SDK in that mode, which [`route_of`] alone cannot.
+///
+/// The port defaults to [`ENVD_PORT`] rather than failing: a client that
+/// names a sandbox and no port means its envd, which is the only service the
+/// SDK addresses this way.
+///
+/// This is client-supplied, exactly as the hostname is. Neither is an
+/// authorization boundary -- the proxy resolves a name to a local listener
+/// and nothing more, so anything that must not be reachable must not be in
+/// the route table.
+#[must_use]
+pub fn route_of_headers(headers: &hyper::HeaderMap) -> Option<(u16, &str)> {
+    let sandbox = headers.get("e2b-sandbox-id")?.to_str().ok()?;
+    if sandbox.is_empty() {
+        return None;
+    }
+    let port = headers
+        .get("e2b-sandbox-port")
+        .and_then(|value| value.to_str().ok())
+        .map_or(Some(ENVD_PORT), |value| value.parse().ok())?;
+    Some((port, sandbox))
+}
+
 /// Serve the proxy on `listen` until `shutdown` fires.
 ///
 /// # Errors
@@ -234,7 +267,7 @@ pub async fn serve(
     }
 }
 
-/// Serve HTTP/2 on one already-accepted stream.
+/// Serve one already-accepted stream, HTTP/1.1 or HTTP/2.
 ///
 /// Shared by the plaintext and TLS listeners, which differ only in what they
 /// hand over here.
@@ -243,10 +276,14 @@ where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
     let service = service_fn(move |req| proxy(req, Arc::clone(&routes)));
-    // HTTP/2 without a prior upgrade: gRPC clients send the h2 preface
-    // directly, and there is no h1 traffic to this port to negotiate away
-    // from.
-    if let Err(e) = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+    // Both HTTP/1.1 and HTTP/2, sniffed from the connection preface.
+    //
+    // This was h2-only, on the reasoning that gRPC clients send the h2
+    // preface directly. That reasoning was wrong about the client that
+    // matters: E2B's own SDK speaks the Connect protocol over HTTP/1.1, so
+    // every request it made was rejected at the preface, before any routing
+    // ran -- the connection log said `http2 error` and nothing else.
+    if let Err(e) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
         .serve_connection(TokioIo::new(stream), service)
         .await
     {
@@ -366,23 +403,29 @@ async fn proxy(
 
     let grpc = is_grpc(&req);
 
-    let Some(authority) = authority else {
-        return Ok(refuse(
-            grpc,
-            StatusCode::BAD_REQUEST,
-            grpc_status::INVALID_ARGUMENT,
-            "no :authority and no Host header; nothing to route on",
-        ));
-    };
+    // Headers first. A client that sends them has said outright which
+    // sandbox it wants, while a hostname has to be parsed and may just be
+    // whatever name the proxy was reached by -- `localhost:49983` in the
+    // SDK's own default mode, which names no sandbox at all.
+    let route = route_of_headers(req.headers())
+        .map(|(port, sandbox)| (port, sandbox.to_owned()))
+        .or_else(|| {
+            authority
+                .as_deref()
+                .and_then(route_of)
+                .map(|(port, sandbox)| (port, sandbox.to_owned()))
+        });
 
-    let Some((port, sandbox)) = route_of(&authority) else {
+    let Some((port, sandbox)) = route else {
         return Ok(refuse(
             grpc,
             StatusCode::BAD_REQUEST,
             grpc_status::INVALID_ARGUMENT,
-            "authority is not {port}-{sandboxID}.{domain}",
+            "nothing to route on: no e2b-sandbox-id header, and the authority \
+             is not {port}-{sandboxID}.{domain}",
         ));
     };
+    let sandbox = sandbox.as_str();
 
     let Some(target) = routes.resolve(sandbox, port) else {
         return Ok(refuse(
@@ -513,6 +556,55 @@ mod tests {
     #[test]
     fn a_malformed_prefix_is_refused_rather_than_guessed() {
         assert_eq!(route_of("notaport-sbx.dev"), None, "port must be a number");
+    }
+
+    fn headers(pairs: &[(&str, &str)]) -> hyper::HeaderMap {
+        let mut map = hyper::HeaderMap::new();
+        for (name, value) in pairs {
+            map.insert(
+                hyper::header::HeaderName::from_bytes(name.as_bytes()).expect("name"),
+                hyper::header::HeaderValue::from_str(value).expect("value"),
+            );
+        }
+        map
+    }
+
+    #[test]
+    fn the_sdks_own_headers_name_a_sandbox() {
+        // Exactly what e2b's Python SDK sends (connectrpc/0.11.1), captured
+        // from a real client: it addresses the sandbox as localhost:49983 and
+        // puts the identity in headers, so there is no hostname to route on.
+        assert_eq!(
+            route_of_headers(&headers(&[
+                ("e2b-sandbox-id", "sbx_test"),
+                ("e2b-sandbox-port", "49983"),
+            ])),
+            Some((49983, "sbx_test"))
+        );
+    }
+
+    #[test]
+    fn a_sandbox_named_without_a_port_means_its_envd() {
+        assert_eq!(
+            route_of_headers(&headers(&[("e2b-sandbox-id", "sbx_test")])),
+            Some((ENVD_PORT, "sbx_test"))
+        );
+    }
+
+    #[test]
+    fn a_header_route_that_is_not_one_is_refused_rather_than_guessed() {
+        // No id at all: this request is not for a sandbox.
+        assert_eq!(route_of_headers(&headers(&[])), None);
+        assert_eq!(route_of_headers(&headers(&[("e2b-sandbox-id", "")])), None);
+        // A port that is not a number is a malformed request, not a request
+        // for the default port -- guessing would send it to the wrong place.
+        assert_eq!(
+            route_of_headers(&headers(&[
+                ("e2b-sandbox-id", "sbx_test"),
+                ("e2b-sandbox-port", "http"),
+            ])),
+            None
+        );
         assert_eq!(route_of("9000-.dev"), None, "sandbox must not be empty");
         assert_eq!(route_of("99999-sbx.dev"), None, "port must fit in u16");
     }
