@@ -2,6 +2,26 @@
 //!
 //! This module provides packet filtering, connection tracking, and NAT
 //! capabilities for virtual networks.
+//!
+//! # Nothing calls this
+//!
+//! Stated at the top because the name promises enforcement and the module
+//! delivers none: no data path in this workspace consults it. It decides, and
+//! is never asked. A reader who assumes otherwise -- reasonably, from the name
+//! -- concludes a guest's traffic is filtered when it is not.
+//!
+//! The control that actually runs is `hv2_net::egress::EgressPolicy` (not a
+//! link: `hv2-net` depends on this crate, not the other way round), which
+//! `hv2_net::bridge::Bridge` consults for every outbound frame. It is
+//! deliberately smaller than this: destination address, port and protocol, no
+//! connection tracking, because a bridge sees frames on the guest's own kick
+//! and whatever it does there is in the path of every packet.
+//!
+//! This is kept rather than deleted because connection tracking is wanted for
+//! the L7 egress work in `docs/CUBESANDBOX_PARITY_ROADMAP.md`'s Phase 3, and
+//! the tests below describe behaviour worth keeping. Wiring it into a data
+//! path is that work, not a small change: it would need to agree with the NAT
+//! table about what a connection is, and the two currently do not share one.
 
 use std::collections::HashMap;
 use std::net::IpAddr;
