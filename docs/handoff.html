@@ -3304,6 +3304,91 @@ pause()   returned from inside its loop, after pausing the vCPUs before
 </section>
 
 <section>
+  <h2>What the documentation said, against what the code does</h2>
+  <p>
+    Four API surfaces were checked name by name against the code. The results
+    were not close to each other, and the spread is the finding rather than any
+    single correction:
+  </p>
+  <pre>REST routes      <b>40 of 41</b>   one missing: a "Files" section whose upload and
+                              download endpoints are registered nowhere
+CLI commands      <b>8 of 16</b>   hm doctor, hm mcp serve, hm version, hm completion,
+                              hm t2 exec, hm t2 console, hm t2 snapshot
+MCP tool names    <b>7 of 12</b>   three real tools under wrong names, two absent
+gRPC service      <b>0 of 13</b>   wrong package, wrong service name, wrong casing</pre>
+  <p>
+    That gradient tracks one thing: <strong>how likely each artifact is to be
+    run.</strong> Routes get invoked, so they stayed honest. A CLI command
+    fails loudly, but only for whoever tries it. A tool name can be wrong in a
+    way a path cannot &mdash; <em>nearly</em> right, which is the worst case
+    for whoever hits it, because the feature exists and the error says only
+    that the tool is unknown. And a protobuf transcribed into a markdown page
+    is executed by nothing at all: it had drifted until it shared nothing with
+    the real service but the port number.
+  </p>
+  <div class="callout">
+    <h3>The configuration pages were worse, and silent</h3>
+    <p>
+      Six of the seven pages carrying configuration keys described a program
+      that does not exist; <code>GETTING_STARTED.md</code> was the one that did
+      not, and it was right because it documented the schema it meant. The deployment guide's main example had one key out
+      of six that the build reads; the getting-started page named a file
+      location that is never opened, thirteen sections that do not exist, and
+      six of seven environment variables that nothing looks up.
+    </p>
+    <p>
+      None of it failed anything. The schema is <code>#[serde(default)]</code>
+      with no <code>deny_unknown_fields</code>, which is correct for a config
+      shared between versions and is also why a wrong key is silent. The
+      access-control page was the sharp case: it documented
+      <code>[[api_keys]]</code> entries carrying per-key permissions, so an
+      operator could believe they had issued a read-only key &mdash; and
+      following it produced a server with <em>no</em> API-key authentication,
+      because the list the middleware reads stayed empty. A page about access
+      control, followed correctly, removed the access control.
+    </p>
+    <p>
+      The root cause is worth keeping: there are <strong>two</strong> TOML
+      schemas. <code>hv2_api::config::ConfigFile</code> is what
+      <code>hv2 serve</code> reads. <code>hv2_core::Config</code> has
+      <code>[vm]</code>, <code>[network]</code>, <code>[gpu]</code>,
+      <code>[agent]</code> and <code>[observability]</code> &mdash; and a
+      <code>from_file</code> nothing in the repository calls. So
+      <code>[vm]</code> and <code>[gpu]</code> are real section names, in a
+      schema no binary loads, which is why documenting them against the API
+      server looked reasonable to everyone who did it.
+    </p>
+  </div>
+  <p>
+    Three checks now run rather than one person reading:
+  </p>
+  <pre>hv2 config check &lt;file&gt;                      names every key the build ignores,
+                                            before it reports the file valid
+tests/documented_config_is_real.rs          every ```toml block in five pages
+                                            must be config this build reads
+tools/check-docs-against-code.py            documented routes and tool names
+                                            must exist; runs in the sweep</pre>
+  <p>
+    Each was verified in both directions before being believed &mdash; a
+    planted <code>tls_enabled</code>, a planted <code>vm.teleport</code>, each
+    reported by name and path, each returning to green when removed. That
+    matters more than usual here, because the first version of the
+    docs-against-code script scanned one crate and reported two real endpoints
+    as missing. It would have had me "correct" documentation that was right,
+    which is the same error as documentation that reads one registry and
+    generalises.
+  </p>
+  <p>
+    Not automated, deliberately: CLI commands, which need the built binary
+    (<code>hm &lt;cmd&gt; --help</code> is the check, run by hand for all ten
+    that remain), and the gRPC service, whose page now points at
+    <code>vm.proto</code> instead of copying it. A copy of a schema is a copy
+    that goes stale; not copying it is the repair that keeps.
+  </p>
+
+</section>
+
+<section>
   <h2>What to do next</h2>
   <ul>
     <li>
