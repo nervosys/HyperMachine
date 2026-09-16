@@ -1,8 +1,8 @@
 //! AI-scriptable VM with enhanced capabilities for autonomous agents
 
 use crate::{
-    AgentError, Capability, CapabilitySet, GuestAgent, GuestExec, Result, Sandbox, SandboxConfig,
-    ScriptEngine,
+    AgentError, Capability, CapabilitySet, GuestAgent, GuestExec, GuestOutput, Result, Sandbox,
+    SandboxConfig, ScriptEngine,
 };
 use hv2_core::{BootSource, VMConfig, VMState, VM};
 use std::sync::Arc;
@@ -373,6 +373,115 @@ impl AgentVM {
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?
+    }
+
+    /// Start a program in the guest and leave it running.
+    ///
+    /// Returns the guest pid. Unlike [`Self::exec_in_guest`], the program is
+    /// still running when this returns -- which is what everything below
+    /// needs, and what a one-shot exec cannot give: `Connect`, `SendInput`,
+    /// `SendSignal` and the rest all require a process to still be there.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability. Propagates the guest agent's
+    /// reason for not starting the program.
+    pub async fn start_in_guest(
+        &self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        timeout: Duration,
+    ) -> Result<u32> {
+        let device = self.guest_channel("start a program in the guest")?;
+        let program = program.to_string();
+        let args = args.to_vec();
+        let cwd = cwd.map(str::to_string);
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.start(&program, &args, cwd.as_deref(), timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest start task failed: {e}")))?
+    }
+
+    /// Collect what a started program has printed since the last poll.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability. Fails if the guest does not know
+    /// that pid.
+    pub async fn poll_in_guest(&self, pid: u32, timeout: Duration) -> Result<GuestOutput> {
+        let device = self.guest_channel("poll a program in the guest")?;
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.poll(pid, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest poll task failed: {e}")))?
+    }
+
+    /// Write to a started program's standard input.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability. Fails if the guest does not know
+    /// that pid, or its stdin is already closed.
+    pub async fn write_stdin_in_guest(
+        &self,
+        pid: u32,
+        data: &str,
+        close: bool,
+        timeout: Duration,
+    ) -> Result<()> {
+        let device = self.guest_channel("write to a program in the guest")?;
+        let data = data.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.write_stdin(pid, &data, close, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest write task failed: {e}")))?
+    }
+
+    /// Send a signal to a started program.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability. Fails if the guest does not know
+    /// that pid -- which includes every pid the agent did not start, so this
+    /// cannot be used to signal arbitrary processes in the guest.
+    pub async fn signal_in_guest(&self, pid: u32, signal: i32, timeout: Duration) -> Result<()> {
+        let device = self.guest_channel("signal a program in the guest")?;
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.signal(pid, signal, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest signal task failed: {e}")))?
+    }
+
+    /// The vsock device to talk to the guest agent over, with the capability
+    /// checked.
+    ///
+    /// One place rather than five copies: every call above needs the same two
+    /// refusals, and five copies of them is five chances for one to drift.
+    fn guest_channel(
+        &self,
+        what: &str,
+    ) -> Result<std::sync::Arc<parking_lot::Mutex<hv2_core::devices::virtio_vsock::VsockDevice>>>
+    {
+        if !self.capabilities.has(Capability::GuestExec) {
+            return Err(AgentError::PermissionDenied(format!(
+                "to {what} requires the GuestExec capability"
+            )));
+        }
+        self.vm.vsock().ok_or_else(|| {
+            AgentError::Script(format!(
+                "this VM has no guest channel, so it cannot {what}: call \
+                 attach_guest_channel() before the guest boots"
+            ))
+        })
     }
 
     /// Ask the guest agent to identify itself, returning its version.

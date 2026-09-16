@@ -5,9 +5,9 @@
 //!
 //! The actual service implementation lives in the crate itself now
 //! (`hv2_api::envd_process`), shared with `e2b_compat`'s per-sandbox gRPC
-//! listener -- see that module's doc comment for what's real here and
-//! what's simplified (batch, not live, streaming; several RPCs
-//! `unimplemented`). This example is the standalone case: one VM, booted
+//! listener -- see that module's doc comment for what's real here and what
+//! is not (output is polled at an interval rather than pushed; `Update`, and
+//! PTYs generally, are `unimplemented`). This example is the standalone case: one VM, booted
 //! at startup, served for the process of this binary's lifetime -- the
 //! shape envd itself actually has (one daemon per sandbox, no sandbox ID
 //! anywhere in the protocol).

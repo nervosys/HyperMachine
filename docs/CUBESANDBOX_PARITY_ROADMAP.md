@@ -296,19 +296,32 @@ returned through the real wire protocol's real message shapes
 (`StartEvent`/`DataEvent`/`EndEvent`), not a REST shim wearing envd's field
 names.
 
-**What's still simplified, stated plainly:** `exec_in_guest` runs a command
-to completion and returns whole stdout/stderr at once, so `Start` emits its
-three events in a burst rather than streaming output as it's produced —
-real envd streams live. `Connect`/`Update`/`StreamInput`/`SendInput`/
-`SendSignal`/`CloseStdin` return `unimplemented` — each needs a way to
-reach a process that's still running, which one blocking `exec_in_guest`
-call doesn't provide.
+**Every process RPC but `Update` is now real,** because the guest agent
+gained a way to start a program and *keep* it (`Operation::Start`, protocol
+version 2) instead of only running one to completion. `Start` streams output
+as it arrives, `Connect` reattaches to a running process by pid or tag,
+`SendInput`/`StreamInput` write to its stdin, `CloseStdin` sends EOF, and
+`SendSignal` signals it. `pid` is the guest's own pid throughout, not a
+synthetic counter.
 
-**`List` is real now, not a stub — backed by an actual table of in-flight
-`Start` calls.** `exec_in_guest` reports no real guest PID, so the id used
-here (`StartEvent::pid`, `ProcessInfo::pid`) is a synthetic counter this
-struct assigns, honestly smaller in scope than the field name suggests —
-documented as such rather than presented as a real kernel PID. A `Start`
+**What's still simplified, stated plainly:** output is *polled* from the
+guest every 50ms rather than pushed, so "as it arrives" means within that
+interval. A `Connect` sees events from the reattach onwards — nothing keeps
+scrollback. `Update` is PTY resize and stays `unimplemented`: the agent gives
+a program pipes, so there is no terminal with a size to change, and for the
+same reason `DataEvent::pty` is never emitted and `ProcessInput::pty` is
+refused. Per-process environment variables are refused rather than silently
+dropped.
+
+Live-verified against a booted guest: a `/bin/sh` read loop started over
+gRPC, fed by `SendInput` and `StreamInput`, watched simultaneously by the
+`Start` stream and a `Connect` stream reattached by tag (both saw the same
+output), ended by `CloseStdin`; and a `/bin/sleep 300` killed by
+`SendSignal`, reported as `exitCode: 137, status: "signalled"`.
+
+**`List` is real — backed by an actual table of running processes.**
+`StartEvent::pid` and `ProcessInfo::pid` are the guest's own pids now, which
+is what makes them usable as selectors for the other RPCs. A `Start`
 call registers itself before the guest command runs and a `Drop` guard
 removes it on every exit path (success or error) once it ends, so `List`
 reflects genuinely in-flight work rather than a permanently-empty table.
@@ -429,10 +442,9 @@ non-interactive shell has no way to supply a password. Same approach for
 endpoint by changing only its base URL. `Start`, `List`, and the core
 `filesystem.Filesystem` RPCs (`Stat`/`MakeDir`/`Move`/`ListDir`/`Remove`)
 are now real and live-verified, on one per-sandbox port the control plane
-wires up automatically. What's left: `Connect`/`Update`/`StreamInput`/
-`SendInput`/`SendSignal`/`CloseStdin` (all need a way to reach an
-already-running process, which the current one-shot `exec_in_guest` model
-doesn't support), watch RPCs, live streaming instead of batched events,
+wires up automatically, as are `Connect`/`StreamInput`/`SendInput`/
+`SendSignal`/`CloseStdin`. What's left: `Update` and anything else needing a
+PTY, watch RPCs, pushed rather than 50ms-polled output,
 and — the part that actually blocks trying a real SDK, not just
 `grpcurl` — routing by domain the way E2B's own `CubeProxy`-equivalent
 would, since `processPort` is not a field any real SDK looks for.

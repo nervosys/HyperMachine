@@ -184,6 +184,23 @@ impl GuestChannel for VsockChannel {
     }
 }
 
+/// What a started program has printed since it was last polled.
+///
+/// Separate from [`GuestExec`] because the two answer different questions.
+/// `GuestExec` is a finished program's whole output; this is a running one's
+/// latest, and `running` says which kind of answer it is.
+#[derive(Debug, Clone)]
+pub struct GuestOutput {
+    /// Printed since the previous poll, not since the program began.
+    pub stdout: String,
+    pub stderr: String,
+    /// While true, `exit_code` and `signal` mean nothing.
+    pub running: bool,
+    /// `None` when a signal ended the program, which is not exiting 0.
+    pub exit_code: Option<i32>,
+    pub signal: Option<i32>,
+}
+
 /// What a command did inside the guest.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuestExec {
@@ -300,6 +317,121 @@ impl GuestAgent {
             ))),
             other => Err(AgentError::Script(format!(
                 "the guest answered an exec with {other:?}"
+            ))),
+        }
+    }
+
+    /// Start a program in the guest and leave it running.
+    ///
+    /// Returns the guest pid, which every other call here takes. Unlike
+    /// [`Self::exec`], nothing is collected and nothing is waited for: the
+    /// program is still running when this returns, which is the point.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest's reason for not starting
+    /// the program.
+    pub fn start(
+        &mut self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        timeout: Duration,
+    ) -> Result<u32> {
+        let op = Operation::Start {
+            program: program.to_string(),
+            args: args.to_vec(),
+            cwd: cwd.map(str::to_string),
+        };
+        match self.request(op, timeout)? {
+            OpResult::Started { pid } => Ok(pid),
+            OpResult::Failed { message } => Err(AgentError::Script(format!(
+                "the guest agent could not start {program}: {message}"
+            ))),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a start with {other:?}"
+            ))),
+        }
+    }
+
+    /// Collect what a started program has printed since the last poll.
+    ///
+    /// Each poll returns only what is new. A caller streaming output calls
+    /// this repeatedly until `running` is false.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest not knowing that pid.
+    pub fn poll(&mut self, pid: u32, timeout: Duration) -> Result<GuestOutput> {
+        match self.request(Operation::Poll { pid }, timeout)? {
+            OpResult::Output {
+                stdout,
+                stderr,
+                running,
+                exit_code,
+                signal,
+            } => Ok(GuestOutput {
+                stdout,
+                stderr,
+                running,
+                exit_code,
+                signal,
+            }),
+            OpResult::Failed { message } => Err(AgentError::Script(format!(
+                "the guest agent could not poll pid {pid}: {message}"
+            ))),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a poll with {other:?}"
+            ))),
+        }
+    }
+
+    /// Write to a started program's standard input.
+    ///
+    /// `close` sends end-of-input afterwards, which a program reading until
+    /// EOF needs in order to finish at all.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest not knowing that pid, or
+    /// its stdin already being closed.
+    pub fn write_stdin(
+        &mut self,
+        pid: u32,
+        data: &str,
+        close: bool,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::WriteStdin {
+            pid,
+            data: data.to_string(),
+            close,
+        };
+        match self.request(op, timeout)? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(format!(
+                "the guest agent could not write to pid {pid}: {message}"
+            ))),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a write with {other:?}"
+            ))),
+        }
+    }
+
+    /// Send a signal to a started program.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest not knowing that pid --
+    /// which includes any pid this agent did not start, deliberately.
+    pub fn signal(&mut self, pid: u32, signal: i32, timeout: Duration) -> Result<()> {
+        match self.request(Operation::Signal { pid, signal }, timeout)? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(format!(
+                "the guest agent could not signal pid {pid}: {message}"
+            ))),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a signal with {other:?}"
             ))),
         }
     }

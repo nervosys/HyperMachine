@@ -90,7 +90,7 @@ pub use events::{
     EventReceiver, EventResult, EventSeverity, VmEvent,
 };
 pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
-pub use guest_agent::{GuestAgent, GuestChannel, GuestExec, VsockChannel};
+pub use guest_agent::{GuestAgent, GuestChannel, GuestExec, GuestOutput, VsockChannel};
 pub use image_host::{AdmissionVerdict, ImageDescriptor, ImageHost, RegistryImageHost};
 pub use learning::{
     ActionValue, Experience, ExperienceBuffer, LearningConfig, LearningError, LearningRateSchedule,

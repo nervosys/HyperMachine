@@ -54,7 +54,7 @@ pub const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 ///
 /// A guest image outlives the host that built it. Without this, an old agent
 /// meeting a new host fails by misreading a field rather than by saying so.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// A request from the host to the guest agent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,6 +91,46 @@ pub enum Operation {
         /// How long the agent will wait before killing the program.
         timeout_ms: u64,
     },
+
+    /// Start a program and leave it running.
+    ///
+    /// The difference from [`Operation::Exec`] is the whole reason this exists:
+    /// `Exec` runs a program to completion and answers with everything it
+    /// printed, so there is no moment at which the host holds a *running*
+    /// process. Anything that needs one -- sending it input, signalling it,
+    /// watching its output arrive -- cannot be built on that shape.
+    ///
+    /// Answers [`OpResult::Started`] with the guest pid, which every operation
+    /// below takes.
+    Start {
+        program: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        cwd: Option<String>,
+    },
+
+    /// Collect whatever a started program has printed since the last poll, and
+    /// say whether it is still running.
+    ///
+    /// Draining rather than accumulating: each poll returns only what is new,
+    /// so a caller streaming output does not re-send what it already has, and
+    /// the agent's buffer does not grow without bound for a chatty process.
+    Poll { pid: u32 },
+
+    /// Write to a started program's standard input.
+    ///
+    /// `close` sends EOF afterwards, which is the only way a program waiting on
+    /// end-of-input ever finishes.
+    WriteStdin {
+        pid: u32,
+        data: String,
+        #[serde(default)]
+        close: bool,
+    },
+
+    /// Send a signal to a started program.
+    Signal { pid: u32, signal: i32 },
 }
 
 /// The guest agent's answer.
@@ -128,6 +168,27 @@ pub enum OpResult {
         /// Whether the agent killed the program for exceeding its timeout.
         timed_out: bool,
     },
+    /// Answer to [`Operation::Start`]: the program is running.
+    Started {
+        /// The guest's own pid, which [`Operation::Signal`] and the rest take.
+        pid: u32,
+    },
+    /// Answer to [`Operation::Poll`].
+    Output {
+        /// Printed since the previous poll, not since the program began.
+        stdout: String,
+        stderr: String,
+        /// Set once the program has finished. `exit_code` and `signal` are
+        /// meaningless while it is `true`.
+        running: bool,
+        /// As [`OpResult::Exited`]: `None` when a signal ended the program,
+        /// which is not the same as exiting 0.
+        exit_code: Option<i32>,
+        signal: Option<i32>,
+    },
+    /// Answer to [`Operation::WriteStdin`] and [`Operation::Signal`]: the agent
+    /// did it. Nothing is reported back because neither produces anything.
+    Acknowledged,
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -299,6 +360,93 @@ mod tests {
         let json = serde_json::to_string(&killed).expect("encode");
         let back: OpResult = serde_json::from_str(&json).expect("decode");
         assert_eq!(back, killed);
+    }
+
+    #[test]
+    fn every_live_process_operation_survives_a_round_trip() {
+        // The host encodes these and the guest decodes them across a vsock,
+        // so a field either side spells differently is a runtime failure with
+        // no compiler to catch it.
+        let ops = [
+            Operation::Start {
+                program: "/bin/sh".to_string(),
+                args: vec!["-c".to_string(), "read x".to_string()],
+                cwd: Some("/tmp".to_string()),
+            },
+            Operation::Poll { pid: 42 },
+            Operation::WriteStdin {
+                pid: 42,
+                data: "hello
+"
+                .to_string(),
+                close: true,
+            },
+            Operation::Signal { pid: 42, signal: 9 },
+        ];
+        for op in ops {
+            let request = Request {
+                id: 1,
+                version: PROTOCOL_VERSION,
+                op: op.clone(),
+            };
+            let bytes = encode(&request).expect("encode");
+            let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+            assert_eq!(back.op, op);
+        }
+    }
+
+    #[test]
+    fn the_optional_start_fields_may_simply_be_absent() {
+        // `args` and `cwd` are `#[serde(default)]`, which is only worth having
+        // if a sender that omits them actually decodes.
+        let body = br#"{"id":1,"version":2,"op":{"kind":"start","program":"/bin/true"}}"#;
+        let mut buf = (body.len() as u32).to_le_bytes().to_vec();
+        buf.extend_from_slice(body);
+        let (request, _) = decode::<Request>(&buf).expect("decode").expect("a frame");
+        assert_eq!(
+            request.op,
+            Operation::Start {
+                program: "/bin/true".to_string(),
+                args: Vec::new(),
+                cwd: None,
+            }
+        );
+    }
+
+    #[test]
+    fn a_poll_says_running_and_finished_apart() {
+        // `running` is what tells a caller whether `exit_code` means anything.
+        // If it round-tripped wrong, a still-running process would report as
+        // having exited with whatever zero value came out of the decode.
+        let running = OpResult::Output {
+            stdout: "partial".to_string(),
+            stderr: String::new(),
+            running: true,
+            exit_code: None,
+            signal: None,
+        };
+        let killed = OpResult::Output {
+            stdout: String::new(),
+            stderr: String::new(),
+            running: false,
+            exit_code: None,
+            signal: Some(9),
+        };
+        for result in [running, killed] {
+            let json = serde_json::to_string(&result).expect("encode");
+            assert_eq!(
+                serde_json::from_str::<OpResult>(&json).expect("decode"),
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn the_protocol_version_moved_with_the_new_operations() {
+        // A v1 agent cannot serve Start or Poll, and a host that spoke v1 at
+        // it would get a confusing decode failure rather than a version
+        // refusal. Bumping this is what makes the mismatch legible.
+        assert_eq!(PROTOCOL_VERSION, 2);
     }
 
     #[test]

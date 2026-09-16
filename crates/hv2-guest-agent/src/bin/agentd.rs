@@ -53,10 +53,12 @@ mod linux {
         decode, encode, truncate_utf8, OpResult, Operation, Request, Response, GUEST_AGENT_PORT,
         MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
     };
-    use std::io::Write;
+    use std::collections::HashMap;
+    use std::io::{Read, Write};
     use std::os::unix::process::ExitStatusExt;
     use std::process::{Command, Stdio};
     use std::sync::mpsc;
+    use std::sync::{Arc, Mutex, OnceLock};
     use std::time::Duration;
 
     /// Accept connections from anywhere; only the host can reach us anyway.
@@ -234,12 +236,253 @@ mod linux {
                 stdin.as_deref(),
                 timeout_ms,
             ),
+            Operation::Start { program, args, cwd } => start(&program, &args, cwd.as_deref()),
+            Operation::Poll { pid } => poll(pid),
+            Operation::WriteStdin { pid, data, close } => write_stdin(pid, &data, close),
+            Operation::Signal {
+                pid,
+                signal: number,
+            } => signal(pid, number),
         };
 
         Response {
             id,
             version: PROTOCOL_VERSION,
             result,
+        }
+    }
+
+    /// How a program ended: its exit code, and the signal that killed it.
+    ///
+    /// Both are optional and neither implies the other -- a program killed by
+    /// SIGKILL has no exit code of its own, and flattening the two would
+    /// report a kill as a clean exit.
+    type Ended = Option<(Option<i32>, Option<i32>)>;
+
+    /// A program started by [`Operation::Start`] and still owned by this agent.
+    ///
+    /// The pipes are drained by their own threads rather than read on demand.
+    /// A pipe has a fixed kernel buffer, and a program that fills it blocks
+    /// forever writing -- so "read it when the host asks" would hang exactly
+    /// the chatty programs streaming exists for.
+    struct Proc {
+        stdin: Option<std::process::ChildStdin>,
+        stdout: Arc<Mutex<Vec<u8>>>,
+        stderr: Arc<Mutex<Vec<u8>>>,
+        /// `Some` once the program has finished, with its exit code and the
+        /// signal that ended it, kept apart because exiting 0 and being killed
+        /// are not the same outcome.
+        finished: Arc<Mutex<Ended>>,
+    }
+
+    /// Every program this agent started and has not yet been asked to forget.
+    ///
+    /// A process-wide table because `handle` is called per request and the
+    /// whole point is that a process outlives the request that started it.
+    fn procs() -> &'static Mutex<HashMap<u32, Proc>> {
+        static PROCS: OnceLock<Mutex<HashMap<u32, Proc>>> = OnceLock::new();
+        PROCS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    /// Drain a pipe into a buffer until it closes.
+    fn drain<R: Read + Send + 'static>(mut source: R, into: Arc<Mutex<Vec<u8>>>) {
+        std::thread::spawn(move || {
+            let mut chunk = [0u8; 8192];
+            loop {
+                match source.read(&mut chunk) {
+                    Ok(0) | Err(_) => return,
+                    Ok(n) => {
+                        let mut buf = match into.lock() {
+                            Ok(buf) => buf,
+                            Err(poisoned) => poisoned.into_inner(),
+                        };
+                        // Bounded like `exec`'s output: a program that prints
+                        // forever must not grow this agent until the guest is
+                        // out of memory. Oldest bytes go first, because the
+                        // newest are the ones a caller is waiting on.
+                        if buf.len() + n > MAX_OUTPUT_BYTES {
+                            let over = buf.len() + n - MAX_OUTPUT_BYTES;
+                            let drop_to = over.min(buf.len());
+                            buf.drain(..drop_to);
+                        }
+                        buf.extend_from_slice(&chunk[..n]);
+                    }
+                }
+            }
+        });
+    }
+
+    /// Take everything buffered so far, leaving the buffer empty.
+    fn take(buf: &Arc<Mutex<Vec<u8>>>) -> String {
+        let mut guard = match buf.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let bytes = std::mem::take(&mut *guard);
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    /// Start a program and keep it.
+    fn start(program: &str, args: &[String], cwd: Option<&str>) -> OpResult {
+        let mut command = Command::new(program);
+        command
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(dir) = cwd {
+            command.current_dir(dir);
+        }
+
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(e) => {
+                return OpResult::Failed {
+                    message: format!("could not start {program}: {e}"),
+                }
+            }
+        };
+
+        let pid = child.id();
+        let stdout = Arc::new(Mutex::new(Vec::new()));
+        let stderr = Arc::new(Mutex::new(Vec::new()));
+        if let Some(pipe) = child.stdout.take() {
+            drain(pipe, Arc::clone(&stdout));
+        }
+        if let Some(pipe) = child.stderr.take() {
+            drain(pipe, Arc::clone(&stderr));
+        }
+
+        // Taken before `child` moves into the waiter below, or there would be
+        // no way to write to the program after starting it -- which is most of
+        // the point of starting it this way.
+        let stdin = child.stdin.take();
+
+        // Reaped on its own thread. Without this the process becomes a zombie
+        // the moment it exits, and `Poll` would report it running forever.
+        let finished = Arc::new(Mutex::new(None));
+        let done = Arc::clone(&finished);
+        std::thread::spawn(move || {
+            let status = child.wait();
+            let mut slot = match done.lock() {
+                Ok(slot) => slot,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            *slot = Some(match status {
+                Ok(status) => (status.code(), status.signal()),
+                Err(_) => (None, None),
+            });
+        });
+
+        let mut table = match procs().lock() {
+            Ok(table) => table,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        table.insert(
+            pid,
+            Proc {
+                stdin,
+                stdout,
+                stderr,
+                finished,
+            },
+        );
+
+        OpResult::Started { pid }
+    }
+
+    /// Collect what a started program has printed since the last poll.
+    fn poll(pid: u32) -> OpResult {
+        let table = match procs().lock() {
+            Ok(table) => table,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let Some(proc) = table.get(&pid) else {
+            return OpResult::Failed {
+                message: format!("no started process with pid {pid}"),
+            };
+        };
+
+        let stdout = take(&proc.stdout);
+        let stderr = take(&proc.stderr);
+        let finished = match proc.finished.lock() {
+            Ok(slot) => *slot,
+            Err(poisoned) => *poisoned.into_inner(),
+        };
+
+        match finished {
+            None => OpResult::Output {
+                stdout,
+                stderr,
+                running: true,
+                exit_code: None,
+                signal: None,
+            },
+            Some((exit_code, signal)) => OpResult::Output {
+                stdout,
+                stderr,
+                running: false,
+                exit_code,
+                signal,
+            },
+        }
+    }
+
+    /// Write to a started program's standard input.
+    fn write_stdin(pid: u32, data: &str, close: bool) -> OpResult {
+        let mut table = match procs().lock() {
+            Ok(table) => table,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let Some(proc) = table.get_mut(&pid) else {
+            return OpResult::Failed {
+                message: format!("no started process with pid {pid}"),
+            };
+        };
+        let Some(pipe) = proc.stdin.as_mut() else {
+            return OpResult::Failed {
+                message: format!("stdin for pid {pid} is already closed"),
+            };
+        };
+        if let Err(e) = pipe.write_all(data.as_bytes()).and_then(|()| pipe.flush()) {
+            return OpResult::Failed {
+                message: format!("writing to pid {pid}: {e}"),
+            };
+        }
+        if close {
+            // Dropping the pipe is what sends EOF, and a program waiting on
+            // end-of-input never finishes without it.
+            proc.stdin = None;
+        }
+        OpResult::Acknowledged
+    }
+
+    /// Send a signal to a started program.
+    fn signal(pid: u32, signal: i32) -> OpResult {
+        {
+            let table = match procs().lock() {
+                Ok(table) => table,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            if !table.contains_key(&pid) {
+                // Only signal what this agent started. A pid the host names
+                // from somewhere else could be any process in the guest,
+                // including this agent.
+                return OpResult::Failed {
+                    message: format!("no started process with pid {pid}"),
+                };
+            }
+        }
+
+        // SAFETY: `kill` with a pid this agent started and a signal number
+        // from the host. Checked above that the pid is one of ours.
+        let sent = unsafe { libc::kill(pid as libc::pid_t, signal) };
+        if sent == 0 {
+            OpResult::Acknowledged
+        } else {
+            OpResult::Failed {
+                message: format!("signalling pid {pid}: {}", std::io::Error::last_os_error()),
+            }
         }
     }
 

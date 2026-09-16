@@ -2,24 +2,33 @@
 //! the actual proto copied from `e2b-dev/runtime`'s
 //! `packages/envd/spec/process/process.proto` (see `proto/process.proto`).
 //!
-//! See `docs/CUBESANDBOX_PARITY_ROADMAP.md`, Phase 1, for what this is and
-//! is not: real wire messages and a real `Start` RPC against
-//! `AgentVM::exec_in_guest`, but `exec_in_guest` runs to completion and
-//! returns its whole output at once, so `Start` emits `StartEvent` /
-//! `DataEvent` / `EndEvent` in a burst rather than truly live-streaming
-//! output. `Connect`, `Update`, `StreamInput`, `SendInput`, `SendSignal`,
-//! and `CloseStdin` are `unimplemented` -- each needs a way to reach a
-//! process that is still running, which `exec_in_guest` (one call, blocks
-//! until exit) does not provide.
+//! Every RPC but `Update` is backed by a real process in the guest. The guest
+//! agent starts a program and keeps it (`Operation::Start`), so this module
+//! holds something that is still running: `Start` streams output as it
+//! arrives, `Connect` reattaches to it, `SendInput` / `StreamInput` write to
+//! its stdin, `CloseStdin` sends EOF, and `SendSignal` signals it. `pid` is
+//! the guest's own pid throughout -- not a synthetic id, as it was while
+//! this was built on `exec_in_guest`.
 //!
-//! `List` is real, backed by an actual table of in-flight `Start` calls
-//! (keyed by a synthetic id this struct assigns, *not* a real guest PID --
-//! `exec_in_guest` doesn't report one, so `StartEvent::pid` and `List`'s
-//! `ProcessInfo::pid` both carry this synthetic id instead, honestly
-//! smaller in scope than the field's name suggests). A `Start` call
-//! registers itself before the guest command runs and removes itself when
-//! it ends, so `List` reflects genuinely in-flight work, not a fabricated
-//! empty table.
+//! `Update` is PTY resize, and stays `unimplemented`: there is no PTY. The
+//! guest agent gives a program three pipes, so there is no terminal to
+//! resize, and reporting success would be a lie. For the same reason
+//! `DataEvent::pty` is never emitted and `ProcessInput::pty` is refused.
+//!
+//! Output is *polled* from the guest rather than pushed: the agent buffers
+//! what a program prints and this module drains it every `POLL_INTERVAL`.
+//! So "as it arrives" means within that interval, not instantly. One poller
+//! per process publishes to a broadcast channel, which is what lets `Start`
+//! and any number of `Connect`s watch the same process without stealing each
+//! other's output -- a poll drains, so two independent pollers would each see
+//! half of it.
+//!
+//! A `Connect` sees what happens *from then on*. Output a process produced
+//! before the reattach is gone: it was drained and delivered to whoever was
+//! watching at the time, and this module keeps no scrollback.
+//!
+//! `List` reflects genuinely in-flight work -- a process is registered when
+//! it starts and removed when its poller sees it exit.
 //!
 //! Pulled out of the `envd_process` example and into the crate itself so
 //! both that example (one VM, one daemon, matching envd's real per-sandbox
@@ -28,12 +37,12 @@
 
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use tokio_stream::Stream;
+use tokio::sync::broadcast;
+use tokio_stream::{Stream, StreamExt};
 use tonic::{Request, Response, Status};
 
 use hv2_agent::AgentVM;
@@ -50,20 +59,42 @@ use process_proto::process_server::Process;
 pub use process_proto::process_server::ProcessServer;
 use process_proto::{
     CloseStdinRequest, CloseStdinResponse, ConnectRequest, ConnectResponse, ListRequest,
-    ListResponse, ProcessEvent, ProcessInfo, SendInputRequest, SendInputResponse,
+    ListResponse, ProcessEvent, ProcessInfo, ProcessSelector, SendInputRequest, SendInputResponse,
     SendSignalRequest, SendSignalResponse, StartRequest, StartResponse, StreamInputRequest,
     StreamInputResponse, UpdateRequest, UpdateResponse,
 };
+
+/// How often a running process is drained.
+///
+/// This is latency the client sees on every byte, so it wants to be small; it
+/// is also a round trip over vsock per running process, so it cannot be tiny.
+/// 50ms is below the point where a human notices output lagging their input,
+/// and costs 20 round trips a second for a process nobody is watching.
+const POLL_INTERVAL: Duration = Duration::from_millis(50);
+
+/// How long any single guest-agent call may take before it counts as failed.
+const GUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How many events a slow watcher may fall behind before it starts losing
+/// them. A watcher this far behind is not keeping up with the process, and
+/// buffering without limit would grow until the host is out of memory.
+const EVENT_BACKLOG: usize = 256;
+
+/// A process this service started and has not yet seen exit.
+struct Tracked {
+    info: ProcessInfo,
+    /// Everything its poller has published. `Start` and every `Connect`
+    /// subscribe here; see this module's doc comment for why a shared
+    /// broadcast rather than each caller polling for itself.
+    events: broadcast::Sender<ProcessEvent>,
+}
 
 /// One VM's `process.Process` service -- envd for exactly the sandbox this
 /// was built for, not a multi-sandbox multiplexer.
 pub struct EnvdProcess {
     vm: Arc<AgentVM>,
-    /// Synthetic pid -> what `Start` was asked to run, for every call
-    /// currently between its `StartEvent` and its `EndEvent`. See this
-    /// module's doc comment for why the id isn't a real guest PID.
-    running: Arc<Mutex<HashMap<u32, ProcessInfo>>>,
-    next_pid: AtomicU32,
+    /// Guest pid -> the process, for every one currently running.
+    running: Arc<Mutex<HashMap<u32, Tracked>>>,
 }
 
 impl EnvdProcess {
@@ -71,31 +102,203 @@ impl EnvdProcess {
         Self {
             vm,
             running: Arc::new(Mutex::new(HashMap::new())),
-            next_pid: AtomicU32::new(1),
         }
+    }
+
+    /// Resolve the pid a request is about.
+    ///
+    /// The proto lets a caller name a process by pid or by the tag it was
+    /// started with, and every RPC below `Start` takes the same selector, so
+    /// this is one place rather than six.
+    fn resolve(&self, selector: Option<ProcessSelector>) -> Result<u32, Status> {
+        use process_proto::process_selector::Selector;
+
+        let selector = selector
+            .and_then(|s| s.selector)
+            .ok_or_else(|| Status::invalid_argument("a process selector is required"))?;
+
+        match selector {
+            Selector::Pid(pid) => {
+                if self.running.lock().contains_key(&pid) {
+                    Ok(pid)
+                } else {
+                    Err(Status::not_found(format!(
+                        "no running process with pid {pid}"
+                    )))
+                }
+            }
+            Selector::Tag(tag) => self
+                .running
+                .lock()
+                .values()
+                .find(|t| t.info.tag.as_deref() == Some(tag.as_str()))
+                .map(|t| t.info.pid)
+                .ok_or_else(|| Status::not_found(format!("no running process tagged {tag}"))),
+        }
+    }
+
+    /// Subscribe to a running process's events.
+    fn watch(&self, pid: u32) -> Result<broadcast::Receiver<ProcessEvent>, Status> {
+        self.running
+            .lock()
+            .get(&pid)
+            .map(|t| t.events.subscribe())
+            .ok_or_else(|| Status::not_found(format!("no running process with pid {pid}")))
+    }
+
+    /// Write to a running process's stdin, translating the proto's input
+    /// oneof. Shared by `SendInput` and `StreamInput`.
+    async fn write_input(
+        &self,
+        pid: u32,
+        input: Option<process_proto::ProcessInput>,
+    ) -> Result<(), Status> {
+        use process_proto::process_input::Input;
+
+        let input = input
+            .and_then(|i| i.input)
+            .ok_or_else(|| Status::invalid_argument("input is required"))?;
+
+        let bytes =
+            match input {
+                Input::Stdin(bytes) => bytes,
+                Input::Pty(_) => return Err(Status::unimplemented(
+                    "there is no PTY to write to: the guest agent gives a program pipes, not a \
+                     terminal. Send stdin instead",
+                )),
+            };
+
+        // The guest agent's protocol carries stdin as a string, so input that
+        // is not text cannot be passed on. Refusing beats silently replacing
+        // bytes the program was going to act on.
+        let text = String::from_utf8(bytes)
+            .map_err(|_| Status::invalid_argument("stdin must be valid UTF-8"))?;
+
+        self.vm
+            .write_stdin_in_guest(pid, &text, false, GUEST_TIMEOUT)
+            .await
+            .map_err(|e| Status::internal(format!("writing to pid {pid}: {e}")))
     }
 }
 
-type EventStream = Pin<Box<dyn Stream<Item = Result<StartResponse, Status>> + Send>>;
+/// Turn a process's broadcast into a gRPC response stream.
+///
+/// A watcher that falls `EVENT_BACKLOG` behind is told what it missed
+/// rather than silently skipped: losing output without saying so would make a
+/// truncated log look complete.
+fn stream_of<T, F>(
+    rx: broadcast::Receiver<ProcessEvent>,
+    wrap: F,
+) -> Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>
+where
+    T: Send + 'static,
+    F: Fn(ProcessEvent) -> T + Send + 'static,
+{
+    let stream = tokio_stream::wrappers::BroadcastStream::new(rx).map(move |event| match event {
+        Ok(event) => Ok(wrap(event)),
+        Err(tokio_stream::wrappers::errors::BroadcastStreamRecvError::Lagged(n)) => Err(
+            Status::data_loss(format!("this watcher fell behind and lost {n} events")),
+        ),
+    });
+    Box::pin(stream)
+}
+
+/// One output event, the long way the generated types spell it.
+fn data(output: process_proto::process_event::data_event::Output) -> ProcessEvent {
+    ProcessEvent {
+        event: Some(ProcessEventKind::Data(DataEvent {
+            output: Some(output),
+        })),
+    }
+}
+
+/// Drain a running process until it exits, publishing what it prints.
+///
+/// One of these per process, spawned by `Start`. It is also what removes the
+/// process from the running table, so `List` and the selectors above stop
+/// reporting it exactly when it stops existing.
+async fn pump(
+    vm: Arc<AgentVM>,
+    pid: u32,
+    running: Arc<Mutex<HashMap<u32, Tracked>>>,
+    events: broadcast::Sender<ProcessEvent>,
+) {
+    use process_proto::process_event::data_event::Output;
+
+    loop {
+        match vm.poll_in_guest(pid, GUEST_TIMEOUT).await {
+            Ok(output) => {
+                if !output.stdout.is_empty() {
+                    let _ = events.send(data(Output::Stdout(output.stdout.into_bytes())));
+                }
+                if !output.stderr.is_empty() {
+                    let _ = events.send(data(Output::Stderr(output.stderr.into_bytes())));
+                }
+                if !output.running {
+                    // A signalled process has no exit code of its own. 128+n
+                    // is the shell's convention for one, and -1 would be
+                    // indistinguishable from the error arm below.
+                    let exit_code = output
+                        .exit_code
+                        .or_else(|| output.signal.map(|s| 128 + s))
+                        .unwrap_or(-1);
+                    let _ = events.send(ProcessEvent {
+                        event: Some(ProcessEventKind::End(EndEvent {
+                            exit_code,
+                            exited: true,
+                            status: if output.signal.is_some() {
+                                "signalled".to_string()
+                            } else {
+                                "exited".to_string()
+                            },
+                            error: None,
+                        })),
+                    });
+                    break;
+                }
+            }
+            Err(e) => {
+                let _ = events.send(ProcessEvent {
+                    event: Some(ProcessEventKind::End(EndEvent {
+                        exit_code: -1,
+                        exited: false,
+                        status: "error".to_string(),
+                        error: Some(e.to_string()),
+                    })),
+                });
+                break;
+            }
+        }
+        tokio::time::sleep(POLL_INTERVAL).await;
+    }
+
+    running.lock().remove(&pid);
+}
 
 #[tonic::async_trait]
 impl Process for EnvdProcess {
     type ConnectStream = Pin<Box<dyn Stream<Item = Result<ConnectResponse, Status>> + Send>>;
-    type StartStream = EventStream;
+    type StartStream = Pin<Box<dyn Stream<Item = Result<StartResponse, Status>> + Send>>;
 
     async fn list(&self, _request: Request<ListRequest>) -> Result<Response<ListResponse>, Status> {
-        let processes = self.running.lock().values().cloned().collect();
+        let processes = self
+            .running
+            .lock()
+            .values()
+            .map(|t| t.info.clone())
+            .collect();
         Ok(Response::new(ListResponse { processes }))
     }
 
     async fn connect(
         &self,
-        _request: Request<ConnectRequest>,
+        request: Request<ConnectRequest>,
     ) -> Result<Response<Self::ConnectStream>, Status> {
-        Err(Status::unimplemented(
-            "Connect (reattaching to a running process) needs live process tracking, which \
-             exec_in_guest does not provide yet",
-        ))
+        let pid = self.resolve(request.into_inner().process)?;
+        let rx = self.watch(pid)?;
+        Ok(Response::new(stream_of(rx, |event| ConnectResponse {
+            event: Some(event),
+        })))
     }
 
     async fn start(
@@ -107,162 +310,170 @@ impl Process for EnvdProcess {
             .process
             .ok_or_else(|| Status::invalid_argument("process config is required"))?;
 
-        let pid = self.next_pid.fetch_add(1, Ordering::Relaxed);
+        if req.pty.is_some() {
+            return Err(Status::unimplemented(
+                "a PTY was requested, but the guest agent starts programs with pipes and has no \
+                 terminal to give them. Start without one",
+            ));
+        }
+        if !config.envs.is_empty() {
+            // Accepting and dropping them would leave a program running
+            // without the environment it was told it had, failing later for a
+            // reason nothing points at.
+            return Err(Status::unimplemented(
+                "per-process environment variables are not implemented: the guest agent's start \
+                 operation carries a program, its arguments and a working directory only",
+            ));
+        }
+
+        let pid = self
+            .vm
+            .start_in_guest(
+                &config.cmd,
+                &config.args,
+                config.cwd.as_deref(),
+                GUEST_TIMEOUT,
+            )
+            .await
+            .map_err(|e| Status::internal(format!("starting {}: {e}", config.cmd)))?;
+
+        let (events, rx) = broadcast::channel(EVENT_BACKLOG);
+
+        // Into the channel before the poller runs, so the caller's stream
+        // opens with it -- the proto's first event for a process is its
+        // StartEvent, and a client reading the pid from it would otherwise
+        // race the first line of output.
+        let _ = events.send(ProcessEvent {
+            event: Some(ProcessEventKind::Start(StartEvent { pid })),
+        });
+
         self.running.lock().insert(
             pid,
-            ProcessInfo {
-                config: Some(config.clone()),
-                pid,
-                tag: req.tag.clone(),
+            Tracked {
+                info: ProcessInfo {
+                    config: Some(config),
+                    pid,
+                    tag: req.tag,
+                },
+                events: events.clone(),
             },
         );
 
-        let vm = Arc::clone(&self.vm);
-        let running = Arc::clone(&self.running);
-        let cmd = config.cmd;
-        let args = config.args;
+        tokio::spawn(pump(
+            Arc::clone(&self.vm),
+            pid,
+            Arc::clone(&self.running),
+            events,
+        ));
 
-        let (tx, rx) = tokio::sync::mpsc::channel(4);
-
-        tokio::spawn(async move {
-            // Removes this call's entry on every exit path -- the match
-            // below has two arms (Ok/Err) that both end the process, and
-            // both need this, so it runs once here via a guard rather than
-            // being duplicated (and risking one arm forgetting it).
-            struct Deregister {
-                running: Arc<Mutex<HashMap<u32, ProcessInfo>>>,
-                pid: u32,
-            }
-            impl Drop for Deregister {
-                fn drop(&mut self) {
-                    self.running.lock().remove(&self.pid);
-                }
-            }
-            let _deregister = Deregister {
-                running: Arc::clone(&running),
-                pid,
-            };
-
-            let _ = tx
-                .send(Ok(StartResponse {
-                    event: Some(ProcessEvent {
-                        event: Some(ProcessEventKind::Start(StartEvent { pid })),
-                    }),
-                }))
-                .await;
-
-            let result = vm.exec_in_guest(&cmd, &args, Duration::from_secs(30)).await;
-            match result {
-                Ok(exec) => {
-                    if !exec.stdout.is_empty() {
-                        let _ = tx
-                            .send(Ok(StartResponse {
-                                event: Some(ProcessEvent {
-                                    event: Some(ProcessEventKind::Data(DataEvent {
-                                        output: Some(
-                                            process_proto::process_event::data_event::Output::Stdout(
-                                                exec.stdout.into_bytes(),
-                                            ),
-                                        ),
-                                    })),
-                                }),
-                            }))
-                            .await;
-                    }
-                    if !exec.stderr.is_empty() {
-                        let _ = tx
-                            .send(Ok(StartResponse {
-                                event: Some(ProcessEvent {
-                                    event: Some(ProcessEventKind::Data(DataEvent {
-                                        output: Some(
-                                            process_proto::process_event::data_event::Output::Stderr(
-                                                exec.stderr.into_bytes(),
-                                            ),
-                                        ),
-                                    })),
-                                }),
-                            }))
-                            .await;
-                    }
-                    let _ = tx
-                        .send(Ok(StartResponse {
-                            event: Some(ProcessEvent {
-                                event: Some(ProcessEventKind::End(EndEvent {
-                                    exit_code: exec.exit_code.unwrap_or(-1),
-                                    exited: !exec.timed_out,
-                                    status: if exec.timed_out {
-                                        "timed_out".to_string()
-                                    } else {
-                                        "exited".to_string()
-                                    },
-                                    error: None,
-                                })),
-                            }),
-                        }))
-                        .await;
-                }
-                Err(e) => {
-                    let _ = tx
-                        .send(Ok(StartResponse {
-                            event: Some(ProcessEvent {
-                                event: Some(ProcessEventKind::End(EndEvent {
-                                    exit_code: -1,
-                                    exited: false,
-                                    status: "error".to_string(),
-                                    error: Some(e.to_string()),
-                                })),
-                            }),
-                        }))
-                        .await;
-                }
-            }
-        });
-
-        let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
-        Ok(Response::new(Box::pin(stream)))
+        Ok(Response::new(stream_of(rx, |event| StartResponse {
+            event: Some(event),
+        })))
     }
 
     async fn update(
         &self,
         _request: Request<UpdateRequest>,
     ) -> Result<Response<UpdateResponse>, Status> {
-        Err(Status::unimplemented("PTY resize is not implemented"))
+        Err(Status::unimplemented(
+            "PTY resize is not implemented: a process started here has pipes, not a terminal, so \
+             there is nothing with a size to change",
+        ))
     }
 
     async fn stream_input(
         &self,
-        _request: Request<tonic::Streaming<StreamInputRequest>>,
+        request: Request<tonic::Streaming<StreamInputRequest>>,
     ) -> Result<Response<StreamInputResponse>, Status> {
-        Err(Status::unimplemented(
-            "stdin streaming needs a live process to write to, which exec_in_guest does not \
-             expose",
-        ))
+        use process_proto::stream_input_request::Event;
+
+        let mut inbound = request.into_inner();
+
+        // The first message names the process; the rest are input for it.
+        // Ordering is the reason this RPC exists at all, so the pid is
+        // resolved once here rather than per message -- a process that exits
+        // mid-stream should fail the writes, not silently rebind to whatever
+        // else answers to the same tag.
+        let mut pid: Option<u32> = None;
+
+        while let Some(message) = inbound.next().await {
+            let message = message?;
+            match message.event {
+                Some(Event::Start(start)) => {
+                    pid = Some(self.resolve(start.process)?);
+                }
+                Some(Event::Data(payload)) => {
+                    let pid = pid.ok_or_else(|| {
+                        Status::failed_precondition(
+                            "the first message on this stream must name the process",
+                        )
+                    })?;
+                    self.write_input(pid, payload.input).await?;
+                }
+                Some(Event::Keepalive(_)) | None => {}
+            }
+        }
+
+        Ok(Response::new(StreamInputResponse {}))
     }
 
     async fn send_input(
         &self,
-        _request: Request<SendInputRequest>,
+        request: Request<SendInputRequest>,
     ) -> Result<Response<SendInputResponse>, Status> {
-        Err(Status::unimplemented("stdin is not implemented"))
+        let req = request.into_inner();
+        let pid = self.resolve(req.process)?;
+        self.write_input(pid, req.input).await?;
+        Ok(Response::new(SendInputResponse {}))
     }
 
     async fn send_signal(
         &self,
-        _request: Request<SendSignalRequest>,
+        request: Request<SendSignalRequest>,
     ) -> Result<Response<SendSignalResponse>, Status> {
-        Err(Status::unimplemented(
-            "signalling a specific process needs live process tracking, which exec_in_guest \
-             does not provide",
-        ))
+        use process_proto::Signal;
+
+        let req = request.into_inner();
+        let pid = self.resolve(req.process)?;
+
+        let signal = match Signal::try_from(req.signal) {
+            Ok(Signal::Sigterm) => GUEST_SIGTERM,
+            Ok(Signal::Sigkill) => GUEST_SIGKILL,
+            Ok(Signal::Unspecified) | Err(_) => {
+                return Err(Status::invalid_argument(
+                    "signal must be SIGNAL_SIGTERM or SIGNAL_SIGKILL",
+                ))
+            }
+        };
+
+        self.vm
+            .signal_in_guest(pid, signal, GUEST_TIMEOUT)
+            .await
+            .map_err(|e| Status::internal(format!("signalling pid {pid}: {e}")))?;
+
+        Ok(Response::new(SendSignalResponse {}))
     }
 
     async fn close_stdin(
         &self,
-        _request: Request<CloseStdinRequest>,
+        request: Request<CloseStdinRequest>,
     ) -> Result<Response<CloseStdinResponse>, Status> {
-        Err(Status::unimplemented("stdin is not implemented"))
+        let pid = self.resolve(request.into_inner().process)?;
+        self.vm
+            .write_stdin_in_guest(pid, "", true, GUEST_TIMEOUT)
+            .await
+            .map_err(|e| Status::internal(format!("closing stdin for pid {pid}: {e}")))?;
+        Ok(Response::new(CloseStdinResponse {}))
     }
 }
+
+/// The guest's signal numbers, not this host's.
+///
+/// Written out rather than taken from `libc` because the host may not be
+/// Linux at all, while these always travel to a Linux guest. Both are fixed
+/// across every Linux architecture this runs on.
+const GUEST_SIGTERM: i32 = 15;
+const GUEST_SIGKILL: i32 = 9;
 
 /// Serve `process.Process` **and** `filesystem.Filesystem` for `vm` on
 /// `addr`, until `shutdown` fires -- both on the same port, the way real
