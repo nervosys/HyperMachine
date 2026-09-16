@@ -23,6 +23,14 @@
 //! in rather than hidden, because it is the number someone measuring this will
 //! want to change.
 //!
+//! # What a guest is allowed to reach
+//!
+//! Every bridge carries an [`EgressPolicy`], and it is an argument to
+//! [`Bridge::new`] rather than a setting with a default, because there is no
+//! default that is right for both a lab bridge and a sandbox running code an
+//! agent was told to run by a document it read. A frame the policy refuses is
+//! dropped and counted, exactly like one NAT will not translate.
+//!
 //! # What NAT failure means here
 //!
 //! A frame NAT declines to translate is dropped and counted, not passed
@@ -35,6 +43,7 @@ use std::sync::Arc;
 
 use hv2_core::devices::virtio_net_mmio::{VirtioNetMmio, MAX_FRAME_LEN};
 
+use crate::egress::EgressPolicy;
 use crate::nat::NatTable;
 use crate::Result;
 
@@ -123,6 +132,12 @@ pub struct BridgeStats {
     /// Frames dropped because the guest's receive backlog was full, or the
     /// frame was one the device would not take.
     pub refused_by_guest: u64,
+    /// Frames the egress policy would not let out.
+    ///
+    /// Counted apart from every other drop because it is the only one that is
+    /// a decision rather than a failure: a rising number here is the policy
+    /// working, and reading it as an error would be backwards.
+    pub refused_by_policy: u64,
 }
 
 /// A guest network device joined to a host link, with NAT in between.
@@ -132,20 +147,32 @@ pub struct Bridge<L: HostLink> {
     /// `None` bridges frames untranslated, which is what a guest on a private
     /// switch with the host wants. `Some` is the routed case.
     nat: Option<NatTable>,
+    /// Checked before NAT, so a refused frame costs nothing and leaves no
+    /// translation entry behind for a connection that was never allowed.
+    policy: EgressPolicy,
     stats: BridgeStats,
 }
 
 impl<L: HostLink> Bridge<L> {
-    /// Join `device` to `link`, translating through `nat` if given.
+    /// Join `device` to `link`, translating through `nat` if given, and
+    /// letting out only what `policy` allows.
+    ///
+    /// The policy is an argument and not a builder step so that every caller
+    /// has to have an opinion. [`EgressPolicy::allow_all`] is the old
+    /// behaviour and says so at the call site, which is the point: "nobody
+    /// configured a policy" and "someone chose to allow everything" should not
+    /// look the same in a code review.
     pub fn new(
         device: Arc<parking_lot::Mutex<VirtioNetMmio>>,
         link: L,
         nat: Option<NatTable>,
+        policy: EgressPolicy,
     ) -> Self {
         Self {
             device,
             link,
             nat,
+            policy,
             stats: BridgeStats::default(),
         }
     }
@@ -166,7 +193,9 @@ impl<L: HostLink> Bridge<L> {
     ///
     /// Propagates a host link failure. A frame NAT refuses is not an error: it
     /// is dropped, counted, and the loop carries on, because one malformed
-    /// packet from a guest must not take the link down.
+    /// packet from a guest must not take the link down. The same is true of a
+    /// frame the egress policy refuses -- a guest trying to reach somewhere it
+    /// may not is an ordinary event in a sandbox, not a fault.
     pub async fn pump(&mut self) -> Result<u64> {
         let mut moved = 0;
 
@@ -176,6 +205,13 @@ impl<L: HostLink> Bridge<L> {
             let Some(mut frame) = self.device.lock().take_transmitted() else {
                 break;
             };
+            // Before NAT: a frame that may not leave should not create a
+            // translation entry for a connection that will never exist.
+            if !self.policy.allows_frame(&frame) {
+                self.stats.refused_by_policy += 1;
+                tracing::debug!("bridge: egress policy refused an outbound frame");
+                continue;
+            }
             if let Some(nat) = self.nat.as_mut() {
                 if let Err(e) = nat.translate_outbound(&mut frame) {
                     self.stats.untranslatable += 1;
@@ -323,7 +359,12 @@ mod tests {
         let mem = GuestMemory::new(0x10000).expect("guest memory");
         mem.allocate_region(0x10000, false).expect("region");
         let dev = device();
-        let mut bridge = Bridge::new(dev.clone(), Loopback::default(), None);
+        let mut bridge = Bridge::new(
+            dev.clone(),
+            Loopback::default(),
+            None,
+            EgressPolicy::allow_all(),
+        );
 
         guest_sends(&mem, &mut dev.lock(), &[0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(bridge.pump().await.expect("pump"), 1);
@@ -335,11 +376,73 @@ mod tests {
         );
     }
 
+    /// A frame the policy refuses never reaches the link.
+    ///
+    /// The policy's own tests check what it decides. This checks that the
+    /// bridge acts on the decision -- a filter consulted and then ignored
+    /// passes every test of the filter.
+    #[tokio::test]
+    async fn a_frame_the_policy_refuses_does_not_reach_the_host_link() {
+        let mem = GuestMemory::new(0x10000).expect("guest memory");
+        mem.allocate_region(0x10000, false).expect("region");
+        let dev = device();
+        let mut bridge = Bridge::new(
+            dev.clone(),
+            Loopback::default(),
+            None,
+            EgressPolicy::deny_all(),
+        );
+
+        guest_sends(&mem, &mut dev.lock(), &[0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(
+            bridge.pump().await.expect("pump"),
+            0,
+            "a refused frame is not a frame moved"
+        );
+        assert_eq!(bridge.stats().refused_by_policy, 1);
+        assert_eq!(bridge.stats().out_frames, 0);
+        assert!(
+            bridge.link.sent.lock().await.is_empty(),
+            "nothing reached the host link"
+        );
+    }
+
+    /// A refused frame does not stop the ones after it.
+    ///
+    /// One guest reaching somewhere it may not is ordinary in a sandbox. If it
+    /// ended the pump, a single blocked packet would take the whole link down
+    /// -- a denial of service the guest gets to trigger.
+    #[tokio::test]
+    async fn a_refused_frame_does_not_stop_the_bridge() {
+        let mem = GuestMemory::new(0x10000).expect("guest memory");
+        mem.allocate_region(0x10000, false).expect("region");
+        let dev = device();
+        let mut bridge = Bridge::new(
+            dev.clone(),
+            Loopback::default(),
+            None,
+            EgressPolicy::deny_all(),
+        );
+
+        guest_sends(&mem, &mut dev.lock(), &[1, 2, 3, 4]);
+        assert_eq!(bridge.pump().await.expect("pump"), 0);
+
+        // The host direction still works afterwards.
+        bridge.link.waiting.lock().await.push_back(vec![5, 6, 7, 8]);
+        assert_eq!(bridge.pump().await.expect("pump"), 1);
+        assert_eq!(bridge.stats().in_frames, 1);
+    }
+
     /// And the other direction, which is the half a one-sided test would miss.
     #[tokio::test]
     async fn a_frame_from_the_host_link_reaches_the_guest() {
         let dev = device();
-        let mut bridge = Bridge::new(dev.clone(), Loopback::default(), None);
+        let mut bridge = Bridge::new(
+            dev.clone(),
+            Loopback::default(),
+            None,
+            EgressPolicy::allow_all(),
+        );
 
         bridge.link.waiting.lock().await.push_back(vec![1, 2, 3, 4]);
         assert_eq!(bridge.pump().await.expect("pump"), 1);
@@ -350,7 +453,12 @@ mod tests {
     /// An idle bridge does nothing and says so, which is what `run` paces on.
     #[tokio::test]
     async fn an_idle_bridge_carries_nothing() {
-        let mut bridge = Bridge::new(device(), Loopback::default(), None);
+        let mut bridge = Bridge::new(
+            device(),
+            Loopback::default(),
+            None,
+            EgressPolicy::allow_all(),
+        );
         assert_eq!(bridge.pump().await.expect("pump"), 0);
         assert_eq!(bridge.stats(), BridgeStats::default());
     }
@@ -361,7 +469,12 @@ mod tests {
     #[tokio::test]
     async fn an_oversized_frame_from_the_host_is_dropped_and_counted() {
         let dev = device();
-        let mut bridge = Bridge::new(dev.clone(), Loopback::default(), None);
+        let mut bridge = Bridge::new(
+            dev.clone(),
+            Loopback::default(),
+            None,
+            EgressPolicy::allow_all(),
+        );
         bridge
             .link
             .waiting
@@ -379,7 +492,12 @@ mod tests {
     #[tokio::test]
     async fn a_burst_is_carried_in_one_pump() {
         let dev = device();
-        let mut bridge = Bridge::new(dev.clone(), Loopback::default(), None);
+        let mut bridge = Bridge::new(
+            dev.clone(),
+            Loopback::default(),
+            None,
+            EgressPolicy::allow_all(),
+        );
         {
             let mut waiting = bridge.link.waiting.lock().await;
             for i in 0..5u8 {

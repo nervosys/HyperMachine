@@ -681,12 +681,41 @@ latency is itself a cold-start number that competes with CubeSandbox's.
 
 ### Phase 3 — Network security (CubeVS/CubeEgress-equivalent)
 
-`hv2-net`'s NAT module (built this week) is userspace and unaware of policy.
-An eBPF-based per-sandbox conntrack + policy layer, and an L7 egress proxy
-with credential injection (so a sandboxed agent's outbound API calls never
-see the real secret), are both real engineering efforts with no existing
-HyperMachine scaffolding to build on — flagged as the least-started phase in
-this roadmap, not sequenced first for that reason.
+**Started, at the layer that was carrying the traffic.**
+`hv2_net::egress::EgressPolicy` decides whether an outbound frame may leave,
+on destination address, port and protocol, and `Bridge` consults it before
+NAT so a refused frame leaves no translation entry behind. Default-deny:
+`EgressPolicy::default()` is `deny_all`, and `allow_all` exists but has to be
+written at the call site, because "nobody configured a policy" and "someone
+chose to allow everything" should not look the same in review.
+
+This came from reading [NVIDIA's sandboxing
+guidance](https://developer.nvidia.com/blog/practical-security-guidance-for-sandboxing-agentic-workflows-and-managing-execution-risk/),
+which puts blocking "outbound network access to unknown destinations" first
+among its mandatory controls — the direct threats being a reverse shell and
+exfiltration, neither of which needs the attacker present. Reading it against
+this repo found that `Bridge` carried every frame a guest produced, and that
+`hv2_core::networking::filter` — a packet filter with connection tracking,
+already written — is called by no data path at all. A filter that is never
+asked is not a control.
+
+Worth recording from the same source: it recommends full virtualization
+("VMs, unikernels, Kata containers") over kernel-sharing for exactly this
+workload, because agentic tools "perform arbitrary code execution by design"
+and "kernel vulnerabilities can be directly targeted as a path to full system
+compromise", rating gVisor as weaker than full virtualization. That is this
+project's own premise, from a third party.
+
+What is still not built: names. A rule is an address, so an allowlist for
+"our package mirror" has to be resolved by whoever writes it and goes stale
+when it moves; filtering on the name a client *asked* for needs TLS
+termination or trust in the guest's DNS. Nor is there an L7 egress proxy with
+credential injection (so a sandboxed agent's outbound API calls never see the
+real secret), or eBPF-based per-sandbox conntrack. Those remain real
+engineering efforts.
+
+Note that `e2b_compat` gives a sandbox no network interface at all, so the
+deployed shape today is denied by absence rather than by policy.
 
 ### Phase 4 — Multi-node cluster orchestration
 

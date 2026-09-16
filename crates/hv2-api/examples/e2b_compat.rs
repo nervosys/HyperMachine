@@ -13,17 +13,25 @@
 //! `envdVersion`), backed by a real VM boot -- `POST /sandboxes` here boots
 //! an actual `hv2-agent` guest, the same one `cold_start.rs` measures.
 //!
-//! It also now boots, per sandbox, a real per-VM `process.Process` gRPC
-//! listener -- `hv2_api::envd_process`, the same service `envd_process.rs`
-//! serves standalone -- rather than leaving `exec` as this file's only way
-//! to run something. `POST /sandboxes` returns a non-standard `processPort`
-//! field (E2B's own routing to a per-sandbox envd goes through a shared
-//! proxy keyed by domain, which is not built here) naming where that
-//! sandbox's real envd-shaped gRPC service is listening. An E2B SDK client
-//! still cannot point at this today -- besides `processPort` not being a
-//! real E2B field, several RPCs are `unimplemented` and streaming is
-//! batched, not live; see `hv2_api::envd_process`'s doc comment. `exec`
-//! remains as the simpler non-gRPC path for a plain `curl` test.
+//! It also boots, per sandbox, a real per-VM envd endpoint --
+//! `hv2_api::envd_process` and `hv2_api::envd_filesystem`, speaking both gRPC
+//! and the Connect protocol on one port -- rather than leaving `exec` as this
+//! file's only way to run something. `POST /sandboxes` returns a non-standard
+//! `processPort` naming where that listener is bound, alongside the hostname
+//! E2B's own SDK would use; `hv2_api::sandbox_proxy` resolves that hostname,
+//! so an unmodified SDK does point at this. `exec` remains as the simpler
+//! non-gRPC path for a plain `curl` test.
+//!
+//! # A sandbox here has no network interface
+//!
+//! Nothing in this file calls `attach_net`, so a guest has a vsock channel to
+//! its agent and nothing else: no NIC, no route out. That is deliberate and
+//! worth stating, because it is the strongest form of the control NVIDIA's
+//! sandboxing guidance puts first -- block outbound access to unknown
+//! destinations -- and an omission nobody wrote down is one somebody
+//! reverses by accident. Giving a sandbox a network means attaching one
+//! *and* choosing an `hv2_net::egress::EgressPolicy`; the default there
+//! denies everything.
 //!
 //! # Running it
 //!

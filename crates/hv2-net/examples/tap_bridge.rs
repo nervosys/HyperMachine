@@ -207,7 +207,18 @@ async fn main() -> std::process::ExitCode {
     // No NAT. It translates IPv4 and this frame is not addressed to anywhere,
     // so a NAT in the path would correctly refuse it and the test would be
     // about NAT rather than about the bridge.
-    let mut bridge = Bridge::new(Arc::clone(&device), link, None);
+    // `allow_all`, and deliberately: this carries one hand-built ethernet
+    // frame that is not addressed to anywhere routable, so any policy that
+    // read its destination would refuse it and the run would demonstrate the
+    // policy instead of the bridge. A sandbox is the other case entirely --
+    // there the default `EgressPolicy::deny_all` applies and an allowlist is
+    // written for what the workload actually needs.
+    let mut bridge = Bridge::new(
+        Arc::clone(&device),
+        link,
+        None,
+        hv2_net::egress::EgressPolicy::allow_all(),
+    );
 
     // Hand the guest a frame. It echoes with the addresses swapped, the device
     // drains it on the guest's own kick, and the bridge is what carries it out.
