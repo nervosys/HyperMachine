@@ -50,12 +50,13 @@ fn main() {
 #[cfg(target_os = "linux")]
 mod linux {
     use hv2_guest_agent::{
-        decode, encode, truncate_utf8, OpResult, Operation, Request, Response, GUEST_AGENT_PORT,
-        MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
+        decode, encode, truncate_utf8, OpResult, Operation, PtySize, Request, Response,
+        GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
     };
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::io::{Read, Write};
-    use std::os::unix::process::ExitStatusExt;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
     use std::process::{Command, Stdio};
     use std::sync::mpsc;
     use std::sync::{Arc, Mutex, OnceLock};
@@ -236,13 +237,20 @@ mod linux {
                 stdin.as_deref(),
                 timeout_ms,
             ),
-            Operation::Start { program, args, cwd } => start(&program, &args, cwd.as_deref()),
+            Operation::Start {
+                program,
+                args,
+                cwd,
+                envs,
+                pty,
+            } => start(&program, &args, cwd.as_deref(), &envs, pty),
             Operation::Poll { pid } => poll(pid),
             Operation::WriteStdin { pid, data, close } => write_stdin(pid, &data, close),
             Operation::Signal {
                 pid,
                 signal: number,
             } => signal(pid, number),
+            Operation::ResizePty { pid, size } => resize_pty(pid, size),
         };
 
         Response {
@@ -266,6 +274,11 @@ mod linux {
     /// forever writing -- so "read it when the host asks" would hang exactly
     /// the chatty programs streaming exists for.
     struct Proc {
+        /// The pty master, for a program started with one. Both ends of the
+        /// conversation: what the program writes is read here, and what is
+        /// written here arrives as the program's input. A pty has no separate
+        /// stdin, which is why this is not the field below.
+        pty: Option<std::fs::File>,
         stdin: Option<std::process::ChildStdin>,
         stdout: Arc<Mutex<Vec<u8>>>,
         stderr: Arc<Mutex<Vec<u8>>>,
@@ -322,16 +335,134 @@ mod linux {
         String::from_utf8_lossy(&bytes).into_owned()
     }
 
+    /// Open a pseudo-terminal, returning (master, slave).
+    ///
+    /// Built from `posix_openpt` and friends rather than `openpty`, which
+    /// lives in libutil: this agent is linked static-pie against glibc for a
+    /// guest with no shared libraries, and depending on one more library to
+    /// get one convenience function is a way to not link at all.
+    ///
+    /// # Safety
+    ///
+    /// Every call is a libc call with checked arguments; each return value is
+    /// tested before the next call uses it.
+    fn open_pty(size: PtySize) -> std::io::Result<(std::fs::File, std::fs::File)> {
+        use std::os::fd::FromRawFd;
+
+        // SAFETY: no arguments but flags; -1 on failure, which is checked.
+        let master = unsafe { libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY) };
+        if master < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        // SAFETY: `master` is a valid fd, checked above. Wrapped now so that
+        // every early return below closes it rather than leaking it.
+        let master = unsafe { std::fs::File::from_raw_fd(master) };
+        let master_fd = std::os::fd::AsRawFd::as_raw_fd(&master);
+
+        // SAFETY: valid fd. `grantpt`/`unlockpt` are what make the slave
+        // openable; without them the open below fails with EIO.
+        if unsafe { libc::grantpt(master_fd) } < 0 || unsafe { libc::unlockpt(master_fd) } < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+
+        let mut name = [0 as libc::c_char; 128];
+        // SAFETY: valid fd, and a buffer whose real length is passed.
+        let named = unsafe { libc::ptsname_r(master_fd, name.as_mut_ptr(), name.len()) };
+        if named != 0 {
+            return Err(std::io::Error::from_raw_os_error(named));
+        }
+        // SAFETY: `ptsname_r` returning 0 means `name` holds a NUL-terminated
+        // path within the buffer.
+        let path = unsafe { std::ffi::CStr::from_ptr(name.as_ptr()) };
+        let slave = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(std::ffi::OsStr::from_bytes(path.to_bytes()))?;
+
+        set_pty_size(master_fd, size)?;
+        Ok((master, slave))
+    }
+
+    /// Tell a pty how big it is.
+    fn set_pty_size(master_fd: libc::c_int, size: PtySize) -> std::io::Result<()> {
+        let winsize = libc::winsize {
+            ws_row: size.rows,
+            ws_col: size.cols,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        // SAFETY: a valid fd and a correctly typed `winsize` for TIOCSWINSZ.
+        if unsafe { libc::ioctl(master_fd, libc::TIOCSWINSZ, &raw const winsize) } < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    }
+
     /// Start a program and keep it.
-    fn start(program: &str, args: &[String], cwd: Option<&str>) -> OpResult {
+    fn start(
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
+    ) -> OpResult {
         let mut command = Command::new(program);
-        command
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        command.args(args);
+        // Added to the agent's own environment rather than replacing it:
+        // `env_clear` would leave the program without a `PATH`, and the first
+        // thing most of them do is look something up in it.
+        command.envs(envs);
         if let Some(dir) = cwd {
             command.current_dir(dir);
+        }
+
+        // Opened before the fork so a failure is reported as a failure to
+        // start, rather than leaving a child running against a terminal
+        // nothing holds.
+        let pty_pair = match pty {
+            Some(size) => match open_pty(size) {
+                Ok(pair) => Some(pair),
+                Err(e) => {
+                    return OpResult::Failed {
+                        message: format!("could not open a terminal for {program}: {e}"),
+                    }
+                }
+            },
+            None => None,
+        };
+
+        if let Some((_, slave)) = pty_pair.as_ref() {
+            use std::os::fd::AsRawFd;
+            let slave_fd = slave.as_raw_fd();
+            command
+                .stdin(duplicate(slave_fd))
+                .stdout(duplicate(slave_fd))
+                .stderr(duplicate(slave_fd));
+            // SAFETY: runs in the child between fork and exec, so it may call
+            // only async-signal-safe functions; `setsid` and `ioctl` are.
+            //
+            // Both are needed and neither is optional: `setsid` makes the
+            // child a session leader, which is a precondition for having a
+            // controlling terminal at all, and `TIOCSCTTY` then makes this pty
+            // that terminal. Without them the program has a terminal on its
+            // file descriptors but no *controlling* one, so Ctrl-C sends no
+            // signal and a shell reports "no job control".
+            unsafe {
+                command.pre_exec(|| {
+                    if libc::setsid() < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if libc::ioctl(0, libc::TIOCSCTTY, 0) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
+        } else {
+            command
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
         }
 
         let mut child = match command.spawn() {
@@ -346,17 +477,42 @@ mod linux {
         let pid = child.id();
         let stdout = Arc::new(Mutex::new(Vec::new()));
         let stderr = Arc::new(Mutex::new(Vec::new()));
-        if let Some(pipe) = child.stdout.take() {
-            drain(pipe, Arc::clone(&stdout));
-        }
-        if let Some(pipe) = child.stderr.take() {
-            drain(pipe, Arc::clone(&stderr));
-        }
 
-        // Taken before `child` moves into the waiter below, or there would be
-        // no way to write to the program after starting it -- which is most of
-        // the point of starting it this way.
-        let stdin = child.stdin.take();
+        // The parent's copy of the slave is dropped here. It has to be: the
+        // master reads end-of-file only when *every* slave handle is closed,
+        // and holding one would make a finished program look like it was still
+        // producing nothing forever.
+        let (pty_master, pty_stdin) = match pty_pair {
+            Some((master, slave)) => {
+                drop(slave);
+                match master.try_clone() {
+                    Ok(reader) => {
+                        // stderr stays empty for a pty: a terminal has one
+                        // stream, and inventing a split would mean guessing.
+                        drain(reader, Arc::clone(&stdout));
+                        (Some(master), None)
+                    }
+                    Err(e) => {
+                        return OpResult::Failed {
+                            message: format!("could not read the terminal for {program}: {e}"),
+                        }
+                    }
+                }
+            }
+            None => {
+                if let Some(pipe) = child.stdout.take() {
+                    drain(pipe, Arc::clone(&stdout));
+                }
+                if let Some(pipe) = child.stderr.take() {
+                    drain(pipe, Arc::clone(&stderr));
+                }
+                // Taken before `child` moves into the waiter below, or there
+                // would be no way to write to the program after starting it --
+                // which is most of the point of starting it this way.
+                (None, child.stdin.take())
+            }
+        };
+        let stdin = pty_stdin;
 
         // Reaped on its own thread. Without this the process becomes a zombie
         // the moment it exits, and `Poll` would report it running forever.
@@ -381,6 +537,7 @@ mod linux {
         table.insert(
             pid,
             Proc {
+                pty: pty_master,
                 stdin,
                 stdout,
                 stderr,
@@ -410,10 +567,12 @@ mod linux {
             Err(poisoned) => *poisoned.into_inner(),
         };
 
+        let pty = proc.pty.is_some();
         match finished {
             None => OpResult::Output {
                 stdout,
                 stderr,
+                pty,
                 running: true,
                 exit_code: None,
                 signal: None,
@@ -421,6 +580,7 @@ mod linux {
             Some((exit_code, signal)) => OpResult::Output {
                 stdout,
                 stderr,
+                pty,
                 running: false,
                 exit_code,
                 signal,
@@ -439,6 +599,31 @@ mod linux {
                 message: format!("no started process with pid {pid}"),
             };
         };
+        // A pty takes input through the master, not a separate stdin.
+        if let Some(master) = proc.pty.as_mut() {
+            if let Err(e) = master
+                .write_all(data.as_bytes())
+                .and_then(|()| master.flush())
+            {
+                return OpResult::Failed {
+                    message: format!("writing to the terminal of pid {pid}: {e}"),
+                };
+            }
+            if close {
+                // 0x04 is Ctrl-D, which is how end-of-input is expressed on a
+                // terminal. Closing the master instead would tear the terminal
+                // down under the program rather than telling it the input has
+                // ended -- the proto says as much: "Only works for non-PTY
+                // processes. For PTY, send Ctrl+D (0x04) instead."
+                if let Err(e) = master.write_all(&[0x04]).and_then(|()| master.flush()) {
+                    return OpResult::Failed {
+                        message: format!("ending input for pid {pid}: {e}"),
+                    };
+                }
+            }
+            return OpResult::Acknowledged;
+        }
+
         let Some(pipe) = proc.stdin.as_mut() else {
             return OpResult::Failed {
                 message: format!("stdin for pid {pid} is already closed"),
@@ -455,6 +640,49 @@ mod linux {
             proc.stdin = None;
         }
         OpResult::Acknowledged
+    }
+
+    /// Tell a program's terminal it is a different size.
+    fn resize_pty(pid: u32, size: PtySize) -> OpResult {
+        let table = match procs().lock() {
+            Ok(table) => table,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let Some(proc) = table.get(&pid) else {
+            return OpResult::Failed {
+                message: format!("no started process with pid {pid}"),
+            };
+        };
+        let Some(master) = proc.pty.as_ref() else {
+            return OpResult::Failed {
+                message: format!("pid {pid} has no terminal to resize; it was started with pipes"),
+            };
+        };
+        match set_pty_size(std::os::fd::AsRawFd::as_raw_fd(master), size) {
+            Ok(()) => OpResult::Acknowledged,
+            Err(e) => OpResult::Failed {
+                message: format!("resizing the terminal of pid {pid}: {e}"),
+            },
+        }
+    }
+
+    /// Duplicate a file descriptor into an owned `Stdio`.
+    ///
+    /// Each of the child's three descriptors needs its own, because `Stdio`
+    /// takes ownership and the same pty slave has to serve all three.
+    fn duplicate(fd: libc::c_int) -> Stdio {
+        use std::os::fd::FromRawFd;
+        // SAFETY: `fd` is open for as long as the caller holds the slave file,
+        // which outlives this call. A failed `dup` gives -1, which
+        // `Stdio::from_raw_fd` would treat as a real descriptor, so that case
+        // becomes a closed stream instead -- the child then fails to start,
+        // which is reported, rather than reading from an arbitrary fd.
+        let copy = unsafe { libc::dup(fd) };
+        if copy < 0 {
+            return Stdio::null();
+        }
+        // SAFETY: `copy` is a fresh descriptor this call owns.
+        unsafe { Stdio::from_raw_fd(copy) }
     }
 
     /// Send a signal to a started program.

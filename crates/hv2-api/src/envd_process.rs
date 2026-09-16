@@ -10,10 +10,20 @@
 //! the guest's own pid throughout -- not a synthetic id, as it was while
 //! this was built on `exec_in_guest`.
 //!
-//! `Update` is PTY resize, and stays `unimplemented`: there is no PTY. The
-//! guest agent gives a program three pipes, so there is no terminal to
-//! resize, and reporting success would be a lie. For the same reason
-//! `DataEvent::pty` is never emitted and `ProcessInput::pty` is refused.
+//! A `Start` carrying a `pty` gets a real pseudo-terminal in the guest, not
+//! pipes: the program has a controlling terminal, so it line-buffers, draws
+//! prompts, answers `isatty` and takes Ctrl-C as a signal. Its output then
+//! arrives as `DataEvent::pty` rather than `stdout`, because a terminal has
+//! one stream and splitting it would mean inventing the split. `Update`
+//! resizes that terminal, and `ProcessInput::pty` writes to it.
+//!
+//! A process started *without* a pty has none of that, and `Update` on one
+//! says so rather than quietly succeeding.
+//!
+//! `ProcessConfig::envs` is passed through, added to the agent's own
+//! environment rather than replacing it -- a program started with an empty
+//! environment has no `PATH`. The SDK sets `TERM`, `LANG` and `LC_ALL` on
+//! every pty it opens, so refusing them meant refusing every terminal.
 //!
 //! Output is *polled* from the guest rather than pushed: the agent buffers
 //! what a program prints and this module drains it every `POLL_INTERVAL`.
@@ -49,7 +59,7 @@ use tokio::sync::broadcast;
 use tokio_stream::{Stream, StreamExt};
 use tonic::{Request, Response, Status};
 
-use hv2_agent::AgentVM;
+use hv2_agent::{AgentVM, PtySize};
 
 pub mod process_proto {
     // As in `envd_filesystem`: generated code, lints nobody can act on.
@@ -92,6 +102,9 @@ const EVENT_BACKLOG: usize = 256;
 /// A process this service started and has not yet seen exit.
 struct Tracked {
     info: ProcessInfo,
+    /// Whether this process has a terminal, which decides both how its output
+    /// is labelled and whether `Update` has anything to resize.
+    pty: bool,
     /// Everything its poller has published. `Start` and every `Connect`
     /// subscribe here; see this module's doc comment for why a shared
     /// broadcast rather than each caller polling for itself.
@@ -173,14 +186,12 @@ impl EnvdProcess {
             .and_then(|i| i.input)
             .ok_or_else(|| Status::invalid_argument("input is required"))?;
 
-        let bytes =
-            match input {
-                Input::Stdin(bytes) => bytes,
-                Input::Pty(_) => return Err(Status::unimplemented(
-                    "there is no PTY to write to: the guest agent gives a program pipes, not a \
-                     terminal. Send stdin instead",
-                )),
-            };
+        // Both arms go to the same place: the guest agent writes to whichever
+        // the process actually has. Refusing `Pty` for a process that has one
+        // would leave a terminal client unable to type into it.
+        let bytes = match input {
+            Input::Stdin(bytes) | Input::Pty(bytes) => bytes,
+        };
 
         // The guest agent's protocol carries stdin as a string, so input that
         // is not text cannot be passed on. Refusing beats silently replacing
@@ -243,7 +254,15 @@ async fn pump(
         match vm.poll_in_guest(pid, GUEST_TIMEOUT).await {
             Ok(output) => {
                 if !output.stdout.is_empty() {
-                    let _ = events.send(data(Output::Stdout(output.stdout.into_bytes())));
+                    // A terminal's output is `pty`, not `stdout`: the client
+                    // is told which it is looking at, since only one of them
+                    // carries escape sequences it has to interpret.
+                    let bytes = output.stdout.into_bytes();
+                    let _ = events.send(data(if output.pty {
+                        Output::Pty(bytes)
+                    } else {
+                        Output::Stdout(bytes)
+                    }));
                 }
                 if !output.stderr.is_empty() {
                     let _ = events.send(data(Output::Stderr(output.stderr.into_bytes())));
@@ -324,21 +343,19 @@ impl Process for EnvdProcess {
             .process
             .ok_or_else(|| Status::invalid_argument("process config is required"))?;
 
-        if req.pty.is_some() {
-            return Err(Status::unimplemented(
-                "a PTY was requested, but the guest agent starts programs with pipes and has no \
-                 terminal to give them. Start without one",
-            ));
-        }
-        if !config.envs.is_empty() {
-            // Accepting and dropping them would leave a program running
-            // without the environment it was told it had, failing later for a
-            // reason nothing points at.
-            return Err(Status::unimplemented(
-                "per-process environment variables are not implemented: the guest agent's start \
-                 operation carries a program, its arguments and a working directory only",
-            ));
-        }
+        // A requested size of 0x0 is what an unset `Size` decodes to, and a
+        // terminal that size makes some programs refuse to draw at all. The
+        // default is the conventional 80x24, which the caller can change with
+        // `Update` the moment it knows better.
+        let pty = req.pty.as_ref().map(|pty| {
+            pty.size
+                .as_ref()
+                .filter(|size| size.cols > 0 && size.rows > 0)
+                .map_or_else(PtySize::default, |size| PtySize {
+                    cols: u16::try_from(size.cols).unwrap_or(u16::MAX),
+                    rows: u16::try_from(size.rows).unwrap_or(u16::MAX),
+                })
+        });
 
         let pid = self
             .vm
@@ -346,6 +363,8 @@ impl Process for EnvdProcess {
                 &config.cmd,
                 &config.args,
                 config.cwd.as_deref(),
+                &config.envs.clone().into_iter().collect(),
+                pty,
                 GUEST_TIMEOUT,
             )
             .await
@@ -369,6 +388,7 @@ impl Process for EnvdProcess {
                     pid,
                     tag: req.tag,
                 },
+                pty: pty.is_some(),
                 events: events.clone(),
             },
         );
@@ -387,12 +407,44 @@ impl Process for EnvdProcess {
 
     async fn update(
         &self,
-        _request: Request<UpdateRequest>,
+        request: Request<UpdateRequest>,
     ) -> Result<Response<UpdateResponse>, Status> {
-        Err(Status::unimplemented(
-            "PTY resize is not implemented: a process started here has pipes, not a terminal, so \
-             there is nothing with a size to change",
-        ))
+        let req = request.into_inner();
+        let pid = self.resolve(req.process)?;
+
+        if !self.running.lock().get(&pid).is_some_and(|t| t.pty) {
+            return Err(Status::failed_precondition(format!(
+                "pid {pid} was started with pipes, so it has no terminal to resize"
+            )));
+        }
+
+        let size = req
+            .pty
+            .as_ref()
+            .and_then(|pty| pty.size.as_ref())
+            .ok_or_else(|| Status::invalid_argument("a pty size is required"))?;
+        if size.cols == 0 || size.rows == 0 {
+            // A zero-sized terminal is what an unset field decodes to, and
+            // some full-screen programs stop drawing entirely when told they
+            // are that size.
+            return Err(Status::invalid_argument(
+                "a terminal must have a non-zero width and height",
+            ));
+        }
+
+        self.vm
+            .resize_pty_in_guest(
+                pid,
+                PtySize {
+                    cols: u16::try_from(size.cols).unwrap_or(u16::MAX),
+                    rows: u16::try_from(size.rows).unwrap_or(u16::MAX),
+                },
+                GUEST_TIMEOUT,
+            )
+            .await
+            .map_err(|e| Status::internal(format!("resizing the terminal of pid {pid}: {e}")))?;
+
+        Ok(Response::new(UpdateResponse {}))
     }
 
     async fn stream_input(

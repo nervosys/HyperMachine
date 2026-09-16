@@ -33,6 +33,7 @@
 //! that it has none.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Port the guest agent listens on.
 ///
@@ -54,7 +55,7 @@ pub const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 ///
 /// A guest image outlives the host that built it. Without this, an old agent
 /// meeting a new host fails by misreading a field rather than by saying so.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// A request from the host to the guest agent.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +109,27 @@ pub enum Operation {
         args: Vec<String>,
         #[serde(default)]
         cwd: Option<String>,
+        /// Added to the environment the agent itself has, not replacing it.
+        ///
+        /// A program inherits `PATH` and the rest either way, because a
+        /// program started with an empty environment cannot find `sh`; these
+        /// are the variables the caller wants on top. Sorted, so two identical
+        /// requests encode identically.
+        #[serde(default)]
+        envs: BTreeMap<String, String>,
+        /// Give the program a pseudo-terminal of this size instead of pipes.
+        ///
+        /// Which changes what the program *is*, not just how it is watched: it
+        /// gets a controlling terminal, so it line-buffers rather than
+        /// block-buffers, draws prompts, honours Ctrl-C as a signal, and
+        /// answers `isatty`. A shell handed pipes behaves like a script
+        /// interpreter; handed a pty it behaves like a shell.
+        ///
+        /// Its stdout and stderr are the same stream afterwards, because a
+        /// terminal has one. [`OpResult::Output`] says `pty` so a caller knows
+        /// that empty `stderr` means merged, not silent.
+        #[serde(default)]
+        pty: Option<PtySize>,
     },
 
     /// Collect whatever a started program has printed since the last poll, and
@@ -131,6 +153,30 @@ pub enum Operation {
 
     /// Send a signal to a started program.
     Signal { pid: u32, signal: i32 },
+
+    /// Tell a program's terminal it is a different size.
+    ///
+    /// Only meaningful for one started with a `pty`. A full-screen program
+    /// redraws when it hears this, and never learns otherwise -- there is
+    /// nothing else in the protocol that would tell it.
+    ResizePty { pid: u32, size: PtySize },
+}
+
+/// A terminal's size, in character cells.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PtySize {
+    pub cols: u16,
+    pub rows: u16,
+}
+
+impl Default for PtySize {
+    /// 80x24, the size a terminal is assumed to be when nobody says.
+    ///
+    /// Not 0x0, which is what zeroed memory would give and what a program
+    /// reads as "no terminal size known" -- some then refuse to draw at all.
+    fn default() -> Self {
+        Self { cols: 80, rows: 24 }
+    }
 }
 
 /// The guest agent's answer.
@@ -176,8 +222,16 @@ pub enum OpResult {
     /// Answer to [`Operation::Poll`].
     Output {
         /// Printed since the previous poll, not since the program began.
+        ///
+        /// For a program with a pty this is everything it wrote, stderr
+        /// included, because a terminal has one stream.
         stdout: String,
         stderr: String,
+        /// Whether this program has a pty, so a caller can tell an empty
+        /// `stderr` that means "merged into stdout" from one that means
+        /// "wrote nothing".
+        #[serde(default)]
+        pty: bool,
         /// Set once the program has finished. `exit_code` and `signal` are
         /// meaningless while it is `true`.
         running: bool,
@@ -372,6 +426,8 @@ mod tests {
                 program: "/bin/sh".to_string(),
                 args: vec!["-c".to_string(), "read x".to_string()],
                 cwd: Some("/tmp".to_string()),
+                envs: BTreeMap::new(),
+                pty: None,
             },
             Operation::Poll { pid: 42 },
             Operation::WriteStdin {
@@ -409,6 +465,8 @@ mod tests {
                 program: "/bin/true".to_string(),
                 args: Vec::new(),
                 cwd: None,
+                envs: BTreeMap::new(),
+                pty: None,
             }
         );
     }
@@ -421,6 +479,7 @@ mod tests {
         let running = OpResult::Output {
             stdout: "partial".to_string(),
             stderr: String::new(),
+            pty: false,
             running: true,
             exit_code: None,
             signal: None,
@@ -428,6 +487,9 @@ mod tests {
         let killed = OpResult::Output {
             stdout: String::new(),
             stderr: String::new(),
+            // A terminal merges the two streams, so this is also the case
+            // where an empty stderr means "merged" rather than "silent".
+            pty: true,
             running: false,
             exit_code: None,
             signal: Some(9),
@@ -442,11 +504,65 @@ mod tests {
     }
 
     #[test]
+    fn a_terminal_is_asked_for_and_resized_across_the_wire() {
+        for op in [
+            Operation::Start {
+                program: "/bin/sh".to_string(),
+                args: Vec::new(),
+                cwd: None,
+                envs: BTreeMap::new(),
+                pty: Some(PtySize {
+                    cols: 120,
+                    rows: 40,
+                }),
+            },
+            Operation::ResizePty {
+                pid: 7,
+                size: PtySize {
+                    cols: 200,
+                    rows: 50,
+                },
+            },
+        ] {
+            let request = Request {
+                id: 1,
+                version: PROTOCOL_VERSION,
+                op: op.clone(),
+            };
+            let bytes = encode(&request).expect("encode");
+            let (back, _) = decode::<Request>(&bytes).expect("decode").expect("a frame");
+            assert_eq!(back.op, op);
+        }
+    }
+
+    #[test]
+    fn a_start_without_a_terminal_still_decodes() {
+        // `pty` is `#[serde(default)]`, so a caller that predates terminals --
+        // or simply does not want one -- keeps working.
+        let body = br#"{"id":1,"version":3,"op":{"kind":"start","program":"/bin/true"}}"#;
+        let mut buf = (body.len() as u32).to_le_bytes().to_vec();
+        buf.extend_from_slice(body);
+        let (request, _) = decode::<Request>(&buf).expect("decode").expect("a frame");
+        let Operation::Start { pty, .. } = request.op else {
+            panic!("expected a start");
+        };
+        assert_eq!(pty, None, "no terminal unless one is asked for");
+    }
+
+    #[test]
+    fn an_unspecified_terminal_is_80x24_not_nothing() {
+        // 0x0 is what zeroed memory gives, and some full-screen programs
+        // refuse to draw at that size. The conventional default is a size a
+        // program can actually work with.
+        assert_eq!(PtySize::default(), PtySize { cols: 80, rows: 24 });
+    }
+
+    #[test]
     fn the_protocol_version_moved_with_the_new_operations() {
         // A v1 agent cannot serve Start or Poll, and a host that spoke v1 at
         // it would get a confusing decode failure rather than a version
         // refusal. Bumping this is what makes the mismatch legible.
-        assert_eq!(PROTOCOL_VERSION, 2);
+        assert_eq!(PROTOCOL_VERSION, 3);
     }
 
     #[test]

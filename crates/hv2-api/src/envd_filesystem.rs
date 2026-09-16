@@ -311,7 +311,16 @@ impl EnvdFilesystem {
 
         let pid = self
             .vm
-            .start_in_guest("/bin/sh", &["-c".to_string(), script], None, EXEC_TIMEOUT)
+            // No terminal: a watcher is a loop whose output this parses, and
+            // a pty would insert carriage returns and echo into it.
+            .start_in_guest(
+                "/bin/sh",
+                &["-c".to_string(), script],
+                None,
+                &Default::default(),
+                None,
+                EXEC_TIMEOUT,
+            )
             .await
             .map_err(|e| Status::internal(format!("could not start a watcher: {e}")))?;
 

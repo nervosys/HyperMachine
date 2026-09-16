@@ -5,6 +5,8 @@ use crate::{
     SandboxConfig, ScriptEngine,
 };
 use hv2_core::{BootSource, VMConfig, VMState, VM};
+use hv2_guest_agent::PtySize;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -391,15 +393,18 @@ impl AgentVM {
         program: &str,
         args: &[String],
         cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
         timeout: Duration,
     ) -> Result<u32> {
         let device = self.guest_channel("start a program in the guest")?;
         let program = program.to_string();
         let args = args.to_vec();
         let cwd = cwd.map(str::to_string);
+        let envs = envs.clone();
         tokio::task::spawn_blocking(move || {
             let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.start(&program, &args, cwd.as_deref(), timeout)
+            agent.start(&program, &args, cwd.as_deref(), &envs, pty, timeout)
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest start task failed: {e}")))?
@@ -442,6 +447,28 @@ impl AgentVM {
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest write task failed: {e}")))?
+    }
+
+    /// Tell a program's terminal it is a different size.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability. Fails if the guest does not know
+    /// that pid, or if the program was started with pipes and so has no
+    /// terminal to resize.
+    pub async fn resize_pty_in_guest(
+        &self,
+        pid: u32,
+        size: PtySize,
+        timeout: Duration,
+    ) -> Result<()> {
+        let device = self.guest_channel("resize a terminal in the guest")?;
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.resize_pty(pid, size, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest resize task failed: {e}")))?
     }
 
     /// Send a signal to a started program.

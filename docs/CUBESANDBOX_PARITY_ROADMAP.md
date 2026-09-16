@@ -593,9 +593,47 @@ One deviation worth knowing about: `pbjson-types` renders a `Timestamp` as
 the same instant and RFC 3339, the SDK parses it into a `datetime`
 correctly, and a stricter protobuf-JSON parser could still object.
 
-Remaining gaps beyond Connect: `Update` and anything else wanting a PTY (a
-program started in the guest gets pipes, so there is no terminal to
-resize), output that is polled rather than pushed, and compression —
+#### Terminals
+
+`Start` with a `pty` now opens a real pseudo-terminal in the guest rather
+than pipes, so the program has a controlling terminal: it line-buffers,
+draws prompts, answers `isatty`, and takes Ctrl-C as a signal rather than a
+byte. Its output arrives as `DataEvent::pty`, because a terminal has one
+stream and splitting it into stdout and stderr would mean inventing the
+split. `Update` resizes it, `ProcessInput::pty` types into it, and
+`CloseStdin` on one sends Ctrl-D, which is what the proto's own comment
+says to do.
+
+Built from `posix_openpt`/`grantpt`/`unlockpt`/`ptsname_r` rather than
+`openpty`, which lives in libutil: the agent links static-pie against glibc
+for a guest with no shared libraries, and one more library to link is one
+more way not to link at all. The child gets `setsid` and `TIOCSCTTY` before
+`exec` — without both it has a terminal on its descriptors but no
+*controlling* terminal, so Ctrl-C signals nothing and a shell reports "no
+job control".
+
+`ProcessConfig::envs` is passed through too, which the same exercise
+forced: the SDK sets `TERM`, `LANG` and `LC_ALL` on every pty it opens, so
+refusing environment variables meant refusing every terminal. They are
+added to the agent's environment rather than replacing it — a program
+started with an empty one has no `PATH`.
+
+Verified through the SDK's own `pty` API, not just grpcurl:
+
+```text
+OK   pty.create: pid 54
+     ... BusyBox v1.37.0 built-in shell (ash) | ~ # tty; stty size; echo TERM=$TERM
+     | /dev/pts/0 | 30 100 | TERM=xterm-256color | ~ #
+OK   pty.resize
+     ~ # stty size | 50 200 | ~ #
+OK   pty.kill: True
+```
+
+The banner, the `~ #` prompt and the echoed command are all things that
+only happen on a terminal; `/dev/pts/0` is the terminal itself; `30 100`
+then `50 200` is the running shell seeing the resize.
+
+Remaining gaps: output that is polled rather than pushed, and compression —
 `connect-accept-encoding` is ignored and nothing is compressed, which the
 protocol allows and which costs bandwidth on a large `ListDir`.
 

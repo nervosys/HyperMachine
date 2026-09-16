@@ -28,10 +28,11 @@
 use crate::{AgentError, Result};
 use hv2_core::devices::virtio_vsock::{VsockConnectionId, VsockConnectionState, VsockDevice};
 use hv2_guest_agent::{
-    decode, encode, OpResult, Operation, Request, Response, GUEST_AGENT_PORT, MAX_FRAME_BYTES,
-    PROTOCOL_VERSION,
+    decode, encode, OpResult, Operation, PtySize, Request, Response, GUEST_AGENT_PORT,
+    MAX_FRAME_BYTES, PROTOCOL_VERSION,
 };
 use parking_lot::Mutex;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -192,8 +193,14 @@ impl GuestChannel for VsockChannel {
 #[derive(Debug, Clone)]
 pub struct GuestOutput {
     /// Printed since the previous poll, not since the program began.
+    ///
+    /// For a program with a terminal this is everything it wrote, stderr
+    /// included, because a terminal has one stream.
     pub stdout: String,
     pub stderr: String,
+    /// Whether this program has a terminal, so a caller can tell an empty
+    /// `stderr` that means "merged" from one that means "wrote nothing".
+    pub pty: bool,
     /// While true, `exit_code` and `signal` mean nothing.
     pub running: bool,
     /// `None` when a signal ended the program, which is not exiting 0.
@@ -336,12 +343,16 @@ impl GuestAgent {
         program: &str,
         args: &[String],
         cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
         timeout: Duration,
     ) -> Result<u32> {
         let op = Operation::Start {
             program: program.to_string(),
             args: args.to_vec(),
             cwd: cwd.map(str::to_string),
+            envs: envs.clone(),
+            pty,
         };
         match self.request(op, timeout)? {
             OpResult::Started { pid } => Ok(pid),
@@ -367,12 +378,14 @@ impl GuestAgent {
             OpResult::Output {
                 stdout,
                 stderr,
+                pty,
                 running,
                 exit_code,
                 signal,
             } => Ok(GuestOutput {
                 stdout,
                 stderr,
+                pty,
                 running,
                 exit_code,
                 signal,
@@ -414,6 +427,24 @@ impl GuestAgent {
             ))),
             other => Err(AgentError::Script(format!(
                 "the guest answered a write with {other:?}"
+            ))),
+        }
+    }
+
+    /// Tell a program's terminal it is a different size.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, the guest not knowing that pid, or the
+    /// program having been started with pipes rather than a terminal.
+    pub fn resize_pty(&mut self, pid: u32, size: PtySize, timeout: Duration) -> Result<()> {
+        match self.request(Operation::ResizePty { pid, size }, timeout)? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(format!(
+                "the guest agent could not resize the terminal of pid {pid}: {message}"
+            ))),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a resize with {other:?}"
             ))),
         }
     }
