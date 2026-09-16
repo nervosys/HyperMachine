@@ -79,6 +79,10 @@ const ENVD_PORT: u16 = 49983;
 struct Options {
     port: u16,
     proxy_port: u16,
+    /// Both must be given for the proxy to speak TLS; either alone is an
+    /// error rather than a silent downgrade to plaintext.
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
     kernel: String,
     initrd: String,
     memory_gb: u64,
@@ -98,6 +102,8 @@ fn parse_options() -> Result<Options, String> {
     let mut opts = Options {
         port: 3980,
         proxy_port: 3981,
+        tls_cert: None,
+        tls_key: None,
         kernel,
         initrd,
         memory_gb: 1,
@@ -119,6 +125,8 @@ fn parse_options() -> Result<Options, String> {
             "--proxy-port" => {
                 opts.proxy_port = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
             }
+            "--tls-cert" => opts.tls_cert = Some(value(&mut i)?),
+            "--tls-key" => opts.tls_key = Some(value(&mut i)?),
             "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--help" | "-h" => {
@@ -441,6 +449,8 @@ async fn main() -> std::process::ExitCode {
     };
     let port = opts.port;
     let proxy_port = opts.proxy_port;
+    let tls_cert = opts.tls_cert.clone();
+    let tls_key = opts.tls_key.clone();
 
     let routes = Arc::new(PortMap::new());
     let state = Arc::new(AppState {
@@ -467,8 +477,36 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    let tls = match (&tls_cert, &tls_key) {
+        (Some(cert), Some(key)) => {
+            match sandbox_proxy::tls_config(std::path::Path::new(cert), std::path::Path::new(key)) {
+                Ok(config) => Some(config),
+                Err(e) => {
+                    eprintln!("e2b_compat: TLS: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+        (None, None) => None,
+        // Half a TLS configuration is a mistake, and starting in plaintext
+        // because one flag was missing is the wrong way to report it.
+        _ => {
+            eprintln!("e2b_compat: --tls-cert and --tls-key must be given together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    let scheme = if tls.is_some() {
+        "HTTP/2 over TLS"
+    } else {
+        "HTTP/2"
+    };
+
     tokio::spawn(async move {
-        if let Err(e) = sandbox_proxy::serve(proxy_addr, routes, proxy_rx).await {
+        let result = match tls {
+            Some(config) => sandbox_proxy::serve_tls(proxy_addr, routes, config, proxy_rx).await,
+            None => sandbox_proxy::serve(proxy_addr, routes, proxy_rx).await,
+        };
+        if let Err(e) = result {
             tracing::error!("sandbox proxy on {proxy_addr} stopped: {e}");
         }
     });
@@ -492,7 +530,7 @@ async fn main() -> std::process::ExitCode {
     println!("  DELETE /sandboxes/{{id}}          -- stop the VM and its process.Process listener");
     println!();
     println!(
-        "sandbox proxy on 0.0.0.0:{proxy_port} -- HTTP/2, routed by the authority a client asks \
+        "sandbox proxy on 0.0.0.0:{proxy_port} -- {scheme}, routed by the authority a client asks \
          for, as {ENVD_PORT}-<sandboxID>.<anything>"
     );
     println!(

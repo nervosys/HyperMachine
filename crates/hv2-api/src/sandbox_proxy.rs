@@ -27,12 +27,19 @@
 //! `Start` sends its output as it arrives, and a proxy that collected the body
 //! before forwarding would turn that into one message at the end.
 //!
+//! # TLS
+//!
+//! [`serve_tls`] takes a certificate and key and speaks HTTPS, advertising
+//! `h2` over ALPN because a gRPC client will not negotiate anything else. The
+//! hop to the sandbox stays plaintext on loopback: the listener is a local
+//! port that only this process routes to, and terminating TLS twice on one
+//! machine buys nothing.
+//!
 //! # What it does not do
 //!
-//! No TLS: E2B's real endpoints are HTTPS, and a client that insists on it
-//! cannot use this yet. No connection reuse either -- each proxied request
-//! opens its own connection to the backend, which is a cost a busy proxy would
-//! not pay and is not worth hiding behind a pool until something measures it.
+//! No connection reuse -- each proxied request opens its own connection to the
+//! backend, which is a cost a busy proxy would not pay and is not worth hiding
+//! behind a pool until something measures it.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -222,15 +229,115 @@ pub async fn serve(
 
         let routes = Arc::clone(&routes);
         tokio::spawn(async move {
-            let service = service_fn(move |req| proxy(req, Arc::clone(&routes)));
-            // HTTP/2 without a prior upgrade: gRPC clients send the h2 preface
-            // directly, and there is no h1 traffic to this port to negotiate
-            // away from.
-            if let Err(e) = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
-                .serve_connection(TokioIo::new(stream), service)
-                .await
-            {
-                tracing::debug!("sandbox proxy: connection from {peer} ended: {e}");
+            serve_one(stream, routes, peer).await;
+        });
+    }
+}
+
+/// Serve HTTP/2 on one already-accepted stream.
+///
+/// Shared by the plaintext and TLS listeners, which differ only in what they
+/// hand over here.
+async fn serve_one<S>(stream: S, routes: Arc<dyn SandboxRoutes>, peer: SocketAddr)
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    let service = service_fn(move |req| proxy(req, Arc::clone(&routes)));
+    // HTTP/2 without a prior upgrade: gRPC clients send the h2 preface
+    // directly, and there is no h1 traffic to this port to negotiate away
+    // from.
+    if let Err(e) = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+        .serve_connection(TokioIo::new(stream), service)
+        .await
+    {
+        tracing::debug!("sandbox proxy: connection from {peer} ended: {e}");
+    }
+}
+
+/// Load a PEM certificate chain and private key into a rustls server config.
+///
+/// ALPN advertises `h2` and nothing else: a gRPC client offers `h2` and will
+/// not fall back, and a server that negotiates `http/1.1` with one produces a
+/// connection that handshakes and then cannot carry a single call.
+///
+/// # Errors
+///
+/// Reports a missing or unreadable file, a PEM that contains no certificate,
+/// or a key rustls will not accept.
+pub fn tls_config(
+    cert_pem: &std::path::Path,
+    key_pem: &std::path::Path,
+) -> std::io::Result<rustls::ServerConfig> {
+    use std::io::{Error, ErrorKind};
+
+    let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(cert_pem)?))
+        .collect::<Result<Vec<_>, _>>()?;
+    if certs.is_empty() {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("{} contains no certificate", cert_pem.display()),
+        ));
+    }
+
+    let key =
+        rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(key_pem)?))?
+            .ok_or_else(|| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("{} contains no private key", key_pem.display()),
+            )
+        })?;
+
+    // rustls 0.23 will not pick a crypto provider for you when the crate is
+    // built with explicit features: without this it panics at the first
+    // `ServerConfig::builder()` with "Could not automatically determine the
+    // process-level CryptoProvider". The workspace enables `ring` and only
+    // `ring`, so that is the one to install. Idempotent -- a second call
+    // returns Err because one is already installed, which is not a failure.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let mut config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    config.alpn_protocols = vec![b"h2".to_vec()];
+    Ok(config)
+}
+
+/// Serve the proxy over TLS on `listen` until `shutdown` fires.
+///
+/// The same routing as [`serve`]; only the transport differs.
+///
+/// # Errors
+///
+/// Fails if `listen` cannot be bound. A handshake that fails is logged and
+/// dropped: one client offering the wrong protocol must not take the endpoint
+/// away from the others.
+pub async fn serve_tls(
+    listen: SocketAddr,
+    routes: Arc<dyn SandboxRoutes>,
+    config: rustls::ServerConfig,
+    mut shutdown: tokio::sync::oneshot::Receiver<()>,
+) -> std::io::Result<()> {
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+    let listener = TcpListener::bind(listen).await?;
+    tracing::info!("sandbox proxy listening on {listen} (TLS)");
+
+    loop {
+        let (stream, peer) = tokio::select! {
+            accepted = listener.accept() => accepted?,
+            _ = &mut shutdown => {
+                tracing::info!("sandbox proxy shutting down");
+                return Ok(());
+            }
+        };
+
+        let routes = Arc::clone(&routes);
+        let acceptor = acceptor.clone();
+        tokio::spawn(async move {
+            match acceptor.accept(stream).await {
+                Ok(tls) => serve_one(tls, routes, peer).await,
+                Err(e) => tracing::debug!("sandbox proxy: TLS handshake with {peer} failed: {e}"),
             }
         });
     }
