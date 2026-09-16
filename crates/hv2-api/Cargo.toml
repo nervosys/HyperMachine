@@ -60,6 +60,11 @@ tonic-prost-build = { workspace = true }
 criterion = { workspace = true }
 tempfile = "3.10"
 
+# Used by examples/e2b_compat.rs, which sets up its own subscriber. Without it
+# `cargo test --workspace` fails to build for the whole repository, because
+# `cargo test` compiles examples.
+tracing-subscriber = { workspace = true }
+
 [lints]
 workspace = true
 
