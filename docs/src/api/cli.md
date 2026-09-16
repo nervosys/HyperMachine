@@ -8,13 +8,16 @@ The `hm` command-line interface for managing HyperMachine.
 hm [OPTIONS] <COMMAND>
 
 Options:
-  --config <FILE>     Config file path
-  --log-level <LEVEL> Log level (trace, debug, info, warn, error)
-  --quiet             Suppress output
-  --json              Output as JSON
-  -h, --help          Print help
-  -V, --version       Print version
+  -v, --verbose  Enable verbose logging
+  -h, --help     Print help
+  -V, --version  Print version
 ```
+
+Commands: `t1`, `t2`, `serve`, `completions`, `info`.
+
+`--config`, `--log-level`, `--quiet` and `--json` were documented here and do
+not exist. `hm` reads no configuration file at all, and its verbosity is
+`--verbose` or `RUST_LOG`.
 
 ## Commands
 
@@ -90,63 +93,56 @@ Examples:
   hm t2 delete --force my-vm
 ```
 
-#### Execute Command
+#### Execute a Script
+
+The subcommand is `script`, and it runs an agent script rather than an
+arbitrary command line. There is no `hm t2 exec`.
 
 ```bash
-hm t2 exec [OPTIONS] <NAME|ID> -- <COMMAND>
+hm t2 script [OPTIONS] --script <SCRIPT> <NAME>
 
 Options:
-  --timeout <SECS>    Command timeout [default: 60]
-  --user <USER>       Run as user
+  -s, --script <SCRIPT>    Script content or file path
+  -t, --timeout <TIMEOUT>  Timeout in seconds [default: 300]
 
 Examples:
-  hm t2 exec my-vm -- uname -a
-  hm t2 exec my-vm -- python -c "print('hello')"
-  hm t2 exec --user root my-vm -- apt update
+  hm t2 script my-vm --script "print('hello')"
+  hm t2 script my-vm --script ./provision.rhai
 ```
 
-#### Console
+#### Status
 
 ```bash
-hm t2 console <NAME|ID>
-
-# Attach to VM console (Ctrl+] to detach)
+hm t2 status <NAME>
 ```
 
-#### Snapshots
+#### Console and snapshots
+
+Neither has a CLI subcommand. `hm t2 console` and `hm t2 snapshot` were
+documented here and do not exist.
+
+Both are reachable over the REST API instead:
 
 ```bash
-# Create snapshot
-hm t2 snapshot create <VM> --name <NAME>
-
-# List snapshots
-hm t2 snapshot list <VM>
-
-# Restore snapshot
-hm t2 snapshot restore <VM> <SNAPSHOT>
-
-# Delete snapshot
-hm t2 snapshot delete <VM> <SNAPSHOT>
-
-Examples:
-  hm t2 snapshot create my-vm --name before-update
-  hm t2 snapshot list my-vm
-  hm t2 snapshot restore my-vm before-update
+curl http://localhost:8080/api/v1/vms/{id}/console
+curl -X POST http://localhost:8080/api/v1/vms/{id}/snapshots
 ```
+
 
 ### MCP Server
 
 #### Start Server
 
+There is no `hm mcp` subcommand. `hm serve` runs the MCP server, alongside the
+REST and gRPC surfaces:
+
 ```bash
-hm mcp serve [OPTIONS]
+hm serve [OPTIONS]
 
 Options:
-  --port <PORT>       Listen port [default: 8080]
-  --host <HOST>       Listen address [default: 127.0.0.1]
-  --api-key <KEY>     API key (or use HM_API_KEY env var)
-  --tls-cert <FILE>   TLS certificate
-  --tls-key <FILE>    TLS private key
+      --grpc-port <GRPC_PORT>  gRPC port [default: 50051]
+      --rest-port <REST_PORT>  REST API port [default: 8080]
+  -v, --verbose                Enable verbose logging
 
 Examples:
   hm mcp serve --api-key "secret"
@@ -155,66 +151,58 @@ Examples:
 
 #### List Tools
 
+No CLI subcommand; `hm mcp tools` was documented here and does not exist. The
+running server lists them over HTTP, and the API server `hv2` serves the
+per-vendor schemas:
+
 ```bash
-hm mcp tools [OPTIONS]
-
-Options:
-  --format <FORMAT>   Format (mcp, openai, anthropic, gemini)
-
-Examples:
-  hm mcp tools
-  hm mcp tools --format openai
+curl http://localhost:8080/mcp/tools              # hm serve
+curl http://localhost:8080/agentic/tools/openai   # hv2 serve
+curl http://localhost:8080/agentic/tools/anthropic
+curl http://localhost:8080/agentic/tools/gemini
 ```
 
 ### System
 
-#### Doctor
-
-Check system requirements:
+#### Info
 
 ```bash
-hm doctor
-
-# Output:
-# ✓ Hypervisor support: KVM
-# ✓ CPU virtualization: Intel VT-x
-# ✓ IOMMU support: Intel VT-d
-# ✓ GPU passthrough: Available
+hm info
 ```
 
-#### Version
+Version and system information. There is no `hm version` subcommand; `hm
+--version` prints the version alone.
 
-```bash
-hm version
-
-# hypermachine 0.1.0
-# Built: 2025-01-15
-# Rust: 1.95.0
-```
+`hm doctor` was documented here and does not exist. Nothing checks hypervisor
+support, VT-x, IOMMU or GPU passthrough from the command line.
 
 ## Environment Variables
 
-| Variable         | Description        |
-| ---------------- | ------------------ |
-| `HM_API_KEY`     | MCP server API key |
-| `HM_LOG_LEVEL`   | Log level          |
-| `HM_CONFIG_FILE` | Config file path   |
-| `HM_DATA_DIR`    | Data directory     |
+| Variable     | Description                                     |
+| ------------ | ----------------------------------------------- |
+| `HM_API_KEY` | MCP server API key; without it, it runs unauthenticated |
+| `RUST_LOG`   | Log filter, e.g. `RUST_LOG=info`                 |
+
+`HM_LOG_LEVEL`, `HM_CONFIG_FILE` and `HM_DATA_DIR` were documented here and are
+read by nothing. The API server `hv2` has its own variables, all prefixed
+`HV2_` — see `docs/src/getting-started/configuration.md`.
 
 ## Completion
 
 Generate shell completions:
 
+The subcommand is `completions`, plural:
+
 ```bash
 # Bash
-hm completion bash > /etc/bash_completion.d/hm
+hm completions bash > /etc/bash_completion.d/hm
 
 # Zsh
-hm completion zsh > ~/.zsh/completions/_hm
+hm completions zsh > ~/.zsh/completions/_hm
 
 # Fish
-hm completion fish > ~/.config/fish/completions/hm.fish
+hm completions fish > ~/.config/fish/completions/hm.fish
 
 # PowerShell
-hm completion powershell > $PROFILE.d/hm.ps1
+hm completions powershell > $PROFILE.d/hm.ps1
 ```
