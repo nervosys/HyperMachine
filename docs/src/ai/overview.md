@@ -156,7 +156,7 @@ curl http://localhost:8080/agentic/tools/gemini
 | ---------------- | --------------------------------------------------------------- |
 | **VM Lifecycle** | `vm.create`, `vm.start`, `vm.stop`, `vm.delete`                 |
 | **VM Info**      | `vm.list`, `vm.get`, `vm.status`                                |
-| **Execution**    | `vm.exec`, `vm.exec_script`, `vm.upload`, `vm.download`         |
+| **Execution**    | `vm.exec`, `vm.execute_script`, `guest.exec`                    |
 | **Snapshots**    | `vm.snapshot.create`, `vm.snapshot.restore`, `vm.snapshot.list` |
 | **Network**      | `vm.network.configure`, `vm.network.port_forward`               |
 | **GPU**          | `vm.gpu.attach`, `vm.gpu.detach`, `vm.gpu.list`                 |

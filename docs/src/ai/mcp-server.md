@@ -228,13 +228,13 @@ Execute a command in a VM.
 }
 ```
 
-#### `vm.exec_script`
+#### `vm.execute_script`
 
 Execute a script file in a VM.
 
 ```json
 {
-  "tool": "vm.exec_script",
+  "tool": "vm.execute_script",
   "arguments": {
     "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
     "script": "#!/bin/bash\necho 'Hello'\ndate",
@@ -245,45 +245,23 @@ Execute a script file in a VM.
 
 ### File Operations
 
-#### `vm.upload`
+**Not implemented.** `vm.upload` and `vm.download` were documented here and are
+registered nowhere; calling either returns an unknown-tool error. There is no
+file transfer to or from a guest by any other name, and no REST equivalent
+either.
 
-Upload a file to a VM.
-
-```json
-{
-  "tool": "vm.upload",
-  "arguments": {
-    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
-    "path": "/home/user/data.json",
-    "content": "{\"key\": \"value\"}",
-    "encoding": "utf-8"
-  }
-}
-```
-
-#### `vm.download`
-
-Download a file from a VM.
-
-```json
-{
-  "tool": "vm.download",
-  "arguments": {
-    "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
-    "path": "/home/user/output.txt"
-  }
-}
-```
+Move data through command execution instead — `vm.exec` for a command,
+`vm.execute_script` for a script, or `POST /api/v1/vms/{id}/script`.
 
 ### Snapshots
 
-#### `vm.snapshot.create`
+#### `snapshot.create`
 
 Create a VM snapshot.
 
 ```json
 {
-  "tool": "vm.snapshot.create",
+  "tool": "snapshot.create",
   "arguments": {
     "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
     "name": "before-experiment"
@@ -291,13 +269,13 @@ Create a VM snapshot.
 }
 ```
 
-#### `vm.snapshot.restore`
+#### `snapshot.restore`
 
 Restore a VM from snapshot.
 
 ```json
 {
-  "tool": "vm.snapshot.restore",
+  "tool": "snapshot.restore",
   "arguments": {
     "vm_id": "vm-550e8400-e29b-41d4-a716-446655440000",
     "snapshot_id": "snap-123456"

@@ -51,7 +51,7 @@ rather than 100 — the foundation of the agent runtime's fleet density.
 
 ### 1. Agentic-First Virtualization
 
-HyperMachine is the first hypervisor designed from the ground up for AI agent workloads. Every VM is an MCP-addressable resource: agents discover capabilities via ontology endpoints, invoke typed tools (`vm.create`, `vm.exec`, `gpu.reserve`), and receive structured results — no shell scraping or brittle CLI wrappers. Multi-LLM tool schemas ship built-in for OpenAI, Anthropic, and Google formats.
+HyperMachine is the first hypervisor designed from the ground up for AI agent workloads. Every VM is an MCP-addressable resource: agents discover capabilities via ontology endpoints, invoke typed tools (`vm.create`, `vm.exec`, `gpu.attach`), and receive structured results — no shell scraping or brittle CLI wrappers. Multi-LLM tool schemas ship built-in for OpenAI, Anthropic, and Google formats.
 
 A built-in **agent runtime** turns this into a fleet service: agents spawn in O(1) as copy-on-write clones of a warm baseline (100 idle agents cost ~one baseline, not 100), run tool-calling loops over a fast MCP dispatch path, and have their sessions and memory reclaimed automatically. It is exposed over a tenant-scoped, optionally-authenticated REST API (`/api/v1/agents`).
 
