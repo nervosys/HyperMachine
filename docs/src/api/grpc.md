@@ -4,195 +4,113 @@ HyperMachine provides a high-performance gRPC API for low-latency operations.
 
 ## Service Definition
 
+The service is defined in `crates/hv2-api/proto/vm.proto`, which is the
+authority: generate clients from that file rather than from this page.
+
 ```protobuf
 syntax = "proto3";
 
-package hypermachine.v1;
+package hv2.v1;
 
-service HyperMachine {
-  // VM lifecycle
-  rpc CreateVm(CreateVmRequest) returns (Vm);
-  rpc GetVm(GetVmRequest) returns (Vm);
-  rpc ListVms(ListVmsRequest) returns (ListVmsResponse);
-  rpc DeleteVm(DeleteVmRequest) returns (Empty);
-  rpc StartVm(StartVmRequest) returns (Empty);
-  rpc StopVm(StopVmRequest) returns (Empty);
-  
-  // Execution
-  rpc ExecCommand(ExecCommandRequest) returns (ExecCommandResponse);
-  rpc ExecStream(ExecStreamRequest) returns (stream ExecStreamResponse);
-  
-  // Files
-  rpc UploadFile(UploadFileRequest) returns (Empty);
-  rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse);
-  
-  // Snapshots
-  rpc CreateSnapshot(CreateSnapshotRequest) returns (Snapshot);
-  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (Empty);
-  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
-  
-  // Console streaming
-  rpc ConsoleStream(ConsoleStreamRequest) returns (stream ConsoleStreamResponse);
-}
-
-message Vm {
-  string id = 1;
-  string name = 2;
-  VmStatus status = 3;
-  int32 cpu_cores = 4;
-  int64 memory_mb = 5;
-  bool gpu_enabled = 6;
-  google.protobuf.Timestamp created_at = 7;
-}
-
-enum VmStatus {
-  VM_STATUS_UNSPECIFIED = 0;
-  VM_STATUS_CREATED = 1;
-  VM_STATUS_RUNNING = 2;
-  VM_STATUS_STOPPED = 3;
-  VM_STATUS_PAUSED = 4;
-}
-
-message CreateVmRequest {
-  string name = 1;
-  int32 cpu_cores = 2;
-  int64 memory_mb = 3;
-  int64 disk_gb = 4;
-  bool enable_gpu = 5;
-  string network_mode = 6;
-  string image = 7;
-}
-
-message ExecCommandRequest {
-  string vm_id = 1;
-  string command = 2;
-  int32 timeout_secs = 3;
-  map<string, string> environment = 4;
-  string working_dir = 5;
-}
-
-message ExecCommandResponse {
-  int32 exit_code = 1;
-  bytes stdout = 2;
-  bytes stderr = 3;
-  int64 duration_ms = 4;
+service VMService {
+  rpc CreateVM(CreateVMRequest) returns (CreateVMResponse);
+  rpc StartVM(StartVMRequest) returns (StartVMResponse);
+  rpc StopVM(StopVMRequest) returns (StopVMResponse);
+  rpc PauseVM(PauseVMRequest) returns (PauseVMResponse);
+  rpc ResumeVM(ResumeVMRequest) returns (ResumeVMResponse);
+  rpc GetVMStatus(GetVMStatusRequest) returns (GetVMStatusResponse);
+  rpc ListVMs(ListVMsRequest) returns (ListVMsResponse);
+  rpc ExecuteScript(ExecuteScriptRequest) returns (ExecuteScriptResponse);
+  rpc StreamEvents(StreamEventsRequest) returns (stream VMEvent);
 }
 ```
 
+The twenty message definitions are in the same file and are not reproduced
+here, because a copy of a schema is a copy that goes stale -- which is what
+this section was.
+
+`PauseVM` and `ResumeVM` exist and always fail: nothing in this hypervisor
+suspends a running vCPU, the same reason their REST equivalents return 500.
+
+### What an earlier version of this page described
+
+A `HyperMachine` service in package `hypermachine.v1`, with `CreateVm`,
+`GetVm`, `DeleteVm`, `ExecCommand`, `ExecStream`, `UploadFile`,
+`DownloadFile`, `CreateSnapshot`, `RestoreSnapshot`, `ListSnapshots` and
+`ConsoleStream`, plus its own message definitions.
+
+None of it resolves. The package and the service name are both different from
+the real ones, and gRPC method names are case-sensitive, so even `CreateVm`
+would not reach `CreateVM`. A client generated from that definition could not
+call this server at all.
+
+Of the operations it named, `DeleteVM`, file transfer, snapshots and console
+streaming are not in `VMService`. Snapshots and the console are reachable over
+REST instead -- see `docs/src/api/rest.md`.
+
 ## Client Usage
 
-### Rust
+Generated from `crates/hv2-api/proto/vm.proto` by `tonic`, so the client type
+is `vm_service_client::VmServiceClient` in package `hv2.v1`.
 
 ```rust
-use hypermachine::grpc::HyperMachineClient;
 use tonic::transport::Channel;
+// from tonic::include_proto!("hv2.v1")
+use proto::vm_service_client::VmServiceClient;
+use proto::{CreateVmRequest, StreamEventsRequest, VmConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let channel = Channel::from_static("http://localhost:50051")
         .connect()
         .await?;
-    
-    let mut client = HyperMachineClient::new(channel);
-    
-    // Create VM
-    let request = tonic::Request::new(CreateVmRequest {
-        name: "grpc-vm".into(),
-        cpu_cores: 4,
-        memory_mb: 8192,
-        ..Default::default()
-    });
-    
-    let response = client.create_vm(request).await?;
-    println!("Created VM: {:?}", response.into_inner());
-    
+    let mut client = VmServiceClient::new(channel);
+
+    let created = client
+        .create_vm(CreateVmRequest {
+            config: Some(VmConfig {
+                name: "grpc-vm".into(),
+                ..Default::default()
+            }),
+        })
+        .await?
+        .into_inner();
+
+    // The one streaming method: VM events, not a console.
+    let mut events = client
+        .stream_events(StreamEventsRequest {
+            vm_id: created.vm_id.clone(),
+        })
+        .await?
+        .into_inner();
+
+    while let Some(event) = events.message().await? {
+        println!("{event:?}");
+    }
     Ok(())
 }
 ```
 
-### Python
+`tonic` renames as it generates: `VMService` becomes `VmServiceClient`,
+`CreateVMRequest` becomes `CreateVmRequest`, and `CreateVM` becomes
+`create_vm`. The proto file spells them the other way; both are correct in
+their own language, and the wire names are the proto's.
 
-```python
-import grpc
-from hypermachine_pb2 import CreateVmRequest
-from hypermachine_pb2_grpc import HyperMachineStub
-
-channel = grpc.insecure_channel('localhost:50051')
-stub = HyperMachineStub(channel)
-
-# Create VM
-request = CreateVmRequest(
-    name="grpc-vm",
-    cpu_cores=4,
-    memory_mb=8192
-)
-
-response = stub.CreateVm(request)
-print(f"Created VM: {response.id}")
-```
-
-### Go
-
-```go
-package main
-
-import (
-    "context"
-    pb "github.com/nervosys/hypermachine/proto"
-    "google.golang.org/grpc"
-)
-
-func main() {
-    conn, _ := grpc.Dial("localhost:50051", grpc.WithInsecure())
-    defer conn.Close()
-    
-    client := pb.NewHyperMachineClient(conn)
-    
-    resp, _ := client.CreateVm(context.Background(), &pb.CreateVmRequest{
-        Name:     "grpc-vm",
-        CpuCores: 4,
-        MemoryMb: 8192,
-    })
-    
-    fmt.Printf("Created VM: %s\n", resp.Id)
-}
-```
+Clients in other languages generate from the same file. Point `protoc` at
+`crates/hv2-api/proto/vm.proto` rather than transcribing a definition from
+documentation, which is how this page came to describe a service that does not
+exist.
 
 ## Streaming
 
-### Console Stream
+`StreamEvents` is the only streaming method. It carries VM lifecycle events
+for one VM, as shown above.
 
-```rust
-let request = tonic::Request::new(ConsoleStreamRequest {
-    vm_id: vm.id.clone(),
-});
+An earlier version of this page documented `ConsoleStream` and `ExecStream`.
+Neither exists. For console output, poll `GET /api/v1/vms/{id}/console` over
+REST; for command output, `ExecuteScript` returns it when the command
+finishes, and there is no incremental variant.
 
-let mut stream = client.console_stream(request).await?.into_inner();
-
-while let Some(response) = stream.message().await? {
-    print!("{}", String::from_utf8_lossy(&response.data));
-}
-```
-
-### Exec Stream
-
-For long-running commands with real-time output:
-
-```rust
-let request = tonic::Request::new(ExecStreamRequest {
-    vm_id: vm.id.clone(),
-    command: "tail -f /var/log/syslog".into(),
-});
-
-let mut stream = client.exec_stream(request).await?.into_inner();
-
-while let Some(response) = stream.message().await? {
-    match response.output_type {
-        OutputType::Stdout => print!("{}", String::from_utf8_lossy(&response.data)),
-        OutputType::Stderr => eprint!("{}", String::from_utf8_lossy(&response.data)),
-    }
-}
-```
 
 ## Configuration
 
