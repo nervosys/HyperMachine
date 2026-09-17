@@ -3,6 +3,7 @@
 //! This module provides the core VM abstraction including multi-vCPU
 //! parallel execution support using tokio tasks.
 
+use crate::snapshot::device as snapshot_device;
 use crate::snapshot::file as snapshot_file;
 use crate::snapshot::vcpu::VCpuSnapshot;
 use crate::{
@@ -1054,6 +1055,7 @@ impl VM {
             }
         }
 
+        let devices = self.device_states().await;
         let header = snapshot_file::Header {
             vm_name: self.config.name.clone(),
             memory_size: memory.total_size(),
@@ -1061,10 +1063,8 @@ impl VM {
             vcpus,
             total_pages,
             present_pages: present.count(),
-            // Not captured. Stated in the file so a restore can refuse rather
-            // than discover it through a guest whose virtqueues disagree with
-            // the device.
-            device_state_included: false,
+            device_state_included: true,
+            devices,
         };
 
         let mut file = std::io::BufWriter::new(snapshot_file::create_new(path)?);
@@ -1232,8 +1232,87 @@ impl VM {
         }
 
         self.restore_vcpu_states(&snapshot.header.vcpus).await?;
+        self.restore_device_states(&snapshot.header.devices).await?;
 
         tracing::info!("VM '{}' restored from {}", self.config.name, path.display());
+        Ok(())
+    }
+
+    /// Capture the host-side state of every virtio-MMIO device attached.
+    ///
+    /// The rings live in guest memory and travel with it. This is what the
+    /// devices hold: where those rings are, what features the driver agreed
+    /// to, and how far each device has got through them.
+    pub async fn device_states(&self) -> Vec<snapshot_device::MmioDeviceState> {
+        let mut states = Vec::new();
+
+        // Only the MMIO variant. A PCI transport keeps its configuration in
+        // guest-visible BAR space rather than in host-side registers, so
+        // capturing it is a different job from this one, and claiming to have
+        // done it would be worse than saying nothing.
+        let vsock_mmio = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Mmio(transport)) => Some(transport),
+            Some(VsockTransport::Pci(_)) => {
+                tracing::warn!("the vsock device is on PCI; its state is not captured");
+                None
+            }
+            None => None,
+        };
+        if let Some(transport) = vsock_mmio {
+            states.push(transport.read().await.save_state());
+        }
+
+        let net = self.net.read().as_ref().map(|a| a.transport.clone());
+        if let Some(transport) = net {
+            states.push(transport.read().await.save_state());
+        }
+        states
+    }
+
+    /// Put every captured device back into the state it was in.
+    ///
+    /// Matched by name rather than by position: a VM with a network device and
+    /// no vsock would otherwise be handed the vsock's queues.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a device that refuses the state -- a different queue count
+    /// means it is not the device the snapshot was taken from.
+    async fn restore_device_states(
+        &self,
+        states: &[snapshot_device::MmioDeviceState],
+    ) -> Result<()> {
+        let vsock_mmio = match self.vsock.read().as_ref().map(|a| a.transport.clone()) {
+            Some(VsockTransport::Mmio(transport)) => Some(transport),
+            _ => None,
+        };
+        let net = self.net.read().as_ref().map(|a| a.transport.clone());
+
+        for state in states {
+            let mut applied = false;
+            if let Some(transport) = vsock_mmio.as_ref() {
+                if transport.read().await.name() == state.name {
+                    transport.read().await.restore_state(state)?;
+                    applied = true;
+                }
+            }
+            if !applied {
+                if let Some(transport) = net.as_ref() {
+                    if transport.read().await.name() == state.name {
+                        transport.read().await.restore_state(state)?;
+                        applied = true;
+                    }
+                }
+            }
+            if !applied {
+                // Not fatal, and worth saying out loud: the snapshot has a
+                // device this VM does not, so the guest will find it missing.
+                tracing::warn!(
+                    "snapshot has device '{}', which this VM does not have",
+                    state.name
+                );
+            }
+        }
         Ok(())
     }
 

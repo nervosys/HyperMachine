@@ -26,6 +26,10 @@ use std::time::{Duration, Instant};
 
 use hv2_core::{BootSource, Result, VMConfig, VM};
 
+/// Any CID above the reserved range; nothing connects to it here, the device
+/// just has to exist for the guest to initialise its queues.
+const GUEST_CID: u64 = 42;
+
 /// Where the guest ELF comes from. Same as `vsock_echo`'s: the unikernel is
 /// built by its own cargo invocation into its own target directory.
 fn build_guest() -> std::result::Result<std::path::PathBuf, String> {
@@ -140,6 +144,9 @@ async fn run() -> Result<std::process::ExitCode> {
     };
 
     vm.provision().await?;
+    // A device, so the snapshot has host-side device state to carry. Without
+    // one the capture is vacuously complete and demonstrates nothing.
+    vm.attach_vsock(GUEST_CID).await?;
     vm.launch().await?;
 
     // The banner the guest actually prints, not the crate name.
@@ -336,6 +343,39 @@ async fn run() -> Result<std::process::ExitCode> {
     let expected_memory = memory_digest(&vm)?;
     vm.snapshot(&path).await?;
     let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+
+    // What the guest's memory does not hold: where each virtqueue is, what
+    // the driver agreed to, and how far the device has got through the rings.
+    let snapshot_devices;
+    {
+        let mut file = std::io::BufReader::new(std::fs::File::open(&path)?);
+        let header = hv2_core::snapshot::file::Snapshot::read_header(&mut file)?.header;
+        println!(
+            "devices       : {} captured, device_state_included={}",
+            header.devices.len(),
+            header.device_state_included
+        );
+        snapshot_devices = header.devices.clone();
+        for device in &header.devices {
+            println!(
+                "                '{}': status={:#x} features={:#x}, {} queue(s)",
+                device.name,
+                device.transport.status,
+                device.transport.driver_features,
+                device.queues.len()
+            );
+            for (index, queue) in device.queues.iter().enumerate() {
+                println!(
+                    "                  queue {index}: ready={} size={} desc={:#x} avail_idx={} used_idx={}",
+                    queue.ready,
+                    queue.size,
+                    queue.desc_addr,
+                    queue.last_avail_idx,
+                    queue.next_used_idx
+                );
+            }
+        }
+    }
     println!(
         "snapshot      : {} ({:.1} MiB, sparse: only non-zero pages)",
         path.display(),
@@ -365,6 +405,7 @@ async fn run() -> Result<std::process::ExitCode> {
     // than the guest takes to boot is a feature for a different workload.
     let boot_started = Instant::now();
     second.provision().await?;
+    second.attach_vsock(GUEST_CID).await?;
     second.launch().await?;
     if !console_says(
         &second,
@@ -412,6 +453,30 @@ async fn run() -> Result<std::process::ExitCode> {
     // what it has after. The middle one is why this is a test rather than a
     // tautology -- two VMs booted from one image have *similar* memory, so
     // "after == first" only means something alongside "before != first".
+    // Did the device state actually land? "restore: ok" only says no call
+    // returned an error. This compares what the second VM's devices hold now
+    // against what the file said, which is the claim being made.
+    let restored_devices = second.device_states().await;
+    let devices_match = restored_devices == snapshot_devices;
+    println!(
+        "devices       : {} restored — {}",
+        restored_devices.len(),
+        if devices_match {
+            "identical to the snapshot"
+        } else {
+            "DIFFERENT from the snapshot"
+        }
+    );
+    if !devices_match {
+        for (was, now) in snapshot_devices.iter().zip(restored_devices.iter()) {
+            if was != now {
+                eprintln!("              : '{}' differs", was.name);
+                eprintln!("                snapshot {:?}", was.transport);
+                eprintln!("                now      {:?}", now.transport);
+            }
+        }
+    }
+
     let after_memory = memory_digest(&second)?;
     println!("memory        : snapshot {expected_memory:#018x}");
     println!("                before   {before_memory:#018x}  (this VM's own boot)");
@@ -445,7 +510,7 @@ async fn run() -> Result<std::process::ExitCode> {
     let _ = second.stop().await;
     let _ = std::fs::remove_file(&path);
 
-    if !same_rip || !memory_moved || !marker_moved {
+    if !same_rip || !memory_moved || !marker_moved || !devices_match {
         eprintln!("verdict       : the restore did not reproduce the snapshotted guest");
         return Ok(std::process::ExitCode::FAILURE);
     }

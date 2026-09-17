@@ -250,6 +250,31 @@ impl GuestQueue {
         self.ready = ready;
     }
 
+    /// How far this device has got through the rings.
+    ///
+    /// `(last_avail_idx, next_used_idx)`: the next available slot the device
+    /// has not taken, and the next used slot it will fill. Together they are
+    /// the device's position in a conversation whose other half lives in guest
+    /// memory, which is why a snapshot has to carry them -- the rings travel
+    /// in the memory image, and a device restored at position zero would walk
+    /// back over descriptors the guest already considers consumed.
+    #[must_use]
+    pub fn progress(&self) -> (u16, u16) {
+        (self.last_avail_idx, self.next_used_idx)
+    }
+
+    /// Put the device back at a position it previously reported.
+    ///
+    /// Only meaningful alongside the guest memory those indices refer to.
+    /// Setting them without restoring the rings, or the other way round, gives
+    /// a device and a driver that disagree about what has been consumed --
+    /// which presents as duplicated or dropped requests rather than as an
+    /// error.
+    pub fn set_progress(&mut self, last_avail_idx: u16, next_used_idx: u16) {
+        self.last_avail_idx = last_avail_idx;
+        self.next_used_idx = next_used_idx;
+    }
+
     /// Return the queue to its post-reset state, keeping the advertised
     /// maximum.
     pub fn reset(&mut self) {

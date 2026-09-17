@@ -738,12 +738,31 @@ could be skipped outright rather than performed to confirm what the backend
 already knows. Beyond that, compression is a different trade (CPU for I/O);
 `MemorySnapshotConfig` describes it and nothing applies it.
 
-Still missing: host-side device state, so `Snapshot::device_state_included`
-answers `false` and a guest restored with I/O in flight will disagree with
-its own virtqueues. Virtio queues here keep ring *addresses* and the rings
-live in guest memory, so most of a device does travel in the pages; what does
-not is `last_avail_idx`, `next_used_idx`, negotiated features, and a vsock
-device's connection table. The vCPU capture now includes the model-specific registers a guest
+Host-side device state travels too. The rings live in guest memory and go
+with it; what the *device* holds — where those rings are, how big they are,
+what features the driver agreed to, and how far the device has read and
+written — is captured per virtqueue, along with the transport's status and
+negotiation registers. A guest restored without them finds a device that has
+forgotten the conversation they were in the middle of. Verified by comparing
+the second VM's device state against the file field by field, not by the
+restore call returning without error:
+
+```text
+devices       : 1 captured, device_state_included=true
+                'virtio-vsock': status=0xf features=0x100000000, 3 queue(s)
+                  queue 0: ready=true size=8 desc=0x200000 avail_idx=0 used_idx=0
+                  queue 1: ready=true size=8 desc=0x203000 avail_idx=0 used_idx=0
+                  queue 2: ready=false size=0 desc=0x0 avail_idx=0 used_idx=0
+devices       : 1 restored — identical to the snapshot
+```
+
+What is still not captured is what a device knows about the world *outside*
+the VM: a vsock device's connection table, a net device's queued frames.
+Those point at a host socket or a host link that no longer exists when the
+snapshot is restored, so they are dropped rather than half-restored — a guest
+that had a vsock connection open finds it gone. A PCI-attached vsock is also
+skipped, and says so in a log line, because its configuration lives in
+guest-visible BAR space rather than in host-side registers. The vCPU capture now includes the model-specific registers a guest
 notices losing — `SYSCALL`'s entry point and flag mask (`STAR`/`LSTAR`/
 `CSTAR`/`SFMASK`), the `FS`/`GS` bases, the `SYSENTER` trio and `PAT` — which
 is what a 64-bit Linux guest needs to survive its next system call. Proven by

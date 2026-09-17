@@ -38,13 +38,14 @@
 //! than a pure saving -- and untaken. `MemorySnapshotConfig` in this crate
 //! describes it and nothing applies it.
 //!
-//! **Device state.** Virtio queues here keep ring *addresses*, and the rings
-//! themselves live in guest memory, so most of a device's state does travel
-//! in the pages. What does not is the host-side bookkeeping --
-//! `last_avail_idx`, `next_used_idx`, negotiated features -- and a vsock
-//! device's connection table. A guest restored with I/O in flight will see
-//! the device disagree with it. [`Snapshot::device_state_included`] answers
-//! `false` so a caller can refuse rather than find out.
+//! **Device-specific internals.** The virtio transports and their queues are
+//! captured: ring addresses, sizes, negotiated features, and each device's
+//! position in the rings, which is the bookkeeping guest memory does not hold.
+//! What is still not captured is what a device knows about the world outside
+//! the VM -- a vsock device's connection table, a net device's queued frames.
+//! Those point at a host socket or a host link that no longer exists by the
+//! time a snapshot is restored, so they are dropped rather than half-restored,
+//! and a guest that had a vsock connection open finds it gone.
 //!
 //! **Anything about the host.** A snapshot does not record which kernel or
 //! backend produced it beyond the version above, so restoring one into a
@@ -104,8 +105,16 @@ pub struct Header {
     /// check its own arithmetic against the writer's, and so a human can see
     /// at a glance how much of the guest was worth storing.
     pub present_pages: u64,
-    /// Whether host-side device state was captured. Always `false` today;
-    /// see this module's own documentation.
+    /// The virtio-MMIO devices attached when this was taken: their transport
+    /// registers and the queue bookkeeping the guest's memory does not hold.
+    #[serde(default)]
+    pub devices: Vec<super::device::MmioDeviceState>,
+    /// Whether host-side device state was captured.
+    ///
+    /// True once the transports and queues above are recorded. It does *not*
+    /// promise device-specific internals -- a vsock connection table, a net
+    /// device's queued frames -- which refer to things outside the VM that a
+    /// restore cannot reconstitute. See this module's own documentation.
     pub device_state_included: bool,
 }
 
@@ -360,6 +369,7 @@ mod tests {
                 },
             ],
             vcpus: vec![VCpuSnapshot::default()],
+            devices: Vec::new(),
             // One writable region of 4096 bytes: one page, and say it is
             // stored. The read-only one has no pages in the file.
             total_pages: 1,

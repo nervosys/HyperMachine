@@ -3,7 +3,59 @@
 //! This module provides a framework for serializing and deserializing
 //! device state for VM snapshots.
 
+use serde::{Deserialize, Serialize};
+
 use super::types::DeviceSnapshot;
+
+/// One virtqueue's host-side state.
+///
+/// The ring buffers themselves are in guest memory and travel in the memory
+/// image. This is the part the *device* holds: where the rings are, how big
+/// they are, whether the driver has switched them on, and how far the device
+/// has read and written. Without it a restored device re-reads descriptors the
+/// guest has already had answered.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueueState {
+    pub size: u16,
+    pub ready: bool,
+    pub desc_addr: u64,
+    pub avail_addr: u64,
+    pub used_addr: u64,
+    /// The next available-ring slot the device has not consumed.
+    pub last_avail_idx: u16,
+    /// The next used-ring slot the device will fill.
+    pub next_used_idx: u16,
+}
+
+/// The virtio-MMIO transport's own registers.
+///
+/// Distinct from the device behind it: these are the negotiation and status
+/// registers a driver writes during probe. A guest restored with `status`
+/// cleared believes the device needs initialising again, and starts over from
+/// a reset while its queues still hold live descriptors.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransportState {
+    pub device_features_sel: u32,
+    pub driver_features_sel: u32,
+    /// What the driver accepted. The device must go on respecting exactly
+    /// this, so a restore that dropped it would change the wire format under
+    /// a guest that had already agreed one.
+    pub driver_features: u64,
+    pub queue_sel: u32,
+    pub status: u32,
+    pub interrupt_status: u32,
+    pub config_generation: u32,
+}
+
+/// One MMIO device: its transport registers and its queues.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MmioDeviceState {
+    /// Which device this is, so a restore can match it to the right one
+    /// rather than relying on the order they were captured in.
+    pub name: String,
+    pub transport: TransportState,
+    pub queues: Vec<QueueState>,
+}
 
 /// Device state serialization result
 pub type DeviceResult<T> = Result<T, DeviceStateError>;

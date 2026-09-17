@@ -197,6 +197,120 @@ impl VirtioMmioTransport {
         }
     }
 
+    /// What this transport was registered as.
+    ///
+    /// Used to match a snapshot's device state back to the right device, since
+    /// a VM may have several and the order they were captured in is not a
+    /// reliable way to tell them apart.
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Capture this transport's registers and its device's queues.
+    ///
+    /// What a snapshot needs that the guest's memory does not already hold.
+    /// The rings live in guest memory and travel with it; the queue addresses,
+    /// the negotiated features and the device's position in each ring live
+    /// here, and a guest restored without them finds a device that has
+    /// forgotten the conversation they were in the middle of.
+    ///
+    /// Device-specific internals are *not* included -- a vsock device's
+    /// connection table, a net device's queued frames. Those refer to things
+    /// outside the VM (a host socket, a host link) that a restore cannot
+    /// reconstitute, so they are dropped rather than half-restored.
+    pub fn save_state(&self) -> crate::snapshot::device::MmioDeviceState {
+        use crate::snapshot::device::{MmioDeviceState, QueueState, TransportState};
+
+        let regs = self.regs.lock();
+        let transport = TransportState {
+            device_features_sel: regs.device_features_sel,
+            driver_features_sel: regs.driver_features_sel,
+            driver_features: regs.driver_features,
+            queue_sel: regs.queue_sel,
+            status: regs.status,
+            interrupt_status: regs.interrupt_status,
+            config_generation: regs.config_generation,
+        };
+        drop(regs);
+
+        let mut device = self.device.lock();
+        let queues = device
+            .queues()
+            .iter()
+            .map(|queue| {
+                let (last_avail_idx, next_used_idx) = queue.progress();
+                QueueState {
+                    size: queue.size(),
+                    ready: queue.is_ready(),
+                    desc_addr: queue.desc_addr(),
+                    avail_addr: queue.avail_addr(),
+                    used_addr: queue.used_addr(),
+                    last_avail_idx,
+                    next_used_idx,
+                }
+            })
+            .collect();
+
+        MmioDeviceState {
+            name: self.name.clone(),
+            transport,
+            queues,
+        }
+    }
+
+    /// Put this transport and its device back into a captured state.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the snapshot describes a different number of queues than this
+    /// device has. That means the two are not the same device, and applying
+    /// what matches would leave the rest at a default -- a device half in one
+    /// state and half in another, which runs and is not either.
+    pub fn restore_state(
+        &self,
+        state: &crate::snapshot::device::MmioDeviceState,
+    ) -> crate::Result<()> {
+        {
+            let mut regs = self.regs.lock();
+            regs.device_features_sel = state.transport.device_features_sel;
+            regs.driver_features_sel = state.transport.driver_features_sel;
+            regs.driver_features = state.transport.driver_features;
+            regs.queue_sel = state.transport.queue_sel;
+            regs.status = state.transport.status;
+            regs.interrupt_status = state.transport.interrupt_status;
+            regs.config_generation = state.transport.config_generation;
+        }
+
+        let mut device = self.device.lock();
+        // The features first: everything the device does afterwards has to
+        // respect what the driver accepted, and a queue configured under one
+        // feature set and driven under another is a wire-format mismatch the
+        // guest cannot see.
+        device.ack_features(state.transport.driver_features);
+
+        let queues = device.queues();
+        if queues.len() != state.queues.len() {
+            return Err(crate::Error::InvalidState(format!(
+                "'{}' has {} queue(s) and the snapshot describes {}",
+                self.name,
+                queues.len(),
+                state.queues.len()
+            )));
+        }
+        for (queue, saved) in queues.iter_mut().zip(state.queues.iter()) {
+            queue.set_size(saved.size);
+            queue.set_desc_addr(saved.desc_addr);
+            queue.set_avail_addr(saved.avail_addr);
+            queue.set_used_addr(saved.used_addr);
+            queue.set_progress(saved.last_avail_idx, saved.next_used_idx);
+            // Last, because a queue is only legally ready once it has been
+            // told where its rings are.
+            queue.set_ready(saved.ready);
+        }
+        Ok(())
+    }
+
     /// Route this device's interrupts to `irq` on `pic`.
     pub fn with_interrupt(mut self, pic: Arc<Pic8259>, irq: u8) -> Self {
         self.interrupt = Some((pic, irq));
