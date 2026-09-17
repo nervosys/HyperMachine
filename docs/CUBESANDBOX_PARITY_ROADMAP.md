@@ -692,18 +692,36 @@ marker        : found in the second VM
 
 This phase was described above as needing sizing, "since snapshot restore
 latency is itself a cold-start number that competes with CubeSandbox's". It
-is now sized, and the answer is not the flattering one:
+is now sized, and the sizing drove three optimisations — two of which taught
+the opposite of what was expected:
+
+| change | file | restore | what it showed |
+| --- | --- | --- | --- |
+| everything written | 64.0 MiB | 92.4 ms | — |
+| sparse: skip all-zero pages | 0.1 MiB | 70.7 ms | file I/O was never the cost |
+| coalesce runs of absent pages | 0.1 MiB | 64.0 ms | nor was per-call overhead |
+| skip zeroing what is already zero | 0.1 MiB | **18.2 ms** | it was *allocating* pages |
+
+The first change was the obvious one and produced a 640x smaller file for a
+24% saving, which says plainly that the bytes on disk were not the problem.
+The third is the one that mattered: a restore has to make the destination's
+memory match the snapshot, and the destination has *already booted*, so most
+of its pages are untouched anonymous memory the kernel still maps to one
+shared zero page. Writing zeroes over them forces the kernel to allocate a
+real page for each; reading them first costs almost nothing and finds that
+nearly all are already correct. 64 MiB of writes became 64 MiB of reads plus
+a handful of writes.
 
 | | |
 | --- | --- |
-| boot this guest from its ELF | **8.7 ms** |
-| restore it from a snapshot | **92.4 ms** |
+| boot this guest from its ELF | **10.2 ms** |
+| restore it from a snapshot | **18.2 ms** |
 
-**Restore is 10.6x slower than booting.** That is not a defect in the
-snapshot code and no amount of tuning it changes the shape: a restore costs
-the memory image, and a guest that boots quickly does not have a smaller one.
-64 MiB moved in 92 ms is about 700 MB/s, which is roughly what a copy through
-the page cache costs.
+Restore is still 1.8x slower than booting *this* guest, and that is the
+honest end state rather than a defeat: a unikernel that boots in ten
+milliseconds is not a workload snapshots help. The remaining cost is reading
+the destination's 64 MiB to find out it is already zero, which is
+proportional to the VM's size and not to what the guest has done.
 
 The useful reading is about *which* workloads this is for. Snapshots win
 where boot is slow and the image is warm — a loaded language runtime, a
@@ -713,12 +731,12 @@ lose on a 64 MiB unikernel that boots in milliseconds. Anyone reaching for
 this to make *this* guest start faster is reaching for the wrong tool, and
 the number says so rather than leaving it to be discovered.
 
-What would actually move the number, in order: **only write the pages that
-differ.** Dirty-page tracking already exists in `snapshot::memory` and nothing
-here uses it; a guest that has touched 4 MiB of its 64 would restore roughly
-sixteen times faster, and that ratio improves with guest size rather than
-degrading. Compression is second and is a different trade (CPU for I/O).
-`MemorySnapshotConfig` already describes it, also unused.
+What would move it further: restoring into a VM that has *never run*, whose
+memory is zero by construction — `HypervisorBackend::guest_memory_starts_zeroed`
+already answers this question and nothing asks it here, so the read pass
+could be skipped outright rather than performed to confirm what the backend
+already knows. Beyond that, compression is a different trade (CPU for I/O);
+`MemorySnapshotConfig` describes it and nothing applies it.
 
 Still missing: host-side device state, so `Snapshot::device_state_included`
 answers `false` and a guest restored with I/O in flight will disagree with

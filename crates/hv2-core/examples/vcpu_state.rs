@@ -280,7 +280,7 @@ async fn run() -> Result<std::process::ExitCode> {
     vm.snapshot(&path).await?;
     let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     println!(
-        "snapshot      : {} ({:.1} MiB, uncompressed and not sparse)",
+        "snapshot      : {} ({:.1} MiB, sparse: only non-zero pages)",
         path.display(),
         size as f64 / (1024.0 * 1024.0)
     );
@@ -414,10 +414,11 @@ async fn run() -> Result<std::process::ExitCode> {
             "              : restore is {:.1}x slower than booting this guest.",
             restore_took.as_secs_f64() / boot_took.as_secs_f64().max(f64::EPSILON)
         );
-        println!("                Expected. A restore costs the memory image, which a");
-        println!("                fast-booting guest does not make smaller. Snapshots pay off");
-        println!("                where boot is slow and the image is warm -- a loaded");
-        println!("                interpreter, a model in RAM -- not on a 64 MiB unikernel.");
+        println!("                A restore costs the destination's memory, which a");
+        println!("                fast-booting guest does not make smaller. This one boots in");
+        println!("                milliseconds, so it is the wrong workload for a snapshot --");
+        println!("                they pay off where boot is slow and the image is warm: a");
+        println!("                loaded interpreter, a model already in RAM.");
     } else {
         println!(
             "              : restore is {:.1}x faster than booting this guest",

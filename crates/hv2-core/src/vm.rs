@@ -1021,11 +1021,46 @@ impl VM {
             })
             .collect();
 
+        // Only writable regions have pages in the file: a read-only region is
+        // host memory shared with other VMs, which the destination maps for
+        // itself.
+        let page_size = snapshot_file::PAGE_SIZE;
+        let total_pages: u64 = regions
+            .iter()
+            .filter(|r| !r.readonly)
+            .map(|r| r.size.div_ceil(page_size))
+            .sum();
+
+        // Two passes over guest memory: one to find out which pages are worth
+        // storing, one to store them. The alternative is buffering the whole
+        // image to fix the header afterwards, which would cost as much host
+        // memory as the guest has.
+        let mut present = snapshot_file::PageMap::empty(total_pages);
+        let mut page = vec![0u8; page_size as usize];
+        let mut index = 0u64;
+        for region in regions.iter().filter(|r| !r.readonly) {
+            let mut at = 0u64;
+            while at < region.size {
+                let take = (page_size as usize).min((region.size - at) as usize);
+                memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+                // A page of zeroes is the common case by far -- a guest uses a
+                // few megabytes of the tens it is given -- and storing it is
+                // storing nothing at the cost of writing and reading it back.
+                if page[..take].iter().any(|byte| *byte != 0) {
+                    present.set(index);
+                }
+                index += 1;
+                at += page_size;
+            }
+        }
+
         let header = snapshot_file::Header {
             vm_name: self.config.name.clone(),
             memory_size: memory.total_size(),
             regions,
             vcpus,
+            total_pages,
+            present_pages: present.count(),
             // Not captured. Stated in the file so a restore can refuse rather
             // than discover it through a guest whose virtqueues disagree with
             // the device.
@@ -1034,25 +1069,36 @@ impl VM {
 
         let mut file = std::io::BufWriter::new(snapshot_file::create_new(path)?);
         snapshot_file::Snapshot::write_header(&header, &mut file)?;
+        std::io::Write::write_all(&mut file, present.as_bytes())
+            .map_err(|e| Error::Config(format!("writing a snapshot's page map: {e}")))?;
 
-        // A page at a time rather than a region at a time: a region is as
-        // large as the guest's RAM, and reading it into one buffer would
-        // double the host memory this VM costs at exactly the moment someone
-        // is trying to save it.
-        const CHUNK: usize = 1 << 20;
-        let mut buffer = vec![0u8; CHUNK];
-        for region in &header.regions {
-            let mut written = 0u64;
-            while written < region.size {
-                let take = CHUNK.min((region.size - written) as usize);
-                memory.read_bytes_into(region.guest_addr + written, &mut buffer[..take])?;
-                std::io::Write::write_all(&mut file, &buffer[..take])
-                    .map_err(|e| Error::Config(format!("writing guest memory: {e}")))?;
-                written += take as u64;
+        let mut index = 0u64;
+        for region in header.regions.iter().filter(|r| !r.readonly) {
+            let mut at = 0u64;
+            while at < region.size {
+                let take = (page_size as usize).min((region.size - at) as usize);
+                if present.contains(index) {
+                    memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+                    // Short final page padded, so every present page in the
+                    // file is exactly one page long and the reader can find
+                    // the next one by counting rather than by parsing.
+                    page[take..].fill(0);
+                    std::io::Write::write_all(&mut file, &page)
+                        .map_err(|e| Error::Config(format!("writing guest memory: {e}")))?;
+                }
+                index += 1;
+                at += page_size;
             }
         }
         std::io::Write::flush(&mut file)
             .map_err(|e| Error::Config(format!("finishing {}: {e}", path.display())))?;
+
+        tracing::debug!(
+            "snapshot of '{}': {} of {} pages stored",
+            self.config.name,
+            header.present_pages,
+            header.total_pages
+        );
 
         tracing::info!(
             "VM '{}' snapshotted to {}",
@@ -1122,22 +1168,66 @@ impl VM {
             }
         }
 
-        const CHUNK: usize = 1 << 20;
-        let mut buffer = vec![0u8; CHUNK];
-        for region in &snapshot.header.regions {
-            let mut read = 0u64;
-            while read < region.size {
-                let take = CHUNK.min((region.size - read) as usize);
-                std::io::Read::read_exact(&mut file, &mut buffer[..take])
-                    .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
-                // Read-only regions are consumed from the file but not written
-                // back: they are host pages shared with other VMs, and writing
-                // there would either fail or privately copy something every
-                // other guest is still reading.
-                if !region.readonly {
-                    memory.write_bytes(region.guest_addr + read, &buffer[..take])?;
+        let page_size = snapshot_file::PAGE_SIZE;
+        let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
+        let mut page = vec![0u8; page_size as usize];
+        // A megabyte, not a page: this fills runs of absent pages now, and a
+        // run is usually most of the guest.
+        let zeroes = vec![0u8; 1 << 20];
+        let mut scratch = vec![0u8; 1 << 20];
+
+        // Runs of absent pages are zeroed in one call rather than one call
+        // each. This is where the time actually goes: making the file sparse
+        // took it from 64 MiB to 0.1 MiB and the restore only from 92ms to
+        // 71ms, because the restore still wrote every page -- the absent ones
+        // as zeroes. The cost was never the file; it was 16,384 calls into
+        // guest memory, each translating an address to copy four kilobytes.
+        let mut index = 0u64;
+        for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
+            let mut at = 0u64;
+            while at < region.size {
+                if present.contains(index) {
+                    let take = (page_size as usize).min((region.size - at) as usize);
+                    std::io::Read::read_exact(&mut file, &mut page)
+                        .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+                    memory.write_bytes(region.guest_addr + at, &page[..take])?;
+                    index += 1;
+                    at += page_size;
+                    continue;
                 }
-                read += take as u64;
+
+                // How far the absent run goes.
+                let run_start = at;
+                while at < region.size && !present.contains(index) {
+                    index += 1;
+                    at += page_size;
+                }
+                let run = (at.min(region.size) - run_start) as usize;
+
+                // Zeroed, not skipped. This VM has its own memory and has
+                // usually booted something into it; leaving those pages alone
+                // would restore a guest built half from the snapshot and half
+                // from whatever was there before -- which runs, and is not the
+                // guest that was captured.
+                // Read before writing, and skip what is already zero.
+                //
+                // Counter-intuitive but measured: writing 64 MiB of zeroes
+                // costs ~64ms because it *allocates* every page it touches,
+                // while reading an untouched anonymous page costs almost
+                // nothing -- the kernel maps one shared zero page. A
+                // destination that has merely booted has most of its memory
+                // in exactly that state, so checking is far cheaper than
+                // unconditionally overwriting.
+                let mut done = 0usize;
+                while done < run {
+                    let take = zeroes.len().min(run - done);
+                    let at = region.guest_addr + run_start + done as u64;
+                    memory.read_bytes_into(at, &mut scratch[..take])?;
+                    if scratch[..take].iter().any(|byte| *byte != 0) {
+                        memory.write_bytes(at, &zeroes[..take])?;
+                    }
+                    done += take;
+                }
             }
         }
 
