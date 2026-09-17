@@ -32,6 +32,7 @@
 //! ```
 
 pub mod device;
+pub mod file;
 pub mod manager;
 pub mod memory;
 pub mod types;

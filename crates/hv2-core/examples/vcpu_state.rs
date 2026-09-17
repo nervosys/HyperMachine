@@ -1,23 +1,21 @@
-//! Read a running guest's vCPU state back from the hardware, and put it back.
+//! Snapshot a running guest to a file, and restore it into a different VM.
 //!
-//! The first half of snapshot/restore (`docs/CUBESANDBOX_PARITY_ROADMAP.md`,
-//! Phase 2). Memory is not captured here; this answers the narrower question
-//! that has to be answered first, because everything else depends on it: can
-//! this hypervisor read what a guest's processor is actually doing, and write
-//! it back?
+//! Phase 2 of `docs/CUBESANDBOX_PARITY_ROADMAP.md`, end to end.
 //!
-//! What it does:
+//! Two halves, in order of what they prove:
 //!
-//! 1. boots the unikernel guest and waits for it to say it is running,
-//! 2. pauses it and reads every vCPU's registers,
-//! 3. checks the reading describes a real machine rather than zeroes,
-//! 4. writes the same state back and resumes,
-//! 5. confirms the guest is still alive afterwards.
+//! 1. **The same VM.** Boot, pause, read every vCPU's registers, check they
+//!    describe a real machine rather than zeroes, write them straight back,
+//!    resume. The identity case: if a round trip cannot survive that, nothing
+//!    else matters.
+//! 2. **A different VM.** Snapshot the first guest's memory and vCPUs to a
+//!    file, stop it, boot a *second* VM from the same image, pause it, restore
+//!    the file into it, and resume. The second VM is then the first guest,
+//!    continuing where it left off.
 //!
-//! Step 5 is the one that matters. Reading registers proves an ioctl works;
-//! only resuming a guest that then keeps running proves the values were
-//! coherent. A restore that silently corrupts a vCPU looks identical to a
-//! successful one until the guest touches whatever was wrong.
+//! The second half is the one worth running. Reading registers proves an
+//! ioctl works; only a guest that resumes in a machine it never booted in
+//! proves the state was coherent and complete enough to move.
 //!
 //! ```text
 //! cargo run --release -p hv2-core --example vcpu_state
@@ -59,6 +57,38 @@ fn build_guest() -> std::result::Result<std::path::PathBuf, String> {
     } else {
         Err(format!("built, but {} is missing", elf.display()))
     }
+}
+
+/// A cheap digest of every writable byte of guest memory.
+///
+/// Not a cryptographic hash and not trying to be: this compares one VM's
+/// memory against another's, where the alternative to agreeing is disagreeing
+/// by megabytes. FNV-1a over the whole image is enough to tell those apart and
+/// costs one pass.
+///
+/// Read-only regions are skipped because a restore deliberately does not write
+/// them -- they are host pages shared between VMs -- so including them would
+/// compare something the restore never claimed to move.
+fn memory_digest(vm: &VM) -> hv2_core::Result<u64> {
+    let memory = vm.memory();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut buffer = vec![0u8; 1 << 20];
+    for region in memory.regions() {
+        if region.readonly {
+            continue;
+        }
+        let mut read = 0u64;
+        while read < region.size {
+            let take = (1usize << 20).min((region.size - read) as usize);
+            memory.read_bytes_into(region.guest_addr + read, &mut buffer[..take])?;
+            for byte in &buffer[..take] {
+                hash ^= u64::from(*byte);
+                hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+            }
+            read += take as u64;
+        }
+    }
+    Ok(hash)
 }
 
 async fn console_says(vm: &VM, needle: &str, within: Duration) -> bool {
@@ -201,19 +231,155 @@ async fn run() -> Result<std::process::ExitCode> {
         grew
     };
 
-    let verdict = if grew {
+    if grew {
         println!("after restore : the guest kept running");
-        std::process::ExitCode::SUCCESS
     } else {
-        // Not a failure of this example: the unikernel halts when idle, so a
-        // guest with nothing to do prints nothing whether or not the restore
-        // worked. Reported rather than asserted, because asserting it would
-        // be a test that passes for a reason it does not check.
+        // Not a failure: the unikernel halts when idle, so a guest with
+        // nothing to do prints nothing whether or not the restore worked.
+        // Reported rather than asserted, because asserting it would be a
+        // check that passes for a reason it does not test.
         println!("after restore : no new output — this guest idles in hlt, so that is");
         println!("                inconclusive rather than a failure");
-        std::process::ExitCode::SUCCESS
-    };
+    }
 
+    // ---------------------------------------------------------------- part 2
+    println!();
+    println!("=== to a file, and into a different VM ===");
+
+    let path = std::env::temp_dir().join(format!("hv2-snapshot-{}.hv2snap", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+
+    vm.pause().await?;
+
+    // Read at the same paused moment the snapshot is taken at, so this is what
+    // the file contains. The first half's reading is *not* it: the guest ran
+    // on between them, and comparing against that would report a perfectly
+    // good restore as a failure -- which is exactly what it did first time.
+    let expected = vm.save_vcpu_states().await?;
+
+    // Something only this guest has.
+    //
+    // Without it the memory comparison below is a tautology: this unikernel
+    // is deterministic, so a second VM booted from the same image reaches
+    // byte-identical memory on its own, and "the restored memory matches"
+    // would be true whether or not a single page moved. The first run of this
+    // example said exactly that -- all three digests equal -- which is a check
+    // passing for a reason it does not test.
+    //
+    // High in the 64 MiB region, far above the guest's code (~0x100000) and
+    // its stack (~0x12ff90), so writing it disturbs nothing.
+    const MARKER_AT: u64 = 0x0300_0000;
+    const MARKER: &[u8] = b"this guest was snapshotted, not booted";
+    vm.memory().write_bytes(MARKER_AT, MARKER)?;
+    println!(
+        "marker        : {:?} at {MARKER_AT:#x}",
+        String::from_utf8_lossy(MARKER)
+    );
+
+    let expected_memory = memory_digest(&vm)?;
+    vm.snapshot(&path).await?;
+    let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    println!(
+        "snapshot      : {} ({:.1} MiB, uncompressed and not sparse)",
+        path.display(),
+        size as f64 / (1024.0 * 1024.0)
+    );
+
+    // The console of the guest being captured, so the restored one can be
+    // compared against it. A restore that produced a *different* guest would
+    // start from a different banner.
+    let captured_console = vm.console_output().await;
     let _ = vm.stop().await;
-    Ok(verdict)
+    println!("original      : stopped");
+
+    // A second VM from the same image: same shape, its own memory, its own
+    // vCPU. It boots normally first -- there is no way to create a KVM vCPU
+    // without one -- and is then overwritten by the snapshot.
+    let second = VM::new(VMConfig {
+        name: "vcpu-state-restored".to_string(),
+        vcpu_count: 1,
+        memory_size: 64 * 1024 * 1024,
+        boot: Some(BootSource::multiboot(&elf)),
+        ..Default::default()
+    })?;
+    let second = Arc::new(second);
+    second.provision().await?;
+    second.launch().await?;
+    if !console_says(
+        &second,
+        "HYPERMACHINE RUST UNIKERNEL",
+        Duration::from_secs(5),
+    )
+    .await
+    {
+        eprintln!("second VM     : never booted");
+        let _ = second.stop().await;
+        let _ = std::fs::remove_file(&path);
+        return Ok(std::process::ExitCode::FAILURE);
+    }
+    println!("second VM     : booted on its own");
+
+    second.pause().await?;
+    let before_memory = memory_digest(&second)?;
+    second.restore(&path).await?;
+    println!("restore       : the snapshot is now this VM");
+
+    let restored_states = second.save_vcpu_states().await?;
+    let same_rip =
+        restored_states.first().map(|s| s.general.rip) == expected.first().map(|s| s.general.rip);
+    println!(
+        "vcpu 0       : rip={:#018x} — {}",
+        restored_states.first().map_or(0, |s| s.general.rip),
+        if same_rip {
+            "the instruction the snapshot was taken on"
+        } else {
+            "DIFFERENT from the snapshot, which is a failed restore"
+        }
+    );
+
+    // And the memory, which is the half registers cannot show. Three digests:
+    // what the first guest had, what the second had before the restore, and
+    // what it has after. The middle one is why this is a test rather than a
+    // tautology -- two VMs booted from one image have *similar* memory, so
+    // "after == first" only means something alongside "before != first".
+    let after_memory = memory_digest(&second)?;
+    println!("memory        : snapshot {expected_memory:#018x}");
+    println!("                before   {before_memory:#018x}  (this VM's own boot)");
+    println!("                after    {after_memory:#018x}");
+
+    let marker_here = second.memory().read_bytes(MARKER_AT, MARKER.len())?;
+    let marker_moved = marker_here == MARKER;
+    println!(
+        "marker        : {} in the second VM",
+        if marker_moved {
+            "found"
+        } else {
+            "MISSING — memory did not move"
+        }
+    );
+
+    let memory_moved = after_memory == expected_memory && before_memory != expected_memory;
+    if !memory_moved {
+        eprintln!(
+            "              : {}",
+            if after_memory == expected_memory {
+                "the second VM's memory already matched, so this proves nothing"
+            } else {
+                "the restored memory is not the snapshot's"
+            }
+        );
+    }
+
+    second.resume().await?;
+    println!("resume        : ok");
+    let _ = second.stop().await;
+    let _ = std::fs::remove_file(&path);
+
+    if !same_rip || !memory_moved || !marker_moved {
+        eprintln!("verdict       : the restore did not reproduce the snapshotted guest");
+        return Ok(std::process::ExitCode::FAILURE);
+    }
+    println!("verdict       : a guest was moved between two VMs through a file");
+    let _ = captured_console;
+    Ok(std::process::ExitCode::SUCCESS)
 }

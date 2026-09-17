@@ -3,6 +3,7 @@
 //! This module provides the core VM abstraction including multi-vCPU
 //! parallel execution support using tokio tasks.
 
+use crate::snapshot::file as snapshot_file;
 use crate::snapshot::vcpu::VCpuSnapshot;
 use crate::{
     DeviceManager, Error, EventBus, GuestMemory, HypervisorBackend, IoDirection, Pic8259, Result,
@@ -973,6 +974,179 @@ impl VM {
     /// Returns an error if the VM is not running. A vCPU that cannot be kicked
     /// is logged rather than failing the call: the message is still queued,
     /// and the vCPU reads it at its next exit.
+    /// Write this VM -- its memory and its vCPUs -- to a file.
+    ///
+    /// The VM must be paused, for the same reason [`Self::save_vcpu_states`]
+    /// requires it, and more so: memory read while a guest is running is torn
+    /// between the pages copied before a write and those copied after, which
+    /// is a memory image no execution ever produced.
+    ///
+    /// Refuses to overwrite an existing file. These are the size of the
+    /// guest's RAM and are named by a human; the cost of a mistaken overwrite
+    /// is a guest that no longer exists anywhere.
+    ///
+    /// # What travels and what does not
+    ///
+    /// Memory and vCPU registers. Not host-side device state, and not the
+    /// parts of a vCPU listed in [`VCpuSnapshot::missing`]. See
+    /// [`crate::snapshot::file`] for what that costs.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless paused; [`Error::Config`] if the file
+    /// exists or cannot be written; whatever [`Self::save_vcpu_states`]
+    /// reports on a backend that cannot read its vCPUs.
+    pub async fn snapshot(&self, path: &std::path::Path) -> Result<()> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "a VM can only be snapshotted while paused; this one is {:?}. Memory read \
+                     from a running guest is torn between the pages copied before a write and \
+                     those copied after",
+                    *state
+                )));
+            }
+        }
+
+        let vcpus = self.save_vcpu_states().await?;
+        let memory = self.memory();
+        let regions: Vec<_> = memory
+            .regions()
+            .into_iter()
+            .map(|region| snapshot_file::RegionRecord {
+                guest_addr: region.guest_addr,
+                size: region.size,
+                readonly: region.readonly,
+            })
+            .collect();
+
+        let header = snapshot_file::Header {
+            vm_name: self.config.name.clone(),
+            memory_size: memory.total_size(),
+            regions,
+            vcpus,
+            // Not captured. Stated in the file so a restore can refuse rather
+            // than discover it through a guest whose virtqueues disagree with
+            // the device.
+            device_state_included: false,
+        };
+
+        let mut file = std::io::BufWriter::new(snapshot_file::create_new(path)?);
+        snapshot_file::Snapshot::write_header(&header, &mut file)?;
+
+        // A page at a time rather than a region at a time: a region is as
+        // large as the guest's RAM, and reading it into one buffer would
+        // double the host memory this VM costs at exactly the moment someone
+        // is trying to save it.
+        const CHUNK: usize = 1 << 20;
+        let mut buffer = vec![0u8; CHUNK];
+        for region in &header.regions {
+            let mut written = 0u64;
+            while written < region.size {
+                let take = CHUNK.min((region.size - written) as usize);
+                memory.read_bytes_into(region.guest_addr + written, &mut buffer[..take])?;
+                std::io::Write::write_all(&mut file, &buffer[..take])
+                    .map_err(|e| Error::Config(format!("writing guest memory: {e}")))?;
+                written += take as u64;
+            }
+        }
+        std::io::Write::flush(&mut file)
+            .map_err(|e| Error::Config(format!("finishing {}: {e}", path.display())))?;
+
+        tracing::info!(
+            "VM '{}' snapshotted to {}",
+            self.config.name,
+            path.display()
+        );
+        Ok(())
+    }
+
+    /// Replace this VM's memory and vCPU state with a snapshot's.
+    ///
+    /// The VM must be paused. Afterwards it *is* the snapshotted guest: resume
+    /// it and it continues from where that one was.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless paused, or if the snapshot describes a
+    /// different machine -- a different memory size or region layout is
+    /// refused rather than partially applied, because a guest restored into
+    /// the wrong shape runs until it touches the difference.
+    pub async fn restore(&self, path: &std::path::Path) -> Result<()> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "a VM can only be restored while paused; this one is {:?}",
+                    *state
+                )));
+            }
+        }
+
+        let file = std::fs::File::open(path)
+            .map_err(|e| Error::Config(format!("opening {}: {e}", path.display())))?;
+        let mut file = std::io::BufReader::new(file);
+        let snapshot = snapshot_file::Snapshot::read_header(&mut file)?;
+        let header_len = snapshot_file::header_len(&snapshot.header)?;
+        snapshot.check_length(&mut file, header_len)?;
+        // `check_length` seeks to the end to measure, so the cursor has to go
+        // back to where the regions start before anything reads them.
+        std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(8 + 4 + 4 + header_len))
+            .map_err(|e| Error::Config(format!("rewinding {}: {e}", path.display())))?;
+
+        let memory = self.memory();
+        if snapshot.header.memory_size != memory.total_size() {
+            return Err(Error::InvalidState(format!(
+                "that snapshot is of a {}-byte guest and this VM has {} bytes",
+                snapshot.header.memory_size,
+                memory.total_size()
+            )));
+        }
+
+        let here = memory.regions();
+        if here.len() != snapshot.header.regions.len() {
+            return Err(Error::InvalidState(format!(
+                "that snapshot has {} memory region(s) and this VM has {}",
+                snapshot.header.regions.len(),
+                here.len()
+            )));
+        }
+        for (recorded, current) in snapshot.header.regions.iter().zip(here.iter()) {
+            if recorded.guest_addr != current.guest_addr || recorded.size != current.size {
+                return Err(Error::InvalidState(format!(
+                    "that snapshot's region at {:#x} ({} bytes) does not match this VM's at \
+                     {:#x} ({} bytes)",
+                    recorded.guest_addr, recorded.size, current.guest_addr, current.size
+                )));
+            }
+        }
+
+        const CHUNK: usize = 1 << 20;
+        let mut buffer = vec![0u8; CHUNK];
+        for region in &snapshot.header.regions {
+            let mut read = 0u64;
+            while read < region.size {
+                let take = CHUNK.min((region.size - read) as usize);
+                std::io::Read::read_exact(&mut file, &mut buffer[..take])
+                    .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+                // Read-only regions are consumed from the file but not written
+                // back: they are host pages shared with other VMs, and writing
+                // there would either fail or privately copy something every
+                // other guest is still reading.
+                if !region.readonly {
+                    memory.write_bytes(region.guest_addr + read, &buffer[..take])?;
+                }
+                read += take as u64;
+            }
+        }
+
+        self.restore_vcpu_states(&snapshot.header.vcpus).await?;
+
+        tracing::info!("VM '{}' restored from {}", self.config.name, path.display());
+        Ok(())
+    }
+
     /// Read every vCPU's architectural state.
     ///
     /// The VM must be paused. Reading a running vCPU's registers gives a
