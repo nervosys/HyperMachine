@@ -303,6 +303,10 @@ async fn run() -> Result<std::process::ExitCode> {
         ..Default::default()
     })?;
     let second = Arc::new(second);
+    // Timed, because the roadmap asks for this as a number: restore latency
+    // competes with boot latency, and a snapshot that takes longer to load
+    // than the guest takes to boot is a feature for a different workload.
+    let boot_started = Instant::now();
     second.provision().await?;
     second.launch().await?;
     if !console_says(
@@ -317,12 +321,21 @@ async fn run() -> Result<std::process::ExitCode> {
         let _ = std::fs::remove_file(&path);
         return Ok(std::process::ExitCode::FAILURE);
     }
-    println!("second VM     : booted on its own");
+    let boot_took = boot_started.elapsed();
+    println!(
+        "second VM     : booted on its own in {:.1} ms",
+        boot_took.as_secs_f64() * 1000.0
+    );
 
     second.pause().await?;
     let before_memory = memory_digest(&second)?;
+    let restore_started = Instant::now();
     second.restore(&path).await?;
-    println!("restore       : the snapshot is now this VM");
+    let restore_took = restore_started.elapsed();
+    println!(
+        "restore       : the snapshot is now this VM, in {:.1} ms",
+        restore_took.as_secs_f64() * 1000.0
+    );
 
     let restored_states = second.save_vcpu_states().await?;
     let same_rip =
@@ -380,6 +393,37 @@ async fn run() -> Result<std::process::ExitCode> {
         return Ok(std::process::ExitCode::FAILURE);
     }
     println!("verdict       : a guest was moved between two VMs through a file");
+    println!();
+    println!("=== what it cost ===");
+    println!(
+        "boot          : {:>8.1} ms   (this guest, from its ELF)",
+        boot_took.as_secs_f64() * 1000.0
+    );
+    println!(
+        "restore       : {:>8.1} ms   ({:.1} MiB read and written back)",
+        restore_took.as_secs_f64() * 1000.0,
+        size as f64 / (1024.0 * 1024.0)
+    );
+    if restore_took > boot_took {
+        // The honest reading, and the one this guest produces: a unikernel
+        // that boots in milliseconds is not a workload snapshots help. A
+        // restore costs the memory image, which does not shrink because the
+        // guest boots quickly -- so the ratio improves with guests that boot
+        // *slowly*, not with better snapshot code.
+        println!(
+            "              : restore is {:.1}x slower than booting this guest.",
+            restore_took.as_secs_f64() / boot_took.as_secs_f64().max(f64::EPSILON)
+        );
+        println!("                Expected. A restore costs the memory image, which a");
+        println!("                fast-booting guest does not make smaller. Snapshots pay off");
+        println!("                where boot is slow and the image is warm -- a loaded");
+        println!("                interpreter, a model in RAM -- not on a 64 MiB unikernel.");
+    } else {
+        println!(
+            "              : restore is {:.1}x faster than booting this guest",
+            boot_took.as_secs_f64() / restore_took.as_secs_f64().max(f64::EPSILON)
+        );
+    }
     let _ = captured_console;
     Ok(std::process::ExitCode::SUCCESS)
 }

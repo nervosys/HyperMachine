@@ -671,13 +671,63 @@ Remaining gaps: output that is polled rather than pushed, and compression —
 `connect-accept-encoding` is ignored and nothing is compressed, which the
 protocol allows and which costs bandwidth on a large `ListDir`.
 
-### Phase 2 — Snapshot/clone (CubeCoW-equivalent)
+### Phase 2 — Snapshot/clone (CubeCoW-equivalent) — **works, and is slower than booting**
 
-`hv2-core` already manages VM memory regions; the gap is a reflink/CoW-style
-snapshot of guest memory + rootfs comparable to `FICLONE`-based zero-copy
-clone. This is squarely a "build it" phase, not a "wire two things together"
-one — size it properly once Phase 0's numbers exist, since snapshot restore
-latency is itself a cold-start number that competes with CubeSandbox's.
+A guest can be written to a file and restored into a different VM, which then
+resumes where the first one left off. `VM::snapshot` and `VM::restore`, over
+`snapshot::file`'s format; `HypervisorBackend::save_vcpu`/`restore_vcpu` with
+a KVM implementation underneath. Verified across two VMs, with a marker
+written into the first guest's memory so the comparison is not a tautology:
+
+```text
+marker        : "this guest was snapshotted, not booted" at 0x3000000
+second VM     : booted on its own in 8.7 ms
+restore       : the snapshot is now this VM, in 92.4 ms
+vcpu 0        : rip=0x105731 — the instruction the snapshot was taken on
+memory        : snapshot 0x1811fb18fc2c65d9
+                before   0x4de186574ba3bb1b  (this VM's own boot)
+                after    0x1811fb18fc2c65d9
+marker        : found in the second VM
+```
+
+This phase was described above as needing sizing, "since snapshot restore
+latency is itself a cold-start number that competes with CubeSandbox's". It
+is now sized, and the answer is not the flattering one:
+
+| | |
+| --- | --- |
+| boot this guest from its ELF | **8.7 ms** |
+| restore it from a snapshot | **92.4 ms** |
+
+**Restore is 10.6x slower than booting.** That is not a defect in the
+snapshot code and no amount of tuning it changes the shape: a restore costs
+the memory image, and a guest that boots quickly does not have a smaller one.
+64 MiB moved in 92 ms is about 700 MB/s, which is roughly what a copy through
+the page cache costs.
+
+The useful reading is about *which* workloads this is for. Snapshots win
+where boot is slow and the image is warm — a loaded language runtime, a
+primed interpreter, a model already in RAM — which is exactly the case
+`memory_cow.rs` describes and the reason CubeSandbox has CubeCoW at all. They
+lose on a 64 MiB unikernel that boots in milliseconds. Anyone reaching for
+this to make *this* guest start faster is reaching for the wrong tool, and
+the number says so rather than leaving it to be discovered.
+
+What would actually move the number, in order: **only write the pages that
+differ.** Dirty-page tracking already exists in `snapshot::memory` and nothing
+here uses it; a guest that has touched 4 MiB of its 64 would restore roughly
+sixteen times faster, and that ratio improves with guest size rather than
+degrading. Compression is second and is a different trade (CPU for I/O).
+`MemorySnapshotConfig` already describes it, also unused.
+
+Still missing: host-side device state, so `Snapshot::device_state_included`
+answers `false` and a guest restored with I/O in flight will disagree with
+its own virtqueues. Virtio queues here keep ring *addresses* and the rings
+live in guest memory, so most of a device does travel in the pages; what does
+not is `last_avail_idx`, `next_used_idx`, negotiated features, and a vsock
+device's connection table. And the vCPU capture omits MSRs, LAPIC state and
+the XSAVE area — `VCpuSnapshot::is_complete` answers `false` and `missing()`
+names them. Every one of those ioctls is already defined in `kvm_ffi`.
 
 ### Phase 3 — Network security (CubeVS/CubeEgress-equivalent)
 
