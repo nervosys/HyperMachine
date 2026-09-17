@@ -1,5 +1,6 @@
 //! Hypervisor backend abstraction
 
+use crate::snapshot::vcpu::VCpuSnapshot;
 use crate::{Error, IoDirection, Result, VCpu, VmExit};
 use async_trait::async_trait;
 use std::collections::VecDeque;
@@ -251,6 +252,41 @@ pub trait HypervisorBackend: Send + Sync {
         let _ = (guest_addr, host_addr, len);
         Err(Error::NotSupported(format!(
             "{} backend cannot map a shared read-only region",
+            self.platform()
+        )))
+    }
+
+    /// Read a vCPU's architectural state back from the hardware.
+    ///
+    /// Only meaningful while the vCPU is not executing: a guest that is
+    /// running changes these between the read and the caller looking at them,
+    /// so the result describes a machine that no longer exists. Callers pause
+    /// first -- [`crate::vm::VM::save_vcpu_states`] does, and refuses if not.
+    ///
+    /// # Errors
+    ///
+    /// The default reports [`Error::NotSupported`]. A backend that cannot read
+    /// its vCPUs should say so rather than return zeroes, which read as a
+    /// perfectly valid vCPU halted at address zero.
+    async fn save_vcpu(&self, vcpu: &VCpu) -> Result<VCpuSnapshot> {
+        let _ = vcpu;
+        Err(Error::NotSupported(format!(
+            "{} backend cannot read a vCPU's state",
+            self.platform()
+        )))
+    }
+
+    /// Put a vCPU back in the state a snapshot describes.
+    ///
+    /// # Errors
+    ///
+    /// The default reports [`Error::NotSupported`], for the same reason as
+    /// [`Self::save_vcpu`]: silently doing nothing would leave a restored
+    /// guest running from whatever state it happened to have.
+    async fn restore_vcpu(&self, vcpu: &VCpu, state: &VCpuSnapshot) -> Result<()> {
+        let _ = (vcpu, state);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot restore a vCPU's state",
             self.platform()
         )))
     }

@@ -3,6 +3,7 @@
 //! This module provides the core VM abstraction including multi-vCPU
 //! parallel execution support using tokio tasks.
 
+use crate::snapshot::vcpu::VCpuSnapshot;
 use crate::{
     DeviceManager, Error, EventBus, GuestMemory, HypervisorBackend, IoDirection, Pic8259, Result,
     VCpu, VmEvent, VmExit,
@@ -972,6 +973,87 @@ impl VM {
     /// Returns an error if the VM is not running. A vCPU that cannot be kicked
     /// is logged rather than failing the call: the message is still queued,
     /// and the vCPU reads it at its next exit.
+    /// Read every vCPU's architectural state.
+    ///
+    /// The VM must be paused. Reading a running vCPU's registers gives a
+    /// description of a machine that has already moved on, and a snapshot
+    /// built from one restores a guest to a moment that never existed -- so
+    /// this refuses rather than returning something that looks usable.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless the VM is paused. [`Error::NotSupported`]
+    /// on a backend that cannot read its vCPUs, which is every backend but
+    /// KVM today.
+    pub async fn save_vcpu_states(&self) -> Result<Vec<VCpuSnapshot>> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "a vCPU's state can only be read while the VM is paused; this one is {:?}. \
+                     Call pause() first",
+                    *state
+                )));
+            }
+        }
+
+        let mut states = Vec::with_capacity(self.vcpus.len());
+        for vcpu in &self.vcpus {
+            states.push(self.backend.save_vcpu(vcpu).await?);
+        }
+        Ok(states)
+    }
+
+    /// Put every vCPU back into the state these snapshots describe.
+    ///
+    /// The VM must be paused, for the mirror of the reason above: writing
+    /// registers underneath a running vCPU races the guest.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::InvalidState`] unless the VM is paused, or if the snapshots do
+    /// not describe this VM's vCPUs -- a count mismatch is refused rather than
+    /// partially applied, because half-restoring a multiprocessor guest leaves
+    /// it in a state no execution ever produced.
+    pub async fn restore_vcpu_states(&self, states: &[VCpuSnapshot]) -> Result<()> {
+        {
+            let state = self.state.read();
+            if *state != VMState::Paused {
+                return Err(Error::InvalidState(format!(
+                    "a vCPU's state can only be written while the VM is paused; this one is {:?}",
+                    *state
+                )));
+            }
+        }
+
+        if states.len() != self.vcpus.len() {
+            return Err(Error::InvalidState(format!(
+                "this snapshot describes {} vCPU(s) and the VM has {}",
+                states.len(),
+                self.vcpus.len()
+            )));
+        }
+
+        // Matched by id rather than by position: the snapshot records which
+        // vCPU each state came from, and restoring vCPU 1's registers into
+        // vCPU 0 is a guest that resumes with two threads believing they are
+        // each other.
+        for state in states {
+            let vcpu = self
+                .vcpus
+                .iter()
+                .find(|vcpu| vcpu.id() == state.id)
+                .ok_or_else(|| {
+                    Error::InvalidState(format!(
+                        "the snapshot describes vCPU {} and this VM has no such vCPU",
+                        state.id
+                    ))
+                })?;
+            self.backend.restore_vcpu(vcpu, state).await?;
+        }
+        Ok(())
+    }
+
     pub async fn pause(&self) -> Result<()> {
         {
             let state = self.state.read();

@@ -49,6 +49,9 @@ use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
 };
+use crate::snapshot::vcpu::{
+    DescriptorTable, FpuState, GeneralRegisters, RunState, Segment, SystemRegisters, VCpuSnapshot,
+};
 use crate::{Error, IoDirection, Result, VCpu, VmExit};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -330,15 +333,81 @@ impl HypervisorBackend for KvmBackend {
     }
 
     async fn run_vcpu(&self, vcpu: &VCpu) -> Result<VmExit> {
-        let kvm_vcpu = {
-            let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
-            map.get(&vcpu.id())
-                .cloned()
-                .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))?
-        };
+        let kvm_vcpu = self.kvm_vcpu(vcpu)?;
 
         // Run the vCPU until it exits — this blocks until a VM exit occurs
         kvm_vcpu.run()
+    }
+
+    async fn save_vcpu(&self, vcpu: &VCpu) -> Result<VCpuSnapshot> {
+        let kvm_vcpu = self.kvm_vcpu(vcpu)?;
+        let fd = kvm_vcpu.fd();
+
+        let mut regs = kvm_regs::default();
+        let mut sregs = kvm_sregs::default();
+        let mut fpu = kvm_fpu::default();
+        let mut mp_state = kvm_mp_state::default();
+
+        // SAFETY: `fd` is this vCPU's file descriptor, held alive by the
+        // `KvmVcpu` above, and each target is a correctly-sized struct this
+        // function owns. The guest is not executing: the caller pauses first,
+        // and reading these from a running vCPU is what makes a snapshot
+        // describe a machine that no longer exists.
+        unsafe {
+            kvm_get_regs(fd, &mut regs)
+                .map_err(|e| Error::Hypervisor(format!("KVM_GET_REGS: {e}")))?;
+            kvm_get_sregs(fd, &mut sregs)
+                .map_err(|e| Error::Hypervisor(format!("KVM_GET_SREGS: {e}")))?;
+            kvm_get_fpu(fd, &mut fpu)
+                .map_err(|e| Error::Hypervisor(format!("KVM_GET_FPU: {e}")))?;
+            kvm_get_mp_state(fd, &mut mp_state)
+                .map_err(|e| Error::Hypervisor(format!("KVM_GET_MP_STATE: {e}")))?;
+        }
+
+        Ok(VCpuSnapshot {
+            id: vcpu.id(),
+            general: general_from(&regs),
+            system: system_from(&sregs),
+            fpu: fpu_from(&fpu),
+            run_state: match mp_state.mp_state {
+                KVM_MP_STATE_RUNNABLE => RunState::Runnable,
+                KVM_MP_STATE_HALTED => RunState::Halted,
+                other => RunState::Other(other),
+            },
+        })
+    }
+
+    async fn restore_vcpu(&self, vcpu: &VCpu, state: &VCpuSnapshot) -> Result<()> {
+        let kvm_vcpu = self.kvm_vcpu(vcpu)?;
+        let fd = kvm_vcpu.fd();
+
+        let regs = general_into(&state.general);
+        let sregs = system_into(&state.system);
+        let fpu = fpu_into(&state.fpu)?;
+        let mp_state = kvm_mp_state {
+            mp_state: match state.run_state {
+                RunState::Runnable => KVM_MP_STATE_RUNNABLE,
+                RunState::Halted => KVM_MP_STATE_HALTED,
+                RunState::Other(other) => other,
+            },
+        };
+
+        // SAFETY: as in `save_vcpu`, with structs this function built and owns.
+        //
+        // Order matters: the special registers decide what the general ones
+        // mean -- paging mode, privilege level, where every segment points --
+        // so they go first. Writing RIP into a vCPU that is still in the
+        // restorer's idea of long mode, and only then switching modes, is a
+        // guest that resumes at an address the hardware reads differently.
+        unsafe {
+            kvm_set_sregs(fd, &sregs)
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_SREGS: {e}")))?;
+            kvm_set_regs(fd, &regs).map_err(|e| Error::Hypervisor(format!("KVM_SET_REGS: {e}")))?;
+            kvm_set_fpu(fd, &fpu).map_err(|e| Error::Hypervisor(format!("KVM_SET_FPU: {e}")))?;
+            kvm_set_mp_state(fd, &mp_state)
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_MP_STATE: {e}")))?;
+        }
+        Ok(())
     }
 
     /// True. `create_vm` maps guest RAM with `MAP_ANONYMOUS`, which the kernel
@@ -1241,6 +1310,15 @@ impl Drop for TidGuard<'_> {
 }
 
 impl KvmVcpu {
+    /// This vCPU's file descriptor.
+    ///
+    /// Borrowed for the life of `self`, which owns it and closes it on drop.
+    /// Returned as a raw descriptor because every state ioctl takes one; a
+    /// caller must not close it or keep it past this `KvmVcpu`.
+    pub(crate) fn fd(&self) -> RawFd {
+        self.vcpu_fd
+    }
+
     /// Create a new vCPU
     fn new(vm_fd: RawFd, vcpu_id: u32, mmap_size: usize, irqchip_in_kernel: bool) -> Result<Self> {
         // SAFETY: `vm_fd` is a valid KVM VM fd. We create a vCPU via ioctl,
@@ -2162,6 +2240,217 @@ impl Drop for KvmVcpu {
 // safe to transfer between threads. No thread-local or non-Send state.
 unsafe impl Send for KvmVcpu {}
 unsafe impl Sync for KvmVcpu {}
+
+/// The `KvmVcpu` behind a `VCpu`, and the conversions between this crate's
+/// snapshot types and KVM's structs.
+///
+/// Separate functions rather than `From` impls: `kvm_regs` and friends are
+/// this module's FFI types and `VCpuSnapshot` is a public API type, so a
+/// conversion between them belongs to neither and would have to live here
+/// anyway.
+impl KvmBackend {
+    /// Look up the backend's vCPU for `vcpu`.
+    fn kvm_vcpu(&self, vcpu: &VCpu) -> Result<Arc<KvmVcpu>> {
+        let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
+        map.get(&vcpu.id())
+            .cloned()
+            .ok_or_else(|| Error::Hypervisor(format!("KVM vCPU {} not found", vcpu.id())))
+    }
+}
+
+fn general_from(regs: &kvm_regs) -> GeneralRegisters {
+    GeneralRegisters {
+        rax: regs.rax,
+        rbx: regs.rbx,
+        rcx: regs.rcx,
+        rdx: regs.rdx,
+        rsi: regs.rsi,
+        rdi: regs.rdi,
+        rsp: regs.rsp,
+        rbp: regs.rbp,
+        r8: regs.r8,
+        r9: regs.r9,
+        r10: regs.r10,
+        r11: regs.r11,
+        r12: regs.r12,
+        r13: regs.r13,
+        r14: regs.r14,
+        r15: regs.r15,
+        rip: regs.rip,
+        rflags: regs.rflags,
+    }
+}
+
+fn general_into(general: &GeneralRegisters) -> kvm_regs {
+    kvm_regs {
+        rax: general.rax,
+        rbx: general.rbx,
+        rcx: general.rcx,
+        rdx: general.rdx,
+        rsi: general.rsi,
+        rdi: general.rdi,
+        rsp: general.rsp,
+        rbp: general.rbp,
+        r8: general.r8,
+        r9: general.r9,
+        r10: general.r10,
+        r11: general.r11,
+        r12: general.r12,
+        r13: general.r13,
+        r14: general.r14,
+        r15: general.r15,
+        rip: general.rip,
+        rflags: general.rflags,
+    }
+}
+
+fn segment_from(segment: &kvm_segment) -> Segment {
+    Segment {
+        base: segment.base,
+        limit: segment.limit,
+        selector: segment.selector,
+        type_: segment.type_,
+        present: segment.present,
+        dpl: segment.dpl,
+        db: segment.db,
+        s: segment.s,
+        l: segment.l,
+        g: segment.g,
+        avl: segment.avl,
+    }
+}
+
+fn segment_into(segment: &Segment) -> kvm_segment {
+    kvm_segment {
+        base: segment.base,
+        limit: segment.limit,
+        selector: segment.selector,
+        type_: segment.type_,
+        present: segment.present,
+        dpl: segment.dpl,
+        db: segment.db,
+        s: segment.s,
+        l: segment.l,
+        g: segment.g,
+        avl: segment.avl,
+        // Not captured: KVM derives `unusable` from `present`, and a segment
+        // restored with both set inconsistently is rejected by KVM_SET_SREGS
+        // rather than silently misbehaving.
+        unusable: 0,
+        padding: 0,
+    }
+}
+
+fn system_from(sregs: &kvm_sregs) -> SystemRegisters {
+    SystemRegisters {
+        cs: segment_from(&sregs.cs),
+        ds: segment_from(&sregs.ds),
+        es: segment_from(&sregs.es),
+        fs: segment_from(&sregs.fs),
+        gs: segment_from(&sregs.gs),
+        ss: segment_from(&sregs.ss),
+        tr: segment_from(&sregs.tr),
+        ldt: segment_from(&sregs.ldt),
+        gdt: DescriptorTable {
+            base: sregs.gdt.base,
+            limit: sregs.gdt.limit,
+        },
+        idt: DescriptorTable {
+            base: sregs.idt.base,
+            limit: sregs.idt.limit,
+        },
+        cr0: sregs.cr0,
+        cr2: sregs.cr2,
+        cr3: sregs.cr3,
+        cr4: sregs.cr4,
+        cr8: sregs.cr8,
+        efer: sregs.efer,
+        apic_base: sregs.apic_base,
+    }
+}
+
+fn system_into(system: &SystemRegisters) -> kvm_sregs {
+    kvm_sregs {
+        cs: segment_into(&system.cs),
+        ds: segment_into(&system.ds),
+        es: segment_into(&system.es),
+        fs: segment_into(&system.fs),
+        gs: segment_into(&system.gs),
+        ss: segment_into(&system.ss),
+        tr: segment_into(&system.tr),
+        ldt: segment_into(&system.ldt),
+        gdt: kvm_dtable {
+            base: system.gdt.base,
+            limit: system.gdt.limit,
+            padding: [0; 3],
+        },
+        idt: kvm_dtable {
+            base: system.idt.base,
+            limit: system.idt.limit,
+            padding: [0; 3],
+        },
+        cr0: system.cr0,
+        cr2: system.cr2,
+        cr3: system.cr3,
+        cr4: system.cr4,
+        cr8: system.cr8,
+        efer: system.efer,
+        apic_base: system.apic_base,
+        // Pending interrupts are not captured. A restored vCPU therefore
+        // loses an interrupt that had been injected but not yet taken --
+        // named in `VCpuSnapshot`'s own documentation rather than zeroed
+        // quietly here.
+        interrupt_bitmap: [0; 4],
+    }
+}
+
+fn fpu_from(fpu: &kvm_fpu) -> FpuState {
+    FpuState {
+        fpr: fpu.fpr.iter().flatten().copied().collect(),
+        xmm: fpu.xmm.iter().flatten().copied().collect(),
+        fcw: fpu.fcw,
+        fsw: fpu.fsw,
+        ftwx: fpu.ftwx,
+        last_opcode: fpu.last_opcode,
+        last_ip: fpu.last_ip,
+        last_dp: fpu.last_dp,
+        mxcsr: fpu.mxcsr,
+    }
+}
+
+fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
+    // Checked rather than padded: a short buffer here means the snapshot was
+    // written by something that disagrees about the register file's shape,
+    // and filling the difference with zeroes would restore a vCPU with
+    // half its floating-point state silently cleared.
+    if state.fpr.len() != 8 * 16 || state.xmm.len() != 16 * 16 {
+        return Err(Error::Hypervisor(format!(
+            "FPU state is the wrong shape: {} bytes of x87 and {} of SSE, expected {} and {}",
+            state.fpr.len(),
+            state.xmm.len(),
+            8 * 16,
+            16 * 16
+        )));
+    }
+
+    let mut fpu = kvm_fpu {
+        fcw: state.fcw,
+        fsw: state.fsw,
+        ftwx: state.ftwx,
+        last_opcode: state.last_opcode,
+        last_ip: state.last_ip,
+        last_dp: state.last_dp,
+        mxcsr: state.mxcsr,
+        ..Default::default()
+    };
+    for (slot, chunk) in fpu.fpr.iter_mut().zip(state.fpr.chunks_exact(16)) {
+        slot.copy_from_slice(chunk);
+    }
+    for (slot, chunk) in fpu.xmm.iter_mut().zip(state.xmm.chunks_exact(16)) {
+        slot.copy_from_slice(chunk);
+    }
+    Ok(fpu)
+}
 
 #[cfg(test)]
 mod tests {

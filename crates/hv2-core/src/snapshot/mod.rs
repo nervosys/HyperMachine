@@ -35,6 +35,7 @@ pub mod device;
 pub mod manager;
 pub mod memory;
 pub mod types;
+pub mod vcpu;
 
 // Re-export main types
 pub use device::{

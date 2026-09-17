@@ -176,7 +176,7 @@ step "examples"
 # So the set is read from cargo, and anything new is run by default. That is the
 # safe direction: a new example should have to opt *out* of being checked, not
 # opt in.
-EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-54}"
+EXPECT_EXAMPLES="${EXPECT_EXAMPLES:-55}"
 
 # The ones that take a model path. Everything else is run with no arguments.
 MODEL_EXAMPLES=" bandwidth batched generate queueing inference scheduled throughput "
