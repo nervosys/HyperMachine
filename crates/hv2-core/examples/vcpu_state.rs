@@ -210,6 +210,12 @@ async fn run() -> Result<std::process::ExitCode> {
             );
         }
 
+        println!(
+            "lapic/xsave  : {} bytes of APIC page, {} bytes of XSAVE area",
+            state.lapic.len(),
+            state.xsave.len()
+        );
+
         if state.system.cr0 & 1 == 0 {
             eprintln!("              : CR0.PE clear — the guest is in real mode");
             plausible = false;

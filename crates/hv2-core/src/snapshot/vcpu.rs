@@ -23,20 +23,21 @@
 //! losing -- a 64-bit Linux guest restored without `LSTAR` jumps somewhere
 //! that is not its system-call entry within microseconds.
 //!
-//! What is still missing, and named here rather than found later:
+//! The local APIC comes too -- which interrupts are in service and what the
+//! timer was counting down to, so a restored guest's scheduler tick still
+//! fires -- and the XSAVE area, which is AVX and anything later the processor
+//! advertises.
 //!
-//! - **The local APIC is not captured.** A restored vCPU loses in-flight
-//!   interrupt state, so a timer already armed does not fire.
-//! - **`XSAVE` is not captured**, only the legacy FPU area, so AVX register
-//!   contents are lost.
+//! One thing is still missing, and it is a decision rather than an oversight:
+//!
 //! - **The TSC is deliberately not captured.** Restoring it makes the guest's
 //!   clock jump by however long the snapshot sat on disk; not restoring it
 //!   makes the clock jump to the host's uptime. Both are wrong, and choosing
 //!   needs a caller who knows what the guest does with time.
 //!
-//! Each of those has its ioctl already defined in `kvm_ffi`, and
-//! [`VCpuSnapshot::is_complete`] answers `false` so that a caller can tell
-//! this apart from a full capture rather than assuming.
+//! [`VCpuSnapshot::is_complete`] therefore still answers `false`, and says
+//! what it is short of, so a caller can tell this apart from a total capture
+//! rather than assuming.
 
 use serde::{Deserialize, Serialize};
 
@@ -196,6 +197,23 @@ pub struct VCpuSnapshot {
     /// than assuming.
     #[serde(default)]
     pub msrs: Vec<Msr>,
+    /// The local APIC's 1 KiB register page: which interrupts are in service,
+    /// which are pending, and what the timer was counting down to. A vCPU
+    /// restored without it loses an armed timer, and a guest whose scheduler
+    /// tick never fires again looks hung rather than broken.
+    ///
+    /// Empty when the backend did not capture it, or when interrupts are
+    /// handled in userspace and there is no in-kernel APIC to read.
+    #[serde(default)]
+    pub lapic: Vec<u8>,
+    /// The XSAVE area: the FPU state above plus AVX and anything later the
+    /// processor advertises. Larger and more complete than [`Self::fpu`],
+    /// which is the legacy x87/SSE view of the same registers.
+    ///
+    /// Both are kept. `fpu` is what a backend without XSAVE can still provide,
+    /// and a restore prefers this when it is present.
+    #[serde(default)]
+    pub xsave: Vec<u8>,
     pub run_state: RunState,
 }
 
@@ -216,8 +234,6 @@ impl VCpuSnapshot {
     #[must_use]
     pub fn missing() -> &'static [&'static str] {
         &[
-            "local APIC state (in-flight and armed interrupts)",
-            "XSAVE area (AVX and later register state)",
             "the TSC, deliberately: restoring it jumps the guest's clock and \
              not restoring it jumps it too, so the choice belongs to a caller",
         ]
@@ -298,7 +314,7 @@ mod tests {
         // captured, a caller will restore a guest that uses them and get a
         // failure with no connection to its cause.
         assert!(!VCpuSnapshot::default().is_complete());
-        assert_eq!(VCpuSnapshot::missing().len(), 3);
+        assert_eq!(VCpuSnapshot::missing().len(), 1);
     }
 
     #[test]

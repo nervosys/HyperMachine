@@ -751,11 +751,20 @@ writing a marker into `LSTAR` and reading it back, because every MSR this
 unikernel reports is zero and "11 captured" is equally true of eleven zeroes
 and of an ioctl that does nothing.
 
-Still omitted, with `VCpuSnapshot::is_complete` answering `false` and
-`missing()` naming them: LAPIC state, the XSAVE area, and the TSC. The last is
-a decision rather than a gap — restoring it jumps the guest's clock by however
-long the snapshot sat on disk, not restoring it jumps the clock to the host's
-uptime, and choosing needs a caller who knows what the guest does with time.
+The local APIC's register page and the XSAVE area come too, so a restored
+guest keeps its armed timer and its AVX registers. Wiring XSAVE turned up a
+latent bug: `KVM_SET_XSAVE` was defined as `0x5000aea3`, whose `nr` of `0xa3`
+is `KVM_ENABLE_CAP` — nothing had ever called it, so it had never had the
+chance to fail. Putting the old value back makes the restore fail with
+`Invalid argument (os error 22)`, which is how the fix was confirmed rather
+than argued.
+
+One thing is still omitted, and it is a decision rather than a gap: the TSC.
+Restoring it jumps the guest's clock by however long the snapshot sat on disk;
+not restoring it jumps the clock to the host's uptime. Both are wrong, and
+choosing needs a caller who knows what the guest does with time.
+`VCpuSnapshot::is_complete` therefore still answers `false`, and `missing()`
+names that one item.
 
 ### Phase 3 — Network security (CubeVS/CubeEgress-equivalent)
 

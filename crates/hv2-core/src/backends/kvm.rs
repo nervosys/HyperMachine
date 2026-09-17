@@ -383,12 +383,43 @@ impl HypervisorBackend for KvmBackend {
             }
         }
 
+        // Both are optional in the same sense the MSRs are: a host with no
+        // in-kernel APIC has none to read, and a processor without XSAVE has
+        // no area. A snapshot that records neither is still a usable snapshot
+        // of a guest that used neither, so a failure here is logged and the
+        // field left empty rather than failing the capture.
+        let mut lapic_state = kvm_lapic_state::default();
+        // SAFETY: `fd` is this vCPU's descriptor, as above.
+        let lapic = match unsafe { kvm_get_lapic(fd, &mut lapic_state) } {
+            Ok(()) => lapic_state.regs.to_vec(),
+            Err(e) => {
+                tracing::debug!("vCPU {}: no LAPIC state: {e}", vcpu.id());
+                Vec::new()
+            }
+        };
+
+        let mut xsave_state = kvm_xsave::default();
+        // SAFETY: as above.
+        let xsave = match unsafe { kvm_get_xsave(fd, &mut xsave_state) } {
+            Ok(()) => xsave_state
+                .region
+                .iter()
+                .flat_map(|word| word.to_le_bytes())
+                .collect(),
+            Err(e) => {
+                tracing::debug!("vCPU {}: no XSAVE area: {e}", vcpu.id());
+                Vec::new()
+            }
+        };
+
         Ok(VCpuSnapshot {
             id: vcpu.id(),
             general: general_from(&regs),
             system: system_from(&sregs),
             fpu: fpu_from(&fpu),
             msrs,
+            lapic,
+            xsave,
             run_state: match mp_state.mp_state {
                 KVM_MP_STATE_RUNNABLE => RunState::Runnable,
                 KVM_MP_STATE_HALTED => RunState::Halted,
@@ -426,6 +457,44 @@ impl HypervisorBackend for KvmBackend {
             kvm_set_fpu(fd, &fpu).map_err(|e| Error::Hypervisor(format!("KVM_SET_FPU: {e}")))?;
             kvm_set_mp_state(fd, &mp_state)
                 .map_err(|e| Error::Hypervisor(format!("KVM_SET_MP_STATE: {e}")))?;
+        }
+
+        // The XSAVE area supersedes the legacy FPU written above: it is the
+        // same registers plus everything the processor added since, so it goes
+        // second and wins. Writing only the legacy view over a guest that was
+        // using AVX would leave half its register file from the snapshot and
+        // half from whatever this vCPU had.
+        if !state.xsave.is_empty() {
+            let mut area = kvm_xsave::default();
+            if state.xsave.len() != area.region.len() * 4 {
+                return Err(Error::Hypervisor(format!(
+                    "this snapshot's XSAVE area is {} bytes and this host's is {}",
+                    state.xsave.len(),
+                    area.region.len() * 4
+                )));
+            }
+            for (word, chunk) in area.region.iter_mut().zip(state.xsave.chunks_exact(4)) {
+                *word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            }
+            // SAFETY: `fd` is this vCPU's descriptor; `area` is a correctly
+            // sized struct this function owns.
+            unsafe { kvm_set_xsave(fd, &area) }
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_XSAVE: {e}")))?;
+        }
+
+        if !state.lapic.is_empty() {
+            let mut lapic = kvm_lapic_state::default();
+            if state.lapic.len() != lapic.regs.len() {
+                return Err(Error::Hypervisor(format!(
+                    "this snapshot's LAPIC page is {} bytes and this host's is {}",
+                    state.lapic.len(),
+                    lapic.regs.len()
+                )));
+            }
+            lapic.regs.copy_from_slice(&state.lapic);
+            // SAFETY: as above.
+            unsafe { kvm_set_lapic(fd, &lapic) }
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_LAPIC: {e}")))?;
         }
 
         // Unlike the read, a write that fails is fatal. Every MSR here was

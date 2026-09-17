@@ -86,7 +86,17 @@ pub const KVM_SET_VCPU_EVENTS: u64 = 0x4040aea0; // _IOW(KVMIO, 0xa0, struct kvm
 pub const KVM_GET_DEBUGREGS: u64 = 0x8080aea1; // _IOR(KVMIO, 0xa1, struct kvm_debugregs)
 pub const KVM_SET_DEBUGREGS: u64 = 0x4080aea2; // _IOW(KVMIO, 0xa2, struct kvm_debugregs)
 pub const KVM_GET_XSAVE: u64 = 0x9000aea4; // _IOR(KVMIO, 0xa4, struct kvm_xsave)
-pub const KVM_SET_XSAVE: u64 = 0x5000aea3; // _IOW(KVMIO, 0xa3, struct kvm_xsave)
+
+// Was 0x5000aea3, whose nr of 0xa3 is KVM_ENABLE_CAP rather than SET_XSAVE.
+// `_IOW(KVMIO, 0xa5, struct kvm_xsave)` over a 4096-byte struct encodes as
+// (1 << 30) | (4096 << 16) | (0xAE << 8) | 0xa5. Nothing called this until
+// XSAVE joined the snapshot, so it had never had the chance to fail.
+//
+// Confirmed rather than reasoned: putting the old value back and running
+// `examples/vcpu_state` gives "KVM_SET_XSAVE: Invalid argument (os error 22)"
+// and the restore fails outright.
+pub const KVM_SET_XSAVE: u64 = 0x5000aea5; // _IOW(KVMIO, 0xa5, struct kvm_xsave)
+
 pub const KVM_GET_XCRS: u64 = 0x8188aea6; // _IOR(KVMIO, 0xa6, struct kvm_xcrs)
 pub const KVM_SET_XCRS: u64 = 0x4188aea7; // _IOW(KVMIO, 0xa7, struct kvm_xcrs)
 
