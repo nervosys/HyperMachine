@@ -2177,7 +2177,6 @@ fn payload_signing_handler(
 
         let expected = hmac_sha256(config.secret.as_bytes(), &body_bytes);
 
-        // Constant-time comparison (best effort without external crate)
         let valid = constant_time_eq(signature.as_bytes(), expected.as_bytes());
 
         if !valid {
@@ -2206,14 +2205,21 @@ fn payload_signing_handler(
 
 /// Best-effort constant-time byte comparison.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
+    use subtle::ConstantTimeEq;
+
+    // The XOR-accumulate loop this replaced was the right idiom, and nothing
+    // in the language stops a compiler from turning it back into an early
+    // exit: the loop has no observable effect until the final compare, so a
+    // sufficiently clever optimiser may short-circuit it. `subtle` exists to
+    // put barriers in the way of exactly that, and this crate already depends
+    // on it -- it is used for API-key comparison in this same file. The old
+    // comment here read "best effort without external crate", which was not
+    // true when it was written.
+    //
+    // Length is compared in the clear deliberately: both sides are hex
+    // digests of a fixed width, so the length is not a secret, and a
+    // mismatched one has to be rejected before the bytes are zipped.
+    a.len() == b.len() && bool::from(a.ct_eq(b))
 }
 
 // ============================================================================
