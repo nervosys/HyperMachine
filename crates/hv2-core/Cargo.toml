@@ -34,7 +34,13 @@ ring = { version = "0.17", optional = true }
 reqwest = { workspace = true, optional = true }
 # Pure-Rust RSA (RustCrypto) — provides RSA key generation and signing, which
 # `ring` does not support. Used by the asymmetric crypto module.
-rsa = { version = "0.9.10", features = ["sha2"] }
+# IronCrypto's RSA: pure Rust, no dependencies outside its own workspace, and
+# a private-key path that is constant-time in `d`. Replaces the `rsa` crate,
+# whose RUSTSEC-2023-0071 (Marvin) has no fixed release -- this repo carried an
+# ignore for it that said "tracked for migration once a constant-time release
+# ships". This is that.
+ic-rsa = { git = "https://github.com/nervosys/IronCrypto.git", rev = "ad762973b4825872e13e0a5b21a72128987be17f" }
+ic-core = { git = "https://github.com/nervosys/IronCrypto.git", rev = "ad762973b4825872e13e0a5b21a72128987be17f" }
 # Zeroization of key material on drop. A plain loop or `fill(0)` writes to
 # memory that is never read again, which the optimizer is free to delete;
 # `zeroize` uses volatile writes so the erasure actually happens.

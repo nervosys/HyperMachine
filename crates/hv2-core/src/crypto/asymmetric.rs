@@ -178,13 +178,6 @@ impl Drop for EcPrivateKey {
     }
 }
 
-/// RSA-OAEP ciphertext
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RsaCiphertext {
-    pub data: Vec<u8>,
-    pub key_size: RsaKeySize,
-}
-
 /// Digital signature
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
@@ -230,39 +223,49 @@ impl FipsCrypto {
     /// All components (n, e, d, p, q, and the CRT values) are stored as raw
     /// big-endian byte strings.
     pub fn generate_rsa_keypair(&self, size: RsaKeySize) -> CryptoResult<RsaPrivateKey> {
-        use rsa::traits::{PrivateKeyParts, PublicKeyParts};
-
         let bits = size.bytes() * 8;
-        // `rsa` 0.9 takes a `rand_core` 0.6 RNG, so go through its own
-        // re-export rather than `rand` (which is on `rand_core` 0.10).
-        // `OsRng` reads the OS CSPRNG directly on every call.
-        let mut rng = rsa::rand_core::OsRng;
+        let mut rng = HostRandom(self);
 
-        let mut key = rsa::RsaPrivateKey::new(&mut rng, bits)
+        let key = ic_rsa::generate(bits, &mut rng)
             .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA keygen: {e}")))?;
-        // Precompute the CRT values (dp, dq, qinv).
-        key.precompute()
-            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA precompute: {e}")))?;
 
-        let primes = key.primes();
-        if primes.len() != 2 {
-            return Err(CryptoError::KeyGenerationFailed(
-                "expected exactly two RSA primes".into(),
-            ));
-        }
+        // Every component comes back through a fixed-size buffer rather than a
+        // growable one: `ic-rsa` writes big-endian into exactly the width the
+        // modulus implies, which is what the rest of this file stores and what
+        // a PKCS#1 encoder expects. A shorter value here would be a different
+        // number once it is parsed back.
+        let k = size.bytes();
+        let half = k / 2;
+
+        let mut n = vec![0u8; k];
+        key.public_key()
+            .modulus_bytes(&mut n)
+            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA modulus: {e}")))?;
+
+        let mut d = vec![0u8; k];
+        key.exponent_bytes(&mut d)
+            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA exponent: {e}")))?;
+
+        let (mut p, mut q) = (vec![0u8; half], vec![0u8; half]);
+        key.prime_bytes(&mut p, &mut q)
+            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA primes: {e}")))?;
+
+        let (mut dp, mut dq, mut qinv) = (vec![0u8; half], vec![0u8; half], vec![0u8; half]);
+        key.crt_exponent_bytes(&mut dp, &mut dq, &mut qinv)
+            .map_err(|e| CryptoError::KeyGenerationFailed(format!("RSA CRT values: {e}")))?;
 
         Ok(RsaPrivateKey {
             public: RsaPublicKey {
-                n: key.n().to_bytes_be(),
-                e: key.e().to_bytes_be(),
+                n,
+                e: key.public_key().exponent().to_be_bytes().to_vec(),
                 size,
             },
-            d: key.d().to_bytes_be(),
-            p: primes[0].to_bytes_be(),
-            q: primes[1].to_bytes_be(),
-            dp: key.dp().map(|v| v.to_bytes_be()).unwrap_or_default(),
-            dq: key.dq().map(|v| v.to_bytes_be()).unwrap_or_default(),
-            qinv: key.qinv().map(|v| v.to_bytes_be().1).unwrap_or_default(),
+            d,
+            p,
+            q,
+            dp,
+            dq,
+            qinv,
         })
     }
 
@@ -275,95 +278,30 @@ impl FipsCrypto {
     // RSA Encryption/Decryption (OAEP)
     // ========================================================================
 
-    /// RSA-OAEP encryption
-    ///
-    /// Software RSA encryption using modular exponentiation with the public key.
-    /// Applies simple PKCS#1 v1.5 type 2 padding for compatibility.
-    pub fn rsa_encrypt(
-        &self,
-        public_key: &RsaPublicKey,
-        plaintext: &[u8],
-    ) -> CryptoResult<RsaCiphertext> {
-        let k = public_key.size.bytes();
-
-        // PKCS#1 v1.5: plaintext must be at most k - 11 bytes
-        if plaintext.len() > k.saturating_sub(11) {
-            return Err(CryptoError::EncryptionFailed(
-                "Plaintext too long for RSA key size".into(),
-            ));
-        }
-
-        if public_key.n.is_empty() || public_key.e.is_empty() {
-            return Err(CryptoError::InvalidKeyLength {
-                expected: k,
-                got: 0,
-            });
-        }
-
-        // Build PKCS#1 v1.5 padded message: 0x00 || 0x02 || PS || 0x00 || M
-        let ps_len = k - plaintext.len() - 3;
-        let mut padded = vec![0u8; k];
-        padded[0] = 0x00;
-        padded[1] = 0x02;
-
-        // Generate non-zero random padding
-        self.random_bytes(&mut padded[2..2 + ps_len])?;
-        for b in &mut padded[2..2 + ps_len] {
-            if *b == 0 {
-                *b = 0x01; // Ensure non-zero
-            }
-        }
-        padded[2 + ps_len] = 0x00;
-        padded[3 + ps_len..].copy_from_slice(plaintext);
-
-        // Modular exponentiation: c = m^e mod n (big-endian byte arrays)
-        let ciphertext_data = mod_exp_bytes(&padded, &public_key.e, &public_key.n);
-
-        Ok(RsaCiphertext {
-            data: ciphertext_data,
-            key_size: public_key.size,
-        })
-    }
-
-    /// RSA-OAEP decryption
-    ///
-    /// Software RSA decryption using modular exponentiation with the private key.
-    /// Removes PKCS#1 v1.5 type 2 padding.
-    pub fn rsa_decrypt(
-        &self,
-        private_key: &RsaPrivateKey,
-        ciphertext: &RsaCiphertext,
-    ) -> CryptoResult<Vec<u8>> {
-        let k = private_key.public.size.bytes();
-
-        if ciphertext.data.len() != k {
-            return Err(CryptoError::DecryptionFailed(
-                "Ciphertext length doesn't match key size".into(),
-            ));
-        }
-
-        // m = c^d mod n
-        let padded = mod_exp_bytes(&ciphertext.data, &private_key.d, &private_key.public.n);
-
-        // Verify and strip PKCS#1 v1.5 padding: 0x00 || 0x02 || PS || 0x00 || M
-        if padded.len() < 11 {
-            return Err(CryptoError::DecryptionFailed("Invalid padding".into()));
-        }
-
-        // Find the 0x00 separator after the padding string
-        if padded.len() >= 2 && padded[0] == 0x00 && padded[1] == 0x02 {
-            if let Some(sep) = padded[2..].iter().position(|&b| b == 0x00) {
-                if sep >= 8 {
-                    // PS must be at least 8 bytes
-                    return Ok(padded[2 + sep + 1..].to_vec());
-                }
-            }
-        }
-
-        Err(CryptoError::DecryptionFailed(
-            "Invalid PKCS#1 padding".into(),
-        ))
-    }
+    // ========================================================================
+    // RSA encryption is deliberately absent
+    //
+    // `rsa_encrypt`/`rsa_decrypt` used to live here, over a hand-written
+    // `mod_exp_bytes`. They were removed rather than fixed, for three reasons
+    // in increasing order of importance.
+    //
+    // They did not work. `mod_exp_bytes` returned 121 for 4^13 mod 497 (445)
+    // and 7 for 5^117 mod 19 (1): it squared the accumulator and multiplied by
+    // the base, which is the left-to-right square-and-multiply, while scanning
+    // the exponent's bits least-significant first, which that form cannot do.
+    // A comment reading "advance base by 32 squarings for next limb" sat above
+    // an empty `if`. Nothing caught it because the only test asserted that an
+    // empty key is refused.
+    //
+    // Nothing called them -- no caller anywhere in the workspace.
+    //
+    // And the primitive is the wrong one. Both doc comments said "RSA-OAEP"
+    // while the code did PKCS#1 v1.5, whose decryption path is a
+    // Bleichenbacher oracle by construction; the padding check here returned
+    // early on each distinct failure, which is that oracle. IronCrypto omits
+    // RSA encryption for exactly this reason, and key transport belongs to
+    // ECDH or ML-KEM. RSA's remaining job here is signatures.
+    // ========================================================================
 
     // ========================================================================
     // ECDSA Key Generation
@@ -451,58 +389,47 @@ impl FipsCrypto {
         data: &[u8],
         algorithm: SignatureAlgorithm,
     ) -> CryptoResult<Signature> {
-        use rsa::sha2::{Digest, Sha256, Sha384, Sha512};
-        use rsa::{BigUint, Pkcs1v15Sign, Pss};
+        use ic_rsa::{Pkcs1Sha256, Pkcs1Sha384, Pkcs1Sha512, PssSha256, PssSha384, PssSha512};
 
-        let key = rsa::RsaPrivateKey::from_components(
-            BigUint::from_bytes_be(&private_key.public.n),
-            BigUint::from_bytes_be(&private_key.public.e),
-            BigUint::from_bytes_be(&private_key.d),
-            vec![
-                BigUint::from_bytes_be(&private_key.p),
-                BigUint::from_bytes_be(&private_key.q),
-            ],
+        // Rebuilt from the primes rather than from (n, e, d), so signing uses
+        // the Chinese remainder theorem. Without them every signature is a
+        // full-width exponentiation: correct, and about four times slower.
+        let key = ic_rsa::RsaPrivateKey::from_primes(
+            &private_key.p,
+            &private_key.q,
+            be_exponent(&private_key.public.e)?,
         )
         .map_err(|e| CryptoError::InvalidInput(format!("invalid RSA private key: {e}")))?;
 
-        // `rsa` 0.9 takes a `rand_core` 0.6 RNG; see `generate_rsa_keypair`.
-        let mut rng = rsa::rand_core::OsRng;
-        let sig = match algorithm {
-            SignatureAlgorithm::RsaPkcs1Sha256 => {
-                key.sign(Pkcs1v15Sign::new::<Sha256>(), &Sha256::digest(data))
-            }
-            SignatureAlgorithm::RsaPkcs1Sha384 => {
-                key.sign(Pkcs1v15Sign::new::<Sha384>(), &Sha384::digest(data))
-            }
-            SignatureAlgorithm::RsaPkcs1Sha512 => {
-                key.sign(Pkcs1v15Sign::new::<Sha512>(), &Sha512::digest(data))
-            }
+        let mut signature = vec![0u8; key.size()];
+        let mut rng = HostRandom(self);
+        match algorithm {
+            SignatureAlgorithm::RsaPkcs1Sha256 => Pkcs1Sha256::sign(&key, data, &mut signature),
+            SignatureAlgorithm::RsaPkcs1Sha384 => Pkcs1Sha384::sign(&key, data, &mut signature),
+            SignatureAlgorithm::RsaPkcs1Sha512 => Pkcs1Sha512::sign(&key, data, &mut signature),
             SignatureAlgorithm::RsaPssSha256 => {
-                key.sign_with_rng(&mut rng, Pss::new::<Sha256>(), &Sha256::digest(data))
+                PssSha256::sign(&key, data, &mut rng, &mut signature)
             }
             SignatureAlgorithm::RsaPssSha384 => {
-                key.sign_with_rng(&mut rng, Pss::new::<Sha384>(), &Sha384::digest(data))
+                PssSha384::sign(&key, data, &mut rng, &mut signature)
             }
             SignatureAlgorithm::RsaPssSha512 => {
-                key.sign_with_rng(&mut rng, Pss::new::<Sha512>(), &Sha512::digest(data))
+                PssSha512::sign(&key, data, &mut rng, &mut signature)
             }
             _ => {
                 return Err(CryptoError::UnsupportedAlgorithm(format!(
-                    "{:?} is not an RSA algorithm",
-                    algorithm
+                    "{algorithm:?} is not an RSA algorithm"
                 )));
             }
         }
         .map_err(|e| CryptoError::EncryptionFailed(format!("RSA signing failed: {e}")))?;
 
         Ok(Signature {
-            data: sig,
+            data: signature,
             algorithm,
         })
     }
 
-    /// Verify RSA signature
-    ///
     /// Verify an RSA signature (PKCS#1 v1.5 or PSS, SHA-256/384/512) using the
     /// pure-Rust `rsa` crate and the public key components (n, e).
     pub fn rsa_verify(
@@ -511,53 +438,30 @@ impl FipsCrypto {
         data: &[u8],
         signature: &Signature,
     ) -> CryptoResult<bool> {
-        use rsa::sha2::{Digest, Sha256, Sha384, Sha512};
-        use rsa::{BigUint, Pkcs1v15Sign, Pss};
+        use ic_rsa::{Pkcs1Sha256, Pkcs1Sha384, Pkcs1Sha512, PssSha256, PssSha384, PssSha512};
 
-        if signature.data.len() != public_key.size.bytes() {
-            return Ok(false);
-        }
+        let key = ic_rsa::RsaPublicKey::from_components(&public_key.n, be_exponent(&public_key.e)?)
+            .map_err(|e| CryptoError::InvalidInput(format!("invalid RSA public key: {e}")))?;
 
-        let key = rsa::RsaPublicKey::new(
-            BigUint::from_bytes_be(&public_key.n),
-            BigUint::from_bytes_be(&public_key.e),
-        )
-        .map_err(|e| CryptoError::InvalidInput(format!("invalid RSA public key: {e}")))?;
-
-        let result = match signature.algorithm {
-            SignatureAlgorithm::RsaPkcs1Sha256 => key.verify(
-                Pkcs1v15Sign::new::<Sha256>(),
-                &Sha256::digest(data),
-                &signature.data,
-            ),
-            SignatureAlgorithm::RsaPkcs1Sha384 => key.verify(
-                Pkcs1v15Sign::new::<Sha384>(),
-                &Sha384::digest(data),
-                &signature.data,
-            ),
-            SignatureAlgorithm::RsaPkcs1Sha512 => key.verify(
-                Pkcs1v15Sign::new::<Sha512>(),
-                &Sha512::digest(data),
-                &signature.data,
-            ),
-            SignatureAlgorithm::RsaPssSha256 => {
-                key.verify(Pss::new::<Sha256>(), &Sha256::digest(data), &signature.data)
-            }
-            SignatureAlgorithm::RsaPssSha384 => {
-                key.verify(Pss::new::<Sha384>(), &Sha384::digest(data), &signature.data)
-            }
-            SignatureAlgorithm::RsaPssSha512 => {
-                key.verify(Pss::new::<Sha512>(), &Sha512::digest(data), &signature.data)
-            }
-            _ => {
+        let outcome = match signature.algorithm {
+            SignatureAlgorithm::RsaPkcs1Sha256 => Pkcs1Sha256::verify(&key, data, &signature.data),
+            SignatureAlgorithm::RsaPkcs1Sha384 => Pkcs1Sha384::verify(&key, data, &signature.data),
+            SignatureAlgorithm::RsaPkcs1Sha512 => Pkcs1Sha512::verify(&key, data, &signature.data),
+            SignatureAlgorithm::RsaPssSha256 => PssSha256::verify(&key, data, &signature.data),
+            SignatureAlgorithm::RsaPssSha384 => PssSha384::verify(&key, data, &signature.data),
+            SignatureAlgorithm::RsaPssSha512 => PssSha512::verify(&key, data, &signature.data),
+            other => {
                 return Err(CryptoError::UnsupportedAlgorithm(format!(
-                    "{:?} is not an RSA algorithm",
-                    signature.algorithm
+                    "{other:?} is not an RSA algorithm"
                 )));
             }
         };
 
-        Ok(result.is_ok())
+        // A bad signature is `false`, not an error: the caller asked whether
+        // this signature is valid, and "no" is an answer rather than a
+        // failure. Errors are reserved for a key or algorithm that could never
+        // verify anything.
+        Ok(outcome.is_ok())
     }
 
     /// Sign data with ECDSA private key
@@ -669,6 +573,45 @@ impl FipsCrypto {
 // DER Encoding Helpers
 // ============================================================================
 
+/// The host's CSPRNG, as IronCrypto's random source.
+///
+/// `ic-rsa` takes any `RandomSource` rather than reaching for the OS itself --
+/// it is `no_std` and has no opinion about where entropy comes from. This
+/// hands it whatever this module already uses, so key generation and PSS salts
+/// draw from the same place as everything else here rather than from a second,
+/// separately-configured source.
+struct HostRandom<'a>(&'a FipsCrypto);
+
+impl ic_core::traits::RandomSource for HostRandom<'_> {
+    fn fill(&mut self, out: &mut [u8]) -> ic_core::Result<()> {
+        self.0
+            .random_bytes(out)
+            .map_err(|_| ic_core::err!(Internal, "the host RNG failed"))
+    }
+}
+
+/// A big-endian public exponent as the `u64` IronCrypto takes.
+///
+/// Stored here as bytes because that is how it arrives in a certificate. It is
+/// `e`, so it is public and small -- 65537 in almost every key ever issued --
+/// and a value that does not fit in 64 bits is a malformed key rather than an
+/// exotic one.
+fn be_exponent(bytes: &[u8]) -> CryptoResult<u64> {
+    let trimmed = bytes
+        .iter()
+        .position(|b| *b != 0)
+        .map_or(&[][..], |at| &bytes[at..]);
+    if trimmed.is_empty() || trimmed.len() > 8 {
+        return Err(CryptoError::InvalidInput(format!(
+            "an RSA public exponent of {} bytes is not a usable one",
+            trimmed.len()
+        )));
+    }
+    Ok(trimmed
+        .iter()
+        .fold(0u64, |acc, b| (acc << 8) | u64::from(*b)))
+}
+
 /// Encode an RSA public key as DER (PKCS#1 RSAPublicKey format).
 ///
 /// ring expects the public key bytes in this format for verification.
@@ -734,168 +677,6 @@ fn der_encode_length(buf: &mut Vec<u8>, len: usize) {
 }
 
 // ============================================================================
-// Big-integer modular exponentiation (software RSA)
-// ============================================================================
-
-/// Modular exponentiation on big-endian byte arrays: base^exp mod modulus.
-/// Uses square-and-multiply algorithm with arbitrary-precision arithmetic.
-fn mod_exp_bytes(base: &[u8], exp: &[u8], modulus: &[u8]) -> Vec<u8> {
-    // Simple big-integer representation: Vec<u32> in little-endian limb order
-    let b = bytes_to_limbs(base);
-    let e = bytes_to_limbs(exp);
-    let m = bytes_to_limbs(modulus);
-
-    if m.is_empty() || (m.len() == 1 && m[0] == 0) {
-        return vec![0u8; modulus.len()];
-    }
-
-    let mut result = vec![1u32; 1]; // Start with 1
-    let b = mod_limbs(&b, &m);
-
-    // Square-and-multiply, scanning exponent bits
-    for limb_idx in 0..e.len() {
-        let limb = e[limb_idx];
-        let bits = if limb_idx == e.len() - 1 {
-            32 - limb.leading_zeros() as usize
-        } else {
-            32
-        };
-        for bit in 0..bits {
-            if limb_idx == 0 && bit == 0 {
-                // First bit
-                if limb & 1 != 0 {
-                    result = mod_limbs(&b, &m);
-                }
-            } else {
-                // Square
-                result = mod_mul_limbs(&result, &result, &m);
-                if (limb >> bit) & 1 != 0 {
-                    result = mod_mul_limbs(&result, &b, &m);
-                }
-            }
-        }
-        if limb_idx < e.len() - 1 {
-            // Advance base by 32 squarings for next limb
-        }
-    }
-
-    limbs_to_bytes(&result, modulus.len())
-}
-
-fn bytes_to_limbs(bytes: &[u8]) -> Vec<u32> {
-    // Convert big-endian bytes to little-endian u32 limbs
-    let mut limbs = Vec::new();
-    let mut i = bytes.len();
-    while i > 0 {
-        let start = i.saturating_sub(4);
-        let mut val = 0u32;
-        for (j, &b) in bytes[start..i].iter().enumerate() {
-            val |= (b as u32) << ((i - start - 1 - j) * 8);
-        }
-        limbs.push(val);
-        i = start;
-    }
-    // Trim leading zeros
-    while limbs.len() > 1 && limbs.last() == Some(&0) {
-        limbs.pop();
-    }
-    limbs
-}
-
-fn limbs_to_bytes(limbs: &[u32], target_len: usize) -> Vec<u8> {
-    // Convert little-endian u32 limbs to big-endian bytes
-    let mut bytes = Vec::new();
-    for &limb in limbs.iter().rev() {
-        bytes.extend_from_slice(&limb.to_be_bytes());
-    }
-    // Trim leading zeros and pad to target_len
-    while bytes.len() > 1 && bytes[0] == 0 {
-        bytes.remove(0);
-    }
-    while bytes.len() < target_len {
-        bytes.insert(0, 0);
-    }
-    if bytes.len() > target_len {
-        bytes = bytes[bytes.len() - target_len..].to_vec();
-    }
-    bytes
-}
-
-fn mod_limbs(a: &[u32], m: &[u32]) -> Vec<u32> {
-    // a mod m using repeated subtraction (slow but correct for moderate sizes)
-    let mut r = a.to_vec();
-    while cmp_limbs(&r, m) != std::cmp::Ordering::Less {
-        r = sub_limbs(&r, m);
-    }
-    r
-}
-
-fn mod_mul_limbs(a: &[u32], b: &[u32], m: &[u32]) -> Vec<u32> {
-    let product = mul_limbs(a, b);
-    mod_limbs(&product, m)
-}
-
-fn mul_limbs(a: &[u32], b: &[u32]) -> Vec<u32> {
-    let mut result = vec![0u32; a.len() + b.len()];
-    for (i, &ai) in a.iter().enumerate() {
-        let mut carry = 0u64;
-        for (j, &bj) in b.iter().enumerate() {
-            let product = (ai as u64) * (bj as u64) + (result[i + j] as u64) + carry;
-            result[i + j] = product as u32;
-            carry = product >> 32;
-        }
-        result[i + b.len()] += carry as u32;
-    }
-    while result.len() > 1 && result.last() == Some(&0) {
-        result.pop();
-    }
-    result
-}
-
-fn sub_limbs(a: &[u32], b: &[u32]) -> Vec<u32> {
-    let mut result = a.to_vec();
-    let mut borrow = 0i64;
-    for i in 0..result.len() {
-        let bi = if i < b.len() { b[i] as i64 } else { 0 };
-        let diff = (result[i] as i64) - bi - borrow;
-        if diff < 0 {
-            result[i] = (diff + (1i64 << 32)) as u32;
-            borrow = 1;
-        } else {
-            result[i] = diff as u32;
-            borrow = 0;
-        }
-    }
-    while result.len() > 1 && result.last() == Some(&0) {
-        result.pop();
-    }
-    result
-}
-
-fn cmp_limbs(a: &[u32], b: &[u32]) -> std::cmp::Ordering {
-    let alen = a.len();
-    let blen = b.len();
-    // Strip leading zeros
-    let aeff = a.iter().rposition(|&x| x != 0).map(|i| i + 1).unwrap_or(0);
-    let beff = b.iter().rposition(|&x| x != 0).map(|i| i + 1).unwrap_or(0);
-    let _ = (alen, blen);
-
-    match aeff.cmp(&beff) {
-        std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
-        std::cmp::Ordering::Less => std::cmp::Ordering::Less,
-        std::cmp::Ordering::Equal => {
-            for i in (0..aeff).rev() {
-                match a[i].cmp(&b[i]) {
-                    std::cmp::Ordering::Equal => continue,
-                    other => return other,
-                }
-            }
-            std::cmp::Ordering::Equal
-        }
-    }
-}
-
-// ============================================================================
 // Tests
 // ============================================================================
 
@@ -935,18 +716,6 @@ mod tests {
                 .rsa_verify(&key.public, b"tampered", &sig)
                 .expect("RSA verify failed"));
         }
-    }
-
-    #[test]
-    fn test_rsa_encrypt_invalid_key() {
-        let crypto = get_crypto();
-        let pub_key = RsaPublicKey {
-            n: vec![],
-            e: vec![0x01, 0x00, 0x01],
-            size: RsaKeySize::Rsa2048,
-        };
-        let result = crypto.rsa_encrypt(&pub_key, b"test");
-        assert!(result.is_err(), "RSA encrypt with empty key should fail");
     }
 
     #[test]

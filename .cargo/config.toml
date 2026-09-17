@@ -21,3 +21,15 @@ target-dir = "target"
 # works and CI runs exactly that -- `cargo check --workspace --all-targets`,
 # with no excludes, on stable. The alias would now be a slower way to check
 # less, so it is gone rather than kept as advice that no longer holds.
+
+# Fetch git dependencies with the `git` CLI rather than cargo's bundled
+# libgit2.
+#
+# `ic-rsa` and `ic-core` come from github.com/nervosys/IronCrypto, which is
+# private. libgit2 has no access to a credential helper, so it fails with
+# "failed to acquire username/password from local configuration" even on a
+# machine where `git clone` of the same URL works. The CLI uses whatever
+# helper git is configured with, which is the one already holding the
+# credentials.
+[net]
+git-fetch-with-cli = true

@@ -64,40 +64,66 @@ crate already depended on.
 `chacha20` 0.10.1 was yanked from crates.io. `cargo update -p chacha20` →
 0.10.2.
 
-## Open: RUSTSEC-2023-0071 — Marvin attack in `rsa`
+## Closed, same day: RUSTSEC-2023-0071 — Marvin attack in `rsa`
 
-`rsa` 0.9.10. *Potential key recovery through timing sidechannels.* **No fixed
-upgrade is available** — the advisory has been open since 2023-11-22 and the
-fix requires the 0.10 line, which replaces `num-bigint` with `crypto-bigint`.
+`rsa` 0.9.10, *potential key recovery through timing sidechannels*, open
+upstream since 2023-11-22 with no fixed release. This report first recorded it
+as accepted, with a `deny.toml` ignore reading "tracked for migration once a
+constant-time release ships".
 
-This is a **shipped dependency**, not a dev-dependency: it is declared in
-`crates/hv2-core/Cargo.toml`'s `[dependencies]` and reaches every binary that
-links `hv2-core`. Checked, because a first reading of `cargo tree -i rsa
---depth 1` suggested otherwise.
+**It is migrated.** `hv2-core` now uses IronCrypto's `ic-rsa`
+(github.com/nervosys/IronCrypto, pinned by revision), whose private-key path
+is constant-time in `d`. The `rsa` crate is no longer in `Cargo.lock` at all —
+`cargo tree -i rsa` reports no such package — so the advisory is not
+suppressed, it is inapplicable, and the ignore was deleted rather than left to
+sit over an advisory nothing can raise. `cargo deny check advisories bans
+licenses` passes without it.
 
-**Where it is used:** `crates/hv2-core/src/crypto/asymmetric.rs` only — RSA key
-generation, and PKCS#1 v1.5 and PSS signing. Nothing else in the workspace
-calls it.
+`ic-rsa` is pure Rust with no dependencies outside its own workspace, and
+covers what this module needs: key generation, PKCS#1 v1.5 and PSS signing and
+verification. Signing rebuilds the key from its primes so it uses the Chinese
+remainder theorem; the alternative is correct and about four times slower.
 
-**What the exposure is:** the Marvin attack recovers a private key by timing
-*decryption* of attacker-chosen ciphertexts. An attacker needs to submit many
-ciphertexts to an oracle that decrypts with the key and measures the response
-time. A deployment that performs RSA decryption on attacker-supplied input over
-a network is exposed; one that only generates keys and signs is far less so,
-because signing does not take attacker-chosen ciphertext.
+### What this report got wrong about it
 
-That is a statement about this code's shape, not a clearance. Anyone relying on
-`asymmetric.rs` for RSA decryption should treat this as live.
+The paragraph above used to end: *"Anyone relying on `asymmetric.rs` for RSA
+decryption should treat this as live."* That was the right instinct and the
+wrong fact. `asymmetric.rs` did expose `rsa_encrypt`/`rsa_decrypt`, but they
+never went through the `rsa` crate at all — they went through a hand-written
+`mod_exp_bytes` in the same file, so the Marvin advisory never applied to them.
 
-**Options, none free:**
+What applied instead was worse, and is the more serious finding of the two:
 
-1. Migrate to `rsa` 0.10. Attempted previously in this repository and it breaks
-   on the `num-bigint` → `crypto-bigint` change — which is the change that
-   fixes the timing leak, so the breakage is the point rather than an obstacle
-   to route around.
-2. Drop RSA. The post-quantum and ECDSA paths (`ml-dsa`, `slh-dsa`, `p256`,
-   `p384`) do not use it.
-3. Accept and document, which is the current state.
+**The hand-written modular exponentiation was wrong.** It returned 121 for
+`4^13 mod 497` (445) and 7 for `5^117 mod 19` (1). It squared the accumulator
+and multiplied by the base — the left-to-right square-and-multiply — while
+scanning the exponent's bits least-significant first, which that form cannot
+do. A comment reading "advance base by 32 squarings for next limb" sat above
+an empty `if`. So `rsa_encrypt` and `rsa_decrypt` did not implement RSA; they
+produced numbers.
+
+Nothing caught it because the only test asserted that an empty key is refused.
+There was no round-trip test, and an encrypt/decrypt pair that never round-trips
+is the first thing such a test would have found.
+
+Two further problems in the same forty lines: both doc comments said
+**"RSA-OAEP"** while the code did PKCS#1 v1.5, and the v1.5 decryption path
+returned early on each distinct padding failure, which is a Bleichenbacher
+oracle by construction.
+
+**Resolution: removed, not repaired.** No caller existed anywhere in the
+workspace. IronCrypto omits RSA encryption deliberately — its own module notes
+call RSAES-PKCS1-v1_5 "a Bleichenbacher oracle waiting to happen" — and key
+transport belongs to ECDH or ML-KEM. RSA's remaining job here is signatures.
+The reasoning is recorded in `asymmetric.rs` where the functions used to be, so
+the next person to want RSA encryption finds the argument rather than the gap.
+
+**The lesson for this report's method.** The original entry was assembled by
+reading `cargo audit` output and grepping for the crate's name. That found a
+real advisory and missed a broken primitive sitting beside it, because a
+hand-rolled implementation has no advisory to find. Two known-answer tests
+would have caught it in seconds, and that is what a crypto audit should run
+rather than only a dependency scan.
 
 ## Open: four unmaintained crates
 
