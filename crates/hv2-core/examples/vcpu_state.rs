@@ -187,6 +187,29 @@ async fn run() -> Result<std::process::ExitCode> {
         }
         // The guest runs in protected or long mode; bit 0 of CR0 is set in
         // both. A guest in real mode here would mean it never got started.
+        // The MSRs a 64-bit guest keeps its system-call entry in. Printed by
+        // name rather than counted, because "11 MSRs captured" is true of a
+        // list of eleven zeroes.
+        if state.msrs.is_empty() {
+            println!("              : no MSRs captured");
+        } else {
+            let named = [
+                (0xc000_0082u32, "LSTAR"),
+                (0xc000_0081, "STAR"),
+                (0xc000_0100, "FS_BASE"),
+                (0xc000_0101, "GS_BASE"),
+            ];
+            let shown: Vec<String> = named
+                .iter()
+                .filter_map(|(index, name)| state.msr(*index).map(|v| format!("{name}={v:#x}")))
+                .collect();
+            println!(
+                "msrs         : {} captured — {}",
+                state.msrs.len(),
+                shown.join(" ")
+            );
+        }
+
         if state.system.cr0 & 1 == 0 {
             eprintln!("              : CR0.PE clear — the guest is in real mode");
             plausible = false;
@@ -210,6 +233,34 @@ async fn run() -> Result<std::process::ExitCode> {
     // cannot survive a restore into a fresh VM.
     vm.restore_vcpu_states(&states).await?;
     println!("restore       : ok");
+
+    // An MSR this guest never sets, set deliberately, so the round trip proves
+    // something. Every MSR read above came back zero -- correct for a unikernel
+    // that never arms SYSCALL, and indistinguishable from an ioctl that
+    // quietly does nothing. A canonical address, because KVM rejects a
+    // non-canonical LSTAR outright.
+    const LSTAR: u32 = 0xc000_0082;
+    const MSR_MARKER: u64 = 0xffff_ffff_8100_1234;
+    let mut marked = states.clone();
+    if let Some(msr) = marked[0].msrs.iter_mut().find(|m| m.index == LSTAR) {
+        msr.value = MSR_MARKER;
+    }
+    vm.restore_vcpu_states(&marked).await?;
+    let read_back = vm.save_vcpu_states().await?;
+    let carried = read_back[0].msr(LSTAR) == Some(MSR_MARKER);
+    println!(
+        "msr round trip: LSTAR written {MSR_MARKER:#x}, read back {:#x} — {}",
+        read_back[0].msr(LSTAR).unwrap_or(0),
+        if carried { "carried" } else { "LOST" }
+    );
+    if !carried {
+        eprintln!("              : MSR capture is not moving values");
+        let _ = vm.stop().await;
+        return Ok(std::process::ExitCode::FAILURE);
+    }
+
+    // Put the guest's own value back before it runs again.
+    vm.restore_vcpu_states(&states).await?;
 
     let before = vm.console_output().await.len();
     vm.resume().await?;

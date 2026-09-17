@@ -50,7 +50,8 @@ use crate::hypervisor::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
 };
 use crate::snapshot::vcpu::{
-    DescriptorTable, FpuState, GeneralRegisters, RunState, Segment, SystemRegisters, VCpuSnapshot,
+    DescriptorTable, FpuState, GeneralRegisters, Msr, RunState, Segment, SystemRegisters,
+    VCpuSnapshot,
 };
 use crate::{Error, IoDirection, Result, VCpu, VmExit};
 use async_trait::async_trait;
@@ -364,11 +365,30 @@ impl HypervisorBackend for KvmBackend {
                 .map_err(|e| Error::Hypervisor(format!("KVM_GET_MP_STATE: {e}")))?;
         }
 
+        // One at a time, and a failure on one is not a failure of the
+        // snapshot: `SNAPSHOT_MSRS` is what a guest might use, not what every
+        // host implements, and an MSR this processor does not have is not part
+        // of this guest's state. A restore only writes back what was read.
+        let mut msrs = Vec::with_capacity(SNAPSHOT_MSRS.len());
+        for index in SNAPSHOT_MSRS {
+            // SAFETY: `fd` is this vCPU's descriptor, as above.
+            match unsafe { kvm_get_msr(fd, *index) } {
+                Ok(value) => msrs.push(Msr {
+                    index: *index,
+                    value,
+                }),
+                Err(e) => {
+                    tracing::debug!("vCPU {}: MSR {index:#x} not readable: {e}", vcpu.id());
+                }
+            }
+        }
+
         Ok(VCpuSnapshot {
             id: vcpu.id(),
             general: general_from(&regs),
             system: system_from(&sregs),
             fpu: fpu_from(&fpu),
+            msrs,
             run_state: match mp_state.mp_state {
                 KVM_MP_STATE_RUNNABLE => RunState::Runnable,
                 KVM_MP_STATE_HALTED => RunState::Halted,
@@ -406,6 +426,23 @@ impl HypervisorBackend for KvmBackend {
             kvm_set_fpu(fd, &fpu).map_err(|e| Error::Hypervisor(format!("KVM_SET_FPU: {e}")))?;
             kvm_set_mp_state(fd, &mp_state)
                 .map_err(|e| Error::Hypervisor(format!("KVM_SET_MP_STATE: {e}")))?;
+        }
+
+        // Unlike the read, a write that fails is fatal. Every MSR here was
+        // readable on the machine that took the snapshot, so one this host
+        // refuses means the two processors disagree about what the guest is --
+        // and a guest resumed without its SYSCALL entry point does not survive
+        // its next system call. Better to refuse the restore than to produce a
+        // VM that runs for a microsecond.
+        for msr in &state.msrs {
+            // SAFETY: `fd` is this vCPU's descriptor, as above.
+            unsafe { kvm_set_msr(fd, msr.index, msr.value) }.map_err(|e| {
+                Error::Hypervisor(format!(
+                    "KVM_SET_MSRS for {:#x}: {e}. The snapshot was taken on a host that has \
+                     this register and this one does not.",
+                    msr.index
+                ))
+            })?;
         }
         Ok(())
     }

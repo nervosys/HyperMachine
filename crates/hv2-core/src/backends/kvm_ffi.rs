@@ -522,6 +522,111 @@ pub struct kvm_msr_entry {
     pub data: u64,
 }
 
+/// Model-specific registers worth carrying in a snapshot.
+///
+/// Not every MSR a CPU has -- there are hundreds, most of them either
+/// read-only, host-owned, or derived. These are the ones whose value belongs
+/// to the *guest* and which a guest notices the loss of:
+///
+/// - `STAR`/`LSTAR`/`CSTAR`/`SFMASK`: where `SYSCALL` lands and which flags it
+///   clears. A 64-bit Linux guest restored without them jumps somewhere that
+///   is not its system-call entry on the next syscall, which is every few
+///   microseconds.
+/// - `FS_BASE`/`GS_BASE`/`KERNEL_GS_BASE`: thread-local storage and the
+///   per-CPU base. Losing them corrupts every `%fs:`/`%gs:` access, which in
+///   Linux means per-CPU data and the current-task pointer.
+/// - `SYSENTER_CS`/`ESP`/`EIP`: the 32-bit equivalent of the above.
+/// - `PAT`: which memory types the page tables' cache bits select.
+///
+/// `EFER` is deliberately absent: it arrives with the special registers, and
+/// setting it twice from two places is a way for the two to disagree.
+///
+/// The TSC is also absent, and that one is a judgement rather than an
+/// oversight. Restoring it makes the guest's clock jump backwards or forwards
+/// by however long the snapshot sat on disk; not restoring it makes the clock
+/// jump to the host's uptime. Both are wrong, and picking the lesser needs a
+/// caller who knows what the guest does with time, so neither is done
+/// silently here.
+pub const SNAPSHOT_MSRS: &[u32] = &[
+    0xc000_0081, // STAR
+    0xc000_0082, // LSTAR
+    0xc000_0083, // CSTAR
+    0xc000_0084, // SFMASK
+    0xc000_0100, // FS_BASE
+    0xc000_0101, // GS_BASE
+    0xc000_0102, // KERNEL_GS_BASE
+    0x0000_0174, // SYSENTER_CS
+    0x0000_0175, // SYSENTER_ESP
+    0x0000_0176, // SYSENTER_EIP
+    0x0000_0277, // PAT
+];
+
+/// Read one MSR.
+///
+/// One ioctl per register rather than one for the batch: `KVM_GET_MSRS`
+/// answers with how many entries it managed, and stops at the first it does
+/// not support, so a batch silently truncates at whichever MSR this host
+/// happens to lack. Eleven ioctls per vCPU is nothing against the cost of
+/// writing a memory image.
+///
+/// # Safety
+///
+/// - `vcpu_fd` must be a valid vCPU file descriptor.
+pub unsafe fn kvm_get_msr(vcpu_fd: RawFd, index: u32) -> Result<u64, std::io::Error> {
+    // The kernel reads a `kvm_msrs` header followed by `nmsrs` entries. The
+    // struct declares a zero-length array, so the storage for the entry has to
+    // be provided here -- as one allocation, because the kernel expects the
+    // entry immediately after the header.
+    let mut buffer = vec![0u8; size_of::<kvm_msrs>() + size_of::<kvm_msr_entry>()];
+    let header = buffer.as_mut_ptr().cast::<kvm_msrs>();
+    (*header).nmsrs = 1;
+    (*header).pad = 0;
+    let entry = buffer
+        .as_mut_ptr()
+        .add(size_of::<kvm_msrs>())
+        .cast::<kvm_msr_entry>();
+    (*entry).index = index;
+    (*entry).reserved = 0;
+    (*entry).data = 0;
+
+    let read = kvm_get_msrs(vcpu_fd, &mut *header)?;
+    if read != 1 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("this host does not have MSR {index:#x}"),
+        ));
+    }
+    Ok((*entry).data)
+}
+
+/// Write one MSR. See [`kvm_get_msr`] for why this is not batched.
+///
+/// # Safety
+///
+/// - `vcpu_fd` must be a valid vCPU file descriptor.
+pub unsafe fn kvm_set_msr(vcpu_fd: RawFd, index: u32, data: u64) -> Result<(), std::io::Error> {
+    let mut buffer = vec![0u8; size_of::<kvm_msrs>() + size_of::<kvm_msr_entry>()];
+    let header = buffer.as_mut_ptr().cast::<kvm_msrs>();
+    (*header).nmsrs = 1;
+    (*header).pad = 0;
+    let entry = buffer
+        .as_mut_ptr()
+        .add(size_of::<kvm_msrs>())
+        .cast::<kvm_msr_entry>();
+    (*entry).index = index;
+    (*entry).reserved = 0;
+    (*entry).data = data;
+
+    let written = kvm_set_msrs(vcpu_fd, &*header)?;
+    if written != 1 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            format!("this host would not accept MSR {index:#x}"),
+        ));
+    }
+    Ok(())
+}
+
 /// MSR list for get/set operations
 ///
 /// Variable-length structure. The entries array has nmsrs elements.

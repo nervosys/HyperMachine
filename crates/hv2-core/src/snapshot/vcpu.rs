@@ -18,16 +18,24 @@
 //! runs today**. It is not enough in general, and the gaps are named here
 //! rather than found later:
 //!
-//! - **MSRs are not captured.** A guest using `SYSCALL`, `FS`/`GS` base or the
-//!   TSC deadline timer keeps state in them. Restoring without them gives a
-//!   guest that was in the middle of a syscall a wrong return address.
+//! MSRs are captured too: `SYSCALL`'s entry point and flag mask, the `FS`/`GS`
+//! bases, the `SYSENTER` trio and `PAT`. Those are the ones a guest notices
+//! losing -- a 64-bit Linux guest restored without `LSTAR` jumps somewhere
+//! that is not its system-call entry within microseconds.
+//!
+//! What is still missing, and named here rather than found later:
+//!
 //! - **The local APIC is not captured.** A restored vCPU loses in-flight
 //!   interrupt state, so a timer already armed does not fire.
 //! - **`XSAVE` is not captured**, only the legacy FPU area, so AVX register
 //!   contents are lost.
+//! - **The TSC is deliberately not captured.** Restoring it makes the guest's
+//!   clock jump by however long the snapshot sat on disk; not restoring it
+//!   makes the clock jump to the host's uptime. Both are wrong, and choosing
+//!   needs a caller who knows what the guest does with time.
 //!
-//! Each of those has its ioctl already defined in `kvm_ffi`; none is wired,
-//! and [`VCpuSnapshot::is_complete`] answers `false` so that a caller can tell
+//! Each of those has its ioctl already defined in `kvm_ffi`, and
+//! [`VCpuSnapshot::is_complete`] answers `false` so that a caller can tell
 //! this apart from a full capture rather than assuming.
 
 use serde::{Deserialize, Serialize};
@@ -163,6 +171,18 @@ pub enum RunState {
     Other(u32),
 }
 
+/// One model-specific register.
+///
+/// Stored as a pair rather than named fields, so a host that lacks one of them
+/// simply records fewer rather than needing a representation for "absent", and
+/// so adding another to the captured set does not change this type.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Msr {
+    /// The architectural MSR number, e.g. `0xc000_0082` for `LSTAR`.
+    pub index: u32,
+    pub value: u64,
+}
+
 /// Everything captured for one vCPU.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VCpuSnapshot {
@@ -170,6 +190,12 @@ pub struct VCpuSnapshot {
     pub general: GeneralRegisters,
     pub system: SystemRegisters,
     pub fpu: FpuState,
+    /// The model-specific registers listed in `kvm_ffi::SNAPSHOT_MSRS`, minus
+    /// any this host does not implement. Empty on a backend that cannot read
+    /// them at all, which is why [`VCpuSnapshot::is_complete`] asks rather
+    /// than assuming.
+    #[serde(default)]
+    pub msrs: Vec<Msr>,
     pub run_state: RunState,
 }
 
@@ -190,10 +216,24 @@ impl VCpuSnapshot {
     #[must_use]
     pub fn missing() -> &'static [&'static str] {
         &[
-            "model-specific registers (SYSCALL target, FS/GS base, TSC deadline)",
             "local APIC state (in-flight and armed interrupts)",
             "XSAVE area (AVX and later register state)",
+            "the TSC, deliberately: restoring it jumps the guest's clock and \
+             not restoring it jumps it too, so the choice belongs to a caller",
         ]
+    }
+
+    /// One captured MSR's value, if it was captured.
+    ///
+    /// By index rather than by position: which MSRs a snapshot holds depends
+    /// on what its host implemented, so the third entry is not reliably the
+    /// same register across two machines.
+    #[must_use]
+    pub fn msr(&self, index: u32) -> Option<u64> {
+        self.msrs
+            .iter()
+            .find(|msr| msr.index == index)
+            .map(|msr| msr.value)
     }
 }
 
@@ -254,11 +294,64 @@ mod tests {
 
     #[test]
     fn a_capture_says_it_is_not_complete() {
-        // If this ever returns true without MSRs, the LAPIC and XSAVE being
+        // If this ever returns true without the LAPIC and XSAVE being
         // captured, a caller will restore a guest that uses them and get a
         // failure with no connection to its cause.
         assert!(!VCpuSnapshot::default().is_complete());
         assert_eq!(VCpuSnapshot::missing().len(), 3);
+    }
+
+    #[test]
+    fn msrs_survive_the_round_trip_and_are_found_by_index() {
+        // `LSTAR` is where SYSCALL lands. A guest restored with the wrong one
+        // jumps somewhere that is not its system-call entry within
+        // microseconds, so this travelling correctly is the difference
+        // between a restored Linux guest and a crashed one.
+        let snapshot = VCpuSnapshot {
+            msrs: vec![
+                Msr {
+                    index: 0xc000_0082,
+                    value: 0xffff_ffff_8100_0000,
+                },
+                Msr {
+                    index: 0xc000_0100,
+                    value: 0x7f00_0000_0000,
+                },
+            ],
+            ..Default::default()
+        };
+        let decoded: VCpuSnapshot =
+            serde_json::from_slice(&serde_json::to_vec(&snapshot).expect("encode"))
+                .expect("decode");
+        assert_eq!(decoded, snapshot);
+        assert_eq!(decoded.msr(0xc000_0082), Some(0xffff_ffff_8100_0000));
+        assert_eq!(decoded.msr(0xc000_0100), Some(0x7f00_0000_0000));
+        // Not captured is not the same as zero.
+        assert_eq!(decoded.msr(0xc000_0081), None);
+    }
+
+    #[test]
+    fn a_snapshot_written_before_msrs_existed_still_reads() {
+        // `msrs` is `#[serde(default)]`, which is only worth having if a file
+        // without the field decodes rather than failing.
+        let without = br#"{"id":0,"general":{"rax":0,"rbx":0,"rcx":0,"rdx":0,"rsi":0,"rdi":0,
+            "rsp":0,"rbp":0,"r8":0,"r9":0,"r10":0,"r11":0,"r12":0,"r13":0,"r14":0,"r15":0,
+            "rip":0,"rflags":0},"system":{"cs":{"base":0,"limit":0,"selector":0,"type_":0,
+            "present":0,"dpl":0,"db":0,"s":0,"l":0,"g":0,"avl":0},"ds":{"base":0,"limit":0,
+            "selector":0,"type_":0,"present":0,"dpl":0,"db":0,"s":0,"l":0,"g":0,"avl":0},
+            "es":{"base":0,"limit":0,"selector":0,"type_":0,"present":0,"dpl":0,"db":0,"s":0,
+            "l":0,"g":0,"avl":0},"fs":{"base":0,"limit":0,"selector":0,"type_":0,"present":0,
+            "dpl":0,"db":0,"s":0,"l":0,"g":0,"avl":0},"gs":{"base":0,"limit":0,"selector":0,
+            "type_":0,"present":0,"dpl":0,"db":0,"s":0,"l":0,"g":0,"avl":0},"ss":{"base":0,
+            "limit":0,"selector":0,"type_":0,"present":0,"dpl":0,"db":0,"s":0,"l":0,"g":0,
+            "avl":0},"tr":{"base":0,"limit":0,"selector":0,"type_":0,"present":0,"dpl":0,
+            "db":0,"s":0,"l":0,"g":0,"avl":0},"ldt":{"base":0,"limit":0,"selector":0,
+            "type_":0,"present":0,"dpl":0,"db":0,"s":0,"l":0,"g":0,"avl":0},
+            "gdt":{"base":0,"limit":0},"idt":{"base":0,"limit":0},"cr0":0,"cr2":0,"cr3":0,
+            "cr4":0,"cr8":0,"efer":0,"apic_base":0},"fpu":{"fpr":[],"xmm":[],"fcw":0,"fsw":0,
+            "ftwx":0,"last_opcode":0,"last_ip":0,"last_dp":0,"mxcsr":0},"run_state":"Runnable"}"#;
+        let decoded: VCpuSnapshot = serde_json::from_slice(without).expect("decode");
+        assert!(decoded.msrs.is_empty());
     }
 
     #[test]

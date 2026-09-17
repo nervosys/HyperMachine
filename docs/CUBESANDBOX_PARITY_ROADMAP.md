@@ -743,9 +743,19 @@ answers `false` and a guest restored with I/O in flight will disagree with
 its own virtqueues. Virtio queues here keep ring *addresses* and the rings
 live in guest memory, so most of a device does travel in the pages; what does
 not is `last_avail_idx`, `next_used_idx`, negotiated features, and a vsock
-device's connection table. And the vCPU capture omits MSRs, LAPIC state and
-the XSAVE area — `VCpuSnapshot::is_complete` answers `false` and `missing()`
-names them. Every one of those ioctls is already defined in `kvm_ffi`.
+device's connection table. The vCPU capture now includes the model-specific registers a guest
+notices losing — `SYSCALL`'s entry point and flag mask (`STAR`/`LSTAR`/
+`CSTAR`/`SFMASK`), the `FS`/`GS` bases, the `SYSENTER` trio and `PAT` — which
+is what a 64-bit Linux guest needs to survive its next system call. Proven by
+writing a marker into `LSTAR` and reading it back, because every MSR this
+unikernel reports is zero and "11 captured" is equally true of eleven zeroes
+and of an ioctl that does nothing.
+
+Still omitted, with `VCpuSnapshot::is_complete` answering `false` and
+`missing()` naming them: LAPIC state, the XSAVE area, and the TSC. The last is
+a decision rather than a gap — restoring it jumps the guest's clock by however
+long the snapshot sat on disk, not restoring it jumps the clock to the host's
+uptime, and choosing needs a caller who knows what the guest does with time.
 
 ### Phase 3 — Network security (CubeVS/CubeEgress-equivalent)
 
