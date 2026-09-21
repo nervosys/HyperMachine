@@ -37,6 +37,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -75,7 +79,6 @@ jobs:
             audit-results.json
             audit-output.txt
           retention-days: 14
-        if: always()
 
   # ============================================================================
   # Dependency License Compliance
@@ -86,6 +89,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -105,6 +112,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -140,6 +151,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
       - name: Install Rust nightly with Miri
         uses: dtolnay/rust-toolchain@nightly
@@ -181,6 +196,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
 
@@ -205,6 +224,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -265,6 +288,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

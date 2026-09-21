@@ -24,6 +24,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
 
@@ -54,6 +58,10 @@ jobs:
                 os: [ubuntu-latest, windows-latest, macos-latest]
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -89,6 +97,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
 
@@ -121,6 +133,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
 
@@ -145,6 +161,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
 
@@ -168,6 +188,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             # Read from Cargo.toml rather than pinned here. A hard-coded
             # number drifts: this job pinned 1.87 while the workspace declared
@@ -210,6 +234,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
               with:
@@ -223,6 +251,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -254,6 +286,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -291,6 +327,10 @@ jobs:
         # probe rather than the memory bus.
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -334,6 +374,10 @@ jobs:
                       extra_artifact: hv2
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
@@ -397,6 +441,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@master
               with:
@@ -443,6 +491,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@master
               with:
@@ -481,6 +533,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             # Stable, and no -Zbuild-std: `x86_64-unknown-none` is a real
             # freestanding target that rustup ships a prebuilt `core` for, so
@@ -551,6 +607,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             # Stable and no -Zbuild-std: `x86_64-unknown-none` is a real
             # freestanding target with a prebuilt `core`. This is what makes an
@@ -631,6 +691,10 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
             - name: Install Rust toolchain
               uses: dtolnay/rust-toolchain@stable
 
@@ -654,6 +718,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@master
@@ -680,6 +748,10 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
+
+            - uses: ./.github/actions/private-git-deps
+              with:
+                  token: ${{ secrets.IRONCRYPTO_TOKEN }}
 
             - name: Install nightly toolchain
               uses: dtolnay/rust-toolchain@master

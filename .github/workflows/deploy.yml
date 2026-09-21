@@ -51,6 +51,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: ./.github/actions/private-git-deps
+        with:
+            token: ${{ secrets.IRONCRYPTO_TOKEN }}
+
       - name: Determine version
         id: version
         run: |

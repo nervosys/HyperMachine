@@ -25,11 +25,18 @@ target-dir = "target"
 # Fetch git dependencies with the `git` CLI rather than cargo's bundled
 # libgit2.
 #
-# `ic-rsa` and `ic-core` come from github.com/nervosys/IronCrypto, which is
-# private. libgit2 has no access to a credential helper, so it fails with
-# "failed to acquire username/password from local configuration" even on a
-# machine where `git clone` of the same URL works. The CLI uses whatever
-# helper git is configured with, which is the one already holding the
-# credentials.
+# The `ic-*` crates -- ic-core, ic-hash, ic-mac, ic-kdf, ic-cipher, ic-ec and
+# ic-rsa, used by hv2-core and hv2-api -- come from
+# github.com/nervosys/IronCrypto, which is private. libgit2 has no access to a
+# credential helper, so it fails with "failed to acquire username/password
+# from local configuration" even on a machine where `git clone` of the same
+# URL works. The CLI uses whatever helper git is configured with, which is the
+# one already holding the credentials.
+#
+# CI has no such helper either. Every workflow job that runs cargo therefore
+# runs `.github/actions/private-git-deps` first, which rewrites the URL to
+# carry a token. That token is the `IRONCRYPTO_TOKEN` secret: the repository's
+# own `GITHUB_TOKEN` is scoped to this repository alone and cannot read a
+# second private one.
 [net]
 git-fetch-with-cli = true
