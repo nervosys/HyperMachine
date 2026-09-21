@@ -60,6 +60,12 @@ rustls-pki-types = { version = "1.10", features = ["std", "alloc"] }
 # Constant-time byte equality for secret comparison (API keys, tokens).
 subtle = { version = "2.6", default-features = false }
 
+# IronCrypto: the HMAC-SHA256 behind request-signature verification. Replaces a
+# hand-written RFC 2104 over a hand-written SHA-256 that lived in middleware.rs.
+ic-core = { git = "https://github.com/nervosys/IronCrypto.git", rev = "ad762973b4825872e13e0a5b21a72128987be17f" }
+ic-hash = { git = "https://github.com/nervosys/IronCrypto.git", rev = "ad762973b4825872e13e0a5b21a72128987be17f" }
+ic-mac = { git = "https://github.com/nervosys/IronCrypto.git", rev = "ad762973b4825872e13e0a5b21a72128987be17f" }
+
 # Protobuf-JSON (the "JSON mapping" in protobuf's own spec) for the generated
 # types. Needed because E2B's SDK speaks the Connect protocol with a JSON
 # codec, and protobuf-JSON is not what `#[derive(Serialize)]` produces: field

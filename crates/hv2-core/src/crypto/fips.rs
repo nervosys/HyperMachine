@@ -1,9 +1,10 @@
 //! FIPS-Aligned Cryptographic Module
 //!
 //! This module provides implementations of FIPS-approved cryptographic
-//! *algorithms* (AES-GCM, SHA-2, HMAC, ECDSA, RSA) backed by the vetted
-//! `ring` and RustCrypto libraries. The `FipsMode` setting gates which
-//! algorithms are permitted and drives the power-on self-tests (KATs).
+//! *algorithms* (AES-GCM, SHA-2, HMAC, ECDSA, RSA) backed by IronCrypto
+//! (`ic-hash`, `ic-mac`, `ic-kdf`, `ic-cipher`, `ic-ec`, `ic-rsa`). The
+//! `FipsMode` setting gates which algorithms are permitted and drives the
+//! power-on self-tests (KATs).
 //!
 //! **Note:** these are validated algorithm implementations, not a FIPS 140-3
 //! *validated module* — no CMVP certificate is claimed. The references below
@@ -408,7 +409,6 @@ impl FipsCrypto {
         let mut nonce = [0u8; 12];
         self.random_bytes(&mut nonce)?;
 
-        // Perform encryption (using ring or similar)
         let ciphertext = self.aes_gcm_encrypt_internal(key, &nonce, plaintext, aad)?;
 
         Ok(AesGcmCiphertext {
@@ -452,49 +452,27 @@ impl FipsCrypto {
         plaintext: &[u8],
         aad: &[u8],
     ) -> CryptoResult<Vec<u8>> {
-        // AES-256-GCM is provided exclusively by the validated `ring` backend
-        // (enabled by default). There is intentionally no software fallback:
-        // a hand-rolled construction would not be FIPS-validated and risks
-        // silently shipping non-conformant crypto.
-        #[cfg(feature = "ring")]
-        {
-            use ring::aead::{
-                Aad, BoundKey, Nonce, NonceSequence, SealingKey, UnboundKey, AES_256_GCM,
-            };
+        use ic_core::traits::Aead;
 
-            struct SingleNonce(Option<[u8; 12]>);
-            impl NonceSequence for SingleNonce {
-                fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-                    self.0
-                        .take()
-                        .map(Nonce::assume_unique_for_key)
-                        .ok_or(ring::error::Unspecified)
-                }
-            }
+        // IronCrypto's AES-256-GCM (SP 800-38D), pure Rust and validated
+        // against the published vectors. There is still no hand-rolled
+        // fallback and there should not be one: the reason the old comment
+        // here gave -- that a hand-written construction is not validated and
+        // risks silently shipping non-conformant crypto -- is the same reason
+        // the RSA modexp this module used to carry returned the wrong number.
+        let cipher = ic_cipher::Aes256Gcm::new(key)
+            .map_err(|e| CryptoError::EncryptionFailed(format!("AES-256-GCM key: {e}")))?;
 
-            let unbound_key = UnboundKey::new(&AES_256_GCM, key)
-                .map_err(|_| CryptoError::EncryptionFailed("Invalid key".into()))?;
-
-            let mut nonce_arr = [0u8; 12];
-            nonce_arr.copy_from_slice(nonce);
-
-            let mut sealing_key = SealingKey::new(unbound_key, SingleNonce(Some(nonce_arr)));
-
-            let mut in_out = plaintext.to_vec();
-            sealing_key
-                .seal_in_place_append_tag(Aad::from(aad), &mut in_out)
-                .map_err(|_| CryptoError::EncryptionFailed("Seal failed".into()))?;
-
-            Ok(in_out)
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (key, nonce, plaintext, aad);
-            Err(CryptoError::NotImplemented(
-                "AES-GCM requires the `ring` feature".into(),
-            ))
-        }
+        // Tag appended, which is what every caller of this function and the
+        // wire format they use expects. `seal_detached` keeps them apart, so
+        // the join happens here rather than in the cipher.
+        let mut in_out = plaintext.to_vec();
+        let mut tag = [0u8; <ic_cipher::Aes256Gcm as Aead>::TAG_LEN];
+        cipher
+            .seal_detached(nonce, aad, &mut in_out, &mut tag)
+            .map_err(|e| CryptoError::EncryptionFailed(format!("AES-256-GCM seal: {e}")))?;
+        in_out.extend_from_slice(&tag);
+        Ok(in_out)
     }
 
     fn aes_gcm_decrypt_internal(
@@ -504,45 +482,27 @@ impl FipsCrypto {
         ciphertext: &[u8],
         aad: &[u8],
     ) -> CryptoResult<Vec<u8>> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::aead::{
-                Aad, BoundKey, Nonce, NonceSequence, OpeningKey, UnboundKey, AES_256_GCM,
-            };
+        use ic_core::traits::Aead;
 
-            struct SingleNonce(Option<[u8; 12]>);
-            impl NonceSequence for SingleNonce {
-                fn advance(&mut self) -> Result<Nonce, ring::error::Unspecified> {
-                    self.0
-                        .take()
-                        .map(Nonce::assume_unique_for_key)
-                        .ok_or(ring::error::Unspecified)
-                }
-            }
-
-            let unbound_key = UnboundKey::new(&AES_256_GCM, key)
-                .map_err(|_| CryptoError::DecryptionFailed("Invalid key".into()))?;
-
-            let mut nonce_arr = [0u8; 12];
-            nonce_arr.copy_from_slice(nonce);
-
-            let mut opening_key = OpeningKey::new(unbound_key, SingleNonce(Some(nonce_arr)));
-
-            let mut in_out = ciphertext.to_vec();
-            let plaintext = opening_key
-                .open_in_place(Aad::from(aad), &mut in_out)
-                .map_err(|_| CryptoError::AuthenticationFailed)?;
-
-            Ok(plaintext.to_vec())
+        const TAG_LEN: usize = <ic_cipher::Aes256Gcm as Aead>::TAG_LEN;
+        if ciphertext.len() < TAG_LEN {
+            // Shorter than a tag means there is no tag, so there is nothing to
+            // authenticate against and the answer is the same as a forgery.
+            return Err(CryptoError::AuthenticationFailed);
         }
 
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (key, nonce, ciphertext, aad);
-            Err(CryptoError::NotImplemented(
-                "AES-GCM requires the `ring` feature".into(),
-            ))
-        }
+        let cipher = ic_cipher::Aes256Gcm::new(key)
+            .map_err(|e| CryptoError::DecryptionFailed(format!("AES-256-GCM key: {e}")))?;
+
+        let (body, tag) = ciphertext.split_at(ciphertext.len() - TAG_LEN);
+        let mut in_out = body.to_vec();
+        cipher
+            .open_detached(nonce, aad, &mut in_out, tag)
+            // Deliberately one error for every way this fails: a wrong key, a
+            // wrong nonce, altered ciphertext and altered AAD are
+            // indistinguishable to a caller, which is the point of an AEAD.
+            .map_err(|_| CryptoError::AuthenticationFailed)?;
+        Ok(in_out)
     }
 
     // ========================================================================
@@ -550,63 +510,33 @@ impl FipsCrypto {
     // ========================================================================
 
     /// SHA-256 hash
+    ///
+    /// IronCrypto's, not `ring`'s: pure Rust, no build script, and validated
+    /// against the FIPS 180-4 vectors. It needs no feature flag, so the arm
+    /// that used to return `NotImplemented` has nothing left to guard.
     pub fn sha256(&self, data: &[u8]) -> CryptoResult<[u8; 32]> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::digest::{digest, SHA256};
-            let result = digest(&SHA256, data);
-            let mut hash = [0u8; 32];
-            hash.copy_from_slice(result.as_ref());
-            Ok(hash)
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = data;
-            Err(CryptoError::NotImplemented(
-                "SHA-256 requires the `ring` feature".into(),
-            ))
-        }
+        use ic_core::traits::Digest;
+        Ok(ic_hash::Sha256::digest(data))
     }
 
     /// SHA-384 hash
+    ///
+    /// IronCrypto's, not `ring`'s: pure Rust, no build script, and validated
+    /// against the FIPS 180-4 vectors. It needs no feature flag, so the arm
+    /// that used to return `NotImplemented` has nothing left to guard.
     pub fn sha384(&self, data: &[u8]) -> CryptoResult<[u8; 48]> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::digest::{digest, SHA384};
-            let result = digest(&SHA384, data);
-            let mut hash = [0u8; 48];
-            hash.copy_from_slice(result.as_ref());
-            Ok(hash)
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = data;
-            Err(CryptoError::NotImplemented(
-                "SHA-384 requires the `ring` feature".into(),
-            ))
-        }
+        use ic_core::traits::Digest;
+        Ok(ic_hash::Sha384::digest(data))
     }
 
     /// SHA-512 hash
+    ///
+    /// IronCrypto's, not `ring`'s: pure Rust, no build script, and validated
+    /// against the FIPS 180-4 vectors. It needs no feature flag, so the arm
+    /// that used to return `NotImplemented` has nothing left to guard.
     pub fn sha512(&self, data: &[u8]) -> CryptoResult<[u8; 64]> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::digest::{digest, SHA512};
-            let result = digest(&SHA512, data);
-            let mut hash = [0u8; 64];
-            hash.copy_from_slice(result.as_ref());
-            Ok(hash)
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = data;
-            Err(CryptoError::NotImplemented(
-                "SHA-512 requires the `ring` feature".into(),
-            ))
-        }
+        use ic_core::traits::Digest;
+        Ok(ic_hash::Sha512::digest(data))
     }
 
     // ========================================================================
@@ -615,44 +545,16 @@ impl FipsCrypto {
 
     /// HMAC-SHA256
     pub fn hmac_sha256(&self, key: &[u8], data: &[u8]) -> CryptoResult<[u8; 32]> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::hmac::{self, Key, HMAC_SHA256};
-            let key = Key::new(HMAC_SHA256, key);
-            let tag = hmac::sign(&key, data);
-            let mut result = [0u8; 32];
-            result.copy_from_slice(tag.as_ref());
-            Ok(result)
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (key, data);
-            Err(CryptoError::NotImplemented(
-                "HMAC-SHA256 requires the `ring` feature".into(),
-            ))
-        }
+        use ic_core::traits::Mac;
+        ic_mac::Hmac::<ic_hash::Sha256>::mac(key, data)
+            .map_err(|e| CryptoError::EncryptionFailed(format!("HMAC-SHA256: {e}")))
     }
 
     /// HMAC-SHA512
     pub fn hmac_sha512(&self, key: &[u8], data: &[u8]) -> CryptoResult<[u8; 64]> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::hmac::{self, Key, HMAC_SHA512};
-            let key = Key::new(HMAC_SHA512, key);
-            let tag = hmac::sign(&key, data);
-            let mut result = [0u8; 64];
-            result.copy_from_slice(tag.as_ref());
-            Ok(result)
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (key, data);
-            Err(CryptoError::NotImplemented(
-                "HMAC-SHA512 requires the `ring` feature".into(),
-            ))
-        }
+        use ic_core::traits::Mac;
+        ic_mac::Hmac::<ic_hash::Sha512>::mac(key, data)
+            .map_err(|e| CryptoError::EncryptionFailed(format!("HMAC-SHA512: {e}")))
     }
 
     // ========================================================================
@@ -667,28 +569,24 @@ impl FipsCrypto {
         info: &[u8],
         output_len: usize,
     ) -> CryptoResult<Vec<u8>> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::hkdf::{Salt, HKDF_SHA256};
-            let salt = Salt::new(HKDF_SHA256, salt);
-            let prk = salt.extract(ikm);
-            let info_refs: &[&[u8]] = &[info];
-            let okm = prk
-                .expand(info_refs, HkdfLen(output_len))
-                .map_err(|_| CryptoError::KeyDerivationFailed("HKDF expand failed".into()))?;
-            let mut out = vec![0u8; output_len];
-            okm.fill(&mut out)
-                .map_err(|_| CryptoError::KeyDerivationFailed("HKDF fill failed".into()))?;
-            Ok(out)
-        }
+        use ic_core::traits::Digest;
 
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (salt, ikm, info, output_len);
-            Err(CryptoError::NotImplemented(
-                "HKDF-SHA256 requires the `ring` feature".into(),
-            ))
-        }
+        // Extract then expand, RFC 5869's two steps, rather than `ring`'s
+        // fused `Salt::extract().expand()`. The pseudorandom key is one hash
+        // wide by definition, which is what `Sha256::OUTPUT_LEN` says.
+        // Generic over the MAC rather than the hash, which is the honest
+        // shape: HKDF is defined in terms of HMAC, and the hash only reaches
+        // it through that.
+        type Hkdf256 = ic_kdf::Hkdf<ic_mac::Hmac<ic_hash::Sha256>>;
+
+        let mut prk = [0u8; <ic_hash::Sha256 as Digest>::OUTPUT_LEN];
+        Hkdf256::extract(salt, ikm, &mut prk)
+            .map_err(|e| CryptoError::KeyDerivationFailed(format!("HKDF extract: {e}")))?;
+
+        let mut out = vec![0u8; output_len];
+        Hkdf256::expand(&prk, info, &mut out)
+            .map_err(|e| CryptoError::KeyDerivationFailed(format!("HKDF expand: {e}")))?;
+        Ok(out)
     }
 
     // ========================================================================
@@ -696,16 +594,47 @@ impl FipsCrypto {
     // ========================================================================
 
     fn kat_aes_gcm(&self) -> CryptoResult<()> {
-        // NIST AES-GCM test vector
-        let key = [0u8; 32];
-        let plaintext = b"test";
-        let aad = b"";
+        // This was a round trip against a random nonce, which is not a known
+        // answer test: encrypt-then-decrypt agrees with itself for any cipher
+        // that is merely self-consistent, including a broken one and including
+        // XOR. A power-on self-test exists to catch exactly that, so it has to
+        // compare against bytes published by someone else.
+        //
+        // NIST SP 800-38D / CAVP case 16 for AES-256-GCM -- the same vector
+        // `aes_256_gcm_matches_the_published_vector` pins, driven through the
+        // internal entry point so the nonce is the vector's and not a fresh
+        // random one.
+        let key = unhex32("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
+        let nonce = unhex(b"cafebabefacedbaddecaf888");
+        let plaintext = unhex(
+            concat!(
+                "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a72",
+                "1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39"
+            )
+            .as_bytes(),
+        );
+        let aad = unhex(b"feedfacedeadbeeffeedfacedeadbeefabaddad2");
+        let expected = unhex(
+            concat!(
+                "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa",
+                "8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662",
+                "76fc6ece0f4e1768cddf8853bb2d551b"
+            )
+            .as_bytes(),
+        );
 
-        let ciphertext = self.aes_gcm_encrypt(&key, plaintext, aad)?;
-        let decrypted = self.aes_gcm_decrypt(&key, &ciphertext, aad)?;
+        let sealed = self.aes_gcm_encrypt_internal(&key, &nonce, &plaintext, &aad)?;
+        if sealed != expected {
+            return Err(CryptoError::SelfTestFailed(
+                "AES-256-GCM KAT failed: ciphertext or tag does not match SP 800-38D".into(),
+            ));
+        }
 
-        if decrypted != plaintext {
-            return Err(CryptoError::SelfTestFailed("AES-GCM KAT failed".into()));
+        let opened = self.aes_gcm_decrypt_internal(&key, &nonce, &sealed, &aad)?;
+        if opened != plaintext {
+            return Err(CryptoError::SelfTestFailed(
+                "AES-256-GCM KAT failed: decryption did not recover the plaintext".into(),
+            ));
         }
         Ok(())
     }
@@ -714,27 +643,24 @@ impl FipsCrypto {
         // SHA-256 known answer test
         // SHA256("") = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
         let empty_hash = self.sha256(b"")?;
-
-        #[cfg(feature = "ring")]
-        {
-            let expected = [
-                0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f,
-                0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
-                0x78, 0x52, 0xb8, 0x55,
-            ];
-            if empty_hash != expected {
-                return Err(CryptoError::SelfTestFailed("SHA-256 KAT failed".into()));
-            }
+        let expected = unhex32("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+        if empty_hash != expected {
+            return Err(CryptoError::SelfTestFailed("SHA-256 KAT failed".into()));
         }
-
         Ok(())
     }
 
     fn kat_hmac_sha256(&self) -> CryptoResult<()> {
-        // HMAC-SHA256 test
-        let key = [0u8; 32];
-        let data = b"test";
-        let _mac = self.hmac_sha256(&key, data)?;
+        // This computed a MAC and threw it away, so it asserted only that the
+        // call returned `Ok` -- a MAC that ignored its key, or its message,
+        // would have passed it. RFC 4231 test case 2 instead.
+        let mac = self.hmac_sha256(b"Jefe", b"what do ya want for nothing?")?;
+        let expected = unhex32("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+        if mac != expected {
+            return Err(CryptoError::SelfTestFailed(
+                "HMAC-SHA256 KAT failed: does not match RFC 4231 test case 2".into(),
+            ));
+        }
         Ok(())
     }
 
@@ -751,15 +677,38 @@ impl FipsCrypto {
     }
 }
 
-// Helper for HKDF output length
-#[cfg(feature = "ring")]
-struct HkdfLen(usize);
+// ============================================================================
+// Test Vector Decoding
+// ============================================================================
 
-#[cfg(feature = "ring")]
-impl ring::hkdf::KeyType for HkdfLen {
-    fn len(&self) -> usize {
-        self.0
+/// Decode an ASCII hex literal into bytes.
+///
+/// Only ever applied to the vectors written into the self-tests above, which
+/// are compile-time literals: a malformed digit is a typo in this file, not
+/// input from anywhere, so it panics rather than widening `CryptoError` with a
+/// variant no caller could act on.
+fn unhex(hex: &[u8]) -> Vec<u8> {
+    fn nibble(c: u8) -> u8 {
+        match c {
+            b'0'..=b'9' => c - b'0',
+            b'a'..=b'f' => c - b'a' + 10,
+            b'A'..=b'F' => c - b'A' + 10,
+            _ => panic!("non-hex digit in a self-test vector: {:?}", c as char),
+        }
     }
+    assert!(hex.len().is_multiple_of(2), "hex literal has an odd length");
+    hex.chunks_exact(2)
+        .map(|pair| (nibble(pair[0]) << 4) | nibble(pair[1]))
+        .collect()
+}
+
+/// [`unhex`] for the fixed-width digests and keys, which want an array.
+fn unhex32(hex: &str) -> [u8; 32] {
+    let bytes = unhex(hex.as_bytes());
+    let mut out = [0u8; 32];
+    assert!(bytes.len() == 32, "expected 32 bytes, got {}", bytes.len());
+    out.copy_from_slice(&bytes);
+    out
 }
 
 // ============================================================================
@@ -804,6 +753,162 @@ impl AesGcmCiphertext {
 
 #[cfg(test)]
 mod tests {
+    /// FIPS 180-4's own vectors for "abc". If these are wrong, everything that
+    /// hashes anything here is wrong, and nothing else would say so.
+    #[test]
+    fn sha2_matches_the_published_vectors() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).expect("crypto");
+
+        assert_eq!(
+            hex(&crypto.sha256(b"abc").expect("sha256")),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(
+            hex(&crypto.sha384(b"abc").expect("sha384")),
+            concat!(
+                "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed",
+                "8086072ba1e7cc2358baeca134c825a7"
+            )
+        );
+        assert_eq!(
+            hex(&crypto.sha512(b"abc").expect("sha512")),
+            concat!(
+                "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a",
+                "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+            )
+        );
+    }
+
+    /// And the empty input, which is where an implementation that forgets to
+    /// pad an empty buffer goes wrong.
+    #[test]
+    fn sha256_of_nothing_is_the_known_value() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).expect("crypto");
+        assert_eq!(
+            hex(&crypto.sha256(b"").expect("sha256")),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    /// RFC 4231 test case 2, the one with a short ASCII key.
+    #[test]
+    fn hmac_matches_rfc_4231() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).expect("crypto");
+        let mac = crypto
+            .hmac_sha256(b"Jefe", b"what do ya want for nothing?")
+            .expect("hmac");
+        assert_eq!(
+            hex(&mac),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+
+        let mac = crypto
+            .hmac_sha512(b"Jefe", b"what do ya want for nothing?")
+            .expect("hmac");
+        assert_eq!(
+            hex(&mac),
+            concat!(
+                "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea250554",
+                "9758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
+            )
+        );
+    }
+
+    /// RFC 5869 test case 1. HKDF is where a fused extract-and-expand can look
+    /// right and produce different bytes, so the vector matters more than the
+    /// shape of the call.
+    #[test]
+    fn hkdf_matches_rfc_5869() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).expect("crypto");
+        let ikm = [0x0b; 22];
+        let salt: Vec<u8> = (0..13).collect();
+        let info: Vec<u8> = (0xf0..0xfa).collect();
+
+        let okm = crypto.hkdf_sha256(&salt, &ikm, &info, 42).expect("hkdf");
+        assert_eq!(
+            hex(&okm),
+            concat!(
+                "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf",
+                "34007208d5b887185865"
+            )
+        );
+    }
+
+    /// NIST SP 800-38D / CAVP test case 16 for AES-256-GCM: a key, an IV, a
+    /// plaintext and AAD with a published ciphertext and tag. A round trip
+    /// alone would pass against a cipher that is merely self-consistent.
+    #[test]
+    fn aes_256_gcm_matches_the_published_vector() {
+        fn unhex(text: &str) -> Vec<u8> {
+            (0..text.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&text[i..i + 2], 16).expect("hex"))
+                .collect()
+        }
+
+        let crypto = FipsCrypto::new(FipsMode::Disabled).expect("crypto");
+        let key = unhex("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308");
+        let nonce = unhex("cafebabefacedbaddecaf888");
+        let plaintext = unhex(concat!(
+            "d9313225f88406e5a55909c5aff5269a86a7a9531534f7da2e4c303d8a318a72",
+            "1c3c0c95956809532fcf0e2449a6b525b16aedf5aa0de657ba637b39"
+        ));
+        let aad = unhex("feedfacedeadbeeffeedfacedeadbeefabaddad2");
+
+        let sealed = crypto
+            .aes_gcm_encrypt_internal(&key, &nonce, &plaintext, &aad)
+            .expect("seal");
+        assert_eq!(
+            hex(&sealed),
+            concat!(
+                "522dc1f099567d07f47f37a32a84427d643a8cdcbfe5c0c97598a2bd2555d1aa",
+                "8cb08e48590dbb3da7b08b1056828838c5f61e6393ba7a0abcc9f662",
+                "76fc6ece0f4e1768cddf8853bb2d551b"
+            ),
+            "ciphertext and tag must match the published vector"
+        );
+
+        let opened = crypto
+            .aes_gcm_decrypt_internal(&key, &nonce, &sealed, &aad)
+            .expect("open");
+        assert_eq!(opened, plaintext);
+    }
+
+    /// A tag that does not belong to the message is refused, and refused the
+    /// same way whatever was tampered with.
+    #[test]
+    fn aes_256_gcm_refuses_what_it_did_not_authenticate() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).expect("crypto");
+        let key = [0x42u8; 32];
+        let nonce = [0x24u8; 12];
+
+        let mut sealed = crypto
+            .aes_gcm_encrypt_internal(&key, &nonce, b"attack at dawn", b"header")
+            .expect("seal");
+
+        // Altered ciphertext.
+        sealed[0] ^= 1;
+        assert!(crypto
+            .aes_gcm_decrypt_internal(&key, &nonce, &sealed, b"header")
+            .is_err());
+        sealed[0] ^= 1;
+
+        // Altered additional data, which is authenticated but not encrypted --
+        // the case an implementation that ignores AAD would pass.
+        assert!(crypto
+            .aes_gcm_decrypt_internal(&key, &nonce, &sealed, b"heaDer")
+            .is_err());
+
+        // Too short to hold a tag at all.
+        assert!(crypto
+            .aes_gcm_decrypt_internal(&key, &nonce, &[0u8; 4], b"header")
+            .is_err());
+    }
+
+    fn hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
     use super::*;
 
     #[test]
@@ -857,41 +962,34 @@ mod tests {
         let plaintext = b"Hello, HyperMachine!";
         let aad = b"additional data";
 
-        // Without the `ring` feature, AES-GCM operations return NotImplemented
-        let result = crypto.aes_gcm_encrypt(key.as_bytes(), plaintext, aad);
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "AES-GCM encrypt requires `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            let ciphertext = result.unwrap();
-            let decrypted = crypto
-                .aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad)
-                .unwrap();
-            assert_eq!(decrypted, plaintext);
-        }
+        let ciphertext = crypto
+            .aes_gcm_encrypt(key.as_bytes(), plaintext, aad)
+            .expect("encrypt");
+        let decrypted = crypto
+            .aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad)
+            .expect("decrypt");
+        assert_eq!(decrypted, plaintext);
     }
 
     #[test]
     fn test_sha256() {
         let crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
-        let result = crypto.sha256(b"test");
-        // Without the `ring` feature, SHA-256 returns NotImplemented
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "SHA-256 requires `ring` feature");
-        #[cfg(feature = "ring")]
-        assert_eq!(result.unwrap().len(), 32);
+        let hash = crypto.sha256(b"test").expect("sha256");
+        assert_eq!(hash.len(), 32);
+        // A digest of all zeroes is what a stub returns, and it is also a
+        // perfectly plausible-looking hash.
+        assert_ne!(hash, [0u8; 32]);
     }
 
     #[test]
     fn test_hmac_sha256() {
         let crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
         let key = [0u8; 32];
-        let result = crypto.hmac_sha256(&key, b"test");
-        // Without the `ring` feature, HMAC-SHA256 returns NotImplemented
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "HMAC-SHA256 requires `ring` feature");
-        #[cfg(feature = "ring")]
-        assert_eq!(result.unwrap().len(), 32);
+        let mac = crypto.hmac_sha256(&key, b"test").expect("hmac");
+        assert_eq!(mac.len(), 32);
+        // A MAC that ignores its key is the failure this catches.
+        let other = crypto.hmac_sha256(&[1u8; 32], b"test").expect("hmac");
+        assert_ne!(mac, other);
     }
 
     #[test]
@@ -901,12 +999,13 @@ mod tests {
         let ikm = b"input key material";
         let info = b"context";
 
-        let result = crypto.hkdf_sha256(&salt, ikm, info, 64);
-        // Without the `ring` feature, HKDF returns NotImplemented
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "HKDF requires `ring` feature");
-        #[cfg(feature = "ring")]
-        assert_eq!(result.unwrap().len(), 64);
+        let okm = crypto.hkdf_sha256(&salt, ikm, info, 64).expect("hkdf");
+        assert_eq!(okm.len(), 64);
+        // Different context, different key: the whole point of `info`.
+        let other = crypto
+            .hkdf_sha256(&salt, ikm, b"other context", 64)
+            .expect("hkdf");
+        assert_ne!(okm, other);
     }
 
     #[test]
@@ -937,14 +1036,12 @@ mod tests {
     fn test_self_tests() {
         let mut crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
         let result = crypto.run_self_tests();
-        // Without the `ring` feature, self-tests fail (crypto ops return NotImplemented)
-        #[cfg(not(feature = "ring"))]
-        assert!(result.is_err(), "Self-tests require `ring` feature");
-        #[cfg(feature = "ring")]
-        {
-            result.unwrap();
-            assert!(crypto.status.self_test_passed);
-        }
+        // These pass unconditionally now. They used to fail without the `ring`
+        // feature, because every primitive they exercise returned
+        // NotImplemented -- so a build without it had self-tests that reported
+        // the crypto as broken, correctly.
+        assert!(result.is_ok(), "self-tests: {result:?}");
+        assert!(crypto.status.self_test_passed);
     }
 
     #[test]

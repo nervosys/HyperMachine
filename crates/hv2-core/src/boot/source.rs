@@ -459,24 +459,15 @@ impl LoadedBoot {
 
     /// Lower-case hex SHA-256 of [`Self::primary_image`].
     ///
-    /// Requires the `ring` feature. Without it this returns an error rather
-    /// than a placeholder, so an enforcement point fails closed instead of
-    /// admitting an image it could not identify.
+    /// No longer conditional. This used to need the `ring` feature and fail
+    /// closed without it, which meant image admission control could not run at
+    /// all on a build that left `ring` out. IronCrypto's SHA-256 is pure Rust
+    /// with no feature to forget, so the enforcement point always has a digest
+    /// to enforce on.
     pub fn primary_image_digest(&self) -> Result<String> {
-        #[cfg(feature = "ring")]
-        {
-            let hash = ring::digest::digest(&ring::digest::SHA256, self.primary_image());
-            Ok(hash.as_ref().iter().map(|b| format!("{b:02x}")).collect())
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            Err(Error::NotSupported(
-                "computing a boot image digest requires the `ring` feature; \
-                 image admission control cannot run without it"
-                    .to_string(),
-            ))
-        }
+        use ic_core::traits::Digest;
+        let hash = ic_hash::Sha256::digest(self.primary_image());
+        Ok(hash.iter().map(|b| format!("{b:02x}")).collect())
     }
 
     /// Total bytes that will be written into guest memory.

@@ -5,7 +5,12 @@
 //! # Features
 //!
 //! - **fips**: Enable FIPS-validated implementations (default: disabled)
-//! - **ring**: Use ring crypto library (recommended)
+//! - **pqc**: Post-quantum algorithms (default: enabled)
+//!
+//! The primitives themselves are unconditional. They come from IronCrypto
+//! (`ic-*`), which is pure Rust and `no_std`, so there is no longer a feature
+//! that decides whether cryptography is present -- the `ring` feature that used
+//! to make that choice is gone, along with the stub paths it selected between.
 //!
 //! # Modules
 //!

@@ -2515,6 +2515,9 @@ dependencies = [
  "hv2-sandbox",
  "hyper",
  "hyper-util",
+ "ic-core",
+ "ic-hash",
+ "ic-mac",
  "parking_lot",
  "pbjson",
  "pbjson-build",
@@ -2585,7 +2588,12 @@ dependencies = [
  "criterion",
  "hv2-agent-proto",
  "hv2-sandbox",
+ "ic-cipher",
  "ic-core",
+ "ic-ec",
+ "ic-hash",
+ "ic-kdf",
+ "ic-mac",
  "ic-rsa",
  "libc",
  "memmap2",
@@ -2595,7 +2603,6 @@ dependencies = [
  "proptest",
  "rand 0.10.2",
  "reqwest",
- "ring",
  "serde",
  "serde_json",
  "slh-dsa",
@@ -2853,9 +2860,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cipher"
+version = "0.1.0"
+source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+dependencies = [
+ "ic-core",
+]
+
+[[package]]
 name = "ic-core"
 version = "0.1.0"
 source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+
+[[package]]
+name = "ic-ec"
+version = "0.1.0"
+source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+dependencies = [
+ "ic-core",
+ "ic-hash",
+ "ic-mac",
+]
 
 [[package]]
 name = "ic-hash"
@@ -2863,6 +2888,26 @@ version = "0.1.0"
 source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
 dependencies = [
  "ic-core",
+]
+
+[[package]]
+name = "ic-kdf"
+version = "0.1.0"
+source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+dependencies = [
+ "ic-core",
+ "ic-hash",
+ "ic-mac",
+]
+
+[[package]]
+name = "ic-mac"
+version = "0.1.0"
+source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+dependencies = [
+ "ic-cipher",
+ "ic-core",
+ "ic-hash",
 ]
 
 [[package]]

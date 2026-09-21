@@ -13,9 +13,6 @@ use super::fips::{CryptoError, CryptoResult, FipsCrypto};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[cfg(feature = "ring")]
-use ring::rand::SystemRandom;
-
 // ============================================================================
 // Key Types
 // ============================================================================
@@ -212,6 +209,55 @@ pub enum SignatureAlgorithm {
 // Asymmetric Crypto Operations
 // ============================================================================
 
+/// Dispatch one call across the three NIST curves.
+///
+/// `ic-ec` names a separate type per curve because the hash is part of the
+/// scheme -- P-256 is always SHA-256, P-384 always SHA-384 -- so there is no
+/// runtime value to pass. This turns this module's runtime `EcCurve` into that
+/// choice in one place, rather than three copies of the same `match`.
+use ic_core::traits::SignatureScheme as _;
+
+macro_rules! per_curve {
+    ($curve:expr, $call:ident $args:tt) => {
+        match $curve {
+            EcCurve::P256 => ic_ec::EcdsaP256Sha256::$call $args,
+            EcCurve::P384 => ic_ec::EcdsaP384Sha384::$call $args,
+            EcCurve::P521 => ic_ec::p521::EcdsaP521Sha512::$call $args,
+        }
+    };
+}
+
+/// How many bytes each curve's private scalar and public key take.
+///
+/// The public key is SEC1 uncompressed: `0x04 || x || y`, so it is one byte
+/// more than twice the field width.
+const fn key_lengths(curve: EcCurve) -> (usize, usize) {
+    match curve {
+        EcCurve::P256 => (32, 65),
+        EcCurve::P384 => (48, 97),
+        EcCurve::P521 => (66, 133),
+    }
+}
+
+/// Bits in the top byte of a private scalar that lie above the curve order.
+///
+/// P-256 and P-384 have orders that are a whole number of bytes wide, so a
+/// buffer of random bytes is already the right size. P-521 is not: the order
+/// is 521 bits but the buffer is 66 bytes, which is 528, and the 7 bits of
+/// slack put roughly 127 of every 128 uniform draws above the order. Left
+/// alone that made key generation fail outright about half the time, since a
+/// hundred consecutive rejections is likelier than not at those odds.
+///
+/// Clearing the slack leaves a uniform value in `[0, 2^521)`, and every NIST
+/// order sits close enough below its power of two that a redraw from there is
+/// genuinely rare.
+const fn excess_scalar_bits(curve: EcCurve) -> u32 {
+    match curve {
+        EcCurve::P256 | EcCurve::P384 => 0,
+        EcCurve::P521 => 7,
+    }
+}
+
 impl FipsCrypto {
     // ========================================================================
     // RSA Key Generation
@@ -219,9 +265,10 @@ impl FipsCrypto {
 
     /// Generate an RSA key pair.
     ///
-    /// Uses the pure-Rust `rsa` crate (RustCrypto) seeded from the OS CSPRNG.
-    /// All components (n, e, d, p, q, and the CRT values) are stored as raw
-    /// big-endian byte strings.
+    /// Uses IronCrypto's `ic-rsa`, drawing entropy from `HostRandom` so that
+    /// key generation shares this module's CSPRNG rather than reaching for the
+    /// OS separately. All components (n, e, d, p, q, and the CRT values) are
+    /// stored as raw big-endian byte strings.
     pub fn generate_rsa_keypair(&self, size: RsaKeySize) -> CryptoResult<RsaPrivateKey> {
         let bits = size.bytes() * 8;
         let mut rng = HostRandom(self);
@@ -308,65 +355,60 @@ impl FipsCrypto {
     // ========================================================================
 
     /// Generate an ECDSA key pair
-    /// Generate an ECDSA key pair
     ///
-    /// Uses `ring` for P-256 and P-384 curves. P-521 is not supported by `ring`.
+    /// P-521 works now. It did not under `ring`, which has no P-521 at all, so
+    /// this used to answer `UnsupportedAlgorithm` for a curve the rest of the
+    /// module claimed to support.
+    ///
+    /// The private scalar is drawn by rejection sampling: random bytes with
+    /// the bits above the curve order masked off (see `excess_scalar_bits`),
+    /// then ask IronCrypto to derive the public key, and draw again if it
+    /// refuses. The refusal is the range check -- a scalar must be in
+    /// `[1, n-1]` -- and borrowing the library's is the point, because a
+    /// comparison against the curve order written here would be one more piece
+    /// of hand-rolled arithmetic of exactly the kind this module has already
+    /// been burned by. Masking first is what makes the redraw rare; without it
+    /// P-521 rejects almost every candidate.
     pub fn generate_ecdsa_keypair(&self, curve: EcCurve) -> CryptoResult<EcPrivateKey> {
-        #[cfg(feature = "ring")]
-        {
-            use ring::signature::{
-                EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING,
-                ECDSA_P384_SHA384_FIXED_SIGNING,
-            };
+        let (private_len, public_len) = key_lengths(curve);
+        let mut d = vec![0u8; private_len];
+        let mut public = vec![0u8; public_len];
 
-            let alg = match curve {
-                EcCurve::P256 => &ECDSA_P256_SHA256_FIXED_SIGNING,
-                EcCurve::P384 => &ECDSA_P384_SHA384_FIXED_SIGNING,
-                EcCurve::P521 => {
-                    return Err(CryptoError::UnsupportedAlgorithm(
-                        "P-521 is not supported by ring".into(),
-                    ));
-                }
-            };
-
-            let rng = SystemRandom::new();
-            let pkcs8_bytes = EcdsaKeyPair::generate_pkcs8(alg, &rng).map_err(|_| {
-                CryptoError::KeyGenerationFailed("ECDSA key generation failed".into())
-            })?;
-
-            let key_pair =
-                EcdsaKeyPair::from_pkcs8(alg, pkcs8_bytes.as_ref(), &rng).map_err(|_| {
-                    CryptoError::KeyGenerationFailed("Failed to parse generated ECDSA key".into())
-                })?;
-
-            // Extract public key coordinates from the uncompressed point (0x04 || x || y)
-            let pub_key_bytes = key_pair.public_key().as_ref();
-            let coord_len = curve.key_size_bytes();
-            // Uncompressed point format: 0x04 || x || y
-            if pub_key_bytes.len() != 1 + 2 * coord_len || pub_key_bytes[0] != 0x04 {
+        // Bounded rather than `loop`: a hundred consecutive refusals is not
+        // bad luck, it is a broken RNG, and spinning forever would hide that.
+        let excess = excess_scalar_bits(curve);
+        let mut attempts = 0;
+        loop {
+            self.random_bytes(&mut d)?;
+            // Drop the bits that sit above the order before asking, or almost
+            // every P-521 candidate is rejected for being too large.
+            if excess > 0 {
+                d[0] &= 0xffu8 >> excess;
+            }
+            if per_curve!(curve, public_key(&d, &mut public)).is_ok() {
+                break;
+            }
+            attempts += 1;
+            if attempts >= 100 {
                 return Err(CryptoError::KeyGenerationFailed(
-                    "Unexpected public key format".into(),
+                    "100 candidate scalars were all out of range; the RNG is not \
+                     producing what it should"
+                        .into(),
                 ));
             }
-            let x = pub_key_bytes[1..1 + coord_len].to_vec();
-            let y = pub_key_bytes[1 + coord_len..].to_vec();
-
-            // Store the PKCS#8 bytes as the private scalar (for signing later)
-            let d = pkcs8_bytes.as_ref().to_vec();
-
-            Ok(EcPrivateKey {
-                public: EcPublicKey { x, y, curve },
-                d,
-            })
         }
 
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = curve;
-            Err(CryptoError::NotImplemented(
-                "ECDSA key generation requires the `ring` feature".into(),
-            ))
-        }
+        // SEC1 uncompressed is `0x04 || x || y`, so the coordinates are the
+        // two halves of what follows the tag.
+        let field = (public_len - 1) / 2;
+        Ok(EcPrivateKey {
+            public: EcPublicKey {
+                x: public[1..=field].to_vec(),
+                y: public[1 + field..].to_vec(),
+                curve,
+            },
+            d,
+        })
     }
 
     /// Extract public key from ECDSA private key
@@ -380,7 +422,7 @@ impl FipsCrypto {
 
     /// Sign data with an RSA private key (PKCS#1 v1.5 or PSS, SHA-256/384/512).
     ///
-    /// Uses the pure-Rust `rsa` crate, reconstructing the signing key from the
+    /// Uses IronCrypto's `ic-rsa`, reconstructing the signing key from the
     /// stored raw components. The message is hashed with the algorithm's digest
     /// before padding is applied.
     pub fn rsa_sign(
@@ -430,8 +472,8 @@ impl FipsCrypto {
         })
     }
 
-    /// Verify an RSA signature (PKCS#1 v1.5 or PSS, SHA-256/384/512) using the
-    /// pure-Rust `rsa` crate and the public key components (n, e).
+    /// Verify an RSA signature (PKCS#1 v1.5 or PSS, SHA-256/384/512) using
+    /// IronCrypto's `ic-rsa` and the public key components (n, e).
     pub fn rsa_verify(
         &self,
         public_key: &RsaPublicKey,
@@ -472,44 +514,17 @@ impl FipsCrypto {
             EcCurve::P521 => SignatureAlgorithm::EcdsaP521Sha512,
         };
 
-        #[cfg(feature = "ring")]
-        {
-            use ring::signature::{
-                EcdsaKeyPair, ECDSA_P256_SHA256_FIXED_SIGNING, ECDSA_P384_SHA384_FIXED_SIGNING,
-            };
+        let mut signature = vec![0u8; 2 * key_lengths(private_key.public.curve).0];
+        per_curve!(
+            private_key.public.curve,
+            sign(&private_key.d, data, &mut signature)
+        )
+        .map_err(|e| CryptoError::EncryptionFailed(format!("ECDSA signing failed: {e}")))?;
 
-            let alg = match private_key.public.curve {
-                EcCurve::P256 => &ECDSA_P256_SHA256_FIXED_SIGNING,
-                EcCurve::P384 => &ECDSA_P384_SHA384_FIXED_SIGNING,
-                EcCurve::P521 => {
-                    return Err(CryptoError::UnsupportedAlgorithm(
-                        "P-521 signing is not supported by ring".into(),
-                    ));
-                }
-            };
-
-            let rng = SystemRandom::new();
-            // private_key.d contains the PKCS#8 encoding
-            let key_pair = EcdsaKeyPair::from_pkcs8(alg, &private_key.d, &rng)
-                .map_err(|_| CryptoError::InvalidInput("Invalid ECDSA private key".into()))?;
-
-            let sig = key_pair
-                .sign(&rng, data)
-                .map_err(|_| CryptoError::EncryptionFailed("ECDSA signing failed".into()))?;
-
-            Ok(Signature {
-                data: sig.as_ref().to_vec(),
-                algorithm,
-            })
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (private_key, data, algorithm);
-            Err(CryptoError::NotImplemented(
-                "ECDSA signing requires the `ring` feature".into(),
-            ))
-        }
+        Ok(Signature {
+            data: signature,
+            algorithm,
+        })
     }
 
     /// Verify ECDSA signature
@@ -530,47 +545,21 @@ impl FipsCrypto {
             return Ok(false);
         }
 
-        #[cfg(feature = "ring")]
-        {
-            use ring::signature::{
-                UnparsedPublicKey, ECDSA_P256_SHA256_FIXED, ECDSA_P384_SHA384_FIXED,
-            };
+        // SEC1 uncompressed, which is what `ic-ec` takes and what this module
+        // already stored the coordinates for.
+        let mut encoded = Vec::with_capacity(1 + public_key.x.len() + public_key.y.len());
+        encoded.push(0x04);
+        encoded.extend_from_slice(&public_key.x);
+        encoded.extend_from_slice(&public_key.y);
 
-            let verify_alg: &dyn ring::signature::VerificationAlgorithm = match public_key.curve {
-                EcCurve::P256 => &ECDSA_P256_SHA256_FIXED,
-                EcCurve::P384 => &ECDSA_P384_SHA384_FIXED,
-                EcCurve::P521 => {
-                    return Err(CryptoError::UnsupportedAlgorithm(
-                        "P-521 verification is not supported by ring".into(),
-                    ));
-                }
-            };
-
-            // Reconstruct uncompressed public key: 0x04 || x || y
-            let mut pub_key_bytes = Vec::with_capacity(1 + public_key.x.len() + public_key.y.len());
-            pub_key_bytes.push(0x04);
-            pub_key_bytes.extend_from_slice(&public_key.x);
-            pub_key_bytes.extend_from_slice(&public_key.y);
-
-            let peer_public_key = UnparsedPublicKey::new(verify_alg, &pub_key_bytes);
-            match peer_public_key.verify(data, &signature.data) {
-                Ok(()) => Ok(true),
-                Err(_) => Ok(false),
-            }
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            let _ = (public_key, data, signature, expected_algorithm);
-            Err(CryptoError::NotImplemented(
-                "ECDSA verification requires the `ring` feature".into(),
-            ))
-        }
+        // A signature that does not verify is `false`, not an error: the
+        // caller asked a question and "no" is an answer.
+        Ok(per_curve!(public_key.curve, verify(&encoded, data, &signature.data)).is_ok())
     }
 }
 
 // ============================================================================
-// DER Encoding Helpers
+// IronCrypto Glue
 // ============================================================================
 
 /// The host's CSPRNG, as IronCrypto's random source.
@@ -612,70 +601,6 @@ fn be_exponent(bytes: &[u8]) -> CryptoResult<u64> {
         .fold(0u64, |acc, b| (acc << 8) | u64::from(*b)))
 }
 
-/// Encode an RSA public key as DER (PKCS#1 RSAPublicKey format).
-///
-/// ring expects the public key bytes in this format for verification.
-/// Structure: SEQUENCE { INTEGER(n), INTEGER(e) }
-#[cfg(feature = "ring")]
-fn encode_rsa_public_key_der(n: &[u8], e: &[u8]) -> Vec<u8> {
-    // Encode n as DER INTEGER (may need leading 0x00 if high bit set)
-    let n_int = der_encode_integer(n);
-    let e_int = der_encode_integer(e);
-
-    // SEQUENCE { n, e }
-    let seq_content_len = n_int.len() + e_int.len();
-    let mut result = Vec::new();
-    result.push(0x30); // SEQUENCE tag
-    der_encode_length(&mut result, seq_content_len);
-    result.extend_from_slice(&n_int);
-    result.extend_from_slice(&e_int);
-    result
-}
-
-/// DER-encode a non-negative integer, stripping leading zeros and adding
-/// a padding zero byte if the high bit is set.
-#[cfg(feature = "ring")]
-fn der_encode_integer(value: &[u8]) -> Vec<u8> {
-    // Strip leading zeros (but keep at least one byte)
-    let stripped = match value.iter().position(|&b| b != 0) {
-        Some(pos) => &value[pos..],
-        None => &[0u8],
-    };
-
-    // Add leading 0x00 if high bit is set (to keep it positive)
-    let needs_pad = !stripped.is_empty() && (stripped[0] & 0x80) != 0;
-    let content_len = stripped.len() + if needs_pad { 1 } else { 0 };
-
-    let mut result = Vec::new();
-    result.push(0x02); // INTEGER tag
-    der_encode_length(&mut result, content_len);
-    if needs_pad {
-        result.push(0x00);
-    }
-    result.extend_from_slice(stripped);
-    result
-}
-
-/// Encode a DER length value (supports definite form, short and long).
-#[cfg(feature = "ring")]
-fn der_encode_length(buf: &mut Vec<u8>, len: usize) {
-    if len < 0x80 {
-        buf.push(len as u8);
-    } else if len < 0x100 {
-        buf.push(0x81);
-        buf.push(len as u8);
-    } else if len < 0x10000 {
-        buf.push(0x82);
-        buf.push((len >> 8) as u8);
-        buf.push(len as u8);
-    } else {
-        buf.push(0x83);
-        buf.push((len >> 16) as u8);
-        buf.push((len >> 8) as u8);
-        buf.push(len as u8);
-    }
-}
-
 // ============================================================================
 // Tests
 // ============================================================================
@@ -686,7 +611,7 @@ mod tests {
     use crate::crypto::fips::FipsMode;
 
     fn get_crypto() -> FipsCrypto {
-        // Use Disabled mode to skip self-tests (which require `ring` feature)
+        // Disabled mode skips the power-on self-tests.
         FipsCrypto::new(FipsMode::Disabled).unwrap()
     }
 
@@ -722,43 +647,40 @@ mod tests {
     fn test_ecdsa_keypair_generation() {
         let crypto = get_crypto();
 
-        // P-256 and P-384 are supported by ring
-        #[cfg(feature = "ring")]
-        for curve in [EcCurve::P256, EcCurve::P384] {
-            let result = crypto.generate_ecdsa_keypair(curve);
-            let keypair = result.unwrap();
+        // All three curves, P-521 included. It used to be absent here and
+        // asserted to *fail* just below, because `ring` has no P-521 -- so the
+        // enum offered a curve the implementation refused.
+        for curve in [EcCurve::P256, EcCurve::P384, EcCurve::P521] {
+            let keypair = crypto
+                .generate_ecdsa_keypair(curve)
+                .unwrap_or_else(|e| panic!("{curve:?} keygen: {e}"));
             assert_eq!(keypair.public.curve, curve);
             assert_eq!(keypair.public.x.len(), curve.key_size_bytes());
             assert_eq!(keypair.public.y.len(), curve.key_size_bytes());
         }
+    }
 
-        // P-521 is not supported by ring
-        #[cfg(feature = "ring")]
-        {
-            let result = crypto.generate_ecdsa_keypair(EcCurve::P521);
-            assert!(result.is_err(), "P-521 not supported by ring");
-        }
-
-        #[cfg(not(feature = "ring"))]
-        {
-            for curve in [EcCurve::P256, EcCurve::P384, EcCurve::P521] {
-                assert!(
-                    crypto.generate_ecdsa_keypair(curve).is_err(),
-                    "ECDSA keygen requires `ring` feature"
-                );
-            }
+    /// P-521 keygen used to fail roughly half the time.
+    ///
+    /// Its 521-bit scalar lives in a 66-byte buffer, so 7 bits of slack put
+    /// about 127 of every 128 uniform draws above the curve order, and the
+    /// hundred-attempt bound was reached more often than not. A single
+    /// generation passes 54% of the time even when the masking is wrong, which
+    /// is exactly why one is not enough to believe: sixteen in a row would
+    /// have caught it with probability better than a million to one.
+    #[test]
+    fn p521_keygen_does_not_run_out_of_attempts() {
+        let crypto = get_crypto();
+        for i in 0..16 {
+            crypto
+                .generate_ecdsa_keypair(EcCurve::P521)
+                .unwrap_or_else(|e| panic!("P-521 keygen failed on attempt {i}: {e}"));
         }
     }
 
     #[test]
     fn test_ecdsa_sign_verify_p256() {
         let crypto = get_crypto();
-        #[cfg(not(feature = "ring"))]
-        assert!(
-            crypto.generate_ecdsa_keypair(EcCurve::P256).is_err(),
-            "ECDSA requires `ring` feature"
-        );
-        #[cfg(feature = "ring")]
         {
             let keypair = crypto.generate_ecdsa_keypair(EcCurve::P256).unwrap();
             let message = b"Sign this with ECDSA P-256";
@@ -781,12 +703,6 @@ mod tests {
     #[test]
     fn test_ecdsa_sign_verify_p384() {
         let crypto = get_crypto();
-        #[cfg(not(feature = "ring"))]
-        assert!(
-            crypto.generate_ecdsa_keypair(EcCurve::P384).is_err(),
-            "ECDSA requires `ring` feature"
-        );
-        #[cfg(feature = "ring")]
         {
             let keypair = crypto.generate_ecdsa_keypair(EcCurve::P384).unwrap();
             let message = b"Sign this with ECDSA P-384";
@@ -803,7 +719,6 @@ mod tests {
     #[test]
     fn test_ecdsa_cross_key_verify_fails() {
         let crypto = get_crypto();
-        #[cfg(feature = "ring")]
         {
             let keypair1 = crypto.generate_ecdsa_keypair(EcCurve::P256).unwrap();
             let keypair2 = crypto.generate_ecdsa_keypair(EcCurve::P256).unwrap();
@@ -821,7 +736,6 @@ mod tests {
     #[test]
     fn test_ecdsa_algorithm_mismatch() {
         let crypto = get_crypto();
-        #[cfg(feature = "ring")]
         {
             let keypair = crypto.generate_ecdsa_keypair(EcCurve::P256).unwrap();
             let message = b"Test algorithm mismatch";
@@ -840,11 +754,6 @@ mod tests {
     fn test_key_zeroization() {
         let crypto = get_crypto();
 
-        #[cfg(not(feature = "ring"))]
-        {
-            assert!(crypto.generate_ecdsa_keypair(EcCurve::P256).is_err());
-        }
-        #[cfg(feature = "ring")]
         {
             // ECDSA key zeroization on drop
             let keypair = crypto.generate_ecdsa_keypair(EcCurve::P256).unwrap();
