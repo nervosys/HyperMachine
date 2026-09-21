@@ -2149,13 +2149,18 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
   <div class="callout stop">
     <h3>And a security check that could not fail, over a vulnerability that is real</h3>
     <p>
-      <code>cargo audit</code> reports one vulnerability in this tree:
+      <em>As of 2026-09-21 this is resolved and the rest of this section is
+      history &mdash; see the note at its end. It is kept because the way the
+      check failed is the part worth remembering.</em>
+    </p>
+    <p>
+      <code>cargo audit</code> reported one vulnerability in this tree:
       <strong>RUSTSEC-2023-0071</strong>, the Marvin attack &mdash; potential
       RSA key recovery through a timing sidechannel, severity 5.9, in
       <code>rsa</code>&nbsp;0.9.10, with <em>no fixed upgrade available</em>.
-      <code>rsa</code> is a direct dependency of <code>hv2-core</code>, and
-      <code>crypto/asymmetric.rs</code> generates private keys and decrypts with
-      them, which is exactly the operation the advisory is about. It applies.
+      <code>rsa</code> was a direct dependency of <code>hv2-core</code> and
+      <code>crypto/asymmetric.rs</code> generated private keys with it, which is
+      the operation the advisory is about. It applied.
     </p>
     <p>
       The security workflow runs on every push and every pull request and has
@@ -2206,6 +2211,43 @@ compiled 64-bit unikernel  <b>2.1 - 2.6 ms</b> median, worst boot 4.0 ms</pre>
         way: it is not enough to run the check that is failing. The check that
         <em>passes</em> is also telling you something, and here it was telling
         you the answer.
+      </p>
+    </div>
+    <div class="callout">
+      <h3>Resolved, 2026-09-21 &mdash; and a second correction that was also mine</h3>
+      <p>
+        The advisory is gone from the tree, not accepted in it. <code>hv2-core</code>
+        no longer depends on <code>rsa</code>: RSA comes from IronCrypto's
+        <code>ic-rsa</code>, whose private-key path is constant-time in
+        <code>d</code>, so there is nothing for Marvin to time. The acceptance
+        has been deleted from <code>deny.toml</code> rather than left to age.
+        The signal that it was stale came from <code>cargo deny</code> itself:
+        with the crate gone but the ignore still in place it warned <em>no
+        crate matched advisory criteria</em>, which is precisely how an
+        acceptance that has outlived its reason announces itself. Removing the
+        entry took the warning with it, and that warning is worth watching for
+        &mdash; it is the one check here that fires when a suppression, rather
+        than the code, is what is out of date.
+      </p>
+      <p>
+        The second correction: the text above said
+        <code>crypto/asymmetric.rs</code> <em>decrypted</em> with those keys.
+        It did not. The file had <code>rsa_encrypt</code> and
+        <code>rsa_decrypt</code>, but they never called the <code>rsa</code>
+        crate &mdash; they used a hand-written modular exponentiation that
+        computed the wrong number (121 for 4^13 mod 497; 7 for 5^117 mod 19),
+        driven by a left-to-right square-and-multiply fed an LSB-first bit
+        scan. They had no callers. They are deleted; <code>ic-rsa</code> has no
+        RSA encryption by design, and key transport belongs to ECDH or ML-KEM.
+        So the advisory applied to key generation and signing, which are real,
+        and not to the decryption oracle the sentence implied.
+      </p>
+      <p>
+        Which is the lesson once more and from a third direction: <code>cargo
+        audit</code> finds advisories against version numbers. It had nothing
+        to say about the arithmetic in the file next to it, which was wrong in
+        a way no advisory will ever carry. Test vectors found that; a
+        dependency scanner cannot.
       </p>
     </div>
   </div>
@@ -3517,6 +3559,20 @@ no method `to_bytes_be` on &amp;NonZero&lt;BoxedUint&gt;      &mdash; from key.n
       online decryption oracle. What has changed is that this is no longer a
       wait: it is a scheduled port whose size has been measured, gated on 0.10.0
       leaving candidate.
+      <br><br>
+      <strong>Done, 2026-09-21, and not this way.</strong> The port never
+      happened, because waiting for <code>rsa</code>&nbsp;0.10 was not the only
+      way to get a constant-time bignum. <code>hv2-core</code> now uses
+      IronCrypto's <code>ic-rsa</code>, which is pure Rust, has no dependency
+      outside its own workspace, and is already constant-time in
+      <code>d</code>. That removed the advisory from the tree rather than
+      accepting it, so the acceptance is deleted from <code>deny.toml</code>
+      too. The measured cost above &mdash; the <code>BoxedUint</code> round
+      trip, confined to one file &mdash; turned out to be a good estimate of
+      the work, just against a different library: the migration was that same
+      one file. Worth noting that the estimate was sound and the conclusion
+      drawn from it was not, because it framed the choice as <em>when</em> to
+      port rather than <em>what</em> to port to.
     </li>
     <li>
       <strong>Get the examples onto something that runs them &mdash; and note

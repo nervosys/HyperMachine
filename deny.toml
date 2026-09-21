@@ -24,19 +24,18 @@ ignore = [
     # the `rsa` crate is no longer in Cargo.lock at all. The ignore is gone with
     # it rather than left behind to suppress an advisory nothing can raise.
 
-    # quick-xml 0.30.0: quadratic parse time on duplicate attributes, and
-    # unbounded namespace-declaration allocation. Fixed in >=0.41.0, and 0.41
-    # is already in the tree -- the vulnerable 0.30 arrives through the Linux
-    # GUI accessibility stack:
-    #   egui-winit -> accesskit_winit -> accesskit_unix
-    #     -> accesskit_atspi_common -> atspi-common -> zbus-lockstep
-    #     -> zbus_xml -> quick-xml 0.30
-    # No version of that chain currently resolves to a fixed quick-xml, so
-    # there is nothing to bump here. Only reachable when hm-gui runs on Linux
-    # with an AT-SPI screen reader attached, parsing D-Bus introspection XML
-    # from the local session bus.
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
+    # RUSTSEC-2026-0194 and -0195 (quick-xml 0.30: quadratic parse time on
+    # duplicate attributes, and unbounded namespace-declaration allocation)
+    # were ignored here. The note beside them read "no version of that chain
+    # currently resolves to a fixed quick-xml, so there is nothing to bump" --
+    # the chain being the Linux GUI accessibility stack, egui-winit through
+    # accesskit to zbus_xml. It resolves now: Cargo.lock carries quick-xml
+    # 0.41.0 and nothing else, and 0.41 is the fixed version. Both ignores are
+    # gone.
+    #
+    # `cargo deny` is what said so, with "no crate matched advisory criteria"
+    # against each -- the warning that fires when a suppression, rather than
+    # the code, is what has gone out of date. It is worth reading.
 
     # smartstring is unmaintained. Transitive via rhai, which is the agent
     # scripting engine. No known vulnerability; rhai has not migrated off it.
