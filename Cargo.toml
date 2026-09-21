@@ -85,7 +85,16 @@ rustls = { version = "0.23", default-features = false, features = [
     "std",
     "tls12",
 ] }
-tokio-rustls = "0.26"
+# `default-features = false` for the same reason as rustls above, and it has
+# to be said twice: tokio-rustls' default features include `aws_lc_rs`, which
+# turns on rustls' `aws-lc-rs` feature through cargo's feature unification. The
+# careful backend pin on rustls is undone from here otherwise, and the build
+# picks up aws-lc-sys -- a second, C-based crypto backend nobody asked for.
+tokio-rustls = { version = "0.26", default-features = false, features = [
+    "logging",
+    "ring",
+    "tls12",
+] }
 rustls-pemfile = "2"
 
 # GPU acceleration
