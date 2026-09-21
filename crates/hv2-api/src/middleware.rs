@@ -2076,9 +2076,29 @@ fn payload_signing_handler(
 
         // Read body to compute HMAC
         let (parts, body) = request.into_parts();
-        let body_bytes = axum::body::to_bytes(body, config.max_body_bytes + 1)
-            .await
-            .unwrap_or_default();
+        // `unwrap_or_default()` here meant a body over the limit, or one that
+        // failed to read, became an *empty* body: the HMAC was then computed
+        // over nothing, compared, and -- had it somehow matched -- the request
+        // forwarded downstream with its body silently replaced by nothing. No
+        // signature was forgeable that way, because the attacker still cannot
+        // produce the HMAC of the empty body without the secret, but a request
+        // that could not be read is not a request that can be authenticated.
+        let body_bytes = match axum::body::to_bytes(body, config.max_body_bytes).await {
+            Ok(b) => b,
+            Err(_) => {
+                let req_id = parts
+                    .headers
+                    .get("x-request-id")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_string());
+                let err = ErrorResponse {
+                    error: "Request body could not be read for signature verification".to_string(),
+                    code: "BODY_READ_ERROR".to_string(),
+                    request_id: req_id,
+                };
+                return (StatusCode::PAYLOAD_TOO_LARGE, Json(err)).into_response();
+            }
+        };
 
         let expected = hmac_sha256(config.secret.as_bytes(), &body_bytes);
 
@@ -14086,6 +14106,72 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["code"], "INVALID_SIGNATURE");
+    }
+
+    /// A body larger than the limit is rejected, not silently emptied.
+    ///
+    /// `to_bytes` was unwrapped with `unwrap_or_default()`, so an over-sized
+    /// body became an empty one: the HMAC was computed over nothing and the
+    /// request, had it verified, went downstream with its body replaced. No
+    /// signature was forgeable that way -- the empty body's HMAC still needs
+    /// the secret -- but a request that cannot be read cannot be
+    /// authenticated either.
+    #[tokio::test]
+    async fn test_payload_signing_oversized_body_is_rejected() {
+        let config = MiddlewareConfig::none().payload_signing(PayloadSigningConfig {
+            secret: "my-secret".to_string(),
+            max_body_bytes: 64,
+            ..PayloadSigningConfig::default()
+        });
+        let app = config.apply(test_router());
+
+        let oversized = vec![b'x'; 65];
+        let response = app
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/test")
+                    .header("content-type", "application/json")
+                    .header("x-signature", "whatever")
+                    .body(Body::from(oversized))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["code"], "BODY_READ_ERROR");
+    }
+
+    /// An empty signature header is a signature, and a wrong one.
+    ///
+    /// The header is only "missing" when absent; present-and-empty reaches the
+    /// comparison. That is why `hmac_sha256` must not return the empty string
+    /// on error -- it would be a digest anyone could send.
+    #[tokio::test]
+    async fn test_payload_signing_empty_signature_is_rejected() {
+        let config = MiddlewareConfig::none().payload_signing(PayloadSigningConfig {
+            secret: "my-secret".to_string(),
+            ..PayloadSigningConfig::default()
+        });
+        let app = config.apply(test_router());
+
+        let response = app
+            .oneshot(
+                HttpRequest::builder()
+                    .method("POST")
+                    .uri("/test")
+                    .header("content-type", "application/json")
+                    .header("x-signature", "")
+                    .body(Body::from(r#"{"a":1}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
