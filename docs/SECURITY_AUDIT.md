@@ -180,11 +180,46 @@ relying on them; the risk was that they read as controls.
 
 ### Bottom line
 
+### Process containment — real, and understated by an earlier draft of this section
+
+`hv2-sandbox` is the counter‑example to everything above, and belongs in the
+"enforced" column. It confines a *process* using primitives the kernel keeps —
+seccomp, Landlock, cgroup v2, no‑new‑privileges — with separate Linux, Windows
+and Unix‑fallback backends. Crucially it **probes rather than assumes**:
+`Sandbox::controls()` reports what this host can actually give, and a caller
+asking for a control the host cannot provide gets a refusal rather than a run
+that silently lacked it. That is the pattern the three modules above should
+have followed.
+
+Observed on this host (`cargo run -p hv2-sandbox --example
+what_this_host_enforces`):
+
+```text
+enforced here (6): CPU time limit, wall‑clock deadline, network isolation,
+                   filesystem isolation, process isolation, no‑new‑privileges
+NOT enforced here (2): memory limit, process count limit
+                   — no writable cgroup v2 hierarchy: Permission denied
+containment: 4 of 4 — a boundary
+```
+
+It is wired: `McpServer` holds a `SandboxHost` and `dispatch_to_sandbox_host`
+consults it on the tool path. Like every other governance feature here
+(`PolicySet`, the image registry, `GovernedVmHost`) it is **opt‑in** —
+`set_sandbox_host` must be called, and the default is `None`.
+
+### Bottom line
+
 Guest isolation today is **what KVM provides** — stage‑2 paging via memory
-slots — plus boot‑image admission. That is a defensible baseline and it is
-not a DoD isolation posture. The gap is not closed by this document; what
-changed is that the platform no longer claims protections it does not have,
-which is the precondition for an assessment rather than a substitute for one.
+slots — plus boot‑image admission, and, for the agent tool path when it is
+installed, genuine OS‑level process containment. That is a more defensible
+baseline than the rest of this section implies, and it is still not a DoD
+isolation posture: none of it protects a guest from the host, which is what
+confidential computing is for and what has no backend here.
+
+The gap is not closed by this document. What changed is that the platform no
+longer claims protections it does not have — and, in this subsection, no
+longer omits one it does. Both directions matter: an assessment is worthless
+if the claims are wrong either way.
 
 ## 4. MITRE ATT&CK Mapping
 
