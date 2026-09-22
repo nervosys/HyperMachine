@@ -234,7 +234,16 @@ impl BootComponent {
 }
 
 /// Verification result
+///
+/// `#[non_exhaustive]` because this grows: `VerificationUnavailable` was added
+/// when the signature path stopped pretending to verify, and real signature
+/// checking will distinguish more outcomes than it does today. A caller that
+/// matched every variant exhaustively would break on each of those, which is
+/// the wrong pressure to put on a security decision -- the safe default for a
+/// verdict a caller does not recognise is to refuse, and a wildcard arm makes
+/// that expressible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum VerificationResult {
     /// Verification succeeded
     Success,

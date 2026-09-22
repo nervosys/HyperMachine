@@ -303,7 +303,13 @@ impl Default for EncryptionConfig {
 }
 
 /// Encryption error types
+///
+/// `#[non_exhaustive]` for the same reason as
+/// [`super::secure_boot::VerificationResult`]: `NoBackend` was added when
+/// `enable` stopped succeeding, and attaching a real backend will bring the
+/// failures a driver can actually have.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum EncryptionError {
     /// No backend is attached, so nothing can encrypt.
     #[error(

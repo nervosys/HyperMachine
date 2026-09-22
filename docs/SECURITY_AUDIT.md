@@ -117,6 +117,70 @@ written justification:
 
 ---
 
+## 3.4 Platform integrity and confidential computing
+
+Added 2026‑09‑22. This document previously mapped FIPS, ATT&CK and CMMC and
+said nothing about boot integrity, measurement or attestation, which is where
+an isolation question actually lands.
+
+### What is enforced
+
+- **Boot image admission** (`security::image_registry`) is real and wired.
+  `vm.rs::admit_boot_image` computes a SHA‑256 over the bytes about to be
+  loaded — not the path they came from — and refuses a VM whose digest the
+  registry does not admit. A digest that cannot be computed is a denial, not
+  a pass. With no registry installed it is a no‑op, which is the default.
+
+### What does not do what its name says
+
+Each of the following was examined on 2026‑09‑22 and corrected to refuse
+rather than to assert. None was reachable from a data path, so nothing was
+relying on them; the risk was that they read as controls.
+
+- **Memory encryption.** No backend exists: no `ioctl`, no `libc`, no
+  `unsafe` in the module, and no `KVM_MEMORY_ENCRYPT_OP` in the workspace.
+  `enable()` formerly set a flag and returned `Ok(())` on any machine. It now
+  returns `NoBackend`, including on SEV‑SNP silicon, because the missing
+  piece is the driver. **A guest is not protected from the host or a host
+  administrator.**
+- **Measured boot / PCRs.** `PcrBank::extend` was `pcr[i] ^= byte`, carrying
+  the comment "Simplified: XOR for demonstration". That made every register
+  forgeable (extend `target ^ current` to reach any value), order‑blind, and
+  reversible. It is now `new = H(old || data)` over SHA‑2, with property
+  tests. Banks whose hash is unavailable (SHA‑1, SM3) refuse to extend.
+- **Attestation.** There is none. No quote operation exists, and a software
+  vTPM living in the VMM's address space could not be a root of trust in any
+  case: whatever compromises the VMM can set a PCR to anything. The
+  measurement log is now correct bookkeeping for a guest, not evidence to a
+  relying party.
+- **Secure boot signature verification.** `verify()` admitted a component
+  when the signer certificate's `subject` **string** matched a trusted entry,
+  under a comment reading "Would verify actual signature here". Forgery
+  required no key. It now returns `VerificationUnavailable`, which admission
+  must treat as refusal. The hash allowlist path, which is genuine integrity
+  evidence, is unchanged.
+
+### Residual isolation exposure
+
+- **Cross‑VM shared pages.** `VM::share_rom` maps identical host pages
+  read‑only into any number of guests, so model weights cost the host once.
+  Read‑only prevents direct signalling; it does not prevent a cache‑timing
+  covert channel (Flush+Reload class) between guests that share them. Sound
+  as a performance feature; it requires an explicit decision before two
+  guests in different security domains run on one host.
+- **No device passthrough.** There is no VFIO path and
+  `supports_gpu_passthrough` is `false`, so there is no assigned‑device DMA
+  surface — and correspondingly nothing programs the IOMMU. The `iommu`
+  module is re‑exported and otherwise uncalled.
+
+### Bottom line
+
+Guest isolation today is **what KVM provides** — stage‑2 paging via memory
+slots — plus boot‑image admission. That is a defensible baseline and it is
+not a DoD isolation posture. The gap is not closed by this document; what
+changed is that the platform no longer claims protections it does not have,
+which is the precondition for an assessment rather than a substitute for one.
+
 ## 4. MITRE ATT&CK Mapping
 
 The hypervisor + agent runtime both **defends against** and (as any compute
