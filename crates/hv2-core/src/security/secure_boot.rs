@@ -254,6 +254,13 @@ pub enum VerificationResult {
     NoSignature,
     /// Unknown algorithm
     UnknownAlgorithm,
+    /// No signature verification is implemented, so nothing was verified.
+    ///
+    /// Distinct from [`Self::InvalidSignature`], which is a verdict. This is
+    /// the absence of one: the signature was neither accepted nor rejected,
+    /// because this build cannot check it. Admission must treat it as a
+    /// refusal -- see [`SecureBoot::verify`].
+    VerificationUnavailable,
 }
 
 /// Secure boot mode
@@ -541,19 +548,42 @@ impl SecureBootManager {
             }
         }
 
-        // Check if signer is in db (trusted)
-        if let Some(ref signer) = signature.signer {
-            for trusted in db.iter() {
-                if trusted.subject == signer.subject {
-                    // Would verify actual signature here
-                    return VerificationResult::Success;
-                }
-            }
+        // Is the claimed signer's subject one this platform trusts?
+        //
+        // Note what this is and is not. Matching a subject says the component
+        // *claims* to come from a trusted signer. It says nothing about
+        // whether the signature is that signer's, because the subject is a
+        // string on a certificate the caller supplied.
+        //
+        // Until 2026-09-22 this arm returned `Success`, under a comment
+        // reading "Would verify actual signature here". So secure boot
+        // admitted any component whose signature carried a `signer` whose
+        // `subject` string matched a trusted certificate -- a forgery needed
+        // no cryptography, only the right string. It now refuses.
+        let claims_a_trusted_signer = signature
+            .signer
+            .as_ref()
+            .is_some_and(|signer| db.iter().any(|trusted| trusted.subject == signer.subject));
+
+        if !claims_a_trusted_signer {
+            self.verification_failures.fetch_add(1, Ordering::Relaxed);
+            return VerificationResult::UntrustedCertificate;
         }
 
-        // Signer not found in trusted database
+        // Claimed, not shown. Refuse.
+        //
+        // Real verification needs the signature checked against the *trusted
+        // database entry's* public key -- never the one attached to the
+        // signature, which the caller chose -- over the bytes the signature
+        // covers, with the certificate's validity window and status honoured.
+        // `Certificate::public_key` is an unspecified `Vec<u8>` today, and
+        // guessing a key encoding inside an admission check is how this file
+        // came to look verified without being so. The allowlist path above is
+        // the mechanism that does work: a known-good hash is integrity
+        // evidence, and it is what `security::image_registry` already enforces
+        // on boot images.
         self.verification_failures.fetch_add(1, Ordering::Relaxed);
-        VerificationResult::UntrustedCertificate
+        VerificationResult::VerificationUnavailable
     }
 
     /// Get verification statistics
@@ -894,13 +924,59 @@ mod tests {
             SignatureAlgorithm::RsaSha256,
         );
 
+        // Note what this signature is: 256 zero bytes, over a component whose
+        // hash is also zeros, from a signer whose public key is zeros too.
         let signature =
             Signature::new(SignatureAlgorithm::RsaSha256, vec![0u8; 256]).with_signer(signer);
 
         let component = BootComponent::new(BootComponentType::Kernel, "vmlinuz", vec![0u8; 32])
             .with_signature(signature);
 
-        assert_eq!(manager.verify(&component), VerificationResult::Success);
+        // This asserted `Success` until 2026-09-22, and it passed, because
+        // `verify` matched the signer's subject string against the trusted
+        // database and returned `Success` under a comment reading "Would
+        // verify actual signature here". So the test did not merely miss the
+        // bypass -- it pinned it as intended behaviour, and a all-zero
+        // signature admitting a kernel was the documented expectation.
+        //
+        // Nothing about this component should admit it. Matching a subject
+        // means it *claims* a trusted signer; the claim is a string the caller
+        // wrote.
+        assert_eq!(
+            manager.verify(&component),
+            VerificationResult::VerificationUnavailable,
+            "a signature that was never checked must not be a pass"
+        );
+    }
+
+    /// A signer nobody trusts is still refused, and for the earlier reason.
+    ///
+    /// Worth separating from the case above so the two refusals cannot be
+    /// confused: this one is a verdict about trust, that one is the absence of
+    /// a verdict about the signature.
+    #[test]
+    fn an_untrusted_signer_is_refused_before_the_signature_matters() {
+        let manager = SecureBootManager::new();
+        manager.enroll_pk(make_pk()).unwrap();
+        manager.add_db(make_db_cert()).unwrap();
+        manager.enable().unwrap();
+
+        let stranger = Certificate::new(
+            CertificateType::Database,
+            "Someone Else",
+            "Unknown KEK",
+            vec![0u8; 256],
+            SignatureAlgorithm::RsaSha256,
+        );
+        let signature =
+            Signature::new(SignatureAlgorithm::RsaSha256, vec![0u8; 256]).with_signer(stranger);
+        let component = BootComponent::new(BootComponentType::Kernel, "vmlinuz", vec![0u8; 32])
+            .with_signature(signature);
+
+        assert_eq!(
+            manager.verify(&component),
+            VerificationResult::UntrustedCertificate
+        );
     }
 
     #[test]
