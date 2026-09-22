@@ -671,7 +671,7 @@ Remaining gaps: output that is polled rather than pushed, and compression —
 `connect-accept-encoding` is ignored and nothing is compressed, which the
 protocol allows and which costs bandwidth on a large `ListDir`.
 
-### Phase 2 — Snapshot/clone (CubeCoW-equivalent) — **works, and is slower than booting**
+### Phase 2 — Snapshot/clone (CubeCoW-equivalent) — **works, and is now faster than booting**
 
 A guest can be written to a file and restored into a different VM, which then
 resumes where the first one left off. `VM::snapshot` and `VM::restore`, over
@@ -712,16 +712,68 @@ real page for each; reading them first costs almost nothing and finds that
 nearly all are already correct. 64 MiB of writes became 64 MiB of reads plus
 a handful of writes.
 
+| change | file | restore | what it showed |
+| --- | --- | --- | --- |
+| discard the pages instead of reading them | 0.1 MiB | **1.8 ms** | the cheapest read is the one not done |
+
 | | |
 | --- | --- |
 | boot this guest from its ELF | **10.2 ms** |
-| restore it from a snapshot | **18.2 ms** |
+| restore it from a snapshot | **1.8 ms** |
 
-Restore is still 1.8x slower than booting *this* guest, and that is the
-honest end state rather than a defeat: a unikernel that boots in ten
-milliseconds is not a workload snapshots help. The remaining cost is reading
-the destination's 64 MiB to find out it is already zero, which is
-proportional to the VM's size and not to what the guest has done.
+Restore is now **5.7x faster than booting** this guest, where it had been
+1.8x slower. The fourth change came from asking why the read pass existed at
+all: it read the destination's 64 MiB to discover the pages were already
+zero, which is the answer the *kernel* could have given for free.
+`madvise(MADV_DONTNEED)` on the guest's `MAP_PRIVATE | MAP_ANONYMOUS`
+mapping frees every page, and the documented behaviour for such a range is
+that the next access gets a zero-fill page. One syscall replaces 64 MiB of
+reads, and it un-allocates the guest's footprint on the way through.
+
+Measured as a paired A/B, arms alternating within each iteration because the
+host was busy and absolute numbers moved between runs. Five pairs, and the
+two arms do not overlap:
+
+| arm | runs (ms) | median |
+| --- | --- | --- |
+| discard | 1.2, 1.8, 1.6, 1.8, 1.5 | **1.6** |
+| read-before-write | 23.1, 23.3, 23.4, 35.8, 24.3 | **23.4** |
+
+(Both inflated by load; the 1.8 and 18.2 in the tables above come from quiet
+runs where boot measures 10.2--10.4 ms, so those are the comparable pair.)
+
+### The version of this that would have been wrong
+
+The note here used to say that
+`HypervisorBackend::guest_memory_starts_zeroed` "already answers this
+question and nothing asks it", so the read pass could simply be skipped. It
+could not, and the reason is worth keeping:
+
+- That method reports a property of the *allocation path* -- memory was zero
+  when handed over. Its own doc says a backend restoring into existing memory
+  "would have to answer differently". Restore is exactly that case.
+- `restore` requires the VM to be paused, so it has necessarily run and
+  dirtied memory. The win only exists for a VM that never ran, which the API
+  did not allow.
+- Tracking "nothing has written here yet" does not close the gap either:
+  `MemoryRegion::host_addr` is a public field written through directly
+  elsewhere, and a running guest dirties pages without passing through any
+  Rust path. An invariant a public field can break is the wrong foundation
+  for a memory-correctness decision.
+
+`mincore(2)` looks like a sound alternative -- ask which pages are resident
+rather than reading them -- and is not: a page that was written and then
+swapped out is non-resident and non-zero. It would corrupt guests rarely and
+silently.
+
+What makes the implemented version safe is that it does not infer anything.
+It performs the zeroing and reports that it did, so the caller's decision to
+skip work rests on an action rather than an assumption about history. The
+backend trait method is `reset_guest_memory_to_zero`, returning `false` when
+a backend cannot do it, in which case the read-before-write path above still
+runs. Restore also declines the fast path entirely if any region is
+read-only, since the loop skips those and would leave them discarded --
+no such region exists today, which is why it is a check and not a comment.
 
 The useful reading is about *which* workloads this is for. Snapshots win
 where boot is slow and the image is warm — a loaded language runtime, a
@@ -731,12 +783,11 @@ lose on a 64 MiB unikernel that boots in milliseconds. Anyone reaching for
 this to make *this* guest start faster is reaching for the wrong tool, and
 the number says so rather than leaving it to be discovered.
 
-What would move it further: restoring into a VM that has *never run*, whose
-memory is zero by construction — `HypervisorBackend::guest_memory_starts_zeroed`
-already answers this question and nothing asks it here, so the read pass
-could be skipped outright rather than performed to confirm what the backend
-already knows. Beyond that, compression is a different trade (CPU for I/O);
-`MemorySnapshotConfig` describes it and nothing applies it.
+What would move it further: at 1.8 ms the remaining cost is no longer the
+memory at all -- it is reading the file and restoring vCPU and device
+state. Compression is a different trade (CPU for I/O);
+`MemorySnapshotConfig` describes it and nothing applies it, and at this
+size it would likely cost more than it saves.
 
 Host-side device state travels too. The rings live in guest memory and go
 with it; what the *device* holds — where those rings are, how big they are,

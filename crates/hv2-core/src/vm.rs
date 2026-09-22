@@ -1176,6 +1176,29 @@ impl VM {
         let zeroes = vec![0u8; 1 << 20];
         let mut scratch = vec![0u8; 1 << 20];
 
+        // Ask the backend to hand back guest RAM that already reads as zero.
+        //
+        // When it can, every absent page in the snapshot is already correct
+        // and the loop below has nothing to do for it -- no read to check, no
+        // write to fix. That is the whole of the remaining restore cost for a
+        // guest that has touched little of its memory, which is most of them.
+        //
+        // The fallback is not a lesser correctness, only a slower one: read
+        // each absent page and write zeroes over it if it is not already zero.
+        // That is what ran before this, and what still runs on a backend that
+        // answers `false`.
+        //
+        // Not attempted at all when any region is read-only. The loop below
+        // skips those, so anything the backend zeroed in one would never be
+        // written back -- it would be discarded and left discarded. No such
+        // region exists today (every `allocate_region` call in the tree passes
+        // `readonly: false`, and `adopt_backend_pages` accepts exactly one
+        // region at address 0), which is precisely why this is a check and not
+        // a comment: the reason it is safe is a fact about current callers,
+        // and those change.
+        let has_readonly = snapshot.header.regions.iter().any(|r| r.readonly);
+        let memory_pre_zeroed = !has_readonly && self.backend.reset_guest_memory_to_zero()?;
+
         // Runs of absent pages are zeroed in one call rather than one call
         // each. This is where the time actually goes: making the file sparse
         // took it from 64 MiB to 0.1 MiB and the restore only from 92ms to
@@ -1218,6 +1241,10 @@ impl VM {
                 // destination that has merely booted has most of its memory
                 // in exactly that state, so checking is far cheaper than
                 // unconditionally overwriting.
+                if memory_pre_zeroed {
+                    continue;
+                }
+
                 let mut done = 0usize;
                 while done < run {
                     let take = zeroes.len().min(run - done);

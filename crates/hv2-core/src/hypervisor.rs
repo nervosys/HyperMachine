@@ -458,6 +458,37 @@ pub trait HypervisorBackend: Send + Sync {
         None
     }
 
+    /// Return this backend's guest RAM to a state that reads as all zeroes,
+    /// without writing to it.
+    ///
+    /// `Ok(true)` means every byte of guest memory now reads zero. `Ok(false)`
+    /// means the backend cannot do this and the caller must zero what it needs
+    /// the slow way. The distinction matters because the caller uses a `true`
+    /// to *skip work entirely*, so a backend that answers `true` without having
+    /// done it leaves a guest restored on top of another guest's memory --
+    /// wrong in a way that runs.
+    ///
+    /// # Why this is not `guest_memory_starts_zeroed`
+    ///
+    /// That method reports a property of the allocation path: memory *was*
+    /// zero when handed over. It says nothing about a VM that has since run,
+    /// and snapshot restore is exactly that case. This one is an action, not
+    /// an observation, so it is true of memory in any state.
+    ///
+    /// # Why not track "nothing has written here yet" instead
+    ///
+    /// Because it cannot be tracked soundly from outside: [`MemoryRegion`]'s
+    /// `host_addr` is public and written through directly in places, and a
+    /// running guest dirties pages without passing through any Rust path at
+    /// all. An invariant that a public field can break is the wrong thing to
+    /// found a memory-correctness decision on. Doing the work and reporting it
+    /// needs no invariant.
+    ///
+    /// [`MemoryRegion`]: crate::memory::MemoryRegion
+    fn reset_guest_memory_to_zero(&self) -> Result<bool> {
+        Ok(false)
+    }
+
     /// Allow downcasting to concrete types
     fn as_any(&self) -> &dyn std::any::Any;
 }

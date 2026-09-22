@@ -603,6 +603,24 @@ impl HypervisorBackend for KvmBackend {
             .map(|ptr| ptr.as_ptr() as u64)
     }
 
+    /// Yes, by discarding the pages -- see `KvmVm::discard_guest_memory`.
+    ///
+    /// This backend can answer honestly because it owns the mapping and knows
+    /// how it was made. `Ok(false)` from here would not be wrong, only slower.
+    fn reset_guest_memory_to_zero(&self) -> Result<bool> {
+        let vm = self.vm.read().unwrap_or_else(|e| e.into_inner());
+        let Some(vm) = vm.as_ref() else {
+            // No VM yet means no guest memory to hold anything, but saying
+            // "done" would be a claim about memory that does not exist.
+            return Ok(false);
+        };
+        if vm.guest_memory().is_none() {
+            return Ok(false);
+        }
+        vm.discard_guest_memory()?;
+        Ok(true)
+    }
+
     async fn set_mmio_result(&self, vcpu: &VCpu, data: &[u8]) -> Result<()> {
         let kvm_vcpu = {
             let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());
@@ -1059,6 +1077,58 @@ impl KvmVm {
     /// Get guest memory pointer
     pub fn guest_memory(&self) -> Option<NonNull<u8>> {
         self.guest_memory
+    }
+
+    /// Bytes of guest RAM registered with KVM as slot 0.
+    pub fn memory_size(&self) -> u64 {
+        self.memory_size
+    }
+
+    /// Discard every page of guest RAM, so it reads back as zero.
+    ///
+    /// `MADV_DONTNEED` on a `MAP_PRIVATE | MAP_ANONYMOUS` range frees the
+    /// pages behind it, and the kernel's documented behaviour for such a range
+    /// is that the next access gets a zero-fill-on-demand page. So this both
+    /// zeroes the memory and *un-allocates* it: the guest's footprint on the
+    /// host drops to nothing until it touches something again.
+    ///
+    /// That is the opposite of writing zeroes, which makes every page it
+    /// touches resident. It is why this is worth doing at all -- see the
+    /// measurements on snapshot restore.
+    ///
+    /// The mapping itself is untouched, which is the reason for `madvise`
+    /// rather than an `munmap`/`mmap` pair: the address stays valid, so KVM's
+    /// slot 0 registration, `guest_memory_host_addr`, and every `host_addr`
+    /// the device model is holding all remain correct. KVM learns the host
+    /// PTEs went away through its MMU notifier, the same path that already
+    /// handles the host swapping or migrating a guest's pages.
+    fn discard_guest_memory(&self) -> Result<()> {
+        let Some(ptr) = self.guest_memory else {
+            return Err(Error::Memory("Guest memory not allocated".into()));
+        };
+        if self.memory_size == 0 {
+            return Ok(());
+        }
+
+        // SAFETY: `ptr` is the base of the `mmap` made in `KvmVm::new` with
+        // `MAP_PRIVATE | MAP_ANONYMOUS`, and `memory_size` is the length that
+        // call was given. `MADV_DONTNEED` neither unmaps nor resizes, so the
+        // pointer stays valid for the lifetime of this `KvmVm`.
+        let rc = unsafe {
+            libc::madvise(
+                ptr.as_ptr() as *mut libc::c_void,
+                self.memory_size as usize,
+                libc::MADV_DONTNEED,
+            )
+        };
+        if rc != 0 {
+            return Err(Error::Memory(format!(
+                "discarding {} bytes of guest memory: {}",
+                self.memory_size,
+                std::io::Error::last_os_error()
+            )));
+        }
+        Ok(())
     }
 
     /// Write `data` into guest physical memory at `addr`.
@@ -2605,5 +2675,87 @@ mod tests {
             .create_vm(1, 1024 * 1024)
             .await
             .expect("after shutdown the backend owns no VM, so this must succeed");
+    }
+
+    /// `reset_guest_memory_to_zero` must actually zero the memory, not just
+    /// say so.
+    ///
+    /// Snapshot restore uses the return value to *skip* writing absent pages
+    /// entirely, so a backend that answered `true` without doing the work
+    /// would leave the previous guest's bytes in place and the next guest
+    /// running on top of them. Writing a pattern first is what makes this a
+    /// test rather than a call that returns `Ok`.
+    #[tokio::test]
+    async fn resetting_guest_memory_really_zeroes_it() {
+        let Ok(backend) = KvmBackend::new() else {
+            eprintln!("KVM not available — skipping");
+            return;
+        };
+        // Two pages, so the check spans a page boundary rather than sitting
+        // inside the first one.
+        let size = 8 * 1024 * 1024;
+        if backend.create_vm(1, size).await.is_err() {
+            eprintln!("KVM VM creation unavailable (check /dev/kvm permissions) — skipping");
+            return;
+        }
+
+        let vm = backend
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .expect("the VM was just created");
+
+        // Dirty the first and last page: a reset that only handled the start
+        // of the mapping would still pass on the first alone.
+        let pattern = [0xa5u8; 4096];
+        vm.write_guest_memory(0, &pattern).expect("write low page");
+        vm.write_guest_memory(size - 4096, &pattern)
+            .expect("write high page");
+
+        let host = backend
+            .guest_memory_host_addr()
+            .expect("KVM owns this guest's RAM");
+        // SAFETY: `host` is the base of the backend's guest mapping, which is
+        // `size` bytes and outlives this borrow.
+        let before = unsafe { std::slice::from_raw_parts(host as *const u8, size as usize) };
+        assert!(
+            before[..4096].iter().all(|b| *b == 0xa5),
+            "low page written"
+        );
+        assert!(
+            before[size as usize - 4096..].iter().all(|b| *b == 0xa5),
+            "high page written"
+        );
+
+        assert!(
+            backend
+                .reset_guest_memory_to_zero()
+                .expect("reset should not fail on a VM that owns memory"),
+            "the KVM backend can do this, so it must not answer false"
+        );
+
+        // SAFETY: as above; `madvise` does not unmap or resize.
+        let after = unsafe { std::slice::from_raw_parts(host as *const u8, size as usize) };
+        assert!(
+            after.iter().all(|b| *b == 0),
+            "every byte must read zero after a reset that claimed success"
+        );
+    }
+
+    /// A backend with no VM owns no memory, and must say so rather than
+    /// claiming it zeroed something that does not exist.
+    #[tokio::test]
+    async fn resetting_guest_memory_without_a_vm_reports_false() {
+        let Ok(backend) = KvmBackend::new() else {
+            eprintln!("KVM not available — skipping");
+            return;
+        };
+        assert!(
+            !backend
+                .reset_guest_memory_to_zero()
+                .expect("no VM is not an error"),
+            "with no VM there is no memory to have zeroed"
+        );
     }
 }
