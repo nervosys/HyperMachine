@@ -21,8 +21,10 @@
 //! everything agents may do, including tools added after it was written.
 //!
 //! See [`limits`](crate::limits), which is still consult-only, and
-//! [`permissions`](crate::permissions), which `hv2-api`'s permission middleware
-//! wires into a request path.
+//! [`permissions`](crate::permissions), which is consult-only too: this line
+//! used to say `hv2-api`'s permission middleware "wires it into a request
+//! path", and that middleware is installed by no router -- see its own header.
+//! Of the three, this module is the one with a caller.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

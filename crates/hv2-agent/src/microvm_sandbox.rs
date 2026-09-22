@@ -11,8 +11,16 @@
 //!
 //! A VM does not have them, because the workload is not sharing a kernel with
 //! the host at all. [`MicroVmSandbox`] runs the workload inside a guest through
-//! the vsock agent, and therefore enforces every [`Control`] this crate
-//! defines. It costs a VM.
+//! the vsock agent, and so enforces every [`Control`] this crate defines
+//! *except* [`Control::ProcessCount`]: this backend forwards a program, its
+//! arguments and a deadline, and nothing carries a process ceiling to the
+//! guest. See [`MicroVmSandbox::declared_controls`], which declines it
+//! explicitly and says why. It costs a VM.
+//!
+//! (This paragraph claimed "every Control" until 2026-09-22. The code was
+//! already right -- `declared_controls` has excluded `ProcessCount` with a
+//! reason for some time -- so the header was the only thing overstating, which
+//! is the reverse of the usual direction and just as worth fixing.)
 //!
 //! Both implement [`Sandbox`], so a caller chooses isolation strength without
 //! changing how it asks.
