@@ -68,8 +68,12 @@ written justification:
 - **FIPS‑mode gate** (`crypto::fips::FipsMode` = `Enabled`/`Disabled`) with an
   **approved‑algorithm allow‑list** and **power‑up known‑answer self‑tests**
   (`run_self_tests`) — the architectural pattern FIPS 140‑3 requires.
-- **Approved symmetric/hash primitives** via the audited `ring` backend:
-  AES‑128/256‑GCM, SHA‑256/384/512, HMAC‑SHA‑2, HKDF.
+- **Approved symmetric/hash primitives** via IronCrypto (`ic-cipher`,
+  `ic-hash`, `ic-mac`, `ic-kdf`): AES‑128/256‑GCM, SHA‑256/384/512,
+  HMAC‑SHA‑2, HKDF. Held to published vectors — FIPS 180‑4, RFC 4231,
+  RFC 5869, SP 800‑38D — in unit tests and in the power‑up self‑tests.
+  This replaced `ring` on 2026‑09‑21; earlier revisions of this document
+  describe `ring` as the backend.
 - **Approved asymmetric primitives:** RSA (FIPS key sizes), ECDSA on NIST curves
   (P‑256/384/521).
 - **NIST Post‑Quantum (CNSA 2.0‑relevant):** ML‑KEM (FIPS 203), ML‑DSA
@@ -78,15 +82,33 @@ written justification:
 
 ### 3.2 Honest limitations
 - **Not CMVP‑validated.** Using FIPS‑*approved algorithms* is **not** the same as
-  being a FIPS 140‑3 **validated module**. `ring` is not itself on the CMVP
-  validated‑module list. A validated deployment requires either linking a
-  validated module (e.g., a FIPS build of BoringSSL/OpenSSL/aws‑lc) and running it
-  in its validated configuration, or pursuing module validation.
+  being a FIPS 140‑3 **validated module**. IronCrypto is not on the CMVP
+  validated‑module list, and neither was `ring` before it — the migration
+  changed the provider, not the validation status. A validated deployment
+  requires either linking a validated module (e.g., a FIPS build of
+  BoringSSL/OpenSSL/aws‑lc) and running it in its validated configuration, or
+  pursuing module validation.
 - **PQC implementations** (RustCrypto) are standards‑conformant but not CAVP‑
   certified.
-- The **memory‑encryption** layer (AMD SME/SEV/SEV‑ES/SEV‑SNP, Intel TDX) is
-  present as a framework/enumeration and is **not fully activated** end‑to‑end;
-  treat confidential‑compute as roadmap, not a guarantee.
+- **There is no memory encryption.** Stated more bluntly than a previous
+  revision of this document, which said the layer was "not fully activated
+  end‑to‑end" — that reads as partial, and it is not partial.
+  `security/memory_encryption.rs` contains no `ioctl`, no `libc` call and no
+  `unsafe` block, and `KVM_MEMORY_ENCRYPT_OP` appears nowhere in the
+  workspace. It models the state SEV and TDX keep; it cannot drive either.
+  Until 2026‑09‑22 its `enable()` set a flag and returned `Ok(())` on any
+  machine, so a caller could have been told encryption was on while the guest
+  ran in plaintext host memory. Nothing called it, so nothing was misled.
+  It now refuses with `EncryptionError::NoBackend`, and refuses on capable
+  silicon too, because what is missing is the driver rather than the
+  hardware. `EncryptionTechnology::available_on_this_host()` reports what the
+  running kernel supports and is the honest half.
+
+  **Consequence for accreditation:** a guest is *not* protected from the host
+  or from a host administrator. Confidential computing is roadmap, and the
+  first real step is a `MemoryEncryptionBackend` implementation developed
+  against SEV‑SNP hardware (EPYC; a desktop Ryzen has no `sev` CPU flag and
+  no `/dev/sev`, so it cannot be developed or verified there).
 
 ### 3.3 Mapping to SP 800‑series
 - **SP 800‑57 (key management):** key sizes/curves enforced; HKDF for derivation. Key *storage/rotation lifecycle* is application‑responsibility.

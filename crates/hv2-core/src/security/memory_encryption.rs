@@ -1,12 +1,72 @@
 //! Memory encryption for confidential computing
 //!
-//! This module provides infrastructure for memory encryption technologies
-//! like AMD SEV (Secure Encrypted Virtualization) and Intel TDX (Trust Domain Extensions).
+//! # This module encrypts nothing
+//!
+//! Stated first because the names below promise otherwise. There is no
+//! `ioctl`, no `libc` call and no `unsafe` block in this file, and no
+//! `KVM_MEMORY_ENCRYPT_OP` anywhere in this workspace. It is a *model* of the
+//! state AMD SEV and Intel TDX keep -- which key is live, which guest page is
+//! marked encrypted -- and not a path to either.
+//!
+//! The distinction is the whole point. A VM whose memory is genuinely
+//! encrypted is protected from the host it runs on; that is the property
+//! confidential computing sells and the reason it appears in requirements for
+//! handling controlled data. A VM that merely *reports* encryption is running
+//! in plaintext host memory while its operator believes otherwise, which is
+//! worse than one that reports nothing, because the belief is what the data
+//! was entrusted to.
+//!
+//! So [`EncryptionManager::enable`] refuses. It does not refuse because the
+//! hardware is missing -- it would refuse on an EPYC with SEV-SNP too --
+//! because what is missing is the code that would drive it. When that code
+//! exists it will arrive as a [`MemoryEncryptionBackend`], and `enable` will
+//! succeed exactly when one is attached and not before.
+//!
+//! [`EncryptionTechnology::available_on_this_host`] is separate and does tell
+//! the truth: it asks the running kernel what this machine supports. Useful
+//! for deciding where a workload can go, and it is the first thing a real
+//! implementation has to get right.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use parking_lot::RwLock;
+
+/// Does this host advertise `flag` in `/proc/cpuinfo` *and* expose `/dev/sev`?
+///
+/// Both, for the reason in [`EncryptionTechnology::available_on_this_host`].
+/// Non-Linux answers `false`: there is no `/proc` to consult, and guessing in
+/// the permissive direction is how a control ends up reporting a protection
+/// nobody has.
+#[cfg(target_os = "linux")]
+fn host_has_amd_sev(flag: &str) -> bool {
+    let Ok(info) = std::fs::read_to_string("/proc/cpuinfo") else {
+        return false;
+    };
+    let advertised = info
+        .lines()
+        .filter(|l| l.starts_with("flags"))
+        .any(|l| l.split_whitespace().any(|f| f == flag));
+    advertised && std::path::Path::new("/dev/sev").exists()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn host_has_amd_sev(_flag: &str) -> bool {
+    false
+}
+
+/// Does this host's `kvm_intel` report TDX enabled?
+#[cfg(target_os = "linux")]
+fn host_has_intel_tdx() -> bool {
+    std::fs::read_to_string("/sys/module/kvm_intel/parameters/tdx")
+        .map(|v| v.trim().eq_ignore_ascii_case("y"))
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn host_has_intel_tdx() -> bool {
+    false
+}
 
 /// Page size for encryption (4KB)
 pub const PAGE_SIZE: u64 = 4096;
@@ -30,8 +90,44 @@ pub enum EncryptionTechnology {
 
 impl EncryptionTechnology {
     /// Check if this technology encrypts memory
+    ///
+    /// A property of the technology, not of this build or this machine: it
+    /// says SEV-SNP encrypts memory and `None` does not. Whether *anything
+    /// here* will encrypt memory is [`EncryptionManager::enable`], which
+    /// refuses, and whether this host could is
+    /// [`Self::available_on_this_host`].
     pub fn encrypts_memory(&self) -> bool {
         !matches!(self, Self::None)
+    }
+
+    /// Whether the running kernel says this machine can provide it.
+    ///
+    /// Asks the host rather than assuming, and answers `false` when it cannot
+    /// tell -- an unreadable `/proc` or a platform without one is not evidence
+    /// of support. The checks are the ones an operator would make by hand:
+    ///
+    /// * AMD: the CPU flag (`sev`, `sev_es`, `sev_snp`) *and* `/dev/sev`,
+    ///   because the flag says the silicon can and the device node says the
+    ///   kernel driver bound to it. Either alone is half an answer.
+    /// * Intel TDX: `/sys/module/kvm_intel/parameters/tdx` reading `Y`.
+    /// * MKTME: reported unsupported. It is total-memory encryption against
+    ///   physical attack, not per-guest isolation from the host, so answering
+    ///   `true` would invite it to be used for something it does not do.
+    ///
+    /// This is capability reporting, not a licence: a `true` here still does
+    /// not make [`EncryptionManager::enable`] succeed, because the driver is
+    /// what is missing.
+    #[must_use]
+    pub fn available_on_this_host(self) -> bool {
+        match self {
+            Self::None => true,
+            Self::AmdSev => host_has_amd_sev("sev"),
+            Self::AmdSevEs => host_has_amd_sev("sev_es"),
+            Self::AmdSevSnp => host_has_amd_sev("sev_snp"),
+            Self::IntelTdx => host_has_intel_tdx(),
+            // See the doc above: deliberately not claimed.
+            Self::IntelMktme => false,
+        }
     }
 
     /// Check if this technology encrypts CPU state
@@ -209,6 +305,11 @@ impl Default for EncryptionConfig {
 /// Encryption error types
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EncryptionError {
+    /// No backend is attached, so nothing can encrypt.
+    #[error(
+        "no memory-encryption backend is attached: this build models {0:?} state          but cannot drive it, so guest memory would not be encrypted"
+    )]
+    NoBackend(EncryptionTechnology),
     /// Technology not supported
     #[error("Encryption technology not supported: {0:?}")]
     NotSupported(EncryptionTechnology),
@@ -284,13 +385,36 @@ impl EncryptionManager {
         self.enabled.load(Ordering::Acquire)
     }
 
-    /// Enable encryption
+    /// Refuse to enable encryption, because this build cannot perform it.
+    ///
+    /// See the module header. This used to set a flag and return `Ok(())` on
+    /// any machine, which meant a caller could switch on "memory encryption"
+    /// and be told it worked while the guest ran in plaintext host memory.
+    /// Nothing called it, so nothing was misled -- but it was one caller away
+    /// from being the most dangerous kind of wrong, and a security control
+    /// that cannot do its job should say so rather than succeed.
+    ///
+    /// # Errors
+    ///
+    /// [`EncryptionError::NotSupported`] when the configured technology is
+    /// [`EncryptionTechnology::None`], and [`EncryptionError::NoBackend`]
+    /// otherwise -- including on hardware that supports the technology, since
+    /// the missing piece is the driver and not the silicon.
     pub fn enable(&self) -> EncryptionResult<()> {
         if self.config.technology == EncryptionTechnology::None {
             return Err(EncryptionError::NotSupported(EncryptionTechnology::None));
         }
+        Err(EncryptionError::NoBackend(self.config.technology))
+    }
+
+    /// Switch the *model* on, for tests of the bookkeeping in this file.
+    ///
+    /// Deliberately not public: the bookkeeping is worth testing, and the way
+    /// to test it is not to make production code able to claim an encryption
+    /// it does not have.
+    #[cfg(test)]
+    fn enable_model_for_tests(&self) {
         self.enabled.store(true, Ordering::Release);
-        Ok(())
     }
 
     /// Disable encryption
@@ -665,18 +789,83 @@ mod tests {
     }
 
     #[test]
-    fn test_encryption_manager_enable_sev() {
+    fn test_enable_refuses_because_nothing_can_encrypt() {
         let config = EncryptionConfig {
-            technology: EncryptionTechnology::AmdSev,
+            technology: EncryptionTechnology::AmdSevSnp,
             ..Default::default()
         };
         let manager = EncryptionManager::new(config);
 
-        assert!(manager.enable().is_ok());
-        assert!(manager.is_enabled());
+        // The point of the whole module. This used to assert `is_ok()`, which
+        // was true and meant nothing: it set a flag. A caller reading that as
+        // "guest memory is encrypted" would have been wrong on every machine.
+        let err = manager.enable().expect_err("enable must refuse");
+        assert!(
+            matches!(
+                err,
+                EncryptionError::NoBackend(EncryptionTechnology::AmdSevSnp)
+            ),
+            "refusal should name the missing backend, got: {err}"
+        );
+        assert!(
+            !manager.is_enabled(),
+            "a refused enable must leave encryption off"
+        );
+    }
 
-        manager.disable();
-        assert!(!manager.is_enabled());
+    /// Refusal does not depend on the hardware being absent.
+    ///
+    /// Worth its own test because the tempting fix is to gate `enable` on
+    /// [`EncryptionTechnology::available_on_this_host`], which would make it
+    /// succeed on an EPYC and encrypt exactly as much as it does here.
+    #[test]
+    fn enable_refuses_even_where_the_silicon_would_support_it() {
+        for tech in [
+            EncryptionTechnology::AmdSev,
+            EncryptionTechnology::AmdSevEs,
+            EncryptionTechnology::AmdSevSnp,
+            EncryptionTechnology::IntelTdx,
+        ] {
+            let manager = EncryptionManager::new(EncryptionConfig {
+                technology: tech,
+                ..Default::default()
+            });
+            assert!(
+                manager.enable().is_err(),
+                "{tech:?}: enable must refuse whatever the host is"
+            );
+        }
+    }
+
+    /// Capability reporting is allowed to say yes, and must not say yes here.
+    ///
+    /// This machine is a desktop Ryzen: `svm` but no `sev`, and no `/dev/sev`.
+    /// The assertion is written against what the host actually reports rather
+    /// than against a hardcoded expectation, so it stays honest if this ever
+    /// runs on an EPYC -- what it pins is that detection agrees with the
+    /// kernel, not that the answer is `false`.
+    #[test]
+    fn availability_matches_what_the_kernel_reports() {
+        let claimed = EncryptionTechnology::AmdSevSnp.available_on_this_host();
+        let truth = cfg!(target_os = "linux")
+            && std::path::Path::new("/dev/sev").exists()
+            && std::fs::read_to_string("/proc/cpuinfo")
+                .map(|i| {
+                    i.lines()
+                        .filter(|l| l.starts_with("flags"))
+                        .any(|l| l.split_whitespace().any(|f| f == "sev_snp"))
+                })
+                .unwrap_or(false);
+        assert_eq!(
+            claimed, truth,
+            "detection disagrees with the running kernel"
+        );
+
+        // `None` is the one technology every host can provide, because it is
+        // the absence of one.
+        assert!(EncryptionTechnology::None.available_on_this_host());
+        // Not claimed even where the CPU has it; see the doc comment.
+        assert!(!EncryptionTechnology::IntelMktme.available_on_this_host());
     }
 
     #[test]
@@ -734,7 +923,7 @@ mod tests {
             ..Default::default()
         };
         let manager = EncryptionManager::new(config);
-        manager.enable().unwrap();
+        manager.enable_model_for_tests();
         manager.create_key(KeyId::GUEST_DEFAULT, true).unwrap();
 
         // Encrypt page
@@ -760,7 +949,7 @@ mod tests {
             ..Default::default()
         };
         let manager = EncryptionManager::new(config);
-        manager.enable().unwrap();
+        manager.enable_model_for_tests();
         manager.create_key(KeyId::GUEST_DEFAULT, true).unwrap();
 
         // Shared page - no C-bit
@@ -780,7 +969,7 @@ mod tests {
             ..Default::default()
         };
         let manager = EncryptionManager::new(config);
-        manager.enable().unwrap();
+        manager.enable_model_for_tests();
         manager.create_key(KeyId::GUEST_DEFAULT, true).unwrap();
 
         manager.encrypt_page(0x1000, KeyId::GUEST_DEFAULT).unwrap();
@@ -801,7 +990,7 @@ mod tests {
             ..Default::default()
         };
         let manager = EncryptionManager::new(config);
-        manager.enable().unwrap();
+        manager.enable_model_for_tests();
         manager.create_key(KeyId::GUEST_DEFAULT, true).unwrap();
 
         manager.encrypt_page(0x1000, KeyId::GUEST_DEFAULT).unwrap();
