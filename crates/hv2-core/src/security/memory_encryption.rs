@@ -19,7 +19,8 @@
 //! So [`EncryptionManager::enable`] refuses. It does not refuse because the
 //! hardware is missing -- it would refuse on an EPYC with SEV-SNP too --
 //! because what is missing is the code that would drive it. When that code
-//! exists it will arrive as a [`MemoryEncryptionBackend`], and `enable` will
+//! exists it will arrive as a `MemoryEncryptionBackend` -- a type that does
+//! not exist yet, which is the point -- and `enable` will
 //! succeed exactly when one is attached and not before.
 //!
 //! [`EncryptionTechnology::available_on_this_host`] is separate and does tell

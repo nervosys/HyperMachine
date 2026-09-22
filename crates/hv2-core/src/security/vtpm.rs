@@ -236,7 +236,7 @@ impl PcrBank {
     /// definition in the TPM specification and the reason PCRs work.
     ///
     /// Returns `false` for an out-of-range index, and for an algorithm this
-    /// build has no hash for -- see [`Self::hash_chain`]. The caller turns that
+    /// build has no hash for -- see `Self::hash_chain`. The caller turns that
     /// into `TpmResponseCode::BadPcr` rather than extending with something
     /// weaker, because a measurement that silently is not one is the failure
     /// this whole function is about.

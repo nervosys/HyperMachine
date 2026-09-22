@@ -268,7 +268,7 @@ pub enum VerificationResult {
     /// Distinct from [`Self::InvalidSignature`], which is a verdict. This is
     /// the absence of one: the signature was neither accepted nor rejected,
     /// because this build cannot check it. Admission must treat it as a
-    /// refusal -- see [`SecureBoot::verify`].
+    /// refusal -- see [`SecureBootManager::verify`].
     VerificationUnavailable,
 }
 
