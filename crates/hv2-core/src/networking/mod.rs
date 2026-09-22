@@ -11,6 +11,13 @@ pub mod sriov;
 pub mod vswitch;
 
 // Re-export key types
+// `ConnTracker`, `FilterChain` and `NetworkFilter` are deprecated: they are
+// not wired to any data path. Re-exported anyway so the deprecation reaches
+// anyone already using them rather than vanishing from the API without a
+// word, and `allow`ed here because re-exporting a deprecated item warns at
+// the `pub use` and this crate builds with warnings denied. The warning is
+// for callers, not for this line.
+#[allow(deprecated)]
 pub use filter::{
     ConnState, ConnTrackEntry, ConnTracker, FilterAction, FilterChain, FilterRule, IpMatch,
     IpProtocol, NetworkFilter, PortMatch, ProtocolMatch, StateMatch,

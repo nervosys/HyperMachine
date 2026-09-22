@@ -247,6 +247,12 @@ pub use nested::{
     PAGE_SIZE_1G as NESTED_PAGE_SIZE_1G, PAGE_SIZE_2M as NESTED_PAGE_SIZE_2M,
     PAGE_SIZE_4K as NESTED_PAGE_SIZE_4K,
 };
+// Reaching these from the crate root is how a reader is most likely to meet
+// them, and the most likely place to assume a name like `NetworkFilter` means
+// traffic is filtered. It does not: see `networking::filter`'s header.
+// `ConnTracker`, `FilterChain` and `NetworkFilter` carry `#[deprecated]` for
+// that reason, which is why this needs the `allow`.
+#[allow(deprecated)]
 pub use networking::{
     ConnState, ConnTrackEntry, ConnTracker, DeviceAssignment, EthernetFrame, FilterAction,
     FilterChain, FilterRule, IommuGroup, IpMatch, IpProtocol, MacAddress, MacEntry, MacTable,

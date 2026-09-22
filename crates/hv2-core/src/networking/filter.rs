@@ -23,6 +23,13 @@
 //! path is that work, not a small change: it would need to agree with the NAT
 //! table about what a connection is, and the two currently do not share one.
 
+// The deprecations below are aimed at callers outside this module -- they say
+// "this enforces nothing, do not rely on it". Inside the module, every `impl`
+// block and internal field naturally mentions the types it defines, and those
+// are not the uses being warned about. Scoped to this file, so the warning
+// still reaches anyone who reaches in from outside.
+#![allow(deprecated)]
+
 use std::collections::HashMap;
 use std::net::IpAddr;
 #[cfg(test)]
@@ -266,7 +273,13 @@ pub struct NatInfo {
 }
 
 /// Connection tracker
+///
+/// See the module header: this tracks nothing, because nothing calls it.
 #[derive(Debug)]
+#[deprecated(
+    since = "1.1.0",
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Egress filtering that actually runs is `hv2_net::egress::EgressPolicy`, and NAT is `hv2_net::nat::NatTable`. Kept for the Phase 3 L7 egress work; see this module's header"
+)]
 pub struct ConnTracker {
     /// Connections by original tuple
     connections: RwLock<HashMap<ConnTuple, Arc<RwLock<ConnTrackEntry>>>>,
@@ -822,7 +835,13 @@ pub enum ChainType {
 }
 
 /// Filter chain
+///
+/// See the module header: no packet is ever evaluated against this.
 #[derive(Debug)]
+#[deprecated(
+    since = "1.1.0",
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Egress filtering that actually runs is `hv2_net::egress::EgressPolicy`, and NAT is `hv2_net::nat::NatTable`. Kept for the Phase 3 L7 egress work; see this module's header"
+)]
 pub struct FilterChain {
     /// Chain type
     pub chain_type: ChainType,
@@ -902,7 +921,14 @@ impl FilterChain {
 }
 
 /// Network filter (firewall)
+///
+/// See the module header: this is not a firewall in any running sense --
+/// it decides, and is never asked.
 #[derive(Debug)]
+#[deprecated(
+    since = "1.1.0",
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Egress filtering that actually runs is `hv2_net::egress::EgressPolicy`, and NAT is `hv2_net::nat::NatTable`. Kept for the Phase 3 L7 egress work; see this module's header"
+)]
 pub struct NetworkFilter {
     /// Filter chains
     chains: RwLock<HashMap<ChainType, FilterChain>>,
