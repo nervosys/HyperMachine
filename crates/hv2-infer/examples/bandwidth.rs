@@ -47,14 +47,18 @@ const RUNS: usize = 3;
 /// `add` rather than the throughput of the memory system.
 fn read(block: &[u8]) -> u64 {
     let mut acc = [0u64; 4];
-    let mut groups = block.chunks_exact(32);
-    for group in &mut groups {
-        for (slot, word) in acc.iter_mut().zip(group.chunks_exact(8)) {
-            *slot = slot.wrapping_add(u64::from_le_bytes(word.try_into().expect("8 bytes")));
+    // `as_chunks` rather than `chunks_exact`: the chunk arrives as `[u8; 8]`
+    // already, so the `try_into().expect("8 bytes")` that used to sit in the
+    // inner loop of a bandwidth measurement is gone with it.
+    let (groups, rest) = block.as_chunks::<32>();
+    for group in groups {
+        let (words, _) = group.as_chunks::<8>();
+        for (slot, word) in acc.iter_mut().zip(words) {
+            *slot = slot.wrapping_add(u64::from_le_bytes(*word));
         }
     }
     let mut total = acc.iter().fold(0u64, |a, b| a.wrapping_add(*b));
-    for byte in groups.remainder() {
+    for byte in rest {
         total = total.wrapping_add(u64::from(*byte));
     }
     total

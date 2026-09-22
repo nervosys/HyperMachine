@@ -14,6 +14,14 @@
 //! Written to be obviously correct rather than fast. A unikernel that moves
 //! enough bytes for a byte-at-a-time loop to matter has outgrown this file,
 //! and the version that is fast is the version with the off-by-one in it.
+//!
+//! The signatures are libc's, in `c_void` rather than `u8`. They took `*mut
+//! u8` until clippy's `suspicious_runtime_symbol_definition` pointed out that
+//! the standard library calls these with the C signature: the two agree on
+//! every ABI this targets, so it worked, but a symbol the compiler emits calls
+//! to is the wrong place to be relying on that. The casts moved inward instead.
+
+use core::ffi::c_void;
 
 /// Set `n` bytes at `dest` to `c`.
 ///
@@ -22,10 +30,11 @@
 /// `dest` must be valid for `n` writes. Called by the compiler, which
 /// guarantees that.
 #[no_mangle]
-pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 {
+pub unsafe extern "C" fn memset(dest: *mut c_void, c: i32, n: usize) -> *mut c_void {
     let byte = c as u8;
+    let bytes = dest.cast::<u8>();
     for i in 0..n {
-        *dest.add(i) = byte;
+        *bytes.add(i) = byte;
     }
     dest
 }
@@ -37,9 +46,10 @@ pub unsafe extern "C" fn memset(dest: *mut u8, c: i32, n: usize) -> *mut u8 {
 /// `src` must be valid for `n` reads, `dest` for `n` writes, and the two must
 /// not overlap. Called by the compiler, which guarantees that.
 #[no_mangle]
-pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+pub unsafe extern "C" fn memcpy(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void {
+    let (to, from) = (dest.cast::<u8>(), src.cast::<u8>());
     for i in 0..n {
-        *dest.add(i) = *src.add(i);
+        *to.add(i) = *from.add(i);
     }
     dest
 }
@@ -51,15 +61,16 @@ pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut
 /// `src` must be valid for `n` reads and `dest` for `n` writes. Overlap is
 /// permitted, which is the whole difference from `memcpy`.
 #[no_mangle]
-pub unsafe extern "C" fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
+pub unsafe extern "C" fn memmove(dest: *mut c_void, src: *const c_void, n: usize) -> *mut c_void {
+    let (to, from) = (dest.cast::<u8>(), src.cast::<u8>());
     // Copy in whichever direction does not overwrite a byte before reading it.
-    if (dest as usize) < (src as usize) {
+    if (to as usize) < (from as usize) {
         for i in 0..n {
-            *dest.add(i) = *src.add(i);
+            *to.add(i) = *from.add(i);
         }
     } else {
         for i in (0..n).rev() {
-            *dest.add(i) = *src.add(i);
+            *to.add(i) = *from.add(i);
         }
     }
     dest
@@ -71,7 +82,8 @@ pub unsafe extern "C" fn memmove(dest: *mut u8, src: *const u8, n: usize) -> *mu
 ///
 /// Both pointers must be valid for `n` reads.
 #[no_mangle]
-pub unsafe extern "C" fn memcmp(a: *const u8, b: *const u8, n: usize) -> i32 {
+pub unsafe extern "C" fn memcmp(a: *const c_void, b: *const c_void, n: usize) -> i32 {
+    let (a, b) = (a.cast::<u8>(), b.cast::<u8>());
     for i in 0..n {
         let (x, y) = (*a.add(i), *b.add(i));
         if x != y {

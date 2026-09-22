@@ -697,7 +697,9 @@ fn unhex(hex: &[u8]) -> Vec<u8> {
         }
     }
     assert!(hex.len().is_multiple_of(2), "hex literal has an odd length");
-    hex.chunks_exact(2)
+    let (pairs, _) = hex.as_chunks::<2>();
+    pairs
+        .iter()
         .map(|pair| (nibble(pair[0]) << 4) | nibble(pair[1]))
         .collect()
 }

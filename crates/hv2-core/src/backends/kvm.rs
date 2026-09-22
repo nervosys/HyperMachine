@@ -473,8 +473,9 @@ impl HypervisorBackend for KvmBackend {
                     area.region.len() * 4
                 )));
             }
-            for (word, chunk) in area.region.iter_mut().zip(state.xsave.chunks_exact(4)) {
-                *word = u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            let (words, _) = state.xsave.as_chunks::<4>();
+            for (word, chunk) in area.region.iter_mut().zip(words) {
+                *word = u32::from_le_bytes(*chunk);
             }
             // SAFETY: `fd` is this vCPU's descriptor; `area` is a correctly
             // sized struct this function owns.
@@ -2619,10 +2620,12 @@ fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
         mxcsr: state.mxcsr,
         ..Default::default()
     };
-    for (slot, chunk) in fpu.fpr.iter_mut().zip(state.fpr.chunks_exact(16)) {
+    let (fpr, _) = state.fpr.as_chunks::<16>();
+    for (slot, chunk) in fpu.fpr.iter_mut().zip(fpr) {
         slot.copy_from_slice(chunk);
     }
-    for (slot, chunk) in fpu.xmm.iter_mut().zip(state.xmm.chunks_exact(16)) {
+    let (xmm, _) = state.xmm.as_chunks::<16>();
+    for (slot, chunk) in fpu.xmm.iter_mut().zip(xmm) {
         slot.copy_from_slice(chunk);
     }
     Ok(fpu)

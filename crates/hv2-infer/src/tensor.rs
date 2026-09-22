@@ -323,7 +323,8 @@ impl QuantAct {
         self.sums.reserve(blocks);
         self.values.reserve(blocks * Q8_BLOCK);
 
-        for block in x.chunks_exact(Q8_BLOCK) {
+        let (blocks_of_x, _) = x.as_chunks::<Q8_BLOCK>();
+        for block in blocks_of_x {
             let peak = block.iter().fold(0.0f32, |a, v| a.max(v.abs()));
             // A block of exact zeros has no scale to speak of; anything
             // non-zero divided by 127 is one.
@@ -355,10 +356,11 @@ impl Default for QuantAct {
 /// answers survive this, the same arithmetic is worth writing wide.
 fn dot_q8_0_quant(row: &[u8], x: &QuantAct) -> f32 {
     let mut total = 0.0f32;
-    for (block, (&scale, values)) in row
-        .chunks_exact(Q8_BYTES)
-        .zip(x.scales.iter().zip(x.values.chunks_exact(Q8_BLOCK)))
-    {
+    for (block, (&scale, values)) in row.as_chunks::<Q8_BYTES>().0.iter().zip(
+        x.scales
+            .iter()
+            .zip(x.values.as_chunks::<Q8_BLOCK>().0.iter()),
+    ) {
         let weight_scale = f32::from(half::f16::from_le_bytes([block[0], block[1]]));
         let mut acc = 0i32;
         for (w, q) in block[2..].iter().zip(values) {
@@ -468,14 +470,18 @@ fn dot(quant: Quant, row: &[u8], x: &[f32]) -> f32 {
     match quant {
         Quant::Q8_0 => dot_q8_0(row, x),
         Quant::F32 => row
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .zip(x)
-            .map(|(w, a)| f32::from_le_bytes([w[0], w[1], w[2], w[3]]) * a)
+            .map(|(w, a)| f32::from_le_bytes(*w) * a)
             .sum(),
         Quant::F16 => row
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .zip(x)
-            .map(|(w, a)| f32::from(half::f16::from_le_bytes([w[0], w[1]])) * a)
+            .map(|(w, a)| f32::from(half::f16::from_le_bytes(*w)) * a)
             .sum(),
     }
 }
@@ -601,7 +607,7 @@ unsafe fn dot_q8_0_wide(row: &[u8], x: &[f32]) -> f32 {
 /// anything that is not an x86-64 with AVX2.
 fn dot_q8_0_scalar(row: &[u8], x: &[f32]) -> f32 {
     let mut sum = 0.0f32;
-    for (block, chunk) in row.chunks_exact(Q8_BYTES).zip(x.chunks(Q8_BLOCK)) {
+    for (block, chunk) in row.as_chunks::<Q8_BYTES>().0.iter().zip(x.chunks(Q8_BLOCK)) {
         let scale = f32::from(half::f16::from_le_bytes([block[0], block[1]]));
         let mut acc = 0.0f32;
         for (q, a) in block[2..].iter().zip(chunk) {
@@ -616,17 +622,22 @@ fn dot_q8_0_scalar(row: &[u8], x: &[f32]) -> f32 {
 pub fn dequant(quant: Quant, bytes: &[u8], out: &mut [f32]) {
     match quant {
         Quant::F32 => {
-            for (slot, w) in out.iter_mut().zip(bytes.chunks_exact(4)) {
-                *slot = f32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+            for (slot, w) in out.iter_mut().zip(bytes.as_chunks::<4>().0) {
+                *slot = f32::from_le_bytes(*w);
             }
         }
         Quant::F16 => {
-            for (slot, w) in out.iter_mut().zip(bytes.chunks_exact(2)) {
-                *slot = f32::from(half::f16::from_le_bytes([w[0], w[1]]));
+            for (slot, w) in out.iter_mut().zip(bytes.as_chunks::<2>().0) {
+                *slot = f32::from(half::f16::from_le_bytes(*w));
             }
         }
         Quant::Q8_0 => {
-            for (block, slots) in bytes.chunks_exact(Q8_BYTES).zip(out.chunks_mut(Q8_BLOCK)) {
+            for (block, slots) in bytes
+                .as_chunks::<Q8_BYTES>()
+                .0
+                .iter()
+                .zip(out.chunks_mut(Q8_BLOCK))
+            {
                 let scale = f32::from(half::f16::from_le_bytes([block[0], block[1]]));
                 for (slot, q) in slots.iter_mut().zip(&block[2..]) {
                     *slot = scale * f32::from(*q as i8);

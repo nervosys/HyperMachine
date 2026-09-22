@@ -63,7 +63,20 @@ use hv2_agent::{AgentVM, PtySize};
 
 pub mod process_proto {
     // As in `envd_filesystem`: generated code, lints nobody can act on.
-    #![allow(clippy::large_enum_variant, clippy::doc_overindented_list_items)]
+    // `useless_borrows_in_formatting` is pbjson-build's, not ours: the
+    // `*.serde.rs` below is written by the build script and passes `&` to
+    // `write!` in its generated `Display` impls. There is no source here to
+    // fix, and the alternative to allowing it is for this workspace's clippy
+    // to fail on code nobody in it wrote.
+    //
+    // It was invisible until 2026-09-22 because the sweep's clippy step read
+    // a grep count and ignored cargo's exit status, so 55 of these reported
+    // as "workspace: 0". See tools/sweep.sh.
+    #![allow(
+        clippy::large_enum_variant,
+        clippy::doc_overindented_list_items,
+        clippy::useless_borrows_in_formatting
+    )]
 
     tonic::include_proto!("process");
 

@@ -415,11 +415,14 @@ fn write_ipv4_addr(frame: &mut [u8], offset: usize, addr: Ipv4Addr) {
 /// folded to 16 bits, then complemented.
 fn internet_checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
-    let mut chunks = data.chunks_exact(2);
-    for chunk in &mut chunks {
-        sum += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
+    let (pairs, rest) = data.as_chunks::<2>();
+    for chunk in pairs {
+        sum += u16::from_be_bytes(*chunk) as u32;
     }
-    if let [last] = chunks.remainder() {
+    // The odd trailing byte, if the data has one: RFC 1071 pads it on the
+    // right, so it is the *high* half of the final word. `as_chunks` hands
+    // back that leftover as its second element, exactly as `remainder()` did.
+    if let [last] = rest {
         sum += (*last as u32) << 8;
     }
     while sum >> 16 != 0 {

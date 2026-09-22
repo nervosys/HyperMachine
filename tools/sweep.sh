@@ -74,13 +74,28 @@ done
 step "clippy"
 # --all-targets, which is what CI does not do: it is how tests, examples and
 # benches get linted rather than only the libraries.
-n=$(cargo clippy --release --workspace --all-targets -- -D warnings 2>&1 |
-    grep -cE '^(warning|error)')
-echo "  workspace: $n"
+#
+# The count is not the verdict; cargo's exit status is. This step counted
+# matching lines and nothing else, and on 2026-09-22 it reported "workspace: 0"
+# twice in a row while `cargo clippy` was exiting 101 on four `chunks_exact`
+# errors. A grep that finds nothing and a command that printed nothing look
+# identical from here, so a run that fails before it can emit a diagnostic --
+# or one whose output is swallowed for any other reason -- reads as clean.
+#
+# That is the same shape as the checks this script exists to catch. Both are
+# reported now: the status says whether clippy was happy, the count says how
+# much it had to say.
+out=$(cargo clippy --release --workspace --all-targets -- -D warnings 2>&1)
+code=$?
+n=$(echo "$out" | grep -cE '^(warning|error)')
+echo "  workspace: $n (cargo exit $code)"
+[ "$code" -eq 0 ] || bad "clippy exited $code"
 [ "$n" -eq 0 ] || bad "clippy reported $n"
-n=$(cd crates/hv1-multiboot && cargo clippy --release -- -D warnings 2>&1 |
-    grep -cE '^(warning|error)')
-echo "  hv1-multiboot: $n"
+out=$(cd crates/hv1-multiboot && cargo clippy --release -- -D warnings 2>&1)
+code=$?
+n=$(echo "$out" | grep -cE '^(warning|error)')
+echo "  hv1-multiboot: $n (cargo exit $code)"
+[ "$code" -eq 0 ] || bad "clippy exited $code in hv1-multiboot"
 [ "$n" -eq 0 ] || bad "clippy reported $n in hv1-multiboot"
 
 step "doc"
@@ -88,9 +103,15 @@ step "doc"
 # still a broken link, and without it rustdoc never looks at one: a
 # dangling [`VmHost`] in rest.rs sat here unreported through every
 # previous sweep.
-n=$(RUSTDOCFLAGS="-D warnings" CARGO_TARGET_DIR=/var/tmp/hm-doc \
-    cargo doc --workspace --no-deps --document-private-items 2>&1 | grep -cE '^error')
-echo "  errors: $n"
+#
+# Exit status as well as the count, for the reason written against the clippy
+# step above: a grep of output that was never produced reads as success.
+out=$(RUSTDOCFLAGS="-D warnings" CARGO_TARGET_DIR=/var/tmp/hm-doc \
+    cargo doc --workspace --no-deps --document-private-items 2>&1)
+code=$?
+n=$(echo "$out" | grep -cE '^error')
+echo "  errors: $n (cargo exit $code)"
+[ "$code" -eq 0 ] || bad "rustdoc exited $code"
 [ "$n" -eq 0 ] || bad "rustdoc reported $n errors"
 
 step "docs against code"
