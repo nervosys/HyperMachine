@@ -1,7 +1,27 @@
-//! Permission middleware — wires the graph-based permission system into the API.
+//! Permission middleware for the graph-based permission system.
 //!
-//! When enabled, each request is checked against the [`PermissionGraph`] before
-//! being forwarded to the handler. The middleware:
+//! # Nothing installs this
+//!
+//! Stated first because the previous first line said this module "wires the
+//! graph-based permission system into the API", and it does not: no router in
+//! this workspace applies [`permission_handler`], and both public functions
+//! here have no caller outside this file. `hv2_agent::permissions` is likewise
+//! re-exported from that crate's `lib.rs` and used by nothing else.
+//!
+//! The wording mattered. A project memory recorded `permissions/` as "the one
+//! governance module wired into a request path, by
+//! `hv2-api/src/permission_middleware.rs`" -- read straight off this header,
+//! and wrong. API requests are not permission-checked by this.
+//!
+//! What does gate the HTTP surface is in `crate::middleware`: API-key
+//! comparison (constant-time, via `subtle`), request-signature verification,
+//! rate limiting and body limits -- each opt-in through `MiddlewareConfig`.
+//! This module is a finer-grained scheme that has not been connected to them.
+//!
+//! # What it would do, once installed
+//!
+//! Each request checked against the [`PermissionGraph`] before reaching the
+//! handler:
 //!
 //! 1. Extracts the API key from the `Authorization` header.
 //! 2. Looks up the associated [`PrincipalId`] in the key→principal map.
