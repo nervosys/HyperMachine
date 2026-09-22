@@ -1,7 +1,34 @@
 //! Virtual Trusted Platform Module (vTPM)
 //!
-//! This module provides a software TPM 2.0 implementation for secure
-//! key storage, attestation, and cryptographic operations.
+//! A software TPM 2.0 in the VMM's own address space: PCR banks, NV storage,
+//! key handles, and the command/response shape a guest expects.
+//!
+//! # What it is not
+//!
+//! **Not a root of trust.** A discrete TPM's value is that its shielded
+//! locations are outside the reach of the software being measured. This one
+//! lives in the process that runs the guest, so anything that compromises the
+//! VMM can set a PCR to whatever it likes and the values mean nothing to a
+//! relying party. It is measurement *bookkeeping* on behalf of a guest, which
+//! is useful, and not evidence to a third party, which is what attestation
+//! means. Hardware-rooted attestation needs SEV-SNP or TDX -- see
+//! `super::memory_encryption`, which does not have a backend either.
+//!
+//! **No attestation.** There is no quote operation: nothing here signs a PCR
+//! set for anyone to verify. The header said "attestation" before; it was
+//! never implemented.
+//!
+//! **Keys are not shielded.** They are a `HashMap` in host memory. A key
+//! handle here is a handle to an ordinary allocation.
+//!
+//! # What is real
+//!
+//! PCR extension is a hash chain, `new = H(old || data)`, over IronCrypto's
+//! SHA-2. That is worth stating because until 2026-09-22 it was `pcr[i] ^=
+//! byte` -- see [`PcrBank::extend`] for why that made every register
+//! forgeable. Within the "not a root of trust" limit above, a guest's
+//! measurement log now behaves like a measurement log: append-only,
+//! order-dependent, and not steerable to a chosen value.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -188,19 +215,61 @@ impl PcrBank {
         self.pcrs.get(index).map(|v| v.as_slice())
     }
 
-    /// Extend PCR with data
+    /// Extend PCR `index` with `data`: `new = H(old || data)`.
+    ///
+    /// # What this replaced, and why it mattered
+    ///
+    /// This was `pcr[i] ^= byte`, with a comment reading "Simplified: XOR for
+    /// demonstration". XOR gives a measurement register none of the
+    /// properties that make one worth having:
+    ///
+    /// * **Forgeable.** To land on any target value, extend `target ^ current`.
+    ///   A hash chain cannot be steered that way without inverting the hash.
+    /// * **Order-blind.** Measuring A then B equals measuring B then A, so a
+    ///   boot sequence and a permutation of it are indistinguishable.
+    /// * **Reversible.** Extending the same value twice returns the register
+    ///   to where it started, so a measurement can be un-measured.
+    ///
+    /// Anything built on that -- sealing, an attestation quote, a policy that
+    /// admits a guest on its PCR values -- would have been decided by a number
+    /// the measured party could choose. It is a hash chain now, which is the
+    /// definition in the TPM specification and the reason PCRs work.
+    ///
+    /// Returns `false` for an out-of-range index, and for an algorithm this
+    /// build has no hash for -- see [`Self::hash_chain`]. The caller turns that
+    /// into `TpmResponseCode::BadPcr` rather than extending with something
+    /// weaker, because a measurement that silently is not one is the failure
+    /// this whole function is about.
     pub fn extend(&mut self, index: usize, data: &[u8]) -> bool {
         if index >= self.pcrs.len() {
             return false;
         }
-
-        // In real TPM: new_value = hash(old_value || data)
-        // Simplified: XOR for demonstration
-        let pcr = &mut self.pcrs[index];
-        for (i, &byte) in data.iter().take(pcr.len()).enumerate() {
-            pcr[i] ^= byte;
-        }
+        let Some(extended) = Self::hash_chain(self.algorithm, &self.pcrs[index], data) else {
+            return false;
+        };
+        self.pcrs[index] = extended;
         true
+    }
+
+    /// `H(old || data)` for the algorithms this build can actually compute.
+    ///
+    /// `None` for SHA-1 and SM3: IronCrypto supplies neither, and a PCR bank
+    /// that quietly measured with a different hash than the one it advertises
+    /// would be lying about what its values mean. SHA-1 is unsuitable for new
+    /// measurement anyway.
+    fn hash_chain(algorithm: HashAlgorithm, old: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+        use ic_core::traits::Digest;
+
+        let mut input = Vec::with_capacity(old.len() + data.len());
+        input.extend_from_slice(old);
+        input.extend_from_slice(data);
+
+        match algorithm {
+            HashAlgorithm::Sha256 => Some(ic_hash::Sha256::digest(&input).to_vec()),
+            HashAlgorithm::Sha384 => Some(ic_hash::Sha384::digest(&input).to_vec()),
+            HashAlgorithm::Sha512 => Some(ic_hash::Sha512::digest(&input).to_vec()),
+            HashAlgorithm::Sha1 | HashAlgorithm::Sm3 => None,
+        }
     }
 
     /// Reset PCR (only PCRs 16-23 are resettable)
@@ -911,5 +980,99 @@ mod tests {
 
         tpm.create_key(KeyType::Rsa, 2048, None).unwrap();
         assert_eq!(tpm.key_count(), 1);
+    }
+
+    /// A PCR must not be steerable to a value the measured party picks.
+    ///
+    /// This is the property the old XOR `extend` did not have: with it, an
+    /// attacker reaching any target value only had to extend
+    /// `target ^ current`. The test does exactly that and requires it to fail.
+    #[test]
+    fn a_pcr_cannot_be_driven_to_a_chosen_value() {
+        let mut bank = PcrBank::new(HashAlgorithm::Sha256);
+        let target = vec![0x42u8; 32];
+
+        let current = bank.read(0).expect("pcr 0").to_vec();
+        let forgery: Vec<u8> = current.iter().zip(&target).map(|(c, t)| c ^ t).collect();
+
+        assert!(bank.extend(0, &forgery), "extend should succeed");
+        assert_ne!(
+            bank.read(0).expect("pcr 0"),
+            target.as_slice(),
+            "the XOR trick must not land on the target: a PCR an attacker can              choose measures nothing"
+        );
+    }
+
+    /// Measuring A then B must differ from measuring B then A.
+    ///
+    /// Order-independence was the second thing XOR gave away: a boot sequence
+    /// and a permutation of it produced the same register.
+    #[test]
+    fn pcr_extension_depends_on_order() {
+        let mut ab = PcrBank::new(HashAlgorithm::Sha256);
+        ab.extend(0, b"first");
+        ab.extend(0, b"second");
+
+        let mut ba = PcrBank::new(HashAlgorithm::Sha256);
+        ba.extend(0, b"second");
+        ba.extend(0, b"first");
+
+        assert_ne!(
+            ab.read(0).expect("pcr 0"),
+            ba.read(0).expect("pcr 0"),
+            "a measurement log that does not depend on order is not a log"
+        );
+    }
+
+    /// Extending the same value twice must not undo it.
+    #[test]
+    fn extending_twice_does_not_return_a_pcr_to_where_it_started() {
+        let mut bank = PcrBank::new(HashAlgorithm::Sha256);
+        let start = bank.read(0).expect("pcr 0").to_vec();
+        bank.extend(0, b"measurement");
+        bank.extend(0, b"measurement");
+        assert_ne!(
+            bank.read(0).expect("pcr 0"),
+            start.as_slice(),
+            "XOR was self-inverse, so a measurement could be un-measured"
+        );
+    }
+
+    /// The chain is the specification's: `new = H(old || data)`, checked
+    /// against a hash computed here rather than against itself.
+    #[test]
+    fn the_chain_is_hash_of_old_then_data() {
+        use ic_core::traits::Digest;
+
+        let mut bank = PcrBank::new(HashAlgorithm::Sha256);
+        let old = bank.read(0).expect("pcr 0").to_vec();
+        bank.extend(0, b"payload");
+
+        let mut expected_input = old.clone();
+        expected_input.extend_from_slice(b"payload");
+        let expected = ic_hash::Sha256::digest(&expected_input);
+
+        assert_eq!(bank.read(0).expect("pcr 0"), expected.as_slice());
+    }
+
+    /// A bank whose hash this build cannot compute refuses to extend.
+    ///
+    /// Measuring with a different algorithm than the bank advertises would
+    /// make its values mean something other than what a verifier assumes.
+    #[test]
+    fn a_bank_without_a_hash_refuses_rather_than_measuring_wrongly() {
+        for algorithm in [HashAlgorithm::Sha1, HashAlgorithm::Sm3] {
+            let mut bank = PcrBank::new(algorithm);
+            let before = bank.read(0).expect("pcr 0").to_vec();
+            assert!(
+                !bank.extend(0, b"anything"),
+                "{algorithm:?}: extend must refuse without a hash"
+            );
+            assert_eq!(
+                bank.read(0).expect("pcr 0"),
+                before.as_slice(),
+                "{algorithm:?}: a refused extend must leave the PCR alone"
+            );
+        }
     }
 }
