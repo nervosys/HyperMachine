@@ -10,12 +10,24 @@
 //! is never asked. A reader who assumes otherwise -- reasonably, from the name
 //! -- concludes a guest's traffic is filtered when it is not.
 //!
-//! The control that actually runs is `hv2_net::egress::EgressPolicy` (not a
-//! link: `hv2-net` depends on this crate, not the other way round), which
-//! `hv2_net::bridge::Bridge` consults for every outbound frame. It is
+//! The nearest thing to a live control is `hv2_net::egress::EgressPolicy`
+//! (not a link: `hv2-net` depends on this crate, not the other way round),
+//! which `hv2_net::bridge::Bridge` consults for every outbound frame. It is
 //! deliberately smaller than this: destination address, port and protocol, no
 //! connection tracking, because a bridge sees frames on the guest's own kick
 //! and whatever it does there is in the path of every packet.
+//!
+//! "Nearest thing", and not "the control that runs", which is what this said
+//! until someone checked. `Bridge` is constructed in exactly one place
+//! outside its own module -- `hv2-net/examples/tap_bridge.rs` -- and no
+//! product path builds one. A sandbox as actually deployed gets no network
+//! interface at all (see `e2b_compat`), so guest traffic is unfiltered
+//! because there is no guest traffic path, not because a policy allowed it.
+//!
+//! The difference between the two modules is still real and worth the
+//! distinction: `EgressPolicy` is wired into the component that would carry
+//! the traffic, so standing up a `Bridge` enforces it. This module is wired
+//! to nothing, and standing anything up does not change that.
 //!
 //! This is kept rather than deleted because connection tracking is wanted for
 //! the L7 egress work in `docs/CUBESANDBOX_PARITY_ROADMAP.md`'s Phase 3, and
@@ -278,7 +290,7 @@ pub struct NatInfo {
 #[derive(Debug)]
 #[deprecated(
     since = "1.1.0",
-    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Egress filtering that actually runs is `hv2_net::egress::EgressPolicy`, and NAT is `hv2_net::nat::NatTable`. Kept for the Phase 3 L7 egress work; see this module's header"
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. The egress filter that a bridge would consult is `hv2_net::egress::EgressPolicy` and NAT is `hv2_net::nat::NatTable`, though no product path builds a bridge either -- a deployed sandbox has no network interface. Kept for the Phase 3 L7 egress work; see this module's header"
 )]
 pub struct ConnTracker {
     /// Connections by original tuple
@@ -840,7 +852,7 @@ pub enum ChainType {
 #[derive(Debug)]
 #[deprecated(
     since = "1.1.0",
-    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Egress filtering that actually runs is `hv2_net::egress::EgressPolicy`, and NAT is `hv2_net::nat::NatTable`. Kept for the Phase 3 L7 egress work; see this module's header"
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. The egress filter that a bridge would consult is `hv2_net::egress::EgressPolicy` and NAT is `hv2_net::nat::NatTable`, though no product path builds a bridge either -- a deployed sandbox has no network interface. Kept for the Phase 3 L7 egress work; see this module's header"
 )]
 pub struct FilterChain {
     /// Chain type
@@ -927,7 +939,7 @@ impl FilterChain {
 #[derive(Debug)]
 #[deprecated(
     since = "1.1.0",
-    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Egress filtering that actually runs is `hv2_net::egress::EgressPolicy`, and NAT is `hv2_net::nat::NatTable`. Kept for the Phase 3 L7 egress work; see this module's header"
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. The egress filter that a bridge would consult is `hv2_net::egress::EgressPolicy` and NAT is `hv2_net::nat::NatTable`, though no product path builds a bridge either -- a deployed sandbox has no network interface. Kept for the Phase 3 L7 egress work; see this module's header"
 )]
 pub struct NetworkFilter {
     /// Filter chains
