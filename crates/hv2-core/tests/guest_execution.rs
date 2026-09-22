@@ -354,6 +354,7 @@ async fn create_test_vm() -> Option<Arc<VM>> {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     match VM::new(config) {
@@ -539,6 +540,7 @@ async fn test_execute_hello_binary() {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -964,6 +966,7 @@ async fn test_execute_multiboot() {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1068,6 +1071,7 @@ async fn test_execute_interrupt_demo() {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1156,6 +1160,7 @@ async fn test_execute_mmio_test() {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1226,6 +1231,7 @@ async fn test_state_management_tracking() {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1299,6 +1305,7 @@ async fn test_multi_vcpu_state_management() {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let backend = Arc::new(MockHypervisorBackend::with_exits(exits));
@@ -1566,6 +1573,7 @@ async fn pinned_vcpu_runs_to_completion() {
         vcpu_affinity: vec![(0, 0)], // pin vCPU 0 to host core 0
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
     let backend = Arc::new(MockHypervisorBackend::with_exits(vec![VmExit::Hlt]));
     let vm = Arc::new(VM::new_with_backend(config, backend).expect("create VM"));

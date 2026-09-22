@@ -74,6 +74,28 @@ pub struct VMConfig {
     /// harnesses), but such a VM has nothing to execute until something does.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub boot: Option<crate::boot::source::BootSource>,
+
+    /// Refuse to show this VM any shared read-only region.
+    ///
+    /// Sharing one host allocation between guests is what makes a fleet of
+    /// agents over one model affordable -- see [`VM::attach_shared_rom`] -- and
+    /// it is also a channel between them. Two guests holding the same physical
+    /// pages can signal through the cache: one evicts a line, the other times
+    /// its own access to it and learns whether the first touched it. Read-only
+    /// mapping stops a guest writing to another's memory; it does not stop
+    /// this, because the channel is in the timing and not in the contents.
+    ///
+    /// Defaults to `false`, which preserves the sharing every existing caller
+    /// relies on. Set it on a host where two guests must not be able to reach
+    /// each other at all -- different tenants, different classifications --
+    /// and [`VM::attach_shared_rom`] will refuse rather than quietly
+    /// establishing the channel.
+    ///
+    /// Named for what it forbids rather than what it allows, so that the
+    /// stricter setting is the one that reads as `true` and a config review
+    /// sees which hosts have it.
+    #[serde(default)]
+    pub forbid_shared_memory: bool,
 }
 
 fn default_parallel_vcpu() -> bool {
@@ -179,6 +201,7 @@ impl Default for VMConfig {
             vcpu_affinity: Vec::new(),
             memory_numa_node: None,
             boot: None,
+            forbid_shared_memory: false,
         }
     }
 }
@@ -1678,15 +1701,39 @@ impl VM {
     /// The [`Arc`] is held for the life of the VM, so the region cannot be
     /// unmapped while a guest is reading it.
     ///
+    /// # What sharing costs
+    ///
+    /// The same physical pages in two guests is a channel between them. One
+    /// evicts a cache line belonging to the shared region; the other times its
+    /// own access to that line and learns whether the first touched it. That
+    /// is a covert channel of the Flush+Reload kind, and it needs neither
+    /// guest to write anything: the read-only mapping prevents a guest
+    /// corrupting another's memory and does nothing about this, because what
+    /// carries the signal is the timing rather than the contents.
+    ///
+    /// For a fleet of mutually-trusting agents over one model -- the case this
+    /// exists for -- that is a fair trade and the alternative is paying for
+    /// the weights per guest. For two guests that must not be able to reach
+    /// each other at all, it is not, and
+    /// [`VMConfig::forbid_shared_memory`] makes this refuse.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the VM has not been provisioned, if the region would
-    /// overlap guest RAM, or if the backend cannot share memory read-only.
+    /// Returns an error if the VM has not been provisioned, if
+    /// [`VMConfig::forbid_shared_memory`] is set, if the region would overlap
+    /// guest RAM, or if the backend cannot share memory read-only.
     pub async fn attach_shared_rom(
         self: &Arc<Self>,
         guest_addr: u64,
         rom: Arc<crate::shared_rom::SharedRom>,
     ) -> Result<()> {
+        if self.config.forbid_shared_memory {
+            return Err(Error::PermissionDenied(format!(
+                "VM '{}': shared memory is forbidden by its configuration, and a                  shared region is a timing channel between every guest that holds it",
+                self.config.name
+            )));
+        }
+
         if self.hv_vm.read().is_none() {
             return Err(Error::InvalidState(
                 "provision the VM before showing it a shared region".into(),
@@ -3414,6 +3461,50 @@ mod tests {
                 None
             }
         }
+    }
+
+    /// A forbidden shared region is refused before anything else is checked.
+    ///
+    /// Deliberately on a VM that has not been provisioned: the refusal has to
+    /// come from the policy and not from the VM happening to be in the wrong
+    /// state, so this would pass for the wrong reason if the guard sat after
+    /// the provisioning check. The error message is checked for the same
+    /// reason -- `InvalidState` and `PermissionDenied` are both `Err`.
+    #[tokio::test]
+    async fn a_forbidden_shared_region_is_refused() {
+        let vm = Arc::new(
+            VM::new(VMConfig {
+                name: "strict".into(),
+                memory_size: 4 * 1024 * 1024,
+                forbid_shared_memory: true,
+                ..Default::default()
+            })
+            .expect("a VM that never runs needs no backend"),
+        );
+
+        let rom = crate::shared_rom::SharedRom::zeroed(4096).expect("a page of shared memory");
+        let err = vm
+            .attach_shared_rom(0x8000_0000, rom)
+            .await
+            .expect_err("forbid_shared_memory must refuse");
+
+        assert!(
+            matches!(err, Error::PermissionDenied(_)),
+            "refusal should be a policy denial, not a state error: {err}"
+        );
+        assert!(
+            err.to_string().contains("timing channel"),
+            "the refusal should say what it is protecting against: {err}"
+        );
+    }
+
+    /// And the default is unchanged: sharing is allowed unless forbidden.
+    #[test]
+    fn sharing_is_permitted_by_default() {
+        assert!(
+            !VMConfig::default().forbid_shared_memory,
+            "defaulting to forbid would break every existing caller"
+        );
     }
 
     /// A small VM for the vsock attachment tests.

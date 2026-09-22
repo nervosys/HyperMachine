@@ -167,7 +167,12 @@ relying on them; the risk was that they read as controls.
   Read‑only prevents direct signalling; it does not prevent a cache‑timing
   covert channel (Flush+Reload class) between guests that share them. Sound
   as a performance feature; it requires an explicit decision before two
-  guests in different security domains run on one host.
+  guests in different security domains run on one host. That decision is now
+  expressible: `VMConfig::forbid_shared_memory` makes `attach_shared_rom`
+  refuse. It defaults to `false`, preserving the sharing the fleet case
+  depends on, and is named for what it forbids so the stricter setting reads
+  as `true` in a config review. **A host carrying guests of differing trust
+  must set it.** It does not mitigate the channel; it declines to create it.
 - **No device passthrough.** There is no VFIO path and
   `supports_gpu_passthrough` is `false`, so there is no assigned‑device DMA
   surface — and correspondingly nothing programs the IOMMU. The `iommu`

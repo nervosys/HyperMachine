@@ -21,6 +21,7 @@ async fn create_test_vm(name: &str) -> Result<Option<Arc<VM>>> {
         vcpu_affinity: Vec::new(),
         memory_numa_node: None,
         boot: None,
+        forbid_shared_memory: false,
     };
 
     let vm = match VM::new(config) {
