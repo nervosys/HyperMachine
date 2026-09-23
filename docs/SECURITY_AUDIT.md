@@ -173,10 +173,28 @@ relying on them; the risk was that they read as controls.
   depends on, and is named for what it forbids so the stricter setting reads
   as `true` in a config review. **A host carrying guests of differing trust
   must set it.** It does not mitigate the channel; it declines to create it.
-- **No device passthrough.** There is no VFIO path and
-  `supports_gpu_passthrough` is `false`, so there is no assigned‑device DMA
-  surface — and correspondingly nothing programs the IOMMU. The `iommu`
-  module is re‑exported and otherwise uncalled.
+- **No device is assigned — but not because the code is absent.** An earlier
+  revision of this section said "there is no VFIO path", and that was wrong:
+  `hv2-gpu/src/passthrough.rs` is real VFIO/IOMMU code that opens
+  `/dev/vfio`, binds a device and maps BARs through actual ioctls (44 `libc`
+  or `unsafe` uses). The claim came from a truncated `grep` and is corrected
+  here because the distinction changes the risk: *absent* code cannot be
+  reached by a future change, *unreachable* code can.
+
+  What is true is that nothing reaches it. `PassthroughDevice::attach` has no
+  caller in the workspace, `hv2-gpu` is depended on only by the `hypermachine`
+  facade, and `KvmBackend` reports `supports_gpu_passthrough: false`. So no
+  device is assigned to a guest and there is no assigned‑device DMA surface in
+  practice, which is also why nothing programs the IOMMU — the `iommu` module
+  is re‑exported and otherwise uncalled.
+
+  **Worth flagging separately:** `hm-cli` surfaces a `gpu_passthrough` flag
+  through the CLI, the MCP tool schema ("Enable GPU passthrough") and the
+  agentic ontology, and that crate does not depend on `hv2-gpu` at all. The
+  flag is stored and displayed; it drives nothing. An operator or agent
+  setting it gets no passthrough and no error. That fails safe — no device
+  assigned means no DMA surface — but it is a capability the product offers
+  and does not provide.
 
 ### Bottom line
 
