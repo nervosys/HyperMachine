@@ -2817,21 +2817,24 @@ dependencies = [
 
 [[package]]
 name = "ic-cipher"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3979784067a76e8adc6cea819ac88dcb074e7ceeb0c0795a136ed8bebd87c5f4"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-core"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c7dfccd38fd9c1610ccfe2e171a0390622e9af732fbae82999591775dff208a"
 
 [[package]]
 name = "ic-ec"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c8917bfd9b00f768fa42df63e8b6739d88090c8498c210c560f8b1d6738cc24"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -2840,16 +2843,18 @@ dependencies = [
 
 [[package]]
 name = "ic-hash"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b080c348adaf33207cd46c0f6c7e8d9c163ed8ad2917734090a756d420f4dc56"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-kdf"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd01af1cb0e07f121e2d06215c35bf7e077a4b0e73e96e3d5d1b820226842e61"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -2858,8 +2863,9 @@ dependencies = [
 
 [[package]]
 name = "ic-mac"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "931997ef87db5178a82c03b1886f9574b36b689f2a7f07ef62f6a1cacab81f1d"
 dependencies = [
  "ic-cipher",
  "ic-core",
@@ -2868,8 +2874,9 @@ dependencies = [
 
 [[package]]
 name = "ic-rsa"
-version = "0.1.0"
-source = "git+https://github.com/nervosys/IronCrypto.git?rev=ad762973b4825872e13e0a5b21a72128987be17f#ad762973b4825872e13e0a5b21a72128987be17f"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "294a8d10d437f5c20ff8a2cc02e48003ebe3d00b8c3f8ecd0597068ee3acc840"
 dependencies = [
  "ic-core",
  "ic-hash",

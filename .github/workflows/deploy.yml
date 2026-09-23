@@ -51,10 +51,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/private-git-deps
-        with:
-            token: ${{ secrets.IRONCRYPTO_TOKEN }}
-
       - name: Determine version
         id: version
         run: |
@@ -142,12 +138,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # A secret, not a build-arg: build args are recorded in the image
-          # history and this one reads a private repository. The Containerfile
-          # mounts it for the single RUN that builds, and deletes the gitconfig
-          # it writes before that step ends.
-          secrets: |
-            ironcrypto_token=${{ secrets.IRONCRYPTO_TOKEN }}
 
   deploy-staging:
     name: Deploy to Staging

@@ -40,10 +40,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./.github/actions/private-git-deps
-        with:
-            token: ${{ secrets.IRONCRYPTO_TOKEN }}
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -195,21 +191,6 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      # Inline rather than `./.github/actions/private-git-deps`, because both
-      # checkouts below set `path:`. Nothing lands at the workspace root, so a
-      # local composite action has no path to be found at. A `run:` step has
-      # no such dependency and can go first.
-      - name: Authenticate to IronCrypto
-        shell: bash
-        run: |
-          if [ -z "${{ secrets.IRONCRYPTO_TOKEN }}" ]; then
-              echo "::warning::No IRONCRYPTO_TOKEN; the IronCrypto fetch will fail."
-              exit 0
-          fi
-          git config --global \
-              url."https://x-access-token:${{ secrets.IRONCRYPTO_TOKEN }}@github.com/nervosys/IronCrypto".insteadOf \
-              "https://github.com/nervosys/IronCrypto"
-
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.base_ref }}

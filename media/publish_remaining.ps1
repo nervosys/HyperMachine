@@ -1,7 +1,11 @@
 $ErrorActionPreference = 'Continue'
 Remove-Item Env:\CARGO_REGISTRY_TOKEN -ErrorAction SilentlyContinue
-$m   = "C:\Users\adamm\dev\nervosys\os\AetherVM\Cargo.toml"
-$log = "C:\Users\adamm\dev\nervosys\os\AetherVM\media\publish_remaining.log"
+# Relative to this script, not to the machine it was first run on. These were
+# absolute paths into a developer's home directory, under the project's former
+# name (AetherVM), so they had stopped resolving anywhere -- including here --
+# and they published the layout of one laptop to a public repository.
+$m   = Join-Path $PSScriptRoot '..\Cargo.toml'
+$log = Join-Path $PSScriptRoot 'publish_remaining.log'
 
 function Log($msg) {
   $ts = (Get-Date).ToUniversalTime().ToString("HH:mm:ss")

@@ -22,21 +22,9 @@ target-dir = "target"
 # with no excludes, on stable. The alias would now be a slower way to check
 # less, so it is gone rather than kept as advice that no longer holds.
 
-# Fetch git dependencies with the `git` CLI rather than cargo's bundled
-# libgit2.
-#
-# The `ic-*` crates -- ic-core, ic-hash, ic-mac, ic-kdf, ic-cipher, ic-ec and
-# ic-rsa, used by hv2-core and hv2-api -- come from
-# github.com/nervosys/IronCrypto, which is private. libgit2 has no access to a
-# credential helper, so it fails with "failed to acquire username/password
-# from local configuration" even on a machine where `git clone` of the same
-# URL works. The CLI uses whatever helper git is configured with, which is the
-# one already holding the credentials.
-#
-# CI has no such helper either. Every workflow job that runs cargo therefore
-# runs `.github/actions/private-git-deps` first, which rewrites the URL to
-# carry a token. That token is the `IRONCRYPTO_TOKEN` secret: the repository's
-# own `GITHUB_TOKEN` is scoped to this repository alone and cannot read a
-# second private one.
-[net]
-git-fetch-with-cli = true
+# There was a `[net] git-fetch-with-cli = true` here, because the `ic-*`
+# crates came from a private github.com/nervosys/IronCrypto and cargo's
+# bundled libgit2 cannot reach a credential helper. They are on crates.io as
+# of 2026-09-22, so this build fetches nothing over git and needs no
+# credential -- in CI, in a container, or on a laptop. The composite action
+# that carried a token into 29 workflow jobs is gone with it.
