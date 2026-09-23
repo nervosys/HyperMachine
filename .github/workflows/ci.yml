@@ -175,9 +175,27 @@ jobs:
             # requires 1.95 -- and had nothing to do with this repository's own
             # code. Taking it from the manifest makes the two impossible to
             # disagree.
+            # `sed`, not `cut -d'\"'`, which is what this was and which never
+            # worked: a delimiter has to be one character and `\"` is two, so
+            # GNU cut refused it, the substitution produced nothing, and the
+            # step "succeeded" with an empty version. The job then installed
+            # whatever toolchain the action defaults to, so from the day this
+            # replaced a hardcoded 1.87 it checked something other than the
+            # MSRV while reporting success. It only became visible when the
+            # unpinned action started rejecting an empty toolchain outright.
+            #
+            # Fails loudly now if the manifest ever stops declaring one.
             - name: Read the MSRV from Cargo.toml
               id: msrv
-              run: echo "version=$(grep -m1 '^rust-version' Cargo.toml | cut -d'\"' -f2)" >> "$GITHUB_OUTPUT"
+              run: |
+                  set -euo pipefail
+                  version=$(sed -n 's/^rust-version *= *"\([^"]*\)".*/\1/p' Cargo.toml | head -1)
+                  if [ -z "$version" ]; then
+                      echo "no rust-version in Cargo.toml; nothing to check an MSRV against" >&2
+                      exit 1
+                  fi
+                  echo "resolved MSRV: $version"
+                  echo "version=$version" >> "$GITHUB_OUTPUT"
 
             - name: Install MSRV toolchain
               uses: dtolnay/rust-toolchain@master
