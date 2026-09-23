@@ -848,13 +848,34 @@ names that one item.
 
 ### Phase 3 — Network security (CubeVS/CubeEgress-equivalent)
 
-**Started, at the layer that was carrying the traffic.**
+**Written, and not yet on a live path.**
 `hv2_net::egress::EgressPolicy` decides whether an outbound frame may leave,
 on destination address, port and protocol, and `Bridge` consults it before
 NAT so a refused frame leaves no translation entry behind. Default-deny:
 `EgressPolicy::default()` is `deny_all`, and `allow_all` exists but has to be
 written at the call site, because "nobody configured a policy" and "someone
 chose to allow everything" should not look the same in review.
+
+That is what happens *when a `Bridge` exists*, and none does outside a test.
+This paragraph opened "started, at the layer that was carrying the traffic"
+until 2026-09-22, which read as though the policy were running. It is not:
+`Bridge` is constructed in exactly one place outside its own module,
+`hv2-net/examples/tap_bridge.rs`, and `hv2-net` is depended on only by the
+`hypermachine` facade, which re-exports it without using it. So no frame a
+deployed sandbox produces passes through `EgressPolicy`, because no frame
+passes through a `Bridge`.
+
+The distinction still worth drawing is with `hv2_core::networking::filter`,
+which is wired to nothing at all: `EgressPolicy` sits inside the component
+that *would* carry the traffic, so standing a `Bridge` up enforces it. That
+is a smaller gap than writing the filter in, and it is still a gap.
+
+Note also how far that wording travelled before being checked. It reached
+`filter.rs`'s `#[deprecated]` notes, `policies.rs`'s module header, and a
+project memory recording `permissions/` as wired into a request path when
+nothing installs that middleware either — four copies, each reading like
+independent confirmation of the others. Worth remembering when a security
+claim is easy to repeat and expensive to verify.
 
 This came from reading [NVIDIA's sandboxing
 guidance](https://developer.nvidia.com/blog/practical-security-guidance-for-sandboxing-agentic-workflows-and-managing-execution-risk/),
