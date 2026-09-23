@@ -18,6 +18,27 @@
 //! └─────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
+//! # Maturity
+//!
+//! **Trap handling is a skeleton, and this crate has never run on ARM
+//! hardware.** The feature list below describes the intended shape; what
+//! `VmContext::handle_exit` does today is narrower, and a reader taking the
+//! bullets at face value would over-estimate it:
+//!
+//! * A **data abort** or **instruction abort** returns "resume" without
+//!   emulating anything and without advancing the PC. There is no MMIO
+//!   dispatch in this crate at all. A guest that faults would re-execute the
+//!   faulting instruction and fault again, indefinitely.
+//! * An unhandled system-register access is commented "inject undefined
+//!   exception into guest"; no injection is performed.
+//! * `HVC` and `SMC` advance the PC and are otherwise ignored, so a guest's
+//!   PSCI call (`CPU_ON`, `SYSTEM_OFF`) returns with its result registers
+//!   untouched while the guest believes the call completed.
+//!
+//! Nothing outside this crate's own tests calls `handle_exit`. The stage-2
+//! translation tables, vGIC state and system-register decoding below are
+//! real and unit-tested; it is the exit path that is not finished.
+//!
 //! # Features
 //!
 //! - **EL2 Exception Handling**: Trap and emulate guest EL1 operations

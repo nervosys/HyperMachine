@@ -127,6 +127,13 @@ impl Vm {
     /// Handle a VM exit (trap from EL1 to EL2) for the given vCPU.
     ///
     /// Returns `true` if the VM should continue running, `false` to stop.
+    ///
+    /// # Unfinished
+    ///
+    /// Several arms below answer `true` without doing the work that would make
+    /// resuming correct -- see the crate header. They are marked individually.
+    /// Nothing outside this module's tests calls this yet, which is the only
+    /// reason that is survivable.
     pub fn handle_exit(&mut self, vcpu_index: usize, esr: u64) -> Result<bool> {
         let trap = el2::decode_trap(esr);
 
@@ -140,15 +147,20 @@ impl Vm {
                         Ok(true)
                     }
                     EmulationResult::Unhandled => {
-                        // Inject undefined exception into guest
+                        // UNFINISHED: this should inject an undefined-instruction
+                        // exception into the guest. It does not -- it resumes,
+                        // so the guest proceeds as though the access
+                        // succeeded, having read or written nothing.
                         Ok(true)
                     }
                 }
             }
             TrapReason::HypervisorCall { imm } => {
                 let vcpu = self.vcpu_mut(vcpu_index)?;
-                // PSCI-like calls could be handled here
-                // For now, advance PC and continue
+                // UNFINISHED: PSCI belongs here. Skipping the instruction
+                // leaves the guest's result registers untouched, so a
+                // `CPU_ON` or `SYSTEM_OFF` returns whatever was already in
+                // x0 and the guest reads it as the call's return value.
                 vcpu.advance_pc();
                 Ok(true)
             }
@@ -175,12 +187,17 @@ impl Vm {
                 srt,
                 ..
             } => {
-                // Could be MMIO — check if the IPA falls in a device region
-                // For now, report as unhandled
+                // UNFINISHED: this is where MMIO emulation would go, and
+                // there is none in this crate. Resuming without emulating the
+                // access and without advancing the PC re-executes the
+                // faulting instruction, which faults again: a guest that
+                // touches a device region would spin here.
                 Ok(true)
             }
             TrapReason::InstructionAbort { .. } => {
-                // Stage-2 instruction abort — could be demand paging
+                // UNFINISHED: demand paging would go here. As with the data
+                // abort above, resuming changes nothing about why the fetch
+                // faulted, so it faults again.
                 Ok(true)
             }
             TrapReason::Interrupt => {
