@@ -1,6 +1,16 @@
 # Beating CubeSandbox: a feature and performance roadmap
 
-Status: **planning document, nothing built as a result of it yet**. Written
+Status: **Phases 0-2 built and verified; Phase 3 started.** Phase 0
+benchmarked honestly before anything was promised; Phase 1 met its exit
+criterion, an unmodified E2B SDK client running against a HyperMachine
+endpoint by changing only where it points; Phase 2 moves a guest between VMs
+through a file and restores faster than that guest boots. Phases 4 and 5 are
+untouched. Each section below carries its own status and the measurements
+behind it.
+
+This began as a planning document -- the line here read "nothing built as a
+result of it yet" until 2026-09-22, long after that stopped being true.
+Written
 after reading CubeSandbox's README, architecture doc, and network model doc
 (not just its marketing copy), and after confirming which of HyperMachine's
 own more ambitious-sounding crates are real and tested rather than
@@ -229,7 +239,7 @@ treated as "we're already 20x faster, ship it": not because there's a
 proven scaling bug, but because there isn't yet a clean measurement to
 build that claim on either way.
 
-### Phase 1 — E2B compatibility layer (highest leverage-to-effort ratio) — **started, first slice live-verified**
+### Phase 1 — E2B compatibility layer (highest leverage-to-effort ratio) — **exit criterion met**
 
 Built `crates/hv2-api/examples/e2b_compat.rs`: a real (not mocked) `POST
 /sandboxes` against E2B's actual `NewSandbox`/`Sandbox` schemas (field names
