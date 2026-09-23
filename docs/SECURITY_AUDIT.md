@@ -148,11 +148,14 @@ relying on them; the risk was that they read as controls.
   forgeable (extend `target ^ current` to reach any value), order‑blind, and
   reversible. It is now `new = H(old || data)` over SHA‑2, with property
   tests. Banks whose hash is unavailable (SHA‑1, SM3) refuse to extend.
-- **Attestation.** There is none. No quote operation exists, and a software
-  vTPM living in the VMM's address space could not be a root of trust in any
-  case: whatever compromises the VMM can set a PCR to anything. The
-  measurement log is now correct bookkeeping for a guest, not evidence to a
-  relying party.
+- **Attestation.** There is none, and the vTPM is further from usable than
+  that sentence implies: there is no command dispatcher, nothing matches on
+  `TpmCommandCode`, and no device model presents a TPM to a guest, so **no
+  guest can reach it at all**. `VirtualTpm` has no consumer outside
+  re-exports. Even reachable, a software vTPM in the VMM's address space
+  could not be a root of trust — whatever compromises the VMM can set a PCR
+  to anything. The measurement log is now correct bookkeeping the host could
+  keep on a guest's behalf, not evidence to a relying party.
 - **Secure boot signature verification.** `verify()` admitted a component
   when the signer certificate's `subject` **string** matched a trusted entry,
   under a comment reading "Would verify actual signature here". Forgery

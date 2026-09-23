@@ -21,6 +21,13 @@
 //! **Keys are not shielded.** They are a `HashMap` in host memory. A key
 //! handle here is a handle to an ordinary allocation.
 //!
+//! **And no guest can reach it.** There is no command dispatcher: nothing
+//! matches on [`TpmCommandCode`], whose `from_u32` is called only by its own
+//! test, and no device model presents a TPM interface to a guest. What exists
+//! is a host-side Rust API, and `VirtualTpm` has no consumer outside this
+//! crate's re-exports. So the measurement log described below is one the host
+//! could keep on a guest's behalf, not one a guest has ever extended.
+//!
 //! # What is real
 //!
 //! PCR extension is a hash chain, `new = H(old || data)`, over IronCrypto's
