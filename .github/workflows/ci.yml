@@ -548,11 +548,18 @@ jobs:
                       *) echo "expected an ET_EXEC executable, got: $file_type" >&2; exit 1 ;;
                   esac
 
-                  # 0x1BADB002, little-endian, at the very start of .text.
-                  magic=$(objdump -s -j .text --stop-address=0x100004 "$elf" \
+                  # 0x1BADB002, little-endian, at 0x100000 -- in the image's own
+                  # `.multiboot` section. This read `.text` until 2026-09-26,
+                  # which is where the header lived on the old i686 layout;
+                  # moving to x86_64-unknown-none put it in a section of its own,
+                  # as hv1-multiboot's already was. The step could not have
+                  # noticed: the build before it had failed on every run, so the
+                  # first time it executed, it failed a correct image. The header
+                  # was there all along.
+                  magic=$(objdump -s -j .multiboot --stop-address=0x100004 "$elf" \
                       | awk '/^ 100000/ {print $2}')
                   if [ "$magic" != "02b0ad1b" ]; then
-                      echo "no Multiboot header at the start of .text (found: ${magic:-nothing})" >&2
+                      echo "no Multiboot header at the start of .multiboot (found: ${magic:-nothing})" >&2
                       exit 1
                   fi
 
