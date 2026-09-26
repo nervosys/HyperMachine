@@ -492,6 +492,7 @@ jobs:
               uses: dtolnay/rust-toolchain@stable
               with:
                   targets: x86_64-unknown-none
+                  components: clippy
 
             - name: Cache cargo registry
               uses: actions/cache@v4
@@ -510,9 +511,25 @@ jobs:
             # live there -- run from the workspace root it would quietly build a
             # 64-bit host binary instead. The crate says so in a compile_error!
             # for anyone who tries.
+            # This job had no clippy step at all, so -D warnings reached it only
+            # through the workflow's RUSTFLAGS -- and that is what broke the
+            # link. Warnings are denied explicitly now, where they belong.
+            - name: Run clippy on the unikernel
+              working-directory: crates/hv2-unikernel
+              run: cargo clippy --release -- -D warnings
+
             - name: Build the unikernel guest
               working-directory: crates/hv2-unikernel
-              run: cargo build --release
+              # `env -u`, not `RUSTFLAGS: ""`. The workflow sets
+              # `RUSTFLAGS: -D warnings`, and an environment RUSTFLAGS *replaces*
+              # the crate's `[target.x86_64-unknown-none] rustflags` rather than
+              # merging with them -- dropping `relocation-model=static` and the
+              # `-Tlink.ld` script, so the link failed with `R_X86_64_32 cannot
+              # be used against local symbol`. Setting it to "" does not help:
+              # an empty-but-set RUSTFLAGS still wins, verified locally. It has
+              # to be absent. Only the link needs this; clippy doesn't link, so
+              # it keeps the workflow's -D warnings.
+              run: env -u RUSTFLAGS cargo build --release
 
             # The build succeeding is not the claim worth checking. A guest that
             # links but has no Multiboot header is not bootable, and the loader
@@ -592,7 +609,16 @@ jobs:
             # crate's target and linker script both live there.
             - name: Build the hv1 Multiboot image
               working-directory: crates/hv1-multiboot
-              run: cargo build --release
+              # `env -u`, not `RUSTFLAGS: ""`. The workflow sets
+              # `RUSTFLAGS: -D warnings`, and an environment RUSTFLAGS *replaces*
+              # the crate's `[target.x86_64-unknown-none] rustflags` rather than
+              # merging with them -- dropping `relocation-model=static` and the
+              # `-Tlink.ld` script, so the link failed with `R_X86_64_32 cannot
+              # be used against local symbol`. Setting it to "" does not help:
+              # an empty-but-set RUSTFLAGS still wins, verified locally. It has
+              # to be absent. Only the link needs this; clippy doesn't link, so
+              # it keeps the workflow's -D warnings.
+              run: env -u RUSTFLAGS cargo build --release
 
             # Linking is not the claim. This image is an ELF64, which the
             # Multiboot specification's ELF path cannot load -- that path is
