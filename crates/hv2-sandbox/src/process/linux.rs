@@ -60,7 +60,7 @@
 //! string it needs is built in the parent and captured; it uses only raw
 //! `libc` calls.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -277,16 +277,23 @@ fn make_mounts_private() -> std::io::Result<()> {
 /// Mount `/proc` and `/sys` so they describe *these* namespaces.
 ///
 /// Split from [`make_mounts_private`] because when a root is pivoted into,
-/// these have to happen after the pivot — a `/proc` mounted before it would end
-/// up in the root that is about to be thrown away — while making the mounts
-/// private has to happen before.
+/// these go inside the new root instead (see [`pivot_into`]), at the paths the
+/// plan carries, while making the mounts private still happens first.
 fn mount_namespaced_filesystems(new_pid_ns: bool, new_net_ns: bool) -> std::io::Result<()> {
-    if new_pid_ns {
+    mount_proc_and_sys(
+        new_pid_ns.then_some(c"/proc"),
+        new_net_ns.then_some(c"/sys"),
+    )
+}
+
+/// Mount a fresh `proc` at `proc_at` and `sysfs` at `sys_at`, where given.
+fn mount_proc_and_sys(proc_at: Option<&CStr>, sys_at: Option<&CStr>) -> std::io::Result<()> {
+    if let Some(target) = proc_at {
         // SAFETY: as above.
         if unsafe {
             libc::mount(
                 c"proc".as_ptr(),
-                c"/proc".as_ptr(),
+                target.as_ptr(),
                 c"proc".as_ptr(),
                 0,
                 std::ptr::null(),
@@ -297,14 +304,14 @@ fn mount_namespaced_filesystems(new_pid_ns: bool, new_net_ns: bool) -> std::io::
         }
     }
 
-    if new_net_ns {
+    if let Some(target) = sys_at {
         // sysfs is bound to the network namespace it is mounted in, which is
         // what makes /sys/class/net show the host interfaces otherwise.
         // SAFETY: as above.
         if unsafe {
             libc::mount(
                 c"sysfs".as_ptr(),
-                c"/sys".as_ptr(),
+                target.as_ptr(),
                 c"sysfs".as_ptr(),
                 0,
                 std::ptr::null(),
@@ -375,6 +382,11 @@ struct FilesystemPlan {
     /// refuses, so it is applied here instead, and a directory that does not
     /// exist inside the root fails the spawn.
     working_dir: Option<CString>,
+    /// Where a fresh `/proc` and `/sys` go, as host paths inside `new_root`,
+    /// when the workload has a PID or network namespace of its own. Mounted
+    /// *before* the pivot: see [`pivot_into`].
+    proc_target: Option<CString>,
+    sys_target: Option<CString>,
 }
 
 /// The kernel's `struct mount_attr`, which `libc` does not declare.
@@ -483,6 +495,14 @@ fn pivot_into(plan: &FilesystemPlan) -> std::io::Result<()> {
         set_subtree_read_only(&bind.target)?;
     }
 
+    // The new /proc and /sys go in now, inside the new root, and not after the
+    // pivot. A user namespace may mount proc or sysfs only while one that is
+    // fully visible already exists in its mount namespace (the kernel's
+    // mount_too_revealing), and after the old root is detached none does:
+    // GitHub's ubuntu-latest refused the post-pivot mount with EPERM, while a
+    // WSL2 kernel happened to allow it. Mounted here, both move with the tree.
+    mount_proc_and_sys(plan.proc_target.as_deref(), plan.sys_target.as_deref())?;
+
     // SAFETY: `new_root` is NUL-terminated and owned by `plan`.
     if unsafe { libc::chdir(plan.new_root.as_ptr()) } != 0 {
         return Err(std::io::Error::last_os_error());
@@ -557,6 +577,8 @@ fn run_filesystem_probe(root: &Path, outside: &Path, read_only: &Path) -> std::i
             target: path_to_cstring(&root.join("ro"))?,
         }],
         working_dir: None,
+        proc_target: None,
+        sys_target: None,
     };
     let outside = path_to_cstring(outside)?;
 
@@ -754,6 +776,12 @@ fn plan_filesystem(
         new_root: cstring_or_invalid(root)?,
         binds,
         working_dir: working_dir.map(cstring_or_invalid).transpose()?,
+        proc_target: need_proc
+            .then(|| cstring_or_invalid(&root.join("proc")))
+            .transpose()?,
+        sys_target: need_sys
+            .then(|| cstring_or_invalid(&root.join("sys")))
+            .transpose()?,
     })
 }
 
@@ -1181,13 +1209,15 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
         pivot_into(filesystem)?;
     }
 
-    // 7. Now that this process really is in the new PID namespace — and inside
-    //    the new root — give it a /proc and /sys that reflect them. Doing this
-    //    before the fork would mount a /proc belonging to the old namespace,
-    //    which is the state that made the host's whole process table readable
-    //    from inside; doing it before the pivot would put both in the root
-    //    that is about to be discarded.
-    mount_namespaced_filesystems(plan.new_pid_ns, plan.new_net_ns)?;
+    // 7. Now that this process really is in the new PID namespace, give it a
+    //    /proc and /sys that reflect it. Doing this before the fork would mount
+    //    a /proc belonging to the old namespace, which is the state that made
+    //    the host's whole process table readable from inside. With a new
+    //    root, pivot_into has already mounted both inside it, before the
+    //    pivot, because after it the kernel may refuse (see pivot_into).
+    if plan.filesystem.is_none() {
+        mount_namespaced_filesystems(plan.new_pid_ns, plan.new_net_ns)?;
+    }
 
     // Become a process group leader so the deadline can kill the whole group.
     // SAFETY: setpgid on self with group 0 has no preconditions.
