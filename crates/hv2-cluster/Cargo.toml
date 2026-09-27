@@ -31,12 +31,15 @@ subtle = { version = "2.6", default-features = false }
 form_urlencoded = "1"
 
 # CubeMaster coordinates through Redis; so does this, and Valkey speaks the
-# same protocol. No TLS feature: a store reached over an untrusted network is
-# a deployment to front with stunnel or a private network, not one to build in.
+# same protocol. TLS (`rediss://`) through rustls with default features off,
+# on the ring provider the rest of the workspace uses -- the store carries the
+# cluster's records and events, which is not traffic to send in the clear.
 redis = { version = "1.7", default-features = false, features = [
     "tokio-comp",
     "connection-manager",
     "streams",
+    "tokio-rustls-comp",
+    "tls-rustls",
 ] }
 
 [dev-dependencies]

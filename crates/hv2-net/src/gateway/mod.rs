@@ -602,7 +602,9 @@ enum Plan {
 /// to the guest, so it bounds a download at buffer / round trip: 64 KiB over a
 /// 3.5 ms round trip measured 15.5 MB/s, exactly that ceiling.
 const TCP_TX_BUFFER: usize = 256 * 1024;
-const TCP_RX_BUFFER: usize = 64 * 1024;
+/// The window the guest may send into: the same bound on an upload that the
+/// send side is on a download.
+const TCP_RX_BUFFER: usize = 256 * 1024;
 /// The largest chunk a task hands the stack at once.
 const TASK_CHUNK: usize = 16 * 1024;
 /// A listening socket whose SYN never took. Only a malformed frame gets here.
@@ -799,6 +801,11 @@ impl Stack {
             return;
         }
         socket.set_nagle_enabled(false);
+        // Acknowledge at once. smoltcp delays an ACK up to 10 ms by default,
+        // which, against the guest's sender, made every window's worth of an
+        // upload wait out that delay: 64 KiB per ~11 ms, measured 5.9 MB/s,
+        // while downloads -- which the guest acknowledges -- ran at 130.
+        socket.set_ack_delay(None);
         socket.set_timeout(Some(smoltcp::time::Duration::from_secs(120)));
         socket.pause_synack(matches!(plan, Plan::DialFirst { .. }));
         let handle = self.sockets.add(socket);

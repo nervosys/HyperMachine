@@ -982,14 +982,18 @@ signals when it has frames, so a round trip no longer waits out two 1 ms
 sleeps. And the send buffer is 256 KiB. Receive-side interrupts are also
 coalesced now: one per burst rather than one per frame.
 
-**Upload is still slow: 5.1 MB/s.** 64 MiB in 13 s is ~3,500 frames/s, about
-280 µs per frame the guest transmits. The device offers no notification
-suppression (`VIRTIO_F_EVENT_IDX`, or `NO_NOTIFY` while a host thread
-drains), so the likely cost is one MMIO exit per transmitted frame -- which
-nested virtualization makes expensive. Not yet confirmed. Download does not
-pay it because host-to-guest delivery is batched. The fix is the vhost-net
-shape: drain the transmit ring from a host thread with guest notifications
-suppressed while it runs.
+~~**Upload is still slow: 5.1 MB/s.**~~ **Corrected in Phase 6: upload was
+never slow; the benchmark was.** It piped `dd` into busybox `nc`, which writes
+about 1 KiB per system call -- the guest's own counters showed 1,080-byte
+packets, each a kick, an interrupt and a legacy-PIC acknowledgement, ~12 VM
+exits apiece. An HTTP POST with curl from the same guest, through the same
+gateway, runs at **146-163 MB/s** with nothing else changed. What was changed
+on the way, measured separately: the gateway now acknowledges at once
+(smoltcp's default delays an ACK 10 ms) with a 256 KiB receive window, and
+sandboxes' NICs offer checksum and TCP segmentation offload to a host side
+that takes a segment of any size, which took uploads to **165-174 MB/s**
+(~9%, 32 KiB segments instead of 1.5 KiB frames; `--no-net-offload` turns it
+off). Download on the same runs: 370-485 MB/s either way.
 
 #### What is still not built
 
@@ -1404,9 +1408,17 @@ tests -- pause, resume, fork, auto-resume through the proxy, a node
 SIGKILLed and its sandbox resumed elsewhere, a node drained -- pass over
 mTLS unchanged. A unit test does real handshakes for each case.
 
-Still plaintext: node and control plane to the Redis/Valkey store (a
-private network or a TLS-terminating sidecar), and the client-facing E2B API
-unless `--tls-cert/--tls-key` or an ingress terminates it.
+The store too: a `rediss://` URL is TLS, verified against the system's
+roots or `HV2_STORE_CA`, with `HV2_STORE_CERT`/`HV2_STORE_KEY` for a store
+that requires client certificates (the chart's `store.tlsSecret`), through
+rustls on the same `ring` provider. Verified against Valkey built with TLS
+and `--tls-auth-clients yes`: it refused a plaintext client and a TLS client
+without a certificate; two nodes and two control planes ran on it, and the
+cluster SDK test -- pause, resume, fork, auto-resume -- passed.
+
+Still plaintext unless configured: the client-facing E2B API
+(`--tls-cert/--tls-key`, or an ingress), and the chart's own single Valkey,
+which only its NetworkPolicy reaches.
 
 #### Workload identity
 

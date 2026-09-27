@@ -102,6 +102,11 @@ store:
   # `url` at a replicated Redis/Valkey instead and set `deploy: false`.
   deploy: true
   url: ""
+  # For an external store over TLS (url: rediss://...): a Secret in
+  # cert-manager's shape -- ca.crt to verify the store, tls.crt and tls.key
+  # for a store that requires client certificates. The chart's own Valkey
+  # (deploy: true) is plaintext, and reached only through the NetworkPolicy.
+  tlsSecret: ""
   namespace: default
   image: valkey/valkey:8.1
   resources:

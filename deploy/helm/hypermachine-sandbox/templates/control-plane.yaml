@@ -54,6 +54,12 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: api-key } }
             - name: HV2_CLUSTER_TOKEN
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
+            {{- if .Values.store.tlsSecret }}
+            # For a rediss:// store: its CA, and this pod's client certificate.
+            - { name: HV2_STORE_CA, value: /etc/hv2-store-tls/ca.crt }
+            - { name: HV2_STORE_CERT, value: /etc/hv2-store-tls/tls.crt }
+            - { name: HV2_STORE_KEY, value: /etc/hv2-store-tls/tls.key }
+            {{- end }}
           ports:
             - { name: api, containerPort: 5980 }
             - { name: envd, containerPort: 5981 }
@@ -67,12 +73,23 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
-          {{- if .Values.mtls.controlPlaneSecret }}
+          {{- if or .Values.mtls.controlPlaneSecret .Values.store.tlsSecret }}
           volumeMounts:
+            {{- if .Values.mtls.controlPlaneSecret }}
             - { name: mtls, mountPath: /etc/hv2-mtls, readOnly: true }
+            {{- end }}
+            {{- if .Values.store.tlsSecret }}
+            - { name: store-tls, mountPath: /etc/hv2-store-tls, readOnly: true }
+            {{- end }}
       volumes:
+        {{- if .Values.mtls.controlPlaneSecret }}
         - name: mtls
           secret: { secretName: {{ .Values.mtls.controlPlaneSecret | quote }} }
+        {{- end }}
+        {{- if .Values.store.tlsSecret }}
+        - name: store-tls
+          secret: { secretName: {{ .Values.store.tlsSecret | quote }} }
+        {{- end }}
           {{- end }}
 ---
 apiVersion: v1

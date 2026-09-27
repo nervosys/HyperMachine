@@ -178,11 +178,51 @@ impl RedisStore {
     /// Connect to `url` (`redis://host:6379/0`), keeping keys under
     /// `namespace`.
     ///
+    /// A `rediss://` URL is TLS. The server is verified against the system's
+    /// roots, or against the CA in the PEM file `HV2_STORE_CA` names -- a
+    /// private store's usual case; `HV2_STORE_CERT` and `HV2_STORE_KEY`, both
+    /// or neither, add a client certificate for a server that asks for one.
+    ///
     /// # Errors
     ///
-    /// The URL does not parse, or the first connection fails.
+    /// The URL does not parse, a named file cannot be read, or the first
+    /// connection fails.
     pub async fn connect(url: &str, namespace: &str) -> Result<Self> {
-        let client = redis::Client::open(url).map_err(redis_error)?;
+        let client = if url.starts_with("rediss://") {
+            // The workspace's one provider, for a crate that asks for the
+            // process default. Already installed is fine.
+            let _ = rustls::crypto::ring::default_provider().install_default();
+            let read = |var: &str| -> Result<Option<Vec<u8>>> {
+                match std::env::var_os(var) {
+                    None => Ok(None),
+                    Some(path) => std::fs::read(&path)
+                        .map(Some)
+                        .map_err(|e| StoreError(format!("{var}={}: {e}", path.to_string_lossy()))),
+                }
+            };
+            let client_tls = match (read("HV2_STORE_CERT")?, read("HV2_STORE_KEY")?) {
+                (Some(client_cert), Some(client_key)) => Some(redis::ClientTlsConfig {
+                    client_cert,
+                    client_key,
+                }),
+                (None, None) => None,
+                _ => {
+                    return Err(StoreError(
+                        "HV2_STORE_CERT and HV2_STORE_KEY go together".into(),
+                    ))
+                }
+            };
+            redis::Client::build_with_tls(
+                url,
+                redis::TlsCertificates {
+                    client_tls,
+                    root_cert: read("HV2_STORE_CA")?,
+                },
+            )
+            .map_err(redis_error)?
+        } else {
+            redis::Client::open(url).map_err(redis_error)?
+        };
         let connection = client.get_connection_manager().await.map_err(redis_error)?;
         Ok(Self {
             connection,

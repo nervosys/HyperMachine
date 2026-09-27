@@ -84,6 +84,21 @@ pub const NET_HDR_LEN: usize = 12;
 /// corruption on the wire instead of a refusal here.
 pub const MAX_FRAME_LEN: usize = 1514;
 
+/// The largest frame the guest may send once TCP segmentation is offloaded
+/// to the host: an Ethernet header and a maximal IPv4 packet.
+pub const MAX_OFFLOADED_FRAME_LEN: usize = 14 + 65_535;
+
+/// The device finishes checksums the driver leaves partial.
+const VIRTIO_NET_F_CSUM: u64 = 1 << 0;
+/// The device takes TCP/IPv4 segments larger than the MTU and makes them
+/// whole -- here, by completing them as one packet for a host stack that
+/// takes any size.
+const VIRTIO_NET_F_HOST_TSO4: u64 = 1 << 11;
+
+/// `virtio_net_hdr.flags`: the checksum from `csum_start` on is the device's
+/// to finish.
+const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
+
 /// Somewhere to be told that a frame is waiting.
 ///
 /// The same shape as the vsock device's wake hook and for the same reason: a
@@ -122,6 +137,10 @@ pub struct VirtioNetMmio {
     /// Frames dropped because the backlog was full, in each direction.
     dropped_rx: u64,
     dropped_tx: u64,
+    /// Offer checksum and TCP segmentation offload for what the guest sends.
+    /// Only for a host side that takes frames larger than the MTU -- a
+    /// userspace stack does; a tap device into a real network would not.
+    host_offloads: bool,
 }
 
 impl VirtioNetMmio {
@@ -138,7 +157,20 @@ impl VirtioNetMmio {
             transmit_wake: None,
             dropped_rx: 0,
             dropped_tx: 0,
+            host_offloads: false,
         }
+    }
+
+    /// Offer checksum and TCP segmentation offload to the driver, so the
+    /// guest sends up to 64 KiB per frame and leaves checksums to this
+    /// device. Set before the driver probes: what it negotiates then is what
+    /// it keeps.
+    ///
+    /// The point is VM exits. Without it an upload is one frame -- a kick,
+    /// an interrupt, and the legacy PIC's acknowledgements -- per 1448
+    /// bytes, and a guest measured spending a whole vCPU on that at 5 MB/s.
+    pub fn set_host_offloads(&mut self, on: bool) {
+        self.host_offloads = on;
     }
 
     /// The MAC this device reports.
@@ -240,8 +272,22 @@ impl VirtioNetMmio {
             // Everything before the header is the driver's business; a frame
             // shorter than the header is not a frame.
             if bytes.len() > NET_HDR_LEN {
-                let frame = bytes[NET_HDR_LEN..].to_vec();
-                if frame.len() <= MAX_FRAME_LEN {
+                let mut frame = bytes[NET_HDR_LEN..].to_vec();
+                let offloaded = self.acked_features & VIRTIO_NET_F_CSUM != 0;
+                let limit = if self.acked_features & VIRTIO_NET_F_HOST_TSO4 != 0 {
+                    MAX_OFFLOADED_FRAME_LEN
+                } else {
+                    MAX_FRAME_LEN
+                };
+                // What the driver left to us: a checksum it did not finish,
+                // or a segment larger than the MTU whose headers describe
+                // the pieces it was to be cut into rather than itself.
+                if offloaded && (bytes[0] & VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 || bytes[1] != 0) {
+                    let csum_start = usize::from(u16::from_le_bytes([bytes[6], bytes[7]]));
+                    let csum_offset = usize::from(u16::from_le_bytes([bytes[8], bytes[9]]));
+                    finish_offloaded(&mut frame, csum_start, csum_offset);
+                }
+                if frame.len() <= limit {
                     if self.tx_pending.len() >= self.backlog {
                         self.tx_pending.pop_front();
                         self.dropped_tx += 1;
@@ -304,14 +350,95 @@ impl VirtioNetMmio {
     }
 }
 
+/// The ones'-complement sum of `data` as 16-bit big-endian words, added to
+/// `sum`.
+fn sum16(mut sum: u32, data: &[u8]) -> u32 {
+    let (words, rest) = data.as_chunks::<2>();
+    for word in words {
+        sum += u32::from(u16::from_be_bytes(*word));
+    }
+    if let [last] = rest {
+        sum += u32::from(*last) << 8;
+    }
+    sum
+}
+
+/// Fold and invert: the checksum a header carries.
+fn fold(mut sum: u32) -> u16 {
+    while sum > 0xffff {
+        sum = (sum & 0xffff) + (sum >> 16);
+    }
+    !(sum as u16)
+}
+
+/// Make an offloaded frame whole: what a NIC doing checksum and
+/// segmentation offload would have done, except that a large TCP segment
+/// stays one packet, since the host side takes any size.
+///
+/// An IPv4 TCP or UDP frame gets its IP total length, IP checksum and L4
+/// checksum computed afresh from what is actually there -- a TSO segment's
+/// headers describe the MTU-sized pieces it was meant to be cut into, not
+/// itself. Anything else gets the partial checksum finished as the virtio
+/// specification describes: the sum from `csum_start` on, stored at
+/// `csum_start + csum_offset`.
+fn finish_offloaded(frame: &mut [u8], csum_start: usize, csum_offset: usize) {
+    const ETH: usize = 14;
+    let ipv4 = frame.len() >= ETH + 20 && frame[12..14] == [0x08, 0x00] && frame[ETH] >> 4 == 4;
+    if ipv4 {
+        let ihl = usize::from(frame[ETH] & 0x0f) * 4;
+        let proto = frame[ETH + 9];
+        let l4 = ETH + ihl;
+        let (field, min) = match proto {
+            6 => (16, 20),
+            17 => (6, 8),
+            _ => (usize::MAX, 0),
+        };
+        if ihl >= 20 && field != usize::MAX && frame.len() >= l4 + min {
+            let total = frame.len() - ETH;
+            if let Ok(total) = u16::try_from(total) {
+                frame[ETH + 2..ETH + 4].copy_from_slice(&total.to_be_bytes());
+                frame[ETH + 10..ETH + 12].copy_from_slice(&[0, 0]);
+                let ip = fold(sum16(0, &frame[ETH..l4]));
+                frame[ETH + 10..ETH + 12].copy_from_slice(&ip.to_be_bytes());
+
+                let length = (frame.len() - l4) as u32;
+                if proto == 17 {
+                    frame[l4 + 4..l4 + 6].copy_from_slice(&(length as u16).to_be_bytes());
+                }
+                frame[l4 + field..l4 + field + 2].copy_from_slice(&[0, 0]);
+                let mut sum = sum16(0, &frame[ETH + 12..ETH + 20]);
+                sum += u32::from(proto) + length;
+                let mut l4sum = fold(sum16(sum, &frame[l4..]));
+                if proto == 17 && l4sum == 0 {
+                    l4sum = 0xffff;
+                }
+                frame[l4 + field..l4 + field + 2].copy_from_slice(&l4sum.to_be_bytes());
+                return;
+            }
+        }
+    }
+    let at = csum_start + csum_offset;
+    if csum_start < frame.len() && at + 2 <= frame.len() {
+        // The driver seeded the field with the pseudo-header's sum.
+        let sum = fold(sum16(0, &frame[csum_start..]));
+        frame[at..at + 2].copy_from_slice(&sum.to_be_bytes());
+    }
+}
+
 impl VirtioMmioDevice for VirtioNetMmio {
     fn device_id(&self) -> u32 {
         VIRTIO_ID_NET
     }
 
     fn device_features(&self) -> u64 {
-        // The MAC, and modern virtio. No offloads: see the module header.
-        VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC
+        // The MAC, and modern virtio; checksum and TCP segmentation offload
+        // for what the guest sends, when the host side can take it.
+        let offloads = if self.host_offloads {
+            VIRTIO_NET_F_CSUM | VIRTIO_NET_F_HOST_TSO4
+        } else {
+            0
+        };
+        VIRTIO_F_VERSION_1 | VIRTIO_NET_F_MAC | offloads
     }
 
     fn ack_features(&mut self, features: u64) {
@@ -617,5 +744,58 @@ mod tests {
         let mem = memory();
         let mut dev = ready_device();
         assert!(!dev.notify(7, &mem).expect("notify"));
+    }
+
+    /// A TSO segment and a partial checksum come out as packets any stack
+    /// accepts: lengths and checksums that match their contents.
+    #[test]
+    fn offloaded_frames_come_out_whole() {
+        // An IPv4/TCP frame with 3000 bytes of payload, its IP length still
+        // the MTU-sized piece's and its checksums left partial.
+        let payload = vec![0xabu8; 3000];
+        let mut frame = vec![0u8; 14 + 20 + 20];
+        frame[12..14].copy_from_slice(&[0x08, 0x00]);
+        frame[14] = 0x45;
+        frame[16..18].copy_from_slice(&1500u16.to_be_bytes());
+        frame[22] = 64;
+        frame[23] = 6;
+        frame[26..30].copy_from_slice(&[10, 0, 0, 2]);
+        frame[30..34].copy_from_slice(&[10, 0, 0, 1]);
+        frame[34..36].copy_from_slice(&40000u16.to_be_bytes());
+        frame[36..38].copy_from_slice(&80u16.to_be_bytes());
+        frame[46] = 0x50;
+        frame[47] = 0x18;
+        frame.extend_from_slice(&payload);
+        finish_offloaded(&mut frame, 34, 16);
+
+        assert_eq!(
+            u16::from_be_bytes([frame[16], frame[17]]) as usize,
+            frame.len() - 14,
+            "the IP length is the packet's own"
+        );
+        assert_eq!(
+            fold(sum16(0, &frame[14..34])),
+            0,
+            "the IP checksum verifies"
+        );
+        let mut pseudo = sum16(0, &frame[26..34]);
+        pseudo += 6 + (frame.len() - 34) as u32;
+        assert_eq!(
+            fold(sum16(pseudo, &frame[34..])),
+            0,
+            "the TCP checksum verifies"
+        );
+    }
+
+    #[test]
+    fn offloads_are_offered_only_when_asked_for() {
+        let mut dev = VirtioNetMmio::new([0x52, 0x54, 0, 0, 0, 1]);
+        assert_eq!(
+            dev.device_features() & (VIRTIO_NET_F_CSUM | VIRTIO_NET_F_HOST_TSO4),
+            0
+        );
+        dev.set_host_offloads(true);
+        assert_ne!(dev.device_features() & VIRTIO_NET_F_HOST_TSO4, 0);
+        assert_ne!(dev.device_features() & VIRTIO_NET_F_CSUM, 0);
     }
 }

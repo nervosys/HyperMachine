@@ -207,6 +207,8 @@ struct Options {
     identity_issuer: Option<String>,
     trust_domain: String,
     identity_key: Option<std::path::PathBuf>,
+    /// Do not offer sandboxes' NICs checksum and segmentation offload.
+    no_net_offload: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -252,6 +254,7 @@ fn parse_options() -> Result<Options, String> {
         node_ttl: Duration::from_secs(9),
         no_template: false,
         prefault: false,
+        no_net_offload: false,
         snapshot_store: None,
         mtls_ca: None,
         mtls_cert: None,
@@ -283,6 +286,7 @@ fn parse_options() -> Result<Options, String> {
             "--network" => opts.network = true,
             "--no-template" => opts.no_template = true,
             "--prefault" => opts.prefault = true,
+            "--no-net-offload" => opts.no_net_offload = true,
             "--snapshot-store" => opts.snapshot_store = Some(value(&mut i)?.into()),
             "--mtls-ca" => opts.mtls_ca = Some(value(&mut i)?),
             "--mtls-cert" => opts.mtls_cert = Some(value(&mut i)?),
@@ -319,7 +323,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -2608,12 +2612,17 @@ async fn new_vm(
     // Attached before launch: virtio-mmio has no hotplug, and the kernel
     // learns where to probe from the command line `attach_net` extends.
     let nic = match mac {
-        Some(mac) => Some(
-            vm.vm()
+        Some(mac) => {
+            let nic = vm
+                .vm()
                 .attach_net(mac)
                 .await
-                .map_err(|e| format!("attaching the network device: {e}"))?,
-        ),
+                .map_err(|e| format!("attaching the network device: {e}"))?;
+            // The far end is always the gateway, a userspace stack that takes
+            // a segment of any size: let the guest send 64 KiB at a time.
+            nic.lock().set_host_offloads(!opts.no_net_offload);
+            Some(nic)
+        }
         None => None,
     };
     Ok((vm, nic))

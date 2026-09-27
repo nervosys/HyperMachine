@@ -90,6 +90,12 @@ spec:
               valueFrom: { fieldRef: { fieldPath: status.podIP } }
             - name: HV2_CLUSTER_TOKEN
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
+            {{- if .Values.store.tlsSecret }}
+            # For a rediss:// store: its CA, and this pod's client certificate.
+            - { name: HV2_STORE_CA, value: /etc/hv2-store-tls/ca.crt }
+            - { name: HV2_STORE_CERT, value: /etc/hv2-store-tls/tls.crt }
+            - { name: HV2_STORE_KEY, value: /etc/hv2-store-tls/tls.key }
+            {{- end }}
           ports:
             - { name: api, containerPort: 3980 }
             - { name: envd, containerPort: 3981 }
@@ -111,6 +117,9 @@ spec:
             privileged: true
           volumeMounts:
             - { name: kvm, mountPath: /dev/kvm }
+            {{- if .Values.store.tlsSecret }}
+            - { name: store-tls, mountPath: /etc/hv2-store-tls, readOnly: true }
+            {{- end }}
             {{- if .Values.mtls.nodeSecret }}
             - { name: mtls, mountPath: /etc/hv2-mtls, readOnly: true }
             {{- end }}
@@ -122,6 +131,10 @@ spec:
       volumes:
         - name: kvm
           hostPath: { path: /dev/kvm, type: CharDevice }
+        {{- if .Values.store.tlsSecret }}
+        - name: store-tls
+          secret: { secretName: {{ .Values.store.tlsSecret | quote }} }
+        {{- end }}
         {{- if .Values.mtls.nodeSecret }}
         - name: mtls
           secret: { secretName: {{ .Values.mtls.nodeSecret | quote }} }
