@@ -1,4 +1,4 @@
-# HyperMachine
+![HyperMachine by Nervosys](media/image/hypermachine_banner_04.jpg)
 
 **Agentic hypervisors for autonomous AI systems.**
 
