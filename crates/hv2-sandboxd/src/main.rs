@@ -115,6 +115,8 @@ use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
 mod identity;
+mod initramfs;
+mod oci;
 
 const GUEST_CID_BASE: u64 = 100;
 
@@ -214,6 +216,9 @@ struct Options {
     /// Templates beyond `base` (which is `HV2_INITRD`): name and initramfs,
     /// from `--template NAME=PATH`.
     templates: Vec<(String, String)>,
+    /// What a template built from an OCI image gets beside it: the guest
+    /// agent, busybox, init, and optionally a bash shim and CA bundle.
+    guest_kit: Option<std::path::PathBuf>,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -261,6 +266,7 @@ fn parse_options() -> Result<Options, String> {
         prefault: false,
         no_net_offload: false,
         templates: Vec::new(),
+        guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
         snapshot_store: None,
         mtls_ca: None,
         mtls_cert: None,
@@ -293,6 +299,7 @@ fn parse_options() -> Result<Options, String> {
             "--no-template" => opts.no_template = true,
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
+            "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
             "--template" => {
                 let spec = value(&mut i)?;
                 let (name, path) = spec
@@ -345,7 +352,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -422,9 +429,14 @@ struct AppState {
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
     /// What sandboxes are restored from, by template name, when not booted.
-    templates: BTreeMap<String, Template>,
+    /// Grows while the node runs, as templates are built.
+    templates: parking_lot::RwLock<BTreeMap<String, Arc<Template>>>,
     /// Every template this node offers, and its initramfs -- `base` always.
-    initrds: BTreeMap<String, String>,
+    initrds: parking_lot::RwLock<BTreeMap<String, String>>,
+    /// Templates being built, or whose build failed, by name.
+    builds: Mutex<BTreeMap<String, TemplateBuild>>,
+    /// For pulling images to build templates from.
+    http: reqwest::Client,
     metrics: NodeMetrics,
     /// Sandboxes this node suspended to disk, under `suspend_dir`.
     paused: Mutex<HashMap<String, PausedSandbox>>,
@@ -972,7 +984,7 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
     e.gauge(
         "hv2_node_template",
         "Templates sandboxes are restored from; 0 if they are booted.",
-        state.templates.len() as f64,
+        state.templates.read().len() as f64,
     );
     e.counters(
         "hv2_node_creates_total",
@@ -1140,8 +1152,8 @@ async fn bring_up(
     // the same CID and MAC it was snapshotted with -- which is fine, because
     // each has its own vsock device and its own gateway, and nothing outside
     // this VM ever sees either.
-    let template = state.templates.get(template_id);
-    let snapshot = snapshot.or(template.map(|t| t.snapshot.as_path()));
+    let template = state.templates.read().get(template_id).cloned();
+    let snapshot = snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()));
     let (cid, mac) = match snapshot {
         Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
         None => {
@@ -1156,11 +1168,13 @@ async fn bring_up(
     let t0 = std::time::Instant::now();
     let initrd = state
         .initrds
+        .read()
         .get(template_id)
-        .map_or(state.opts.initrd.as_str(), String::as_str);
+        .cloned()
+        .unwrap_or_else(|| state.opts.initrd.clone());
     let (vm, nic) = new_vm(
         &state.opts,
-        initrd,
+        &initrd,
         sandbox_id,
         cid,
         network.is_some().then_some(mac),
@@ -1170,7 +1184,9 @@ async fn bring_up(
     let built = t0.elapsed();
     let launched = match snapshot {
         Some(snapshot) => {
-            let working_set = template.map_or(&[][..], |t| t.working_set.as_slice());
+            let working_set = template
+                .as_ref()
+                .map_or(&[][..], |t| t.working_set.as_slice());
             vm.launch_from_snapshot_prefaulted(snapshot, working_set)
                 .await
         }
@@ -1354,12 +1370,18 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         .template_id
         .clone()
         .unwrap_or_else(|| "base".to_string());
-    if !state.initrds.contains_key(&template_id) {
+    if !state.initrds.read().contains_key(&template_id) {
         return api_error(
             StatusCode::NOT_FOUND,
             format!(
                 "template {template_id:?} not found; this node has {}",
-                state.initrds.keys().cloned().collect::<Vec<_>>().join(", ")
+                state
+                    .initrds
+                    .read()
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         );
     }
@@ -1376,7 +1398,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         Ok(lifecycle) => lifecycle,
         Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
     };
-    if lifecycle.pause_on_timeout && !state.templates.contains_key(&template_id) {
+    if lifecycle.pause_on_timeout && !state.templates.read().contains_key(&template_id) {
         return api_error(
             StatusCode::BAD_REQUEST,
             "autoPause needs sandboxes restored from a template, and this node boots them \
@@ -1712,7 +1734,7 @@ async fn pause_sandbox(
             format!("sandbox {sandbox_id} is already paused"),
         ));
     }
-    if state.templates.is_empty() {
+    if state.templates.read().is_empty() {
         return Err((
             StatusCode::CONFLICT,
             "pausing needs sandboxes restored from a template, and this node boots them".into(),
@@ -2025,7 +2047,7 @@ async fn fork_route(
         return api_error(StatusCode::BAD_REQUEST, "count is between 1 and 100");
     }
     let lifetime_secs = body.timeout.unwrap_or(15).min(MAX_TIMEOUT_SECS);
-    if state.templates.is_empty() {
+    if state.templates.read().is_empty() {
         return api_error(
             StatusCode::CONFLICT,
             "forking needs sandboxes restored from a template, and this node boots them",
@@ -2555,8 +2577,10 @@ async fn shared_template(
 /// shape as far as it applies -- what each is, and whether its sandboxes are
 /// restored from a snapshot or booted.
 async fn list_templates(State(state): State<Arc<AppState>>) -> Response {
-    let listed: Vec<serde_json::Value> = state
+    let snapshots = state.templates.read();
+    let mut listed: Vec<serde_json::Value> = state
         .initrds
+        .read()
         .keys()
         .map(|name| {
             json!({
@@ -2568,11 +2592,223 @@ async fn list_templates(State(state): State<Arc<AppState>>) -> Response {
                 "memoryMB": state.opts.memory_gb * 1024,
                 "envdVersion": ENVD_VERSION,
                 "buildStatus": "ready",
-                "snapshot": state.templates.contains_key(name),
+                "snapshot": snapshots.contains_key(name),
             })
         })
         .collect();
+    for (name, build) in state.builds.lock().iter() {
+        let (status, detail) = match build {
+            TemplateBuild::Building { image } => ("building", image.clone()),
+            TemplateBuild::Failed { image, error } => ("error", format!("{image}: {error}")),
+        };
+        listed.push(json!({
+            "templateID": name,
+            "buildID": name,
+            "aliases": [name],
+            "public": false,
+            "buildStatus": status,
+            "detail": detail,
+        }));
+    }
     Json(listed).into_response()
+}
+
+/// A template build in progress, or one that failed.
+enum TemplateBuild {
+    Building { image: String },
+    Failed { image: String, error: String },
+}
+
+#[derive(Debug, Deserialize)]
+struct BuildTemplateRequest {
+    #[serde(rename = "templateID")]
+    template_id: String,
+    /// An OCI image reference: `python:3.12-slim`, `ghcr.io/org/tool@sha256:...`.
+    image: String,
+}
+
+/// What a snapshot store keeps about a template a node built, so every node
+/// sharing the store offers it too.
+#[derive(Serialize, Deserialize)]
+struct BuiltTemplate {
+    image: String,
+    digest: String,
+    initramfs: String,
+}
+
+/// `POST /templates`: build a template from an OCI image, pulled from its
+/// registry by this node -- no Docker daemon. Answers 202 at once; the
+/// build's progress is in `GET /templates`, and a create for the template
+/// works from the moment it is `ready`.
+async fn build_template_route(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<BuildTemplateRequest>,
+) -> Response {
+    let name = req.template_id;
+    if !valid_template_name(&name) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            format!("template name {name:?}: letters, digits, - _ . only"),
+        );
+    }
+    if state.opts.guest_kit.is_none() {
+        return api_error(
+            StatusCode::NOT_IMPLEMENTED,
+            "this node builds no templates: start it with --guest-kit DIR",
+        );
+    }
+    if state.initrds.read().contains_key(&name) {
+        return api_error(StatusCode::CONFLICT, format!("template {name} exists"));
+    }
+    {
+        let mut builds = state.builds.lock();
+        if matches!(builds.get(&name), Some(TemplateBuild::Building { .. })) {
+            return api_error(StatusCode::CONFLICT, format!("template {name} is building"));
+        }
+        builds.insert(
+            name.clone(),
+            TemplateBuild::Building {
+                image: req.image.clone(),
+            },
+        );
+    }
+    let building = Arc::clone(&state);
+    let (task_name, image) = (name.clone(), req.image.clone());
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        let outcome = build_from_image(&building, &task_name, &image).await;
+        let mut builds = building.builds.lock();
+        match outcome {
+            Ok(()) => {
+                builds.remove(&task_name);
+                tracing::info!(
+                    "template {task_name} from {image} built in {:?}",
+                    started.elapsed()
+                );
+            }
+            Err(error) => {
+                tracing::warn!("building template {task_name} from {image}: {error}");
+                builds.insert(task_name, TemplateBuild::Failed { image, error });
+            }
+        }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({ "templateID": name, "buildStatus": "building" })),
+    )
+        .into_response()
+}
+
+fn valid_template_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// Pull `image`, write its initramfs, snapshot it, and offer it.
+async fn build_from_image(state: &Arc<AppState>, name: &str, image: &str) -> Result<(), String> {
+    let kit_dir = state.opts.guest_kit.clone().ok_or("no --guest-kit")?;
+    let kit = initramfs::GuestKit::check(&kit_dir)?;
+    let pulled = oci::pull(&state.http, image).await?;
+    let digest = pulled.digest.clone();
+    let bytes = tokio::task::spawn_blocking(move || initramfs::build(&pulled, &kit))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    let images = match &state.store {
+        Some(store) => store.dir.join("images"),
+        None => std::env::temp_dir().join(format!("hv2-sandboxd-{}-images", std::process::id())),
+    };
+    std::fs::create_dir_all(&images).map_err(|e| format!("{}: {e}", images.display()))?;
+    let short = digest.trim_start_matches("sha256:");
+    let file = images.join(format!("{name}-{}.cpio.gz", &short[..short.len().min(16)]));
+    let scratch = images.join(format!(".{}", uuid::Uuid::new_v4().simple()));
+    std::fs::write(&scratch, &bytes).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    std::fs::rename(&scratch, &file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let initramfs = file.to_string_lossy().into_owned();
+
+    offer(state, name, &initramfs).await?;
+    if let Some(store) = &state.store {
+        // Recorded for the other nodes, which adopt it from here.
+        let built = BuiltTemplate {
+            image: image.to_string(),
+            digest,
+            initramfs,
+        };
+        let dir = store.dir.join("built");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let record = serde_json::to_vec(&built).map_err(|e| e.to_string())?;
+        let tmp = dir.join(format!(".{name}.{}", uuid::Uuid::new_v4().simple()));
+        std::fs::write(&tmp, record).map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, dir.join(format!("{name}.json"))).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Snapshot the template in `initramfs` and offer it as `name`.
+async fn offer(state: &AppState, name: &str, initramfs: &str) -> Result<(), String> {
+    let mut for_this = state.opts.clone();
+    for_this.initrd = initramfs.to_string();
+    if !state.opts.no_template {
+        let built = match &state.store {
+            Some(store) => shared_template(&for_this, state.authority.as_deref(), store).await,
+            None => {
+                let dir = std::env::temp_dir()
+                    .join(format!("hv2-sandboxd-{}-{name}", std::process::id()));
+                build_template(&for_this, state.authority.as_deref(), dir).await
+            }
+        }?;
+        state
+            .templates
+            .write()
+            .insert(name.to_string(), Arc::new(built));
+    }
+    state
+        .initrds
+        .write()
+        .insert(name.to_string(), initramfs.to_string());
+    if let Some(node) = &state.node {
+        node.set_templates(state.initrds.read().keys().cloned().collect());
+    }
+    Ok(())
+}
+
+/// Offer every template another node built into the shared store that this
+/// one does not have yet -- at start, and every few seconds after.
+async fn adopt_built(state: Arc<AppState>) {
+    let Some(store) = &state.store else {
+        return;
+    };
+    let dir = store.dir.join("built");
+    loop {
+        if let Ok(listing) = std::fs::read_dir(&dir) {
+            for entry in listing.flatten() {
+                let file = entry.file_name().to_string_lossy().into_owned();
+                let Some(name) = file.strip_suffix(".json") else {
+                    continue;
+                };
+                if name.starts_with('.') || state.initrds.read().contains_key(name) {
+                    continue;
+                }
+                let Some(built) = std::fs::read(entry.path())
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<BuiltTemplate>(&b).ok())
+                else {
+                    continue;
+                };
+                match offer(&state, name, &built.initramfs).await {
+                    Ok(()) => tracing::info!(
+                        "offering template {name} ({}), built by another node",
+                        built.image
+                    ),
+                    Err(e) => tracing::warn!("adopting template {name}: {e}"),
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
 }
 
 /// `GET /.well-known/jwks.json`: this node's workload-token key.
@@ -3212,7 +3448,7 @@ async fn main() -> std::process::ExitCode {
             };
             match built {
                 Ok(template) => {
-                    templates.insert(name.clone(), template);
+                    templates.insert(name.clone(), Arc::new(template));
                 }
                 Err(e) => tracing::warn!(
                     "no snapshot for template {name} ({e}); its sandboxes will boot instead"
@@ -3309,8 +3545,13 @@ async fn main() -> std::process::ExitCode {
         next_cid: Mutex::new(0),
         routes: Arc::clone(&routes),
         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
-        templates,
-        initrds,
+        templates: parking_lot::RwLock::new(templates),
+        initrds: parking_lot::RwLock::new(initrds),
+        builds: Mutex::new(BTreeMap::new()),
+        http: reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .unwrap_or_default(),
         metrics: NodeMetrics::default(),
         node: node.clone(),
         paused: Mutex::new(HashMap::new()),
@@ -3327,6 +3568,7 @@ async fn main() -> std::process::ExitCode {
         tokio::spawn(node.heartbeat(move || beating.running()));
     }
     tokio::spawn(expire(Arc::clone(&state)));
+    tokio::spawn(adopt_built(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
     //
@@ -3433,7 +3675,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
-        .route("/templates", get(list_templates))
+        .route("/templates", get(list_templates).post(build_template_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
@@ -3536,7 +3778,7 @@ async fn main() -> std::process::ExitCode {
     // draining a node loses no sandbox. Without one, everything ends --
     // paused ones too, whose snapshots are layered over a template this
     // process is about to delete.
-    if state.store.is_some() && !state.templates.is_empty() {
+    if state.store.is_some() && !state.templates.read().is_empty() {
         let running: Vec<String> = state.sandboxes.lock().keys().cloned().collect();
         for id in running {
             match pause_sandbox(&state, &id, false).await {

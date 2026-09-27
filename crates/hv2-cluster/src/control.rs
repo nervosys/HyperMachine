@@ -132,7 +132,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/network/decisions", get(forward))
         .route("/sandboxes/{id}/exec", post(forward))
         .route("/cluster/nodes", get(cluster_nodes))
-        .route("/templates", get(templates))
+        .route("/templates", get(templates).post(build_templates))
         .route("/cluster/events", get(cluster_events))
         .route_layer(axum::middleware::from_fn_with_state(
             Arc::clone(&control),
@@ -680,6 +680,47 @@ async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
             .collect::<Vec<_>>(),
     )
     .into_response()
+}
+
+/// `POST /templates`: have every live node build a template from an image.
+/// Answered with each node's answer; 202 if any node took the build.
+///
+/// Every node, not one: without a shared snapshot store a template exists
+/// only where it was built. With one, nodes adopt what another built, and
+/// the extra builds converge on the same content-addressed files.
+async fn build_templates(State(control): State<Arc<ControlPlane>>, body: Bytes) -> Response {
+    let nodes = match control.store.nodes().await {
+        Ok(nodes) => nodes,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    let mut answers = Vec::new();
+    let mut accepted = false;
+    for node in &nodes {
+        let mut request = control
+            .http
+            .post(format!("{}/templates", node.api))
+            .header("content-type", "application/json")
+            .body(body.clone());
+        if let Some(token) = &control.config.cluster_token {
+            request = request.header(CLUSTER_TOKEN_HEADER, token);
+        }
+        let (status, answer) = match request.send().await {
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let answer = response.json::<Value>().await.unwrap_or(Value::Null);
+                (status, answer)
+            }
+            Err(e) => (502, json!({ "message": e.to_string() })),
+        };
+        accepted |= status == 202;
+        answers.push(json!({ "nodeID": node.id, "status": status, "answer": answer }));
+    }
+    let status = if accepted {
+        StatusCode::ACCEPTED
+    } else {
+        StatusCode::BAD_GATEWAY
+    };
+    (status, Json(answers)).into_response()
 }
 
 /// `GET /.well-known/jwks.json`: every live node's workload-token key, once

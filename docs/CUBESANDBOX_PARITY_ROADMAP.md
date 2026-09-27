@@ -1487,6 +1487,44 @@ template's memory image, shared copy-on-write. Booted rather than restored
 cluster where one node of two had the template, four Python creates through
 a control plane all went to it; base creates went anywhere.
 
+#### Templates built by the platform
+
+`from-oci.sh` needs Docker on the operator's machine. Now a node builds a
+template itself: `POST /templates {"templateID": "node", "image":
+"node:22-slim"}` answers 202, and the node
+
+- pulls the image from its registry over HTTPS -- anonymous bearer tokens
+  as Docker Hub and most registries issue them, the `linux/amd64` manifest
+  chosen from an index -- verifying every blob against its sha256 digest;
+- applies the layers in memory with OCI whiteouts (`.wh.NAME`, opaque
+  directories), never unpacking a layer's paths onto the host;
+- writes the initramfs itself, `newc` cpio, deterministic, hard links kept
+  as links (busybox's image is ~400 links to one binary: as copies it was
+  270 MiB, as links 4 MiB), with the guest kit (`--guest-kit`, in the node
+  image at `/opt/hv2/kit`) added where the image lacks it -- an image's own
+  busybox is kept;
+- snapshots it and offers it; `GET /templates` shows `building`, `ready` or
+  `error`.
+
+With a shared snapshot store, the other nodes adopt a template one node
+built -- its record and initramfs are in the store and its snapshot is
+content-addressed there -- within a few seconds and without pulling. A
+control plane's `POST /templates` fans the build out to every node, which
+a cluster without a store needs.
+
+Verified: `alpine:3.20` built in 5-6 s and `node:22-slim` in 27-42 s on one
+node, pulled from Docker Hub by the node; through the unmodified SDK a
+`node` sandbox was created in 136-236 ms and ran Node.js 22, npm, and a
+script written with `files.write`; `alpine` ran `apk`. With two nodes and a
+store, `alpine` built on node A was offered by node B without a pull; a
+`busybox:1.36` build through a control plane reached both nodes, and
+sandboxes of both templates ran through the control plane. In the Compose
+stack the node container, with the kit its image now carries, built `alpine`
+through a control plane and a create from it answered in 85 ms.
+
+Not done: building from a Dockerfile (E2B's `template build` runs one), a
+registry that requires credentials, and zstd-compressed layers.
+
 What Agent Substrate has that this does not:
 
 - **Kubernetes-native objects** (`ActorTemplate`, `WorkerPool`,

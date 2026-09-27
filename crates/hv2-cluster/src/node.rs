@@ -33,12 +33,25 @@ pub struct NodeConfig {
 pub struct NodeAgent {
     store: Arc<dyn ClusterStore>,
     config: NodeConfig,
+    /// The templates it offers now: set at start from the config, and
+    /// again as templates are built while it runs.
+    templates: Arc<parking_lot::Mutex<Vec<String>>>,
 }
 
 impl NodeAgent {
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, config: NodeConfig) -> Self {
-        Self { store, config }
+        let templates = Arc::new(parking_lot::Mutex::new(config.templates.clone()));
+        Self {
+            store,
+            config,
+            templates,
+        }
+    }
+
+    /// Offer these templates from the next heartbeat on.
+    pub fn set_templates(&self, templates: Vec<String>) {
+        *self.templates.lock() = templates;
     }
 
     #[must_use]
@@ -56,7 +69,7 @@ impl NodeAgent {
             heartbeat_ms: now_ms(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             jwk: self.config.jwk.clone(),
-            templates: self.config.templates.clone(),
+            templates: self.templates.lock().clone(),
         }
     }
 
