@@ -13,7 +13,16 @@
 FROM rust:1.98-bookworm AS builder
 
 # Install protobuf compiler (required for hv2-api gRPC codegen)
-RUN apt-get update && apt-get install -y --no-install-recommends protobuf-compiler && rm -rf /var/lib/apt/lists/*
+# `libprotobuf-dev` as well as `protobuf-compiler`, because the compiler alone
+# does not ship the well-known types. `envd`'s filesystem.proto imports
+# `google/protobuf/timestamp.proto`, and Debian puts those `.proto` files in
+# the -dev package, so the build script failed with "File not found" on an
+# import that is part of protobuf itself. Verified in this image: with
+# protobuf-compiler alone `/usr/include/google/protobuf/timestamp.proto` is
+# absent, and adding libprotobuf-dev is what puts it there.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    protobuf-compiler libprotobuf-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
