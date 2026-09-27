@@ -220,6 +220,8 @@ struct Shared {
     dialer: Arc<dyn Dialer>,
     intercept: Option<Intercept>,
     egress_proxy: RwLock<Option<socks::Socks5Proxy>>,
+    /// Workload tokens for placeholders in injected headers.
+    tokens: RwLock<Option<mitm::TokenSource>>,
     resolved: Mutex<HashMap<IpAddr, BTreeSet<String>>>,
     log: Mutex<VecDeque<Decision>>,
     stats: Mutex<GatewayStats>,
@@ -326,6 +328,12 @@ impl GatewayHandle {
         self.0.egress_proxy.read().clone()
     }
 
+    /// Where workload tokens come from, for `${e2b.identity.tokens.NAME}`
+    /// in an injected header. None: placeholders are sent as written.
+    pub fn set_token_source(&self, tokens: Option<mitm::TokenSource>) {
+        *self.0.tokens.write() = tokens;
+    }
+
     /// The most recent decisions, oldest first.
     #[must_use]
     pub fn decisions(&self) -> Vec<Decision> {
@@ -415,6 +423,7 @@ impl GatewayBuilder {
             dialer: self.dialer,
             intercept,
             egress_proxy: RwLock::new(None),
+            tokens: RwLock::new(None),
             resolved: Mutex::new(HashMap::new()),
             log: Mutex::new(VecDeque::new()),
             stats: Mutex::new(GatewayStats::default()),
@@ -1384,11 +1393,13 @@ async fn connection(
                 prefix,
                 inner: guest,
             };
+            let tokens = shared.tokens.read().clone();
             if let Err(e) = mitm::intercept(
                 guest,
                 upstream,
                 sni,
                 &headers,
+                tokens,
                 intercept.server,
                 intercept.client,
             )
@@ -1432,7 +1443,8 @@ async fn connection(
                 prefix,
                 inner: guest,
             };
-            if let Err(e) = mitm::relay_http(guest, upstream, &headers).await {
+            let tokens = shared.tokens.read().clone();
+            if let Err(e) = mitm::relay_http(guest, upstream, &headers, tokens).await {
                 tracing::debug!("gateway: injected HTTP connection to {host} ended: {e}");
             }
             let _ = events.send(Event::WriteClosed(id));

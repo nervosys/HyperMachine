@@ -30,6 +30,7 @@ struct Options {
     mtls_cert: Option<String>,
     mtls_key: Option<String>,
     mtls_node_name: String,
+    identity_issuer: Option<String>,
 }
 
 fn parse() -> Result<Options, String> {
@@ -50,6 +51,7 @@ fn parse() -> Result<Options, String> {
         mtls_cert: None,
         mtls_key: None,
         mtls_node_name: hv2_cluster::mtls::DEFAULT_NODE_NAME.to_string(),
+        identity_issuer: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -83,12 +85,14 @@ fn parse() -> Result<Options, String> {
             "--mtls-cert" => opts.mtls_cert = Some(value()?),
             "--mtls-key" => opts.mtls_key = Some(value()?),
             "--mtls-node-name" => opts.mtls_node_name = value()?,
+            "--identity-issuer" => opts.identity_issuer = Some(value()?),
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-control-plane [--store memory:|redis://host:port] [--namespace N] \
                      [--port N] [--proxy-port N] [--api-key K] [--cluster-token T] \
                      [--reap-interval SECS] [--tls-cert F --tls-key F] \
-                     [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]]\n\
+                     [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
+                     [--identity-issuer URL]\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
                 );
                 std::process::exit(0);
@@ -203,6 +207,7 @@ async fn main() -> std::process::ExitCode {
         cluster_token: opts.cluster_token,
         proxy_port: opts.proxy_port,
         create_timeout: Duration::from_secs(60),
+        identity_issuer: opts.identity_issuer,
     };
     let control = match &mtls {
         None => ControlPlane::new(store, config),

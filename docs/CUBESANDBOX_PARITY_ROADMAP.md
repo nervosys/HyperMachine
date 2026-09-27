@@ -1408,12 +1408,43 @@ Still plaintext: node and control plane to the Redis/Valkey store (a
 private network or a TLS-terminating sidecar), and the client-facing E2B API
 unless `--tls-cert/--tls-key` or an ingress terminates it.
 
+#### Workload identity
+
+Agent Substrate authenticates agents to Google Cloud through GKE Workload
+Identity. E2B has its own design, which the SDK already speaks, and which
+this now implements: `iam.tokens` registers named tokens (an audience, and
+`tokenType: JWT-SVID`, the one type E2B accepts), and a network rule writes
+`${e2b.identity.tokens.NAME}` into a header it injects. The egress gateway
+replaces the placeholder with a token minted for that request. The guest
+wrote a placeholder and never holds a token; the token exists only between
+the gateway and the destination.
+
+- The token is an ES256 JWT-SVID: `sub` the sandbox's SPIFFE ID
+  (`spiffe://TRUST_DOMAIN/sandbox/ID`), `aud` the registered audience,
+  five minutes, a fresh `jti` each request, `iss` the configured issuer.
+- Nodes and control planes serve `/.well-known/jwks.json` and
+  `openid-configuration` without an API key -- what AWS STS
+  `AssumeRoleWithWebIdentity` or GCP workload identity federation fetch.
+  A control plane's JWKS is every live node's key, once each.
+- With a snapshot store, every node signs with one key published there,
+  so a sandbox paused on one node and resumed on another keeps its identity
+  and one JWKS entry covers the cluster.
+
+Verified with the unmodified SDK, and checked by a verifier that shares no
+code with the signer -- `openssl dgst -verify` against a public key rebuilt
+from the JWKS: a sandbox with `Authorization: Bearer
+${ctx.iam.tokens['aws']}` curled httpbin twice; the upstream saw two
+different JWTs, both verified, with the right subject, audience, issuer and
+expiry; nothing in the guest held one; a type other than `JWT-SVID` was
+refused with 400. Across nodes: tokens minted on node A and, after it was
+SIGKILLed and the sandbox resumed, on node B carried one SPIFFE ID and one
+key, and both verified against a control plane's JWKS.
+
+Not verified: federation with a real cloud provider, which needs the
+issuer reachable from it over public HTTPS.
+
 What Agent Substrate has that this does not:
 
-- **Workload identity.** Substrate authenticates sandboxes to cloud APIs
-  through GKE Workload Identity. Here a sandbox gets credentials only by
-  header injection into its egress, which does keep them out of the guest
-  but is not a cloud identity.
 - **Kubernetes-native objects** (`ActorTemplate`, `WorkerPool`,
   `kubectl-ate`). This is E2B's API instead, deployed by a Helm chart.
 

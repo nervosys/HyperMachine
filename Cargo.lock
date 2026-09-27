@@ -2832,6 +2832,7 @@ dependencies = [
  "hv2-core",
  "hv2-net",
  "parking_lot",
+ "ring",
  "serde",
  "serde_json",
  "sha2",

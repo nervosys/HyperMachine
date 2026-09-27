@@ -149,6 +149,11 @@ async fn fake_node(
             proxy: SocketAddr::from(([127, 0, 0, 1], 40000 + addr.port() % 1000)),
             capacity: capacity as u32,
             ttl,
+            // Nodes a and b share a key; any other has its own.
+            jwk: Some(json!({
+                "kty": "EC",
+                "kid": if id == "a" || id == "b" { "shared".to_string() } else { format!("key-{id}") },
+            })),
         },
     );
     agent.join().await.unwrap();
@@ -182,6 +187,7 @@ async fn control_plane(store: Arc<dyn ClusterStore>, api_key: Option<&str>) -> S
             cluster_token: Some(TOKEN.into()),
             proxy_port: 5981,
             create_timeout: Duration::from_secs(10),
+            identity_issuer: Some("https://issuer.test".into()),
         },
     );
     tokio::spawn(async move {
@@ -439,4 +445,47 @@ async fn envd_routes_go_to_the_owning_nodes_proxy() {
     let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
     assert_eq!(routes.resolve(id, 49983).await, Some(node.proxy));
     assert_eq!(routes.resolve("sbx-nope", 49983).await, None);
+}
+
+/// The cluster's JWKS is every live node's workload-token key, each once,
+/// and discovery points at it -- what a cloud verifying a sandbox's token
+/// fetches, without an API key.
+#[tokio::test]
+async fn the_jwks_lists_each_nodes_key_once_and_discovery_points_at_it() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let _a = fake_node(Arc::clone(&store), "a", 4, Duration::from_secs(30)).await;
+    let _b = fake_node(Arc::clone(&store), "b", 4, Duration::from_secs(30)).await;
+    let _c = fake_node(Arc::clone(&store), "c", 4, Duration::from_secs(30)).await;
+    let base = control_plane(Arc::clone(&store), Some("the-key")).await;
+
+    let jwks: Value = client()
+        .get(format!("{base}/.well-known/jwks.json"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut kids: Vec<String> = jwks["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["kid"].as_str().unwrap().to_string())
+        .collect();
+    kids.sort();
+    assert_eq!(kids, ["key-c", "shared"]);
+
+    let discovery: Value = client()
+        .get(format!("{base}/.well-known/openid-configuration"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(discovery["issuer"], "https://issuer.test");
+    assert_eq!(
+        discovery["jwks_uri"],
+        "https://issuer.test/.well-known/jwks.json"
+    );
 }

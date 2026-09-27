@@ -42,6 +42,11 @@ pub struct NodeInfo {
     pub running: u32,
     pub heartbeat_ms: u64,
     pub version: String,
+    /// The public key this node signs sandboxes' workload tokens with, as
+    /// a JWK -- what a control plane's JWKS publishes, so a token from any
+    /// node verifies against the cluster's issuer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jwk: Option<Value>,
 }
 
 impl NodeInfo {

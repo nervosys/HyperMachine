@@ -114,6 +114,8 @@ use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
+mod identity;
+
 const GUEST_CID_BASE: u64 = 100;
 
 /// The port an E2B client asks for when it wants a sandbox's envd.
@@ -199,6 +201,12 @@ struct Options {
     mtls_ca: Option<String>,
     mtls_cert: Option<String>,
     mtls_key: Option<String>,
+    /// Workload identity: the issuer URL tokens name (and that serves their
+    /// keys), the SPIFFE trust domain, and a signing key to use rather than
+    /// share through the snapshot store or generate.
+    identity_issuer: Option<String>,
+    trust_domain: String,
+    identity_key: Option<std::path::PathBuf>,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -248,6 +256,9 @@ fn parse_options() -> Result<Options, String> {
         mtls_ca: None,
         mtls_cert: None,
         mtls_key: None,
+        identity_issuer: None,
+        trust_domain: "hv2.local".to_string(),
+        identity_key: None,
         evict_idle_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -276,6 +287,9 @@ fn parse_options() -> Result<Options, String> {
             "--mtls-ca" => opts.mtls_ca = Some(value(&mut i)?),
             "--mtls-cert" => opts.mtls_cert = Some(value(&mut i)?),
             "--mtls-key" => opts.mtls_key = Some(value(&mut i)?),
+            "--identity-issuer" => opts.identity_issuer = Some(value(&mut i)?),
+            "--trust-domain" => opts.trust_domain = value(&mut i)?,
+            "--identity-key" => opts.identity_key = Some(value(&mut i)?.into()),
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -305,7 +319,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -391,6 +405,8 @@ struct AppState {
     store: Option<SnapshotStore>,
     /// This node's name in the cluster, or `local`.
     node_id: String,
+    /// Signs sandboxes' workload tokens, when sandboxes have a network.
+    identity: Option<Arc<identity::Identity>>,
     /// One lock per sandbox that has paused, resumed or forked.
     transitions: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
@@ -448,6 +464,60 @@ struct NewSandbox {
     auto_pause_memory: Option<bool>,
     #[serde(rename = "autoResume")]
     auto_resume: Option<AutoResume>,
+    /// Workload identity: named tokens the egress gateway mints per request.
+    iam: Option<SandboxIam>,
+}
+
+/// `SandboxIam`: a non-empty `tokens` map turns workload identity on.
+#[derive(Debug, Default, Deserialize)]
+struct SandboxIam {
+    #[serde(default)]
+    tokens: BTreeMap<String, SandboxIamToken>,
+}
+
+/// `SandboxIamToken`: who a token is for, and what kind it is.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SandboxIamToken {
+    audience: String,
+    #[serde(rename = "tokenType")]
+    token_type: String,
+}
+
+/// E2B's `iam.tokens`, checked: names a placeholder can carry, and the one
+/// type the API accepts. A sandbox with tokens needs a network to use them
+/// through, and a node with an identity to mint them.
+fn iam_tokens(
+    iam: Option<&SandboxIam>,
+    network: bool,
+) -> Result<BTreeMap<String, SandboxIamToken>, String> {
+    let Some(iam) = iam else {
+        return Ok(BTreeMap::new());
+    };
+    for (name, token) in &iam.tokens {
+        if !identity::valid_token_name(name) {
+            return Err(format!(
+                "iam token name {name:?} cannot carry '{{', '}}' or control characters"
+            ));
+        }
+        if token.token_type != identity::JWT_SVID {
+            return Err(format!(
+                "iam token {name:?}: tokenType {:?} is not supported; {} is",
+                token.token_type,
+                identity::JWT_SVID
+            ));
+        }
+        if token.audience.is_empty() {
+            return Err(format!("iam token {name:?} needs an audience"));
+        }
+    }
+    if !iam.tokens.is_empty() && !network {
+        return Err(
+            "iam tokens are injected by the egress gateway, and this server gives sandboxes no \
+             network (start it with --network)"
+                .into(),
+        );
+    }
+    Ok(iam.tokens.clone())
 }
 
 /// `SandboxAutoResumeConfig`.
@@ -1106,7 +1176,7 @@ async fn bring_up(
 
     let network = match (network, nic) {
         (Some(spec), Some(device)) => {
-            match start_network(state, &vm, device, spec, snapshot.is_none()).await {
+            match start_network(state, sandbox_id, &vm, device, spec, snapshot.is_none()).await {
                 Ok(network) => Some(network),
                 Err(e) => {
                     let _ = vm.stop().await;
@@ -1269,6 +1339,10 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
 
     // Decided before anything boots, so a policy that does not parse costs a
     // 400 and not a VM.
+    let tokens = match iam_tokens(req.iam.as_ref(), state.opts.network) {
+        Ok(tokens) => tokens,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
     let wants_network = req.allow_internet_access == Some(true) || req.network.is_some();
     let network = if state.opts.network {
         let policy = match policy_from(
@@ -1283,7 +1357,11 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
             Ok(proxy) => proxy,
             Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
         };
-        Some(NetworkSpec { policy, proxy })
+        Some(NetworkSpec {
+            policy,
+            proxy,
+            tokens: tokens.clone(),
+        })
     } else if wants_network {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -1296,6 +1374,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
     let network_request = state.opts.network.then(|| NetworkRequest {
         allow_internet_access: req.allow_internet_access,
         network: req.network.clone(),
+        iam: tokens,
     });
     let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
     let sandbox_id = new_sandbox_id();
@@ -1390,6 +1469,8 @@ impl Lifecycle {
 struct NetworkSpec {
     policy: NetworkPolicy,
     proxy: Option<Socks5Proxy>,
+    /// Workload tokens its injected headers may name.
+    tokens: BTreeMap<String, SandboxIamToken>,
 }
 
 /// A sandbox's network as it was asked for, E2B's fields verbatim: what a
@@ -1399,6 +1480,9 @@ struct NetworkSpec {
 struct NetworkRequest {
     allow_internet_access: Option<bool>,
     network: Option<SandboxNetworkConfig>,
+    /// `iam.tokens`, which only a network can use.
+    #[serde(default)]
+    iam: BTreeMap<String, SandboxIamToken>,
 }
 
 impl NetworkRequest {
@@ -1412,6 +1496,7 @@ impl NetworkRequest {
                 opts.egress_default,
             )?,
             proxy: egress_proxy_from(opts, self.network.as_ref()).await?,
+            tokens: self.iam.clone(),
         })
     }
 }
@@ -1617,11 +1702,17 @@ async fn pause_sandbox(
         ));
     }
     let _ = live.process_shutdown.send(());
+    let tokens = live
+        .network_request
+        .as_ref()
+        .map(|r| r.iam.clone())
+        .unwrap_or_default();
     let network = live.network.map(|network| {
         network.bridge.abort();
         NetworkSpec {
             policy: network.gateway.policy(),
             proxy: network.gateway.egress_proxy(),
+            tokens,
         }
     });
     let mut record = live.record;
@@ -1901,6 +1992,11 @@ async fn fork_route(
                     live.network.as_ref().map(|n| NetworkSpec {
                         policy: n.gateway.policy(),
                         proxy: n.gateway.egress_proxy(),
+                        tokens: live
+                            .network_request
+                            .as_ref()
+                            .map(|r| r.iam.clone())
+                            .unwrap_or_default(),
                     }),
                     live.network_request.clone(),
                 )
@@ -2170,6 +2266,7 @@ impl Drop for ActivityGuard {
 /// Put a gateway behind a sandbox's NIC, and point the guest at it.
 async fn start_network(
     state: &AppState,
+    sandbox_id: &str,
     vm: &Arc<AgentVM>,
     device: Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>,
     spec: NetworkSpec,
@@ -2184,6 +2281,24 @@ async fn start_network(
         .map_err(|e| format!("starting the gateway: {e}"))?;
     let handle = gateway.handle();
     handle.set_egress_proxy(spec.proxy);
+    // Workload tokens, minted here per request for the names this sandbox
+    // registered: the guest's request carries a placeholder, and the token
+    // exists only on the way out.
+    if let (Some(identity), false) = (&state.identity, spec.tokens.is_empty()) {
+        let identity = Arc::clone(identity);
+        let tokens = spec.tokens;
+        let sandbox = sandbox_id.to_string();
+        handle.set_token_source(Some(Arc::new(move |name: &str| {
+            let token = tokens.get(name)?;
+            match identity.mint(&sandbox, &token.audience) {
+                Ok(jwt) => Some(jwt),
+                Err(e) => {
+                    tracing::warn!("minting {name} for {sandbox}: {e}");
+                    None
+                }
+            }
+        })));
+    }
 
     // `allow_all` on the bridge because the gateway is the enforcement point:
     // it sees the guest's ARP, which a frame-level policy refuses by design,
@@ -2365,6 +2480,55 @@ async fn shared_template(
         Err(e) => {
             let _ = std::fs::remove_dir_all(&scratch);
             Err(format!("publishing template {key}: {e}"))
+        }
+    }
+}
+
+/// `GET /.well-known/jwks.json`: this node's workload-token key.
+async fn node_jwks(State(state): State<Arc<AppState>>) -> Response {
+    let keys: Vec<serde_json::Value> = state.identity.iter().map(|i| i.jwk()).collect();
+    Json(json!({ "keys": keys })).into_response()
+}
+
+/// `GET /.well-known/openid-configuration`, when an issuer is configured.
+async fn node_openid_configuration(State(state): State<Arc<AppState>>) -> Response {
+    match &state.opts.identity_issuer {
+        Some(issuer) => Json(identity::Identity::discovery(issuer)).into_response(),
+        None => api_error(
+            StatusCode::NOT_FOUND,
+            "no --identity-issuer: this node is not an OIDC issuer",
+        ),
+    }
+}
+
+/// The workload-token key every node sharing `store` signs with, published
+/// the same way the egress CA is.
+fn shared_identity(store: &SnapshotStore, opts: &Options) -> Result<identity::Identity, String> {
+    let dir = store.dir.join("identity");
+    let load = |dir: &std::path::Path| {
+        let der =
+            std::fs::read(dir.join("key.pk8")).map_err(|e| format!("{}: {e}", dir.display()))?;
+        identity::Identity::from_pkcs8(
+            &der,
+            opts.identity_issuer.clone(),
+            opts.trust_domain.clone(),
+        )
+    };
+    if dir.join("key.pk8").exists() {
+        return load(&dir);
+    }
+    let made =
+        identity::Identity::generate(opts.identity_issuer.clone(), opts.trust_domain.clone())?;
+    let scratch = store
+        .dir
+        .join(format!(".identity.{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    write_private(&scratch.join("key.pk8"), made.pkcs8())?;
+    match std::fs::rename(&scratch, &dir) {
+        Ok(()) => Ok(made),
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            load(&dir)
         }
     }
 }
@@ -2584,9 +2748,17 @@ async fn update_network(
     gateway.set_policy(policy);
     gateway.set_egress_proxy(proxy);
     if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+        // The update replaces the rules; the tokens were registered at
+        // creation and are not part of it.
+        let iam = live
+            .network_request
+            .take()
+            .map(|r| r.iam)
+            .unwrap_or_default();
         live.network_request = Some(NetworkRequest {
             allow_internet_access: None,
             network: Some(update),
+            iam,
         });
     }
     StatusCode::NO_CONTENT.into_response()
@@ -2878,6 +3050,35 @@ async fn main() -> std::process::ExitCode {
     } else {
         None
     };
+    // Workload identity, for sandboxes with a network: a key given, shared
+    // through the snapshot store so every node signs alike, or made here.
+    let identity = if opts.network {
+        let made = match (&opts.identity_key, &store) {
+            (Some(path), _) => std::fs::read(path)
+                .map_err(|e| format!("{}: {e}", path.display()))
+                .and_then(|der| {
+                    identity::Identity::from_pkcs8(
+                        &der,
+                        opts.identity_issuer.clone(),
+                        opts.trust_domain.clone(),
+                    )
+                }),
+            (None, Some(store)) => shared_identity(store, &opts),
+            (None, None) => identity::Identity::generate(
+                opts.identity_issuer.clone(),
+                opts.trust_domain.clone(),
+            ),
+        };
+        match made {
+            Ok(identity) => Some(Arc::new(identity)),
+            Err(e) => {
+                eprintln!("hv2-sandboxd: workload identity: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
     let network_line = if opts.network {
         format!(
             "sandboxes get a network, egress default {:?} for a sandbox that configures none",
@@ -2962,6 +3163,7 @@ async fn main() -> std::process::ExitCode {
                     proxy,
                     capacity: opts.capacity,
                     ttl: opts.node_ttl,
+                    jwk: identity.as_ref().map(|i| i.jwk()),
                 },
             );
             if let Err(e) = agent.join().await {
@@ -3005,6 +3207,7 @@ async fn main() -> std::process::ExitCode {
         paused: Mutex::new(HashMap::new()),
         suspend_dir,
         store,
+        identity,
         node_id: node
             .as_ref()
             .map_or_else(|| "local".to_string(), |n| n.id().to_string()),
@@ -3139,6 +3342,13 @@ async fn main() -> std::process::ExitCode {
             require_cluster_token,
         ))
         .route("/metrics", get(node_metrics))
+        // Public: a verifier of a sandbox's token fetches these. In a
+        // cluster the control planes serve the same, for every node.
+        .route("/.well-known/jwks.json", get(node_jwks))
+        .route(
+            "/.well-known/openid-configuration",
+            get(node_openid_configuration),
+        )
         // Even "no such route" has to be JSON: the SDK parses the body of
         // every non-2xx reply before it looks at the status.
         .fallback(|uri: axum::http::Uri| async move {

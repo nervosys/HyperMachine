@@ -63,6 +63,12 @@ spec:
             - --mtls-key
             - /etc/hv2-mtls/tls.key
             {{- end }}
+            {{- with .Values.identity.issuer }}
+            - --identity-issuer
+            - {{ . | quote }}
+            {{- end }}
+            - --trust-domain
+            - {{ .Values.identity.trustDomain | quote }}
             {{- if .Values.node.snapshotStore.claimName }}
             - --snapshot-store
             - /var/lib/hv2-store

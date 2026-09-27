@@ -37,6 +37,10 @@ spec:
             - "5981"
             - --reap-interval
             - {{ .Values.controlPlane.reapIntervalSeconds | quote }}
+            {{- with .Values.identity.issuer }}
+            - --identity-issuer
+            - {{ . | quote }}
+            {{- end }}
             {{- if .Values.mtls.controlPlaneSecret }}
             - --mtls-ca
             - /etc/hv2-mtls/ca.crt

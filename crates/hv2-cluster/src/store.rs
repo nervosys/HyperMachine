@@ -415,6 +415,7 @@ pub(crate) mod tests {
             running,
             heartbeat_ms: now_ms(),
             version: "test".into(),
+            jwk: None,
         }
     }
 

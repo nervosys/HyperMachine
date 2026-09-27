@@ -75,6 +75,16 @@ node:
   resources:
     requests: { cpu: 500m, memory: 512Mi }
 
+# Workload identity (E2B's `iam.tokens`): sandboxes' JWT-SVIDs, minted by
+# the egress gateway per request, with subject spiffe://TRUST_DOMAIN/sandbox/ID.
+# `issuer` is the URL tokens name as `iss` -- the control planes' public
+# address, which serves /.well-known/openid-configuration and jwks.json for
+# a cloud's OIDC federation to fetch. With a snapshot store every node signs
+# with one shared key; without one, each node its own, all in the JWKS.
+identity:
+  issuer: ""
+  trustDomain: hv2.local
+
 # Mutual TLS between control planes and nodes. Each names a Secret in
 # cert-manager's shape -- ca.crt, tls.crt, tls.key -- from one CA: nodes' with
 # DNS name hv2-node and server+client auth, control planes' with client auth

@@ -231,6 +231,43 @@ pub fn upstream_config(extra: &[CertificateDer<'static>]) -> io::Result<Arc<Clie
     Ok(Arc::new(config))
 }
 
+/// Resolves a workload token by name, freshly, for one request: what an
+/// injected header's `${e2b.identity.tokens.NAME}` becomes. `None` leaves
+/// the placeholder as it was -- a name the sandbox never registered.
+pub type TokenSource = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
+/// The placeholder E2B's SDK writes for a workload token.
+const TOKEN_PLACEHOLDER: &str = "${e2b.identity.tokens.";
+
+/// `value` with every token placeholder replaced by what `tokens` gives.
+///
+/// Read the way the SDK defines it: everything between the prefix and the
+/// next `}` is the name. Replaced once, left to right, and never rescanned,
+/// so a token's own text cannot introduce a placeholder.
+fn expand(value: &str, tokens: &TokenSource) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(at) = rest.find(TOKEN_PLACEHOLDER) {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + TOKEN_PLACEHOLDER.len()..];
+        let Some(end) = after.find('}') else {
+            out.push_str(&rest[at..]);
+            return out;
+        };
+        let name = &after[..end];
+        match tokens(name) {
+            Some(token) => out.push_str(&token),
+            None => {
+                tracing::warn!("egress: no workload token named {name:?}; left as written");
+                out.push_str(&rest[at..at + TOKEN_PLACEHOLDER.len() + end + 1]);
+            }
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Terminate `guest`'s TLS as `name`, and relay its requests to `upstream`
 /// over verified TLS with `headers` set on each.
 ///
@@ -242,6 +279,7 @@ pub async fn intercept<G, U>(
     upstream: U,
     name: &str,
     headers: &Headers,
+    tokens: Option<TokenSource>,
     server: Arc<ServerConfig>,
     client: Arc<ClientConfig>,
 ) -> io::Result<()>
@@ -270,7 +308,7 @@ where
     .await
     .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "upstream TLS handshake"))??;
     tracing::debug!("egress intercept: upstream handshake for {name} done");
-    relay_http(guest, upstream, headers).await
+    relay_http(guest, upstream, headers, tokens).await
 }
 
 /// Relay HTTP/1 requests from `guest` to `upstream`, setting `headers` on
@@ -281,19 +319,31 @@ where
 /// # Errors
 ///
 /// A header that does not parse, or the exchange failed.
-pub async fn relay_http<G, U>(guest: G, upstream: U, headers: &Headers) -> io::Result<()>
+///
+/// A header whose value holds a workload-token placeholder is expanded per
+/// request, through `tokens`, so each request carries a token minted for it
+/// and the guest -- which only ever wrote the placeholder -- holds none.
+pub async fn relay_http<G, U>(
+    guest: G,
+    upstream: U,
+    headers: &Headers,
+    tokens: Option<TokenSource>,
+) -> io::Result<()>
 where
     G: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     U: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     // Parsed once, up front, so a bad rule fails the connection rather than
-    // every request on it.
+    // every request on it. A value with a placeholder is kept as text, and
+    // becomes a header value only once its tokens are in.
     let mut inject = Vec::with_capacity(headers.len());
     for (k, v) in headers {
-        inject.push((
-            HeaderName::from_bytes(k.as_bytes()).map_err(io::Error::other)?,
-            HeaderValue::from_str(v).map_err(io::Error::other)?,
-        ));
+        let name = HeaderName::from_bytes(k.as_bytes()).map_err(io::Error::other)?;
+        let value = match (&tokens, v.contains(TOKEN_PLACEHOLDER)) {
+            (Some(_), true) => Injected::Minted(v.clone()),
+            _ => Injected::Fixed(HeaderValue::from_str(v).map_err(io::Error::other)?),
+        };
+        inject.push((name, value));
     }
 
     let (sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(upstream))
@@ -310,9 +360,23 @@ where
     let service = hyper::service::service_fn(move |mut request: Request<Incoming>| {
         let sender = Arc::clone(&sender);
         let inject = Arc::clone(&inject);
+        let tokens = tokens.clone();
         async move {
             for (name, value) in inject.iter() {
-                request.headers_mut().insert(name.clone(), value.clone());
+                let value = match (value, &tokens) {
+                    (Injected::Fixed(value), _) => value.clone(),
+                    (Injected::Minted(template), Some(tokens)) => {
+                        match HeaderValue::from_str(&expand(template, tokens)) {
+                            Ok(value) => value,
+                            Err(e) => {
+                                tracing::warn!("egress: a minted header did not parse: {e}");
+                                continue;
+                            }
+                        }
+                    }
+                    (Injected::Minted(_), None) => continue,
+                };
+                request.headers_mut().insert(name.clone(), value);
             }
             let mut sender = sender.lock().await;
             sender.ready().await?;
@@ -329,10 +393,47 @@ where
         .map_err(io::Error::other)
 }
 
+/// A header to set: fixed, or holding placeholders to expand per request.
+enum Injected {
+    Fixed(HeaderValue),
+    Minted(String),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use rustls::client::danger::ServerCertVerifier;
+
+    #[test]
+    fn placeholders_expand_by_name_and_only_once() {
+        let tokens: TokenSource = Arc::new(|name: &str| match name {
+            "aws" => Some("TOKEN-${e2b.identity.tokens.gcp}".to_string()),
+            "gcp" => Some("G".to_string()),
+            _ => None,
+        });
+        assert_eq!(
+            expand("Bearer ${e2b.identity.tokens.aws}", &tokens),
+            "Bearer TOKEN-${e2b.identity.tokens.gcp}",
+            "a token's text is not rescanned"
+        );
+        assert_eq!(
+            expand(
+                "${e2b.identity.tokens.gcp},${e2b.identity.tokens.gcp}",
+                &tokens
+            ),
+            "G,G"
+        );
+        assert_eq!(
+            expand("x ${e2b.identity.tokens.unknown} y", &tokens),
+            "x ${e2b.identity.tokens.unknown} y",
+            "an unregistered name is left as written"
+        );
+        assert_eq!(
+            expand("${e2b.identity.tokens.aws", &tokens),
+            "${e2b.identity.tokens.aws"
+        );
+        assert_eq!(expand("plain", &tokens), "plain");
+    }
 
     /// A CA reloaded from its PEM on another host issues leaves that a guest
     /// holding only the original certificate accepts -- which is the whole

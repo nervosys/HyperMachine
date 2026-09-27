@@ -51,6 +51,9 @@ pub struct ControlConfig {
     pub proxy_port: u16,
     /// How long a node may take to boot a sandbox.
     pub create_timeout: Duration,
+    /// The URL sandboxes' workload tokens name as their issuer, and where
+    /// this serves OIDC discovery for them; nodes must be given the same.
+    pub identity_issuer: Option<String>,
 }
 
 pub struct ControlPlane {
@@ -139,6 +142,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         // Outside the key, like /health: a scraper holds no API key, and
         // counts are all this says.
         .route("/metrics", get(metrics))
+        // Public, like any OIDC issuer's: what a cloud verifying a
+        // sandbox's workload token fetches.
+        .route("/.well-known/jwks.json", get(jwks))
+        .route("/.well-known/openid-configuration", get(openid_configuration))
         .route("/ui", get(ui))
         .merge(e2b)
         .fallback(|uri: axum::http::Uri| async move {
@@ -618,6 +625,42 @@ async fn metrics(State(control): State<Arc<ControlPlane>>) -> Response {
         &[("node-gone", m.reaped.get())],
     );
     ([("content-type", metrics::CONTENT_TYPE)], e.finish()).into_response()
+}
+
+/// `GET /.well-known/jwks.json`: every live node's workload-token key, once
+/// each -- nodes sharing a key publish the same `kid`.
+async fn jwks(State(control): State<Arc<ControlPlane>>) -> Response {
+    match control.store.nodes().await {
+        Ok(nodes) => {
+            let mut seen = std::collections::BTreeSet::new();
+            let keys: Vec<Value> = nodes
+                .into_iter()
+                .filter_map(|n| n.jwk)
+                .filter(|jwk| seen.insert(jwk["kid"].to_string()))
+                .collect();
+            Json(json!({ "keys": keys })).into_response()
+        }
+        Err(e) => api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    }
+}
+
+/// `GET /.well-known/openid-configuration`, when an issuer is configured.
+async fn openid_configuration(State(control): State<Arc<ControlPlane>>) -> Response {
+    let Some(issuer) = &control.config.identity_issuer else {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            "no --identity-issuer: this control plane is not an OIDC issuer",
+        );
+    };
+    let base = issuer.trim_end_matches('/');
+    Json(json!({
+        "issuer": issuer,
+        "jwks_uri": format!("{base}/.well-known/jwks.json"),
+        "response_types_supported": ["id_token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["ES256"],
+    }))
+    .into_response()
 }
 
 /// `GET /ui`: the operator's view -- nodes, sandboxes, events. One static

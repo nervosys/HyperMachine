@@ -22,6 +22,8 @@ pub struct NodeConfig {
     /// How long the node's record lives without a heartbeat. Heartbeats go
     /// out at a third of this, so one lost heartbeat is not a death.
     pub ttl: Duration,
+    /// Its workload-token signing key, public half, as a JWK.
+    pub jwk: Option<serde_json::Value>,
 }
 
 /// A node's handle on the cluster store.
@@ -51,6 +53,7 @@ impl NodeAgent {
             running,
             heartbeat_ms: now_ms(),
             version: env!("CARGO_PKG_VERSION").to_string(),
+            jwk: self.config.jwk.clone(),
         }
     }
 
@@ -217,6 +220,7 @@ mod tests {
                 proxy: "127.0.0.1:3981".parse().unwrap(),
                 capacity: 4,
                 ttl: Duration::from_secs(9),
+                jwk: None,
             },
         )
     }
