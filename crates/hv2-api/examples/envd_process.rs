@@ -125,7 +125,7 @@ async fn main() -> std::process::ExitCode {
     let addr = format!("0.0.0.0:{}", opts.port).parse().unwrap();
     println!("envd_process: serving process.Process on {addr}");
     let (_tx, rx) = tokio::sync::oneshot::channel();
-    if let Err(e) = serve_for_sandbox(std::sync::Arc::new(vm), addr, rx).await {
+    if let Err(e) = serve_for_sandbox(std::sync::Arc::new(vm), addr, None, rx).await {
         eprintln!("envd_process: server error: {e}");
         return std::process::ExitCode::FAILURE;
     }

@@ -22,16 +22,23 @@
 //! so an unmodified SDK does point at this. `exec` remains as the simpler
 //! non-gRPC path for a plain `curl` test.
 //!
-//! # A sandbox here has no network interface
+//! # A sandbox's network
 //!
-//! Nothing in this file calls `attach_net`, so a guest has a vsock channel to
-//! its agent and nothing else: no NIC, no route out. That is deliberate and
-//! worth stating, because it is the strongest form of the control NVIDIA's
-//! sandboxing guidance puts first -- block outbound access to unknown
-//! destinations -- and an omission nobody wrote down is one somebody
-//! reverses by accident. Giving a sandbox a network means attaching one
-//! *and* choosing an `hv2_net::egress::EgressPolicy`; the default there
-//! denies everything.
+//! Without `--network`, a guest has a vsock channel to its agent and nothing
+//! else: no NIC, no route out. That remains the default, because it is the
+//! strongest form of the control NVIDIA's sandboxing guidance puts first --
+//! block outbound access to unknown destinations.
+//!
+//! With `--network`, every sandbox gets a virtio-net device whose far end is
+//! an `hv2_net::gateway::Gateway`: a userspace router that decides each
+//! connection and DNS query against the sandbox's policy and opens the
+//! allowed ones from the host. The policy is E2B's own `NewSandbox` fields --
+//! `allow_internet_access`, `network.allowOut`, `network.denyOut`, and
+//! `network.rules` for header injection into HTTPS -- and
+//! `PUT /sandboxes/{id}/network` replaces it on a running sandbox, as E2B's
+//! does. A sandbox that configures nothing gets `--egress-default`, which is
+//! `deny` unless the operator says otherwise; see `hv2_net::network_policy`
+//! for that and the other deliberate differences from E2B.
 //!
 //! # Running it
 //!
@@ -46,8 +53,9 @@
 //! curl -s -X POST localhost:3980/sandboxes -d '{"templateID":"base"}' | tee /tmp/sbx.json
 //! SBX=$(jq -r .sandboxID /tmp/sbx.json)
 //! PORT=$(jq -r .processPort /tmp/sbx.json)
+//! TOKEN=$(jq -r .envdAccessToken /tmp/sbx.json)
 //! curl -s -X POST localhost:3980/sandboxes/$SBX/exec -d '{"cmd":"echo hello from a real microVM"}'
-//! grpcurl -plaintext -import-path crates/hv2-api/proto -proto process.proto \
+//! grpcurl -plaintext -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
 //!   -d '{"process":{"cmd":"/bin/sh","args":["-c","echo via envd-shaped grpc"]}}' \
 //!   localhost:$PORT process.Process/Start
 //! curl -s -X DELETE localhost:3980/sandboxes/$SBX
@@ -60,7 +68,7 @@ use std::time::Duration;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -69,6 +77,9 @@ use serde_json::json;
 use hv2_agent::{AgentVM, Capability, CapabilitySet};
 use hv2_api::envd_process::serve_for_sandbox;
 use hv2_api::sandbox_proxy::{self, PortMap};
+use hv2_net::gateway::socks::Socks5Proxy;
+use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
+use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
 const GUEST_CID_BASE: u64 = 100;
 /// First port handed to a sandbox's own `process.Process` listener.
@@ -125,6 +136,12 @@ struct Options {
     memory_gb: u64,
     cpu_cores: u32,
     ready_timeout: Duration,
+    /// Give each sandbox a NIC behind a gateway. Off by default.
+    network: bool,
+    /// What a sandbox that configures no network policy gets.
+    egress_default: Verdict,
+    /// Accept an `egressProxy` on a private or internal address.
+    allow_private_egress_proxy: bool,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -146,6 +163,9 @@ fn parse_options() -> Result<Options, String> {
         memory_gb: 1,
         cpu_cores: 1,
         ready_timeout: Duration::from_secs(15),
+        network: false,
+        egress_default: Verdict::Deny,
+        allow_private_egress_proxy: false,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -166,8 +186,21 @@ fn parse_options() -> Result<Options, String> {
             "--tls-key" => opts.tls_key = Some(value(&mut i)?),
             "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--network" => opts.network = true,
+            "--allow-private-egress-proxy" => opts.allow_private_egress_proxy = true,
+            "--egress-default" => {
+                opts.egress_default = match value(&mut i)?.as_str() {
+                    "deny" => Verdict::Deny,
+                    "allow" => Verdict::Allow,
+                    other => return Err(format!("--egress-default is allow or deny, not {other}")),
+                };
+            }
             "--help" | "-h" => {
-                println!("usage: e2b_compat [--port N] [--memory-gb N] [--cpu-cores N]");
+                println!(
+                    "usage: e2b_compat [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
+                     [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
+                     [--tls-cert F --tls-key F]"
+                );
                 std::process::exit(0);
             }
             other => return Err(format!("unrecognised argument {other}")),
@@ -193,10 +226,21 @@ struct LiveSandbox {
     /// the reply as the sandbox's identity; reconstructing it from parts
     /// would be two descriptions of one sandbox, free to drift apart.
     descriptor: SandboxResponse,
+    /// The sandbox's network, when the server gives it one.
+    network: Option<LiveNetwork>,
+}
+
+struct LiveNetwork {
+    gateway: GatewayHandle,
+    /// The loop carrying frames between the guest's NIC and the gateway.
+    bridge: tokio::task::JoinHandle<()>,
 }
 
 struct AppState {
     opts: Options,
+    /// Signs the leaves the gateway presents when a rule injects headers.
+    /// One per server process; its certificate is installed in each guest.
+    authority: Option<Arc<Authority>>,
     sandboxes: Mutex<HashMap<String, LiveSandbox>>,
     next_cid: Mutex<u64>,
     next_process_port: Mutex<u16>,
@@ -214,6 +258,108 @@ struct NewSandbox {
     #[allow(dead_code)]
     #[serde(rename = "templateID")]
     template_id: Option<String>,
+    /// Snake case in the spec, unlike every other field.
+    allow_internet_access: Option<bool>,
+    network: Option<SandboxNetworkConfig>,
+}
+
+/// `SandboxNetworkConfig`, and `SandboxNetworkUpdateConfig` -- the same
+/// fields that matter here.
+#[derive(Debug, Default, Deserialize)]
+struct SandboxNetworkConfig {
+    #[serde(rename = "allowOut", default)]
+    allow_out: Vec<String>,
+    #[serde(rename = "denyOut", default)]
+    deny_out: Vec<String>,
+    #[serde(default)]
+    rules: HashMap<String, Vec<SandboxNetworkRule>>,
+    #[serde(rename = "egressProxy")]
+    egress_proxy: Option<SandboxEgressProxyConfig>,
+    /// Only on the update shape.
+    allow_internet_access: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SandboxEgressProxyConfig {
+    address: String,
+    username: Option<String>,
+    password: Option<String>,
+}
+
+/// The egress proxy a request names, checked the way E2B checks it: an
+/// address that does not resolve, or resolves into a private or internal
+/// range, is refused before the sandbox exists -- unless the operator has
+/// said their proxy lives on such a network.
+async fn egress_proxy_from(
+    opts: &Options,
+    network: Option<&SandboxNetworkConfig>,
+) -> Result<Option<Socks5Proxy>, String> {
+    let Some(config) = network.and_then(|n| n.egress_proxy.as_ref()) else {
+        return Ok(None);
+    };
+    let proxy = Socks5Proxy::new(
+        &config.address,
+        config.username.as_deref(),
+        config.password.as_deref(),
+    )?;
+    let addresses: Vec<_> = tokio::net::lookup_host(&proxy.address)
+        .await
+        .map_err(|e| format!("egress proxy {}: {e}", proxy.address))?
+        .collect();
+    if addresses.is_empty() {
+        return Err(format!("egress proxy {} does not resolve", proxy.address));
+    }
+    if !opts.allow_private_egress_proxy
+        && addresses.iter().any(|a| NetworkPolicy::is_reserved(a.ip()))
+    {
+        return Err(format!(
+            "egress proxy {} resolves into a private or internal range \
+             (start the server with --allow-private-egress-proxy if that is intended)",
+            proxy.address
+        ));
+    }
+    Ok(Some(proxy))
+}
+
+#[derive(Debug, Deserialize)]
+struct SandboxNetworkRule {
+    transform: Option<SandboxNetworkTransform>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SandboxNetworkTransform {
+    #[serde(default)]
+    headers: Headers,
+}
+
+/// E2B's fields as a policy, or the reason they cannot be one.
+fn policy_from(
+    allow_internet_access: Option<bool>,
+    network: Option<&SandboxNetworkConfig>,
+    operator_default: Verdict,
+) -> Result<NetworkPolicy, String> {
+    let empty = SandboxNetworkConfig::default();
+    let network = network.unwrap_or(&empty);
+    let mut rules = Vec::new();
+    for (pattern, list) in &network.rules {
+        // "Matching rule sets are not merged": a key's own list is one set,
+        // so its transforms are applied in order, later ones overriding.
+        let mut headers = Headers::new();
+        for rule in list {
+            if let Some(transform) = &rule.transform {
+                headers.extend(transform.headers.clone());
+            }
+        }
+        rules.push((pattern.clone(), headers));
+    }
+    NetworkPolicy::from_e2b(
+        allow_internet_access.or(network.allow_internet_access),
+        &network.allow_out,
+        &network.deny_out,
+        &rules,
+        operator_default,
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -245,6 +391,11 @@ struct SandboxResponse {
     envd_host: String,
     #[serde(rename = "proxyPort")]
     proxy_port: u16,
+    /// Required on every request to this sandbox's envd, as `X-Access-Token`.
+    /// Always issued: E2B's v2 creation route is secure-only, and a sandbox
+    /// reachable by anyone who learns its ID is not one worth issuing.
+    #[serde(rename = "envdAccessToken")]
+    envd_access_token: String,
 }
 
 /// An error in the shape E2B's own API returns.
@@ -321,6 +472,36 @@ async fn create_sandbox(
     State(state): State<Arc<AppState>>,
     Json(req): Json<NewSandbox>,
 ) -> Response {
+    // Decided before anything boots, so a policy that does not parse costs a
+    // 400 and not a VM.
+    let wants_network = req.allow_internet_access == Some(true) || req.network.is_some();
+    let policy = if state.opts.network {
+        match policy_from(
+            req.allow_internet_access,
+            req.network.as_ref(),
+            state.opts.egress_default,
+        ) {
+            Ok(policy) => Some(policy),
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        }
+    } else if wants_network {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "this server gives sandboxes no network interface (start it with --network)",
+        );
+    } else {
+        None
+    };
+    let egress_proxy = if policy.is_some() {
+        match egress_proxy_from(&state.opts, req.network.as_ref()).await {
+            Ok(proxy) => proxy,
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        }
+    } else {
+        None
+    };
+    let gateway_config = GatewayConfig::default();
+
     let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
     // A hyphen, not an underscore. This id becomes a DNS label -- the SDK
     // addresses a sandbox as `{port}-{sandboxID}.{domain}` -- and an
@@ -348,8 +529,14 @@ async fn create_sandbox(
             &state.opts.kernel,
             Some(&state.opts.initrd),
             format!(
-                "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}",
-                hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS
+                "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}{}",
+                hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
+                // The guest configures its NIC from this before init runs.
+                if policy.is_some() {
+                    format!(" {}", gateway_config.kernel_ip_arg())
+                } else {
+                    String::new()
+                }
             ),
         )
         .build()
@@ -372,6 +559,23 @@ async fn create_sandbox(
         )
             .into_response();
     }
+    // Attached before launch: virtio-mmio has no hotplug, and the kernel
+    // learns where to probe from the command line `attach_net` extends.
+    let nic = match &policy {
+        Some(_) => {
+            let [_, b, c, d] = u32::try_from(cid).unwrap_or(u32::MAX).to_be_bytes();
+            match vm.vm().attach_net([0x52, 0x54, 0x00, b, c, d]).await {
+                Ok(device) => Some(device),
+                Err(e) => {
+                    return api_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("attaching the network device: {e}"),
+                    );
+                }
+            }
+        }
+        None => None,
+    };
     if let Err(e) = vm.launch().await {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -393,6 +597,19 @@ async fn create_sandbox(
 
     let vm = Arc::new(vm);
 
+    let network = match (policy, nic) {
+        (Some(policy), Some(device)) => {
+            match start_network(&state, &vm, device, policy, egress_proxy, gateway_config).await {
+                Ok(network) => Some(network),
+                Err(e) => {
+                    let _ = vm.stop().await;
+                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+                }
+            }
+        }
+        _ => None,
+    };
+
     // Give this sandbox its own process.Process listener -- envd's real
     // shape, one daemon per sandbox, not one shared server multiplexing
     // by sandbox ID (see hv2_api::envd_process's doc comment).
@@ -403,6 +620,13 @@ async fn create_sandbox(
         port
     };
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+    // 244 bits from the OS RNG, via two v4 UUIDs.
+    let access_token = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    let listener_token = Some(access_token.clone());
     let process_vm = Arc::clone(&vm);
     let process_addr: std::net::SocketAddr = format!("0.0.0.0:{process_port}").parse().unwrap();
     // What the proxy dials. The listener binds 0.0.0.0; the proxy reaches it
@@ -411,7 +635,9 @@ async fn create_sandbox(
         format!("127.0.0.1:{process_port}").parse().unwrap();
     let process_sandbox_id = sandbox_id.clone();
     tokio::spawn(async move {
-        if let Err(e) = serve_for_sandbox(process_vm, process_addr, shutdown_rx).await {
+        if let Err(e) =
+            serve_for_sandbox(process_vm, process_addr, listener_token, shutdown_rx).await
+        {
             tracing::warn!("process.Process listener for {process_sandbox_id} stopped: {e}");
         }
     });
@@ -432,6 +658,7 @@ async fn create_sandbox(
         process_port,
         envd_host: format!("{ENVD_PORT}-{sandbox_id}"),
         proxy_port: state.opts.proxy_port,
+        envd_access_token: access_token,
     };
 
     state.sandboxes.lock().insert(
@@ -440,10 +667,161 @@ async fn create_sandbox(
             vm,
             process_shutdown: shutdown_tx,
             descriptor: descriptor.clone(),
+            network,
         },
     );
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
+}
+
+/// Put a gateway behind a sandbox's NIC, and point the guest at it.
+async fn start_network(
+    state: &AppState,
+    vm: &Arc<AgentVM>,
+    device: Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>,
+    policy: NetworkPolicy,
+    egress_proxy: Option<Socks5Proxy>,
+    config: GatewayConfig,
+) -> Result<LiveNetwork, String> {
+    let mut builder = Gateway::builder(policy).config(config);
+    if let Some(authority) = &state.authority {
+        builder = builder.intercept_with(Arc::clone(authority));
+    }
+    let gateway = builder
+        .build()
+        .map_err(|e| format!("starting the gateway: {e}"))?;
+    let handle = gateway.handle();
+    handle.set_egress_proxy(egress_proxy);
+
+    // `allow_all` on the bridge because the gateway is the enforcement point:
+    // it sees the guest's ARP, which a frame-level policy refuses by design,
+    // and it decides every connection with more than a frame to go on.
+    let bridge = hv2_net::bridge::Bridge::new(
+        device,
+        gateway,
+        None,
+        hv2_net::egress::EgressPolicy::allow_all(),
+    );
+    let bridge = tokio::spawn(async move {
+        if let Err(e) = bridge.run(Duration::from_millis(1)).await {
+            tracing::warn!("sandbox network bridge stopped: {e}");
+        }
+    });
+
+    // The kernel wrote the nameserver to /proc/net/pnp, in resolv.conf's own
+    // format. The CA goes where OpenSSL, curl and Python's ssl look by
+    // default, so injection works for a client that was not told about it.
+    // `mkdir -p /etc` because a minimal initramfs need not have one -- the
+    // reference image here does not, which is how this was found.
+    let mut script = String::from("mkdir -p /etc && ln -sf /proc/net/pnp /etc/resolv.conf");
+    if let Some(ca) = handle.ca_pem() {
+        script.push_str(&format!(
+            " && mkdir -p /etc/ssl/certs && printf '%s' '{ca}' >> /etc/ssl/certs/ca-certificates.crt"
+        ));
+    }
+    let setup = match vm
+        .exec_in_guest(
+            "/bin/sh",
+            &["-c".to_string(), script],
+            Duration::from_secs(10),
+        )
+        .await
+    {
+        Ok(setup) => setup,
+        Err(e) => {
+            bridge.abort();
+            return Err(format!("configuring the guest's network: {e}"));
+        }
+    };
+    if setup.exit_code != Some(0) {
+        bridge.abort();
+        return Err(format!(
+            "configuring the guest's network exited {:?}: {}",
+            setup.exit_code, setup.stderr
+        ));
+    }
+
+    Ok(LiveNetwork {
+        gateway: handle,
+        bridge,
+    })
+}
+
+/// `PUT /sandboxes/{id}/network` -- replace a running sandbox's egress rules.
+///
+/// The body is `SandboxNetworkUpdateConfig`: "Omitting field clears it", so
+/// this builds a whole new policy rather than patching the old one.
+async fn update_network(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    Json(update): Json<SandboxNetworkConfig>,
+) -> Response {
+    let gateway = {
+        let sandboxes = state.sandboxes.lock();
+        match sandboxes.get(&sandbox_id) {
+            None => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
+            Some(live) => live.network.as_ref().map(|n| n.gateway.clone()),
+        }
+    };
+    let Some(gateway) = gateway else {
+        return api_error(StatusCode::BAD_REQUEST, "this sandbox has no network");
+    };
+    let policy = match policy_from(None, Some(&update), state.opts.egress_default) {
+        Ok(policy) => policy,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    let proxy = match egress_proxy_from(&state.opts, Some(&update)).await {
+        Ok(proxy) => proxy,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    // Both or neither: a policy applied with the old proxy, or the reverse,
+    // is a configuration nobody asked for.
+    gateway.set_policy(policy);
+    gateway.set_egress_proxy(proxy);
+    StatusCode::NO_CONTENT.into_response()
+}
+
+/// `GET /sandboxes/{id}/network/decisions` -- not E2B's; what the gateway
+/// allowed and refused, most recent last.
+async fn network_decisions(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+) -> Response {
+    let gateway = {
+        let sandboxes = state.sandboxes.lock();
+        match sandboxes.get(&sandbox_id) {
+            None => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
+            Some(live) => live.network.as_ref().map(|n| n.gateway.clone()),
+        }
+    };
+    let Some(gateway) = gateway else {
+        return api_error(StatusCode::BAD_REQUEST, "this sandbox has no network");
+    };
+    let decisions: Vec<_> = gateway
+        .decisions()
+        .into_iter()
+        .map(|d| {
+            json!({
+                "kind": d.kind,
+                "destination": d.destination.to_string(),
+                "name": d.name,
+                "verdict": format!("{:?}", d.verdict).to_lowercase(),
+                "reason": d.reason,
+            })
+        })
+        .collect();
+    let stats = gateway.stats();
+    Json(json!({
+        "decisions": decisions,
+        "stats": {
+            "connectionsAllowed": stats.connections_allowed,
+            "connectionsRefused": stats.connections_refused,
+            "dnsAnswered": stats.dns_answered,
+            "dnsRefused": stats.dns_refused,
+            "intercepted": stats.intercepted,
+        }
+    }))
+    .into_response()
 }
 
 async fn exec(
@@ -509,6 +887,12 @@ async fn destroy_sandbox(
             // is in the middle of stopping.
             state.routes.remove_sandbox(&sandbox_id);
             let _ = live.process_shutdown.send(());
+            // Dropping the bridge drops the gateway, whose stack task ends
+            // with it; open upstream connections close as their tasks see
+            // the guest side go away.
+            if let Some(network) = live.network {
+                network.bridge.abort();
+            }
             if let Err(e) = live.vm.stop().await {
                 tracing::warn!("stopping sandbox {sandbox_id}: {e}");
             }
@@ -552,8 +936,29 @@ async fn main() -> std::process::ExitCode {
     let tls_cert = opts.tls_cert.clone();
     let tls_key = opts.tls_key.clone();
 
+    let authority = if opts.network {
+        match Authority::generate() {
+            Ok(authority) => Some(Arc::new(authority)),
+            Err(e) => {
+                eprintln!("e2b_compat: generating the egress CA: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+    let network_line = if opts.network {
+        format!(
+            "sandboxes get a network, egress default {:?} for a sandbox that configures none",
+            opts.egress_default
+        )
+    } else {
+        "sandboxes get no network interface (--network to change that)".to_string()
+    };
+
     let routes = Arc::new(PortMap::new());
     let state = Arc::new(AppState {
+        authority,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
@@ -613,9 +1018,17 @@ async fn main() -> std::process::ExitCode {
 
     let app = Router::new()
         .route("/sandboxes", post(create_sandbox))
+        // What current SDKs (2.51+) call: `NewSandboxV2`, the same fields
+        // used here, secure-only -- which every sandbox here already is.
+        .route("/v2/sandboxes", post(create_sandbox))
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
         .route("/sandboxes/{sandboxID}", delete(destroy_sandbox))
+        .route("/sandboxes/{sandboxID}/network", put(update_network))
+        .route(
+            "/sandboxes/{sandboxID}/network/decisions",
+            get(network_decisions),
+        )
         // Even "no such route" has to be JSON: the SDK parses the body of
         // every non-2xx reply before it looks at the status.
         .fallback(|uri: axum::http::Uri| async move {
@@ -638,14 +1051,17 @@ async fn main() -> std::process::ExitCode {
          Sandbox.connect() calls"
     );
     println!("  DELETE /sandboxes/{{id}}          -- stop the VM and its process.Process listener");
+    println!("  PUT    /sandboxes/{{id}}/network  -- replace a running sandbox's egress rules");
+    println!("  GET    /sandboxes/{{id}}/network/decisions -- NOT E2B's; the gateway's audit log");
+    println!("{network_line}");
     println!();
     println!(
         "sandbox proxy on 0.0.0.0:{proxy_port} -- {scheme}, routed by the authority a client asks \
          for, as {ENVD_PORT}-<sandboxID>.<anything>"
     );
     println!(
-        "  grpcurl -plaintext -authority {ENVD_PORT}-$SBX.local -import-path \
-         crates/hv2-api/proto -proto process.proto \\"
+        "  grpcurl -plaintext -authority {ENVD_PORT}-$SBX.local -H \"X-Access-Token: $TOKEN\" \
+         -import-path crates/hv2-api/proto -proto process.proto \\"
     );
     println!("      -d '{{\"process\":{{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}}}' \\");
     println!("      localhost:{proxy_port} process.Process/Start");

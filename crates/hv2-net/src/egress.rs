@@ -132,7 +132,7 @@ impl Rule {
 /// as `10.0.0.1/64` matches only that host instead of silently matching
 /// everything.
 #[must_use]
-fn within(address: IpAddr, network: IpAddr, prefix: u8) -> bool {
+pub(crate) fn within(address: IpAddr, network: IpAddr, prefix: u8) -> bool {
     fn compare(address: &[u8], network: &[u8], prefix: u8) -> bool {
         let bits = usize::from(prefix).min(address.len() * 8);
         let whole = bits / 8;

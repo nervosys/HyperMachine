@@ -76,6 +76,9 @@ allow = [
     "Ubuntu-font-1.0",
     "NCSA",
     "CDLA-Permissive-2.0",
+    # smoltcp, the sandbox gateway's TCP/IP stack. Zero-clause BSD: MIT with
+    # even the attribution requirement removed.
+    "0BSD",
 ]
 confidence-threshold = 0.8
 

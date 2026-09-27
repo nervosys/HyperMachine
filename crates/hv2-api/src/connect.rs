@@ -730,6 +730,7 @@ pub fn shared_service(
 pub async fn serve(
     vm: Arc<hv2_agent::AgentVM>,
     addr: std::net::SocketAddr,
+    access_token: Option<String>,
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -737,15 +738,58 @@ pub async fn serve(
         listener,
         EnvdProcess::new(Arc::clone(&vm)),
         EnvdFilesystem::new(vm),
+        access_token,
         shutdown,
     )
     .await
+}
+
+/// The header envd reads its access token from, as E2B's SDK sends it.
+pub const ACCESS_TOKEN_HEADER: &str = "x-access-token";
+
+/// Does `request` carry `token`? Compared in constant time: the comparison
+/// is the whole of the check, and one that returned early on the first wrong
+/// byte would say how many were right.
+fn carries_token<B>(request: &Request<B>, token: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    request
+        .headers()
+        .get(ACCESS_TOKEN_HEADER)
+        .is_some_and(|sent| sent.as_bytes().ct_eq(token.as_bytes()).into())
+}
+
+/// The refusal for a request without the token, in the caller's protocol: a
+/// gRPC client reads trailers-style status from a 200, a Connect client reads
+/// the HTTP status and a JSON body.
+fn unauthenticated<B>(request: &Request<B>) -> Response<ConnectBody> {
+    let status = Status::unauthenticated("missing or wrong access token");
+    let grpc = request
+        .headers()
+        .get(hyper::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("application/grpc"));
+    if grpc {
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE, "application/grpc")
+            .header("grpc-status", "16")
+            .header("grpc-message", "missing or wrong access token")
+            .body(full(Vec::new()))
+            .expect("a static response builds");
+    }
+    fail(&status)
 }
 
 /// As [`serve`], on a listener the caller already holds.
 ///
 /// Split out so a test can bind port 0 and still know where to connect: the
 /// kernel picks the port, and only the listener knows which.
+///
+/// With `access_token`, every request must carry it in
+/// [`ACCESS_TOKEN_HEADER`] -- E2B's `envdAccessToken`. The check lives here,
+/// on the listener, rather than in the proxy in front of it, because the
+/// listener is reachable without the proxy; a token only the proxy checked
+/// would be one anyone who found the port could skip.
 ///
 /// # Errors
 ///
@@ -755,9 +799,11 @@ pub async fn serve_on(
     listener: tokio::net::TcpListener,
     process: EnvdProcess,
     filesystem: EnvdFilesystem,
+    access_token: Option<String>,
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
     let service = shared_service(process, filesystem);
+    let access_token: Option<Arc<str>> = access_token.map(Arc::from);
     let mut shutdown = shutdown;
 
     loop {
@@ -767,6 +813,7 @@ pub async fn serve_on(
         };
 
         let service = service.clone();
+        let access_token = access_token.clone();
         tokio::spawn(async move {
             // HTTP/1.1 and HTTP/2 both: gRPC needs h2, and the Connect client
             // uses h1.
@@ -774,9 +821,15 @@ pub async fn serve_on(
                 hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new())
                     .serve_connection(
                         hyper_util::rt::TokioIo::new(stream),
-                        hyper::service::service_fn(move |request| {
+                        hyper::service::service_fn(move |request: Request<Incoming>| {
                             let mut service = service.clone();
+                            let access_token = access_token.clone();
                             async move {
+                                if let Some(token) = access_token.as_deref() {
+                                    if !carries_token(&request, token) {
+                                        return Ok(unauthenticated(&request));
+                                    }
+                                }
                                 use tower::Service;
                                 std::future::poll_fn(|cx| service.poll_ready(cx)).await?;
                                 service.call(request).await

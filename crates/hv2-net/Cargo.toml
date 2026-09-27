@@ -20,6 +20,25 @@ parking_lot = { workspace = true }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
+
+# The userspace gateway (src/gateway): a TCP/IP stack to be the guest's router,
+# and TLS for the one case that must read inside a connection -- injecting
+# headers a sandbox's policy names. rustls on `ring`, as everywhere in the
+# workspace, and rcgen on the same backend, so there is one crypto provider.
+smoltcp = { version = "0.14", default-features = false, features = [
+    "std",
+    "medium-ethernet",
+    "proto-ipv4",
+    "socket-tcp",
+    "socket-tcp-pause-synack",
+    "socket-udp",
+] }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+webpki-roots = "1"
+hyper = { workspace = true, features = ["http1", "server", "client"] }
+hyper-util = { workspace = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

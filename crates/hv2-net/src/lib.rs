@@ -4,7 +4,9 @@
 
 pub mod bridge;
 pub mod egress;
+pub mod gateway;
 pub mod nat;
+pub mod network_policy;
 pub mod tap;
 pub mod virtio;
 pub mod vswitch;

@@ -564,13 +564,17 @@ const GUEST_SIGKILL: i32 = 9;
 /// E2B's own SDK sends Connect. They share every path, so [`crate::connect`]
 /// tells them apart by content-type.
 ///
+/// `access_token`, when given, is required on every request -- E2B's
+/// `envdAccessToken`; see [`crate::connect::serve_on`].
+///
 /// # Errors
 ///
 /// Fails if `addr` cannot be bound.
 pub async fn serve_for_sandbox(
     vm: Arc<AgentVM>,
     addr: std::net::SocketAddr,
+    access_token: Option<String>,
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
-    crate::connect::serve(vm, addr, shutdown).await
+    crate::connect::serve(vm, addr, access_token, shutdown).await
 }

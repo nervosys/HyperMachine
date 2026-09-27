@@ -90,6 +90,10 @@ tempfile = "3.10"
 # `cargo test` compiles examples.
 tracing-subscriber = { workspace = true }
 
+# examples/e2b_compat.rs gives a sandbox a network through hv2-net's gateway
+# when started with --network.
+hv2-net = { path = "../hv2-net", version = "1.1.0" }
+
 [lints]
 workspace = true
 

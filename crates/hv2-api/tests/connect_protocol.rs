@@ -49,6 +49,12 @@ async fn unstarted_vm() -> Arc<AgentVM> {
 /// the shutdown signal, so letting it fall out of scope would stop the server
 /// before the test could connect.
 async fn spawn() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
+    spawn_with(None).await
+}
+
+/// As [`spawn`], requiring `token` on every request.
+async fn spawn_with(token: Option<&str>) -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
+    let token = token.map(str::to_owned);
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = listener.local_addr().expect("addr");
     let vm = unstarted_vm().await;
@@ -58,6 +64,7 @@ async fn spawn() -> (SocketAddr, tokio::sync::oneshot::Sender<()>) {
             listener,
             EnvdProcess::new(Arc::clone(&vm)),
             EnvdFilesystem::new(vm),
+            token,
             rx,
         )
         .await;
@@ -82,6 +89,17 @@ async fn request(
     content_type: &str,
     body: &'static [u8],
 ) -> (StatusCode, String, String) {
+    request_with(addr, method, path, content_type, body, &[]).await
+}
+
+async fn request_with(
+    addr: SocketAddr,
+    method: &str,
+    path: &str,
+    content_type: &str,
+    body: &'static [u8],
+    extra: &[(&str, &str)],
+) -> (StatusCode, String, String) {
     let stream = tokio::net::TcpStream::connect(addr).await.expect("connect");
     let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream))
         .await
@@ -90,12 +108,16 @@ async fn request(
         let _ = connection.await;
     });
 
-    let request = Request::builder()
+    let mut builder = Request::builder()
         .method(method)
         .uri(path)
         .header(hyper::header::HOST, "localhost")
         .header(hyper::header::CONTENT_TYPE, content_type)
-        .header("connect-protocol-version", "1")
+        .header("connect-protocol-version", "1");
+    for (name, value) in extra {
+        builder = builder.header(*name, *value);
+    }
+    let request = builder
         .body(Full::new(Bytes::from_static(body)))
         .expect("build");
 
@@ -309,4 +331,25 @@ async fn grpc_on_the_same_port_still_reaches_tonic() {
         "a gRPC request must be answered by the gRPC service, not the Connect \
          one; got {content_type:?}"
     );
+}
+
+/// E2B's `envdAccessToken`: without it, or with the wrong one, nothing is
+/// served.
+#[tokio::test]
+async fn a_token_protected_envd_refuses_requests_without_it() {
+    let (addr, _shutdown) = spawn_with(Some("t0ken")).await;
+    let path = "/process.Process/List";
+
+    let (status, _, body) = post(addr, path, "application/json", b"{}").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "no token: {body}");
+    assert!(body.contains("unauthenticated"), "{body}");
+
+    let wrong = [("X-Access-Token", "t0kem")];
+    let (status, _, _) = request_with(addr, "POST", path, "application/json", b"{}", &wrong).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "one byte off");
+
+    let right = [("X-Access-Token", "t0ken")];
+    let (status, _, body) =
+        request_with(addr, "POST", path, "application/json", b"{}", &right).await;
+    assert_eq!(status, StatusCode::OK, "the right token: {body}");
 }

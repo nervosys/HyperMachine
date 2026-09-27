@@ -1,12 +1,13 @@
 # Beating CubeSandbox: a feature and performance roadmap
 
-Status: **Phases 0-2 built and verified; Phase 3 started.** Phase 0
-benchmarked honestly before anything was promised; Phase 1 met its exit
-criterion, an unmodified E2B SDK client running against a HyperMachine
-endpoint by changing only where it points; Phase 2 moves a guest between VMs
-through a file and restores faster than that guest boots. Phases 4 and 5 are
-untouched. Each section below carries its own status and the measurements
-behind it.
+Status: **Phases 0-3 built and verified.** Phase 0 benchmarked honestly
+before anything was promised; Phase 1 met its exit criterion, an unmodified
+E2B SDK client running against a HyperMachine endpoint by changing only where
+it points; Phase 2 moves a guest between VMs through a file and restores
+faster than that guest boots; Phase 3 gives a sandbox a network whose every
+connection and DNS query passes E2B's own egress policy, with credentials
+injected on the host so the guest never holds them. Each section below
+carries its own status and the measurements behind it.
 
 This began as a planning document -- the line here read "nothing built as a
 result of it yet" until 2026-09-22, long after that stopped being true.
@@ -846,64 +847,177 @@ choosing needs a caller who knows what the guest does with time.
 `VCpuSnapshot::is_complete` therefore still answers `false`, and `missing()`
 names that one item.
 
-### Phase 3 — Network security (CubeVS/CubeEgress-equivalent)
+### Phase 3 — Network security (CubeVS/CubeEgress-equivalent) — **built, on the live path, verified with the real SDK**
 
-**Written, and not yet on a live path.**
-`hv2_net::egress::EgressPolicy` decides whether an outbound frame may leave,
-on destination address, port and protocol, and `Bridge` consults it before
-NAT so a refused frame leaves no translation entry behind. Default-deny:
-`EgressPolicy::default()` is `deny_all`, and `allow_all` exists but has to be
-written at the call site, because "nobody configured a policy" and "someone
-chose to allow everything" should not look the same in review.
+A sandbox can now have a network, and every packet of it passes a policy.
+`e2b_compat --network` gives each sandbox a virtio-net NIC whose far end is
+`hv2_net::gateway::Gateway`: a userspace TCP/IP stack (smoltcp) that is the
+guest's router (10.0.2.2) and DNS server (10.0.2.3), ends every TCP connection
+the guest opens, and opens the corresponding one from the host only if the
+sandbox's policy allows it. The guest configures itself from the kernel
+command line (`ip=`, `CONFIG_IP_PNP`), so no guest software changed. Nothing
+needs privilege: no TAP device, no `CAP_NET_ADMIN`, no host firewall rules.
 
-That is what happens *when a `Bridge` exists*, and none does outside a test.
-This paragraph opened "started, at the layer that was carrying the traffic"
-until 2026-09-22, which read as though the policy were running. It is not:
-`Bridge` is constructed in exactly one place outside its own module,
-`hv2-net/examples/tap_bridge.rs`, and `hv2-net` is depended on only by the
-`hypermachine` facade, which re-exports it without using it. So no frame a
-deployed sandbox produces passes through `EgressPolicy`, because no frame
-passes through a `Bridge`.
+Without `--network` a sandbox still has no NIC at all, and that remains the
+default.
 
-The distinction still worth drawing is with `hv2_core::networking::filter`,
-which is wired to nothing at all: `EgressPolicy` sits inside the component
-that *would* carry the traffic, so standing a `Bridge` up enforces it. That
-is a smaller gap than writing the filter in, and it is still a gap.
+**The policy is E2B's own API**, not a new one: `allow_internet_access`,
+`network.allowOut` (CIDRs, addresses, `name`, `*.name`), `network.denyOut`
+(addresses only, as the spec says), `network.rules[name].transform.headers`,
+`network.egressProxy` (SOCKS5), and `PUT /sandboxes/{id}/network` to replace
+it on a running sandbox. `hv2_net::network_policy` implements the spec's
+semantics -- allow beats deny, wildcards cover subdomains but not the apex,
+exact rules beat the longest matching wildcard, rule sets are not merged.
 
-Note also how far that wording travelled before being checked. It reached
-`filter.rs`'s `#[deprecated]` notes, `policies.rs`'s module header, and a
-project memory recording `permissions/` as wired into a request path when
-nothing installs that middleware either — four copies, each reading like
-independent confirmation of the others. Worth remembering when a security
-claim is easy to repeat and expensive to verify.
+**Verified with the unmodified E2B Python SDK** (`e2b` 2.51.0 from PyPI),
+against a real booted guest and the real internet:
 
-This came from reading [NVIDIA's sandboxing
+```text
+created: sbx-18d904800277d754
+OK   injected header seen upstream: from-the-host
+OK   allowed name: 200
+OK   refused name: curl: (6) Could not resolve host: www.google.com
+OK   after update_network, google: 200
+OK   after update_network, example.com: curl: (6) Could not resolve host: example.com
+OK   allow_internet_access=False: curl: (6) Could not resolve host: example.com
+```
+
+The first line is the credential-injection control CubeEgress sells: the
+sandbox asked for `https://postman-echo.com/headers` with a placeholder
+`Authorization`, and the upstream received the host-held value -- while
+`curl` in the guest *verified* the certificate it was shown, against the
+sandbox CA the gateway installed. `grep` for the secret anywhere in the
+guest finds nothing.
+
+#### How a connection is decided
+
+At the guest's SYN, from the address where that is enough:
+
+- **Refused** -- a reserved address, a `denyOut` address with no name rule
+  that could override it, or the default: no socket is created and the stack
+  answers with a RST. The guest sees "connection refused" in microseconds.
+- **Allowed by address**, or because *this gateway's own DNS* answered an
+  allowed name with that address: the host dials first with the guest's SYN
+  held unanswered (smoltcp's `pause_synack`), so an upstream's refusal reaches
+  the guest as its own RST rather than a connection that opens and dies.
+- **Needs a name**: the handshake completes and the first bytes are read for
+  a TLS SNI or HTTP `Host`. The name must be allowed *and* resolve, from the
+  host, to the address the guest connected to.
+
+Five things in that design are there because the obvious version is
+exploitable, and each has a test that fails without it (checked by removing
+the guard and watching it fail, not by reading the test):
+
+1. **DNS is egress.** `secret.attacker.example` carries its payload in the
+   question. A name the policy would not let the sandbox reach is answered
+   `REFUSED`, not resolved -- so a deny-by-default sandbox cannot exfiltrate
+   through lookups either.
+2. **A name never opens a reserved address.** Loopback, RFC 1918, CGNAT,
+   link-local (including `169.254.169.254`, every cloud's metadata service)
+   need an explicit `allowOut` CIDR. An allowed name that resolves to
+   `10.0.0.5` is DNS rebinding, not a trip to that name.
+3. **The guest chooses both the address and the name.** An allowed `Host`
+   aimed at an address it does not resolve to is reset.
+4. **A shared CDN address is not a shared allowance.** On an address opened
+   by the gateway's DNS answer for an allowed name, a TLS ClientHello naming
+   a refused one is reset.
+5. **A credential only goes where the rule says.** Over HTTPS the upstream
+   must prove the name with a certificate from the public web PKI. Over plain
+   HTTP there is no proof, so injection happens only if the address is where
+   the name resolves; otherwise `Host: api.vendor.example` sent to the
+   guest's own server would collect the credential.
+
+Also deliberate: `egressProxy` fails closed (a proxy that is down or refuses
+credentials fails the connection instead of letting it out directly), and a
+transform rule on a server started without interception refuses the
+connection rather than sending the request without the credential it was
+meant to carry.
+
+**Where this differs from E2B, on purpose.** A sandbox that configures
+nothing gets the operator's `--egress-default`, which is `deny` unless told
+otherwise; E2B's is allow. And an `egressProxy` that resolves into a private
+range is refused unless the operator passes `--allow-private-egress-proxy`,
+which matches E2B's own check.
+
+#### A hole found on the way: envd had no authentication
+
+Current SDKs create sandboxes through `POST /v2/sandboxes`, which is
+secure-only: the response carries an `envdAccessToken` and the SDK sends it
+back as `X-Access-Token` on every envd call. Nothing here issued or checked
+one, which meant **anyone who could reach the proxy -- or the per-sandbox
+envd port directly -- could run commands in any sandbox whose ID they
+learned.** Each sandbox now gets a 244-bit token, compared in constant time
+on the envd listener itself (not only in the proxy, which the listener does
+not need to be reached through). Verified both ways: no token or a wrong one
+is `401`, the right one `200`, through the proxy and directly.
+
+#### Performance
+
+Measured on this machine (nested KVM under WSL2; bare metal will differ),
+64 MiB over HTTP from a host-side server:
+
+| path | before | after |
+| --- | --- | --- |
+| download through the gateway | 15.5 MB/s | **130.6 MB/s** |
+| TCP connect | 3.47 ms | **1.13 ms** |
+| small HTTP request | 11.0 ms | **4.65 ms** |
+| host-side baseline, no VM | 127-155 MB/s | -- |
+
+The first number was a ceiling, and arithmetic said which one: 64 KiB of
+send buffer over a 3.5 ms round trip is 16 MB/s. Two changes removed it. The
+bridge stopped polling -- the device gained a transmit wake (fired from the
+guest's own kick; the old doc comment said nothing could be signalled from
+there, and nothing had to *block*, which is different) and the gateway
+signals when it has frames, so a round trip no longer waits out two 1 ms
+sleeps. And the send buffer is 256 KiB. Receive-side interrupts are also
+coalesced now: one per burst rather than one per frame.
+
+**Upload is still slow: 5.1 MB/s.** 64 MiB in 13 s is ~3,500 frames/s, about
+280 µs per frame the guest transmits. The device offers no notification
+suppression (`VIRTIO_F_EVENT_IDX`, or `NO_NOTIFY` while a host thread
+drains), so the likely cost is one MMIO exit per transmitted frame -- which
+nested virtualization makes expensive. Not yet confirmed. Download does not
+pay it because host-to-guest delivery is batched. The fix is the vhost-net
+shape: drain the transmit ring from a host thread with guest notifications
+suppressed while it runs.
+
+#### What is still not built
+
+- **eBPF per-sandbox conntrack** (CubeVS). The gateway does in userspace what
+  CubeVS does in the kernel; at thousands of sandboxes per node the per-packet
+  cost will matter, and this has not been measured at that density.
+- **IPv6**, and **UDP other than DNS**: dropped. So is ICMP -- a guest `ping`
+  gets no answer rather than one the gateway fabricated.
+- **HTTP/2 and WebSocket inside injected connections**: interception offers
+  only `http/1.1` in ALPN, which clients fall back to; an `Upgrade` request is
+  not relayed.
+- **busybox's built-in TLS client** cannot complete a handshake with the
+  gateway's interception (it stalls after rustls's ServerHello; reproduced on
+  the host with no VM involved). OpenSSL-based clients -- curl, Python, Node
+  -- work. It also never validates certificates, so it was never going to
+  prove the trust chain anyway.
+
+#### History worth keeping
+
+This section said "Written, and not yet on a live path" until 2026-09-26,
+and before 2026-09-22 it opened "started, at the layer that was carrying the
+traffic", which read as though `EgressPolicy` were running. It was not:
+`Bridge` was constructed in exactly one place outside its own module, an
+example. That wording travelled -- into `filter.rs`'s `#[deprecated]` notes,
+`policies.rs`'s module header, and a project memory recording `permissions/`
+as wired into a request path when nothing installed that middleware either
+-- four copies, each reading like independent confirmation of the others.
+Worth remembering when a security claim is easy to repeat and expensive to
+verify.
+
+The push came from [NVIDIA's sandboxing
 guidance](https://developer.nvidia.com/blog/practical-security-guidance-for-sandboxing-agentic-workflows-and-managing-execution-risk/),
 which puts blocking "outbound network access to unknown destinations" first
-among its mandatory controls — the direct threats being a reverse shell and
-exfiltration, neither of which needs the attacker present. Reading it against
-this repo found that `Bridge` carried every frame a guest produced, and that
-`hv2_core::networking::filter` — a packet filter with connection tracking,
-already written — is called by no data path at all. A filter that is never
-asked is not a control.
-
-Worth recording from the same source: it recommends full virtualization
-("VMs, unikernels, Kata containers") over kernel-sharing for exactly this
-workload, because agentic tools "perform arbitrary code execution by design"
-and "kernel vulnerabilities can be directly targeted as a path to full system
-compromise", rating gVisor as weaker than full virtualization. That is this
-project's own premise, from a third party.
-
-What is still not built: names. A rule is an address, so an allowlist for
-"our package mirror" has to be resolved by whoever writes it and goes stale
-when it moves; filtering on the name a client *asked* for needs TLS
-termination or trust in the guest's DNS. Nor is there an L7 egress proxy with
-credential injection (so a sandboxed agent's outbound API calls never see the
-real secret), or eBPF-based per-sandbox conntrack. Those remain real
-engineering efforts.
-
-Note that `e2b_compat` gives a sandbox no network interface at all, so the
-deployed shape today is denied by absence rather than by policy.
+among its mandatory controls, and recommends full virtualization over
+kernel-sharing for this workload because agentic tools "perform arbitrary
+code execution by design". `hv2_core::networking::filter`, a packet filter
+with connection tracking, is still called by no data path; the gateway is
+the control that is.
 
 ### Phase 4 — Multi-node cluster orchestration
 
