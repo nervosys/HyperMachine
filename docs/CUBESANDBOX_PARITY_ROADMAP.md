@@ -1145,7 +1145,7 @@ with a private network or a TLS tunnel). A store outage stops creates and
 routing -- running sandboxes keep running, and nodes re-announce when it
 returns -- so production wants a replicated Redis/Valkey.
 
-### Phase 5 — Density, ops tooling, deployment convenience — **built; arm64 execution and a full node-image build are the gaps**
+### Phase 5 — Density, ops tooling, deployment convenience — **built; arm64 execution is the gap**
 
 #### Cold start and density: restore, don't boot
 
@@ -1217,9 +1217,10 @@ Two defects that predated all of this, found by measuring it:
 
 - **Images** (`Containerfile.sandbox`): `control-plane` on distroless,
   non-root; `node` with the daemon, the guest kernel and the initramfs.
-  The `control-plane` image builds under Docker Desktop.
-  The `node` image has not finished a build: the one attempt was stopped when
-  the development machine ran short of memory during the kernel stage.
+  Both build under Docker Desktop: 46 MB and 157 MB. The first node build
+  compiled the kernel for twenty minutes and then failed to install it --
+  `build-kernel.sh` did not create its output directory, which a host
+  build never needed.
 - **Guest image, reproducibly** (`tools/guest-image/`): `build.sh` assembles
   the initramfs from busybox, the static agent, and extras
   (`--extra SRC[:NAME]`), byte-for-byte reproducible (`cpio --reproducible`,
@@ -1237,9 +1238,10 @@ Two defects that predated all of this, found by measuring it:
   non-metal type (an EC2 VM has no `/dev/kvm`). `terraform validate` passes
   against the AWS provider. Not applied.
 - **Compose** (`deploy/compose`): store, control plane and one node on a
-  single KVM host. Not yet brought up: it needs the `node` image.
-  Docker Desktop on this machine does pass `/dev/kvm` through to a container,
-  so it is expected to run here once that image builds.
+  single KVM host. Brought up under Docker Desktop, which passes `/dev/kvm`
+  through: the node builds its template in the container in 1.1 s, a create
+  through the control plane answers in 25 ms, and the Phase 6 SDK test --
+  pause, resume, fork, auto-pause, auto-resume -- passes against it.
 - **Metrics**: `/metrics` in Prometheus text on control planes (cluster
   gauges from the store, creates by outcome, create latency, reaps) and
   nodes (running, booting, capacity, template, creates, latency, ends).
