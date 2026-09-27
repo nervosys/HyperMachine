@@ -27,6 +27,17 @@
 //! - A caller who genuinely wants best-effort says so, once, with
 //!   [`SandboxSpec::best_effort`], and can read back what was dropped.
 //!
+//! **For integrators: the refusal is the value, so make sure it arrives.** An
+//! [`SandboxError::Unsupported`] names the controls this host cannot enforce,
+//! and [`Controls::reason`] says why, in terms an operator can act on. Both
+//! are easy to lose downstream of this crate without touching it: an
+//! application that sanitises error messages before showing them (a common
+//! and sensible habit) turns a precise refusal into "Operation failed", and the
+//! operator is left knowing only that something went wrong. The first
+//! consumer of this crate hit exactly that. Check what your error path does to
+//! the message, and pass the refusal and its reasons through a channel that
+//! keeps them, verbatim.
+//!
 //! # Backends
 //!
 //! | Backend | Where | Enforces |
