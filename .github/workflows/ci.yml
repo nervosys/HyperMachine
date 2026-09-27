@@ -83,6 +83,72 @@ jobs:
             - name: Run tests
               run: cargo test --workspace --exclude hv2-core ${{ runner.arch == 'ARM64' && '--exclude hv1-core' || '' }}
 
+            # What hv2-sandbox can enforce on this runner, probed rather than
+            # assumed -- in particular whether a GitHub runner gives an
+            # unprivileged process a writable cgroup v2 hierarchy, which the
+            # memory and process-count caps depend on and WSL2 cannot answer.
+            # A report, not a gate: a runner lacking a control is a fact about
+            # the runner. The tests above are what fail on a wrong answer.
+            - name: Report what hv2-sandbox enforces here
+              shell: bash
+              run: |
+                  cargo run -q -p hv2-sandbox --example what_this_host_enforces | tee sandbox-report.txt
+                  { echo "### hv2-sandbox on ${{ matrix.os }}"; echo '```'; cat sandbox-report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+    # hv2-sandbox's containment tests skip themselves when the host cannot
+    # enforce a control, which keeps them honest on a developer's machine and
+    # made them vacuous here: ubuntu-latest restricts unprivileged user
+    # namespaces through AppArmor and gives the runner no writable cgroup, so
+    # every namespace and cgroup test "passed" by skipping. This job grants
+    # both, then fails if the probe falls short of all eight controls or if
+    # any test still skips.
+    sandbox-containment:
+        name: Sandbox Containment (Linux, all controls)
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@stable
+
+            - name: Allow unprivileged user namespaces
+              run: |
+                  if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+                      sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+                  fi
+
+            - name: Build before moving into the delegated cgroup
+              run: cargo test -p hv2-sandbox --no-run && cargo build -p hv2-sandbox --example what_this_host_enforces
+
+            - name: Probe and test inside a delegated cgroup
+              shell: bash
+              run: |
+                  # A cgroup the runner user owns, with memory and pids
+                  # delegated to its children, and this shell in a leaf under
+                  # it -- the arrangement a systemd user session gives a
+                  # desktop login. The crate places each workload in a sibling
+                  # of the leaf.
+                  base=/sys/fs/cgroup/hv2-ci
+                  sudo mkdir -p "$base/shell"
+                  echo "+memory +pids" | sudo tee /sys/fs/cgroup/cgroup.subtree_control >/dev/null
+                  sudo chown -R "$(id -u):$(id -g)" "$base"
+                  echo "+memory +pids" > "$base/cgroup.subtree_control"
+                  # Root moves the shell: migrating a process needs write access
+                  # to the cgroup.procs of the common ancestor, here the root.
+                  echo $$ | sudo tee "$base/shell/cgroup.procs" >/dev/null
+                  grep -q "^0::/hv2-ci/shell$" /proc/self/cgroup
+
+                  cargo run -q -p hv2-sandbox --example what_this_host_enforces | tee report.txt
+                  { echo '### hv2-sandbox with every control granted'; echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+                  grep -q '^enforced here (8)' report.txt || { echo "::error::the probe did not report all 8 controls"; exit 1; }
+
+                  cargo test -p hv2-sandbox -- --nocapture 2>&1 | tee test.log
+                  test "${PIPESTATUS[0]}" -eq 0
+                  if grep -n 'skipping:' test.log; then
+                      echo "::error::a containment test skipped on a host granted every control"
+                      exit 1
+                  fi
+
     test-core:
         name: Test Core (Linux only)
         runs-on: ubuntu-latest

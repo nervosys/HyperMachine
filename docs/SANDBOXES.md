@@ -53,7 +53,7 @@ caller asks for it.
 | Control | Linux process | Windows process | macOS process | microVM |
 | --- | --- | --- | --- | --- |
 | Memory | cgroup v2 `memory.max` | job object `JobMemoryLimit` | ✗ (`RLIMIT_AS` bounds address space, not usage) | the VM's own memory size |
-| Process count | `pids.max` + `RLIMIT_NPROC` | job `ActiveProcessLimit` | `RLIMIT_NPROC` | the guest |
+| Process count | `pids.max` | job `ActiveProcessLimit` | ✗ (`RLIMIT_NPROC` counts the user's processes, not the workload's) | the guest |
 | CPU time | `RLIMIT_CPU` | job `PerJobUserTimeLimit` | `RLIMIT_CPU` | guest agent |
 | Wall clock | kill the process group | terminate the job | kill the process group | guest agent |
 | Network isolation | `CLONE_NEWNET` + its own sysfs | ✗ | ✗ | no network device |
@@ -181,7 +181,13 @@ environment, which is not a limit anyone asked to remove. A workload that needs
   mount the spec asked to be read-only. Memory and process-count limits are
   *not* enforced there — the cgroup hierarchy is not writable — and the probe
   says so.
-- **macOS**: type-checked with `--target aarch64-apple-darwin`, not run.
+- **macOS**: run on GitHub's `macos-latest` in the Test job, whose summary
+  carries `what_this_host_enforces`'s report for each runner.
+- **Linux with every control granted**: the *Sandbox Containment* CI job
+  lifts Ubuntu's AppArmor user-namespace restriction and runs the tests in a
+  delegated cgroup, and fails if the probe reports fewer than all eight
+  controls or if any test skips. Before it existed, every containment test on
+  `ubuntu-latest` passed by skipping.
 
 Running it on a kernel found two defects that type-checking could not, both of
 the same shape — a claim that was true in the mechanism and false in what the
@@ -205,6 +211,18 @@ visible to a compiler:
    `2>/dev/null`, and an isolated root has no `/dev`, so *both* redirections
    failed and the "refused" it asserted said nothing about the mount. The test
    now checks the writable direction too, which is what caught it.
+
+Granting every control found a fifth, of a different shape: a limit that
+over-reached instead of under-delivering.
+
+5. `Control::ProcessCount` set `RLIMIT_NPROC` beside `pids.max`, as "belt and
+   braces". `RLIMIT_NPROC` counts every task the *user* owns, host-wide and
+   threads included. On a machine whose user ran 69 threads, a spec asking for
+   64 processes (`SandboxSpec::untrusted`'s default) had every spawn refused
+   with `EAGAIN`. Linux now relies on `pids.max` alone, and macOS, where
+   `RLIMIT_NPROC` was the only mechanism, reports the control as unenforced.
+   It went unseen because no host that had ever run the tests delegated the
+   pids controller, so the tests that would have failed skipped.
 
 `cargo run -p hv2-sandbox --example probe` prints what the machine you are on
 can enforce, and asks a confined workload what it can see. Run it on any host

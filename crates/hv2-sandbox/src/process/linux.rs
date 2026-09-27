@@ -5,7 +5,7 @@
 //! | Control | Mechanism |
 //! | --- | --- |
 //! | [`Control::Memory`] | `memory.max` *and* `memory.swap.max` in a cgroup v2 the workload is placed in before `exec` |
-//! | [`Control::ProcessCount`] | `pids.max` in the same cgroup, plus `RLIMIT_NPROC` |
+//! | [`Control::ProcessCount`] | `pids.max` in the same cgroup (not `RLIMIT_NPROC`: see `Confinement`) |
 //! | [`Control::CpuTime`] | `RLIMIT_CPU`, which the kernel turns into `SIGKILL` |
 //! | [`Control::WallClock`] | this crate, killing the process group |
 //! | [`Control::NetworkIsolation`] | `CLONE_NEWNET`: an empty network namespace with only loopback, down |
@@ -60,7 +60,7 @@
 //! string it needs is built in the parent and captured; it uses only raw
 //! `libc` calls.
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -79,6 +79,26 @@ use super::driver;
 /// other and from another process's.
 static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// The most common reason a namespace probe fails on a stock distribution,
+/// named so an operator is not left with only its symptom.
+///
+/// Ubuntu 23.10 and later let an unprivileged process create a user namespace
+/// but give it no capabilities inside, so the next step -- writing its id maps
+/// -- is what fails. Found on GitHub's `ubuntu-latest` runner, where every
+/// namespace-based control came back unenforced with nothing in the reason
+/// pointing at AppArmor.
+fn userns_restriction() -> Option<&'static str> {
+    let value =
+        std::fs::read_to_string("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").ok()?;
+    (value.trim() == "1").then_some(
+        "; this host's AppArmor restricts unprivileged user namespaces \
+         (kernel.apparmor_restrict_unprivileged_userns = 1, the default since Ubuntu 23.10): \
+         one can be created but holds no capabilities. Set the sysctl to 0, give the \
+         calling program an AppArmor profile that allows user namespaces, or use the \
+         microVM sandbox",
+    )
+}
+
 /// Probe what this kernel actually allows.
 ///
 /// Every answer comes from trying the thing. A kernel with unprivileged user
@@ -86,6 +106,7 @@ static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
 /// enforces less than the same code on the next machine, and a caller has to
 /// be told which machine it is on.
 pub(super) fn probe() -> Controls {
+    let restricted = userns_restriction().unwrap_or("");
     let mut controls = Controls::none()
         // Always available: these need no privileges and no configuration.
         .with(Control::CpuTime)
@@ -95,7 +116,7 @@ pub(super) fn probe() -> Controls {
         Ok(()) => controls.with(Control::FilesystemIsolation),
         Err(e) => controls.without(
             Control::FilesystemIsolation,
-            format!("the filesystem could not be isolated: {e}"),
+            format!("the filesystem could not be isolated: {e}{restricted}"),
         ),
     };
 
@@ -103,7 +124,7 @@ pub(super) fn probe() -> Controls {
         Ok(()) => controls.with(Control::NetworkIsolation),
         Err(e) => controls.without(
             Control::NetworkIsolation,
-            format!("the network could not be isolated: {e}"),
+            format!("the network could not be isolated: {e}{restricted}"),
         ),
     };
 
@@ -111,7 +132,7 @@ pub(super) fn probe() -> Controls {
         Ok(()) => controls.with(Control::ProcessIsolation),
         Err(e) => controls.without(
             Control::ProcessIsolation,
-            format!("processes could not be isolated: {e}"),
+            format!("processes could not be isolated: {e}{restricted}"),
         ),
     };
 
@@ -151,7 +172,14 @@ pub(super) fn probe() -> Controls {
             };
         }
         Err(e) => {
-            let reason = format!("no writable cgroup v2 hierarchy: {e}");
+            // The raw error ("Permission denied") says what failed and not what
+            // to do. The usual cause is running as a user whose session does
+            // not own a cgroup -- a CI runner, a service without Delegate=yes.
+            let reason = format!(
+                "no writable cgroup v2 hierarchy: {e}. Run inside a cgroup delegated to \
+                 this user (for example `systemd-run --user --scope -p Delegate=yes ...`, \
+                 or a service with Delegate=yes), or use the microVM sandbox"
+            );
             controls = controls
                 .without(Control::Memory, reason.clone())
                 .without(Control::ProcessCount, reason);
@@ -257,16 +285,23 @@ fn make_mounts_private() -> std::io::Result<()> {
 /// Mount `/proc` and `/sys` so they describe *these* namespaces.
 ///
 /// Split from [`make_mounts_private`] because when a root is pivoted into,
-/// these have to happen after the pivot — a `/proc` mounted before it would end
-/// up in the root that is about to be thrown away — while making the mounts
-/// private has to happen before.
+/// these go inside the new root instead (see [`pivot_into`]), at the paths the
+/// plan carries, while making the mounts private still happens first.
 fn mount_namespaced_filesystems(new_pid_ns: bool, new_net_ns: bool) -> std::io::Result<()> {
-    if new_pid_ns {
+    mount_proc_and_sys(
+        new_pid_ns.then_some(c"/proc"),
+        new_net_ns.then_some(c"/sys"),
+    )
+}
+
+/// Mount a fresh `proc` at `proc_at` and `sysfs` at `sys_at`, where given.
+fn mount_proc_and_sys(proc_at: Option<&CStr>, sys_at: Option<&CStr>) -> std::io::Result<()> {
+    if let Some(target) = proc_at {
         // SAFETY: as above.
         if unsafe {
             libc::mount(
                 c"proc".as_ptr(),
-                c"/proc".as_ptr(),
+                target.as_ptr(),
                 c"proc".as_ptr(),
                 0,
                 std::ptr::null(),
@@ -277,14 +312,14 @@ fn mount_namespaced_filesystems(new_pid_ns: bool, new_net_ns: bool) -> std::io::
         }
     }
 
-    if new_net_ns {
+    if let Some(target) = sys_at {
         // sysfs is bound to the network namespace it is mounted in, which is
         // what makes /sys/class/net show the host interfaces otherwise.
         // SAFETY: as above.
         if unsafe {
             libc::mount(
                 c"sysfs".as_ptr(),
-                c"/sys".as_ptr(),
+                target.as_ptr(),
                 c"sysfs".as_ptr(),
                 0,
                 std::ptr::null(),
@@ -355,6 +390,11 @@ struct FilesystemPlan {
     /// refuses, so it is applied here instead, and a directory that does not
     /// exist inside the root fails the spawn.
     working_dir: Option<CString>,
+    /// Where a fresh `/proc` and `/sys` go, as host paths inside `new_root`,
+    /// when the workload has a PID or network namespace of its own. Mounted
+    /// *before* the pivot: see [`pivot_into`].
+    proc_target: Option<CString>,
+    sys_target: Option<CString>,
 }
 
 /// The kernel's `struct mount_attr`, which `libc` does not declare.
@@ -463,6 +503,14 @@ fn pivot_into(plan: &FilesystemPlan) -> std::io::Result<()> {
         set_subtree_read_only(&bind.target)?;
     }
 
+    // The new /proc and /sys go in now, inside the new root, and not after the
+    // pivot. A user namespace may mount proc or sysfs only while one that is
+    // fully visible already exists in its mount namespace (the kernel's
+    // mount_too_revealing), and after the old root is detached none does:
+    // GitHub's ubuntu-latest refused the post-pivot mount with EPERM, while a
+    // WSL2 kernel happened to allow it. Mounted here, both move with the tree.
+    mount_proc_and_sys(plan.proc_target.as_deref(), plan.sys_target.as_deref())?;
+
     // SAFETY: `new_root` is NUL-terminated and owned by `plan`.
     if unsafe { libc::chdir(plan.new_root.as_ptr()) } != 0 {
         return Err(std::io::Error::last_os_error());
@@ -537,6 +585,8 @@ fn run_filesystem_probe(root: &Path, outside: &Path, read_only: &Path) -> std::i
             target: path_to_cstring(&root.join("ro"))?,
         }],
         working_dir: None,
+        proc_target: None,
+        sys_target: None,
     };
     let outside = path_to_cstring(outside)?;
 
@@ -734,6 +784,12 @@ fn plan_filesystem(
         new_root: cstring_or_invalid(root)?,
         binds,
         working_dir: working_dir.map(cstring_or_invalid).transpose()?,
+        proc_target: need_proc
+            .then(|| cstring_or_invalid(&root.join("proc")))
+            .transpose()?,
+        sys_target: need_sys
+            .then(|| cstring_or_invalid(&root.join("sys")))
+            .transpose()?,
     })
 }
 
@@ -998,7 +1054,6 @@ pub(super) fn run(
     let confinement = Confinement {
         procs_file,
         cpu_seconds: spec.cpu_time.map(|d| d.as_secs().max(1)),
-        max_processes: spec.max_processes,
         no_new_privs: spec.no_new_privileges,
         clone_flags,
         new_user_ns,
@@ -1064,7 +1119,12 @@ pub(super) fn run(
 struct Confinement {
     procs_file: Option<CString>,
     cpu_seconds: Option<u64>,
-    max_processes: Option<u32>,
+    // No RLIMIT_NPROC, although it looks like a second lock beside pids.max.
+    // It counts every task the *user* owns, host-wide and threads included,
+    // not the workload's: a caller whose user already ran more threads than
+    // the limit -- 69 tokio workers and shells on the machine that found this
+    // -- had every spawn refused with EAGAIN. pids.max counts only this
+    // cgroup, which is the promise Control::ProcessCount makes.
     no_new_privs: bool,
     clone_flags: libc::c_int,
     new_user_ns: bool,
@@ -1092,12 +1152,6 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
     // 2. Limits that need no privileges.
     if let Some(seconds) = plan.cpu_seconds {
         set_rlimit(libc::RLIMIT_CPU, seconds)?;
-    }
-    if let Some(max) = plan.max_processes {
-        // Belt and braces alongside pids.max: RLIMIT_NPROC is per-user rather
-        // than per-cgroup, so it is the weaker of the two and never the only
-        // one relied on.
-        set_rlimit(libc::RLIMIT_NPROC, u64::from(max))?;
     }
     if plan.no_new_privs {
         // SAFETY: prctl with this option takes no pointers.
@@ -1163,13 +1217,15 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
         pivot_into(filesystem)?;
     }
 
-    // 7. Now that this process really is in the new PID namespace — and inside
-    //    the new root — give it a /proc and /sys that reflect them. Doing this
-    //    before the fork would mount a /proc belonging to the old namespace,
-    //    which is the state that made the host's whole process table readable
-    //    from inside; doing it before the pivot would put both in the root
-    //    that is about to be discarded.
-    mount_namespaced_filesystems(plan.new_pid_ns, plan.new_net_ns)?;
+    // 7. Now that this process really is in the new PID namespace, give it a
+    //    /proc and /sys that reflect it. Doing this before the fork would mount
+    //    a /proc belonging to the old namespace, which is the state that made
+    //    the host's whole process table readable from inside. With a new
+    //    root, pivot_into has already mounted both inside it, before the
+    //    pivot, because after it the kernel may refuse (see pivot_into).
+    if plan.filesystem.is_none() {
+        mount_namespaced_filesystems(plan.new_pid_ns, plan.new_net_ns)?;
+    }
 
     // Become a process group leader so the deadline can kill the whole group.
     // SAFETY: setpgid on self with group 0 has no preconditions.

@@ -555,6 +555,49 @@ mod tests {
         );
     }
 
+    /// The limit is the workload's, not the user's. With `RLIMIT_NPROC` set
+    /// beside `pids.max`, a caller whose user already owned more threads than
+    /// the limit -- counted host-wide -- had every spawn refused with EAGAIN.
+    /// The caller here makes sure of that by holding 80 threads itself.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_limit_counts_the_workload_not_everything_the_user_runs() {
+        let sandbox = ProcessSandbox::new();
+        if !sandbox.controls().enforces(Control::ProcessCount) {
+            eprintln!("skipping: the pids controller is not delegated to this cgroup");
+            return;
+        }
+
+        let release = std::sync::Arc::new(std::sync::Barrier::new(81));
+        let held: Vec<_> = (0..80)
+            .map(|_| {
+                let release = std::sync::Arc::clone(&release);
+                std::thread::spawn(move || {
+                    release.wait();
+                })
+            })
+            .collect();
+
+        // One fork, well inside the limit of 8. It has to fork: the per-user
+        // count was checked at fork, so a workload that only execs would pass
+        // with the bug in place -- which is how this test's first draft did.
+        let command = SandboxCommand::new("/bin/sh").args(["-c", "/bin/true && echo ran"]);
+        let spec = SandboxSpec {
+            max_processes: Some(8),
+            wall_clock: Some(Duration::from_secs(30)),
+            network: NetworkPolicy::Host,
+            ..SandboxSpec::default()
+        };
+        let result = sandbox.run(&command, &spec);
+
+        release.wait();
+        for thread in held {
+            thread.join().unwrap();
+        }
+        let out = result.expect("a limit of 8 must not count the caller's own 80 threads");
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "ran");
+    }
+
     #[cfg(windows)]
     #[test]
     fn a_memory_limit_stops_the_workload_allocating_past_it() {
