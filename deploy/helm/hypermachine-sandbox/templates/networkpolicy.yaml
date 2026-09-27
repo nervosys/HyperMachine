@@ -22,6 +22,62 @@ spec:
         - { port: 3980 }
         - { port: 3981 }
 ---
+# What node pods may reach. A sandbox's egress leaves through its node's
+# gateway, so this is also the ceiling on every sandbox: the gateway refuses
+# reserved addresses a tenant's allowOut asks for, and this refuses them again
+# should the gateway ever be wrong -- the store, the control planes, other
+# nodes and the cloud metadata service are all on the far side of it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "hv2.name" . }}-node-egress
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: node
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.dns.namespace }}
+          podSelector:
+            matchLabels: {{- toYaml .Values.networkPolicy.dns.podLabels | nindent 14 }}
+      ports:
+        - { port: 53, protocol: UDP }
+        - { port: 53, protocol: TCP }
+    {{- if .Values.store.deploy }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+              app.kubernetes.io/component: store
+      ports:
+        - { port: 6379 }
+    {{- else }}
+    {{- if not .Values.networkPolicy.externalStoreCidrs }}
+    {{- fail "networkPolicy.externalStoreCidrs is required with store.deploy false: the address of store.url, which node pods must reach" }}
+    {{- end }}
+    - to:
+        {{- range .Values.networkPolicy.externalStoreCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+    {{- end }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: {{- toYaml .Values.networkPolicy.internalCidrs | nindent 14 }}
+        - ipBlock:
+            cidr: ::/0
+            except: ["fc00::/7", "fe80::/10", "::1/128", "ff00::/8"]
+        {{- range .Values.node.tenantReservedCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+---
 # The store answers control planes and nodes, nothing else.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

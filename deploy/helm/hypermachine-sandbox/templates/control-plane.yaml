@@ -42,6 +42,8 @@ spec:
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: api-key } }
             - name: HV2_CLUSTER_TOKEN
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
+            - name: HV2_STORE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password } }
           ports:
             - { name: api, containerPort: 5980 }
             - { name: envd, containerPort: 5981 }

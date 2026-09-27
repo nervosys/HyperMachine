@@ -22,12 +22,19 @@
 //! agent was told to run by something it read, and "nobody decided" should
 //! not read as "everything is allowed".
 //!
-//! **Reserved addresses need an address rule.** Loopback, link-local
-//! (including `169.254.169.254`, every cloud's metadata service), RFC 1918,
-//! CGNAT, multicast and the gateway's own subnet are refused unless an
-//! `allowOut` *CIDR* covers them. A name rule never does: if `example.com`
-//! is allowed and its DNS answer is `10.0.0.5`, that is DNS rebinding into
-//! the host's network, not a trip to example.com.
+//! **Reserved addresses are the operator's, not the tenant's.** Loopback,
+//! link-local (including `169.254.169.254`, every cloud's metadata service),
+//! RFC 1918, CGNAT, multicast and the gateway's own subnet are refused unless
+//! an `allowOut` *CIDR* covers them *and* the operator has let tenants open
+//! that range ([`NetworkPolicy::with_tenant_reserved`]). `allowOut` is written
+//! by whoever creates the sandbox; the network behind a reserved address is
+//! the host's -- in a cluster, the pod network with the state store and the
+//! other nodes on it. A tenant asking for `0.0.0.0/0` means "the internet",
+//! and must not get the store with it.
+//!
+//! A name rule never opens a reserved address either: if `example.com` is
+//! allowed and its DNS answer is `10.0.0.5`, that is DNS rebinding into the
+//! host's network, not a trip to example.com.
 
 use std::collections::BTreeMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -173,6 +180,9 @@ pub struct NetworkPolicy {
     transforms: Vec<(NamePattern, Headers)>,
     /// For a destination no rule speaks to.
     default: Verdict,
+    /// The reserved ranges an `allowOut` CIDR may open -- the operator's
+    /// grant, never the tenant's. Empty unless the operator says otherwise.
+    tenant_reserved: Vec<Cidr>,
 }
 
 impl NetworkPolicy {
@@ -186,6 +196,7 @@ impl NetworkPolicy {
             deny_addresses: Vec::new(),
             transforms: Vec::new(),
             default,
+            tenant_reserved: Vec::new(),
         }
     }
 
@@ -293,8 +304,21 @@ impl NetworkPolicy {
         }
     }
 
+    /// Let `allowOut` CIDRs open these reserved ranges.
+    ///
+    /// For the operator, from the operator's configuration: a private
+    /// service sandboxes are meant to reach. Without it, no tenant rule
+    /// reaches a reserved address, however broad.
+    #[must_use]
+    pub fn with_tenant_reserved(mut self, ranges: &[Cidr]) -> Self {
+        self.tenant_reserved = ranges.to_vec();
+        self
+    }
+
     fn address_allowed(&self, address: IpAddr) -> bool {
         self.allow_addresses.iter().any(|c| c.contains(address))
+            && (!Self::is_reserved(address)
+                || self.tenant_reserved.iter().any(|c| c.contains(address)))
     }
 
     fn address_denied(&self, address: IpAddr) -> bool {
@@ -502,11 +526,62 @@ mod tests {
                 "{addr}"
             );
         }
-        let explicit = policy(&["10.0.0.0/8"], &[]);
+    }
+
+    /// `allowOut` is the tenant's. A tenant asking for the whole internet, or
+    /// for a private range by name, must not get the host's network: in a
+    /// cluster that is the state store holding every sandbox's access token.
+    #[test]
+    fn a_tenant_address_rule_never_opens_a_reserved_address() {
+        for allow in ["0.0.0.0/0", "10.0.0.0/8", "169.254.169.254", "::/0"] {
+            let p = policy(&[allow], &[]);
+            for addr in [
+                "10.0.0.5",
+                "169.254.169.254",
+                "127.0.0.1",
+                "::ffff:10.0.0.5",
+            ] {
+                if Cidr::parse(allow).unwrap().contains(ip(addr)) {
+                    assert_eq!(
+                        p.decide_address(ip(addr)),
+                        AddressVerdict::Deny("reserved address"),
+                        "allowOut {allow} opened {addr}"
+                    );
+                    assert_eq!(
+                        p.decide(ip(addr), "anything"),
+                        (Verdict::Deny, "reserved address"),
+                        "allowOut {allow} opened {addr}"
+                    );
+                }
+            }
+        }
+        // The same rule still opens the internet it was asked for.
         assert_eq!(
-            explicit.decide_address(ip("10.0.0.5")),
-            AddressVerdict::Allow("allowOut address"),
-            "an address rule is how an operator says they meant it"
+            policy(&["0.0.0.0/0"], &[]).decide_address(ip("93.184.216.34")),
+            AddressVerdict::Allow("allowOut address")
+        );
+    }
+
+    /// The operator can let tenants reach a private range -- and only within
+    /// what the tenant also asked for.
+    #[test]
+    fn the_operator_can_let_tenants_open_a_reserved_range() {
+        let grant = [Cidr::parse("10.20.0.0/16").unwrap()];
+        let p = policy(&["10.0.0.0/8"], &[]).with_tenant_reserved(&grant);
+        assert_eq!(
+            p.decide_address(ip("10.20.1.1")),
+            AddressVerdict::Allow("allowOut address")
+        );
+        assert_eq!(
+            p.decide_address(ip("10.30.1.1")),
+            AddressVerdict::Deny("reserved address"),
+            "outside the operator's grant"
+        );
+        let unasked = policy(&[], &[]).with_tenant_reserved(&grant);
+        assert_eq!(
+            unasked.decide_address(ip("10.20.1.1")),
+            AddressVerdict::Deny("reserved address"),
+            "the grant is not an allow rule of its own"
         );
     }
 

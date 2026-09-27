@@ -168,7 +168,7 @@ async fn main() -> std::process::ExitCode {
     };
     println!(
         "hv2-control-plane: E2B API on {addr}, envd proxy on {proxy_addr}, store {}",
-        opts.store
+        store::redacted(&opts.store)
     );
     if let Err(e) = axum::serve(listener, control::router(control)).await {
         eprintln!("hv2-control-plane: {e}");

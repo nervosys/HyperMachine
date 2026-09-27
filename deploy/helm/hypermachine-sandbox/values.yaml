@@ -7,12 +7,14 @@ image:
   pullPolicy: IfNotPresent
 
 # The API key clients send as X-API-Key (E2B_API_KEY) and the token control
-# planes use with nodes. Left empty, each is generated once and kept across
-# upgrades. `existingSecret` names a Secret with keys `api-key` and
-# `cluster-token` instead.
+# planes use with nodes, and the chart-deployed store's password. Left empty,
+# each is generated once and kept across upgrades. `existingSecret` names a
+# Secret with keys `api-key`, `cluster-token` and `store-password` instead.
 auth:
   apiKey: ""
   clusterToken: ""
+  # Letters and digits only: it is spliced into the store's redis:// URL.
+  storePassword: ""
   existingSecret: ""
 
 controlPlane:
@@ -50,6 +52,10 @@ node:
   network: true
   # What a sandbox that configures no egress policy gets: deny or allow.
   egressDefault: deny
+  # Private ranges a sandbox's `allowOut` may open. Empty, none: a tenant
+  # asking for 0.0.0.0/0 gets the internet, not this cluster's pod network.
+  # Anything listed here is also let out of the node pods' egress policy.
+  tenantReservedCidrs: []
   # Restore sandboxes from a template snapshot (default) rather than boot.
   template: true
   # Oversubscription: when a node is full, pause the sandbox idle longest
@@ -67,8 +73,10 @@ node:
     requests: { cpu: 500m, memory: 512Mi }
 
 store:
-  # Deploy a single Valkey instance with the chart. For production, point
-  # `url` at a replicated Redis/Valkey instead and set `deploy: false`.
+  # Deploy a single Valkey instance with the chart, password-protected. For
+  # production, point `url` at a replicated Redis/Valkey instead (credentials
+  # in the URL: `redis://:PASSWORD@host:6379`), set `deploy: false`, and set
+  # `networkPolicy.externalStoreCidrs`.
   deploy: true
   url: ""
   namespace: default
@@ -77,7 +85,28 @@ store:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { memory: 512Mi }
 
-# Restrict each node daemon's API to the control planes. The cluster token is
-# required either way; this is the second lock.
+# Restrict each node daemon's API to the control planes (the cluster token is
+# required either way; this is the second lock), and what node pods -- whose
+# traffic carries their sandboxes' -- may reach: DNS, the store, the public
+# internet, and `node.tenantReservedCidrs`.
 networkPolicy:
   enabled: true
+  # The cluster DNS a node resolves the store and sandboxes' names through.
+  dns:
+    namespace: kube-system
+    podLabels: { k8s-app: kube-dns }
+  # Everything but the internet: private, shared, link-local (the cloud
+  # metadata service) and loopback. Add the cluster's pod and service CIDRs
+  # here if either is public address space.
+  internalCidrs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - 169.254.0.0/16
+    - 127.0.0.0/8
+    - 0.0.0.0/8
+    - 224.0.0.0/3
+  # With `store.deploy: false`: where `store.url` lives, which node pods must
+  # still reach. Required then, because the rule above blocks private ranges.
+  externalStoreCidrs: []
