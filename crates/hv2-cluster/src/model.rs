@@ -89,6 +89,8 @@ impl SandboxRecord {
             "metadata": self.metadata,
             "state": "running",
             "envdVersion": self.envd_version,
+            // Not E2B's; which node runs it, for an operator.
+            "nodeID": self.node_id,
         })
     }
 
@@ -105,7 +107,6 @@ impl SandboxRecord {
                     detail.insert(key.to_string(), value.clone());
                 }
             }
-            detail.insert("nodeID".to_string(), Value::String(self.node_id.clone()));
         }
         detail
     }

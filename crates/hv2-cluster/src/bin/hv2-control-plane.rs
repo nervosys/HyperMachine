@@ -148,8 +148,6 @@ async fn main() -> std::process::ExitCode {
         }
     });
 
-    tokio::spawn(control::reaper(Arc::clone(&store), opts.reap_interval));
-
     let control = ControlPlane::new(
         store,
         ControlConfig {
@@ -159,6 +157,7 @@ async fn main() -> std::process::ExitCode {
             create_timeout: Duration::from_secs(60),
         },
     );
+    tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
     let addr = format!("0.0.0.0:{}", opts.port);
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(listener) => listener,

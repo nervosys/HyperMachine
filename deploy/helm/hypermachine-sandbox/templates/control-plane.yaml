@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hv2.name" . }}-control-plane
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: control-plane
+spec:
+  replicas: {{ .Values.controlPlane.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: control-plane
+  template:
+    metadata:
+      labels: {{- include "hv2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: control-plane
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5980"
+        prometheus.io/path: /metrics
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      containers:
+        - name: control-plane
+          image: {{ .Values.image.controlPlane }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --store
+            - {{ include "hv2.storeUrl" . | quote }}
+            - --namespace
+            - {{ .Values.store.namespace | quote }}
+            - --port
+            - "5980"
+            - --proxy-port
+            - "5981"
+            - --reap-interval
+            - {{ .Values.controlPlane.reapIntervalSeconds | quote }}
+          env:
+            - name: HV2_API_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: api-key } }
+            - name: HV2_CLUSTER_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
+          ports:
+            - { name: api, containerPort: 5980 }
+            - { name: envd, containerPort: 5981 }
+          readinessProbe:
+            httpGet: { path: /health, port: api }
+          livenessProbe:
+            httpGet: { path: /health, port: api }
+            periodSeconds: 20
+          resources: {{- toYaml .Values.controlPlane.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hv2.name" . }}
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.controlPlane.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: control-plane
+  ports:
+    # E2B_API_URL points here.
+    - { name: api, port: {{ .Values.controlPlane.service.apiPort }}, targetPort: api }
+    # E2B_SANDBOX_URL (or *.E2B_DOMAIN behind an ingress) points here.
+    - { name: envd, port: {{ .Values.controlPlane.service.proxyPort }}, targetPort: envd }

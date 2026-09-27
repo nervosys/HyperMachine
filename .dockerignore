@@ -1,0 +1,10 @@
+# An allowlist. Without it the build context is the whole checkout, target/
+# included -- more than five minutes just to measure on the machine this was
+# written on. Everything is excluded except what an image build reads.
+*
+!Cargo.toml
+!Cargo.lock
+!.cargo/
+!crates/
+!tools/guest-image/
+**/target/

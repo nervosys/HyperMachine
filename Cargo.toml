@@ -111,8 +111,18 @@ parking_lot = "0.12"
 anyhow = "1.0"
 thiserror = "2"
 
-# HTTP client
-reqwest = { version = "0.12", default-features = true, features = ["json"] }
+# HTTP client. rustls on `ring`, not the default native-tls: the default
+# brought OpenSSL in as a second TLS stack beside the one the workspace pins,
+# and made every crate using this unbuildable for another architecture
+# without that architecture's OpenSSL -- which is how it was found, checking
+# an aarch64 build. The rest of the defaults are kept as they were.
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "charset",
+    "http2",
+    "system-proxy",
+] }
 
 # Logging and tracing
 tracing = "0.1"

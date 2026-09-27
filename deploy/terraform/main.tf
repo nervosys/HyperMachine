@@ -108,6 +108,27 @@ variable "gpu_instance_type" {
   default     = "g5.xlarge"
 }
 
+variable "sandbox_node_count" {
+  description = <<-EOT
+    Bare-metal nodes for microVM sandboxes (deploy/helm/hypermachine-sandbox).
+    Zero leaves the group out. Metal, because an ordinary EC2 instance is
+    itself a VM with no /dev/kvm, and the sandbox node daemon needs one.
+  EOT
+  type        = number
+  default     = 0
+}
+
+variable "sandbox_instance_type" {
+  description = "Instance type for sandbox nodes; must be a .metal type on AWS"
+  type        = string
+  default     = "m7i.metal-24xl"
+
+  validation {
+    condition     = can(regex("\\.metal", var.sandbox_instance_type))
+    error_message = "Sandbox nodes need /dev/kvm, which on EC2 means a .metal instance type."
+  }
+}
+
 variable "domain_name" {
   description = "Domain name for API endpoint — set to your own domain"
   type        = string
@@ -362,6 +383,51 @@ resource "aws_eks_node_group" "gpu" {
   tags = merge(local.common_tags, {
     "k8s.io/cluster-autoscaler/enabled" = "true"
   })
+}
+
+# Sandbox Node Group (optional): where hv2-sandboxd runs microVMs.
+#
+# Labelled and tainted exactly as deploy/helm/hypermachine-sandbox's
+# values.yaml expects, so the node DaemonSet lands here and nothing else does.
+resource "aws_eks_node_group" "sandbox" {
+  count = var.cloud_provider == "aws" && var.sandbox_node_count > 0 ? 1 : 0
+
+  cluster_name    = aws_eks_cluster.main[0].name
+  node_group_name = "${local.cluster_name}-sandbox"
+  node_role_arn   = aws_iam_role.eks_node[0].arn
+  subnet_ids      = aws_subnet.private[*].id
+  instance_types  = [var.sandbox_instance_type]
+
+  scaling_config {
+    desired_size = var.sandbox_node_count
+    max_size     = var.sandbox_node_count * 2
+    min_size     = 1
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  labels = {
+    role                           = "sandbox"
+    "hypermachine.io/sandbox-node" = "true"
+  }
+
+  taint {
+    key    = "hypermachine.io/sandbox-node"
+    value  = "true"
+    effect = "NO_SCHEDULE"
+  }
+
+  tags = merge(local.common_tags, {
+    "k8s.io/cluster-autoscaler/enabled" = "true"
+  })
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_ecr_policy,
+  ]
 }
 
 # ============================================================================

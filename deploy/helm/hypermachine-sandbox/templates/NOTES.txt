@@ -1,0 +1,16 @@
+HyperMachine sandboxes are deploying.
+
+Sandbox nodes are the ones labelled {{ toYaml .Values.node.nodeSelector | trim }}.
+Until at least one is, the node DaemonSet schedules nowhere and creates fail
+with "no node has room (0 alive)".
+
+The API key:
+  kubectl get secret {{ include "hv2.secretName" . }} -n {{ .Release.Namespace }} \
+    -o jsonpath='{.data.api-key}' | base64 -d
+
+Point the E2B SDK at the control plane:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "hv2.name" . }} 5980:{{ .Values.controlPlane.service.apiPort }} 5981:{{ .Values.controlPlane.service.proxyPort }}
+  export E2B_API_URL=http://127.0.0.1:5980 E2B_SANDBOX_URL=http://127.0.0.1:5981 E2B_API_KEY=<the key>
+
+The operator view is at http://127.0.0.1:5980/ui, and /metrics on every
+control plane and node is Prometheus text.

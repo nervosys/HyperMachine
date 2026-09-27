@@ -1,0 +1,53 @@
+{{- if .Values.store.deploy }}
+# One Valkey, no persistence: the store holds liveness and routing, which the
+# nodes rebuild -- each re-announces itself and forgets stale records on join.
+# Losing it drops routes for running sandboxes until it is back.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "hv2.name" . }}-store
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: store
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: store
+  template:
+    metadata:
+      labels: {{- include "hv2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: store
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+      containers:
+        - name: valkey
+          image: {{ .Values.store.image }}
+          args: ["--save", "", "--appendonly", "no"]
+          ports:
+            - containerPort: 6379
+              name: redis
+          readinessProbe:
+            tcpSocket: { port: redis }
+          resources: {{- toYaml .Values.store.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hv2.name" . }}-store
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: store
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+{{- end }}

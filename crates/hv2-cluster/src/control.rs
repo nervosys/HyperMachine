@@ -31,6 +31,7 @@ use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::metrics::{self, Counter, Exposition, Histogram};
 use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, SandboxRecord};
 use crate::scheduler::candidates;
 use crate::store::ClusterStore;
@@ -56,6 +57,20 @@ pub struct ControlPlane {
     store: Arc<dyn ClusterStore>,
     http: reqwest::Client,
     config: ControlConfig,
+    metrics: ControlMetrics,
+}
+
+/// What `/metrics` reports beyond the store's gauges.
+#[derive(Default)]
+struct ControlMetrics {
+    creates_ok: Counter,
+    /// No node had room.
+    creates_full: Counter,
+    /// The request was refused as the client's fault (4xx).
+    creates_rejected: Counter,
+    creates_error: Counter,
+    create_latency: Histogram,
+    reaped: Counter,
 }
 
 impl ControlPlane {
@@ -70,6 +85,7 @@ impl ControlPlane {
                 .build()
                 .unwrap_or_default(),
             config,
+            metrics: ControlMetrics::default(),
         })
     }
 }
@@ -104,6 +120,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         ));
     Router::new()
         .route("/health", get(health))
+        // Outside the key, like /health: a scraper holds no API key, and
+        // counts are all this says.
+        .route("/metrics", get(metrics))
+        .route("/ui", get(ui))
         .merge(e2b)
         .fallback(|uri: axum::http::Uri| async move {
             api_error(StatusCode::NOT_FOUND, format!("no route {uri}"))
@@ -156,6 +176,22 @@ fn rewrite_descriptor(control: &ControlPlane, descriptor: &mut Value, node: &str
 }
 
 async fn create(control: &ControlPlane, path: &str, body: Bytes) -> Response {
+    let started = Instant::now();
+    let response = create_inner(control, path, body).await;
+    let m = &control.metrics;
+    match response.status() {
+        StatusCode::CREATED => {
+            m.creates_ok.inc();
+            m.create_latency.observe(started.elapsed());
+        }
+        StatusCode::SERVICE_UNAVAILABLE => m.creates_full.inc(),
+        s if s.is_client_error() => m.creates_rejected.inc(),
+        _ => m.creates_error.inc(),
+    }
+    response
+}
+
+async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Response {
     let nodes = match control.store.nodes().await {
         Ok(nodes) => nodes,
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
@@ -452,15 +488,87 @@ pub async fn reap(store: &dyn ClusterStore) -> crate::store::Result<usize> {
 }
 
 /// Run [`reap`] every `interval`, forever.
-pub async fn reaper(store: Arc<dyn ClusterStore>, interval: Duration) {
+pub async fn reaper(control: Arc<ControlPlane>, interval: Duration) {
     loop {
         tokio::time::sleep(interval).await;
-        match reap(store.as_ref()).await {
+        match reap(control.store.as_ref()).await {
             Ok(0) => {}
-            Ok(n) => tracing::info!("reaped {n} sandbox(es) whose node is gone"),
+            Ok(n) => {
+                for _ in 0..n {
+                    control.metrics.reaped.inc();
+                }
+                tracing::info!("reaped {n} sandbox(es) whose node is gone");
+            }
             Err(e) => tracing::warn!("reaper: {e}"),
         }
     }
+}
+
+/// `GET /metrics`: Prometheus text format.
+async fn metrics(State(control): State<Arc<ControlPlane>>) -> Response {
+    let m = &control.metrics;
+    let mut e = Exposition::new();
+    // The cluster as the store sees it -- the same from every instance.
+    if let (Ok(nodes), Ok(sandboxes)) =
+        (control.store.nodes().await, control.store.sandboxes().await)
+    {
+        e.gauge(
+            "hv2_cluster_nodes",
+            "Nodes whose heartbeat is current.",
+            nodes.len() as f64,
+        );
+        e.gauge(
+            "hv2_cluster_capacity",
+            "Sandboxes the live nodes will run at once, summed.",
+            nodes.iter().map(|n| f64::from(n.capacity)).sum(),
+        );
+        e.gauge(
+            "hv2_cluster_sandboxes",
+            "Sandboxes recorded in the store.",
+            sandboxes.len() as f64,
+        );
+    }
+    // This instance's own work.
+    e.counters(
+        "hv2_control_creates_total",
+        "Creations handled by this control plane, by outcome.",
+        "result",
+        &[
+            ("ok", m.creates_ok.get()),
+            ("full", m.creates_full.get()),
+            ("rejected", m.creates_rejected.get()),
+            ("error", m.creates_error.get()),
+        ],
+    );
+    e.histogram(
+        "hv2_control_create_seconds",
+        "Time to a created sandbox, through this control plane.",
+        &m.create_latency,
+    );
+    e.counters(
+        "hv2_control_reaped_total",
+        "Sandboxes this instance removed because their node died.",
+        "reason",
+        &[("node-gone", m.reaped.get())],
+    );
+    ([("content-type", metrics::CONTENT_TYPE)], e.finish()).into_response()
+}
+
+/// `GET /ui`: the operator's view -- nodes, sandboxes, events. One static
+/// page that calls this API with a key the viewer enters.
+async fn ui() -> Response {
+    (
+        [
+            ("content-type", "text/html; charset=utf-8"),
+            // The page talks only to this origin and loads nothing else.
+            (
+                "content-security-policy",
+                "default-src 'none'; script-src 'self' 'unsafe-inline';                  style-src 'unsafe-inline'; connect-src 'self'; img-src data:",
+            ),
+        ],
+        include_str!("ui.html"),
+    )
+        .into_response()
 }
 
 // ── Envd routing ────────────────────────────────────────────────────────────

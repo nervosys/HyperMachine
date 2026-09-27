@@ -1,0 +1,48 @@
+# One host, the whole cluster: a store, a control plane, one node.
+#
+#   docker compose -f deploy/compose/compose.yaml up --build
+#   export E2B_API_URL=http://127.0.0.1:5980 E2B_SANDBOX_URL=http://127.0.0.1:5981
+#   export E2B_API_KEY=$HV2_API_KEY   # the value below, or your own
+#
+# The host needs /dev/kvm. Add nodes on other hosts by running the node image
+# there against the same store (see deploy/helm for Kubernetes).
+
+x-secrets: &secrets
+  HV2_API_KEY: ${HV2_API_KEY:-e2b_change_me_before_exposing_this}
+  HV2_CLUSTER_TOKEN: ${HV2_CLUSTER_TOKEN:-change-me-cluster-token}
+
+services:
+  store:
+    image: valkey/valkey:8.1
+    command: ["--save", "", "--appendonly", "no"]
+    restart: unless-stopped
+
+  control-plane:
+    build: { context: ../.., dockerfile: Containerfile.sandbox, target: control-plane }
+    image: hv2-control-plane:dev
+    command: ["--store", "redis://store:6379", "--port", "5980", "--proxy-port", "5981"]
+    environment: *secrets
+    ports: ["5980:5980", "5981:5981"]
+    depends_on: [store]
+    restart: unless-stopped
+
+  node:
+    build: { context: ../.., dockerfile: Containerfile.sandbox, target: node }
+    image: hv2-sandboxd:dev
+    command:
+      - --network
+      - --capacity
+      - "16"
+      - --cluster-store
+      - redis://store:6379
+      - --node-id
+      - node-1
+      - --advertise-api
+      - http://node:3980
+      - --advertise-proxy
+      - node:3981
+    environment: *secrets
+    devices: ["/dev/kvm:/dev/kvm"]
+    depends_on: [store]
+    restart: unless-stopped
+    stop_grace_period: 60s

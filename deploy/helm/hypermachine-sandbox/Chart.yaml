@@ -1,0 +1,9 @@
+apiVersion: v2
+name: hypermachine-sandbox
+description: >-
+  E2B-compatible microVM sandboxes on Kubernetes: stateless control planes,
+  a node daemon on every KVM-capable node, and the Valkey store between them.
+type: application
+version: 0.1.0
+appVersion: "1.1.0"
+keywords: [sandbox, microvm, kvm, e2b, agents]

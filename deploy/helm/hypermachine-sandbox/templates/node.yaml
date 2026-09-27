@@ -1,0 +1,85 @@
+# One hv2-sandboxd per KVM-capable node. It advertises its pod IP, which is
+# how control planes reach its API and envd proxy.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "hv2.name" . }}-node
+  labels: {{- include "hv2.labels" . | nindent 4 }}
+    app.kubernetes.io/component: node
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: node
+  template:
+    metadata:
+      labels: {{- include "hv2.labels" . | nindent 8 }}
+        app.kubernetes.io/component: node
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3980"
+        prometheus.io/path: /metrics
+    spec:
+      nodeSelector: {{- toYaml .Values.node.nodeSelector | nindent 8 }}
+      tolerations: {{- toYaml .Values.node.tolerations | nindent 8 }}
+      # SIGTERM ends every sandbox and leaves the cluster at once; give it
+      # time to stop its VMs rather than being killed mid-teardown.
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: sandboxd
+          image: {{ .Values.image.node }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --port
+            - "3980"
+            - --proxy-port
+            - "3981"
+            - --capacity
+            - {{ .Values.node.capacity | quote }}
+            - --memory-gb
+            - {{ .Values.node.memoryGb | quote }}
+            - --cpu-cores
+            - {{ .Values.node.cpuCores | quote }}
+            {{- if .Values.node.network }}
+            - --network
+            - --egress-default
+            - {{ .Values.node.egressDefault | quote }}
+            {{- end }}
+            {{- if not .Values.node.template }}
+            - --no-template
+            {{- end }}
+            - --cluster-store
+            - {{ include "hv2.storeUrl" . | quote }}
+            - --cluster-namespace
+            - {{ .Values.store.namespace | quote }}
+            - --node-id
+            - $(NODE_NAME)
+            - --advertise-api
+            - http://$(POD_IP):3980
+            - --advertise-proxy
+            - $(POD_IP):3981
+          env:
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - name: POD_IP
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
+            - name: HV2_CLUSTER_TOKEN
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
+          ports:
+            - { name: api, containerPort: 3980 }
+            - { name: envd, containerPort: 3981 }
+          readinessProbe:
+            # /metrics needs no token, and answers only once the template is
+            # built and the node has joined -- both happen before it listens.
+            httpGet: { path: /metrics, port: api }
+          resources: {{- toYaml .Values.node.resources | nindent 12 }}
+          securityContext:
+            # For /dev/kvm. A device plugin exposing it (e.g. KubeVirt's
+            # devices.kubevirt.io/kvm) is the narrower grant where available;
+            # swap this for that resource and drop privileged.
+            privileged: true
+          volumeMounts:
+            - { name: kvm, mountPath: /dev/kvm }
+      volumes:
+        - name: kvm
+          hostPath: { path: /dev/kvm, type: CharDevice }

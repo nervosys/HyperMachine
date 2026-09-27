@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HyperMachine Cluster</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1f23; --muted: #6b7079;
+    --line: #e3e3df; --accent: #2f5bd3; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b;
+    --on-accent: #ffffff;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121417; --panel: #1a1d21; --ink: #e6e7ea; --muted: #9aa0a9;
+      --line: #2b2f35; --accent: #7aa2ff; --ok: #4cc38a; --warn: #e0a84a; --bad: #ff7a6b;
+      --on-accent: #0d1424;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+           padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 16px; margin: 0 12px 0 0; font-weight: 600; }
+  .stat { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .stat b { color: var(--ink); font-weight: 600; }
+  .grow { flex: 1; }
+  input, button { font: inherit; color: inherit; }
+  input { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  button { background: var(--accent); color: var(--on-accent); border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+  button.quiet { background: transparent; color: var(--bad); border: 1px solid var(--line); padding: 3px 8px; }
+  main { display: grid; gap: 16px; padding: 16px 20px; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+               margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 14px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  tr:last-child td { border-bottom: 0; }
+  td.mono, .mono { font-family: var(--mono); font-size: 12.5px; }
+  td.meta { max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  td.actions { text-align: right; width: 1%; }
+  .bar { height: 6px; width: 90px; background: var(--line); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; }
+  .bar > span { display: block; height: 100%; background: var(--ok); }
+  .empty { padding: 14px; color: var(--muted); }
+  .events { max-height: 520px; overflow-y: auto; }
+  .event { padding: 7px 14px; border-bottom: 1px solid var(--line); }
+  .event .kind { font-weight: 600; }
+  .kind.sandbox-lost, .kind.sandbox-expired { color: var(--warn); }
+  .kind.sandbox-created, .kind.node-joined { color: var(--ok); }
+  .event .when { color: var(--muted); font-size: 12px; float: right; }
+  form { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--line); align-items: center; }
+  #status { color: var(--muted); font-size: 12px; }
+  #status.error { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>HyperMachine cluster</h1>
+  <span class="stat">nodes <b id="n-nodes">–</b></span>
+  <span class="stat">sandboxes <b id="n-sandboxes">–</b> / <b id="n-capacity">–</b></span>
+  <span class="grow"></span>
+  <label class="stat" for="key">API key</label>
+  <input id="key" type="password" placeholder="X-API-Key" autocomplete="off" size="24">
+  <span id="status">not loaded</span>
+</header>
+<main>
+  <div style="display:grid; gap:16px">
+    <section>
+      <h2>Nodes</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Node</th><th>Load</th><th>Running</th><th>API</th><th>Proxy</th><th>Heartbeat</th></tr></thead>
+        <tbody id="nodes"></tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>Sandboxes</h2>
+      <form id="create">
+        <input id="template" value="base" size="10" aria-label="templateID">
+        <input id="timeout" value="300" size="5" aria-label="timeout seconds"> s
+        <button type="submit">Create sandbox</button>
+      </form>
+      <div class="scroll"><table>
+        <thead><tr><th>Sandbox</th><th>Node</th><th>Template</th><th>Started</th><th>Ends</th><th>Metadata</th><th></th></tr></thead>
+        <tbody id="sandboxes"></tbody>
+      </table></div>
+    </section>
+  </div>
+  <section>
+    <h2>Events</h2>
+    <div class="events" id="events"></div>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const keyInput = $("key");
+try { keyInput.value = sessionStorage.getItem("hv2-key") || ""; } catch (_) {}
+keyInput.addEventListener("change", () => {
+  try { sessionStorage.setItem("hv2-key", keyInput.value); } catch (_) {}
+  refresh();
+});
+
+async function api(path, init = {}) {
+  const headers = Object.assign({ "x-api-key": keyInput.value }, init.headers || {});
+  const r = await fetch(path, Object.assign({}, init, { headers }));
+  if (!r.ok) {
+    let msg = r.status + "";
+    try { msg = (await r.json()).message || msg; } catch (_) {}
+    throw new Error(msg);
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+// Every value from the API goes in through textContent: sandbox metadata is
+// whatever a client sent, and this page must not become a way to run it.
+function cell(text, cls) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  if (cls) td.className = cls;
+  return td;
+}
+function ago(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  return s < 60 ? s + "s ago" : Math.round(s / 60) + "m ago";
+}
+function until(iso) {
+  const s = Math.round((Date.parse(iso) - Date.now()) / 1000);
+  return s <= 0 ? "now" : s < 120 ? "in " + s + "s" : "in " + Math.round(s / 60) + "m";
+}
+function replace(tbody, rows, emptyText, cols) {
+  tbody.replaceChildren();
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = cell(emptyText, "empty");
+    td.colSpan = cols;
+    tr.append(td);
+    tbody.append(tr);
+    return;
+  }
+  for (const r of rows) tbody.append(r);
+}
+
+async function refresh() {
+  try {
+    const [nodes, sandboxes, events] = await Promise.all([
+      api("/cluster/nodes"), api("/v2/sandboxes?limit=1000"), api("/cluster/events?count=60"),
+    ]);
+    $("n-nodes").textContent = nodes.length;
+    $("n-sandboxes").textContent = sandboxes.length;
+    $("n-capacity").textContent = nodes.reduce((a, n) => a + n.capacity, 0);
+
+    replace($("nodes"), nodes.map((n) => {
+      const tr = document.createElement("tr");
+      tr.append(cell(n.id, "mono"));
+      const load = document.createElement("td");
+      const bar = document.createElement("span"); bar.className = "bar";
+      const fill = document.createElement("span");
+      fill.style.width = (n.capacity ? Math.min(100, 100 * n.running / n.capacity) : 0) + "%";
+      bar.append(fill); load.append(bar);
+      tr.append(load, cell(n.running + " / " + n.capacity), cell(n.api, "mono"),
+                cell(n.proxy, "mono"), cell(ago(n.heartbeat_ms)));
+      return tr;
+    }), "No live nodes.", 6);
+
+    replace($("sandboxes"), sandboxes.map((s) => {
+      const tr = document.createElement("tr");
+      const meta = Object.entries(s.metadata || {}).map(([k, v]) => k + "=" + v).join(" ");
+      const metaCell = cell(meta, "mono meta");
+      metaCell.title = meta;
+      tr.append(cell(s.sandboxID, "mono"), cell(s.nodeID || "", "mono"), cell(s.templateID),
+                cell(new Date(s.startedAt).toLocaleTimeString()), cell(until(s.endAt)), metaCell);
+      const td = document.createElement("td");
+      td.className = "actions";
+      const b = document.createElement("button");
+      b.className = "quiet"; b.textContent = "Delete";
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        try { await api("/sandboxes/" + encodeURIComponent(s.sandboxID), { method: "DELETE" }); }
+        catch (e) { setStatus("delete: " + e.message, true); }
+        refresh();
+      });
+      td.append(b); tr.append(td);
+      return tr;
+    }), "No sandboxes.", 7);
+
+    const list = $("events");
+    list.replaceChildren();
+    for (const e of events) {
+      const div = document.createElement("div"); div.className = "event";
+      const when = document.createElement("span"); when.className = "when"; when.textContent = ago(e.at_ms);
+      const kind = document.createElement("span"); kind.className = "kind " + e.kind; kind.textContent = e.kind;
+      const rest = document.createElement("div"); rest.className = "mono";
+      rest.textContent = [e.sandbox_id, "on " + e.node_id, e.detail].filter(Boolean).join("  ");
+      div.append(when, kind, rest);
+      list.append(div);
+    }
+    if (!events.length) { const d = document.createElement("div"); d.className = "empty"; d.textContent = "No events yet."; list.append(d); }
+    setStatus("updated " + new Date().toLocaleTimeString(), false);
+  } catch (e) {
+    setStatus(e.message === "401" || /X-API-Key/.test(e.message) ? "enter the API key" : e.message, true);
+  }
+}
+function setStatus(text, error) {
+  const s = $("status"); s.textContent = text; s.className = error ? "error" : "";
+}
+
+$("create").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  try {
+    await api("/v2/sandboxes", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateID: $("template").value, timeout: Number($("timeout").value) || 300 }),
+    });
+  } catch (e) { setStatus("create: " + e.message, true); }
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

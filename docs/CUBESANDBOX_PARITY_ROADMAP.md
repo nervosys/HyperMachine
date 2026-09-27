@@ -1,13 +1,16 @@
 # Beating CubeSandbox: a feature and performance roadmap
 
-Status: **Phases 0-4 built and verified.** Phase 0 benchmarked honestly
+Status: **Phases 0-5 built and verified, except arm64 execution.** Phase 0 benchmarked honestly
 before anything was promised; Phase 1 met its exit criterion, an unmodified
 E2B SDK client running against a HyperMachine endpoint by changing only where
 it points; Phase 2 moves a guest between VMs through a file and restores
 faster than that guest boots; Phase 3 gives a sandbox a network whose every
 connection and DNS query passes E2B's own egress policy, with credentials
 injected on the host so the guest never holds them; Phase 4 runs many hosts
-behind stateless control planes coordinating through Redis/Valkey. Each
+behind stateless control planes coordinating through Redis/Valkey; Phase 5
+creates a sandbox by restoring a template instead of booting one, in tens of
+milliseconds and a few MiB each, and ships images, a Helm chart, Terraform,
+Compose, metrics and a web UI. Each
 section below carries its own status and the measurements behind it.
 
 `e2b_compat`, which the Phase 1-3 sections run, is now the `hv2-sandboxd`
@@ -1140,18 +1143,134 @@ with a private network or a TLS tunnel). A store outage stops creates and
 routing -- running sandboxes keep running, and nodes re-announce when it
 returns -- so production wants a replicated Redis/Valkey.
 
-### Phase 5 — Density, ops tooling, deployment convenience
+### Phase 5 — Density, ops tooling, deployment convenience — **built; arm64 execution and a full node-image build are the gaps**
 
-WebUI, K8s/Terraform deploy, ARM64 — genuinely important for adoption, and
-deliberately last: none of it matters if Phases 0–1 don't already make this
-worth deploying at all.
+#### Cold start and density: restore, don't boot
+
+CubeSandbox's headline numbers are <60 ms cold start and <5 MB per sandbox,
+and neither is achievable by booting Linux -- this repo's guest takes
+640-960 ms to an answering agent. So a sandbox is now not booted: one
+template guest boots when a node starts, is configured (resolver, egress CA),
+and is snapshotted with its memory written as a raw, sparse image; every
+sandbox after that is a fresh VM whose RAM is that image mapped
+`MAP_PRIVATE` -- copy-on-write, shared through the page cache until the guest
+writes.
+
+| | measured here |
+| --- | --- |
+| restore to a running guest | **1.2 ms** (provision 0.8 + map 0.2) |
+| restore to an answering agent | **12.9 ms** median (boot: 640-960 ms; ~50x) |
+| `POST /v2/sandboxes` on a node, envd and gateway included | **~31 ms** |
+| through a control plane to a node | **~25 ms** |
+| `Sandbox.create()` from the unmodified E2B SDK, in Python | **59 ms** |
+| memory per live sandbox (PSS, each having run a command) | **2.4 MiB** |
+| template image on disk, 1 GiB guest | 77 MiB allocated |
+
+On nested KVM under WSL2; bare metal will be faster, not slower. Against
+CubeSandbox's published figures this is under both, on this box; the
+comparison that would settle it is the two on one bare-metal host, which has
+not been run.
+
+Getting there took four things a Linux guest needs from a snapshot that the
+Phase 2 unikernel never did, each found by a restored guest failing, not by
+reading:
+
+- **Interrupt controllers and the PIT.** The guest's interrupts go through
+  the 8259 PICs and its tick is the PIT (its own `/proc/interrupts` says
+  so); fresh ones deliver at vectors it never programmed. Captured now with
+  `KVM_GET_IRQCHIP`/`_PIT2`, plus kvmclock.
+- **XCR0.** The first AVX instruction after restore was `#UD`, and the kernel
+  reported "Bad FPU state".
+- **`IA32_XSS`.** Linux saves task FPU state with `XSAVES` in compacted form;
+  with XSS at zero every `XRSTORS` faulted.
+- **The clock.** The guest's clocksource is the TSC with kvmclock registered.
+  `ClockOnRestore::Continue` restores both -- the choice Phase 2 deliberately
+  left to the caller, which a sandbox daemon is.
+
+And two that are about clones rather than snapshots:
+
+- **Every clone had the same RNG.** Measured: five sandboxes restored from
+  one template drew one distinct value from `/dev/urandom` between them.
+  Linux reseeds on its own only every minute or so, and writing to
+  `/dev/urandom` mixes without forcing it. A new guest-agent operation sets
+  the clock and reseeds (`RNDADDENTROPY` + `RNDRESEEDCRNG`) with host entropy
+  in one round trip; after it, five of five distinct. The daemon refuses a
+  sandbox whose reseed fails rather than hand it out.
+- **Page-cache sharing is a side channel** in principle -- the same property
+  that makes density cheap -- as it is for every CoW-snapshot sandbox,
+  CubeSandbox's included. Not mitigated here beyond `MAP_PRIVATE`.
+
+Two defects that predated all of this, found by measuring it:
+
+- **Every VM leaked.** Four delivery threads held a strong `Arc<VM>` while
+  blocking on channels whose senders lived in that VM's devices, so no VM
+  was ever dropped: deleting 20 sandboxes freed nothing. With weak
+  references the daemon goes 20 → 68 → 28 MiB PSS across 0 → 20 → 0
+  sandboxes.
+- **Guest-agent calls polled at 5 ms, twice per request**: 10.3 ms for a
+  ping to a warm guest. The vsock device signals delivery now; 3.7 ms, most
+  of it VM exits under nested virtualisation.
+
+#### Ops
+
+- **Images** (`Containerfile.sandbox`): `control-plane` on distroless,
+  non-root; `node` with the daemon, the guest kernel and the initramfs.
+  The `control-plane` image builds under Docker Desktop.
+  The `node` image has not finished a build: the one attempt was stopped when
+  the development machine ran short of memory during the kernel stage.
+- **Guest image, reproducibly** (`tools/guest-image/`): `build.sh` assembles
+  the initramfs from busybox, the static agent, and extras
+  (`--extra SRC[:NAME]`), byte-for-byte reproducible (`cpio --reproducible`,
+  `gzip -n`); `build-kernel.sh` builds Linux 6.6.52 from a checked-in
+  defconfig with a fixed build identity. A kernel built by it on this machine
+  is the same size as the one the measurements above used, boots, and restores
+  to an answering agent in 11.9 ms median.
+- **Kubernetes** (`deploy/helm/hypermachine-sandbox`): control planes, a
+  node DaemonSet on labelled KVM nodes, Valkey, generated-once secrets, and
+  NetworkPolicies so only control planes reach nodes and the store. Lints,
+  and all rendered resources pass `kubeconform -strict` against 1.30. Not
+  installed on a cluster.
+- **Terraform** (`deploy/terraform`): an optional `.metal` EKS node group,
+  labelled and tainted to match the chart, with a validation that refuses a
+  non-metal type (an EC2 VM has no `/dev/kvm`). `terraform validate` passes
+  against the AWS provider. Not applied.
+- **Compose** (`deploy/compose`): store, control plane and one node on a
+  single KVM host. Not yet brought up: it needs the `node` image.
+  Docker Desktop on this machine does pass `/dev/kvm` through to a container,
+  so it is expected to run here once that image builds.
+- **Metrics**: `/metrics` in Prometheus text on control planes (cluster
+  gauges from the store, creates by outcome, create latency, reaps) and
+  nodes (running, booting, capacity, template, creates, latency, ends).
+- **Web UI**: `/ui` on any control plane -- nodes with load, sandboxes with
+  create and delete, the event stream. Driven in headless Chrome against a
+  live two-node cluster: loads with the key, lists both nodes, creates and
+  deletes, and renders a sandbox whose metadata was
+  `<img src=x onerror=...>` as that text, with no element created and no
+  script run.
+
+Also: `reqwest` in the workspace uses rustls on `ring` now. Its default,
+native-tls, had brought OpenSSL in as a second TLS stack -- which the repo's
+own "one TLS backend" commit meant to rule out -- and it was found because
+it stopped an aarch64 build.
+
+#### ARM64: compiles, does not run
+
+Every crate in the sandbox stack builds for `aarch64-unknown-linux-gnu`. The
+KVM backend is x86 in substance -- register and special-register ioctls,
+CPUID, the PIC/IOAPIC irqchip, the bzImage loader -- so on an arm64 host it
+now refuses at construction with the reason, rather than failing at its
+first ioctl. What arm64 needs is a backend of its own: `KVM_ARM_VCPU_INIT`,
+a GICv3 through `KVM_CREATE_DEVICE`, a device tree describing the
+virtio-mmio devices, the arm64 `Image` boot protocol and PSCI. That is real
+work and cannot be verified on the x86 machine this was written on.
 
 ## What this roadmap deliberately does not do
 
 - It does not commit to building all five phases — that is a resourcing
   decision for whoever owns HyperMachine's priorities, not something a
   planning document should presume.
-- It does not touch any code. No crate, no benchmark harness, no E2B shim
-  exists as a result of writing this file.
+- It does not claim a head-to-head result. Every number here was measured
+  on one nested-KVM development box; CubeSandbox's are its own published
+  figures. The two have not been run on the same bare-metal host.
 - It does not resolve the AGPL/Apache-2.0 licensing question — flagged
   above as a real strategic input, decided by whoever owns that call.

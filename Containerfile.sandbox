@@ -1,0 +1,63 @@
+# Images for the sandbox cluster: the stateless control plane, and the node
+# daemon with its guest kernel and initramfs.
+#
+#   docker build -f Containerfile.sandbox --target control-plane -t hv2-control-plane .
+#   docker build -f Containerfile.sandbox --target node          -t hv2-sandboxd .
+#
+# The node image runs microVMs, so it needs /dev/kvm at run time:
+#   docker run --device /dev/kvm -p 3980:3980 -p 3981:3981 hv2-sandboxd --network
+# deploy/helm/hypermachine-sandbox runs both on Kubernetes.
+
+# --- Rust: the daemons and the guest agent -----------------------------------
+FROM rust:1.98-bookworm AS build
+# libprotobuf-dev for the well-known types hv2-api's protos import
+# (google/protobuf/timestamp.proto); protobuf-compiler alone lacks them.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends protobuf-compiler libprotobuf-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY Cargo.toml Cargo.lock ./
+COPY .cargo/ .cargo/
+COPY crates/ crates/
+RUN cargo build --release -p hv2-sandboxd -p hv2-cluster \
+    && strip target/release/hv2-sandboxd target/release/hv2-control-plane
+# The agent runs in an image with no libc of its own: static glibc, as
+# tools/guest-image/build.sh expects.
+RUN RUSTFLAGS="-C target-feature=+crt-static" cargo build --release \
+        -p hv2-guest-agent --target x86_64-unknown-linux-gnu \
+    && strip target/x86_64-unknown-linux-gnu/release/hv2-guest-agentd
+
+# --- The guest kernel --------------------------------------------------------
+FROM debian:bookworm AS kernel
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential bc flex bison \
+       libelf-dev libssl-dev curl ca-certificates xz-utils cpio \
+    && rm -rf /var/lib/apt/lists/*
+COPY tools/guest-image/ /guest-image/
+RUN /guest-image/build-kernel.sh -o /out/bzImage
+
+# --- The guest initramfs -----------------------------------------------------
+FROM debian:bookworm AS guest
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends busybox-static cpio file gzip ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+COPY tools/guest-image/ /guest-image/
+COPY --from=build /src/target/x86_64-unknown-linux-gnu/release/hv2-guest-agentd /hv2-guest-agentd
+RUN mkdir -p /out && /guest-image/build.sh -o /out/initramfs.cpio.gz \
+        --busybox /bin/busybox --agent /hv2-guest-agentd \
+        --ca-bundle /etc/ssl/certs/ca-certificates.crt
+
+# --- control-plane: no state, no privilege -----------------------------------
+FROM gcr.io/distroless/cc-debian12:nonroot AS control-plane
+COPY --from=build /src/target/release/hv2-control-plane /usr/local/bin/hv2-control-plane
+EXPOSE 5980 5981
+ENTRYPOINT ["/usr/local/bin/hv2-control-plane"]
+
+# --- node: the daemon, its guest, and nothing else ---------------------------
+FROM debian:bookworm-slim AS node
+COPY --from=build /src/target/release/hv2-sandboxd /usr/local/bin/hv2-sandboxd
+COPY --from=kernel /out/bzImage /opt/hv2/bzImage
+COPY --from=guest /out/initramfs.cpio.gz /opt/hv2/initramfs.cpio.gz
+ENV HV2_KERNEL=/opt/hv2/bzImage HV2_INITRD=/opt/hv2/initramfs.cpio.gz
+EXPOSE 3980 3981
+ENTRYPOINT ["/usr/local/bin/hv2-sandboxd"]

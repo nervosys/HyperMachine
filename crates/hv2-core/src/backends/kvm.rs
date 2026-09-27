@@ -168,6 +168,19 @@ impl KvmBackend {
     /// - KVM API version is incompatible
     /// - Required capabilities are missing
     pub fn new() -> Result<Self> {
+        // Everything below is x86: general and special registers, CPUID, the
+        // PIC/IOAPIC irqchip, the bzImage and multiboot loaders. On an arm64
+        // host the crate compiles -- `cargo check` for aarch64 passes -- and
+        // the first of those ioctls would fail with an error naming neither
+        // the architecture nor the reason. Refuse here instead.
+        if cfg!(not(target_arch = "x86_64")) {
+            return Err(Error::NotSupported(
+                "the KVM backend is x86_64-only: an arm64 guest needs vCPU init by \
+                 KVM_ARM_VCPU_INIT, a GICv3 through KVM_CREATE_DEVICE, a device tree \
+                 and the arm64 Image boot protocol, none of which exist here yet"
+                    .into(),
+            ));
+        }
         // SAFETY: All KVM ioctls below operate on file descriptors obtained from
         // `/dev/kvm`. Each call is checked for errors, and the fd is closed on
         // failure paths. The returned `KvmBackend` owns the fd exclusively.

@@ -93,6 +93,7 @@ use serde_json::json;
 use hv2_agent::{AgentVM, Capability, CapabilitySet};
 use hv2_api::sandbox_proxy::{self, PortMap};
 use hv2_cluster::control::CLUSTER_TOKEN_HEADER;
+use hv2_cluster::metrics::{Counter, Exposition, Histogram};
 use hv2_cluster::model::{metadata_matches, now_ms, parse_metadata_query, SandboxRecord};
 use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
@@ -166,7 +167,9 @@ struct Options {
     /// How a control plane reaches this node's API and proxy. Required in a
     /// cluster: the addresses this binds (0.0.0.0) are not ones to dial.
     advertise_api: Option<String>,
-    advertise_proxy: Option<std::net::SocketAddr>,
+    /// `host:port`; a name is resolved once, at startup, since the store
+    /// records an address.
+    advertise_proxy: Option<String>,
     /// Required on every API call when set.
     cluster_token: Option<String>,
     node_ttl: Duration,
@@ -235,11 +238,7 @@ fn parse_options() -> Result<Options, String> {
             "--node-id" => opts.node_id = Some(value(&mut i)?),
             "--advertise-api" => opts.advertise_api = Some(value(&mut i)?),
             "--advertise-proxy" => {
-                opts.advertise_proxy = Some(
-                    value(&mut i)?
-                        .parse()
-                        .map_err(|e| format!("--advertise-proxy: {e}"))?,
-                );
+                opts.advertise_proxy = Some(value(&mut i)?);
             }
             "--cluster-token" => opts.cluster_token = Some(value(&mut i)?),
             "--node-ttl" => {
@@ -321,6 +320,19 @@ struct AppState {
     node: Option<NodeAgent>,
     /// What sandboxes are restored from, when not booted.
     template: Option<Template>,
+    metrics: NodeMetrics,
+}
+
+/// What `/metrics` reports beyond live gauges.
+#[derive(Default)]
+struct NodeMetrics {
+    creates_ok: Counter,
+    creates_full: Counter,
+    creates_rejected: Counter,
+    creates_error: Counter,
+    create_latency: Histogram,
+    ended_deleted: Counter,
+    ended_expired: Counter,
 }
 
 impl AppState {
@@ -688,12 +700,85 @@ struct ExecResponse {
 
 /// `POST /sandboxes`: E2B's v1 route, whose default lifetime is 15 seconds.
 async fn create_v1(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
-    create_sandbox(state, req, 15).await
+    counted_create(state, req, 15).await
 }
 
 /// `POST /v2/sandboxes`: what current SDKs call, default lifetime 300 s.
 async fn create_v2(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
-    create_sandbox(state, req, 300).await
+    counted_create(state, req, 300).await
+}
+
+async fn counted_create(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+    let started = std::time::Instant::now();
+    let response = create_sandbox(Arc::clone(&state), req, default_timeout).await;
+    let m = &state.metrics;
+    match response.status() {
+        StatusCode::CREATED => {
+            m.creates_ok.inc();
+            m.create_latency.observe(started.elapsed());
+        }
+        StatusCode::SERVICE_UNAVAILABLE => m.creates_full.inc(),
+        s if s.is_client_error() => m.creates_rejected.inc(),
+        _ => m.creates_error.inc(),
+    }
+    response
+}
+
+/// `GET /metrics`: Prometheus text format. Outside the cluster token, as a
+/// scraper holds none; counts are all it says.
+async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
+    let m = &state.metrics;
+    let mut e = Exposition::new();
+    e.gauge(
+        "hv2_node_sandboxes_running",
+        "Sandboxes running on this node.",
+        f64::from(state.running()),
+    );
+    e.gauge(
+        "hv2_node_sandboxes_booting",
+        "Creations in flight.",
+        f64::from(*state.booting.lock()),
+    );
+    e.gauge(
+        "hv2_node_capacity",
+        "Sandboxes this node will run at once.",
+        f64::from(state.opts.capacity),
+    );
+    e.gauge(
+        "hv2_node_template",
+        "1 if sandboxes are restored from a template snapshot, 0 if booted.",
+        if state.template.is_some() { 1.0 } else { 0.0 },
+    );
+    e.counters(
+        "hv2_node_creates_total",
+        "Creations on this node, by outcome.",
+        "result",
+        &[
+            ("ok", m.creates_ok.get()),
+            ("full", m.creates_full.get()),
+            ("rejected", m.creates_rejected.get()),
+            ("error", m.creates_error.get()),
+        ],
+    );
+    e.histogram(
+        "hv2_node_create_seconds",
+        "Time from request to a sandbox whose agent answers.",
+        &m.create_latency,
+    );
+    e.counters(
+        "hv2_node_sandbox_ends_total",
+        "Sandboxes that ended, by why.",
+        "reason",
+        &[
+            ("deleted", m.ended_deleted.get()),
+            ("expired", m.ended_expired.get()),
+        ],
+    );
+    (
+        [("content-type", hv2_cluster::metrics::CONTENT_TYPE)],
+        e.finish(),
+    )
+        .into_response()
 }
 
 async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
@@ -1302,6 +1387,11 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     let Some(live) = removed else {
         return false;
     };
+    if kind == "sandbox-expired" {
+        state.metrics.ended_expired.inc();
+    } else {
+        state.metrics.ended_deleted.inc();
+    }
     // Stop resolving the name first: a request that arrives during teardown
     // should fail to route rather than be sent at a VM that is stopping.
     state.routes.remove_sandbox(sandbox_id);
@@ -1410,13 +1500,21 @@ async fn main() -> std::process::ExitCode {
     let node = match &opts.cluster_store {
         None => None,
         Some(url) => {
-            let (Some(api), Some(proxy)) = (opts.advertise_api.clone(), opts.advertise_proxy)
+            let (Some(api), Some(proxy)) =
+                (opts.advertise_api.clone(), opts.advertise_proxy.clone())
             else {
                 eprintln!(
                     "hv2-sandboxd: --cluster-store needs --advertise-api and --advertise-proxy: \
                      the addresses a control plane dials, which 0.0.0.0 is not"
                 );
                 return std::process::ExitCode::FAILURE;
+            };
+            let proxy = match tokio::net::lookup_host(&proxy).await.map(|mut a| a.next()) {
+                Ok(Some(addr)) => addr,
+                Ok(None) | Err(_) => {
+                    eprintln!("hv2-sandboxd: --advertise-proxy {proxy} does not resolve");
+                    return std::process::ExitCode::FAILURE;
+                }
             };
             if opts.cluster_token.is_none() {
                 tracing::warn!(
@@ -1462,6 +1560,7 @@ async fn main() -> std::process::ExitCode {
         routes: Arc::clone(&routes),
         booting: Mutex::new(0),
         template,
+        metrics: NodeMetrics::default(),
         node: node.clone(),
     });
     if let Some(node) = node.clone() {
@@ -1542,6 +1641,7 @@ async fn main() -> std::process::ExitCode {
             Arc::clone(&state),
             require_cluster_token,
         ))
+        .route("/metrics", get(node_metrics))
         // Even "no such route" has to be JSON: the SDK parses the body of
         // every non-2xx reply before it looks at the status.
         .fallback(|uri: axum::http::Uri| async move {
