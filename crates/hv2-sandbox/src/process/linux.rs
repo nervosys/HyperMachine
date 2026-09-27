@@ -5,7 +5,7 @@
 //! | Control | Mechanism |
 //! | --- | --- |
 //! | [`Control::Memory`] | `memory.max` *and* `memory.swap.max` in a cgroup v2 the workload is placed in before `exec` |
-//! | [`Control::ProcessCount`] | `pids.max` in the same cgroup, plus `RLIMIT_NPROC` |
+//! | [`Control::ProcessCount`] | `pids.max` in the same cgroup (not `RLIMIT_NPROC`: see `Confinement`) |
 //! | [`Control::CpuTime`] | `RLIMIT_CPU`, which the kernel turns into `SIGKILL` |
 //! | [`Control::WallClock`] | this crate, killing the process group |
 //! | [`Control::NetworkIsolation`] | `CLONE_NEWNET`: an empty network namespace with only loopback, down |
@@ -79,6 +79,25 @@ use super::driver;
 /// other and from another process's.
 static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
 
+/// The most common reason a namespace probe fails on a stock distribution,
+/// named so an operator is not left with only its symptom.
+///
+/// Ubuntu 23.10 and later let an unprivileged process create a user namespace
+/// but give it no capabilities inside, so the next step -- writing its id maps
+/// -- is what fails. Found on GitHub's `ubuntu-latest` runner, where every
+/// namespace-based control came back unenforced with nothing in the reason
+/// pointing at AppArmor.
+fn userns_restriction() -> Option<&'static str> {
+    let value =
+        std::fs::read_to_string("/proc/sys/kernel/apparmor_restrict_unprivileged_userns").ok()?;
+    (value.trim() == "1").then_some(
+        "; this host's AppArmor restricts unprivileged user namespaces \
+         (kernel.apparmor_restrict_unprivileged_userns = 1, the default since Ubuntu 23.10): \
+         one can be created but holds no capabilities. Set the sysctl to 0, or give the \
+         calling program an AppArmor profile that allows user namespaces",
+    )
+}
+
 /// Probe what this kernel actually allows.
 ///
 /// Every answer comes from trying the thing. A kernel with unprivileged user
@@ -86,6 +105,7 @@ static SCRATCH_SEQ: AtomicU64 = AtomicU64::new(0);
 /// enforces less than the same code on the next machine, and a caller has to
 /// be told which machine it is on.
 pub(super) fn probe() -> Controls {
+    let restricted = userns_restriction().unwrap_or("");
     let mut controls = Controls::none()
         // Always available: these need no privileges and no configuration.
         .with(Control::CpuTime)
@@ -95,7 +115,7 @@ pub(super) fn probe() -> Controls {
         Ok(()) => controls.with(Control::FilesystemIsolation),
         Err(e) => controls.without(
             Control::FilesystemIsolation,
-            format!("the filesystem could not be isolated: {e}"),
+            format!("the filesystem could not be isolated: {e}{restricted}"),
         ),
     };
 
@@ -103,7 +123,7 @@ pub(super) fn probe() -> Controls {
         Ok(()) => controls.with(Control::NetworkIsolation),
         Err(e) => controls.without(
             Control::NetworkIsolation,
-            format!("the network could not be isolated: {e}"),
+            format!("the network could not be isolated: {e}{restricted}"),
         ),
     };
 
@@ -111,7 +131,7 @@ pub(super) fn probe() -> Controls {
         Ok(()) => controls.with(Control::ProcessIsolation),
         Err(e) => controls.without(
             Control::ProcessIsolation,
-            format!("processes could not be isolated: {e}"),
+            format!("processes could not be isolated: {e}{restricted}"),
         ),
     };
 
@@ -998,7 +1018,6 @@ pub(super) fn run(
     let confinement = Confinement {
         procs_file,
         cpu_seconds: spec.cpu_time.map(|d| d.as_secs().max(1)),
-        max_processes: spec.max_processes,
         no_new_privs: spec.no_new_privileges,
         clone_flags,
         new_user_ns,
@@ -1064,7 +1083,12 @@ pub(super) fn run(
 struct Confinement {
     procs_file: Option<CString>,
     cpu_seconds: Option<u64>,
-    max_processes: Option<u32>,
+    // No RLIMIT_NPROC, although it looks like a second lock beside pids.max.
+    // It counts every task the *user* owns, host-wide and threads included,
+    // not the workload's: a caller whose user already ran more threads than
+    // the limit -- 69 tokio workers and shells on the machine that found this
+    // -- had every spawn refused with EAGAIN. pids.max counts only this
+    // cgroup, which is the promise Control::ProcessCount makes.
     no_new_privs: bool,
     clone_flags: libc::c_int,
     new_user_ns: bool,
@@ -1092,12 +1116,6 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
     // 2. Limits that need no privileges.
     if let Some(seconds) = plan.cpu_seconds {
         set_rlimit(libc::RLIMIT_CPU, seconds)?;
-    }
-    if let Some(max) = plan.max_processes {
-        // Belt and braces alongside pids.max: RLIMIT_NPROC is per-user rather
-        // than per-cgroup, so it is the weaker of the two and never the only
-        // one relied on.
-        set_rlimit(libc::RLIMIT_NPROC, u64::from(max))?;
     }
     if plan.no_new_privs {
         // SAFETY: prctl with this option takes no pointers.

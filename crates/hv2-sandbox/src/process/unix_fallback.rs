@@ -41,7 +41,19 @@ pub(super) fn probe() -> Controls {
             Control::Memory,
             unsupported("a committed-memory limit (RLIMIT_AS bounds address space, not usage)"),
         )
-        .with(Control::ProcessCount)
+        // RLIMIT_NPROC is the only process limit here, and it caps every
+        // process the *user* owns, not the workload's. A user already running
+        // more than the limit -- any desktop session -- has the spawn refused;
+        // one running fewer gets a workload that may fork until the user's
+        // total reaches it. Neither is "at most N processes".
+        .without(
+            Control::ProcessCount,
+            format!(
+                "a per-workload process limit is not available on {}: RLIMIT_NPROC counts \
+                 every process the user owns, not the workload's; use the microVM sandbox",
+                std::env::consts::OS
+            ),
+        )
         .without(Control::NetworkIsolation, unsupported("network isolation"))
         .without(
             Control::FilesystemIsolation,
@@ -67,7 +79,6 @@ pub(super) fn run(
     }
 
     let cpu_seconds = spec.cpu_time.map(|d| d.as_secs().max(1));
-    let max_processes = spec.max_processes;
 
     let mut builder = Command::new(&command.program);
     builder
@@ -87,9 +98,6 @@ pub(super) fn run(
         builder.pre_exec(move || {
             if let Some(seconds) = cpu_seconds {
                 set_rlimit(libc::RLIMIT_CPU, seconds)?;
-            }
-            if let Some(max) = max_processes {
-                set_rlimit(libc::RLIMIT_NPROC, u64::from(max))?;
             }
             // Lead a process group, so the deadline can kill everything the
             // workload started rather than only the workload.
