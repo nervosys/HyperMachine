@@ -63,6 +63,15 @@ node:
   # faults; measure on your hardware before turning it on (it made no
   # latency difference under nested virtualisation).
   prefault: false
+  # A ReadWriteMany volume every node mounts -- templates, the egress CA and
+  # paused sandboxes live there, so a sandbox paused on one node resumes on
+  # any, survives its node, and a node draining (SIGTERM) pauses what it
+  # runs into it instead of ending it. Name an existing PVC (NFS, EFS,
+  # Filestore, CephFS...) to turn it on; the filesystem must make rename
+  # atomic, which is how nodes claim a paused sandbox. Empty: paused
+  # sandboxes stay on their node's disk and end with it.
+  snapshotStore:
+    claimName: ""
   resources:
     requests: { cpu: 500m, memory: 512Mi }
 

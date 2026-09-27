@@ -179,6 +179,13 @@ pub trait SandboxRoutes: Send + Sync + 'static {
             .await
             .map(|addr| (addr, InFlight::none()))
     }
+
+    /// The last answer for `sandbox` could not be connected to: drop
+    /// whatever made it, so the next [`Self::open`] asks afresh. Nothing to
+    /// drop by default.
+    async fn forget(&self, sandbox: &str) {
+        let _ = sandbox;
+    }
 }
 
 /// Held for as long as a request to a sandbox is in flight; see
@@ -489,7 +496,7 @@ async fn proxy(
     };
     let sandbox = sandbox.as_str();
 
-    let Some((target, in_flight)) = routes.open(sandbox, port).await else {
+    let Some((mut target, mut in_flight)) = routes.open(sandbox, port).await else {
         return Ok(refuse(
             grpc,
             StatusCode::NOT_FOUND,
@@ -498,16 +505,41 @@ async fn proxy(
         ));
     };
 
-    let stream = match TcpStream::connect(target).await {
-        Ok(stream) => stream,
-        Err(e) => {
-            tracing::warn!("sandbox proxy: {sandbox} port {port} at {target}: {e}");
-            return Ok(refuse(
-                grpc,
-                StatusCode::BAD_GATEWAY,
-                grpc_status::UNAVAILABLE,
-                "the sandbox's listener did not accept a connection",
-            ));
+    // One retry, after telling the routes their answer failed: a cached
+    // route can name a node that has gone while the sandbox moved on --
+    // paused into shared storage when the node drained, resumed by another.
+    let mut retried = false;
+    let stream = loop {
+        match TcpStream::connect(target).await {
+            Ok(stream) => break stream,
+            Err(e) if !retried => {
+                tracing::debug!("sandbox proxy: {sandbox} at {target}: {e}; asking again");
+                retried = true;
+                routes.forget(sandbox).await;
+                match routes.open(sandbox, port).await {
+                    Some((again, guard)) => {
+                        target = again;
+                        in_flight = guard;
+                    }
+                    None => {
+                        return Ok(refuse(
+                            grpc,
+                            StatusCode::NOT_FOUND,
+                            grpc_status::NOT_FOUND,
+                            "no sandbox is serving that name and port",
+                        ))
+                    }
+                }
+            }
+            Err(e) => {
+                tracing::warn!("sandbox proxy: {sandbox} port {port} at {target}: {e}");
+                return Ok(refuse(
+                    grpc,
+                    StatusCode::BAD_GATEWAY,
+                    grpc_status::UNAVAILABLE,
+                    "the sandbox's listener did not accept a connection",
+                ));
+            }
         }
     };
 

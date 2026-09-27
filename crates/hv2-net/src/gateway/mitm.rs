@@ -16,8 +16,10 @@
 //! so a guest that aims an allowed name at an address of its choosing gets a
 //! handshake failure rather than a request carrying the secret.
 //!
-//! The CA's key never leaves the host process and is generated fresh each run;
-//! a guest can see the CA certificate and nothing else.
+//! The CA's key never reaches a guest; a guest can see the CA certificate and
+//! nothing else. It is generated fresh each run unless the host loads one --
+//! hosts that hand guests between them share one, or a guest resumed on a
+//! host that is not the one it was created on would distrust every leaf.
 
 use std::collections::HashMap;
 use std::io;
@@ -46,13 +48,37 @@ fn provider() -> Arc<CryptoProvider> {
     Arc::new(rustls::crypto::ring::default_provider())
 }
 
-/// A certificate authority that exists for one gateway host process.
+/// The certificate authority a gateway signs its interception leaves with.
+///
+/// Fresh per process by default. [`Self::from_pem`] loads one instead, which
+/// is what hosts sharing guests need: a guest trusts the CA it was created
+/// with, so a guest paused on one host and resumed on another needs the
+/// second to sign with the same key.
 pub struct Authority {
-    issuer: rcgen::CertifiedIssuer<'static, rcgen::KeyPair>,
+    issuer: rcgen::Issuer<'static, rcgen::KeyPair>,
     ca_der: CertificateDer<'static>,
     ca_pem: String,
+    key_pem: String,
     leaves: Mutex<HashMap<String, Arc<CertifiedKey>>>,
     provider: Arc<CryptoProvider>,
+}
+
+/// What the CA's certificate says about itself, the same every time: a
+/// leaf's issuer is this name, and a certificate reloaded with its key must
+/// issue leaves a guest holding the original certificate accepts.
+fn ca_params() -> io::Result<rcgen::CertificateParams> {
+    let mut params =
+        rcgen::CertificateParams::new(Vec::<String>::new()).map_err(io::Error::other)?;
+    params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+    params.key_usages = vec![
+        rcgen::KeyUsagePurpose::KeyCertSign,
+        rcgen::KeyUsagePurpose::CrlSign,
+        rcgen::KeyUsagePurpose::DigitalSignature,
+    ];
+    params
+        .distinguished_name
+        .push(rcgen::DnType::CommonName, "HyperMachine sandbox egress CA");
+    Ok(params)
 }
 
 impl std::fmt::Debug for Authority {
@@ -69,27 +95,48 @@ impl Authority {
     /// Key generation or self-signing failed.
     pub fn generate() -> io::Result<Self> {
         let key = rcgen::KeyPair::generate().map_err(io::Error::other)?;
-        let mut params =
-            rcgen::CertificateParams::new(Vec::<String>::new()).map_err(io::Error::other)?;
-        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
-        params.key_usages = vec![
-            rcgen::KeyUsagePurpose::KeyCertSign,
-            rcgen::KeyUsagePurpose::CrlSign,
-            rcgen::KeyUsagePurpose::DigitalSignature,
-        ];
-        params
-            .distinguished_name
-            .push(rcgen::DnType::CommonName, "HyperMachine sandbox egress CA");
-        let issuer = rcgen::CertifiedIssuer::self_signed(params, key).map_err(io::Error::other)?;
-        let ca_der = issuer.der().clone();
-        let ca_pem = issuer.pem();
+        let key_pem = key.serialize_pem();
+        let certificate = ca_params()?.self_signed(&key).map_err(io::Error::other)?;
+        let ca_pem = certificate.pem();
+        Self::assemble(certificate.der().clone(), ca_pem, key_pem, key)
+    }
+
+    /// The CA whose certificate and private key are these PEM documents --
+    /// as [`Self::ca_pem`] and [`Self::key_pem`] wrote them.
+    ///
+    /// # Errors
+    ///
+    /// Either does not parse.
+    pub fn from_pem(ca_pem: &str, key_pem: &str) -> io::Result<Self> {
+        use rustls::pki_types::pem::PemObject;
+        let key = rcgen::KeyPair::from_pem(key_pem).map_err(io::Error::other)?;
+        let ca_der = CertificateDer::from_pem_slice(ca_pem.as_bytes())
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?
+            .into_owned();
+        Self::assemble(ca_der, ca_pem.to_string(), key_pem.to_string(), key)
+    }
+
+    fn assemble(
+        ca_der: CertificateDer<'static>,
+        ca_pem: String,
+        key_pem: String,
+        key: rcgen::KeyPair,
+    ) -> io::Result<Self> {
         Ok(Self {
-            issuer,
+            issuer: rcgen::Issuer::new(ca_params()?, key),
             ca_der,
             ca_pem,
+            key_pem,
             leaves: Mutex::new(HashMap::new()),
             provider: provider(),
         })
+    }
+
+    /// The CA's private key, PEM -- to share it with another host, and
+    /// nothing else. A guest must never see it.
+    #[must_use]
+    pub fn key_pem(&self) -> &str {
+        &self.key_pem
     }
 
     /// The CA certificate, PEM, for a guest's trust store.
@@ -280,4 +327,47 @@ where
         .serve_connection(TokioIo::new(guest), service)
         .await
         .map_err(io::Error::other)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rustls::client::danger::ServerCertVerifier;
+
+    /// A CA reloaded from its PEM on another host issues leaves that a guest
+    /// holding only the original certificate accepts -- which is the whole
+    /// reason to share one.
+    #[test]
+    fn a_reloaded_authority_issues_leaves_the_original_certificate_verifies() {
+        let original = Authority::generate().expect("a CA");
+        let reloaded =
+            Authority::from_pem(original.ca_pem(), original.key_pem()).expect("it reloads");
+        assert_eq!(reloaded.ca_pem(), original.ca_pem());
+
+        let leaf = reloaded.leaf("api.example.com").expect("a leaf");
+        let mut roots = RootCertStore::empty();
+        roots.add(original.ca_der().clone()).expect("a root");
+        let verifier = rustls::client::WebPkiServerVerifier::builder_with_provider(
+            Arc::new(roots),
+            provider(),
+        )
+        .build()
+        .expect("a verifier");
+        let name = ServerName::try_from("api.example.com").expect("a name");
+        verifier
+            .verify_server_cert(
+                &leaf.cert[0],
+                &[],
+                &name,
+                &[],
+                rustls::pki_types::UnixTime::now(),
+            )
+            .expect("the original CA vouches for the reloaded one's leaf");
+    }
+
+    #[test]
+    fn a_key_that_is_not_pem_is_refused() {
+        let original = Authority::generate().expect("a CA");
+        assert!(Authority::from_pem(original.ca_pem(), "not a key").is_err());
+    }
 }

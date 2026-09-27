@@ -189,6 +189,10 @@ struct Options {
     node_ttl: Duration,
     /// Boot every sandbox instead of restoring it from a template.
     no_template: bool,
+    /// A directory shared by every node, mounted at the same path on each:
+    /// templates, the egress CA and paused sandboxes, so a sandbox paused on
+    /// one node resumes on any.
+    snapshot_store: Option<std::path::PathBuf>,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -234,6 +238,7 @@ fn parse_options() -> Result<Options, String> {
         node_ttl: Duration::from_secs(9),
         no_template: false,
         prefault: false,
+        snapshot_store: None,
         evict_idle_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -258,6 +263,7 @@ fn parse_options() -> Result<Options, String> {
             "--network" => opts.network = true,
             "--no-template" => opts.no_template = true,
             "--prefault" => opts.prefault = true,
+            "--snapshot-store" => opts.snapshot_store = Some(value(&mut i)?.into()),
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -287,7 +293,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--snapshot-store DIR] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -318,6 +324,9 @@ struct LiveSandbox {
     _slot: Slot,
     /// What its timeout does, and whether traffic resumes it.
     lifecycle: Lifecycle,
+    /// Its network as asked for, kept current by `PUT .../network`, for
+    /// when it pauses into a store another node may resume it from.
+    network_request: Option<NetworkRequest>,
     /// Requests in flight to it through the proxy, and when it was last used.
     activity: Arc<Activity>,
     /// What `POST /sandboxes` answered with.
@@ -363,9 +372,13 @@ struct AppState {
     /// What sandboxes are restored from, when not booted.
     template: Option<Template>,
     metrics: NodeMetrics,
-    /// Sandboxes suspended to disk, under `suspend_dir`.
+    /// Sandboxes this node suspended to disk, under `suspend_dir`.
     paused: Mutex<HashMap<String, PausedSandbox>>,
     suspend_dir: std::path::PathBuf,
+    /// Shared with other nodes, when `--snapshot-store` names one.
+    store: Option<SnapshotStore>,
+    /// This node's name in the cluster, or `local`.
+    node_id: String,
     /// One lock per sandbox that has paused, resumed or forked.
     transitions: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
@@ -438,7 +451,7 @@ const MAX_TIMEOUT_SECS: u64 = 24 * 60 * 60;
 
 /// `SandboxNetworkConfig`, and `SandboxNetworkUpdateConfig` -- the same
 /// fields that matter here.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct SandboxNetworkConfig {
     #[serde(rename = "allowOut", default)]
     allow_out: Vec<String>,
@@ -452,7 +465,7 @@ struct SandboxNetworkConfig {
     allow_internet_access: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SandboxEgressProxyConfig {
     address: String,
     username: Option<String>,
@@ -494,12 +507,12 @@ async fn egress_proxy_from(
     Ok(Some(proxy))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SandboxNetworkRule {
     transform: Option<SandboxNetworkTransform>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SandboxNetworkTransform {
     #[serde(default)]
     headers: Headers,
@@ -535,7 +548,7 @@ fn policy_from(
     .map_err(|e| e.to_string())
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct SandboxResponse {
     #[serde(rename = "templateID")]
     template_id: String,
@@ -621,7 +634,13 @@ async fn connect_sandbox(
     let requested = body.and_then(|b| b.timeout);
     // Paused: resumed, and answered 201 rather than 200, as E2B does.
     // `Ok(None)` means it was running after all, and falls through.
-    if state.paused.lock().contains_key(&sandbox_id) {
+    let paused_here = state.paused.lock().contains_key(&sandbox_id);
+    let paused_in_store = !state.sandboxes.lock().contains_key(&sandbox_id)
+        && state
+            .store
+            .as_ref()
+            .is_some_and(|store| store.peek(&sandbox_id).is_some());
+    if paused_here || paused_in_store {
         match resume_sandbox(&state, &sandbox_id, Some(requested.unwrap_or(300)), None).await {
             Ok(Some(descriptor)) => return (StatusCode::CREATED, Json(descriptor)).into_response(),
             Ok(None) => {}
@@ -1173,6 +1192,7 @@ async fn register(
     descriptor: SandboxResponse,
     record: SandboxRecord,
     lifecycle: Lifecycle,
+    network_request: Option<NetworkRequest>,
     event: Option<&str>,
 ) {
     let sandbox_id = record.sandbox_id.clone();
@@ -1194,6 +1214,7 @@ async fn register(
                 network: running.network,
                 record: record.clone(),
                 lifecycle,
+                network_request,
                 activity: Activity::new(),
             },
         );
@@ -1260,6 +1281,10 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         None
     };
 
+    let network_request = state.opts.network.then(|| NetworkRequest {
+        allow_internet_access: req.allow_internet_access,
+        network: req.network.clone(),
+    });
     let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
     let sandbox_id = new_sandbox_id();
     let access_token = new_access_token();
@@ -1295,6 +1320,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         envd_version: ENVD_VERSION.to_string(),
         descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
         paused: false,
+        portable: false,
     };
     register(
         &state,
@@ -1303,6 +1329,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         descriptor.clone(),
         record,
         lifecycle,
+        network_request,
         None,
     )
     .await;
@@ -1311,7 +1338,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
 }
 
 /// What a sandbox does when its time is up, and whether traffic wakes it.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct Lifecycle {
     /// Pause rather than end at the timeout (E2B's `autoPause`).
     pause_on_timeout: bool,
@@ -1353,13 +1380,157 @@ struct NetworkSpec {
     proxy: Option<Socks5Proxy>,
 }
 
-/// A sandbox suspended to this node's disk.
+/// A sandbox's network as it was asked for, E2B's fields verbatim: what a
+/// paused sandbox's record keeps, so any node can build the same network
+/// for it -- a [`NetworkSpec`] is decided state, and not written down.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct NetworkRequest {
+    allow_internet_access: Option<bool>,
+    network: Option<SandboxNetworkConfig>,
+}
+
+impl NetworkRequest {
+    /// The network this asks for, decided now -- the egress proxy is
+    /// resolved and checked again, as it would be on a create.
+    async fn decide(&self, opts: &Options) -> Result<NetworkSpec, String> {
+        Ok(NetworkSpec {
+            policy: policy_from(
+                self.allow_internet_access,
+                self.network.as_ref(),
+                opts.egress_default,
+            )?,
+            proxy: egress_proxy_from(opts, self.network.as_ref()).await?,
+        })
+    }
+}
+
+/// A sandbox suspended to disk.
 struct PausedSandbox {
     snapshot: std::path::PathBuf,
     descriptor: SandboxResponse,
     record: SandboxRecord,
     lifecycle: Lifecycle,
+    /// Decided already, when this node paused it; built from
+    /// `network_request` when another node did.
     network: Option<NetworkSpec>,
+    network_request: Option<NetworkRequest>,
+}
+
+/// What a snapshot store keeps beside a paused sandbox's snapshot: enough
+/// for any node sharing the store to resume it.
+#[derive(Serialize, Deserialize)]
+struct PausedMeta {
+    descriptor: SandboxResponse,
+    record: SandboxRecord,
+    lifecycle: Lifecycle,
+    network: Option<NetworkRequest>,
+}
+
+/// A directory every node of a cluster mounts at the same path, holding
+/// what a paused sandbox needs to resume on any of them: the template its
+/// snapshot is layered over, the egress CA its guest trusts, and the
+/// snapshot and its description.
+///
+/// A paused sandbox is claimed by renaming its description, which is atomic
+/// on a POSIX filesystem: two nodes asked to resume the same sandbox at
+/// once cannot both get it. The descriptions hold what the sandbox's
+/// network was configured with, egress proxy credentials and injected
+/// headers included, so they are written owner-only.
+struct SnapshotStore {
+    dir: std::path::PathBuf,
+}
+
+impl SnapshotStore {
+    fn paused_dir(&self) -> std::path::PathBuf {
+        self.dir.join("paused")
+    }
+
+    fn snapshot(&self, sandbox_id: &str) -> std::path::PathBuf {
+        self.paused_dir().join(format!("{sandbox_id}.snap"))
+    }
+
+    fn meta(&self, sandbox_id: &str) -> std::path::PathBuf {
+        self.paused_dir().join(format!("{sandbox_id}.json"))
+    }
+
+    /// Describe a paused sandbox, unclaimed.
+    fn put(&self, sandbox_id: &str, meta: &PausedMeta) -> Result<(), String> {
+        let bytes = serde_json::to_vec(meta).map_err(|e| e.to_string())?;
+        let tmp = self.paused_dir().join(format!(
+            ".{sandbox_id}.{}.tmp",
+            uuid::Uuid::new_v4().simple()
+        ));
+        write_private(&tmp, &bytes)?;
+        std::fs::rename(&tmp, self.meta(sandbox_id)).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            format!("recording paused {sandbox_id}: {e}")
+        })
+    }
+
+    /// Read a paused sandbox's description without claiming it.
+    fn peek(&self, sandbox_id: &str) -> Option<PausedMeta> {
+        if !valid_sandbox_id(sandbox_id) {
+            return None;
+        }
+        let bytes = std::fs::read(self.meta(sandbox_id)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    /// Take a paused sandbox for this node: its description moves aside,
+    /// and no other node can take it until [`Self::release`] puts it back.
+    fn claim(&self, sandbox_id: &str, node: &str) -> Option<(std::path::PathBuf, PausedMeta)> {
+        if !valid_sandbox_id(sandbox_id) {
+            return None;
+        }
+        let claimed = self
+            .paused_dir()
+            .join(format!("{sandbox_id}.json.claimed-{node}"));
+        std::fs::rename(self.meta(sandbox_id), &claimed).ok()?;
+        let meta = std::fs::read(&claimed)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        match meta {
+            Some(meta) => Some((claimed, meta)),
+            None => {
+                let _ = std::fs::rename(&claimed, self.meta(sandbox_id));
+                None
+            }
+        }
+    }
+
+    /// Give a claim back, for a resume that failed.
+    fn release(&self, sandbox_id: &str, claimed: &std::path::Path) {
+        if let Err(e) = std::fs::rename(claimed, self.meta(sandbox_id)) {
+            tracing::warn!("giving back the claim on paused {sandbox_id}: {e}");
+        }
+    }
+
+    /// Forget a claimed sandbox: resumed, or deleted.
+    fn finish(&self, sandbox_id: &str, claimed: &std::path::Path) {
+        let _ = std::fs::remove_file(claimed);
+        let _ = std::fs::remove_file(self.snapshot(sandbox_id));
+    }
+}
+
+/// Whether `id` could be one this daemon minted -- checked before it goes
+/// into a path, since a request names it.
+fn valid_sandbox_id(id: &str) -> bool {
+    id.starts_with("sbx-") && id.len() <= 64 && id[4..].chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Write a file only its owner can read.
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The lock a sandbox's pause, resume and fork take, so two of them never
@@ -1443,6 +1614,21 @@ async fn pause_sandbox(
     });
     let mut record = live.record;
     record.paused = true;
+    // In a shared store, described there too -- after the snapshot, so a
+    // node that finds the description finds a whole snapshot beside it.
+    if let Some(store) = &state.store {
+        record.portable = true;
+        let meta = PausedMeta {
+            descriptor: live.descriptor.clone(),
+            record: record.clone(),
+            lifecycle: live.lifecycle,
+            network: live.network_request.clone(),
+        };
+        if let Err(e) = store.put(sandbox_id, &meta) {
+            tracing::warn!("{e}; {sandbox_id} can resume only on this node");
+            record.portable = false;
+        }
+    }
     state.paused.lock().insert(
         sandbox_id.to_string(),
         PausedSandbox {
@@ -1451,6 +1637,7 @@ async fn pause_sandbox(
             record: record.clone(),
             lifecycle: live.lifecycle,
             network,
+            network_request: live.network_request,
         },
     );
     state.metrics.pauses.inc();
@@ -1479,7 +1666,12 @@ async fn resume_sandbox(
     if state.sandboxes.lock().contains_key(sandbox_id) {
         return Ok(None);
     }
-    if !state.paused.lock().contains_key(sandbox_id) {
+    let known_here = state.paused.lock().contains_key(sandbox_id);
+    let in_store = state
+        .store
+        .as_ref()
+        .is_some_and(|store| store.meta(sandbox_id).exists());
+    if !known_here && !in_store {
         return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")));
     }
     let started = std::time::Instant::now();
@@ -1487,30 +1679,92 @@ async fn resume_sandbox(
     let slot = reserve(state, park)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-    let Some(paused) = state.paused.lock().remove(sandbox_id) else {
-        return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")));
+
+    // With a store, the store decides who resumes it: this node's own note
+    // of a sandbox it paused may be stale, if another node has resumed it
+    // since. Claimed first, then taken from the note or the description.
+    let mut claim = None;
+    let paused = match &state.store {
+        Some(store) => {
+            let Some((claimed, meta)) = store.claim(sandbox_id, &state.node_id) else {
+                state.paused.lock().remove(sandbox_id);
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    format!("paused {sandbox_id} was resumed or deleted elsewhere"),
+                ));
+            };
+            claim = Some(claimed);
+            match state.paused.lock().remove(sandbox_id) {
+                Some(paused) => paused,
+                None => PausedSandbox {
+                    snapshot: store.snapshot(sandbox_id),
+                    descriptor: meta.descriptor,
+                    record: meta.record,
+                    lifecycle: meta.lifecycle,
+                    network: None,
+                    network_request: meta.network,
+                },
+            }
+        }
+        None => match state.paused.lock().remove(sandbox_id) {
+            Some(paused) => paused,
+            None => return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))),
+        },
+    };
+    let give_back = |paused: PausedSandbox| match (&state.store, &claim) {
+        (Some(store), Some(claimed)) => store.release(sandbox_id, claimed),
+        _ => {
+            state.paused.lock().insert(sandbox_id.to_string(), paused);
+        }
+    };
+    // Decided here when this node did not pause it: the description holds
+    // the request, and this node decides it as it would a create's.
+    let network = match (&paused.network, &paused.network_request) {
+        (Some(spec), _) => Some(spec.clone()),
+        (None, Some(request)) if state.opts.network => match request.decide(&state.opts).await {
+            Ok(spec) => Some(spec),
+            Err(e) => {
+                give_back(paused);
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
+            }
+        },
+        (None, Some(_)) => {
+            give_back(paused);
+            return Err((
+                StatusCode::CONFLICT,
+                format!("{sandbox_id} has a network and this node gives sandboxes none"),
+            ));
+        }
+        (None, None) => None,
     };
     let running = match bring_up(
         state,
         sandbox_id,
         Some(&paused.snapshot),
-        paused.network.clone(),
+        network,
         &paused.descriptor.envd_access_token,
     )
     .await
     {
         Ok(running) => running,
         Err(e) => {
-            state.paused.lock().insert(sandbox_id.to_string(), paused);
+            give_back(paused);
             return Err(e);
         }
     };
-    let _ = std::fs::remove_file(&paused.snapshot);
+    match (&state.store, &claim) {
+        (Some(store), Some(claimed)) => store.finish(sandbox_id, claimed),
+        _ => {
+            let _ = std::fs::remove_file(&paused.snapshot);
+        }
+    }
 
     let mut descriptor = paused.descriptor;
     descriptor.process_port = running.process_addr.port();
     let mut record = paused.record;
     record.paused = false;
+    record.portable = false;
+    record.node_id.clone_from(&state.node_id);
     let lifetime = lifetime_secs
         .unwrap_or(paused.lifecycle.lifetime_secs)
         .min(MAX_TIMEOUT_SECS);
@@ -1523,6 +1777,7 @@ async fn resume_sandbox(
         descriptor.clone(),
         record,
         paused.lifecycle,
+        paused.network_request,
         Some("sandbox-resumed"),
     )
     .await;
@@ -1621,7 +1876,7 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network) = {
+    let (template_id, metadata, network, source_request) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -1635,10 +1890,11 @@ async fn fork_route(
                         policy: n.gateway.policy(),
                         proxy: n.gateway.egress_proxy(),
                     }),
+                    live.network_request.clone(),
                 )
             })
         };
-        let Some((vm, template_id, metadata, network)) = source else {
+        let Some((vm, template_id, metadata, network, source_request)) = source else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
                     StatusCode::CONFLICT,
@@ -1657,7 +1913,7 @@ async fn fork_route(
             );
         }
         state.metrics.checkpoint_latency.observe(started.elapsed());
-        (template_id, metadata, network)
+        (template_id, metadata, network, source_request)
     };
 
     // Concurrently: each fork is independent, and they are what a caller
@@ -1669,6 +1925,7 @@ async fn fork_route(
             let template_id = template_id.clone();
             let metadata = metadata.clone();
             let network = network.clone();
+            let network_request = source_request.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
@@ -1703,6 +1960,7 @@ async fn fork_route(
                     envd_version: ENVD_VERSION.to_string(),
                     descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
                     paused: false,
+                    portable: false,
                 };
                 let lifecycle = Lifecycle {
                     lifetime_secs,
@@ -1715,6 +1973,7 @@ async fn fork_route(
                     descriptor.clone(),
                     record,
                     lifecycle,
+                    network_request,
                     None,
                 )
                 .await;
@@ -1810,12 +2069,19 @@ impl sandbox_proxy::SandboxRoutes for ResumingRoutes {
                 return Some(open);
             }
         }
-        let wakes = self
+        let known = self
             .state
             .paused
             .lock()
             .get(sandbox)
-            .is_some_and(|p| p.lifecycle.auto_resume);
+            .map(|p| p.lifecycle.auto_resume);
+        let wakes = known.unwrap_or_else(|| {
+            self.state
+                .store
+                .as_ref()
+                .and_then(|store| store.peek(sandbox))
+                .is_some_and(|meta| meta.lifecycle.auto_resume)
+        });
         if !wakes {
             tracing::debug!("proxy: {sandbox} is neither running nor paused to wake");
             return None;
@@ -1977,6 +2243,9 @@ const TEMPLATE_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x00, 0x00, 0x01];
 struct Template {
     dir: std::path::PathBuf,
     snapshot: std::path::PathBuf,
+    /// Deleted with this process. Not when it lives in a snapshot store,
+    /// where other nodes -- and paused sandboxes -- depend on it.
+    owned: bool,
     /// The guest pages a sandbox restored from this touches before it first
     /// answers, as guest-physical (address, length) ranges: prefaulted into
     /// every restore, so the guest does not take an exit for each. Empty
@@ -1986,7 +2255,135 @@ struct Template {
 
 impl Drop for Template {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
+        if self.owned {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+}
+
+/// What a template is a function of, as a name: every input that changes
+/// the guest it holds. Nodes that agree on it can share one template, and
+/// only then can a snapshot layered over it resume on either.
+fn template_key(opts: &Options, authority: Option<&Authority>) -> Result<String, String> {
+    use sha2::Digest;
+    let mut hash = sha2::Sha256::new();
+    for path in [&opts.kernel, &opts.initrd] {
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        hash.update((bytes.len() as u64).to_le_bytes());
+        hash.update(&bytes);
+    }
+    let config = format!(
+        "{}\0{}\0{}\0{}\0{}",
+        guest_cmdline(opts.network),
+        opts.memory_gb,
+        opts.cpu_cores,
+        opts.network,
+        authority.map_or("", Authority::ca_pem)
+    );
+    hash.update(config.as_bytes());
+    Ok(hash
+        .finalize()
+        .iter()
+        .take(16)
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+/// The template in `store` for this configuration: found if some node made
+/// it already, else made here and published -- into a scratch directory,
+/// then renamed into place, so another node never sees half of one. If two
+/// nodes race, the first rename wins and the other uses its template.
+async fn shared_template(
+    opts: &Options,
+    authority: Option<&Authority>,
+    store: &SnapshotStore,
+) -> Result<Template, String> {
+    let key = template_key(opts, authority)?;
+    let templates = store.dir.join("templates");
+    std::fs::create_dir_all(&templates).map_err(|e| format!("{}: {e}", templates.display()))?;
+    let dir = templates.join(&key);
+    let found = |dir: std::path::PathBuf| Template {
+        snapshot: dir.join("template.snap"),
+        dir,
+        owned: false,
+        working_set: Vec::new(),
+    };
+    if dir.join("template.snap").exists() {
+        tracing::info!("using the shared template {key}");
+        return Ok(found(dir));
+    }
+    let scratch = templates.join(format!(".{key}.{}", uuid::Uuid::new_v4().simple()));
+    // A few attempts, looking between them for one another node published:
+    // two nodes booting templates at once on one busy host have been seen
+    // to leave one guest unanswering past the ready timeout.
+    let mut attempt = 1;
+    let mut built = loop {
+        match build_template(opts, authority, scratch.clone()).await {
+            Ok(built) => break built,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&scratch);
+                if dir.join("template.snap").exists() {
+                    tracing::info!("building template {key} failed ({e}); another node's is there");
+                    return Ok(found(dir));
+                }
+                if attempt == 3 {
+                    return Err(e);
+                }
+                tracing::warn!("building template {key}, attempt {attempt}: {e}; again");
+                attempt += 1;
+            }
+        }
+    };
+    built.owned = false;
+    match std::fs::rename(&scratch, &dir) {
+        Ok(()) => {
+            tracing::info!("published the shared template {key}");
+            Ok(Template {
+                snapshot: dir.join("template.snap"),
+                dir,
+                owned: false,
+                working_set: std::mem::take(&mut built.working_set),
+            })
+        }
+        Err(_) if dir.join("template.snap").exists() => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            tracing::info!("another node published template {key} first; using theirs");
+            Ok(found(dir))
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            Err(format!("publishing template {key}: {e}"))
+        }
+    }
+}
+
+/// The egress CA every node sharing `store` signs with: loaded, or made
+/// here and published the same way a template is.
+fn shared_authority(store: &SnapshotStore) -> Result<Authority, String> {
+    let dir = store.dir.join("egress-ca");
+    let load = |dir: &std::path::Path| -> Result<Authority, String> {
+        let cert = std::fs::read_to_string(dir.join("ca.pem"))
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
+        let key = std::fs::read_to_string(dir.join("ca.key"))
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
+        Authority::from_pem(&cert, &key).map_err(|e| format!("the shared egress CA: {e}"))
+    };
+    if dir.join("ca.key").exists() {
+        return load(&dir);
+    }
+    let authority = Authority::generate().map_err(|e| format!("generating the egress CA: {e}"))?;
+    let scratch = store
+        .dir
+        .join(format!(".egress-ca.{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    write_private(&scratch.join("ca.key"), authority.key_pem().as_bytes())?;
+    write_private(&scratch.join("ca.pem"), authority.ca_pem().as_bytes())?;
+    match std::fs::rename(&scratch, &dir) {
+        Ok(()) => Ok(authority),
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            load(&dir)
+        }
     }
 }
 
@@ -2048,13 +2445,17 @@ async fn new_vm(
 
 /// Boot the template once, configure it as every sandbox needs, and write it
 /// to disk with its memory as an image a restore can map.
-async fn build_template(opts: &Options, authority: Option<&Authority>) -> Result<Template, String> {
-    let dir = std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id()));
+async fn build_template(
+    opts: &Options,
+    authority: Option<&Authority>,
+    dir: std::path::PathBuf,
+) -> Result<Template, String> {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut template = Template {
         snapshot: dir.join("template.snap"),
         dir,
+        owned: true,
         working_set: Vec::new(),
     };
 
@@ -2170,6 +2571,12 @@ async fn update_network(
     // is a configuration nobody asked for.
     gateway.set_policy(policy);
     gateway.set_egress_proxy(proxy);
+    if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+        live.network_request = Some(NetworkRequest {
+            allow_internet_access: None,
+            network: Some(update),
+        });
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -2290,14 +2697,39 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
         (removed, u32::try_from(sandboxes.len()).unwrap_or(u32::MAX))
     };
     let Some(live) = removed else {
-        // A paused one has only its snapshot and its record to lose.
+        // A paused one has only its snapshot and its record to lose -- and
+        // in a store, only once it is claimed, so a sandbox another node is
+        // resuming is not deleted from under it.
         let paused = state.paused.lock().remove(sandbox_id);
+        let claimed = match &state.store {
+            Some(store) => match store.claim(sandbox_id, &state.node_id) {
+                Some((claimed, _)) => {
+                    store.finish(sandbox_id, &claimed);
+                    true
+                }
+                None => false,
+            },
+            None => false,
+        };
         drop(held);
         state.transitions.lock().remove(sandbox_id);
-        let Some(paused) = paused else {
-            return false;
+        if let Some(paused) = &paused {
+            if state.store.is_none() {
+                let _ = std::fs::remove_file(&paused.snapshot);
+            }
+        }
+        // With a store, only a claim makes it this node's to delete: a note
+        // of a sandbox this node paused, claimed since by another that has
+        // resumed it, is not a sandbox here -- and its record, which now
+        // names the other node, is not this node's to remove.
+        let ours = if state.store.is_some() {
+            claimed
+        } else {
+            paused.is_some()
         };
-        let _ = std::fs::remove_file(&paused.snapshot);
+        if !ours {
+            return false;
+        }
         state.metrics.ended_deleted.inc();
         if let Some(node) = &state.node {
             if let Err(e) = node.ended(sandbox_id, kind, running).await {
@@ -2386,11 +2818,26 @@ async fn main() -> std::process::ExitCode {
     let tls_cert = opts.tls_cert.clone();
     let tls_key = opts.tls_key.clone();
 
+    let store = match &opts.snapshot_store {
+        None => None,
+        Some(dir) => {
+            let store = SnapshotStore { dir: dir.clone() };
+            if let Err(e) = std::fs::create_dir_all(store.paused_dir()) {
+                eprintln!("hv2-sandboxd: {}: {e}", store.paused_dir().display());
+                return std::process::ExitCode::FAILURE;
+            }
+            Some(store)
+        }
+    };
     let authority = if opts.network {
-        match Authority::generate() {
+        let made = match &store {
+            Some(store) => shared_authority(store),
+            None => Authority::generate().map_err(|e| format!("generating the egress CA: {e}")),
+        };
+        match made {
             Ok(authority) => Some(Arc::new(authority)),
             Err(e) => {
-                eprintln!("hv2-sandboxd: generating the egress CA: {e}");
+                eprintln!("hv2-sandboxd: {e}");
                 return std::process::ExitCode::FAILURE;
             }
         }
@@ -2413,7 +2860,14 @@ async fn main() -> std::process::ExitCode {
     let template = if opts.no_template {
         None
     } else {
-        match build_template(&opts, authority.as_deref()).await {
+        let built = match &store {
+            Some(store) => shared_template(&opts, authority.as_deref(), store).await,
+            None => {
+                let dir = std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id()));
+                build_template(&opts, authority.as_deref(), dir).await
+            }
+        };
+        match built {
             Ok(template) => Some(template),
             Err(e) => {
                 tracing::warn!("no template ({e}); every sandbox will boot instead");
@@ -2484,15 +2938,19 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
-    // Where paused sandboxes and fork checkpoints go: beside the template,
-    // whose image every one of them is layered over.
-    let suspend_dir = template
-        .as_ref()
-        .map_or_else(
-            || std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id())),
-            |t| t.dir.clone(),
-        )
-        .join("suspended");
+    // Where paused sandboxes and fork checkpoints go: the store's, if there
+    // is one; else beside the template, whose image every one of them is
+    // layered over.
+    let suspend_dir = match &store {
+        Some(store) => store.paused_dir(),
+        None => template
+            .as_ref()
+            .map_or_else(
+                || std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id())),
+                |t| t.dir.clone(),
+            )
+            .join("suspended"),
+    };
     if let Err(e) = std::fs::create_dir_all(&suspend_dir) {
         eprintln!("hv2-sandboxd: {}: {e}", suspend_dir.display());
         return std::process::ExitCode::FAILURE;
@@ -2512,6 +2970,10 @@ async fn main() -> std::process::ExitCode {
         node: node.clone(),
         paused: Mutex::new(HashMap::new()),
         suspend_dir,
+        store,
+        node_id: node
+            .as_ref()
+            .map_or_else(|| "local".to_string(), |n| n.id().to_string()),
         transitions: Mutex::new(HashMap::new()),
     });
     if let Some(node) = node.clone() {
@@ -2681,15 +3143,31 @@ async fn main() -> std::process::ExitCode {
             }
         })
         .await;
-    // Paused ones too: their snapshots are layered over a template this
-    // process is about to delete, so they could not be resumed anyway.
-    let ids: Vec<String> = state
-        .sandboxes
-        .lock()
-        .keys()
-        .chain(state.paused.lock().keys())
-        .cloned()
-        .collect();
+    // With a shared store, a node going away pauses what it runs rather
+    // than ending it: another node resumes each on its next request, so
+    // draining a node loses no sandbox. Without one, everything ends --
+    // paused ones too, whose snapshots are layered over a template this
+    // process is about to delete.
+    if state.store.is_some() && state.template.is_some() {
+        let running: Vec<String> = state.sandboxes.lock().keys().cloned().collect();
+        for id in running {
+            match pause_sandbox(&state, &id, false).await {
+                Ok(()) => tracing::info!("paused {id} into the store for another node"),
+                Err((_, e)) => tracing::warn!("could not pause {id} on the way out: {e}"),
+            }
+        }
+    }
+    let ids: Vec<String> = if state.store.is_some() {
+        state.sandboxes.lock().keys().cloned().collect()
+    } else {
+        state
+            .sandboxes
+            .lock()
+            .keys()
+            .chain(state.paused.lock().keys())
+            .cloned()
+            .collect()
+    };
     for id in ids {
         end_sandbox(&state, &id, "sandbox-deleted").await;
     }

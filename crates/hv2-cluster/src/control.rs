@@ -363,8 +363,25 @@ async fn forward(
         Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {id}")),
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
-    let node = match control.store.node(&record.node_id).await {
-        Ok(Some(node)) => node,
+    // Where to send it: the sandbox's node -- or, for one paused into
+    // shared storage whose node is gone, any node with room, since any of
+    // them can resume it.
+    let targets = match control.store.node(&record.node_id).await {
+        Ok(Some(node)) => vec![node],
+        Ok(None) if record.survives_its_node() => match control.store.nodes().await {
+            Ok(nodes) => {
+                let mut order = candidates(&nodes);
+                if order.is_empty() {
+                    // Full everywhere: a node may still make room.
+                    order = nodes;
+                }
+                if order.is_empty() {
+                    return api_error(StatusCode::SERVICE_UNAVAILABLE, "no node is alive");
+                }
+                order
+            }
+            Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+        },
         Ok(None) => {
             // Its node is gone, and its VM with it. The reaper would get to
             // it; this request already has.
@@ -392,24 +409,43 @@ async fn forward(
     let path_and_query = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
     let reqwest_method =
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
-    let mut request = control
-        .http
-        .request(reqwest_method, format!("{}{path_and_query}", node.api))
-        .body(body);
-    if let Some(content_type) = headers.get("content-type") {
-        request = request.header("content-type", content_type.as_bytes());
-    }
-    if let Some(token) = &control.config.cluster_token {
-        request = request.header(CLUSTER_TOKEN_HEADER, token);
-    }
-    let response = match request.send().await {
-        Ok(response) => response,
-        Err(e) => {
-            return api_error(
-                StatusCode::BAD_GATEWAY,
-                format!("node {} did not answer: {e}", node.id),
+    let mut answered = None;
+    let mut refusals = Vec::new();
+    let last = targets.len() - 1;
+    for (i, node) in targets.iter().enumerate() {
+        let mut request = control
+            .http
+            .request(
+                reqwest_method.clone(),
+                format!("{}{path_and_query}", node.api),
             )
+            .body(body.clone());
+        if let Some(content_type) = headers.get("content-type") {
+            request = request.header("content-type", content_type.as_bytes());
         }
+        if let Some(token) = &control.config.cluster_token {
+            request = request.header(CLUSTER_TOKEN_HEADER, token);
+        }
+        let response = match request.send().await {
+            Ok(response) => response,
+            Err(e) => {
+                refusals.push(format!("{}: {e}", node.id));
+                continue;
+            }
+        };
+        // A full node, when there are others to ask: as for a create.
+        if response.status() == reqwest::StatusCode::SERVICE_UNAVAILABLE && i < last {
+            refusals.push(format!("{}: {}", node.id, response.status()));
+            continue;
+        }
+        answered = Some((node, response));
+        break;
+    }
+    let Some((node, response)) = answered else {
+        return api_error(
+            StatusCode::BAD_GATEWAY,
+            format!("no node answered: {}", refusals.join("; ")),
+        );
     };
     let status =
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -486,6 +522,11 @@ pub async fn reap(store: &dyn ClusterStore) -> crate::store::Result<usize> {
         store.nodes().await?.into_iter().map(|n| n.id).collect();
     let mut reaped = 0;
     for record in store.sandboxes().await? {
+        // Paused into shared storage: nothing of it was on the node, so
+        // nothing of it went with the node.
+        if record.survives_its_node() {
+            continue;
+        }
         if !live.contains(&record.node_id) && store.delete_sandbox(&record.sandbox_id).await? {
             store
                 .publish(
@@ -617,12 +658,29 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
             }
         }
         let record = self.store.sandbox(sandbox).await.ok()??;
-        let node = self.store.node(&record.node_id).await.ok()??;
+        let node = match self.store.node(&record.node_id).await.ok()? {
+            Some(node) => node,
+            // Paused into shared storage, on a node that has gone: any node
+            // resumes it, and its proxy does so for the request that asks.
+            None if record.survives_its_node() => {
+                let nodes = self.store.nodes().await.ok()?;
+                let chosen = candidates(&nodes).into_iter().next();
+                chosen.or_else(|| nodes.into_iter().next())?
+            }
+            None => return None,
+        };
         let mut cache = self.cache.lock();
         if cache.len() > 10_000 {
             cache.clear();
         }
         cache.insert(sandbox.to_string(), (node.proxy, Instant::now()));
         Some(node.proxy)
+    }
+
+    /// The cached node did not answer -- gone, with the sandbox paused into
+    /// shared storage for another to resume -- so the next look goes to the
+    /// store rather than waiting out the cache.
+    async fn forget(&self, sandbox: &str) {
+        self.cache.lock().remove(sandbox);
     }
 }

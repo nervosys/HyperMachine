@@ -1268,7 +1268,7 @@ a GICv3 through `KVM_CREATE_DEVICE`, a device tree describing the
 virtio-mmio devices, the arm64 `Image` boot protocol and PSCI. That is real
 work and cannot be verified on the x86 machine this was written on.
 
-### Phase 6 — Suspend, resume, fork and oversubscription (Agent Substrate) — **built, verified with the real SDK; storage is node-local**
+### Phase 6 — Suspend, resume, fork and oversubscription (Agent Substrate) — **built, verified with the real SDK, across nodes**
 
 Google's [Agent Substrate](https://github.com/agent-substrate/substrate)
 (Apache-2.0, pre-1.0; on GKE for evaluation) is a second competitor with a
@@ -1333,13 +1333,52 @@ creates, since nothing is shared but the store. What limits a node here is
 CPU: a create costs ~25 ms of host CPU, about its whole latency, and
 concurrency past eight adds contention.
 
+#### Restore on any node
+
+Agent Substrate's snapshots go to Cloud Storage and restore on any worker.
+Here, with `--snapshot-store DIR` -- a directory every node mounts at the
+same path (NFS, EFS, Filestore, CephFS; a ReadWriteMany PVC in the chart):
+
+- **The template is shared, by content.** Its name is a hash of everything
+  that makes the guest what it is -- kernel, initramfs, command line, size,
+  the egress CA. The first node to need it builds it in a scratch directory
+  and renames it into place; a node that loses the race uses the winner's.
+  A layered snapshot names its template, so every node sharing the store can
+  lay it over the same bytes.
+- **So is the egress CA**, published the same way: a guest trusts the CA it
+  was created with, and must still after resuming elsewhere. Its key and the
+  paused sandboxes' descriptions -- which hold egress-proxy credentials and
+  injected headers -- are written owner-only.
+- **A paused sandbox is claimed, not assumed.** Resuming renames its
+  description aside, which is atomic, so two nodes asked at once cannot
+  both resume it; a node's own note of a sandbox it paused is checked
+  against the store, since another may have resumed it since.
+- **It outlives its node.** The record says it is paused into shared
+  storage; a restarting node keeps it, the reaper keeps it, and a control
+  plane sends a request for it to any node with room when its own has gone
+  -- `connect`, `resume`, `DELETE`, and the envd proxy, where the request
+  that wakes it is served by whichever node resumed it. A proxy whose cached
+  route no longer connects asks again once.
+- **Draining a node loses nothing.** On SIGTERM a node pauses what it runs
+  into the store instead of ending it, and the next request for each
+  resumes it elsewhere.
+
+Verified on two nodes sharing a directory, two control planes, the
+unmodified SDK: a sandbox with a counting loop and an injected header,
+paused on node A; node A SIGKILLed; `Sandbox.connect` through the other
+control plane resumed it **on node B in 53 ms**, file kept, loop still
+counting, and the header still injected -- the guest trusted node B's
+leaves. Node A drained by SIGTERM: a command through a control plane's
+proxy resumed its sandbox on node B in 95 ms. A paused sandbox whose node
+was dead deleted cleanly, record and snapshot. The two nodes started at
+once and raced to publish the template; one won and the other used it.
+
+What it does not do: move a *running* sandbox (it pauses first), or keep
+paused sandboxes anywhere but a filesystem -- object storage would need the
+template fetched to local disk before it can be mapped.
+
 What Agent Substrate has that this does not:
 
-- **Restore on any worker.** Snapshots here stay on the node that paused
-  them, layered over that node's template -- which is not byte-identical to
-  another node's -- so a paused sandbox resumes where it paused, and a
-  node's loss takes its paused sandboxes with it. Moving them needs either
-  deterministic templates or shipping the full image, and a shared store.
 - **Workload identity and mTLS.** Substrate authenticates to cloud APIs
   through GKE Workload Identity and uses pod certificates. Here a node
   trusts its control plane by a shared token over plain HTTP, and a sandbox

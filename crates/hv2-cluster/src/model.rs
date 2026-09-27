@@ -74,9 +74,20 @@ pub struct SandboxRecord {
     /// counts against no capacity until something resumes it.
     #[serde(default)]
     pub paused: bool,
+    /// Paused into a snapshot store every node shares, so any node can
+    /// resume it: it outlives the node that paused it, and a request for it
+    /// goes to whichever node has room.
+    #[serde(default)]
+    pub portable: bool,
 }
 
 impl SandboxRecord {
+    /// Whether this sandbox survives its node: paused, into shared storage.
+    #[must_use]
+    pub fn survives_its_node(&self) -> bool {
+        self.paused && self.portable
+    }
+
     /// E2B's `SandboxState`: `running` or `paused`.
     #[must_use]
     pub fn state(&self) -> &'static str {
@@ -193,6 +204,7 @@ mod tests {
             envd_version: "0.6.3".into(),
             descriptor: json!({"envdAccessToken": "tok", "sandboxID": "sbx-1"}),
             paused: false,
+            portable: false,
         }
     }
 

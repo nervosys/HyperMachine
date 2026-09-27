@@ -55,14 +55,17 @@ impl NodeAgent {
     }
 
     /// Join: forget any sandboxes the store says this node was running --
-    /// they died with the process that ran them -- and announce the node.
+    /// they died with the process that ran them, unless paused into shared
+    /// storage -- and announce the node.
     ///
     /// # Errors
     ///
     /// The store could not be reached.
     pub async fn join(&self) -> crate::store::Result<()> {
         for record in self.store.sandboxes().await? {
+            // Paused into shared storage, it did not die with the process.
             if record.node_id == self.config.id
+                && !record.survives_its_node()
                 && self.store.delete_sandbox(&record.sandbox_id).await?
             {
                 self.store

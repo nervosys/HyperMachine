@@ -431,6 +431,7 @@ pub(crate) mod tests {
             envd_version: "0.6.3".into(),
             descriptor: json!({"sandboxID": id}),
             paused: false,
+            portable: false,
         }
     }
 

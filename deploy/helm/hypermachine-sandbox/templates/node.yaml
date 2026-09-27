@@ -55,6 +55,10 @@ spec:
             {{- if .Values.node.prefault }}
             - --prefault
             {{- end }}
+            {{- if .Values.node.snapshotStore.claimName }}
+            - --snapshot-store
+            - /var/lib/hv2-store
+            {{- end }}
             - --cluster-store
             - {{ include "hv2.storeUrl" . | quote }}
             - --cluster-namespace
@@ -87,6 +91,15 @@ spec:
             privileged: true
           volumeMounts:
             - { name: kvm, mountPath: /dev/kvm }
+            {{- if .Values.node.snapshotStore.claimName }}
+            # The same path on every node: a paused sandbox's snapshot names
+            # its template by absolute path.
+            - { name: snapshot-store, mountPath: /var/lib/hv2-store }
+            {{- end }}
       volumes:
         - name: kvm
           hostPath: { path: /dev/kvm, type: CharDevice }
+        {{- if .Values.node.snapshotStore.claimName }}
+        - name: snapshot-store
+          persistentVolumeClaim: { claimName: {{ .Values.node.snapshotStore.claimName | quote }} }
+        {{- end }}
