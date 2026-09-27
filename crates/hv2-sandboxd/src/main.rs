@@ -297,7 +297,8 @@ fn parse_options() -> Result<Options, String> {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
                      [--capacity N] [--no-template] [--prefault] [--evict-idle-after SECS] \
-                     [--network [--egress-default deny|allow] [--allow-private-egress-proxy]                      [--tenant-reserved-cidr CIDR]...] \
+                     [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
+                     [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS]]\n\
