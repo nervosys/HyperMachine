@@ -1522,8 +1522,63 @@ sandboxes of both templates ran through the control plane. In the Compose
 stack the node container, with the kit its image now carries, built `alpine`
 through a control plane and a create from it answered in 85 ms.
 
-Not done: building from a Dockerfile (E2B's `template build` runs one), a
-registry that requires credentials, and zstd-compressed layers.
+Private registries and zstd: a registry's `Basic` challenge is answered with
+a username and password, a `Bearer` challenge's token requested with them
+(`POST /templates` takes `username`/`password`; the SDK's
+`from_image(image, username=, password=)` sends them), never stored or
+logged. Layers are decompressed by their magic bytes: gzip, zstd (a pure
+Rust decoder), or plain tar. Verified against a password-protected
+`registry:2` holding an image built with zstd layers only: no login was
+refused ("the registry wants a username and password"), a wrong password
+refused with 401, the right one built in 2.0 s and a sandbox read the zstd
+layer's file; the password appeared nowhere in the node's log. A
+`localhost` registry is spoken to over plain HTTP, as Docker does.
+
+#### Snapshots and builds: E2B's Template SDK and Dockerfiles
+
+`sandbox.create_snapshot()` (`POST /sandboxes/{id}/snapshots`) checkpoints a
+running sandbox in place -- layered, only what it changed since its
+template -- and offers it as a template; `Sandbox.create(snapshot_id)`
+restores it as a fork is restored. `GET /snapshots` and
+`Sandbox.delete_snapshot` (`DELETE /templates/{id}`) complete E2B's set. With
+a store, a snapshot taken on one node restores on any node at once: a
+create for a name a node has not seen yet reads the store's record, and the
+taking node announces it to the cluster without waiting for a heartbeat.
+
+On that sits E2B's build API -- `POST /v3/templates`, file upload links and
+uploads, `POST /v2/templates/{id}/builds/{build}`, build status with logs --
+which is what `Template.build()` calls, and so what
+`Template().from_dockerfile(...)` builds with, the SDK having turned the
+Dockerfile into steps. A build restores its base (an image, pulled into a
+template of its own and cached by name; or a template, or a snapshot), runs
+`RUN`, `COPY`, `ENV`, `WORKDIR` and `USER` in that sandbox with each line of
+output in the build log, starts the start command, waits for the readiness
+check, and snapshots the sandbox into the template. Every sandbox created
+from it is restored with that process already running. The build's commands
+run in a microVM, never on the node, with no container runtime; a `COPY`'s
+upload is repacked on the host with Docker's placement rules and unpacked
+by the guest's own tar. `ENV` and `WORKDIR` hold for every later command:
+the agent reads them from the template at each start. Through a control
+plane, a template's build calls all reach one node, chosen from its name by
+rendezvous hashing, and uploads stream through unbuffered.
+
+Verified with the unmodified SDK: a builder template on `base` (COPY, ENV,
+WORKDIR, RUN, `busybox httpd` started with a `wget` readiness check) built in
+0.9 s, and a sandbox from it answered in 42 ms with httpd already serving
+the copied file, in the template's directory and environment. A Dockerfile
+(`FROM python:3.12-slim`, `ENV`, `RUN pip install six`, `WORKDIR`, `COPY
+app.py`, `RUN python app.py`) built in 24.7 s including the pull from Docker
+Hub; its sandbox was created in 126 ms and ran the app with the installed
+package. Through a control plane over two nodes and a store, a build took
+0.9 s and its sandboxes were created in 23-29 ms through the control plane
+and on either node. A sandbox of a built template paused in 7 ms, resumed in
+20 ms and forked with its server and state intact. Snapshots: taken in
+8-11 ms, created from in 17-30 ms on the taking node, the other node, or
+through the control plane.
+
+Not done: `USER` holds for the build's steps but a sandbox's commands still
+run as root; per-build CPU and memory sizes (a node's are fixed); and
+registries' cloud logins (AWS, GCP) -- only `{"type": "registry"}`.
 
 What Agent Substrate has that this does not:
 

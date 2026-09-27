@@ -6,8 +6,10 @@
 //! (or an index, from which the `linux/amd64` manifest is chosen), the
 //! config blob for the image's environment, and the layers, each verified
 //! against its sha256 digest before it is used and applied in order with
-//! the OCI whiteout rules. Anonymous bearer-token auth, which Docker Hub and
-//! most registries serve for public images, is followed when challenged.
+//! the OCI whiteout rules. Bearer-token auth, which Docker Hub and most
+//! registries serve, is followed when challenged -- anonymously, or with a
+//! username and password for a private image, which a registry asking for
+//! basic auth is sent directly. Layers are gzip, zstd, or uncompressed.
 //!
 //! The filesystem is assembled in memory, as the path-ordered set of
 //! entries an initramfs needs -- not unpacked to disk, so a layer's paths
@@ -101,12 +103,33 @@ const MANIFEST_TYPES: &str = "application/vnd.oci.image.index.v1+json, \
     application/vnd.oci.image.manifest.v1+json, \
     application/vnd.docker.distribution.manifest.v2+json";
 
-/// A registry session: the client and whatever token a challenge earned.
+/// A private registry's login.
+#[derive(Clone)]
+pub struct Credentials {
+    pub username: String,
+    pub password: String,
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Credentials({}, <redacted>)", self.username)
+    }
+}
+
+/// How a registry session proves itself, once challenged.
+enum Auth {
+    None,
+    Bearer(String),
+    Basic,
+}
+
+/// A registry session: the client and whatever a challenge earned.
 struct Registry {
     http: reqwest::Client,
     base: String,
     repository: String,
-    token: Option<String>,
+    auth: Auth,
+    credentials: Option<Credentials>,
 }
 
 impl Registry {
@@ -114,18 +137,31 @@ impl Registry {
         let url = format!("{}/v2/{}/{path}", self.base, self.repository);
         for _ in 0..2 {
             let mut request = self.http.get(&url).header("Accept", accept);
-            if let Some(token) = &self.token {
-                request = request.bearer_auth(token);
+            match (&self.auth, &self.credentials) {
+                (Auth::Bearer(token), _) => request = request.bearer_auth(token),
+                (Auth::Basic, Some(c)) => {
+                    request = request.basic_auth(&c.username, Some(&c.password));
+                }
+                _ => {}
             }
             let response = request.send().await.map_err(|e| format!("{url}: {e}"))?;
-            if response.status() == reqwest::StatusCode::UNAUTHORIZED && self.token.is_none() {
+            if response.status() == reqwest::StatusCode::UNAUTHORIZED
+                && matches!(self.auth, Auth::None)
+            {
                 let challenge = response
                     .headers()
                     .get("www-authenticate")
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or_default()
                     .to_string();
-                self.token = Some(self.authenticate(&challenge).await?);
+                self.auth = if challenge.starts_with("Basic") {
+                    if self.credentials.is_none() {
+                        return Err(format!("{url}: the registry wants a username and password"));
+                    }
+                    Auth::Basic
+                } else {
+                    Auth::Bearer(self.authenticate(&challenge).await?)
+                };
                 continue;
             }
             if !response.status().is_success() {
@@ -136,8 +172,8 @@ impl Registry {
         Err(format!("{url}: still unauthorized with a token"))
     }
 
-    /// Follow a `Bearer realm=..., service=..., scope=...` challenge for an
-    /// anonymous pull token.
+    /// Follow a `Bearer realm=..., service=..., scope=...` challenge for a
+    /// pull token: anonymous, or for this session's credentials.
     async fn authenticate(&self, challenge: &str) -> Result<String, String> {
         let params = challenge.strip_prefix("Bearer ").ok_or_else(|| {
             format!("the registry asks for {challenge:?}, which is not bearer auth")
@@ -162,10 +198,11 @@ impl Registry {
             ));
         }
         let realm = realm.ok_or("a bearer challenge without a realm")?;
-        let answer: Value = self
-            .http
-            .get(&realm)
-            .query(&query)
+        let mut request = self.http.get(&realm).query(&query);
+        if let Some(c) = &self.credentials {
+            request = request.basic_auth(&c.username, Some(&c.password));
+        }
+        let answer: Value = request
             .send()
             .await
             .map_err(|e| format!("{realm}: {e}"))?
@@ -212,13 +249,18 @@ impl Registry {
 }
 
 /// Pull `image` for `linux/amd64` and assemble its filesystem.
-pub async fn pull(http: &reqwest::Client, image: &str) -> Result<Image, String> {
+pub async fn pull(
+    http: &reqwest::Client,
+    image: &str,
+    credentials: Option<Credentials>,
+) -> Result<Image, String> {
     let reference = Reference::parse(image)?;
     let mut registry = Registry {
         http: http.clone(),
-        base: format!("https://{}", reference.registry),
+        base: format!("{}://{}", scheme(&reference.registry), reference.registry),
         repository: reference.repository.clone(),
-        token: None,
+        auth: Auth::None,
+        credentials,
     };
 
     let mut manifest: Value = registry
@@ -285,24 +327,38 @@ pub async fn pull(http: &reqwest::Client, image: &str) -> Result<Image, String> 
     let mut budget = MAX_IMAGE_BYTES;
     for layer in layers {
         let digest = layer["digest"].as_str().ok_or("a layer without a digest")?;
-        let media = layer["mediaType"].as_str().unwrap_or_default();
-        if media.contains("zstd") {
-            return Err(format!(
-                "{image}: layer {digest} is zstd, which is not supported"
-            ));
-        }
         let blob = registry.blob(digest, budget).await?;
         budget = budget.saturating_sub(blob.len() as u64);
-        let gzipped = blob.starts_with(&[0x1f, 0x8b]);
-        let reader: Box<dyn Read> = if gzipped {
-            Box::new(flate2::read::GzDecoder::new(&blob[..]))
-        } else {
-            Box::new(&blob[..])
-        };
-        apply_layer(&mut pulled.entries, reader)
+        apply_layer(&mut pulled.entries, decompressed(&blob)?)
             .map_err(|e| format!("{image}: layer {digest}: {e}"))?;
     }
     Ok(pulled)
+}
+
+/// HTTPS, but for a registry on this host -- as Docker, which lets
+/// `localhost` registries be plain HTTP: nothing crosses a network.
+fn scheme(registry: &str) -> &'static str {
+    let host = registry.rsplit_once(':').map_or(registry, |(host, _)| host);
+    if matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+        "http"
+    } else {
+        "https"
+    }
+}
+
+/// A layer's tar, by what its bytes say it is rather than its media type:
+/// registries have been seen to label a gzip layer as plain tar.
+fn decompressed(blob: &[u8]) -> Result<Box<dyn Read + '_>, String> {
+    Ok(if blob.starts_with(&[0x1f, 0x8b]) {
+        Box::new(flate2::read::GzDecoder::new(blob))
+    } else if blob.starts_with(&[0x28, 0xb5, 0x2f, 0xfd]) {
+        Box::new(
+            ruzstd::decoding::StreamingDecoder::new(blob)
+                .map_err(|e| format!("a zstd layer that does not open: {e}"))?,
+        )
+    } else {
+        Box::new(blob)
+    })
 }
 
 /// Normalise a tar path to the form entries are kept in, refusing anything
@@ -466,6 +522,28 @@ mod tests {
             "an opaque dir hides the lower one"
         );
         assert!(entries.contains_key("opt/x/z"), "but keeps its own layer's");
+    }
+
+    /// A layer is read as what its bytes are: gzip, zstd, or a bare tar.
+    #[test]
+    fn layers_decompress_by_their_magic() {
+        let tar = layer(&[("etc/hostname", b"sandbox\n")]);
+        let gzip = {
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            std::io::Write::write_all(&mut gz, &tar).unwrap();
+            gz.finish().unwrap()
+        };
+        let zstd = ruzstd::encoding::compress_to_vec(
+            &tar[..],
+            ruzstd::encoding::CompressionLevel::Fastest,
+        );
+        for blob in [&tar, &gzip, &zstd] {
+            let mut entries = BTreeMap::new();
+            apply_layer(&mut entries, decompressed(blob).unwrap()).unwrap();
+            assert!(
+                matches!(entries.get("etc/hostname"), Some(Entry::File { data, .. }) if data == b"sandbox\n")
+            );
+        }
     }
 
     #[test]

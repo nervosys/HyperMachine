@@ -210,6 +210,23 @@ pub enum Operation {
 /// frame must stay under [`MAX_FRAME_BYTES`].
 pub const FILE_CHUNK: usize = 4 * 1024 * 1024;
 
+/// Where a template built by steps keeps [`TemplateDefaults`], in the guest.
+pub const TEMPLATE_DEFAULTS_PATH: &str = "/etc/hv2/defaults.json";
+
+/// What a template built by steps -- a Dockerfile's `ENV` and `WORKDIR` --
+/// gives every program started in its sandboxes. Read by the agent at each
+/// start, so it holds in every sandbox restored from the template's
+/// snapshot, whose agent was running long before the file was written.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateDefaults {
+    /// Under what a request sets: a request's own variable wins.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    /// The working directory, when a request names none.
+    #[serde(default)]
+    pub cwd: Option<String>,
+}
+
 /// A terminal's size, in character cells.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PtySize {

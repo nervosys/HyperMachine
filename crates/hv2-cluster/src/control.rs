@@ -127,6 +127,14 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/pause", post(forward))
         .route("/sandboxes/{id}/resume", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
+        .route("/sandboxes/{id}/snapshots", post(forward))
+        .route("/snapshots", get(snapshots))
+        .route("/templates/{id}", axum::routing::delete(delete_template))
+        .route("/v3/templates", post(to_builder))
+        .route("/templates/{id}/files/{hash}", get(to_builder))
+        .route("/v2/templates/{id}/builds/{build}", post(to_builder))
+        .route("/templates/{id}/builds/{build}/status", get(to_builder))
+        .route("/templates/aliases/{alias}", get(template_alias))
         .route("/sandboxes/{id}/refreshes", post(forward))
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
@@ -148,6 +156,9 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/.well-known/jwks.json", get(jwks))
         .route("/.well-known/openid-configuration", get(openid_configuration))
         .route("/ui", get(ui))
+        // Without the key: the SDK sends none with an upload. The node
+        // checks the token its authenticated link carried.
+        .route("/templates/{id}/files/{hash}", axum::routing::put(to_builder))
         .merge(e2b)
         .fallback(|uri: axum::http::Uri| async move {
             api_error(StatusCode::NOT_FOUND, format!("no route {uri}"))
@@ -721,6 +732,217 @@ async fn build_templates(State(control): State<Arc<ControlPlane>>, body: Bytes) 
         StatusCode::BAD_GATEWAY
     };
     (status, Json(answers)).into_response()
+}
+
+/// `method path` on every live node: each node's ID, status and JSON answer.
+async fn on_every_node(
+    control: &ControlPlane,
+    method: Method,
+    path: &str,
+) -> Result<Vec<(String, u16, Value)>, (StatusCode, String)> {
+    let nodes = control
+        .store
+        .nodes()
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let mut answers = Vec::with_capacity(nodes.len());
+    for node in &nodes {
+        let mut request = control
+            .http
+            .request(method.clone(), format!("{}{path}", node.api));
+        if let Some(token) = &control.config.cluster_token {
+            request = request.header(CLUSTER_TOKEN_HEADER, token);
+        }
+        answers.push(match request.send().await {
+            Ok(response) => {
+                let status = response.status().as_u16();
+                let answer = response.json::<Value>().await.unwrap_or(Value::Null);
+                (node.id.clone(), status, answer)
+            }
+            Err(e) => (node.id.clone(), 502, json!({ "message": e.to_string() })),
+        });
+    }
+    Ok(answers)
+}
+
+/// `GET /snapshots`: every live node's snapshots, once each -- nodes that
+/// share a snapshot store offer the same ones -- with the nodes offering it.
+async fn snapshots(State(control): State<Arc<ControlPlane>>, uri: axum::http::Uri) -> Response {
+    let path = uri
+        .path_and_query()
+        .map_or("/snapshots", axum::http::uri::PathAndQuery::as_str);
+    let answers = match on_every_node(&control, Method::GET, path).await {
+        Ok(answers) => answers,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let mut merged: BTreeMap<String, Value> = BTreeMap::new();
+    for (node, status, answer) in answers {
+        if status != 200 {
+            continue;
+        }
+        for mut snapshot in answer.as_array().cloned().unwrap_or_default() {
+            let Some(id) = snapshot["snapshotID"].as_str().map(str::to_string) else {
+                continue;
+            };
+            let entry = merged.entry(id).or_insert_with(|| {
+                snapshot["nodeIDs"] = json!([]);
+                snapshot
+            });
+            if let Some(nodes) = entry["nodeIDs"].as_array_mut() {
+                nodes.push(json!(node));
+            }
+        }
+    }
+    Json(merged.into_values().collect::<Vec<_>>()).into_response()
+}
+
+/// `DELETE /templates/{id}`: delete a snapshot wherever it is offered.
+async fn delete_template(
+    State(control): State<Arc<ControlPlane>>,
+    Path(id): Path<String>,
+) -> Response {
+    let path = format!("/templates/{}", crate::model::untagged(&id));
+    let answers = match on_every_node(&control, Method::DELETE, &path).await {
+        Ok(answers) => answers,
+        Err((status, message)) => return api_error(status, message),
+    };
+    if answers.iter().any(|(_, status, _)| *status == 204) {
+        StatusCode::NO_CONTENT.into_response()
+    } else if let Some((_, _, answer)) = answers.iter().find(|(_, s, _)| *s == 409) {
+        (StatusCode::CONFLICT, Json(answer.clone())).into_response()
+    } else {
+        api_error(StatusCode::NOT_FOUND, format!("no snapshot {id}"))
+    }
+}
+
+/// The node a template's builds run on: chosen from the template's name by
+/// rendezvous hashing over the live nodes, so every control plane chooses
+/// the same one, and every call of one build -- its upload links, uploads,
+/// start and status -- reaches the node that holds it.
+async fn builder(
+    control: &ControlPlane,
+    template: &str,
+) -> Result<crate::model::NodeInfo, (StatusCode, String)> {
+    let nodes = control
+        .store
+        .nodes()
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e.to_string()))?;
+    let template = crate::model::untagged(template);
+    nodes
+        .into_iter()
+        .max_by_key(|node| fnv1a(&[template.as_bytes(), b"\0", node.id.as_bytes()]))
+        .ok_or_else(|| {
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "no node is alive".to_string(),
+            )
+        })
+}
+
+/// FNV-1a: stable across processes and releases, as a choice every
+/// control plane must agree on has to be.
+fn fnv1a(parts: &[&[u8]]) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for part in parts {
+        for byte in *part {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+    hash
+}
+
+/// E2B's template build calls, to the template's build node. The body is
+/// streamed through, not buffered: an upload may be large. The host the
+/// caller reached is passed on, so the upload links a node makes point
+/// back here.
+async fn to_builder(
+    State(control): State<Arc<ControlPlane>>,
+    method: Method,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let path = uri.path();
+    let (template, body) = if path == "/v3/templates" {
+        // The name is in the body, which is small.
+        let bytes = match axum::body::to_bytes(body, 1 << 20).await {
+            Ok(bytes) => bytes,
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        };
+        let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
+        let name = parsed["name"]
+            .as_str()
+            .or_else(|| parsed["alias"].as_str())
+            .unwrap_or_default()
+            .to_string();
+        (name, reqwest::Body::from(bytes))
+    } else {
+        let mut segments = path.trim_start_matches("/v2").split('/').skip(2);
+        let name = segments.next().unwrap_or_default().to_string();
+        (name, reqwest::Body::wrap_stream(body.into_data_stream()))
+    };
+    let node = match builder(&control, &template).await {
+        Ok(node) => node,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let path_and_query = uri.path_and_query().map_or(path, |p| p.as_str());
+    let reqwest_method =
+        reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
+    let mut request = control
+        .http
+        .request(reqwest_method, format!("{}{path_and_query}", node.api))
+        .body(body);
+    for name in ["content-type", "content-length"] {
+        if let Some(value) = headers.get(name) {
+            request = request.header(name, value.as_bytes());
+        }
+    }
+    if let Some(host) = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get("host"))
+    {
+        request = request.header("x-forwarded-host", host.as_bytes());
+    }
+    if let Some(proto) = headers.get("x-forwarded-proto") {
+        request = request.header("x-forwarded-proto", proto.as_bytes());
+    }
+    if let Some(token) = &control.config.cluster_token {
+        request = request.header(CLUSTER_TOKEN_HEADER, token);
+    }
+    let response = match request.send().await {
+        Ok(response) => response,
+        Err(e) => return api_error(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
+    };
+    let status =
+        StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+    let content_type = response.headers().get("content-type").cloned();
+    let bytes = response.bytes().await.unwrap_or_default();
+    let mut out = Response::new(Body::from(bytes));
+    *out.status_mut() = status;
+    if let Some(value) = content_type {
+        out.headers_mut().insert("content-type", value);
+    }
+    out
+}
+
+/// `GET /templates/aliases/{alias}`: whether a live node offers a template
+/// of that name.
+async fn template_alias(
+    State(control): State<Arc<ControlPlane>>,
+    Path(alias): Path<String>,
+) -> Response {
+    let nodes = match control.store.nodes().await {
+        Ok(nodes) => nodes,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    let name = crate::model::untagged(&alias);
+    if nodes.iter().any(|n| n.offers(name)) {
+        Json(json!({ "templateID": name, "public": false })).into_response()
+    } else {
+        api_error(StatusCode::NOT_FOUND, format!("no template {name}"))
+    }
 }
 
 /// `GET /.well-known/jwks.json`: every live node's workload-token key, once

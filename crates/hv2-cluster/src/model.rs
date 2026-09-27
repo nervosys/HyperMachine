@@ -57,6 +57,7 @@ impl NodeInfo {
     /// Whether this node can start a sandbox from `template`.
     #[must_use]
     pub fn offers(&self, template: &str) -> bool {
+        let template = untagged(template);
         if self.templates.is_empty() {
             template == "base"
         } else {
@@ -206,9 +207,25 @@ pub fn metadata_matches(record: &SandboxRecord, wanted: &BTreeMap<String, String
         .all(|(k, v)| record.metadata.get(k).is_some_and(|have| have == v))
 }
 
+/// A template name as E2B's clients may spell it -- `team/name:tag` -- as
+/// a node names it. Template names hold neither `/` nor `:`.
+#[must_use]
+pub fn untagged(template: &str) -> &str {
+    let name = template.rsplit_once('/').map_or(template, |(_, name)| name);
+    name.split_once(':').map_or(name, |(name, _)| name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn template_names_as_e2b_spells_them() {
+        assert_eq!(untagged("my-snap"), "my-snap");
+        assert_eq!(untagged("my-snap:default"), "my-snap");
+        assert_eq!(untagged("team/my-snap:v2"), "my-snap");
+        assert_eq!(untagged("team/my-snap"), "my-snap");
+    }
 
     fn record() -> SandboxRecord {
         SandboxRecord {

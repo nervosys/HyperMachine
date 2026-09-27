@@ -25,7 +25,8 @@ tracing-subscriber = { workspace = true }
 parking_lot = { workspace = true }
 chrono = { workspace = true }
 axum = { workspace = true }
-reqwest = { workspace = true }
+# stream: a template build's uploads pass through to its node unbuffered.
+reqwest = { workspace = true, features = ["stream"] }
 rustls = { workspace = true }
 subtle = { version = "2.6", default-features = false }
 form_urlencoded = "1"

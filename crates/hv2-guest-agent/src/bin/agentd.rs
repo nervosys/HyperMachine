@@ -51,7 +51,8 @@ fn main() {
 mod linux {
     use hv2_guest_agent::{
         decode, encode, truncate_utf8, OpResult, Operation, PtySize, Request, Response,
-        GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
+        TemplateDefaults, GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
+        TEMPLATE_DEFAULTS_PATH,
     };
     use std::collections::{BTreeMap, HashMap};
     use std::io::{Read, Write};
@@ -551,6 +552,16 @@ mod linux {
     }
 
     /// Start a program and keep it.
+    /// This template's defaults, read fresh: a template build writes them
+    /// while this agent runs, and every sandbox restored from it keeps this
+    /// same agent. None, if the template was not built by steps.
+    fn template_defaults() -> TemplateDefaults {
+        std::fs::read(TEMPLATE_DEFAULTS_PATH)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
     fn start(
         program: &str,
         args: &[String],
@@ -562,9 +573,12 @@ mod linux {
         command.args(args);
         // Added to the agent's own environment rather than replacing it:
         // `env_clear` would leave the program without a `PATH`, and the first
-        // thing most of them do is look something up in it.
+        // thing most of them do is look something up in it. The template's
+        // defaults go under the request's own.
+        let defaults = template_defaults();
+        command.envs(&defaults.env);
         command.envs(envs);
-        if let Some(dir) = cwd {
+        if let Some(dir) = cwd.or(defaults.cwd.as_deref()) {
             command.current_dir(dir);
         }
 
@@ -880,7 +894,9 @@ mod linux {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if let Some(dir) = cwd {
+        let defaults = template_defaults();
+        command.envs(&defaults.env);
+        if let Some(dir) = cwd.or(defaults.cwd.as_deref()) {
             command.current_dir(dir);
         }
 

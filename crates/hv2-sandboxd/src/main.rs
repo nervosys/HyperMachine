@@ -114,9 +114,11 @@ use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
+mod builds;
 mod identity;
 mod initramfs;
 mod oci;
+mod snapshots;
 
 const GUEST_CID_BASE: u64 = 100;
 
@@ -435,6 +437,12 @@ struct AppState {
     initrds: parking_lot::RwLock<BTreeMap<String, String>>,
     /// Templates being built, or whose build failed, by name.
     builds: Mutex<BTreeMap<String, TemplateBuild>>,
+    /// Sandboxes' snapshots, by name: templates too, to a create.
+    snapshots: parking_lot::RwLock<BTreeMap<String, Arc<snapshots::Snapshot>>>,
+    /// Template builds by steps (E2B's `Template.build`), by build ID.
+    step_builds: builds::Builds,
+    /// What each offered `COPY` upload, by files hash, must present.
+    upload_tokens: Mutex<HashMap<String, String>>,
     /// For pulling images to build templates from.
     http: reqwest::Client,
     metrics: NodeMetrics,
@@ -1366,10 +1374,13 @@ async fn register(
 async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
     // A template this node does not have is the caller's mistake, answered
     // before a slot is taken -- as E2B answers an unknown template.
-    let template_id = req
-        .template_id
-        .clone()
-        .unwrap_or_else(|| "base".to_string());
+    // A snapshot is created from as a fork is: its template restored, its
+    // pages copied in. Held until then: a delete meanwhile waits for it.
+    let requested = snapshots::untagged(req.template_id.as_deref().unwrap_or("base")).to_string();
+    let from_snapshot = snapshots::lookup(&state, &requested);
+    let template_id = from_snapshot
+        .as_ref()
+        .map_or_else(|| requested.clone(), |s| s.base.clone());
     if !state.initrds.read().contains_key(&template_id) {
         return api_error(
             StatusCode::NOT_FOUND,
@@ -1451,7 +1462,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         &state,
         &sandbox_id,
         &template_id,
-        None,
+        from_snapshot.as_ref().map(|s| s.file.as_path()),
         network,
         &access_token,
     )
@@ -1460,11 +1471,14 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         Ok(running) => running,
         Err((status, e)) => return api_error(status, e),
     };
+    drop(from_snapshot);
 
     // Built once and kept, so `POST /sandboxes/{id}/connect` answers with the
-    // same description rather than a second one assembled from parts.
+    // same description rather than a second one assembled from parts. It
+    // names the snapshot asked for; the record, the template under it, which
+    // a pause, resume or fork of this sandbox is layered over.
     let descriptor = SandboxResponse {
-        template_id: template_id.clone(),
+        template_id: requested,
         sandbox_id: sandbox_id.clone(),
         client_id: sandbox_id.clone(),
         envd_version: ENVD_VERSION.to_string(),
@@ -2625,6 +2639,9 @@ struct BuildTemplateRequest {
     template_id: String,
     /// An OCI image reference: `python:3.12-slim`, `ghcr.io/org/tool@sha256:...`.
     image: String,
+    /// A private registry's login, used for this pull and not kept.
+    username: Option<String>,
+    password: Option<String>,
 }
 
 /// What a snapshot store keeps about a template a node built, so every node
@@ -2674,9 +2691,13 @@ async fn build_template_route(
     }
     let building = Arc::clone(&state);
     let (task_name, image) = (name.clone(), req.image.clone());
+    let credentials = match (req.username, req.password) {
+        (Some(username), Some(password)) => Some(oci::Credentials { username, password }),
+        _ => None,
+    };
     tokio::spawn(async move {
         let started = std::time::Instant::now();
-        let outcome = build_from_image(&building, &task_name, &image).await;
+        let outcome = build_from_image(&building, &task_name, &image, credentials).await;
         let mut builds = building.builds.lock();
         match outcome {
             Ok(()) => {
@@ -2708,10 +2729,15 @@ fn valid_template_name(name: &str) -> bool {
 }
 
 /// Pull `image`, write its initramfs, snapshot it, and offer it.
-async fn build_from_image(state: &Arc<AppState>, name: &str, image: &str) -> Result<(), String> {
+async fn build_from_image(
+    state: &Arc<AppState>,
+    name: &str,
+    image: &str,
+    credentials: Option<oci::Credentials>,
+) -> Result<(), String> {
     let kit_dir = state.opts.guest_kit.clone().ok_or("no --guest-kit")?;
     let kit = initramfs::GuestKit::check(&kit_dir)?;
-    let pulled = oci::pull(&state.http, image).await?;
+    let pulled = oci::pull(&state.http, image, credentials).await?;
     let digest = pulled.digest.clone();
     let bytes = tokio::task::spawn_blocking(move || initramfs::build(&pulled, &kit))
         .await
@@ -2769,10 +2795,18 @@ async fn offer(state: &AppState, name: &str, initramfs: &str) -> Result<(), Stri
         .initrds
         .write()
         .insert(name.to_string(), initramfs.to_string());
-    if let Some(node) = &state.node {
-        node.set_templates(state.initrds.read().keys().cloned().collect());
-    }
+    advertise_templates(state);
     Ok(())
+}
+
+/// Tell the cluster every template this node offers: those built, and the
+/// snapshots, which a create names the same way.
+fn advertise_templates(state: &AppState) {
+    if let Some(node) = &state.node {
+        let mut names: Vec<String> = state.initrds.read().keys().cloned().collect();
+        names.extend(state.snapshots.read().keys().cloned());
+        node.set_templates(names);
+    }
 }
 
 /// Offer every template another node built into the shared store that this
@@ -3548,6 +3582,9 @@ async fn main() -> std::process::ExitCode {
         templates: parking_lot::RwLock::new(templates),
         initrds: parking_lot::RwLock::new(initrds),
         builds: Mutex::new(BTreeMap::new()),
+        snapshots: parking_lot::RwLock::new(BTreeMap::new()),
+        step_builds: parking_lot::Mutex::new(HashMap::new()),
+        upload_tokens: Mutex::new(HashMap::new()),
         http: reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
             .build()
@@ -3569,6 +3606,7 @@ async fn main() -> std::process::ExitCode {
     }
     tokio::spawn(expire(Arc::clone(&state)));
     tokio::spawn(adopt_built(Arc::clone(&state)));
+    tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
     //
@@ -3679,6 +3717,20 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
+        .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
+        .route("/snapshots", get(snapshots::list))
+        .route("/templates/{templateID}", axum::routing::delete(snapshots::delete))
+        .route("/v3/templates", post(builds::request))
+        .route("/templates/{templateID}/files/{hash}", get(builds::file_link))
+        .route(
+            "/v2/templates/{templateID}/builds/{buildID}",
+            post(builds::start),
+        )
+        .route(
+            "/templates/{templateID}/builds/{buildID}/status",
+            get(builds::status),
+        )
+        .route("/templates/aliases/{alias}", get(builds::alias))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
         .route(
             "/sandboxes/{sandboxID}",
@@ -3694,6 +3746,12 @@ async fn main() -> std::process::ExitCode {
             require_cluster_token,
         ))
         .route("/metrics", get(node_metrics))
+        // No API key: the SDK sends none with an upload. The URL's token,
+        // from the authenticated `GET` of the same path, stands in.
+        .route(
+            "/templates/{templateID}/files/{hash}",
+            put(builds::upload),
+        )
         // Public: a verifier of a sandbox's token fetches these. In a
         // cluster the control planes serve the same, for every node.
         .route("/.well-known/jwks.json", get(node_jwks))
