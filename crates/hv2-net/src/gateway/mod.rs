@@ -320,6 +320,12 @@ impl GatewayHandle {
         self.0.policy.read().clone()
     }
 
+    /// What allowed connections are tunnelled through, if anything.
+    #[must_use]
+    pub fn egress_proxy(&self) -> Option<socks::Socks5Proxy> {
+        self.0.egress_proxy.read().clone()
+    }
+
     /// The most recent decisions, oldest first.
     #[must_use]
     pub fn decisions(&self) -> Vec<Decision> {

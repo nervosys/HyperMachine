@@ -54,6 +54,20 @@
 //! so a node's port is not a way around the control plane's API key. See
 //! `hv2_cluster`.
 //!
+//! # Pausing, resuming, forking
+//!
+//! E2B's lifecycle API, on sandboxes restored from the template: `pause`
+//! writes a sandbox to disk as only the pages it changed since its restore
+//! and releases its VM; `connect` (or `resume`) brings it back under the same
+//! ID and token; `lifecycle.on_timeout = "pause"` pauses at the timeout
+//! instead of killing; `auto_resume` lets a request through the proxy resume
+//! it; and `fork` checkpoints a running sandbox in place and starts copies of
+//! it. With `--evict-idle-after`, a full node pauses its longest-idle
+//! `auto_resume` sandbox to make room, and parks requests for a slot rather
+//! than refusing them -- many more sandboxes than VMs, the way Agent
+//! Substrate multiplexes actors onto workers. Paused sandboxes live on this
+//! node's disk, over this node's template, and end with the process.
+//!
 //! # Running it
 //!
 //! ```text
@@ -175,6 +189,15 @@ struct Options {
     node_ttl: Duration,
     /// Boot every sandbox instead of restoring it from a template.
     no_template: bool,
+    /// Prefault a restored guest's working set. Off by default: it halves
+    /// the page faults and exits a restore takes, and did not change create
+    /// latency measurably on the nested-KVM host it was tried on, where it
+    /// also costs a probe restore at startup and ~3 ms of each launch. Kept,
+    /// and opt-in, for a bare-metal host to measure.
+    prefault: bool,
+    /// When full, pause a sandbox that resumes on traffic and has been idle
+    /// this long, to make room.
+    evict_idle_after: Option<Duration>,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -210,6 +233,8 @@ fn parse_options() -> Result<Options, String> {
             .filter(|t| !t.is_empty()),
         node_ttl: Duration::from_secs(9),
         no_template: false,
+        prefault: false,
+        evict_idle_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -232,6 +257,7 @@ fn parse_options() -> Result<Options, String> {
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--network" => opts.network = true,
             "--no-template" => opts.no_template = true,
+            "--prefault" => opts.prefault = true,
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -246,6 +272,11 @@ fn parse_options() -> Result<Options, String> {
                     Duration::from_secs(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
             }
             "--allow-private-egress-proxy" => opts.allow_private_egress_proxy = true,
+            "--evict-idle-after" => {
+                opts.evict_idle_after = Some(Duration::from_secs(
+                    value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+                ));
+            }
             "--egress-default" => {
                 opts.egress_default = match value(&mut i)?.as_str() {
                     "deny" => Verdict::Deny,
@@ -256,7 +287,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] \
+                     [--capacity N] [--no-template] [--prefault] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -281,6 +312,14 @@ fn parse_options() -> Result<Options, String> {
 struct LiveSandbox {
     vm: Arc<AgentVM>,
     process_shutdown: tokio::sync::oneshot::Sender<()>,
+    /// Where that listener is, so a failed pause can route to it again.
+    process_addr: std::net::SocketAddr,
+    /// Its share of capacity, given back when it pauses or ends.
+    _slot: Slot,
+    /// What its timeout does, and whether traffic resumes it.
+    lifecycle: Lifecycle,
+    /// Requests in flight to it through the proxy, and when it was last used.
+    activity: Arc<Activity>,
     /// What `POST /sandboxes` answered with.
     ///
     /// Kept so `POST /sandboxes/{id}/connect` can answer with exactly the
@@ -312,15 +351,23 @@ struct AppState {
     /// task, which only reads it; every write happens here, on create and
     /// destroy, so a name stops resolving the moment its VM goes away.
     routes: Arc<PortMap>,
-    /// Creations in flight. Counted against capacity from the moment one is
-    /// accepted, not from when its VM is up: a boot takes most of a second,
-    /// and without this a burst of creates all see room for themselves.
-    booting: Mutex<u32>,
+    /// Capacity, as permits: one held by every running sandbox and every
+    /// one being brought up. Held from the moment a create is accepted, not
+    /// from when its VM is up, or a burst of creates all see room for
+    /// themselves. A semaphore because its waiters are served in order: a
+    /// request parked for a slot is not overtaken, again and again, by
+    /// creates that arrived after it.
+    slots: Arc<tokio::sync::Semaphore>,
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
     /// What sandboxes are restored from, when not booted.
     template: Option<Template>,
     metrics: NodeMetrics,
+    /// Sandboxes suspended to disk, under `suspend_dir`.
+    paused: Mutex<HashMap<String, PausedSandbox>>,
+    suspend_dir: std::path::PathBuf,
+    /// One lock per sandbox that has paused, resumed or forked.
+    transitions: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 /// What `/metrics` reports beyond live gauges.
@@ -333,6 +380,15 @@ struct NodeMetrics {
     create_latency: Histogram,
     ended_deleted: Counter,
     ended_expired: Counter,
+    pauses: Counter,
+    resumes: Counter,
+    auto_resumes: Counter,
+    evictions: Counter,
+    forks_ok: Counter,
+    forks_failed: Counter,
+    pause_latency: Histogram,
+    resume_latency: Histogram,
+    checkpoint_latency: Histogram,
 }
 
 impl AppState {
@@ -342,15 +398,9 @@ impl AppState {
 }
 
 /// A slot against capacity, given back when dropped -- so a create that fails
-/// halfway, by error or by panic, does not leak one.
-struct Reservation<'a>(&'a Mutex<u32>);
-
-impl Drop for Reservation<'_> {
-    fn drop(&mut self) {
-        let mut booting = self.0.lock();
-        *booting = booting.saturating_sub(1);
-    }
-}
+/// halfway, by error or by panic, does not leak one, and a sandbox that
+/// pauses or ends gives its back without being told to.
+type Slot = tokio::sync::OwnedSemaphorePermit;
 
 // ── E2B wire shapes -- field names taken directly from e2b-dev/E2B's
 // spec/openapi.yml (`NewSandbox`, `Sandbox` schemas), not invented. ──
@@ -367,6 +417,19 @@ struct NewSandbox {
     /// Snake case in the spec, unlike every other field.
     allow_internet_access: Option<bool>,
     network: Option<SandboxNetworkConfig>,
+    #[serde(rename = "autoPause")]
+    auto_pause: Option<bool>,
+    #[serde(rename = "autoPauseMemory")]
+    auto_pause_memory: Option<bool>,
+    #[serde(rename = "autoResume")]
+    auto_resume: Option<AutoResume>,
+}
+
+/// `SandboxAutoResumeConfig`.
+#[derive(Debug, Deserialize)]
+struct AutoResume {
+    #[serde(default)]
+    enabled: bool,
 }
 
 /// The longest a sandbox may be asked to live, in seconds: E2B's own limit
@@ -529,11 +592,13 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
 #[derive(Debug, Deserialize)]
 struct ConnectSandbox {
     timeout: Option<u64>,
-    #[allow(dead_code)]
-    memory: Option<u64>,
+    /// `false` asks to resume from disk alone, dropping memory -- which here
+    /// is the filesystem too, so it is refused rather than approximated.
+    memory: Option<bool>,
 }
 
-/// `POST /sandboxes/{id}/connect` -- attach to a sandbox that already exists.
+/// `POST /sandboxes/{id}/connect` -- attach to a sandbox that already exists,
+/// resuming it first if it is paused.
 ///
 /// The SDK calls this before anything else, so without it every
 /// `Sandbox.connect()` fails, and the failure surfaced as a JSON parse error
@@ -545,9 +610,25 @@ async fn connect_sandbox(
 ) -> Response {
     // `Option` means "the SDK sent nothing", not "anything goes": a
     // malformed body is still refused by the extractor.
-    let extend_to = body
-        .and_then(|Json(b)| b.timeout)
-        .map(|secs| now_ms() + secs.min(MAX_TIMEOUT_SECS) * 1000);
+    let body = body.map(|Json(b)| b);
+    if body.as_ref().and_then(|b| b.memory) == Some(false) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "memory=false (resume from disk only) is not available here: a sandbox's \
+             filesystem lives in its memory",
+        );
+    }
+    let requested = body.and_then(|b| b.timeout);
+    // Paused: resumed, and answered 201 rather than 200, as E2B does.
+    // `Ok(None)` means it was running after all, and falls through.
+    if state.paused.lock().contains_key(&sandbox_id) {
+        match resume_sandbox(&state, &sandbox_id, Some(requested.unwrap_or(300)), None).await {
+            Ok(Some(descriptor)) => return (StatusCode::CREATED, Json(descriptor)).into_response(),
+            Ok(None) => {}
+            Err((status, e)) => return api_error(status, e),
+        }
+    }
+    let extend_to = requested.map(|secs| now_ms() + secs.min(MAX_TIMEOUT_SECS) * 1000);
     let found = {
         let mut sandboxes = state.sandboxes.lock();
         sandboxes.get_mut(&sandbox_id).map(|live| {
@@ -611,8 +692,8 @@ struct ListQuery {
     state: Option<String>,
 }
 
-/// `GET /sandboxes` and `GET /v2/sandboxes`, for this node alone. Every
-/// sandbox here is running, so a query for only paused ones gets none.
+/// `GET /sandboxes` and `GET /v2/sandboxes`, for this node alone: running
+/// and paused, filtered by `state` and `metadata`.
 async fn list_sandboxes(
     State(state): State<Arc<AppState>>,
     Query(query): Query<ListQuery>,
@@ -622,16 +703,20 @@ async fn list_sandboxes(
         .as_deref()
         .map(parse_metadata_query)
         .unwrap_or_default();
-    let wants_running = query
-        .state
-        .as_deref()
-        .is_none_or(|s| s.split(',').any(|s| s == "running"));
+    let wants = |record: &SandboxRecord| {
+        query
+            .state
+            .as_deref()
+            .is_none_or(|s| s.split(',').any(|s| s == record.state()))
+            && metadata_matches(record, &wanted)
+    };
     let mut records: Vec<SandboxRecord> = state
         .sandboxes
         .lock()
         .values()
         .map(|live| live.record.clone())
-        .filter(|r| wants_running && metadata_matches(r, &wanted))
+        .chain(state.paused.lock().values().map(|p| p.record.clone()))
+        .filter(|r| wants(r))
         .collect();
     records.sort_by(|a, b| (a.started_at_ms, &a.sandbox_id).cmp(&(b.started_at_ms, &b.sandbox_id)));
     Json(
@@ -648,11 +733,18 @@ async fn sandbox_detail(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
 ) -> Response {
-    let record = state
+    let running = state
         .sandboxes
         .lock()
         .get(&sandbox_id)
         .map(|live| live.record.clone());
+    let record = running.or_else(|| {
+        state
+            .paused
+            .lock()
+            .get(&sandbox_id)
+            .map(|p| p.record.clone())
+    });
     match record {
         Some(record) => Json(record.detail()).into_response(),
         None => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
@@ -735,10 +827,14 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
         f64::from(state.running()),
     );
     e.gauge(
-        "hv2_node_sandboxes_booting",
-        "Creations in flight.",
-        f64::from(*state.booting.lock()),
+        "hv2_node_sandboxes_paused",
+        "Sandboxes suspended to this node's disk.",
+        state.paused.lock().len() as f64,
     );
+    e.gauge("hv2_node_sandboxes_booting", "Creations in flight.", {
+        let held = state.opts.capacity as usize - state.slots.available_permits();
+        held.saturating_sub(state.running() as usize) as f64
+    });
     e.gauge(
         "hv2_node_capacity",
         "Sandboxes this node will run at once.",
@@ -774,6 +870,34 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
             ("expired", m.ended_expired.get()),
         ],
     );
+    e.counters(
+        "hv2_node_transitions_total",
+        "Pauses, resumes (and those a request triggered), evictions to make room, and forks.",
+        "kind",
+        &[
+            ("pause", m.pauses.get()),
+            ("resume", m.resumes.get()),
+            ("auto_resume", m.auto_resumes.get()),
+            ("evict", m.evictions.get()),
+            ("fork_ok", m.forks_ok.get()),
+            ("fork_failed", m.forks_failed.get()),
+        ],
+    );
+    e.histogram(
+        "hv2_node_pause_seconds",
+        "Time to suspend a running sandbox to disk.",
+        &m.pause_latency,
+    );
+    e.histogram(
+        "hv2_node_resume_seconds",
+        "Time from a resume request to a sandbox whose agent answers.",
+        &m.resume_latency,
+    );
+    e.histogram(
+        "hv2_node_checkpoint_seconds",
+        "Time a fork's source is paused to be checkpointed.",
+        &m.checkpoint_latency,
+    );
     (
         [("content-type", hv2_cluster::metrics::CONTENT_TYPE)],
         e.finish(),
@@ -781,74 +905,113 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
         .into_response()
 }
 
-async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
-    // Room first, before anything is parsed or booted: a full node should
-    // answer at once so a control plane can try the next one.
-    let _slot = {
-        let mut booting = state.booting.lock();
-        let running = state.running();
-        if running + *booting >= state.opts.capacity {
-            return api_error(
-                StatusCode::SERVICE_UNAVAILABLE,
-                format!(
-                    "this node is full: {running} running and {} booting of {}",
-                    *booting, state.opts.capacity
-                ),
-            );
+/// A slot against capacity, made or waited for.
+///
+/// Queued in order behind any request already waiting for one. With
+/// `--evict-idle-after`, a full node makes room by pausing the sandbox idle
+/// longest among those that resume themselves on traffic -- nothing is lost,
+/// since the next request to it brings it back. With `park`, a request that
+/// still finds no room waits up to that long rather than being refused: what
+/// a request to a paused sandbox wants, since failing it would mean the
+/// caller retries anyway.
+async fn reserve(state: &Arc<AppState>, park: Option<Duration>) -> Result<Slot, String> {
+    let deadline = park.map(|p| tokio::time::Instant::now() + p);
+    // In the queue from here on, so a slot freed at any point below goes to
+    // whoever asked first.
+    let mut acquire = Box::pin(Arc::clone(&state.slots).acquire_owned());
+    loop {
+        let now = tokio::time::Instant::now();
+        // Without a deadline, one look. With one, until it -- or, with
+        // eviction on, briefly: a request ending makes a sandbox evictable
+        // without freeing a slot, and nothing announces that.
+        let wait = match deadline {
+            None => Duration::ZERO,
+            Some(deadline) => {
+                let left = deadline.saturating_duration_since(now);
+                match state.opts.evict_idle_after {
+                    Some(_) => left.min(Duration::from_millis(25)),
+                    None => left,
+                }
+            }
+        };
+        if let Ok(permit) = tokio::time::timeout(wait, &mut acquire).await {
+            tracing::debug!("slot granted after {:?}", now.elapsed());
+            return permit.map_err(|_| "this node is shutting down".to_string());
         }
-        *booting += 1;
-        Reservation(&state.booting)
-    };
-    let lifetime_secs = req.timeout.unwrap_or(default_timeout).min(MAX_TIMEOUT_SECS);
-    let started_at_ms = now_ms();
-
-    // Decided before anything boots, so a policy that does not parse costs a
-    // 400 and not a VM.
-    let wants_network = req.allow_internet_access == Some(true) || req.network.is_some();
-    let policy = if state.opts.network {
-        match policy_from(
-            req.allow_internet_access,
-            req.network.as_ref(),
-            state.opts.egress_default,
-        ) {
-            Ok(policy) => Some(policy),
-            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        if let Some(victim) = idle_victim(state) {
+            tracing::info!("node full: pausing {victim}, idle longest, to make room");
+            if pause_sandbox(state, &victim, true).await.is_ok() {
+                state.metrics.evictions.inc();
+                continue;
+            }
         }
-    } else if wants_network {
-        return api_error(
-            StatusCode::BAD_REQUEST,
-            "this server gives sandboxes no network interface (start it with --network)",
-        );
-    } else {
-        None
-    };
-    let egress_proxy = if policy.is_some() {
-        match egress_proxy_from(&state.opts, req.network.as_ref()).await {
-            Ok(proxy) => proxy,
-            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        if deadline.is_none_or(|deadline| tokio::time::Instant::now() >= deadline) {
+            let held =
+                (state.opts.capacity as usize).saturating_sub(state.slots.available_permits());
+            let running = state.running() as usize;
+            return Err(format!(
+                "this node is full: {running} running and {} starting, of {}",
+                held.saturating_sub(running),
+                state.opts.capacity
+            ));
         }
-    } else {
-        None
-    };
-    let gateway_config = GatewayConfig::default();
+    }
+}
 
-    let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
-    // A hyphen, not an underscore. This id becomes a DNS label -- the SDK
-    // addresses a sandbox as `{port}-{sandboxID}.{domain}` -- and an
-    // underscore is not legal in one. With `sbx_...` the SDK built a name its
-    // own resolver then refused: "Label contains invalid characters". The
-    // proxy splits on the *first* hyphen, so further hyphens are harmless.
-    // Random, not a clock: in a cluster two nodes mint IDs into one
-    // namespace, and two creates in the same nanosecond on two hosts is not
-    // a case to rule out by hoping.
-    let sandbox_id = format!("sbx-{}", &uuid::Uuid::new_v4().simple().to_string()[..20]);
+/// How long a create waits for room on a full node. Not at all, normally: a
+/// control plane reads 503 as "try another node", which is faster than any
+/// wait. With eviction on, a full node is expected to make room, so a create
+/// is parked for up to the ready timeout rather than refused because every
+/// running sandbox happened to be mid-request.
+fn create_park(state: &AppState) -> Option<Duration> {
+    state
+        .opts
+        .evict_idle_after
+        .map(|_| state.opts.ready_timeout)
+}
 
-    // From the template when there is one: every sandbox is then the same
-    // guest, restored, with the same CID and MAC it was snapshotted with --
-    // which is fine, because each has its own vsock device and its own
-    // gateway, and nothing outside this VM ever sees either.
-    let template = state.template.as_ref();
-    let (cid, mac) = match template {
+/// The running sandbox idle longest that may be paused to make room: one
+/// that resumes itself on traffic, idle at least `--evict-idle-after`.
+fn idle_victim(state: &AppState) -> Option<String> {
+    let idle_after = state.opts.evict_idle_after?;
+    let cutoff = now_ms().saturating_sub(u64::try_from(idle_after.as_millis()).unwrap_or(u64::MAX));
+    state
+        .sandboxes
+        .lock()
+        .iter()
+        .filter(|(_, live)| {
+            live.lifecycle.auto_resume
+                && !live.activity.busy()
+                && live.activity.last_active_ms() <= cutoff
+        })
+        .min_by_key(|(_, live)| live.activity.last_active_ms())
+        .map(|(id, _)| id.clone())
+}
+
+/// A sandbox's VM up and wired: what create, resume and fork all end with.
+struct Running {
+    vm: Arc<AgentVM>,
+    network: Option<LiveNetwork>,
+    process_shutdown: tokio::sync::oneshot::Sender<()>,
+    process_addr: std::net::SocketAddr,
+}
+
+/// Bring up a sandbox's VM: from `snapshot` when given, else from the
+/// template, else by booting; then its network and its envd listener.
+async fn bring_up(
+    state: &AppState,
+    sandbox_id: &str,
+    snapshot: Option<&std::path::Path>,
+    network: Option<NetworkSpec>,
+    access_token: &str,
+) -> Result<Running, (StatusCode, String)> {
+    let internal = |e: String| (StatusCode::INTERNAL_SERVER_ERROR, e);
+    // From a snapshot, every sandbox is the template's guest, restored, with
+    // the same CID and MAC it was snapshotted with -- which is fine, because
+    // each has its own vsock device and its own gateway, and nothing outside
+    // this VM ever sees either.
+    let snapshot = snapshot.or(state.template.as_ref().map(|t| t.snapshot.as_path()));
+    let (cid, mac) = match snapshot {
         Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
         None => {
             let mut next = state.next_cid.lock();
@@ -859,64 +1022,64 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         }
     };
 
-    let (vm, nic) = match new_vm(
+    let t0 = std::time::Instant::now();
+    let (vm, nic) = new_vm(
         &state.opts,
-        &sandbox_id,
+        sandbox_id,
         cid,
-        policy.is_some().then_some(mac),
+        network.is_some().then_some(mac),
     )
     .await
-    {
-        Ok(built) => built,
-        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
-    };
-    let launched = match template {
-        Some(template) => vm.launch_from_snapshot(&template.snapshot).await,
+    .map_err(internal)?;
+    let built = t0.elapsed();
+    let launched = match snapshot {
+        Some(snapshot) => {
+            let working_set = state
+                .template
+                .as_ref()
+                .map_or(&[][..], |t| t.working_set.as_slice());
+            vm.launch_from_snapshot_prefaulted(snapshot, working_set)
+                .await
+        }
         None => vm.launch().await,
     };
     if let Err(e) = launched {
         let _ = vm.stop().await;
-        return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("launching: {e}"));
+        return Err(internal(format!("launching: {e}")));
     }
+    let launched_at = t0.elapsed();
     // A caller creating a sandbox waits for one it can actually use --
     // returning before the guest agent answers would hand back a
     // sandboxID that fails the first real request against it.
-    if let Err(e) = vm.ping_guest(state.opts.ready_timeout).await {
+    //
+    // A restored guest has its snapshot's clock and RNG, which the agent
+    // resets in one round trip -- and that round trip is also the proof it
+    // answers, so a restore makes one call, not a ping and then another.
+    // Half of what a create waited on was that second trip. Refused rather
+    // than served if the reseed fails: a sandbox sharing random state with
+    // its siblings -- or with the fork it came from -- is not one to hand out.
+    let ready = match snapshot {
+        Some(_) => vm.after_restore(state.opts.ready_timeout).await,
+        None => vm.ping_guest(state.opts.ready_timeout).await.map(|_| ()),
+    };
+    if let Err(e) = ready {
         let _ = vm.stop().await;
-        return api_error(
+        return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             format!("guest never became ready: {e}"),
-        );
+        ));
     }
-    // A restored guest has its template's clock and RNG. Refused rather than
-    // served if the reseed fails: a sandbox sharing random state with its
-    // siblings is not one to hand out.
-    if template.is_some() {
-        if let Err(e) = vm.after_restore(state.opts.ready_timeout).await {
-            let _ = vm.stop().await;
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
-        }
-    }
+    let answered = t0.elapsed();
 
     let vm = Arc::new(vm);
 
-    let network = match (policy, nic) {
-        (Some(policy), Some(device)) => {
-            match start_network(
-                &state,
-                &vm,
-                device,
-                policy,
-                egress_proxy,
-                gateway_config,
-                template.is_none(),
-            )
-            .await
-            {
+    let network = match (network, nic) {
+        (Some(spec), Some(device)) => {
+            match start_network(state, &vm, device, spec, snapshot.is_none()).await {
                 Ok(network) => Some(network),
                 Err(e) => {
                     let _ = vm.stop().await;
-                    return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+                    return Err(internal(e));
                 }
             }
         }
@@ -935,30 +1098,22 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         Ok(listener) => listener,
         Err(e) => {
             let _ = vm.stop().await;
-            return api_error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("binding the sandbox's envd listener: {e}"),
-            );
+            return Err(internal(format!(
+                "binding the sandbox's envd listener: {e}"
+            )));
         }
     };
-    let local_process_addr = match listener.local_addr() {
+    let process_addr = match listener.local_addr() {
         Ok(addr) => addr,
         Err(e) => {
             let _ = vm.stop().await;
-            return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+            return Err(internal(e.to_string()));
         }
     };
-    let process_port = local_process_addr.port();
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-    // 244 bits from the OS RNG, via two v4 UUIDs.
-    let access_token = format!(
-        "{}{}",
-        uuid::Uuid::new_v4().simple(),
-        uuid::Uuid::new_v4().simple()
-    );
-    let listener_token = Some(access_token.clone());
+    let (process_shutdown, shutdown_rx) = tokio::sync::oneshot::channel();
+    let listener_token = Some(access_token.to_string());
     let process_vm = Arc::clone(&vm);
-    let process_sandbox_id = sandbox_id.clone();
+    let process_sandbox_id = sandbox_id.to_string();
     tokio::spawn(async move {
         let served = hv2_api::connect::serve_on(
             listener,
@@ -973,11 +1128,145 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         }
     });
 
+    tracing::debug!(
+        "{sandbox_id} up in {:?}: build {built:?}, launch {:?}, agent answering {:?},          network and envd {:?}",
+        t0.elapsed(),
+        launched_at - built,
+        answered - launched_at,
+        t0.elapsed() - answered,
+    );
+    Ok(Running {
+        vm,
+        network,
+        process_shutdown,
+        process_addr,
+    })
+}
+
+/// 244 bits from the OS RNG, via two v4 UUIDs.
+fn new_access_token() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
+}
+
+/// A new sandbox ID.
+///
+/// A hyphen, not an underscore. This id becomes a DNS label -- the SDK
+/// addresses a sandbox as `{port}-{sandboxID}.{domain}` -- and an underscore
+/// is not legal in one. With `sbx_...` the SDK built a name its own resolver
+/// then refused: "Label contains invalid characters". The proxy splits on the
+/// *first* hyphen, so further hyphens are harmless. Random, not a clock: in a
+/// cluster two nodes mint IDs into one namespace, and two creates in the same
+/// nanosecond on two hosts is not a case to rule out by hoping.
+fn new_sandbox_id() -> String {
+    format!("sbx-{}", &uuid::Uuid::new_v4().simple().to_string()[..20])
+}
+
+/// Make a running sandbox reachable and known: routed, listed, recorded.
+async fn register(
+    state: &AppState,
+    slot: Slot,
+    running: Running,
+    descriptor: SandboxResponse,
+    record: SandboxRecord,
+    lifecycle: Lifecycle,
+    event: Option<&str>,
+) {
+    let sandbox_id = record.sandbox_id.clone();
     // Resolvable by name before the sandbox is announced, so a client that
     // uses the response immediately does not race the registration.
     state
         .routes
-        .insert(&sandbox_id, ENVD_PORT, local_process_addr);
+        .insert(&sandbox_id, ENVD_PORT, running.process_addr);
+    let count = {
+        let mut sandboxes = state.sandboxes.lock();
+        sandboxes.insert(
+            sandbox_id.clone(),
+            LiveSandbox {
+                vm: running.vm,
+                process_shutdown: running.process_shutdown,
+                process_addr: running.process_addr,
+                _slot: slot,
+                descriptor,
+                network: running.network,
+                record: record.clone(),
+                lifecycle,
+                activity: Activity::new(),
+            },
+        );
+        u32::try_from(sandboxes.len()).unwrap_or(u32::MAX)
+    };
+    // Recorded before answering, so a control plane that routes the next
+    // call by the store finds it.
+    if let Some(node) = &state.node {
+        let recorded = match event {
+            None => node.created(&record, count).await,
+            Some(kind) => node.transitioned(&record, kind, count).await,
+        };
+        if let Err(e) = recorded {
+            tracing::warn!("recording {sandbox_id} in the cluster store: {e}");
+        }
+    }
+}
+
+async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+    // Room first, before anything is parsed or booted: a full node should
+    // answer at once so a control plane can try the next one.
+    let slot = match reserve(&state, create_park(&state)).await {
+        Ok(slot) => slot,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    let lifetime_secs = req.timeout.unwrap_or(default_timeout).min(MAX_TIMEOUT_SECS);
+    let started_at_ms = now_ms();
+
+    let lifecycle = match Lifecycle::from_request(&req, lifetime_secs) {
+        Ok(lifecycle) => lifecycle,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    if lifecycle.pause_on_timeout && state.template.is_none() {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "autoPause needs sandboxes restored from a template, and this node boots them \
+             (--no-template, or the template failed to build)",
+        );
+    }
+
+    // Decided before anything boots, so a policy that does not parse costs a
+    // 400 and not a VM.
+    let wants_network = req.allow_internet_access == Some(true) || req.network.is_some();
+    let network = if state.opts.network {
+        let policy = match policy_from(
+            req.allow_internet_access,
+            req.network.as_ref(),
+            state.opts.egress_default,
+        ) {
+            Ok(policy) => policy,
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        };
+        let proxy = match egress_proxy_from(&state.opts, req.network.as_ref()).await {
+            Ok(proxy) => proxy,
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        };
+        Some(NetworkSpec { policy, proxy })
+    } else if wants_network {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "this server gives sandboxes no network interface (start it with --network)",
+        );
+    } else {
+        None
+    };
+
+    let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
+    let sandbox_id = new_sandbox_id();
+    let access_token = new_access_token();
+    let running = match bring_up(&state, &sandbox_id, None, network, &access_token).await {
+        Ok(running) => running,
+        Err((status, e)) => return api_error(status, e),
+    };
 
     // Built once and kept, so `POST /sandboxes/{id}/connect` answers with the
     // same description rather than a second one assembled from parts.
@@ -986,7 +1275,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         sandbox_id: sandbox_id.clone(),
         client_id: sandbox_id.clone(),
         envd_version: ENVD_VERSION.to_string(),
-        process_port,
+        process_port: running.process_addr.port(),
         envd_host: format!("{ENVD_PORT}-{sandbox_id}"),
         proxy_port: state.opts.proxy_port,
         envd_access_token: access_token,
@@ -1005,31 +1294,599 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         metadata: req.metadata,
         envd_version: ENVD_VERSION.to_string(),
         descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
+        paused: false,
     };
-
-    let running = {
-        let mut sandboxes = state.sandboxes.lock();
-        sandboxes.insert(
-            sandbox_id.clone(),
-            LiveSandbox {
-                vm,
-                process_shutdown: shutdown_tx,
-                descriptor: descriptor.clone(),
-                network,
-                record: record.clone(),
-            },
-        );
-        u32::try_from(sandboxes.len()).unwrap_or(u32::MAX)
-    };
-    // Recorded before answering, so a control plane that routes the next
-    // call by the store finds it.
-    if let Some(node) = &state.node {
-        if let Err(e) = node.created(&record, running).await {
-            tracing::warn!("recording {sandbox_id} in the cluster store: {e}");
-        }
-    }
+    register(
+        &state,
+        slot,
+        running,
+        descriptor.clone(),
+        record,
+        lifecycle,
+        None,
+    )
+    .await;
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
+}
+
+/// What a sandbox does when its time is up, and whether traffic wakes it.
+#[derive(Debug, Clone, Copy, Default)]
+struct Lifecycle {
+    /// Pause rather than end at the timeout (E2B's `autoPause`).
+    pause_on_timeout: bool,
+    /// A paused sandbox resumes when a request arrives for it through the
+    /// proxy (E2B's `autoResume`). Also what makes a running one eligible to
+    /// be paused to make room, since nothing is lost by it.
+    auto_resume: bool,
+    /// The lifetime it was created with, which an automatic resume grants
+    /// again.
+    lifetime_secs: u64,
+}
+
+impl Lifecycle {
+    fn from_request(req: &NewSandbox, lifetime_secs: u64) -> Result<Self, String> {
+        // A filesystem-only pause keeps the disk and drops memory. The root
+        // filesystem here *is* memory -- an initramfs -- so there is nothing
+        // to keep, and the spec says to refuse rather than silently take a
+        // memory snapshot instead.
+        if req.auto_pause_memory == Some(false) {
+            return Err(
+                "autoPauseMemory=false (a filesystem-only pause) is not available here: a \
+                 sandbox's filesystem lives in its memory, so a pause always keeps both"
+                    .into(),
+            );
+        }
+        Ok(Self {
+            pause_on_timeout: req.auto_pause.unwrap_or(false),
+            auto_resume: req.auto_resume.as_ref().is_some_and(|a| a.enabled),
+            lifetime_secs,
+        })
+    }
+}
+
+/// A sandbox's network, as decided at creation or last replaced: enough to
+/// give a resumed or forked copy the same one.
+#[derive(Clone)]
+struct NetworkSpec {
+    policy: NetworkPolicy,
+    proxy: Option<Socks5Proxy>,
+}
+
+/// A sandbox suspended to this node's disk.
+struct PausedSandbox {
+    snapshot: std::path::PathBuf,
+    descriptor: SandboxResponse,
+    record: SandboxRecord,
+    lifecycle: Lifecycle,
+    network: Option<NetworkSpec>,
+}
+
+/// The lock a sandbox's pause, resume and fork take, so two of them never
+/// act on one sandbox at once.
+fn transition_lock(state: &AppState, sandbox_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+    Arc::clone(
+        state
+            .transitions
+            .lock()
+            .entry(sandbox_id.to_string())
+            .or_default(),
+    )
+}
+
+/// Suspend a running sandbox to disk: its memory goes back to the host, its
+/// slot to the node, and its ID, token and metadata stay.
+async fn pause_sandbox(
+    state: &AppState,
+    sandbox_id: &str,
+    evicting: bool,
+) -> Result<(), (StatusCode, String)> {
+    let lock = transition_lock(state, sandbox_id);
+    let _held = lock.lock().await;
+    if state.paused.lock().contains_key(sandbox_id) {
+        return Err((
+            StatusCode::CONFLICT,
+            format!("sandbox {sandbox_id} is already paused"),
+        ));
+    }
+    if state.template.is_none() {
+        return Err((
+            StatusCode::CONFLICT,
+            "pausing needs sandboxes restored from a template, and this node boots them".into(),
+        ));
+    }
+    let live = {
+        let mut sandboxes = state.sandboxes.lock();
+        match sandboxes.get(sandbox_id) {
+            None => return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))),
+            // Chosen as idle, and a request arrived since: it is not idle,
+            // and making room is not worth cutting that request off. Asked
+            // for by name, a pause goes ahead regardless, as E2B's does.
+            Some(live) if evicting && live.activity.busy() => {
+                return Err((
+                    StatusCode::CONFLICT,
+                    format!("sandbox {sandbox_id} has a request in flight"),
+                ))
+            }
+            Some(_) => {}
+        }
+        sandboxes
+            .remove(sandbox_id)
+            .expect("present under this lock")
+    };
+    let started = std::time::Instant::now();
+    // Unroutable first: a request arriving now should resume it, not reach a
+    // VM that is stopping.
+    state.routes.remove_sandbox(sandbox_id);
+    let snapshot = state.suspend_dir.join(format!("{sandbox_id}.snap"));
+    let _ = std::fs::remove_file(&snapshot);
+    if let Err(e) = live.vm.suspend_to(&snapshot).await {
+        // Still running -- `suspend_to` resumes it on failure -- so put it
+        // back as it was.
+        let _ = std::fs::remove_file(&snapshot);
+        state
+            .routes
+            .insert(sandbox_id, ENVD_PORT, live.process_addr);
+        state.sandboxes.lock().insert(sandbox_id.to_string(), live);
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("pausing {sandbox_id}: {e}"),
+        ));
+    }
+    let _ = live.process_shutdown.send(());
+    let network = live.network.map(|network| {
+        network.bridge.abort();
+        NetworkSpec {
+            policy: network.gateway.policy(),
+            proxy: network.gateway.egress_proxy(),
+        }
+    });
+    let mut record = live.record;
+    record.paused = true;
+    state.paused.lock().insert(
+        sandbox_id.to_string(),
+        PausedSandbox {
+            snapshot,
+            descriptor: live.descriptor,
+            record: record.clone(),
+            lifecycle: live.lifecycle,
+            network,
+        },
+    );
+    state.metrics.pauses.inc();
+    state.metrics.pause_latency.observe(started.elapsed());
+    if let Some(node) = &state.node {
+        if let Err(e) = node
+            .transitioned(&record, "sandbox-paused", state.running())
+            .await
+        {
+            tracing::warn!("recording {sandbox_id}'s pause: {e}");
+        }
+    }
+    Ok(())
+}
+
+/// Bring a paused sandbox back, under the same ID and token, to live
+/// `lifetime_secs` from now. `Ok(None)` when it was running already.
+async fn resume_sandbox(
+    state: &Arc<AppState>,
+    sandbox_id: &str,
+    lifetime_secs: Option<u64>,
+    park: Option<Duration>,
+) -> Result<Option<SandboxResponse>, (StatusCode, String)> {
+    let lock = transition_lock(state, sandbox_id);
+    let _held = lock.lock().await;
+    if state.sandboxes.lock().contains_key(sandbox_id) {
+        return Ok(None);
+    }
+    if !state.paused.lock().contains_key(sandbox_id) {
+        return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")));
+    }
+    let started = std::time::Instant::now();
+    tracing::debug!("resume {sandbox_id}: waiting for a slot");
+    let slot = reserve(state, park)
+        .await
+        .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+    let Some(paused) = state.paused.lock().remove(sandbox_id) else {
+        return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")));
+    };
+    let running = match bring_up(
+        state,
+        sandbox_id,
+        Some(&paused.snapshot),
+        paused.network.clone(),
+        &paused.descriptor.envd_access_token,
+    )
+    .await
+    {
+        Ok(running) => running,
+        Err(e) => {
+            state.paused.lock().insert(sandbox_id.to_string(), paused);
+            return Err(e);
+        }
+    };
+    let _ = std::fs::remove_file(&paused.snapshot);
+
+    let mut descriptor = paused.descriptor;
+    descriptor.process_port = running.process_addr.port();
+    let mut record = paused.record;
+    record.paused = false;
+    let lifetime = lifetime_secs
+        .unwrap_or(paused.lifecycle.lifetime_secs)
+        .min(MAX_TIMEOUT_SECS);
+    record.end_at_ms = now_ms() + lifetime * 1000;
+    record.descriptor = serde_json::to_value(&descriptor).unwrap_or_default();
+    register(
+        state,
+        slot,
+        running,
+        descriptor.clone(),
+        record,
+        paused.lifecycle,
+        Some("sandbox-resumed"),
+    )
+    .await;
+    state.metrics.resumes.inc();
+    state.metrics.resume_latency.observe(started.elapsed());
+    Ok(Some(descriptor))
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct PauseRequest {
+    memory: Option<bool>,
+}
+
+/// `POST /sandboxes/{id}/pause`.
+async fn pause_route(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    body: Option<Json<PauseRequest>>,
+) -> Response {
+    if body.and_then(|Json(b)| b.memory) == Some(false) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "memory=false (a filesystem-only pause) is not available here: a sandbox's \
+             filesystem lives in its memory, so a pause always keeps both",
+        );
+    }
+    match pause_sandbox(&state, &sandbox_id, false).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err((status, e)) => api_error(status, e),
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ResumeRequest {
+    timeout: Option<u64>,
+    memory: Option<bool>,
+}
+
+/// `POST /sandboxes/{id}/resume`: E2B's deprecated route, 15 s by default.
+async fn resume_route(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    body: Option<Json<ResumeRequest>>,
+) -> Response {
+    let body = body.map(|Json(b)| b).unwrap_or_default();
+    if body.memory == Some(false) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            "memory=false (resume from disk only) is not available here",
+        );
+    }
+    match resume_sandbox(&state, &sandbox_id, Some(body.timeout.unwrap_or(15)), None).await {
+        Ok(Some(descriptor)) => (StatusCode::CREATED, Json(descriptor)).into_response(),
+        Ok(None) => api_error(
+            StatusCode::CONFLICT,
+            format!("sandbox {sandbox_id} is already running"),
+        ),
+        Err((status, e)) => api_error(status, e),
+    }
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct ForkRequest {
+    timeout: Option<u64>,
+    count: Option<u32>,
+}
+
+/// `POST /sandboxes/{id}/fork`: checkpoint a running sandbox in place and
+/// start `count` new ones from that checkpoint.
+///
+/// The checkpoint is a layered snapshot -- only what the source changed since
+/// its template -- so its cost does not grow with the guest's RAM, and every
+/// fork maps the template and copies in just those pages. Each fork gets its
+/// own ID, token, network gateway (with the source's policy) and a reseeded
+/// RNG: a fork that drew the same random numbers as its siblings would be a
+/// fork of their secrets too.
+async fn fork_route(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    body: Option<Json<ForkRequest>>,
+) -> Response {
+    let body = body.map(|Json(b)| b).unwrap_or_default();
+    let count = body.count.unwrap_or(1);
+    if !(1..=100).contains(&count) {
+        return api_error(StatusCode::BAD_REQUEST, "count is between 1 and 100");
+    }
+    let lifetime_secs = body.timeout.unwrap_or(15).min(MAX_TIMEOUT_SECS);
+    if state.template.is_none() {
+        return api_error(
+            StatusCode::CONFLICT,
+            "forking needs sandboxes restored from a template, and this node boots them",
+        );
+    }
+
+    let checkpoint = state.suspend_dir.join(format!(
+        "{sandbox_id}-fork-{}.snap",
+        uuid::Uuid::new_v4().simple()
+    ));
+    let (template_id, metadata, network) = {
+        let lock = transition_lock(&state, &sandbox_id);
+        let _held = lock.lock().await;
+        let source = {
+            let sandboxes = state.sandboxes.lock();
+            sandboxes.get(&sandbox_id).map(|live| {
+                (
+                    Arc::clone(&live.vm),
+                    live.record.template_id.clone(),
+                    live.record.metadata.clone(),
+                    live.network.as_ref().map(|n| NetworkSpec {
+                        policy: n.gateway.policy(),
+                        proxy: n.gateway.egress_proxy(),
+                    }),
+                )
+            })
+        };
+        let Some((vm, template_id, metadata, network)) = source else {
+            return if state.paused.lock().contains_key(&sandbox_id) {
+                api_error(
+                    StatusCode::CONFLICT,
+                    format!("sandbox {sandbox_id} is paused; resume it to fork it"),
+                )
+            } else {
+                api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
+            };
+        };
+        let started = std::time::Instant::now();
+        if let Err(e) = vm.checkpoint_to(&checkpoint).await {
+            let _ = std::fs::remove_file(&checkpoint);
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("checkpointing {sandbox_id}: {e}"),
+            );
+        }
+        state.metrics.checkpoint_latency.observe(started.elapsed());
+        (template_id, metadata, network)
+    };
+
+    // Concurrently: each fork is independent, and they are what a caller
+    // fanning work out to N agents is waiting on.
+    let forks: Vec<_> = (0..count)
+        .map(|_| {
+            let state = Arc::clone(&state);
+            let checkpoint = checkpoint.clone();
+            let template_id = template_id.clone();
+            let metadata = metadata.clone();
+            let network = network.clone();
+            async move {
+                let slot = reserve(&state, create_park(&state))
+                    .await
+                    .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
+                let fork_id = new_sandbox_id();
+                let access_token = new_access_token();
+                let running =
+                    bring_up(&state, &fork_id, Some(&checkpoint), network, &access_token).await?;
+                let started_at_ms = now_ms();
+                let descriptor = SandboxResponse {
+                    template_id: template_id.clone(),
+                    sandbox_id: fork_id.clone(),
+                    client_id: fork_id.clone(),
+                    envd_version: ENVD_VERSION.to_string(),
+                    process_port: running.process_addr.port(),
+                    envd_host: format!("{ENVD_PORT}-{fork_id}"),
+                    proxy_port: state.opts.proxy_port,
+                    envd_access_token: access_token,
+                };
+                let record = SandboxRecord {
+                    sandbox_id: fork_id,
+                    node_id: state
+                        .node
+                        .as_ref()
+                        .map_or_else(|| "local".to_string(), |n| n.id().to_string()),
+                    template_id,
+                    started_at_ms,
+                    end_at_ms: started_at_ms + lifetime_secs * 1000,
+                    cpu_count: state.opts.cpu_cores,
+                    memory_mb: state.opts.memory_gb * 1024,
+                    metadata,
+                    envd_version: ENVD_VERSION.to_string(),
+                    descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
+                    paused: false,
+                };
+                let lifecycle = Lifecycle {
+                    lifetime_secs,
+                    ..Lifecycle::default()
+                };
+                register(
+                    &state,
+                    slot,
+                    running,
+                    descriptor.clone(),
+                    record,
+                    lifecycle,
+                    None,
+                )
+                .await;
+                Ok::<_, (StatusCode, String)>(descriptor)
+            }
+        })
+        .map(tokio::spawn)
+        .collect();
+    let mut results = Vec::with_capacity(forks.len());
+    for fork in forks {
+        results.push(fork.await.unwrap_or_else(|e| {
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("the fork's task failed: {e}"),
+            ))
+        }));
+    }
+    // Every fork has copied what it needed out of the checkpoint by now.
+    let _ = std::fs::remove_file(&checkpoint);
+
+    let results: Vec<_> = results
+        .into_iter()
+        .map(|result| match result {
+            Ok(descriptor) => {
+                state.metrics.forks_ok.inc();
+                json!({ "sandbox": descriptor })
+            }
+            Err((status, message)) => {
+                state.metrics.forks_failed.inc();
+                json!({ "error": { "code": status.as_u16(), "message": message } })
+            }
+        })
+        .collect();
+    (StatusCode::CREATED, Json(results)).into_response()
+}
+
+/// The proxy's view of this node's sandboxes: a paused one that resumes on
+/// traffic is brought back by the request that wants it, and every request
+/// is counted against its sandbox for as long as it is in flight.
+struct ResumingRoutes {
+    state: Arc<AppState>,
+}
+
+impl ResumingRoutes {
+    /// The route and an in-flight guard for a sandbox that is running now.
+    ///
+    /// Counted under the same lock a pause removes the sandbox under, so a
+    /// pause either sees this request or this request sees no sandbox --
+    /// and then waits for the pause and resumes it.
+    async fn running(
+        &self,
+        sandbox: &str,
+        port: u16,
+    ) -> Option<(std::net::SocketAddr, sandbox_proxy::InFlight)> {
+        use sandbox_proxy::SandboxRoutes;
+        let guard = {
+            let sandboxes = self.state.sandboxes.lock();
+            let live = sandboxes.get(sandbox)?;
+            ActivityGuard::enter(&live.activity)
+        };
+        let addr = self.state.routes.resolve(sandbox, port).await?;
+        Some((addr, sandbox_proxy::InFlight::new(guard)))
+    }
+}
+
+#[async_trait::async_trait]
+impl sandbox_proxy::SandboxRoutes for ResumingRoutes {
+    async fn resolve(&self, sandbox: &str, port: u16) -> Option<std::net::SocketAddr> {
+        self.open(sandbox, port).await.map(|(addr, _)| addr)
+    }
+
+    async fn open(
+        &self,
+        sandbox: &str,
+        port: u16,
+    ) -> Option<(std::net::SocketAddr, sandbox_proxy::InFlight)> {
+        tracing::debug!("proxy: request for {sandbox} port {port}");
+        if let Some(open) = self.running(sandbox, port).await {
+            return Some(open);
+        }
+        // Neither running nor paused can also mean "between the two": a
+        // pause takes the sandbox out of one map before it is in the other,
+        // and a request arriving then would be refused as unknown -- which
+        // is how the first command to a sandbox evicted as it was created
+        // failed. The pause holds the sandbox's transition lock throughout,
+        // so wait for it and look again. Only a lock that already exists:
+        // creating one per unknown name would let any request grow the
+        // table.
+        let transition = self.state.transitions.lock().get(sandbox).cloned();
+        if let Some(transition) = transition {
+            drop(transition.lock().await);
+            if let Some(open) = self.running(sandbox, port).await {
+                return Some(open);
+            }
+        }
+        let wakes = self
+            .state
+            .paused
+            .lock()
+            .get(sandbox)
+            .is_some_and(|p| p.lifecycle.auto_resume);
+        if !wakes {
+            tracing::debug!("proxy: {sandbox} is neither running nor paused to wake");
+            return None;
+        }
+        tracing::debug!("proxy: a request for paused {sandbox}; resuming it");
+        // Parked, not refused, while the node is full: the request waits for
+        // a slot as long as a sandbox may take to become ready.
+        match resume_sandbox(
+            &self.state,
+            sandbox,
+            None,
+            Some(self.state.opts.ready_timeout),
+        )
+        .await
+        {
+            Ok(_) => {
+                self.state.metrics.auto_resumes.inc();
+                self.running(sandbox, port).await
+            }
+            Err((_, e)) => {
+                tracing::warn!("auto-resuming {sandbox} for a request: {e}");
+                None
+            }
+        }
+    }
+}
+
+/// How a running sandbox is being used, as the proxy sees it.
+struct Activity {
+    /// Requests to it in flight now, streamed responses included.
+    in_flight: std::sync::atomic::AtomicUsize,
+    /// When a request to it last began or ended.
+    last_active_ms: std::sync::atomic::AtomicU64,
+}
+
+impl Activity {
+    fn new() -> Arc<Self> {
+        Arc::new(Self {
+            in_flight: std::sync::atomic::AtomicUsize::new(0),
+            last_active_ms: std::sync::atomic::AtomicU64::new(now_ms()),
+        })
+    }
+
+    fn busy(&self) -> bool {
+        self.in_flight.load(std::sync::atomic::Ordering::SeqCst) > 0
+    }
+
+    fn last_active_ms(&self) -> u64 {
+        self.last_active_ms
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+/// One request in flight; its drop is the request's end.
+struct ActivityGuard(Arc<Activity>);
+
+impl ActivityGuard {
+    fn enter(activity: &Arc<Activity>) -> Self {
+        use std::sync::atomic::Ordering;
+        activity.in_flight.fetch_add(1, Ordering::SeqCst);
+        activity.last_active_ms.store(now_ms(), Ordering::SeqCst);
+        Self(Arc::clone(activity))
+    }
+}
+
+impl Drop for ActivityGuard {
+    fn drop(&mut self) {
+        use std::sync::atomic::Ordering;
+        self.0.last_active_ms.store(now_ms(), Ordering::SeqCst);
+        self.0.in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 /// Put a gateway behind a sandbox's NIC, and point the guest at it.
@@ -1037,12 +1894,10 @@ async fn start_network(
     state: &AppState,
     vm: &Arc<AgentVM>,
     device: Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>,
-    policy: NetworkPolicy,
-    egress_proxy: Option<Socks5Proxy>,
-    config: GatewayConfig,
+    spec: NetworkSpec,
     configure_guest: bool,
 ) -> Result<LiveNetwork, String> {
-    let mut builder = Gateway::builder(policy).config(config);
+    let mut builder = Gateway::builder(spec.policy).config(GatewayConfig::default());
     if let Some(authority) = &state.authority {
         builder = builder.intercept_with(Arc::clone(authority));
     }
@@ -1050,7 +1905,7 @@ async fn start_network(
         .build()
         .map_err(|e| format!("starting the gateway: {e}"))?;
     let handle = gateway.handle();
-    handle.set_egress_proxy(egress_proxy);
+    handle.set_egress_proxy(spec.proxy);
 
     // `allow_all` on the bridge because the gateway is the enforcement point:
     // it sees the guest's ARP, which a frame-level policy refuses by design,
@@ -1122,6 +1977,11 @@ const TEMPLATE_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x00, 0x00, 0x01];
 struct Template {
     dir: std::path::PathBuf,
     snapshot: std::path::PathBuf,
+    /// The guest pages a sandbox restored from this touches before it first
+    /// answers, as guest-physical (address, length) ranges: prefaulted into
+    /// every restore, so the guest does not take an exit for each. Empty
+    /// unless `--prefault`, or when it could not be measured.
+    working_set: Vec<(u64, u64)>,
 }
 
 impl Drop for Template {
@@ -1192,9 +2052,10 @@ async fn build_template(opts: &Options, authority: Option<&Authority>) -> Result
     let dir = std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let template = Template {
+    let mut template = Template {
         snapshot: dir.join("template.snap"),
         dir,
+        working_set: Vec::new(),
     };
 
     let started = std::time::Instant::now();
@@ -1229,12 +2090,53 @@ async fn build_template(opts: &Options, authority: Option<&Authority>) -> Result
     .await;
     let _ = vm.stop().await;
     result?;
+
+    // What a sandbox restored from it touches before it first answers:
+    // measured on one, restored and asked exactly that. A failure costs only
+    // the optimisation.
+    if opts.prefault {
+        match working_set(opts, &template.snapshot).await {
+            Ok(ranges) => template.working_set = ranges,
+            Err(e) => tracing::warn!("measuring the template's working set: {e}; not prefaulting"),
+        }
+    }
+    let pages: u64 = template.working_set.iter().map(|(_, len)| len / 4096).sum();
     tracing::info!(
-        "template ready in {:?} at {}",
+        "template ready in {:?} at {}; working set {pages} pages in {} ranges",
         started.elapsed(),
-        template.snapshot.display()
+        template.snapshot.display(),
+        template.working_set.len()
     );
     Ok(template)
+}
+
+/// The pages a guest restored from `snapshot` touches to answer its first
+/// request, found by restoring one and asking it.
+async fn working_set(
+    opts: &Options,
+    snapshot: &std::path::Path,
+) -> Result<Vec<(u64, u64)>, String> {
+    let (vm, _nic) = new_vm(
+        opts,
+        "template-probe",
+        TEMPLATE_CID,
+        opts.network.then_some(TEMPLATE_MAC),
+    )
+    .await?;
+    let measured = async {
+        vm.launch_from_snapshot(snapshot)
+            .await
+            .map_err(|e| format!("restoring a probe: {e}"))?;
+        // Exactly what a create does before it answers, and no more: every
+        // page prefaulted costs a little, whether or not it is then used.
+        vm.after_restore(opts.ready_timeout)
+            .await
+            .map_err(|e| format!("the probe's agent: {e}"))?;
+        vm.touched_ranges().map_err(|e| e.to_string())
+    }
+    .await;
+    let _ = vm.stop().await;
+    measured
 }
 
 /// `PUT /sandboxes/{id}/network` -- replace a running sandbox's egress rules.
@@ -1379,14 +2281,33 @@ async fn destroy_sandbox(
 /// Stop a sandbox and everything it had, and say why (`kind` is the cluster
 /// event). Returns whether there was such a sandbox.
 async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
+    // Not while it is pausing, resuming or being forked from.
+    let lock = transition_lock(state, sandbox_id);
+    let held = lock.lock().await;
     let (removed, running) = {
         let mut sandboxes = state.sandboxes.lock();
         let removed = sandboxes.remove(sandbox_id);
         (removed, u32::try_from(sandboxes.len()).unwrap_or(u32::MAX))
     };
     let Some(live) = removed else {
-        return false;
+        // A paused one has only its snapshot and its record to lose.
+        let paused = state.paused.lock().remove(sandbox_id);
+        drop(held);
+        state.transitions.lock().remove(sandbox_id);
+        let Some(paused) = paused else {
+            return false;
+        };
+        let _ = std::fs::remove_file(&paused.snapshot);
+        state.metrics.ended_deleted.inc();
+        if let Some(node) = &state.node {
+            if let Err(e) = node.ended(sandbox_id, kind, running).await {
+                tracing::warn!("recording the end of {sandbox_id}: {e}");
+            }
+        }
+        return true;
     };
+    drop(held);
+    state.transitions.lock().remove(sandbox_id);
     if kind == "sandbox-expired" {
         state.metrics.ended_expired.inc();
     } else {
@@ -1412,19 +2333,31 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     true
 }
 
-/// End every sandbox whose time is up, once a second.
+/// End every sandbox whose time is up, once a second -- or pause it, if it
+/// asked to be paused instead. A paused sandbox has no timeout: it waits on
+/// disk until it is resumed or deleted, as E2B's do.
 async fn expire(state: Arc<AppState>) {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
         let now = now_ms();
-        let due: Vec<String> = state
+        let due: Vec<(String, bool)> = state
             .sandboxes
             .lock()
             .iter()
             .filter(|(_, live)| live.record.end_at_ms <= now)
-            .map(|(id, _)| id.clone())
+            .map(|(id, live)| (id.clone(), live.lifecycle.pause_on_timeout))
             .collect();
-        for id in due {
+        for (id, pause) in due {
+            if pause {
+                match pause_sandbox(&state, &id, false).await {
+                    Ok(()) => {
+                        tracing::info!("sandbox {id} reached its timeout and paused");
+                        continue;
+                    }
+                    // Ended rather than left running past its time.
+                    Err((_, e)) => tracing::warn!("pausing {id} at its timeout: {e}; ending it"),
+                }
+            }
             if end_sandbox(&state, &id, "sandbox-expired").await {
                 tracing::info!("sandbox {id} reached its timeout");
             }
@@ -1551,17 +2484,35 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
+    // Where paused sandboxes and fork checkpoints go: beside the template,
+    // whose image every one of them is layered over.
+    let suspend_dir = template
+        .as_ref()
+        .map_or_else(
+            || std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id())),
+            |t| t.dir.clone(),
+        )
+        .join("suspended");
+    if let Err(e) = std::fs::create_dir_all(&suspend_dir) {
+        eprintln!("hv2-sandboxd: {}: {e}", suspend_dir.display());
+        return std::process::ExitCode::FAILURE;
+    }
+
     let routes = Arc::new(PortMap::new());
+    let opts_capacity = opts.capacity as usize;
     let state = Arc::new(AppState {
         authority,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
         routes: Arc::clone(&routes),
-        booting: Mutex::new(0),
+        slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
         template,
         metrics: NodeMetrics::default(),
         node: node.clone(),
+        paused: Mutex::new(HashMap::new()),
+        suspend_dir,
+        transitions: Mutex::new(HashMap::new()),
     });
     if let Some(node) = node.clone() {
         let beating = Arc::clone(&state);
@@ -1609,6 +2560,11 @@ async fn main() -> std::process::ExitCode {
         "HTTP/2"
     };
 
+    // The proxy asks the node, not the bare map, so that a request for a
+    // paused sandbox can resume it.
+    let routes: Arc<dyn sandbox_proxy::SandboxRoutes> = Arc::new(ResumingRoutes {
+        state: Arc::clone(&state),
+    });
     tokio::spawn(async move {
         let result = match tls {
             Some(config) => sandbox_proxy::serve_tls(proxy_addr, routes, config, proxy_rx).await,
@@ -1627,6 +2583,9 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
+        .route("/sandboxes/{sandboxID}/pause", post(pause_route))
+        .route("/sandboxes/{sandboxID}/resume", post(resume_route))
+        .route("/sandboxes/{sandboxID}/fork", post(fork_route))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
         .route(
             "/sandboxes/{sandboxID}",
@@ -1671,6 +2630,10 @@ async fn main() -> std::process::ExitCode {
     );
     println!("  DELETE /sandboxes/{{id}}          -- stop the VM and its process.Process listener");
     println!("  PUT    /sandboxes/{{id}}/network  -- replace a running sandbox's egress rules");
+    println!(
+        "  POST   /sandboxes/{{id}}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy"
+    );
+    println!("  POST   /sandboxes/{{id}}/fork     -- checkpoint in place, start `count` copies");
     println!("  GET    /sandboxes/{{id}}/network/decisions -- NOT E2B's; the gateway's audit log");
     println!("{network_line}");
     println!("{template_line}");
@@ -1718,7 +2681,15 @@ async fn main() -> std::process::ExitCode {
             }
         })
         .await;
-    let ids: Vec<String> = state.sandboxes.lock().keys().cloned().collect();
+    // Paused ones too: their snapshots are layered over a template this
+    // process is about to delete, so they could not be resumed anyway.
+    let ids: Vec<String> = state
+        .sandboxes
+        .lock()
+        .keys()
+        .chain(state.paused.lock().keys())
+        .cloned()
+        .collect();
     for id in ids {
         end_sandbox(&state, &id, "sandbox-deleted").await;
     }

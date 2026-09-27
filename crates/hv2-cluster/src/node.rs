@@ -144,6 +144,30 @@ impl NodeAgent {
         self.store.put_sandbox(record).await
     }
 
+    /// Record a sandbox that paused or resumed (`kind` is `sandbox-paused` or
+    /// `sandbox-resumed`), leaving `running`: it stays this node's either
+    /// way, since its snapshot is on this node's disk.
+    ///
+    /// # Errors
+    ///
+    /// The store could not be reached.
+    pub async fn transitioned(
+        &self,
+        record: &SandboxRecord,
+        kind: &str,
+        running: u32,
+    ) -> crate::store::Result<()> {
+        self.store.put_sandbox(record).await?;
+        self.announce(running).await?;
+        self.store
+            .publish(&ClusterEvent::new(
+                kind,
+                &self.config.id,
+                Some(&record.sandbox_id),
+            ))
+            .await
+    }
+
     /// Record that a sandbox ended, and why (`sandbox-deleted` or
     /// `sandbox-expired`), leaving `running`.
     ///

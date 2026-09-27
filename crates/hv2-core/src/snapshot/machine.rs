@@ -60,10 +60,22 @@ pub enum ClockOnRestore {
 /// the other paravirtual registrations that name guest pages KVM writes to
 /// (async page fault, steal time, PV EOI), plus the TSC deadline, which is
 /// meaningless against a TSC that was not restored.
+///
+/// Order is restore order. `ASYNC_PF_INT` -- the vector "page ready" is
+/// delivered on -- goes before `ASYNC_PF_EN`, which a Linux guest enables
+/// with delivery by interrupt. It was missing once: a restored guest then had
+/// async page faults enabled on vector 0, which is not a vector. The first
+/// page-ready notification could never be delivered, KVM kept it queued, and
+/// a queued completion counts as a pending event -- so every `HLT` returned
+/// at once: 315,000 halt exits a second from an idle guest, a host core
+/// each. It showed only on a guest restored from a snapshot of a guest that
+/// had itself been restored, since mapping memory from a file is what makes
+/// async page faults happen at all.
 pub const CLOCK_MSRS: &[u32] = &[
     0x0000_0010, // IA32_TSC
     0x4b56_4d00, // MSR_KVM_WALL_CLOCK_NEW
     0x4b56_4d01, // MSR_KVM_SYSTEM_TIME_NEW
+    0x4b56_4d06, // MSR_KVM_ASYNC_PF_INT
     0x4b56_4d02, // MSR_KVM_ASYNC_PF_EN
     0x4b56_4d03, // MSR_KVM_STEAL_TIME
     0x4b56_4d04, // MSR_KVM_PV_EOI_EN

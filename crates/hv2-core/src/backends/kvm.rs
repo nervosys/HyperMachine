@@ -774,6 +774,39 @@ impl HypervisorBackend for KvmBackend {
         Ok(true)
     }
 
+    /// `KVM_PRE_FAULT_MEMORY`, Linux 6.10 and later. A kernel without it, or
+    /// a range it will not take, is reported as `Ok(false)` -- the guest then
+    /// faults those pages in itself, which is only slower.
+    fn prefault_guest_memory(&self, vcpu: &VCpu, ranges: &[(u64, u64)]) -> Result<bool> {
+        let kvm_vcpu = self.kvm_vcpu(vcpu)?;
+        let fd = kvm_vcpu.fd();
+        for &(gpa, size) in ranges {
+            let mut range = kvm_pre_fault_memory {
+                gpa,
+                size,
+                ..Default::default()
+            };
+            while range.size > 0 {
+                // SAFETY: `fd` is this vCPU's descriptor, and `range` a struct
+                // this function owns, of the size the ioctl number encodes.
+                match unsafe { kvm_pre_fault_memory(fd, &mut range) } {
+                    Ok(()) => {}
+                    Err(e) if matches!(e.raw_os_error(), Some(libc::EINTR | libc::EAGAIN)) => {}
+                    Err(e) => {
+                        tracing::debug!(
+                            "KVM_PRE_FAULT_MEMORY at {:#x} (+{:#x}): {e}; the guest will fault \
+                             the rest in itself",
+                            range.gpa,
+                            range.size
+                        );
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+        Ok(true)
+    }
+
     async fn set_mmio_result(&self, vcpu: &VCpu, data: &[u8]) -> Result<()> {
         let kvm_vcpu = {
             let map = self.vcpu_map.read().unwrap_or_else(|e| e.into_inner());

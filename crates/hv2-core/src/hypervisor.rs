@@ -539,6 +539,23 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(false)
     }
 
+    /// Map guest-physical `ranges` (address, length) into the hypervisor's
+    /// stage-2 tables now, through `vcpu`, rather than a fault at a time as
+    /// the guest touches them.
+    ///
+    /// An optimisation and nothing more: `Ok(false)`, the default, means the
+    /// backend cannot, and the guest faults the pages in itself as it always
+    /// did. Worth it for the pages a restored guest is known to touch first,
+    /// since each fault it takes is an exit.
+    ///
+    /// # Errors
+    ///
+    /// None by default; a backend reports a failure it cannot explain.
+    fn prefault_guest_memory(&self, vcpu: &VCpu, ranges: &[(u64, u64)]) -> Result<bool> {
+        let _ = (vcpu, ranges);
+        Ok(false)
+    }
+
     /// Allow downcasting to concrete types
     fn as_any(&self) -> &dyn std::any::Any;
 }

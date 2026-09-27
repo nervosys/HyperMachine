@@ -2820,6 +2820,7 @@ dependencies = [
 name = "hv2-sandboxd"
 version = "1.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "hv2-agent",
  "hv2-api",

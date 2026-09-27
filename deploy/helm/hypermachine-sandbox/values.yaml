@@ -52,6 +52,17 @@ node:
   egressDefault: deny
   # Restore sandboxes from a template snapshot (default) rather than boot.
   template: true
+  # Oversubscription: when a node is full, pause the sandbox idle longest
+  # (at least this many seconds, with no request in flight) among those
+  # created with autoResume, and park requests for a slot instead of
+  # refusing them. Unset, a full node answers 503 and the control plane
+  # tries another. Paused sandboxes live on the pod's disk, so they do not
+  # survive the pod.
+  evictIdleAfterSeconds: null
+  # Prefault each restore's measured working set. Halves a restore's page
+  # faults; measure on your hardware before turning it on (it made no
+  # latency difference under nested virtualisation).
+  prefault: false
   resources:
     requests: { cpu: 500m, memory: 512Mi }
 

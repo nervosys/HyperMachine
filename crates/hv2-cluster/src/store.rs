@@ -430,6 +430,7 @@ pub(crate) mod tests {
             metadata: Default::default(),
             envd_version: "0.6.3".into(),
             descriptor: json!({"sandboxID": id}),
+            paused: false,
         }
     }
 

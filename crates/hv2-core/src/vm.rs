@@ -384,6 +384,114 @@ fn write_memory_image(
     Ok(())
 }
 
+/// Where a snapshot puts guest memory.
+#[derive(Debug, PartialEq, Eq)]
+enum MemoryLayout {
+    /// Nonzero pages, in the snapshot file.
+    Inline,
+    /// A raw image beside the snapshot, for mapping.
+    Image,
+    /// Pages written since this base image was mapped, in the snapshot file.
+    Layered(std::path::PathBuf),
+}
+
+/// Which pages of guest memory the guest has written since its memory was
+/// mapped from an image, one bit per page as a snapshot's page map counts.
+///
+/// Asked of the host kernel rather than found by comparing against the
+/// image: a private file mapping's page is file-backed until it is written
+/// and anonymous after, and `/proc/self/pagemap` says which each is -- bit 61
+/// set for a file page, bit 63 for present, bit 62 for swapped out. A page
+/// that is neither present nor swapped was never touched. Reading 8 bytes a
+/// page from the kernel is far cheaper than reading 4096 from each of two
+/// places and comparing them.
+fn written_pages(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total_pages: u64,
+) -> Result<snapshot_file::PageMap> {
+    pages_where(memory, regions, total_pages, |entry| {
+        entry & (PAGEMAP_PRESENT | PAGEMAP_SWAPPED) != 0 && entry & PAGEMAP_FILE_PAGE == 0
+    })
+}
+
+/// Which pages of guest memory have been touched at all -- read or written,
+/// so mapped on the host -- since the memory was mapped.
+fn touched_pages(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total_pages: u64,
+) -> Result<snapshot_file::PageMap> {
+    pages_where(memory, regions, total_pages, |entry| {
+        entry & (PAGEMAP_PRESENT | PAGEMAP_SWAPPED) != 0
+    })
+}
+
+const PAGEMAP_PRESENT: u64 = 1 << 63;
+const PAGEMAP_SWAPPED: u64 = 1 << 62;
+const PAGEMAP_FILE_PAGE: u64 = 1 << 61;
+
+/// The pages of guest memory whose `/proc/self/pagemap` entry satisfies
+/// `want`, one bit per page as a snapshot's page map counts them.
+#[cfg(target_os = "linux")]
+fn pages_where(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total_pages: u64,
+    want: impl Fn(u64) -> bool,
+) -> Result<snapshot_file::PageMap> {
+    use std::os::unix::fs::FileExt;
+
+    let page_size = snapshot_file::PAGE_SIZE;
+    // SAFETY: sysconf has no preconditions.
+    let host_page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    if u64::try_from(host_page).ok() != Some(page_size) {
+        return Err(Error::Config(format!(
+            "a layered snapshot assumes {page_size}-byte host pages, and this host's are \
+             {host_page}"
+        )));
+    }
+    let pagemap = std::fs::File::open("/proc/self/pagemap")
+        .map_err(|e| Error::Config(format!("opening /proc/self/pagemap: {e}")))?;
+    let mut written = snapshot_file::PageMap::empty(total_pages);
+    let mut index = 0u64;
+    let mut entries = Vec::new();
+    for region in regions.iter().filter(|r| !r.readonly) {
+        let host = memory.translate(region.guest_addr)?;
+        if host % page_size != 0 {
+            return Err(Error::InvalidState(format!(
+                "guest memory at {:#x} is not page-aligned on the host",
+                region.guest_addr
+            )));
+        }
+        let pages = region.size.div_ceil(page_size);
+        entries.resize(usize::try_from(pages * 8).unwrap_or(usize::MAX), 0u8);
+        pagemap
+            .read_exact_at(&mut entries, host / page_size * 8)
+            .map_err(|e| Error::Config(format!("reading /proc/self/pagemap: {e}")))?;
+        for entry in entries.as_chunks::<8>().0 {
+            if want(u64::from_le_bytes(*entry)) {
+                written.set(index);
+            }
+            index += 1;
+        }
+    }
+    Ok(written)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn pages_where(
+    _memory: &crate::memory::GuestMemory,
+    _regions: &[snapshot_file::RegionRecord],
+    _total_pages: u64,
+    _want: impl Fn(u64) -> bool,
+) -> Result<snapshot_file::PageMap> {
+    Err(Error::Config(
+        "reading which guest pages the host has mapped needs /proc/self/pagemap, which only          Linux has"
+            .into(),
+    ))
+}
+
 /// Tells the delivery thread that a frame is waiting for the guest.
 ///
 /// The same shape and the same reason as [`QueuedPackets`].
@@ -473,6 +581,9 @@ pub struct VM {
     /// guest transmits and hand it the ones addressed to it, and that
     /// something needs the device, not an MMIO handle.
     net: RwLock<Option<AttachedNet>>,
+    /// The raw image guest RAM is a private mapping of, when a restore mapped
+    /// one. What [`Self::snapshot_layered`] records only the difference from.
+    memory_base: parking_lot::Mutex<Option<std::path::PathBuf>>,
     /// The PCI root complex the guest reads through the 0xCF8 window.
     ///
     /// Held here rather than inside the machine model because attaching a PCI
@@ -650,6 +761,7 @@ impl VM {
             shared_roms: RwLock::new(Vec::new()),
             vsock: RwLock::new(None),
             net: RwLock::new(None),
+            memory_base: parking_lot::Mutex::new(None),
         })
     }
 
@@ -1112,6 +1224,94 @@ impl VM {
     ///
     /// As [`Self::snapshot`]; also an image file that already exists.
     pub async fn snapshot_with(&self, path: &std::path::Path, memory_image: bool) -> Result<()> {
+        let layout = if memory_image {
+            MemoryLayout::Image
+        } else {
+            MemoryLayout::Inline
+        };
+        self.snapshot_inner(path, layout).await
+    }
+
+    /// [`Self::snapshot`] of a VM whose memory is a mapped image, storing
+    /// only the pages the guest has written since that image was mapped.
+    ///
+    /// The snapshot names the image as its base, and a restore maps the base
+    /// and lays these pages over it. For a sandbox restored from a template
+    /// this is what the sandbox did, not what it is: a guest that wrote a few
+    /// megabytes pauses into a few megabytes, whatever its RAM size, and is
+    /// written without reading the rest of its memory at all. The base must
+    /// still exist, unchanged, when the snapshot is restored.
+    ///
+    /// Which pages were written comes from the host kernel (`/proc/self/pagemap`):
+    /// a written page of a private file mapping has become anonymous, and an
+    /// unwritten one has not. Linux only.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::snapshot`]; also a VM whose memory was not mapped from an
+    /// image, and a host that cannot say which pages were written.
+    pub async fn snapshot_layered(&self, path: &std::path::Path) -> Result<()> {
+        let base = self.memory_base.lock().clone().ok_or_else(|| {
+            Error::InvalidState(
+                "a layered snapshot needs guest memory mapped from an image, and this VM's \
+                 was not"
+                    .into(),
+            )
+        })?;
+        self.snapshot_inner(path, MemoryLayout::Layered(base)).await
+    }
+
+    /// The guest-physical ranges (address, length) of every page the host has
+    /// mapped for this guest since its memory was mapped -- which is every
+    /// page the guest has touched, read or written.
+    ///
+    /// Run on a guest restored from a snapshot and then asked to do what its
+    /// siblings will be asked first, this is that snapshot's working set: the
+    /// pages worth prefaulting for them (see
+    /// [`Self::launch_from_snapshot_prefaulted`]). Linux only.
+    ///
+    /// # Errors
+    ///
+    /// A host that cannot say which pages are mapped.
+    pub fn touched_ranges(&self) -> Result<Vec<(u64, u64)>> {
+        let memory = self.memory();
+        let regions: Vec<_> = memory
+            .regions()
+            .into_iter()
+            .map(|region| snapshot_file::RegionRecord {
+                guest_addr: region.guest_addr,
+                size: region.size,
+                readonly: region.readonly,
+            })
+            .collect();
+        let page_size = snapshot_file::PAGE_SIZE;
+        let total_pages: u64 = regions
+            .iter()
+            .filter(|r| !r.readonly)
+            .map(|r| r.size.div_ceil(page_size))
+            .sum();
+        let touched = touched_pages(&memory, &regions, total_pages)?;
+        let mut ranges: Vec<(u64, u64)> = Vec::new();
+        let mut index = 0u64;
+        for region in regions.iter().filter(|r| !r.readonly) {
+            let mut at = 0u64;
+            while at < region.size {
+                if touched.contains(index) {
+                    let gpa = region.guest_addr + at;
+                    let len = page_size.min(region.size - at);
+                    match ranges.last_mut() {
+                        Some((start, run)) if *start + *run == gpa => *run += len,
+                        _ => ranges.push((gpa, len)),
+                    }
+                }
+                index += 1;
+                at += page_size;
+            }
+        }
+        Ok(ranges)
+    }
+
+    async fn snapshot_inner(&self, path: &std::path::Path, layout: MemoryLayout) -> Result<()> {
         {
             let state = self.state.read();
             if *state != VMState::Paused {
@@ -1154,7 +1354,13 @@ impl VM {
         let mut page = vec![0u8; page_size as usize];
 
         // With an image, the pages go there and this file's map stays empty.
-        let image_name = if memory_image {
+        // Layered, the map is the pages written since the base was mapped.
+        let mut memory_base = None;
+        let image_name = if let MemoryLayout::Layered(base) = &layout {
+            present = written_pages(&memory, &regions, total_pages)?;
+            memory_base = Some(base.to_string_lossy().into_owned());
+            None
+        } else if layout == MemoryLayout::Image {
             let name = format!(
                 "{}.mem",
                 path.file_name()
@@ -1198,6 +1404,7 @@ impl VM {
             devices,
             machine,
             memory_image: image_name,
+            memory_base,
         };
 
         let mut file = std::io::BufWriter::new(snapshot_file::create_new(path)?);
@@ -1327,6 +1534,27 @@ impl VM {
 
         if let Some(name) = &snapshot.header.memory_image {
             self.load_memory_image(&path.with_file_name(name), &memory)?;
+        } else if let Some(base) = &snapshot.header.memory_base {
+            // The base first, then this snapshot's pages over it. A page the
+            // map leaves out is the base's, so nothing here zeroes anything.
+            self.load_memory_image(std::path::Path::new(base), &memory)?;
+            let page_size = snapshot_file::PAGE_SIZE;
+            let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
+            let mut page = vec![0u8; page_size as usize];
+            let mut index = 0u64;
+            for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
+                let mut at = 0u64;
+                while at < region.size {
+                    if present.contains(index) {
+                        let take = (page_size as usize).min((region.size - at) as usize);
+                        std::io::Read::read_exact(&mut file, &mut page)
+                            .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+                        memory.write_bytes(region.guest_addr + at, &page[..take])?;
+                    }
+                    index += 1;
+                    at += page_size;
+                }
+            }
         } else {
             let page_size = snapshot_file::PAGE_SIZE;
             let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
@@ -1460,6 +1688,10 @@ impl VM {
         let file = std::fs::File::open(image)
             .map_err(|e| Error::Config(format!("opening {}: {e}", image.display())))?;
         if self.backend.map_guest_memory_from(&file)? {
+            // Absolute, because a layered snapshot names it and may be
+            // written anywhere.
+            let base = std::fs::canonicalize(image).unwrap_or_else(|_| image.to_path_buf());
+            *self.memory_base.lock() = Some(base);
             return Ok(());
         }
         // The slow way: every byte, including the zeroes, because this VM's
@@ -1497,10 +1729,35 @@ impl VM {
         path: &std::path::Path,
         clock: crate::snapshot::machine::ClockOnRestore,
     ) -> Result<()> {
+        self.launch_from_snapshot_prefaulted(path, clock, &[]).await
+    }
+
+    /// [`Self::launch_from_snapshot`], mapping `prefault` -- guest-physical
+    /// (address, length) ranges -- before the guest runs, so it does not
+    /// take an exit for each of those pages as it first touches them.
+    ///
+    /// Meant for the pages a guest restored from this snapshot is known to
+    /// touch first: see [`Self::touched_ranges`], which is how to find them.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::launch_from_snapshot`]. A backend that cannot prefault is
+    /// not an error; the guest faults the pages in itself.
+    pub async fn launch_from_snapshot_prefaulted(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        clock: crate::snapshot::machine::ClockOnRestore,
+        prefault: &[(u64, u64)],
+    ) -> Result<()> {
         let t0 = std::time::Instant::now();
         self.provision_inner(false).await?;
         let provisioned = t0.elapsed();
         self.restore_with(path, clock).await?;
+        if !prefault.is_empty() {
+            if let Some(vcpu) = self.vcpus.first() {
+                self.backend.prefault_guest_memory(vcpu, prefault)?;
+            }
+        }
         let restored = t0.elapsed();
         self.start_in_background().await?;
         tracing::debug!(

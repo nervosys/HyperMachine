@@ -48,6 +48,13 @@ spec:
             {{- if not .Values.node.template }}
             - --no-template
             {{- end }}
+            {{- with .Values.node.evictIdleAfterSeconds }}
+            - --evict-idle-after
+            - {{ . | quote }}
+            {{- end }}
+            {{- if .Values.node.prefault }}
+            - --prefault
+            {{- end }}
             - --cluster-store
             - {{ include "hv2.storeUrl" . | quote }}
             - --cluster-namespace

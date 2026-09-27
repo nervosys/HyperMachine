@@ -41,5 +41,5 @@ make -s hv2_guest_defconfig
 # A fixed build identity, so two builds of one tree produce one kernel.
 export KBUILD_BUILD_TIMESTAMP="1970-01-01" KBUILD_BUILD_USER=hv2 KBUILD_BUILD_HOST=hv2
 make -s -j"$(nproc)" bzImage
-install -m 0644 arch/x86/boot/bzImage "$out"
+install -D -m 0644 arch/x86/boot/bzImage "$out"
 echo "build-kernel.sh: $out ($(du -h "$out" | cut -f1))"

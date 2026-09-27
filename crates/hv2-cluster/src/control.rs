@@ -108,6 +108,9 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/connect", post(forward))
         .route("/v2/sandboxes/{id}/connect", post(forward))
         .route("/sandboxes/{id}/timeout", post(forward))
+        .route("/sandboxes/{id}/pause", post(forward))
+        .route("/sandboxes/{id}/resume", post(forward))
+        .route("/sandboxes/{id}/fork", post(forward))
         .route("/sandboxes/{id}/refreshes", post(forward))
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
@@ -283,11 +286,8 @@ async fn matching(
         .into_iter()
         .filter(|r| metadata_matches(r, &wanted))
         .collect();
-    // Every sandbox here is running; a query for only `paused` ones gets none.
     if let Some(state) = &query.state {
-        if !state.split(',').any(|s| s == "running") {
-            records.clear();
-        }
+        records.retain(|r| state.split(',').any(|s| s == r.state()));
     }
     if query.order.as_deref() == Some("desc") {
         records.reverse();
@@ -421,11 +421,23 @@ async fn forward(
         .to_string();
     let bytes = response.bytes().await.unwrap_or_default();
 
-    // `connect` answers with the descriptor, which has to point here too.
-    if uri.path().ends_with("/connect") && status.is_success() {
+    // `connect` and `resume` answer with the descriptor, which has to point
+    // here too; `fork` with one per fork, beside an error or not.
+    let path = uri.path();
+    if (path.ends_with("/connect") || path.ends_with("/resume")) && status.is_success() {
         if let Ok(mut descriptor) = serde_json::from_slice::<Value>(&bytes) {
             rewrite_descriptor(&control, &mut descriptor, &node.id);
             return (status, Json(descriptor)).into_response();
+        }
+    }
+    if path.ends_with("/fork") && status.is_success() {
+        if let Ok(mut results) = serde_json::from_slice::<Vec<Value>>(&bytes) {
+            for result in &mut results {
+                if let Some(sandbox) = result.get_mut("sandbox") {
+                    rewrite_descriptor(&control, sandbox, &node.id);
+                }
+            }
+            return (status, Json(results)).into_response();
         }
     }
     let mut out = Response::new(Body::from(bytes));

@@ -92,6 +92,7 @@ async fn node_create(
                 metadata,
                 envd_version: "0.6.3".into(),
                 descriptor: descriptor.clone(),
+                paused: false,
             },
             running,
         )

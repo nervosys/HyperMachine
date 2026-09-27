@@ -130,6 +130,12 @@ pub struct Header {
     /// `HypervisorBackend::map_guest_memory_from`.
     #[serde(default)]
     pub memory_image: Option<String>,
+    /// When set, the pages in this file are laid over a raw image, named here
+    /// by absolute path, rather than over zeroes: a page the map leaves out
+    /// reads as the base has it. What `VM::snapshot_layered` writes -- the
+    /// difference a guest made to the image it was restored from.
+    #[serde(default)]
+    pub memory_base: Option<String>,
 }
 
 /// Which pages a snapshot carries.
@@ -391,6 +397,7 @@ mod tests {
             device_state_included: false,
             machine: None,
             memory_image: None,
+            memory_base: None,
         }
     }
 

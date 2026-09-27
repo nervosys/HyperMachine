@@ -103,6 +103,7 @@ pub const KVM_SET_XSAVE: u64 = 0x5000aea5; // _IOW(KVMIO, 0xa5, struct kvm_xsave
 
 pub const KVM_GET_XCRS: u64 = 0x8188aea6; // _IOR(KVMIO, 0xa6, struct kvm_xcrs)
 pub const KVM_SET_XCRS: u64 = 0x4188aea7; // _IOW(KVMIO, 0xa7, struct kvm_xcrs)
+pub const KVM_PRE_FAULT_MEMORY: u64 = 0xc040aed5; // _IOWR(KVMIO, 0xd5, struct kvm_pre_fault_memory)
 
 // KVM capability flags
 pub const KVM_CAP_IRQCHIP: u32 = 0;
@@ -1703,6 +1704,39 @@ pub unsafe fn kvm_set_debugregs(
     debugregs: &kvm_debugregs,
 ) -> Result<(), std::io::Error> {
     let ret = ioctl(vcpu_fd, KVM_SET_DEBUGREGS, debugregs as *const _ as usize);
+    if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// `struct kvm_pre_fault_memory` (Linux 6.10+): a guest-physical range to
+/// map into the stage-2 page tables before the guest touches it. The kernel
+/// advances `gpa` and shrinks `size` as it goes, so a call interrupted part
+/// way is continued by calling again with the same struct.
+#[repr(C)]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct kvm_pre_fault_memory {
+    pub gpa: u64,
+    pub size: u64,
+    pub flags: u64,
+    pub padding: [u64; 5],
+}
+
+const _: () = assert!(std::mem::size_of::<kvm_pre_fault_memory>() == 64);
+
+/// Map `range` into this vCPU's stage-2 page tables now, rather than one
+/// fault at a time as the guest touches it.
+///
+/// # Safety
+///
+/// `vcpu_fd` must be a KVM vCPU file descriptor.
+pub unsafe fn kvm_pre_fault_memory(
+    vcpu_fd: RawFd,
+    range: &mut kvm_pre_fault_memory,
+) -> Result<(), std::io::Error> {
+    let ret = ioctl(vcpu_fd, KVM_PRE_FAULT_MEMORY, range as *mut _ as usize);
     if ret < 0 {
         Err(std::io::Error::last_os_error())
     } else {

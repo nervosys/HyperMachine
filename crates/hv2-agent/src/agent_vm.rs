@@ -224,20 +224,64 @@ impl AgentVM {
     /// is then stale by as long as the snapshot sat, which
     /// [`Self::set_guest_clock`] corrects.
     pub async fn launch_from_snapshot(&self, snapshot: &std::path::Path) -> Result<()> {
+        self.launch_from_snapshot_prefaulted(snapshot, &[]).await
+    }
+
+    /// [`Self::launch_from_snapshot`], with the guest-physical ranges in
+    /// `prefault` mapped before the guest runs -- the snapshot's working set,
+    /// as [`Self::touched_ranges`] found it on a guest restored earlier.
+    pub async fn launch_from_snapshot_prefaulted(
+        &self,
+        snapshot: &std::path::Path,
+        prefault: &[(u64, u64)],
+    ) -> Result<()> {
         self.vm
-            .launch_from_snapshot(
+            .launch_from_snapshot_prefaulted(
                 snapshot,
                 hv2_core::snapshot::machine::ClockOnRestore::Continue,
+                prefault,
             )
             .await?;
         *self.started_at.write().await = Some(Instant::now());
         Ok(())
     }
 
+    /// Every guest page this VM has touched since its memory was mapped, as
+    /// guest-physical (address, length) ranges. See `VM::touched_ranges`.
+    pub fn touched_ranges(&self) -> Result<Vec<(u64, u64)>> {
+        Ok(self.vm.touched_ranges()?)
+    }
+
     /// Pause, write this VM to `snapshot`, and resume it.
     pub async fn snapshot_to(&self, snapshot: &std::path::Path) -> Result<()> {
         self.vm.pause().await?;
         let written = self.vm.snapshot_with(snapshot, true).await;
+        self.vm.resume().await?;
+        written?;
+        Ok(())
+    }
+
+    /// Pause, write this VM to `snapshot` as only what it changed since the
+    /// image it was restored from, and stop it.
+    ///
+    /// What suspending an idle sandbox is: its host memory goes back to the
+    /// host, and [`Self::launch_from_snapshot`] on a fresh VM brings it back.
+    /// On failure the VM is resumed rather than left paused.
+    pub async fn suspend_to(&self, snapshot: &std::path::Path) -> Result<()> {
+        self.vm.pause().await?;
+        if let Err(e) = self.vm.snapshot_layered(snapshot).await {
+            self.vm.resume().await?;
+            return Err(e.into());
+        }
+        self.stop().await
+    }
+
+    /// Pause, write this VM to `snapshot` as only what it changed since the
+    /// image it was restored from, and resume it: a checkpoint to fork from,
+    /// which the guest sees as a pause of a few milliseconds.
+    pub async fn checkpoint_to(&self, snapshot: &std::path::Path) -> Result<()> {
+        self.vm.pause().await?;
+        let written = self.vm.snapshot_layered(snapshot).await;
         self.vm.resume().await?;
         written?;
         Ok(())

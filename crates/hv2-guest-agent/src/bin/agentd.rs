@@ -68,6 +68,21 @@ mod linux {
     /// Version reported in a pong, so one guest image can be told from another.
     const AGENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+    /// Whether to log every connection and read, with `HV2_AGENT_TRACE` set --
+    /// which a kernel command line can do, since the kernel hands init the
+    /// `KEY=value` words it does not know.
+    ///
+    /// Off by default because the console is a UART, and every byte written
+    /// to one is a trap to the host. Two lines a request came to about 250
+    /// VM exits: most of what a restored sandbox's first request cost, and a
+    /// tax on every request after it, measured under nested virtualisation
+    /// where each exit is dear. Worth paying when debugging a transport, and
+    /// not otherwise.
+    fn tracing() -> bool {
+        static ON: OnceLock<bool> = OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("HV2_AGENT_TRACE").is_some())
+    }
+
     pub fn run() -> std::io::Result<()> {
         let listener = bind()?;
         eprintln!("hv2-guest-agentd {AGENT_VERSION} listening on vsock port {GUEST_AGENT_PORT}");
@@ -81,21 +96,31 @@ mod linux {
                 }
                 return Err(err);
             }
-            // Say so on accept. Silence here is ambiguous in exactly the way
-            // that costs the most time: a host that gets no answer cannot tell
-            // an agent that never accepted from one that accepted and is
-            // waiting on a request that never arrived, and those are failures
-            // in different halves of the transport.
-            eprintln!("hv2-guest-agentd: accepted a connection");
-
-            // One connection at a time: the protocol is request/response and
-            // the host opens one channel. Serving them in sequence keeps the
-            // agent to a single thread of control, which is what a guest with
-            // no scheduler pressure to speak of wants.
-            if let Err(e) = serve(fd) {
-                eprintln!("hv2-guest-agentd: connection ended: {e}");
+            // Say so on accept, when tracing. Silence here is ambiguous in
+            // exactly the way that costs the most time: a host that gets no
+            // answer cannot tell an agent that never accepted from one that
+            // accepted and is waiting on a request that never arrived, and
+            // those are failures in different halves of the transport.
+            if tracing() {
+                eprintln!("hv2-guest-agentd: accepted a connection");
             }
-            unsafe { libc::close(fd) };
+
+            // A thread per connection. This was one connection at a time,
+            // which a snapshot turned into a hang: the guest in every restored
+            // copy still held the connection the snapshot was taken during,
+            // blocked in `read` on a host-side peer that no longer existed --
+            // the host's connection table is not part of a snapshot -- so
+            // the agent never returned to `accept`, and every sandbox from
+            // that template (or that paused sandbox) was unreachable. With a
+            // thread each, a dead connection costs one parked thread and
+            // nothing else. It also stops one long command from holding the
+            // agent against every other request.
+            std::thread::spawn(move || {
+                if let Err(e) = serve(fd) {
+                    eprintln!("hv2-guest-agentd: connection ended: {e}");
+                }
+                unsafe { libc::close(fd) };
+            });
         }
     }
 
@@ -146,7 +171,9 @@ mod linux {
             // Same reason as the accept log: from the host, a read that never
             // returns and a read that returns something unparseable are the
             // same silence.
-            eprintln!("hv2-guest-agentd: read {read} bytes");
+            if tracing() {
+                eprintln!("hv2-guest-agentd: read {read} bytes");
+            }
             if read == 0 {
                 return Ok(());
             }

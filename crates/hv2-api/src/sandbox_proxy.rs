@@ -59,6 +59,33 @@ use tokio::net::{TcpListener, TcpStream};
 type ProxyBody =
     http_body_util::combinators::BoxBody<Bytes, Box<dyn std::error::Error + Send + Sync>>;
 
+/// A backend's response body, holding the request's [`InFlight`] guard until
+/// the body is finished with -- fully sent, or dropped by a client that left.
+struct GuardedBody {
+    inner: ProxyBody,
+    _in_flight: InFlight,
+}
+
+impl hyper::body::Body for GuardedBody {
+    type Data = Bytes;
+    type Error = Box<dyn std::error::Error + Send + Sync>;
+
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        std::pin::Pin::new(&mut self.inner).poll_frame(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> hyper::body::SizeHint {
+        self.inner.size_hint()
+    }
+}
+
 /// Refuse a request in the shape its client can read.
 ///
 /// A gRPC client does not interpret HTTP status codes: a 404 reaches it as
@@ -138,6 +165,38 @@ mod grpc_status {
 pub trait SandboxRoutes: Send + Sync + 'static {
     /// The address serving `port` for `sandbox`, if that sandbox exists.
     async fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr>;
+
+    /// [`Self::resolve`] for a request about to be sent, with a guard the
+    /// proxy holds until that request's exchange is over -- response body
+    /// included, which for a streamed command is the whole of its run.
+    ///
+    /// What lets the owner of the routes tell a sandbox that is idle from one
+    /// with a request in flight, which a last-request timestamp cannot: a
+    /// command started a minute ago and still streaming is not idle. The
+    /// default holds nothing.
+    async fn open(&self, sandbox: &str, port: u16) -> Option<(SocketAddr, InFlight)> {
+        self.resolve(sandbox, port)
+            .await
+            .map(|addr| (addr, InFlight::none()))
+    }
+}
+
+/// Held for as long as a request to a sandbox is in flight; see
+/// [`SandboxRoutes::open`]. Whatever it wraps is dropped when it is.
+pub struct InFlight(Option<Box<dyn Send + Sync>>);
+
+impl InFlight {
+    /// A guard that tracks nothing.
+    #[must_use]
+    pub fn none() -> Self {
+        Self(None)
+    }
+
+    /// A guard whose end is `guard`'s drop.
+    #[must_use]
+    pub fn new(guard: impl Send + Sync + 'static) -> Self {
+        Self(Some(Box::new(guard)))
+    }
 }
 
 /// A registry that can be handed around and updated as sandboxes come and go.
@@ -430,7 +489,7 @@ async fn proxy(
     };
     let sandbox = sandbox.as_str();
 
-    let Some(target) = routes.resolve(sandbox, port).await else {
+    let Some((target, in_flight)) = routes.open(sandbox, port).await else {
         return Ok(refuse(
             grpc,
             StatusCode::NOT_FOUND,
@@ -511,10 +570,23 @@ async fn proxy(
     match sender.send_request(Request::from_parts(parts, body)).await {
         Ok(response) => {
             let (parts, body) = response.into_parts();
+            let body = body
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                .boxed();
+            // The guard goes with the response body, which is the exchange's
+            // last part to finish: a streamed command's output is still
+            // arriving long after the headers. Not with the connection task,
+            // where it once was -- that future resolves as soon as the
+            // request's sender is dropped, while hyper goes on driving the
+            // stream by itself, so a command 40 ms into its run already
+            // counted as finished and its sandbox was paused under it.
             Ok(Response::from_parts(
                 parts,
-                body.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-                    .boxed(),
+                GuardedBody {
+                    inner: body,
+                    _in_flight: in_flight,
+                }
+                .boxed(),
             ))
         }
         Err(e) => {
@@ -660,6 +732,53 @@ mod tests {
             map.resolve("sbx_b", 49983).await,
             Some(addr),
             "and only that one"
+        );
+    }
+
+    /// The in-flight guard lasts exactly as long as the response body: held
+    /// while it is still being read, released once it is done with. It was
+    /// once tied to the backend connection's future, which ends when the
+    /// request's sender is dropped -- long before a streamed body is -- so a
+    /// sandbox mid-command counted as idle and was paused under it.
+    #[tokio::test]
+    async fn the_in_flight_guard_lives_as_long_as_the_body() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        struct Released(Arc<AtomicBool>);
+        impl Drop for Released {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let released = Arc::new(AtomicBool::new(false));
+        let (tx, rx) = tokio::sync::mpsc::channel::<
+            Result<hyper::body::Frame<Bytes>, Box<dyn std::error::Error + Send + Sync>>,
+        >(4);
+        let inner =
+            http_body_util::StreamBody::new(tokio_stream::wrappers::ReceiverStream::new(rx))
+                .boxed();
+        let body = GuardedBody {
+            inner,
+            _in_flight: InFlight::new(Released(Arc::clone(&released))),
+        };
+        let reading = tokio::spawn(body.collect());
+
+        tx.send(Ok(hyper::body::Frame::data(Bytes::from_static(b"first"))))
+            .await
+            .expect("the body is reading");
+        tokio::task::yield_now().await;
+        assert!(
+            !released.load(Ordering::SeqCst),
+            "a body still streaming holds its guard"
+        );
+
+        drop(tx);
+        let collected = reading.await.expect("joined").expect("a clean body");
+        assert_eq!(collected.to_bytes(), Bytes::from_static(b"first"));
+        assert!(
+            released.load(Ordering::SeqCst),
+            "a finished body releases it"
         );
     }
 }

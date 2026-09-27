@@ -1,6 +1,6 @@
-# Beating CubeSandbox: a feature and performance roadmap
+# Beating CubeSandbox and Agent Substrate: a feature and performance roadmap
 
-Status: **Phases 0-5 built and verified, except arm64 execution.** Phase 0 benchmarked honestly
+Status: **Phases 0-6 built and verified, except arm64 execution.** Phase 0 benchmarked honestly
 before anything was promised; Phase 1 met its exit criterion, an unmodified
 E2B SDK client running against a HyperMachine endpoint by changing only where
 it points; Phase 2 moves a guest between VMs through a file and restores
@@ -10,7 +10,9 @@ injected on the host so the guest never holds them; Phase 4 runs many hosts
 behind stateless control planes coordinating through Redis/Valkey; Phase 5
 creates a sandbox by restoring a template instead of booting one, in tens of
 milliseconds and a few MiB each, and ships images, a Helm chart, Terraform,
-Compose, metrics and a web UI. Each
+Compose, metrics and a web UI; Phase 6 answers Google's Agent Substrate
+with E2B's pause, resume, auto-pause, traffic-driven resume and fork, and
+runs 240 stateful sandboxes on 8 VM slots. Each
 section below carries its own status and the measurements behind it.
 
 `e2b_compat`, which the Phase 1-3 sections run, is now the `hv2-sandboxd`
@@ -1263,6 +1265,131 @@ first ioctl. What arm64 needs is a backend of its own: `KVM_ARM_VCPU_INIT`,
 a GICv3 through `KVM_CREATE_DEVICE`, a device tree describing the
 virtio-mmio devices, the arm64 `Image` boot protocol and PSCI. That is real
 work and cannot be verified on the x86 machine this was written on.
+
+### Phase 6 — Suspend, resume, fork and oversubscription (Agent Substrate) — **built, verified with the real SDK; storage is node-local**
+
+Google's [Agent Substrate](https://github.com/agent-substrate/substrate)
+(Apache-2.0, pre-1.0; on GKE for evaluation) is a second competitor with a
+different idea than CubeSandbox's: most agents are idle most of the time, so
+suspend an idle one to storage, give its worker to another, and resume it
+on the next request. Its published figures: resume "sub-500ms", "over 500
+suspend/resume activations per second", a demo of ~250 stateful actors on 8
+pods (30x). Isolation is gVisor or Cloud Hypervisor; snapshots go to Cloud
+Storage and restore on any worker; a router parks requests during
+saturation rather than refusing them. Its GKE documentation also lists what
+it does not do yet: EgressPolicy hostname and IP rules, GPUs, and keeping
+open connections across a suspend.
+
+Before this phase HyperMachine had no per-sandbox pause at all. Now, all
+through E2B's own API:
+
+- **Pause** (`POST /sandboxes/{id}/pause`): the sandbox is written to the
+  node's disk as a *layered* snapshot -- only the pages it wrote since it was
+  restored from its template, found from the host kernel's page map rather
+  than by reading guest memory -- and its VM and slot are released. 7 ms; a
+  paused sandbox costs ~2-5 MiB of disk and no memory.
+- **Resume**: `connect` (answering 201, as E2B's does) or the deprecated
+  `resume`. The template is mapped copy-on-write and the written pages are
+  laid over it. 18-23 ms to an answering sandbox, same ID, same token, same
+  processes: a background loop counting in the guest was still counting.
+- **Timeout pauses instead of killing** (`lifecycle.on_timeout = "pause"`,
+  E2B's `autoPause`), and **traffic resumes** (`auto_resume`): a request
+  through the proxy for a paused sandbox resumes it and is then served.
+- **Fork** (`POST /sandboxes/{id}/fork`, E2B's newest API): the source is
+  checkpointed in place -- paused for the few milliseconds a layered
+  snapshot takes -- and `count` sandboxes start from it, each with its own
+  ID, token and gateway (the source's policy) and a reseeded RNG. Five
+  forks in 50 ms. For multi-agent work this is the fan-out primitive: set a
+  workspace up once, hand N agents an identical copy.
+- **Oversubscription** (`--evict-idle-after SECS`): a full node pauses the
+  sandbox idle longest among those with `auto_resume` and no request in
+  flight, and parks a create or a resume for a slot rather than answering
+  503. Slots are a FIFO semaphore, so a parked request is not overtaken.
+- Paused sandboxes list with `state: paused` and filter by it, through a
+  node or a cluster's control planes; the control plane rewrites `resume`
+  and `fork` answers as it does `connect`'s. Prometheus has pauses,
+  resumes, auto-resumes, evictions, forks and their latencies.
+
+Measured on the same nested-KVM development box as every other phase, with
+the unmodified E2B Python SDK (2.51) unless it says HTTP:
+
+| | HyperMachine | Agent Substrate (published) |
+| --- | --- | --- |
+| resume a paused sandbox, alone | **18-23 ms** | "sub-500ms", "under a second" |
+| resume, 96 at once, 24 in flight (HTTP) | p50 117 ms, p99 242 ms, **188/s** | -- |
+| pause, 96 at once (HTTP) | p50 73 ms, **283/s** | -- |
+| create, 96 at once (HTTP) | p50 152 ms, **145/s** | Agent Sandbox: 300/s at sub-200 ms |
+| stateful sandboxes on 8 VM slots | **240 (30x)**, every one kept its state | ~250 on 8 pods (30x) |
+| a request to one of those 240 (evict + resume + command) | p50 ~135 ms, p99 ~220 ms, 58/s | -- |
+| fork x5 | 50 ms | not in its documentation |
+| paused sandbox, storage | ~2.2 MiB each (240 in 523 MiB) | Cloud Storage, size not published |
+
+The throughput rows are one node. Agent Substrate's 500/s and Agent
+Sandbox's 300/s do not say how many machines they are, so the comparison is
+not like for like either way; a cluster here adds nodes linearly for
+creates, since nothing is shared but the store. What limits a node here is
+CPU: a create costs ~25 ms of host CPU, about its whole latency, and
+concurrency past eight adds contention.
+
+What Agent Substrate has that this does not:
+
+- **Restore on any worker.** Snapshots here stay on the node that paused
+  them, layered over that node's template -- which is not byte-identical to
+  another node's -- so a paused sandbox resumes where it paused, and a
+  node's loss takes its paused sandboxes with it. Moving them needs either
+  deterministic templates or shipping the full image, and a shared store.
+- **Workload identity and mTLS.** Substrate authenticates to cloud APIs
+  through GKE Workload Identity and uses pod certificates. Here a node
+  trusts its control plane by a shared token over plain HTTP, and a sandbox
+  gets credentials only by header injection into its egress.
+- **Kubernetes-native objects** (`ActorTemplate`, `WorkerPool`,
+  `kubectl-ate`). This is E2B's API instead, deployed by a Helm chart.
+
+What this has that it does not: E2B compatibility (the unmodified SDK),
+egress policy by hostname and CIDR with DNS control and credential
+injection, fork, a KVM guest with its own kernel per sandbox, and running
+anywhere with `/dev/kvm` rather than on Kubernetes.
+
+#### Found on the way
+
+Four defects, each found by a measurement or a test failing, not by
+reading:
+
+- **A restored guest's idle vCPU spun at 100%.** 315,000 `HLT` exits a
+  second from a guest whose own accounting said it was idle -- read off KVM's
+  debugfs counters. The snapshot captured `MSR_KVM_ASYNC_PF_EN` (async page
+  faults, delivered by interrupt) but not `MSR_KVM_ASYNC_PF_INT`, the
+  vector: restored guests had async page faults on vector 0. The first
+  page-ready notification could never be delivered, and a pending one makes
+  every halt return at once. Latent in every Phase 5 template restore; hit
+  every time here, because a resumed guest's memory is a file mapping and
+  file mappings are what fault asynchronously. Idle CPU for 16 resumed
+  sandboxes went from 1613% of a core to 4%.
+- **A snapshot could hang every guest restored from it.** The guest agent
+  served one connection at a time, and a snapshot taken before the guest
+  saw the host close its last connection left every copy blocked reading a
+  connection whose host side no longer existed. The agent now serves each
+  connection on its own thread -- which also stops one long command from
+  holding the agent against every other request.
+- **Requests counted as finished while still streaming.** The proxy held a
+  request's in-flight guard in the backend connection's future, which hyper
+  resolves once the request's sender is dropped -- not when the streamed
+  response ends. A command 40 ms into its run counted as idle, and its
+  sandbox was paused under it. The guard now lives in the response body.
+- **A request arriving during a pause was refused as unknown**, between the
+  sandbox leaving the running set and entering the paused one; and a
+  resume could be overtaken by creates for longer than the SDK's 10 s
+  timeout. Requests now wait out a transition in progress, and slots are
+  granted in order.
+
+Two things tried and not kept on by default: the guest agent logged two
+lines to the serial console per request, ~250 VM exits, and those are now
+opt-in (`HV2_AGENT_TRACE`) -- which made no measurable latency difference;
+and prefaulting a restore's measured working set (`KVM_PRE_FAULT_MEMORY`,
+`--prefault`) halves a restore's page faults and exits, and also made no
+measurable latency difference here. Under nested virtualisation the cost
+of a restore's first request is somewhere the host's counters do not show;
+both are left for a bare-metal host to measure.
 
 ## What this roadmap deliberately does not do
 

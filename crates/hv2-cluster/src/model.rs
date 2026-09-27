@@ -70,9 +70,23 @@ pub struct SandboxRecord {
     /// What `POST /sandboxes` answered with, verbatim, so `connect` and
     /// detail can repeat it rather than rebuild it.
     pub descriptor: Value,
+    /// Suspended to its node's disk rather than running: it holds no VM and
+    /// counts against no capacity until something resumes it.
+    #[serde(default)]
+    pub paused: bool,
 }
 
 impl SandboxRecord {
+    /// E2B's `SandboxState`: `running` or `paused`.
+    #[must_use]
+    pub fn state(&self) -> &'static str {
+        if self.paused {
+            "paused"
+        } else {
+            "running"
+        }
+    }
+
     /// E2B's `ListedSandbox`.
     #[must_use]
     pub fn listed(&self) -> Value {
@@ -87,7 +101,7 @@ impl SandboxRecord {
             // No disk of its own: the root filesystem is an initramfs in RAM.
             "diskSizeMB": 0,
             "metadata": self.metadata,
-            "state": "running",
+            "state": self.state(),
             "envdVersion": self.envd_version,
             // Not E2B's; which node runs it, for an operator.
             "nodeID": self.node_id,
@@ -178,6 +192,7 @@ mod tests {
             metadata: [("team".to_string(), "red".to_string())].into(),
             envd_version: "0.6.3".into(),
             descriptor: json!({"envdAccessToken": "tok", "sandboxID": "sbx-1"}),
+            paused: false,
         }
     }
 
@@ -201,6 +216,20 @@ mod tests {
             assert!(listed.get(field).is_some(), "{field}");
         }
         assert_eq!(listed["startedAt"], "2023-11-14T22:13:20.000Z");
+    }
+
+    /// A paused sandbox lists as `paused`, which the SDK filters on; and a
+    /// record written before the field existed reads as running.
+    #[test]
+    fn a_paused_record_lists_as_paused() {
+        let mut r = record();
+        assert_eq!(r.listed()["state"], "running");
+        r.paused = true;
+        assert_eq!(r.listed()["state"], "paused");
+        let mut old = serde_json::to_value(record()).expect("encodes");
+        old.as_object_mut().expect("an object").remove("paused");
+        let old: SandboxRecord = serde_json::from_value(old).expect("still decodes");
+        assert!(!old.paused);
     }
 
     #[test]
