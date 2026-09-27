@@ -114,6 +114,11 @@ pub struct VirtioNetMmio {
     /// what a real link does when a queue fills.
     backlog: usize,
     wake: Option<Arc<dyn FrameWake>>,
+    /// Told when the guest's kick has queued frames for the host, so whoever
+    /// collects them need not poll. Called on the vCPU thread with the device
+    /// locked: an implementation must only signal, never block or lock this
+    /// device.
+    transmit_wake: Option<Arc<dyn FrameWake>>,
     /// Frames dropped because the backlog was full, in each direction.
     dropped_rx: u64,
     dropped_tx: u64,
@@ -130,6 +135,7 @@ impl VirtioNetMmio {
             rx_pending: VecDeque::new(),
             backlog: 256,
             wake: None,
+            transmit_wake: None,
             dropped_rx: 0,
             dropped_tx: 0,
         }
@@ -143,6 +149,15 @@ impl VirtioNetMmio {
     /// Install the hook that tells the VM a received frame is waiting.
     pub fn set_frame_wake(&mut self, wake: Arc<dyn FrameWake>) {
         self.wake = Some(wake);
+    }
+
+    /// Install the hook told when the guest has sent frames.
+    ///
+    /// It runs on the vCPU thread, inside this device's lock, during the
+    /// guest's own kick: it must signal and return. Taking this device's lock
+    /// from it deadlocks the vCPU.
+    pub fn set_transmit_wake(&mut self, wake: Arc<dyn FrameWake>) {
+        self.transmit_wake = Some(wake);
     }
 
     /// How many frames may wait in one direction before the oldest is dropped.
@@ -245,6 +260,11 @@ impl VirtioNetMmio {
             // runs out stops sending with no error anywhere.
             self.queues[TX_QUEUE].add_used(mem, chain.head, 0)?;
             consumed = true;
+        }
+        if consumed && !self.tx_pending.is_empty() {
+            if let Some(wake) = &self.transmit_wake {
+                wake.wake();
+            }
         }
         Ok(consumed)
     }

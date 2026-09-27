@@ -2037,6 +2037,10 @@ impl VM {
             .name(format!("hv2-net-{}", self.config.name))
             .spawn(move || {
                 while frame_rx.recv().is_ok() {
+                    // One delivery publishes everything queued, so a burst
+                    // of wakes is one interrupt, not one per frame: each is
+                    // an injection the guest has to take and answer.
+                    while frame_rx.try_recv().is_ok() {}
                     handle.block_on(async {
                         if let Err(e) = pump_vm.notify_net().await {
                             tracing::debug!(
