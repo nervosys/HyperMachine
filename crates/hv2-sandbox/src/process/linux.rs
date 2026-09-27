@@ -93,8 +93,9 @@ fn userns_restriction() -> Option<&'static str> {
     (value.trim() == "1").then_some(
         "; this host's AppArmor restricts unprivileged user namespaces \
          (kernel.apparmor_restrict_unprivileged_userns = 1, the default since Ubuntu 23.10): \
-         one can be created but holds no capabilities. Set the sysctl to 0, or give the \
-         calling program an AppArmor profile that allows user namespaces",
+         one can be created but holds no capabilities. Set the sysctl to 0, give the \
+         calling program an AppArmor profile that allows user namespaces, or use the \
+         microVM sandbox",
     )
 }
 
@@ -171,7 +172,14 @@ pub(super) fn probe() -> Controls {
             };
         }
         Err(e) => {
-            let reason = format!("no writable cgroup v2 hierarchy: {e}");
+            // The raw error ("Permission denied") says what failed and not what
+            // to do. The usual cause is running as a user whose session does
+            // not own a cgroup -- a CI runner, a service without Delegate=yes.
+            let reason = format!(
+                "no writable cgroup v2 hierarchy: {e}. Run inside a cgroup delegated to \
+                 this user (for example `systemd-run --user --scope -p Delegate=yes ...`, \
+                 or a service with Delegate=yes), or use the microVM sandbox"
+            );
             controls = controls
                 .without(Control::Memory, reason.clone())
                 .without(Control::ProcessCount, reason);
