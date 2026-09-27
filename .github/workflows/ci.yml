@@ -83,6 +83,18 @@ jobs:
             - name: Run tests
               run: cargo test --workspace --exclude hv2-core ${{ runner.arch == 'ARM64' && '--exclude hv1-core' || '' }}
 
+            # What hv2-sandbox can enforce on this runner, probed rather than
+            # assumed -- in particular whether a GitHub runner gives an
+            # unprivileged process a writable cgroup v2 hierarchy, which the
+            # memory and process-count caps depend on and WSL2 cannot answer.
+            # A report, not a gate: a runner lacking a control is a fact about
+            # the runner. The tests above are what fail on a wrong answer.
+            - name: Report what hv2-sandbox enforces here
+              shell: bash
+              run: |
+                  cargo run -q -p hv2-sandbox --example what_this_host_enforces | tee sandbox-report.txt
+                  { echo "### hv2-sandbox on ${{ matrix.os }}"; echo '```'; cat sandbox-report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
     test-core:
         name: Test Core (Linux only)
         runs-on: ubuntu-latest
