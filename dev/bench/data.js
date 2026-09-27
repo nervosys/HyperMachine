@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790489010115,
+  "lastUpdate": 1790532326811,
   "repoUrl": "https://github.com/nervosys/HyperMachine",
   "entries": {
     "HyperMachine Benchmarks": [
@@ -10043,6 +10043,330 @@ window.BENCHMARK_DATA = {
             "name": "tool_formats/serialize_openai_tools",
             "value": 9187.067,
             "range": "+/- 195.367",
+            "unit": "ns"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "5751456+admercs@users.noreply.github.com",
+            "name": "Adam Erickson",
+            "username": "admercs"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4c6d0c44719e3c7dc2d77c7621ea14b09752da7",
+          "message": "Merge pull request #104 from nervosys/docs/sandbox-refusal-plumbing\n\ndocs(sandbox): tell integrators their error path can eat the refusal",
+          "timestamp": "2026-09-27T10:47:48-07:00",
+          "tree_id": "7b819a8abfd213ada0ef12f3dabeefdbf808b595",
+          "url": "https://github.com/nervosys/HyperMachine/commit/c4c6d0c44719e3c7dc2d77c7621ea14b09752da7"
+        },
+        "date": 1790532324599,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "aes_gcm_decrypt/1024",
+            "value": 5062.644,
+            "range": "+/- 14.014",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/16384",
+            "value": 17629.53,
+            "range": "+/- 77.039",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/256",
+            "value": 4438.086,
+            "range": "+/- 9.005",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/4096",
+            "value": 7520.166,
+            "range": "+/- 18.918",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/64",
+            "value": 4303.948,
+            "range": "+/- 8.416",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_decrypt/65536",
+            "value": 57709.439,
+            "range": "+/- 171.557",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/1024",
+            "value": 5217.183,
+            "range": "+/- 7.869",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/16384",
+            "value": 18296.983,
+            "range": "+/- 40.394",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/256",
+            "value": 4641.552,
+            "range": "+/- 23.866",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/4096",
+            "value": 7732.215,
+            "range": "+/- 10.047",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/64",
+            "value": 4453.995,
+            "range": "+/- 11.061",
+            "unit": "ns"
+          },
+          {
+            "name": "aes_gcm_encrypt/65536",
+            "value": 59683.829,
+            "range": "+/- 160.565",
+            "unit": "ns"
+          },
+          {
+            "name": "fips_self_tests",
+            "value": 21300.292,
+            "range": "+/- 62.748",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes128_key",
+            "value": 99.917,
+            "range": "+/- 0.321",
+            "unit": "ns"
+          },
+          {
+            "name": "generate_aes256_key",
+            "value": 114.806,
+            "range": "+/- 0.356",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/128",
+            "value": 4830.598,
+            "range": "+/- 13.397",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/256",
+            "value": 8597.291,
+            "range": "+/- 19.276",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/32",
+            "value": 1970.266,
+            "range": "+/- 4.858",
+            "unit": "ns"
+          },
+          {
+            "name": "hkdf/64",
+            "value": 2934.412,
+            "range": "+/- 11.413",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/1024",
+            "value": 1410.987,
+            "range": "+/- 1.944",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/16384",
+            "value": 12380.26,
+            "range": "+/- 17.342",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/256",
+            "value": 862.368,
+            "range": "+/- 1.623",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/4096",
+            "value": 3607.436,
+            "range": "+/- 4.465",
+            "unit": "ns"
+          },
+          {
+            "name": "hmac_sha256/64",
+            "value": 723.634,
+            "range": "+/- 1.235",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/deserialize_ontology",
+            "value": 75948.024,
+            "range": "+/- 473.086",
+            "unit": "ns"
+          },
+          {
+            "name": "ontology/serialize_ontology",
+            "value": 11383.506,
+            "range": "+/- 75.877",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/1024",
+            "value": 435.496,
+            "range": "+/- 1.124",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/16",
+            "value": 17.109,
+            "range": "+/- 0.06",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/256",
+            "value": 109.789,
+            "range": "+/- 0.234",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/32",
+            "value": 22.915,
+            "range": "+/- 0.027",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/4096",
+            "value": 1736.239,
+            "range": "+/- 3.101",
+            "unit": "ns"
+          },
+          {
+            "name": "random_bytes/64",
+            "value": 36.717,
+            "range": "+/- 0.171",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/parse_create_vm_request",
+            "value": 2002.783,
+            "range": "+/- 6.198",
+            "unit": "ns"
+          },
+          {
+            "name": "request_parsing/serialize_list_response",
+            "value": 15380.731,
+            "range": "+/- 82.616",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1024",
+            "value": 839.817,
+            "range": "+/- 1.053",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/1048576",
+            "value": 748573.823,
+            "range": "+/- 240.369",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/16384",
+            "value": 11796.227,
+            "range": "+/- 3.521",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/256",
+            "value": 290.778,
+            "range": "+/- 0.409",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/4096",
+            "value": 3031.756,
+            "range": "+/- 1.641",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/64",
+            "value": 153.897,
+            "range": "+/- 0.242",
+            "unit": "ns"
+          },
+          {
+            "name": "sha256/65536",
+            "value": 46854.918,
+            "range": "+/- 23.664",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1024",
+            "value": 2428.499,
+            "range": "+/- 7.523",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/1048576",
+            "value": 2119054.417,
+            "range": "+/- 5765.792",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/16384",
+            "value": 33677.484,
+            "range": "+/- 193.953",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/256",
+            "value": 875.313,
+            "range": "+/- 1.843",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/4096",
+            "value": 8616.534,
+            "range": "+/- 18.34",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/64",
+            "value": 379.105,
+            "range": "+/- 1.277",
+            "unit": "ns"
+          },
+          {
+            "name": "sha512/65536",
+            "value": 132579.326,
+            "range": "+/- 437.739",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_anthropic_tools",
+            "value": 6842.511,
+            "range": "+/- 39.822",
+            "unit": "ns"
+          },
+          {
+            "name": "tool_formats/serialize_openai_tools",
+            "value": 7635.675,
+            "range": "+/- 58.297",
             "unit": "ns"
           }
         ]
