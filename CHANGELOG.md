@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **A tenant's `allowOut` no longer reaches the host's or the cluster's
+  network** (`hv2-net`, `hv2-sandboxd`, Helm chart). `allowOut` CIDRs were
+  checked before reserved addresses, so a sandbox created with
+  `allowOut: ["0.0.0.0/0"]` could reach private and link-local ranges. In a
+  cluster that included the unauthenticated Valkey store holding every
+  sandbox's envd access token, and the cloud metadata address. Reproduced on
+  real KVM guests. Now:
+  - a reserved range opens only where the operator grants it, with
+    `--tenant-reserved-cidr` or `node.tenantReservedCidrs`;
+  - the chart's store has a generated password;
+  - node pods get an egress NetworkPolicy.
+
+  Behaviour changes: `allowOut` rules that relied on reaching private ranges
+  need an operator grant, and an `auth.existingSecret` needs a
+  `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
+
 ### Added
 - **A command runs inside a guest through the published API** (`hv2-agent`).
   Not the boot probe, which drives the vsock device by hand because it was

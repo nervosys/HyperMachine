@@ -44,6 +44,10 @@ spec:
             - --network
             - --egress-default
             - {{ .Values.node.egressDefault | quote }}
+            {{- range .Values.node.tenantReservedCidrs }}
+            - --tenant-reserved-cidr
+            - {{ . | quote }}
+            {{- end }}
             {{- end }}
             {{- if not .Values.node.template }}
             - --no-template
@@ -72,6 +76,8 @@ spec:
               valueFrom: { fieldRef: { fieldPath: status.podIP } }
             - name: HV2_CLUSTER_TOKEN
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
+            - name: HV2_STORE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password } }
           ports:
             - { name: api, containerPort: 3980 }
             - { name: envd, containerPort: 3981 }

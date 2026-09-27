@@ -11,16 +11,20 @@ x-secrets: &secrets
   HV2_API_KEY: ${HV2_API_KEY:-e2b_change_me_before_exposing_this}
   HV2_CLUSTER_TOKEN: ${HV2_CLUSTER_TOKEN:-change-me-cluster-token}
 
+# The store holds every sandbox's envd access token. Letters and digits only:
+# it is spliced into a redis:// URL below.
+x-store-url: &store-url redis://:${HV2_STORE_PASSWORD:-changemestorepassword}@store:6379
+
 services:
   store:
     image: valkey/valkey:8.1
-    command: ["--save", "", "--appendonly", "no"]
+    command: ["--save", "", "--appendonly", "no", "--requirepass", "${HV2_STORE_PASSWORD:-changemestorepassword}"]
     restart: unless-stopped
 
   control-plane:
     build: { context: ../.., dockerfile: Containerfile.sandbox, target: control-plane }
     image: hv2-control-plane:dev
-    command: ["--store", "redis://store:6379", "--port", "5980", "--proxy-port", "5981"]
+    command: ["--store", *store-url, "--port", "5980", "--proxy-port", "5981"]
     environment: *secrets
     ports: ["5980:5980", "5981:5981"]
     depends_on: [store]
@@ -34,7 +38,7 @@ services:
       - --capacity
       - "16"
       - --cluster-store
-      - redis://store:6379
+      - *store-url
       - --node-id
       - node-1
       - --advertise-api

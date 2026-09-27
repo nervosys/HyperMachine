@@ -284,7 +284,7 @@ pub struct NatInfo {
 #[derive(Debug)]
 #[deprecated(
     since = "1.1.0",
-    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. The egress filter that a bridge would consult is `hv2_net::egress::EgressPolicy` and NAT is `hv2_net::nat::NatTable`, though no product path builds a bridge either -- a deployed sandbox has no network interface. Kept for the Phase 3 L7 egress work; see this module's header"
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Sandbox egress is enforced by `hv2_net::gateway` against `hv2_net::network_policy::NetworkPolicy` (hv2-sandboxd --network); see this module's header"
 )]
 pub struct ConnTracker {
     /// Connections by original tuple
@@ -846,7 +846,7 @@ pub enum ChainType {
 #[derive(Debug)]
 #[deprecated(
     since = "1.1.0",
-    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. The egress filter that a bridge would consult is `hv2_net::egress::EgressPolicy` and NAT is `hv2_net::nat::NatTable`, though no product path builds a bridge either -- a deployed sandbox has no network interface. Kept for the Phase 3 L7 egress work; see this module's header"
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Sandbox egress is enforced by `hv2_net::gateway` against `hv2_net::network_policy::NetworkPolicy` (hv2-sandboxd --network); see this module's header"
 )]
 pub struct FilterChain {
     /// Chain type
@@ -933,7 +933,7 @@ impl FilterChain {
 #[derive(Debug)]
 #[deprecated(
     since = "1.1.0",
-    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. The egress filter that a bridge would consult is `hv2_net::egress::EgressPolicy` and NAT is `hv2_net::nat::NatTable`, though no product path builds a bridge either -- a deployed sandbox has no network interface. Kept for the Phase 3 L7 egress work; see this module's header"
+    note = "not wired to any data path: nothing in this workspace consults it, so it enforces nothing. Sandbox egress is enforced by `hv2_net::gateway` against `hv2_net::network_policy::NetworkPolicy` (hv2-sandboxd --network); see this module's header"
 )]
 pub struct NetworkFilter {
     /// Filter chains

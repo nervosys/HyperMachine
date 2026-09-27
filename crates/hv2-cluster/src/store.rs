@@ -396,8 +396,22 @@ pub async fn open(url: &str, namespace: &str) -> Result<std::sync::Arc<dyn Clust
         ));
     }
     Err(StoreError(format!(
-        "unknown store '{url}': use memory: or redis://host:port"
+        "unknown store '{}': use memory: or redis://host:port",
+        redacted(url)
     )))
+}
+
+/// `url` fit for a log: any credentials (`redis://:password@host`) replaced.
+#[must_use]
+pub fn redacted(url: &str) -> String {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return url.to_string();
+    };
+    let authority_end = rest.find('/').unwrap_or(rest.len());
+    match rest[..authority_end].rfind('@') {
+        Some(at) => format!("{scheme}://***@{}", &rest[at + 1..]),
+        None => url.to_string(),
+    }
 }
 
 #[cfg(test)]
@@ -405,6 +419,20 @@ pub(crate) mod tests {
     use super::*;
     use crate::model::now_ms;
     use serde_json::json;
+
+    #[test]
+    fn a_logged_store_url_carries_no_password() {
+        assert_eq!(
+            redacted("redis://:hunter2@store:6379/0"),
+            "redis://***@store:6379/0"
+        );
+        assert_eq!(
+            redacted("rediss://user:p@ss@store:6380"),
+            "rediss://***@store:6380"
+        );
+        assert_eq!(redacted("redis://store:6379"), "redis://store:6379");
+        assert_eq!(redacted("memory:"), "memory:");
+    }
 
     pub(crate) fn node(id: &str, running: u32, capacity: u32) -> NodeInfo {
         NodeInfo {

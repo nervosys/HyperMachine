@@ -11,6 +11,9 @@ helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 {{- if .Values.auth.existingSecret -}}{{ .Values.auth.existingSecret }}{{- else -}}{{ include "hv2.name" . }}-auth{{- end -}}
 {{- end }}
 
+{{- /* With the chart's own store, the password comes from the Secret through
+       HV2_STORE_PASSWORD, which every container using this URL must set;
+       Kubernetes expands $(VAR) in args, so it never sits in the pod spec. */ -}}
 {{- define "hv2.storeUrl" -}}
-{{- if .Values.store.deploy -}}redis://{{ include "hv2.name" . }}-store:6379{{- else -}}{{ required "store.url is required when store.deploy is false" .Values.store.url }}{{- end -}}
+{{- if .Values.store.deploy -}}redis://:$(HV2_STORE_PASSWORD)@{{ include "hv2.name" . }}-store:6379{{- else -}}{{ required "store.url is required when store.deploy is false" .Values.store.url }}{{- end -}}
 {{- end }}

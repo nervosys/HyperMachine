@@ -112,7 +112,7 @@ use hv2_cluster::model::{metadata_matches, now_ms, parse_metadata_query, Sandbox
 use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
-use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
+use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
 const GUEST_CID_BASE: u64 = 100;
 
@@ -171,6 +171,9 @@ struct Options {
     egress_default: Verdict,
     /// Accept an `egressProxy` on a private or internal address.
     allow_private_egress_proxy: bool,
+    /// Reserved ranges a sandbox's `allowOut` may open. Empty: none may, so
+    /// no tenant rule reaches this host's network or the cluster's store.
+    tenant_reserved: Vec<Cidr>,
     /// Sandboxes this node runs at once. A create beyond it is refused with
     /// 503, which a control plane reads as "try another node".
     capacity: u32,
@@ -222,6 +225,7 @@ fn parse_options() -> Result<Options, String> {
         network: false,
         egress_default: Verdict::Deny,
         allow_private_egress_proxy: false,
+        tenant_reserved: Vec::new(),
         capacity: 16,
         cluster_store: None,
         cluster_namespace: "default".to_string(),
@@ -272,6 +276,11 @@ fn parse_options() -> Result<Options, String> {
                     Duration::from_secs(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
             }
             "--allow-private-egress-proxy" => opts.allow_private_egress_proxy = true,
+            "--tenant-reserved-cidr" => {
+                let text = value(&mut i)?;
+                opts.tenant_reserved
+                    .push(Cidr::parse(&text).map_err(|e| format!("--tenant-reserved-cidr: {e}"))?);
+            }
             "--evict-idle-after" => {
                 opts.evict_idle_after = Some(Duration::from_secs(
                     value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
@@ -288,7 +297,8 @@ fn parse_options() -> Result<Options, String> {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
                      [--capacity N] [--no-template] [--prefault] [--evict-idle-after SECS] \
-                     [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
+                     [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
+                     [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
                      [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS]]\n\
@@ -510,6 +520,7 @@ fn policy_from(
     allow_internet_access: Option<bool>,
     network: Option<&SandboxNetworkConfig>,
     operator_default: Verdict,
+    tenant_reserved: &[Cidr],
 ) -> Result<NetworkPolicy, String> {
     let empty = SandboxNetworkConfig::default();
     let network = network.unwrap_or(&empty);
@@ -532,6 +543,7 @@ fn policy_from(
         &rules,
         operator_default,
     )
+    .map(|policy| policy.with_tenant_reserved(tenant_reserved))
     .map_err(|e| e.to_string())
 }
 
@@ -1242,6 +1254,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
             req.allow_internet_access,
             req.network.as_ref(),
             state.opts.egress_default,
+            &state.opts.tenant_reserved,
         ) {
             Ok(policy) => policy,
             Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
@@ -2158,7 +2171,12 @@ async fn update_network(
     let Some(gateway) = gateway else {
         return api_error(StatusCode::BAD_REQUEST, "this sandbox has no network");
     };
-    let policy = match policy_from(None, Some(&update), state.opts.egress_default) {
+    let policy = match policy_from(
+        None,
+        Some(&update),
+        state.opts.egress_default,
+        &state.opts.tenant_reserved,
+    ) {
         Ok(policy) => policy,
         Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
     };
@@ -2703,4 +2721,43 @@ async fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
     std::process::ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hv2_net::network_policy::AddressVerdict;
+
+    fn allowing_everything() -> SandboxNetworkConfig {
+        SandboxNetworkConfig {
+            allow_out: vec!["0.0.0.0/0".into()],
+            ..SandboxNetworkConfig::default()
+        }
+    }
+
+    /// The daemon's policies carry the operator's grant: none by default, so
+    /// a tenant's `0.0.0.0/0` reaches the internet and not the cluster store.
+    #[test]
+    fn a_tenant_rule_opens_reserved_ranges_only_as_the_operator_allows() {
+        let store: std::net::IpAddr = "10.0.3.7".parse().unwrap();
+        let public: std::net::IpAddr = "93.184.216.34".parse().unwrap();
+
+        let policy = policy_from(None, Some(&allowing_everything()), Verdict::Deny, &[]).unwrap();
+        assert_eq!(
+            policy.decide_address(store),
+            AddressVerdict::Deny("reserved address")
+        );
+        assert_eq!(
+            policy.decide_address(public),
+            AddressVerdict::Allow("allowOut address")
+        );
+
+        let grant = [Cidr::parse("10.0.3.0/24").unwrap()];
+        let policy =
+            policy_from(None, Some(&allowing_everything()), Verdict::Deny, &grant).unwrap();
+        assert_eq!(
+            policy.decide_address(store),
+            AddressVerdict::Allow("allowOut address")
+        );
+    }
 }

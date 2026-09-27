@@ -25,7 +25,13 @@ spec:
       containers:
         - name: valkey
           image: {{ .Values.store.image }}
-          args: ["--save", "", "--appendonly", "no"]
+          # A password even behind the NetworkPolicy: the store holds every
+          # sandbox's envd access token and the routes to it, and a node's
+          # own traffic -- which carries its sandboxes' -- is allowed in.
+          args: ["--save", "", "--appendonly", "no", "--requirepass", "$(HV2_STORE_PASSWORD)"]
+          env:
+            - name: HV2_STORE_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: store-password } }
           ports:
             - containerPort: 6379
               name: redis
