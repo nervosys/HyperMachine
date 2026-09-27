@@ -344,6 +344,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **macOS no longer claims a process-count limit** (`hv2-sandbox`). Breaking
+  for a caller that asked for one: a spec with `max_processes` set and not
+  `best_effort` was accepted by 1.1.0 and is now refused with
+  `SandboxError::Unsupported`. On macOS the only mechanism was
+  `RLIMIT_NPROC`, which caps every process the *user* owns rather than the
+  workload's. A desktop user already over the limit had every spawn refused,
+  and a user under it got a workload that could fork until the user's total
+  reached the limit. Neither is "at most N processes". `Controls::reason`
+  says so. A caller that set no process limit, such as Lit, is unaffected.
+- **Refusal reasons on Linux say what to do** (`hv2-sandbox`). On a host
+  where AppArmor restricts unprivileged user namespaces (the default since
+  Ubuntu 23.10), the three namespace-based reasons name
+  `kernel.apparmor_restrict_unprivileged_userns`. The cgroup reason names a
+  delegated cgroup (`systemd-run --user --scope -p Delegate=yes`). Both end
+  with the microVM sandbox as the way out.
 - **Six tools that reported an effect nothing performed now refuse**
   (`hv2-agent`). Each returned a plausible success and did nothing, which is
   the defect `execute_plan` had and which the `vm.exec` fallback in the same
@@ -478,6 +493,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **A process limit that counted the user, not the workload** (`hv2-sandbox`,
+  Linux). `Control::ProcessCount` set `RLIMIT_NPROC` beside the cgroup's
+  `pids.max`. `RLIMIT_NPROC` counts every task the user owns, host-wide and
+  threads included, so `SandboxSpec::untrusted`'s default of 64 had every
+  spawn that forked refused with `EAGAIN` whenever the user already ran more
+  than 64 threads. Linux now relies on `pids.max`, which counts only the
+  workload's cgroup.
+- **A new root plus a PID namespace could not start on Ubuntu**
+  (`hv2-sandbox`, Linux). The fresh `/proc` was mounted after the pivot, when
+  the kernel no longer lets a user namespace mount one (`EPERM`). It is now
+  mounted inside the new root before the pivot. WSL2's kernel allowed the old
+  order, which is why it went unseen.
+- **hv2-sandbox's containment tests had never run in CI.** On
+  `ubuntu-latest` every one skipped itself, because AppArmor blocks user
+  namespaces there and no cgroup is writable. The new *Sandbox Containment*
+  job grants both, and fails if the probe reports fewer than all eight
+  controls or if any test skips. Both bugs above were found by it.
 - **Four more parameters that were accepted and ignored** (`hv2-agent`).
   - A **disabled tool was hidden, not refused**. `McpTool::enabled` was
     filtered in `list_tools` and never checked on the call path, so a tool
