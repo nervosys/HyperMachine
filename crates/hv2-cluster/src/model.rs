@@ -47,9 +47,23 @@ pub struct NodeInfo {
     /// node verifies against the cluster's issuer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jwk: Option<Value>,
+    /// The templates this node can start sandboxes from. Empty from a node
+    /// older than templates, which offered `base` alone.
+    #[serde(default)]
+    pub templates: Vec<String>,
 }
 
 impl NodeInfo {
+    /// Whether this node can start a sandbox from `template`.
+    #[must_use]
+    pub fn offers(&self, template: &str) -> bool {
+        if self.templates.is_empty() {
+            template == "base"
+        } else {
+            self.templates.iter().any(|t| t == template)
+        }
+    }
+
     /// Room for one more, as of its last heartbeat. The node itself is the
     /// authority -- it refuses a create it has no room for -- so this is a
     /// scheduling hint and a stale one is safe.

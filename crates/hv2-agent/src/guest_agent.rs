@@ -508,6 +508,82 @@ impl GuestAgent {
         }
     }
 
+    /// Write `data` to `path` in the guest, replacing it -- in chunks, each
+    /// its own request, so a file of any size fits the frame limit.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest's reason for refusing.
+    pub fn write_file(&mut self, path: &str, data: &[u8], timeout: Duration) -> Result<()> {
+        let mut chunks = data.chunks(hv2_guest_agent::FILE_CHUNK).peekable();
+        let mut append = false;
+        // An empty file is still one write, which creates it.
+        let empty: &[u8] = &[];
+        let first = chunks.next().unwrap_or(empty);
+        for chunk in std::iter::once(first).chain(chunks) {
+            match self.request(
+                Operation::WriteFile {
+                    path: path.to_string(),
+                    data: hv2_guest_agent::b64::encode(chunk),
+                    append,
+                },
+                timeout,
+            )? {
+                OpResult::Acknowledged => {}
+                OpResult::Failed { message } => return Err(AgentError::Script(message)),
+                other => {
+                    return Err(AgentError::Script(format!(
+                        "the guest answered a file write with {other:?}"
+                    )))
+                }
+            }
+            append = true;
+        }
+        Ok(())
+    }
+
+    /// Read all of `path` in the guest, up to `limit` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, the guest's reason for refusing, or
+    /// a file larger than `limit`.
+    pub fn read_file(&mut self, path: &str, limit: u64, timeout: Duration) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        loop {
+            match self.request(
+                Operation::ReadFile {
+                    path: path.to_string(),
+                    offset: out.len() as u64,
+                    length: hv2_guest_agent::FILE_CHUNK as u64,
+                },
+                timeout,
+            )? {
+                OpResult::FileData { data, size } => {
+                    if size > limit {
+                        return Err(AgentError::Script(format!(
+                            "{path} is {size} bytes, over the {limit}-byte limit"
+                        )));
+                    }
+                    let bytes = hv2_guest_agent::b64::decode(&data).ok_or_else(|| {
+                        AgentError::Script("the guest sent file data that is not base64".into())
+                    })?;
+                    let done = bytes.is_empty();
+                    out.extend_from_slice(&bytes);
+                    if done || out.len() as u64 >= size {
+                        return Ok(out);
+                    }
+                }
+                OpResult::Failed { message } => return Err(AgentError::Script(message)),
+                other => {
+                    return Err(AgentError::Script(format!(
+                        "the guest answered a file read with {other:?}"
+                    )))
+                }
+            }
+        }
+    }
+
     /// Send a signal to a started program.
     ///
     /// # Errors

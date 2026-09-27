@@ -69,6 +69,10 @@ spec:
             {{- end }}
             - --trust-domain
             - {{ .Values.identity.trustDomain | quote }}
+            {{- range .Values.node.templates }}
+            - --template
+            - {{ printf "%s=%s" .name .initramfs | quote }}
+            {{- end }}
             {{- if .Values.node.snapshotStore.claimName }}
             - --snapshot-store
             - /var/lib/hv2-store
@@ -117,6 +121,9 @@ spec:
             privileged: true
           volumeMounts:
             - { name: kvm, mountPath: /dev/kvm }
+            {{- with .Values.node.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
             {{- if .Values.store.tlsSecret }}
             - { name: store-tls, mountPath: /etc/hv2-store-tls, readOnly: true }
             {{- end }}
@@ -131,6 +138,9 @@ spec:
       volumes:
         - name: kvm
           hostPath: { path: /dev/kvm, type: CharDevice }
+        {{- with .Values.node.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- if .Values.store.tlsSecret }}
         - name: store-tls
           secret: { secretName: {{ .Values.store.tlsSecret | quote }} }

@@ -132,6 +132,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/network/decisions", get(forward))
         .route("/sandboxes/{id}/exec", post(forward))
         .route("/cluster/nodes", get(cluster_nodes))
+        .route("/templates", get(templates))
         .route("/cluster/events", get(cluster_events))
         .route_layer(axum::middleware::from_fn_with_state(
             Arc::clone(&control),
@@ -219,6 +220,24 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
         Ok(nodes) => nodes,
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
+    // Only nodes with the template asked for. The body is the node's to
+    // validate; this reads only which template, and a body that does not
+    // parse goes on for the node to refuse.
+    let template = serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|b| {
+            b.get("templateID")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "base".to_string());
+    let nodes: Vec<_> = nodes.into_iter().filter(|n| n.offers(&template)).collect();
+    if nodes.is_empty() {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            format!("template {template:?} not found on any live node"),
+        );
+    }
     let order = candidates(&nodes);
     if order.is_empty() {
         return api_error(
@@ -625,6 +644,42 @@ async fn metrics(State(control): State<Arc<ControlPlane>>) -> Response {
         &[("node-gone", m.reaped.get())],
     );
     ([("content-type", metrics::CONTENT_TYPE)], e.finish()).into_response()
+}
+
+/// `GET /templates`: every template a live node offers, E2B's `Template`
+/// shape as far as the cluster knows it, with the nodes offering each.
+async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
+    let nodes = match control.store.nodes().await {
+        Ok(nodes) => nodes,
+        Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
+    };
+    let mut offered: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for node in &nodes {
+        let names = if node.templates.is_empty() {
+            vec!["base".to_string()]
+        } else {
+            node.templates.clone()
+        };
+        for name in names {
+            offered.entry(name).or_default().push(node.id.clone());
+        }
+    }
+    Json(
+        offered
+            .into_iter()
+            .map(|(name, nodes)| {
+                json!({
+                    "templateID": name,
+                    "buildID": name,
+                    "aliases": [name],
+                    "public": false,
+                    "buildStatus": "ready",
+                    "nodeIDs": nodes,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+    .into_response()
 }
 
 /// `GET /.well-known/jwks.json`: every live node's workload-token key, once

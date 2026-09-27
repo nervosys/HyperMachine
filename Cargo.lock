@@ -2601,6 +2601,7 @@ dependencies = [
  "chrono",
  "criterion",
  "flate2",
+ "form_urlencoded",
  "http-body-util",
  "hv2-agent",
  "hv2-context",

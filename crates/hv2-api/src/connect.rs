@@ -697,6 +697,14 @@ pub fn shared_service(
         let filesystem = filesystem.clone();
         let grpc = grpc.clone();
         Box::pin(async move {
+            // envd's plain-HTTP routes, beside its RPC ones on the same port.
+            match request.uri().path() {
+                "/files" => {
+                    return Ok(crate::envd_files::handle(filesystem.vm(), request).await);
+                }
+                "/health" => return Ok(crate::envd_files::health()),
+                _ => {}
+            }
             let is_grpc = request
                 .headers()
                 .get(hyper::header::CONTENT_TYPE)

@@ -179,7 +179,36 @@ pub enum Operation {
         /// Fresh randomness from the host, unique to this guest.
         entropy: Vec<u8>,
     },
+
+    /// Write bytes to a file, creating it and its parent directories.
+    ///
+    /// A large file goes as several of these, the first truncating and the
+    /// rest appending: one frame holds [`FILE_CHUNK`] bytes of it.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    WriteFile {
+        path: String,
+        /// The bytes, base64 (standard alphabet, padded).
+        data: String,
+        /// Append rather than replace.
+        #[serde(default)]
+        append: bool,
+    },
+
+    /// Read up to `length` bytes of a file from `offset`.
+    ///
+    /// Answered with [`OpResult::FileData`].
+    ReadFile {
+        path: String,
+        offset: u64,
+        length: u64,
+    },
 }
+
+/// The most file data one [`Operation::WriteFile`] or
+/// [`OpResult::FileData`] carries: base64 makes it a third larger, and the
+/// frame must stay under [`MAX_FRAME_BYTES`].
+pub const FILE_CHUNK: usize = 4 * 1024 * 1024;
 
 /// A terminal's size, in character cells.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -262,6 +291,13 @@ pub enum OpResult {
     /// Answer to [`Operation::WriteStdin`] and [`Operation::Signal`]: the agent
     /// did it. Nothing is reported back because neither produces anything.
     Acknowledged,
+    /// Answer to [`Operation::ReadFile`].
+    FileData {
+        /// The bytes read, base64 (standard alphabet, padded).
+        data: String,
+        /// The file's size, so a reader knows when it has everything.
+        size: u64,
+    },
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -295,6 +331,67 @@ impl std::fmt::Display for FrameError {
 impl std::error::Error for FrameError {}
 
 /// Encode a value as a length-prefixed frame.
+/// Base64, standard alphabet with padding, for file data in a JSON frame --
+/// a third larger than the bytes, where a JSON array of numbers is three
+/// to four times larger.
+pub mod b64 {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    /// Encode `bytes`.
+    #[must_use]
+    pub fn encode(bytes: &[u8]) -> String {
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let n = chunk
+                .iter()
+                .enumerate()
+                .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+            for i in 0..4 {
+                if i <= chunk.len() {
+                    out.push(char::from(ALPHABET[(n >> (18 - 6 * i) & 0x3f) as usize]));
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    /// Decode `text`, or `None` if it is not base64.
+    #[must_use]
+    pub fn decode(text: &str) -> Option<Vec<u8>> {
+        let text = text.as_bytes();
+        if !text.len().is_multiple_of(4) {
+            return None;
+        }
+        let value = |c: u8| -> Option<u32> {
+            Some(match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => return None,
+            } as u32)
+        };
+        let mut out = Vec::with_capacity(text.len() / 4 * 3);
+        for (index, quad) in text.chunks(4).enumerate() {
+            let last = index == text.len() / 4 - 1;
+            let pad = quad.iter().rev().take_while(|c| **c == b'=').count();
+            if pad > 2 || (pad > 0 && !last) {
+                return None;
+            }
+            let mut n = 0u32;
+            for (i, c) in quad[..4 - pad].iter().enumerate() {
+                n |= value(*c)? << (18 - 6 * i);
+            }
+            let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+            out.extend_from_slice(&bytes[..3 - pad]);
+        }
+        Some(out)
+    }
+}
+
 pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, FrameError> {
     let body = serde_json::to_vec(value).map_err(|e| FrameError::Malformed(e.to_string()))?;
     if body.len() > MAX_FRAME_BYTES {
@@ -594,6 +691,32 @@ mod tests {
             assert!(cut.len() <= limit.min(s.len()));
             assert_eq!(truncated, limit < s.len());
             assert!(s.starts_with(&cut));
+        }
+    }
+}
+
+#[cfg(test)]
+mod b64_tests {
+    use super::b64;
+
+    #[test]
+    fn base64_round_trips_and_matches_the_rfc() {
+        for (plain, encoded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(b64::encode(plain.as_bytes()), encoded);
+            assert_eq!(b64::decode(encoded).as_deref(), Some(plain.as_bytes()));
+        }
+        let all: Vec<u8> = (0..=255).collect();
+        assert_eq!(b64::decode(&b64::encode(&all)), Some(all));
+        for bad in ["Zg=", "Z===", "Zg==Zg==", "Zm9v!", "Zg=a"] {
+            assert_eq!(b64::decode(bad), None, "{bad}");
         }
     }
 }

@@ -45,6 +45,7 @@ hyper-util = { workspace = true }
 # and its own short error replies need a body that is not `Incoming`.
 http-body-util = "0.1"
 bytes = "1"
+form_urlencoded = "1"
 uuid = { workspace = true }
 chrono = { workspace = true }
 reqwest = { workspace = true }

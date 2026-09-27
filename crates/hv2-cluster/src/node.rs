@@ -24,6 +24,8 @@ pub struct NodeConfig {
     pub ttl: Duration,
     /// Its workload-token signing key, public half, as a JWK.
     pub jwk: Option<serde_json::Value>,
+    /// The templates it offers.
+    pub templates: Vec<String>,
 }
 
 /// A node's handle on the cluster store.
@@ -54,6 +56,7 @@ impl NodeAgent {
             heartbeat_ms: now_ms(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             jwk: self.config.jwk.clone(),
+            templates: self.config.templates.clone(),
         }
     }
 
@@ -221,6 +224,7 @@ mod tests {
                 capacity: 4,
                 ttl: Duration::from_secs(9),
                 jwk: None,
+                templates: Vec::new(),
             },
         )
     }

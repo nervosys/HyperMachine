@@ -469,6 +469,67 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?
     }
 
+    /// Write `data` to `path` in the guest, creating its directories.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn write_file_in_guest(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let device = self.file_channel()?;
+        let path = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.write_file(&path, &data, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest file write task failed: {e}")))?
+    }
+
+    /// Read `path` from the guest, up to `limit` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn read_file_in_guest(
+        &self,
+        path: &str,
+        limit: u64,
+        timeout: Duration,
+    ) -> Result<Vec<u8>> {
+        let device = self.file_channel()?;
+        let path = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.read_file(&path, limit, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest file read task failed: {e}")))?
+    }
+
+    /// The guest channel, for moving files: gated as running a command is,
+    /// since writing any file is as much power over the guest.
+    fn file_channel(
+        &self,
+    ) -> Result<std::sync::Arc<parking_lot::Mutex<hv2_core::devices::virtio_vsock::VsockDevice>>>
+    {
+        if !self.capabilities.has(Capability::GuestExec) {
+            return Err(AgentError::PermissionDenied(
+                "moving files in the guest requires the GuestExec capability".to_string(),
+            ));
+        }
+        self.vm.vsock().ok_or_else(|| {
+            AgentError::Script(
+                "this VM has no guest channel: call attach_guest_channel() before the guest boots"
+                    .to_string(),
+            )
+        })
+    }
+
     /// Start a program in the guest and leave it running.
     ///
     /// Returns the guest pid. Unlike [`Self::exec_in_guest`], the program is

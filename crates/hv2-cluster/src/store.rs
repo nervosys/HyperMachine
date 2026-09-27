@@ -456,6 +456,7 @@ pub(crate) mod tests {
             heartbeat_ms: now_ms(),
             version: "test".into(),
             jwk: None,
+            templates: Vec::new(),
         }
     }
 

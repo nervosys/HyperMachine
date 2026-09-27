@@ -1455,6 +1455,38 @@ key, and both verified against a control plane's JWKS.
 Not verified: federation with a real cloud provider, which needs the
 issuer reachable from it over public HTTPS.
 
+#### Templates and files
+
+Until this, every sandbox was the one `base` guest and `templateID` was
+echoed back unread -- while E2B, CubeSandbox and Agent Substrate all start
+agents from images their users build. Now:
+
+- **Templates from OCI images.** `tools/guest-image/from-oci.sh IMAGE`
+  exports any image (with `docker`), adds the guest agent and init, and
+  writes an initramfs; its `ENV` is loaded before the agent starts.
+  `--template NAME=INITRAMFS`, as many as wanted, beside `base`; each is
+  booted and snapshotted once, and `Sandbox.create(template=NAME)`
+  restores from its own. An unknown template is a 404, before a slot is
+  taken. `GET /templates` lists them, on a node and on a control plane.
+- **Scheduling by template.** Nodes advertise the templates they offer, and
+  a control plane sends a create only to one that has it.
+- **Files.** envd's `GET /files` and `POST /files` (multipart and
+  octet-stream), on the same port as its RPCs, through two new guest-agent
+  operations that move bytes in 4 MiB chunks -- binary content arrives as
+  sent. `sandbox.files.write` and `files.read` work; before this they had
+  no route at all.
+
+Verified with the unmodified SDK and `python:3.12-slim` (130 MiB of root
+filesystem, 45 MiB compressed): `Sandbox.create(template="python")` in
+**91 ms**, Python 3.12 running with the image's `ENV` and Debian root; a
+script written with `files.write` ran; five more Python sandboxes, each
+having run Python, cost **7.7 MiB** each -- the root filesystem is in the
+template's memory image, shared copy-on-write. Booted rather than restored
+-- as happened once when the template's boot outlasted a 15 s timeout, now
+120 s for templates -- the same sandbox took 4.9 s and 282 MiB. In a
+cluster where one node of two had the template, four Python creates through
+a control plane all went to it; base creates went anywhere.
+
 What Agent Substrate has that this does not:
 
 - **Kubernetes-native objects** (`ActorTemplate`, `WorkerPool`,

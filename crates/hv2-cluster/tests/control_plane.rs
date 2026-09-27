@@ -154,6 +154,12 @@ async fn fake_node(
                 "kty": "EC",
                 "kid": if id == "a" || id == "b" { "shared".to_string() } else { format!("key-{id}") },
             })),
+            // Node c alone offers the python template.
+            templates: if id == "c" {
+                vec!["base".into(), "python".into()]
+            } else {
+                Vec::new()
+            },
         },
     );
     agent.join().await.unwrap();
@@ -488,4 +494,45 @@ async fn the_jwks_lists_each_nodes_key_once_and_discovery_points_at_it() {
         discovery["jwks_uri"],
         "https://issuer.test/.well-known/jwks.json"
     );
+}
+
+/// A create for a template goes only to a node that offers it; one no node
+/// offers is refused as not found, and the templates are listed.
+#[tokio::test]
+async fn creates_go_to_a_node_with_the_template() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (a, _) = fake_node(Arc::clone(&store), "a", 4, Duration::from_secs(30)).await;
+    let (c, _) = fake_node(Arc::clone(&store), "c", 4, Duration::from_secs(30)).await;
+    let base = control_plane(Arc::clone(&store), None).await;
+
+    for _ in 0..3 {
+        let (status, body) = create(&base, json!({"templateID": "python"})).await;
+        assert_eq!(status, 201, "{body}");
+    }
+    assert_eq!(
+        c.running.lock().len(),
+        3,
+        "all on the node with the template"
+    );
+    assert_eq!(a.running.lock().len(), 0);
+
+    let (status, body) = create(&base, json!({"templateID": "rust"})).await;
+    assert_eq!(status, 404, "{body}");
+
+    let listed: Value = client()
+        .get(format!("{base}/templates"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut names: Vec<&str> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["templateID"].as_str().unwrap())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["base", "python"]);
 }

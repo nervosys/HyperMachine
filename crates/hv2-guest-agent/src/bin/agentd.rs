@@ -282,12 +282,82 @@ mod linux {
                 unix_time_ns,
                 entropy,
             } => restored(unix_time_ns, &entropy),
+            Operation::WriteFile { path, data, append } => write_file(&path, &data, append),
+            Operation::ReadFile {
+                path,
+                offset,
+                length,
+            } => read_file(&path, offset, length),
         };
 
         Response {
             id,
             version: PROTOCOL_VERSION,
             result,
+        }
+    }
+
+    /// See [`Operation::WriteFile`].
+    fn write_file(path: &str, data: &str, append: bool) -> OpResult {
+        let failed = |what: &str, e: &dyn std::fmt::Display| OpResult::Failed {
+            message: format!("{what} {path}: {e}"),
+        };
+        let Some(bytes) = hv2_guest_agent::b64::decode(data) else {
+            return failed("decoding the data for", &"not base64");
+        };
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                return failed("creating the directory of", &e);
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(path);
+        match file.and_then(|mut f| f.write_all(&bytes)) {
+            Ok(()) => OpResult::Acknowledged,
+            Err(e) => failed("writing", &e),
+        }
+    }
+
+    /// See [`Operation::ReadFile`].
+    fn read_file(path: &str, offset: u64, length: u64) -> OpResult {
+        use std::io::{Seek, SeekFrom};
+        let failed = |e: std::io::Error| OpResult::Failed {
+            message: format!("reading {path}: {e}"),
+        };
+        let mut file = match std::fs::File::open(path) {
+            Ok(file) => file,
+            Err(e) => return failed(e),
+        };
+        let size = match file.metadata() {
+            Ok(meta) if meta.is_dir() => {
+                return OpResult::Failed {
+                    message: format!("reading {path}: it is a directory"),
+                }
+            }
+            Ok(meta) => meta.len(),
+            Err(e) => return failed(e),
+        };
+        let want = length.min(hv2_guest_agent::FILE_CHUNK as u64) as usize;
+        let mut buf = vec![0u8; want];
+        let mut got = 0;
+        if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+            return failed(e);
+        }
+        while got < want {
+            match file.read(&mut buf[got..]) {
+                Ok(0) => break,
+                Ok(n) => got += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return failed(e),
+            }
+        }
+        OpResult::FileData {
+            data: hv2_guest_agent::b64::encode(&buf[..got]),
+            size,
         }
     }
 

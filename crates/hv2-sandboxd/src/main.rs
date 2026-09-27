@@ -144,17 +144,19 @@ const ENVD_PORT: u16 = 49983;
 /// | 0.3.0 | stdin on commands | yes |
 /// | 0.4.0 | default user | no users at all; the field is ignored |
 /// | 0.5.2 | CloseStdin | yes |
-/// | 0.5.7 | octet-stream upload | **no** -- no file-upload route exists |
+/// | 0.5.7 | octet-stream upload | yes -- `hv2_api::envd_files`, multipart too; not gzip |
 /// | 0.6.2 | xattr file metadata | **no** -- `metadata` is always empty |
 /// | 0.6.3 | entry info on watch events | yes |
 ///
 /// 0.6.3 is chosen because the alternative is worse: a lower number would
-/// turn off watch entry info, which really works, to avoid claiming upload
-/// and xattrs, which fail gracefully anyway -- upload has no route at any
-/// version, and absent metadata reads as empty rather than as an error.
-/// Claiming less would cost a working feature and buy nothing.
+/// turn off watch entry info, which really works, to avoid claiming xattrs,
+/// which fail gracefully anyway -- absent metadata reads as empty rather
+/// than as an error. Claiming less would cost a working feature and buy
+/// nothing. A gzip-compressed upload is refused with 415, which only a
+/// caller asking for `gzip=True` sends.
 const ENVD_VERSION: &str = "0.6.3";
 
+#[derive(Clone)]
 struct Options {
     port: u16,
     proxy_port: u16,
@@ -209,6 +211,9 @@ struct Options {
     identity_key: Option<std::path::PathBuf>,
     /// Do not offer sandboxes' NICs checksum and segmentation offload.
     no_net_offload: bool,
+    /// Templates beyond `base` (which is `HV2_INITRD`): name and initramfs,
+    /// from `--template NAME=PATH`.
+    templates: Vec<(String, String)>,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -255,6 +260,7 @@ fn parse_options() -> Result<Options, String> {
         no_template: false,
         prefault: false,
         no_net_offload: false,
+        templates: Vec::new(),
         snapshot_store: None,
         mtls_ca: None,
         mtls_cert: None,
@@ -287,6 +293,22 @@ fn parse_options() -> Result<Options, String> {
             "--no-template" => opts.no_template = true,
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
+            "--template" => {
+                let spec = value(&mut i)?;
+                let (name, path) = spec
+                    .split_once('=')
+                    .ok_or_else(|| format!("--template is NAME=INITRAMFS, not {spec}"))?;
+                if name.is_empty()
+                    || !name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+                {
+                    return Err(format!(
+                        "--template name {name:?}: letters, digits, - _ . only"
+                    ));
+                }
+                opts.templates.push((name.to_string(), path.to_string()));
+            }
             "--snapshot-store" => opts.snapshot_store = Some(value(&mut i)?.into()),
             "--mtls-ca" => opts.mtls_ca = Some(value(&mut i)?),
             "--mtls-cert" => opts.mtls_cert = Some(value(&mut i)?),
@@ -323,7 +345,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -399,8 +421,10 @@ struct AppState {
     slots: Arc<tokio::sync::Semaphore>,
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
-    /// What sandboxes are restored from, when not booted.
-    template: Option<Template>,
+    /// What sandboxes are restored from, by template name, when not booted.
+    templates: BTreeMap<String, Template>,
+    /// Every template this node offers, and its initramfs -- `base` always.
+    initrds: BTreeMap<String, String>,
     metrics: NodeMetrics,
     /// Sandboxes this node suspended to disk, under `suspend_dir`.
     paused: Mutex<HashMap<String, PausedSandbox>>,
@@ -947,8 +971,8 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
     );
     e.gauge(
         "hv2_node_template",
-        "1 if sandboxes are restored from a template snapshot, 0 if booted.",
-        if state.template.is_some() { 1.0 } else { 0.0 },
+        "Templates sandboxes are restored from; 0 if they are booted.",
+        state.templates.len() as f64,
     );
     e.counters(
         "hv2_node_creates_total",
@@ -1106,6 +1130,7 @@ struct Running {
 async fn bring_up(
     state: &AppState,
     sandbox_id: &str,
+    template_id: &str,
     snapshot: Option<&std::path::Path>,
     network: Option<NetworkSpec>,
     access_token: &str,
@@ -1115,7 +1140,8 @@ async fn bring_up(
     // the same CID and MAC it was snapshotted with -- which is fine, because
     // each has its own vsock device and its own gateway, and nothing outside
     // this VM ever sees either.
-    let snapshot = snapshot.or(state.template.as_ref().map(|t| t.snapshot.as_path()));
+    let template = state.templates.get(template_id);
+    let snapshot = snapshot.or(template.map(|t| t.snapshot.as_path()));
     let (cid, mac) = match snapshot {
         Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
         None => {
@@ -1128,8 +1154,13 @@ async fn bring_up(
     };
 
     let t0 = std::time::Instant::now();
+    let initrd = state
+        .initrds
+        .get(template_id)
+        .map_or(state.opts.initrd.as_str(), String::as_str);
     let (vm, nic) = new_vm(
         &state.opts,
+        initrd,
         sandbox_id,
         cid,
         network.is_some().then_some(mac),
@@ -1139,10 +1170,7 @@ async fn bring_up(
     let built = t0.elapsed();
     let launched = match snapshot {
         Some(snapshot) => {
-            let working_set = state
-                .template
-                .as_ref()
-                .map_or(&[][..], |t| t.working_set.as_slice());
+            let working_set = template.map_or(&[][..], |t| t.working_set.as_slice());
             vm.launch_from_snapshot_prefaulted(snapshot, working_set)
                 .await
         }
@@ -1320,6 +1348,21 @@ async fn register(
 }
 
 async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+    // A template this node does not have is the caller's mistake, answered
+    // before a slot is taken -- as E2B answers an unknown template.
+    let template_id = req
+        .template_id
+        .clone()
+        .unwrap_or_else(|| "base".to_string());
+    if !state.initrds.contains_key(&template_id) {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            format!(
+                "template {template_id:?} not found; this node has {}",
+                state.initrds.keys().cloned().collect::<Vec<_>>().join(", ")
+            ),
+        );
+    }
     // Room first, before anything is parsed or booted: a full node should
     // answer at once so a control plane can try the next one.
     let slot = match reserve(&state, create_park(&state)).await {
@@ -1333,7 +1376,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         Ok(lifecycle) => lifecycle,
         Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
     };
-    if lifecycle.pause_on_timeout && state.template.is_none() {
+    if lifecycle.pause_on_timeout && !state.templates.contains_key(&template_id) {
         return api_error(
             StatusCode::BAD_REQUEST,
             "autoPause needs sandboxes restored from a template, and this node boots them \
@@ -1380,10 +1423,18 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         network: req.network.clone(),
         iam: tokens,
     });
-    let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
     let sandbox_id = new_sandbox_id();
     let access_token = new_access_token();
-    let running = match bring_up(&state, &sandbox_id, None, network, &access_token).await {
+    let running = match bring_up(
+        &state,
+        &sandbox_id,
+        &template_id,
+        None,
+        network,
+        &access_token,
+    )
+    .await
+    {
         Ok(running) => running,
         Err((status, e)) => return api_error(status, e),
     };
@@ -1661,7 +1712,7 @@ async fn pause_sandbox(
             format!("sandbox {sandbox_id} is already paused"),
         ));
     }
-    if state.template.is_none() {
+    if state.templates.is_empty() {
         return Err((
             StatusCode::CONFLICT,
             "pausing needs sandboxes restored from a template, and this node boots them".into(),
@@ -1844,9 +1895,11 @@ async fn resume_sandbox(
         }
         (None, None) => None,
     };
+    let template_id = paused.record.template_id.clone();
     let running = match bring_up(
         state,
         sandbox_id,
+        &template_id,
         Some(&paused.snapshot),
         network,
         &paused.descriptor.envd_access_token,
@@ -1972,7 +2025,7 @@ async fn fork_route(
         return api_error(StatusCode::BAD_REQUEST, "count is between 1 and 100");
     }
     let lifetime_secs = body.timeout.unwrap_or(15).min(MAX_TIMEOUT_SECS);
-    if state.template.is_none() {
+    if state.templates.is_empty() {
         return api_error(
             StatusCode::CONFLICT,
             "forking needs sandboxes restored from a template, and this node boots them",
@@ -2044,8 +2097,15 @@ async fn fork_route(
                     .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
                 let fork_id = new_sandbox_id();
                 let access_token = new_access_token();
-                let running =
-                    bring_up(&state, &fork_id, Some(&checkpoint), network, &access_token).await?;
+                let running = bring_up(
+                    &state,
+                    &fork_id,
+                    &template_id,
+                    Some(&checkpoint),
+                    network,
+                    &access_token,
+                )
+                .await?;
                 let started_at_ms = now_ms();
                 let descriptor = SandboxResponse {
                     template_id: template_id.clone(),
@@ -2369,6 +2429,9 @@ async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), S
 const TEMPLATE_CID: u64 = GUEST_CID_BASE;
 const TEMPLATE_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x00, 0x00, 0x01];
 
+/// How long a template's guest may take to boot and answer.
+const TEMPLATE_BOOT_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// A booted, configured guest written to disk, that sandboxes are restored
 /// from instead of booting.
 struct Template {
@@ -2488,6 +2551,30 @@ async fn shared_template(
     }
 }
 
+/// `GET /templates`: the templates this node offers, in E2B's `Template`
+/// shape as far as it applies -- what each is, and whether its sandboxes are
+/// restored from a snapshot or booted.
+async fn list_templates(State(state): State<Arc<AppState>>) -> Response {
+    let listed: Vec<serde_json::Value> = state
+        .initrds
+        .keys()
+        .map(|name| {
+            json!({
+                "templateID": name,
+                "buildID": name,
+                "aliases": [name],
+                "public": false,
+                "cpuCount": state.opts.cpu_cores,
+                "memoryMB": state.opts.memory_gb * 1024,
+                "envdVersion": ENVD_VERSION,
+                "buildStatus": "ready",
+                "snapshot": state.templates.contains_key(name),
+            })
+        })
+        .collect();
+    Json(listed).into_response()
+}
+
 /// `GET /.well-known/jwks.json`: this node's workload-token key.
 async fn node_jwks(State(state): State<Arc<AppState>>) -> Response {
     let keys: Vec<serde_json::Value> = state.identity.iter().map(|i| i.jwk()).collect();
@@ -2587,6 +2674,7 @@ type NetDevice = Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::Virt
 /// and a NIC with `mac` when one is given.
 async fn new_vm(
     opts: &Options,
+    initrd: &str,
     name: &str,
     cid: u64,
     mac: Option<[u8; 6]>,
@@ -2598,11 +2686,7 @@ async fn new_vm(
         .cpu_cores(opts.cpu_cores)
         .memory_gb(opts.memory_gb)
         .capabilities(capabilities)
-        .boot_linux(
-            &opts.kernel,
-            Some(&opts.initrd),
-            guest_cmdline(mac.is_some()),
-        )
+        .boot_linux(&opts.kernel, Some(initrd), guest_cmdline(mac.is_some()))
         .build()
         .await
         .map_err(|e| format!("building the VM: {e}"))?;
@@ -2647,6 +2731,7 @@ async fn build_template(
     let started = std::time::Instant::now();
     let (vm, _nic) = new_vm(
         opts,
+        &opts.initrd,
         "template",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
@@ -2654,7 +2739,10 @@ async fn build_template(
     .await?;
     vm.launch().await.map_err(|e| format!("launching: {e}"))?;
     let result = async {
-        vm.ping_guest(opts.ready_timeout)
+        // Booted once, at startup, so allowed longer than a sandbox is: a
+        // template from an OCI image first unpacks its whole filesystem --
+        // 130 MiB for python:3.12-slim -- and missed 15 s on a busy host.
+        vm.ping_guest(opts.ready_timeout.max(TEMPLATE_BOOT_TIMEOUT))
             .await
             .map_err(|e| format!("the template's agent never answered: {e}"))?;
         if opts.network {
@@ -2704,6 +2792,7 @@ async fn working_set(
 ) -> Result<Vec<(u64, u64)>, String> {
     let (vm, _nic) = new_vm(
         opts,
+        &opts.initrd,
         "template-probe",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
@@ -3101,28 +3190,43 @@ async fn main() -> std::process::ExitCode {
     // and then spent a second booting would be scheduled onto meanwhile.
     // Failing to build one is not fatal -- sandboxes boot instead, slower,
     // and the log says why.
-    let template = if opts.no_template {
-        None
-    } else {
-        let built = match &store {
-            Some(store) => shared_template(&opts, authority.as_deref(), store).await,
-            None => {
-                let dir = std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id()));
-                build_template(&opts, authority.as_deref(), dir).await
-            }
-        };
-        match built {
-            Ok(template) => Some(template),
-            Err(e) => {
-                tracing::warn!("no template ({e}); every sandbox will boot instead");
-                None
+    let mut initrds = BTreeMap::new();
+    initrds.insert("base".to_string(), opts.initrd.clone());
+    for (name, path) in &opts.templates {
+        initrds.insert(name.clone(), path.clone());
+    }
+    let mut templates = BTreeMap::new();
+    if !opts.no_template {
+        for (name, initrd) in &initrds {
+            // Each template is the guest its own initramfs boots: the same
+            // build, with that initramfs.
+            let mut for_this = opts.clone();
+            for_this.initrd.clone_from(initrd);
+            let built = match &store {
+                Some(store) => shared_template(&for_this, authority.as_deref(), store).await,
+                None => {
+                    let dir = std::env::temp_dir()
+                        .join(format!("hv2-sandboxd-{}-{name}", std::process::id()));
+                    build_template(&for_this, authority.as_deref(), dir).await
+                }
+            };
+            match built {
+                Ok(template) => {
+                    templates.insert(name.clone(), template);
+                }
+                Err(e) => tracing::warn!(
+                    "no snapshot for template {name} ({e}); its sandboxes will boot instead"
+                ),
             }
         }
-    };
-    let template_line = if template.is_some() {
-        "sandboxes are restored from a template snapshot"
+    }
+    let template_line = if templates.is_empty() {
+        "sandboxes boot from the kernel (no template snapshot)".to_string()
     } else {
-        "sandboxes boot from the kernel (no template)"
+        format!(
+            "sandboxes are restored from template snapshots: {}",
+            templates.keys().cloned().collect::<Vec<_>>().join(", ")
+        )
     };
 
     // Cluster membership, if asked for: checked and joined before anything
@@ -3173,6 +3277,7 @@ async fn main() -> std::process::ExitCode {
                     capacity: opts.capacity,
                     ttl: opts.node_ttl,
                     jwk: identity.as_ref().map(|i| i.jwk()),
+                    templates: initrds.keys().cloned().collect(),
                 },
             );
             if let Err(e) = agent.join().await {
@@ -3188,13 +3293,7 @@ async fn main() -> std::process::ExitCode {
     // layered over.
     let suspend_dir = match &store {
         Some(store) => store.paused_dir(),
-        None => template
-            .as_ref()
-            .map_or_else(
-                || std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id())),
-                |t| t.dir.clone(),
-            )
-            .join("suspended"),
+        None => std::env::temp_dir().join(format!("hv2-sandboxd-{}-suspended", std::process::id())),
     };
     if let Err(e) = std::fs::create_dir_all(&suspend_dir) {
         eprintln!("hv2-sandboxd: {}: {e}", suspend_dir.display());
@@ -3210,7 +3309,8 @@ async fn main() -> std::process::ExitCode {
         next_cid: Mutex::new(0),
         routes: Arc::clone(&routes),
         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
-        template,
+        templates,
+        initrds,
         metrics: NodeMetrics::default(),
         node: node.clone(),
         paused: Mutex::new(HashMap::new()),
@@ -3333,6 +3433,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
+        .route("/templates", get(list_templates))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
@@ -3435,7 +3536,7 @@ async fn main() -> std::process::ExitCode {
     // draining a node loses no sandbox. Without one, everything ends --
     // paused ones too, whose snapshots are layered over a template this
     // process is about to delete.
-    if state.store.is_some() && state.template.is_some() {
+    if state.store.is_some() && !state.templates.is_empty() {
         let running: Vec<String> = state.sandboxes.lock().keys().cloned().collect();
         for id in running {
             match pause_sandbox(&state, &id, false).await {
@@ -3457,6 +3558,11 @@ async fn main() -> std::process::ExitCode {
     };
     for id in ids {
         end_sandbox(&state, &id, "sandbox-deleted").await;
+    }
+    // Without a store, paused sandboxes and fork checkpoints were this
+    // process's alone, and ended with it above.
+    if state.store.is_none() {
+        let _ = std::fs::remove_dir_all(&state.suspend_dir);
     }
     if let Some(node) = &node {
         if let Err(e) = node.leave().await {

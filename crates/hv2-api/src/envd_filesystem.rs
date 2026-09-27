@@ -176,6 +176,12 @@ pub struct EnvdFilesystem {
 }
 
 impl EnvdFilesystem {
+    /// The sandbox this serves.
+    #[must_use]
+    pub fn vm(&self) -> Arc<AgentVM> {
+        Arc::clone(&self.vm)
+    }
+
     pub fn new(vm: Arc<AgentVM>) -> Self {
         Self {
             vm,

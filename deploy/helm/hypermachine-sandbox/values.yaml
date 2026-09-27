@@ -72,6 +72,15 @@ node:
   # sandboxes stay on their node's disk and end with it.
   snapshotStore:
     claimName: ""
+  # Templates beyond `base`, each an initramfs built from an OCI image by
+  # tools/guest-image/from-oci.sh, e.g.
+  #   - { name: python, initramfs: /templates/python.cpio.gz }
+  # with the files reached through extraVolumes/extraVolumeMounts (a PVC or
+  # an image volume). A control plane sends a create for a template only to
+  # nodes offering it.
+  templates: []
+  extraVolumes: []
+  extraVolumeMounts: []
   resources:
     requests: { cpu: 500m, memory: 512Mi }
 
