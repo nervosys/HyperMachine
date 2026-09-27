@@ -193,6 +193,12 @@ struct Options {
     /// templates, the egress CA and paused sandboxes, so a sandbox paused on
     /// one node resumes on any.
     snapshot_store: Option<std::path::PathBuf>,
+    /// Mutual TLS for the API and the envd proxy: the CA peers must be
+    /// signed by, and this node's certificate (carrying the nodes' shared
+    /// name) and key.
+    mtls_ca: Option<String>,
+    mtls_cert: Option<String>,
+    mtls_key: Option<String>,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -239,6 +245,9 @@ fn parse_options() -> Result<Options, String> {
         no_template: false,
         prefault: false,
         snapshot_store: None,
+        mtls_ca: None,
+        mtls_cert: None,
+        mtls_key: None,
         evict_idle_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -264,6 +273,9 @@ fn parse_options() -> Result<Options, String> {
             "--no-template" => opts.no_template = true,
             "--prefault" => opts.prefault = true,
             "--snapshot-store" => opts.snapshot_store = Some(value(&mut i)?.into()),
+            "--mtls-ca" => opts.mtls_ca = Some(value(&mut i)?),
+            "--mtls-cert" => opts.mtls_cert = Some(value(&mut i)?),
+            "--mtls-key" => opts.mtls_key = Some(value(&mut i)?),
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -293,7 +305,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--snapshot-store DIR] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -2797,6 +2809,28 @@ async fn expire(state: Arc<AppState>) {
     }
 }
 
+/// Ctrl-C or SIGTERM.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut term =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            () = async {
+                match term.as_mut() {
+                    Some(term) => { term.recv().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     tracing_subscriber::fmt()
@@ -2998,7 +3032,49 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    // Mutual TLS, when configured, for both of this node's ports: only a
+    // peer whose certificate the cluster's CA signed -- a control plane --
+    // gets a handshake at all. It replaces --tls-cert/--tls-key, which
+    // authenticate this end only.
+    let mtls = match (
+        &state.opts.mtls_ca,
+        &state.opts.mtls_cert,
+        &state.opts.mtls_key,
+    ) {
+        (None, None, None) => None,
+        (Some(ca), Some(cert), Some(key)) => {
+            let loaded = hv2_cluster::mtls::Mtls::load(
+                std::path::Path::new(ca),
+                std::path::Path::new(cert),
+                std::path::Path::new(key),
+                hv2_cluster::mtls::DEFAULT_NODE_NAME,
+            )
+            .and_then(|mtls| mtls.server_config());
+            match loaded {
+                Ok(config) => Some(config),
+                Err(e) => {
+                    eprintln!("hv2-sandboxd: mTLS: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+        _ => {
+            eprintln!("hv2-sandboxd: --mtls-ca, --mtls-cert and --mtls-key go together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if mtls.is_some()
+        && state
+            .opts
+            .advertise_api
+            .as_deref()
+            .is_some_and(|api| !api.starts_with("https://"))
+    {
+        eprintln!("hv2-sandboxd: with mTLS, --advertise-api must be an https:// URL");
+        return std::process::ExitCode::FAILURE;
+    }
     let tls = match (&tls_cert, &tls_key) {
+        _ if mtls.is_some() => mtls.clone(),
         (Some(cert), Some(key)) => {
             match sandbox_proxy::tls_config(std::path::Path::new(cert), std::path::Path::new(key)) {
                 Ok(config) => Some(config),
@@ -3121,28 +3197,20 @@ async fn main() -> std::process::ExitCode {
     // Ctrl-C or SIGTERM ends the server gracefully, then the node leaves the
     // cluster at once instead of lingering until its TTL runs out -- which is
     // what makes scaling a cluster down a non-event.
-    let served = axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            #[cfg(unix)]
-            {
-                let mut term =
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {}
-                    () = async {
-                        match term.as_mut() {
-                            Some(term) => { term.recv().await; }
-                            None => std::future::pending::<()>().await,
-                        }
-                    } => {}
-                }
-            }
-            #[cfg(not(unix))]
-            {
-                let _ = tokio::signal::ctrl_c().await;
-            }
-        })
-        .await;
+    let served = match mtls {
+        None => axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .map_err(|e| e.to_string()),
+        Some(config) => hv2_api::tls::serve_tls(
+            listener,
+            app,
+            tokio_rustls::TlsAcceptor::from(Arc::new(config)),
+            shutdown_signal(),
+        )
+        .await
+        .map_err(|e| e.to_string()),
+    };
     // With a shared store, a node going away pauses what it runs rather
     // than ending it: another node resumes each on its next request, so
     // draining a node loses no sandbox. Without one, everything ends --

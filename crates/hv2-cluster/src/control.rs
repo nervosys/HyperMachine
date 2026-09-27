@@ -76,14 +76,27 @@ struct ControlMetrics {
 impl ControlPlane {
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, config: ControlConfig) -> Arc<Self> {
+        // No global timeout: a streaming or long request is the caller's
+        // business. Creation gets its own below.
+        let http = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .unwrap_or_default();
+        Self::with_client(store, config, http)
+    }
+
+    /// [`Self::new`], reaching nodes through `http` -- one built by
+    /// [`crate::mtls::Mtls::http_client`], for nodes that require a client
+    /// certificate.
+    #[must_use]
+    pub fn with_client(
+        store: Arc<dyn ClusterStore>,
+        config: ControlConfig,
+        http: reqwest::Client,
+    ) -> Arc<Self> {
         Arc::new(Self {
             store,
-            // No global timeout: a streaming or long request is the caller's
-            // business. Creation gets its own below.
-            http: reqwest::Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .build()
-                .unwrap_or_default(),
+            http,
             config,
             metrics: ControlMetrics::default(),
         })
@@ -636,6 +649,10 @@ pub struct ClusterRoutes {
     store: Arc<dyn ClusterStore>,
     cache: Mutex<HashMap<String, (SocketAddr, Instant)>>,
     ttl: Duration,
+    backend_tls: Option<(
+        Arc<rustls::ClientConfig>,
+        rustls::pki_types::ServerName<'static>,
+    )>,
 }
 
 impl ClusterRoutes {
@@ -645,7 +662,18 @@ impl ClusterRoutes {
             store,
             cache: Mutex::new(HashMap::new()),
             ttl,
+            backend_tls: None,
         }
+    }
+
+    /// Relay to nodes' proxies over mutual TLS.
+    ///
+    /// # Errors
+    ///
+    /// The certificate and key do not go together.
+    pub fn with_mtls(mut self, mtls: &crate::mtls::Mtls) -> std::io::Result<Self> {
+        self.backend_tls = Some((Arc::new(mtls.client_config()?), mtls.node_name().clone()));
+        Ok(self)
     }
 }
 
@@ -682,5 +710,14 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
     /// store rather than waiting out the cache.
     async fn forget(&self, sandbox: &str) {
         self.cache.lock().remove(sandbox);
+    }
+
+    fn backend_tls(
+        &self,
+    ) -> Option<(
+        Arc<rustls::ClientConfig>,
+        rustls::pki_types::ServerName<'static>,
+    )> {
+        self.backend_tls.clone()
     }
 }

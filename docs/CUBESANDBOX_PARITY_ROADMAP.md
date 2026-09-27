@@ -1377,12 +1377,43 @@ What it does not do: move a *running* sandbox (it pauses first), or keep
 paused sandboxes anywhere but a filesystem -- object storage would need the
 template fetched to local disk before it can be mapped.
 
+#### Mutual TLS inside the cluster
+
+Agent Substrate uses Kubernetes pod certificates between its components.
+Until this, a node here trusted a control plane by a shared token sent over
+plain HTTP -- anyone on the path had the token, and the envd traffic a
+control plane relays (commands, their output, files) with it. Now, with
+`--mtls-ca/--mtls-cert/--mtls-key` on both sides (`tools/mtls-certs.sh`
+makes a CA and both certificates; the chart takes cert-manager-shaped
+Secrets):
+
+- a node serves its API **and** its envd proxy only to a peer presenting a
+  certificate the cluster's CA signed; a control plane talks only to a node
+  whose certificate it signed too, and relays envd traffic over TLS;
+- nodes are verified by one shared DNS name (`hv2-node`) rather than by
+  address, since a node's address is whatever its pod got -- the chain, the
+  signatures and validity are all still checked;
+- the cluster token still rides every request: TLS says the peer holds a
+  key the CA vouched for, the token says it is this cluster's.
+
+Verified: a node answers plain HTTP, HTTPS without a client certificate,
+and HTTPS with another CA's certificate by refusing the handshake, and the
+token with the cluster's certificate with 200. A control plane given another
+CA's certificate reaches no node ("every node refused"). The cluster SDK
+tests -- pause, resume, fork, auto-resume through the proxy, a node
+SIGKILLed and its sandbox resumed elsewhere, a node drained -- pass over
+mTLS unchanged. A unit test does real handshakes for each case.
+
+Still plaintext: node and control plane to the Redis/Valkey store (a
+private network or a TLS-terminating sidecar), and the client-facing E2B API
+unless `--tls-cert/--tls-key` or an ingress terminates it.
+
 What Agent Substrate has that this does not:
 
-- **Workload identity and mTLS.** Substrate authenticates to cloud APIs
-  through GKE Workload Identity and uses pod certificates. Here a node
-  trusts its control plane by a shared token over plain HTTP, and a sandbox
-  gets credentials only by header injection into its egress.
+- **Workload identity.** Substrate authenticates sandboxes to cloud APIs
+  through GKE Workload Identity. Here a sandbox gets credentials only by
+  header injection into its egress, which does keep them out of the guest
+  but is not a cloud identity.
 - **Kubernetes-native objects** (`ActorTemplate`, `WorkerPool`,
   `kubectl-ate`). This is E2B's API instead, deployed by a Helm chart.
 

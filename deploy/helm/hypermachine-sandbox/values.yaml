@@ -75,6 +75,18 @@ node:
   resources:
     requests: { cpu: 500m, memory: 512Mi }
 
+# Mutual TLS between control planes and nodes. Each names a Secret in
+# cert-manager's shape -- ca.crt, tls.crt, tls.key -- from one CA: nodes' with
+# DNS name hv2-node and server+client auth, control planes' with client auth
+# (tools/mtls-certs.sh makes both). Set both or neither. Without them nodes
+# are reached in plaintext, the cluster token and all envd traffic with them,
+# and only the NetworkPolicy stands between a node and the rest of the
+# cluster network. With them, a node's /metrics needs a client certificate
+# too.
+mtls:
+  nodeSecret: ""
+  controlPlaneSecret: ""
+
 store:
   # Deploy a single Valkey instance with the chart. For production, point
   # `url` at a replicated Redis/Valkey instead and set `deploy: false`.

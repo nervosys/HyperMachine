@@ -55,6 +55,14 @@ spec:
             {{- if .Values.node.prefault }}
             - --prefault
             {{- end }}
+            {{- if .Values.mtls.nodeSecret }}
+            - --mtls-ca
+            - /etc/hv2-mtls/ca.crt
+            - --mtls-cert
+            - /etc/hv2-mtls/tls.crt
+            - --mtls-key
+            - /etc/hv2-mtls/tls.key
+            {{- end }}
             {{- if .Values.node.snapshotStore.claimName }}
             - --snapshot-store
             - /var/lib/hv2-store
@@ -66,7 +74,7 @@ spec:
             - --node-id
             - $(NODE_NAME)
             - --advertise-api
-            - http://$(POD_IP):3980
+            - {{ if .Values.mtls.nodeSecret }}https{{ else }}http{{ end }}://$(POD_IP):3980
             - --advertise-proxy
             - $(POD_IP):3981
           env:
@@ -82,7 +90,13 @@ spec:
           readinessProbe:
             # /metrics needs no token, and answers only once the template is
             # built and the node has joined -- both happen before it listens.
+            # With mTLS the kubelet has no client certificate to probe with,
+            # so the port opening -- which also waits for both -- is the sign.
+            {{- if .Values.mtls.nodeSecret }}
+            tcpSocket: { port: api }
+            {{- else }}
             httpGet: { path: /metrics, port: api }
+            {{- end }}
           resources: {{- toYaml .Values.node.resources | nindent 12 }}
           securityContext:
             # For /dev/kvm. A device plugin exposing it (e.g. KubeVirt's
@@ -91,6 +105,9 @@ spec:
             privileged: true
           volumeMounts:
             - { name: kvm, mountPath: /dev/kvm }
+            {{- if .Values.mtls.nodeSecret }}
+            - { name: mtls, mountPath: /etc/hv2-mtls, readOnly: true }
+            {{- end }}
             {{- if .Values.node.snapshotStore.claimName }}
             # The same path on every node: a paused sandbox's snapshot names
             # its template by absolute path.
@@ -99,6 +116,10 @@ spec:
       volumes:
         - name: kvm
           hostPath: { path: /dev/kvm, type: CharDevice }
+        {{- if .Values.mtls.nodeSecret }}
+        - name: mtls
+          secret: { secretName: {{ .Values.mtls.nodeSecret | quote }} }
+        {{- end }}
         {{- if .Values.node.snapshotStore.claimName }}
         - name: snapshot-store
           persistentVolumeClaim: { claimName: {{ .Values.node.snapshotStore.claimName | quote }} }

@@ -37,6 +37,14 @@ spec:
             - "5981"
             - --reap-interval
             - {{ .Values.controlPlane.reapIntervalSeconds | quote }}
+            {{- if .Values.mtls.controlPlaneSecret }}
+            - --mtls-ca
+            - /etc/hv2-mtls/ca.crt
+            - --mtls-cert
+            - /etc/hv2-mtls/tls.crt
+            - --mtls-key
+            - /etc/hv2-mtls/tls.key
+            {{- end }}
           env:
             - name: HV2_API_KEY
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: api-key } }
@@ -55,6 +63,13 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
+          {{- if .Values.mtls.controlPlaneSecret }}
+          volumeMounts:
+            - { name: mtls, mountPath: /etc/hv2-mtls, readOnly: true }
+      volumes:
+        - name: mtls
+          secret: { secretName: {{ .Values.mtls.controlPlaneSecret | quote }} }
+          {{- end }}
 ---
 apiVersion: v1
 kind: Service

@@ -186,7 +186,23 @@ pub trait SandboxRoutes: Send + Sync + 'static {
     async fn forget(&self, sandbox: &str) {
         let _ = sandbox;
     }
+
+    /// Speak TLS to the addresses this resolves to: the client config, and
+    /// the name their certificates must carry. `None`, the default, is
+    /// plaintext -- right for a loopback listener, wrong across a network.
+    fn backend_tls(
+        &self,
+    ) -> Option<(
+        Arc<rustls::ClientConfig>,
+        rustls::pki_types::ServerName<'static>,
+    )> {
+        None
+    }
 }
+
+/// What the proxy relays over: a TCP stream, or TLS on one.
+trait BackendIo: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send {}
+impl<T: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send> BackendIo for T {}
 
 /// Held for as long as a request to a sandbox is in flight; see
 /// [`SandboxRoutes::open`]. Whatever it wraps is dropped when it is.
@@ -543,6 +559,30 @@ async fn proxy(
         }
     };
 
+    // Over TLS when the routes say so -- a control plane relaying to a
+    // node's proxy, with a client certificate -- and plain otherwise, as a
+    // node relaying to its own sandbox's loopback listener is.
+    let stream: Box<dyn BackendIo> = match routes.backend_tls() {
+        None => Box::new(stream),
+        Some((config, name)) => {
+            match tokio_rustls::TlsConnector::from(config)
+                .connect(name, stream)
+                .await
+            {
+                Ok(tls) => Box::new(tls),
+                Err(e) => {
+                    tracing::warn!("sandbox proxy: TLS with {target} failed: {e}");
+                    return Ok(refuse(
+                        grpc,
+                        StatusCode::BAD_GATEWAY,
+                        grpc_status::UNAVAILABLE,
+                        "the sandbox's node refused this proxy's certificate, or presented one \
+                         this proxy does not trust",
+                    ));
+                }
+            }
+        }
+    };
     let (mut sender, connection) =
         match hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(stream))
             .await
