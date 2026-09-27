@@ -46,7 +46,7 @@
 //!
 //! Pulled out of the `envd_process` example and into the crate itself so
 //! both that example (one VM, one daemon, matching envd's real per-sandbox
-//! shape) and `e2b_compat`'s per-sandbox gRPC listener (see
+//! shape) and `hv2-sandboxd`'s per-sandbox gRPC listener (see
 //! `serve_for_sandbox`) share one implementation rather than diverging.
 
 use std::collections::HashMap;

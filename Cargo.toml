@@ -15,6 +15,8 @@ members = [
     "crates/hv2-context",
     "crates/hv2-runtime",
     "crates/hv2-api",
+    "crates/hv2-cluster",
+    "crates/hv2-sandboxd",
     "crates/hv2-cli",
     "crates/hm-cli",
     "crates/hm-gui",

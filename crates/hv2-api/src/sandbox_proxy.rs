@@ -2,7 +2,7 @@
 //!
 //! # Why this exists
 //!
-//! `e2b_compat`'s `POST /sandboxes` returns a `processPort`, and the sandbox's
+//! `hv2-sandboxd`'s `POST /sandboxes` returns a `processPort`, and the sandbox's
 //! gRPC service really is listening there. But no E2B SDK reads a field called
 //! `processPort`: E2B addresses a sandbox by *hostname*, as
 //! `{port}-{sandboxID}.{domain}`, and its own proxy resolves that to the right
@@ -130,12 +130,14 @@ mod grpc_status {
 /// Where a sandbox's listener actually is.
 ///
 /// A trait rather than a concrete map because the thing that knows this is the
-/// control plane -- `e2b_compat` holds the sandboxes -- and a proxy that owned
-/// the registry would have to be told about every creation and deletion. This
-/// way it asks.
+/// control plane -- a node daemon holds its own sandboxes, a cluster's control
+/// plane asks a shared store -- and a proxy that owned the registry would have
+/// to be told about every creation and deletion. This way it asks. Async,
+/// because the cluster's answer is a network round trip away.
+#[async_trait::async_trait]
 pub trait SandboxRoutes: Send + Sync + 'static {
-    /// The local address serving `port` for `sandbox`, if that sandbox exists.
-    fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr>;
+    /// The address serving `port` for `sandbox`, if that sandbox exists.
+    async fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr>;
 }
 
 /// A registry that can be handed around and updated as sandboxes come and go.
@@ -174,8 +176,9 @@ impl PortMap {
     }
 }
 
+#[async_trait::async_trait]
 impl SandboxRoutes for PortMap {
-    fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr> {
+    async fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr> {
         self.routes.lock().get(&(sandbox.to_owned(), port)).copied()
     }
 }
@@ -427,7 +430,7 @@ async fn proxy(
     };
     let sandbox = sandbox.as_str();
 
-    let Some(target) = routes.resolve(sandbox, port) else {
+    let Some(target) = routes.resolve(sandbox, port).await else {
         return Ok(refuse(
             grpc,
             StatusCode::NOT_FOUND,
@@ -476,6 +479,18 @@ async fn proxy(
     // Rewrite the authority to the backend's own, and keep everything else --
     // path, method, and the headers gRPC carries its metadata in.
     let (mut parts, body) = req.into_parts();
+    // The route goes with the request as headers, because rewriting the
+    // authority erases a route that was read from it: a proxy in front of
+    // another proxy -- a cluster's control plane in front of a node -- would
+    // otherwise hand the second one a request it cannot route.
+    if !parts.headers.contains_key("e2b-sandbox-id") {
+        if let Ok(value) = hyper::header::HeaderValue::from_str(sandbox) {
+            parts.headers.insert("e2b-sandbox-id", value);
+            parts
+                .headers
+                .insert("e2b-sandbox-port", hyper::header::HeaderValue::from(port));
+        }
+    }
     let path = parts
         .uri
         .path_and_query()
@@ -609,16 +624,20 @@ mod tests {
         assert_eq!(route_of("99999-sbx.dev"), None, "port must fit in u16");
     }
 
-    #[test]
-    fn a_port_map_answers_only_for_what_it_holds() {
+    #[tokio::test]
+    async fn a_port_map_answers_only_for_what_it_holds() {
         let map = PortMap::new();
         let addr: SocketAddr = "127.0.0.1:9000".parse().unwrap();
         map.insert("sbx_a", 49983, addr);
 
-        assert_eq!(map.resolve("sbx_a", 49983), Some(addr));
-        assert_eq!(map.resolve("sbx_a", 22), None, "a port it does not serve");
+        assert_eq!(map.resolve("sbx_a", 49983).await, Some(addr));
         assert_eq!(
-            map.resolve("sbx_b", 49983),
+            map.resolve("sbx_a", 22).await,
+            None,
+            "a port it does not serve"
+        );
+        assert_eq!(
+            map.resolve("sbx_b", 49983).await,
             None,
             "a sandbox it has never seen"
         );
@@ -626,8 +645,8 @@ mod tests {
 
     /// A destroyed sandbox takes all of its ports with it, or the next request
     /// is routed at a VM that is gone.
-    #[test]
-    fn removing_a_sandbox_removes_every_port_it_had() {
+    #[tokio::test]
+    async fn removing_a_sandbox_removes_every_port_it_had() {
         let map = PortMap::new();
         let addr: SocketAddr = "127.0.0.1:9000".parse().unwrap();
         map.insert("sbx_a", 49983, addr);
@@ -635,8 +654,12 @@ mod tests {
         map.insert("sbx_b", 49983, addr);
 
         map.remove_sandbox("sbx_a");
-        assert_eq!(map.resolve("sbx_a", 49983), None);
-        assert_eq!(map.resolve("sbx_a", 8080), None);
-        assert_eq!(map.resolve("sbx_b", 49983), Some(addr), "and only that one");
+        assert_eq!(map.resolve("sbx_a", 49983).await, None);
+        assert_eq!(map.resolve("sbx_a", 8080).await, None);
+        assert_eq!(
+            map.resolve("sbx_b", 49983).await,
+            Some(addr),
+            "and only that one"
+        );
     }
 }

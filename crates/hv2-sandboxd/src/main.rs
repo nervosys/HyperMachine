@@ -1,5 +1,10 @@
-//! Phase 1 of `docs/CUBESANDBOX_PARITY_ROADMAP.md`: a minimal slice of
-//! E2B's REST API, backed by a real `hv2-agent` VM instead of a mock.
+//! `hv2-sandboxd`: E2B's sandbox API and envd, for microVMs on one host.
+//!
+//! This began as `hv2-api/examples/e2b_compat.rs`, Phase 1 of
+//! `docs/CUBESANDBOX_PARITY_ROADMAP.md`, and became a daemon in Phase 4 when
+//! it gained what a node in a cluster needs: a capacity it enforces,
+//! sandbox lifetimes (E2B's `timeout`), and registration with a shared store
+//! so `hv2-control-plane` can schedule onto it. It runs the same alone.
 //!
 //! # What this actually is
 //!
@@ -40,17 +45,27 @@
 //! `deny` unless the operator says otherwise; see `hv2_net::network_policy`
 //! for that and the other deliberate differences from E2B.
 //!
+//! # In a cluster
+//!
+//! With `--cluster-store redis://...`, the node joins a cluster: it
+//! announces itself (API URL, proxy address, capacity, load) with a TTL it
+//! renews, writes a record for every sandbox it runs and deletes it when the
+//! sandbox ends, and refuses API calls that do not carry the cluster token --
+//! so a node's port is not a way around the control plane's API key. See
+//! `hv2_cluster`.
+//!
 //! # Running it
 //!
 //! ```text
 //! HV2_KERNEL=/var/tmp/kbuild/bzImage HV2_INITRD=/var/tmp/kbuild/initramfs.cpio.gz \
-//!   cargo run --release -p hv2-api --example e2b_compat -- --port 3980
+//!   cargo run --release -p hv2-sandboxd -- --port 3980
 //! ```
 //!
-//! Then, from another shell:
+//! Then, from another shell (a v1 create lives 15 s unless `timeout` says
+//! otherwise, as in E2B):
 //!
 //! ```text
-//! curl -s -X POST localhost:3980/sandboxes -d '{"templateID":"base"}' | tee /tmp/sbx.json
+//! curl -s -X POST localhost:3980/sandboxes -d '{"templateID":"base","timeout":300}' | tee /tmp/sbx.json
 //! SBX=$(jq -r .sandboxID /tmp/sbx.json)
 //! PORT=$(jq -r .processPort /tmp/sbx.json)
 //! TOKEN=$(jq -r .envdAccessToken /tmp/sbx.json)
@@ -61,31 +76,30 @@
 //! curl -s -X DELETE localhost:3980/sandboxes/$SBX
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, Request, State};
 use axum::http::StatusCode;
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post, put};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use hv2_agent::{AgentVM, Capability, CapabilitySet};
-use hv2_api::envd_process::serve_for_sandbox;
 use hv2_api::sandbox_proxy::{self, PortMap};
+use hv2_cluster::control::CLUSTER_TOKEN_HEADER;
+use hv2_cluster::model::{metadata_matches, now_ms, parse_metadata_query, SandboxRecord};
+use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
 const GUEST_CID_BASE: u64 = 100;
-/// First port handed to a sandbox's own `process.Process` listener.
-/// Incremented per sandbox -- fine for a demo server; a real one would
-/// need to handle exhaustion and reuse.
-const PROCESS_PORT_BASE: u16 = 9000;
 
 /// The port an E2B client asks for when it wants a sandbox's envd.
 ///
@@ -142,6 +156,20 @@ struct Options {
     egress_default: Verdict,
     /// Accept an `egressProxy` on a private or internal address.
     allow_private_egress_proxy: bool,
+    /// Sandboxes this node runs at once. A create beyond it is refused with
+    /// 503, which a control plane reads as "try another node".
+    capacity: u32,
+    /// Join a cluster through this store (`redis://...`).
+    cluster_store: Option<String>,
+    cluster_namespace: String,
+    node_id: Option<String>,
+    /// How a control plane reaches this node's API and proxy. Required in a
+    /// cluster: the addresses this binds (0.0.0.0) are not ones to dial.
+    advertise_api: Option<String>,
+    advertise_proxy: Option<std::net::SocketAddr>,
+    /// Required on every API call when set.
+    cluster_token: Option<String>,
+    node_ttl: Duration,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -166,6 +194,16 @@ fn parse_options() -> Result<Options, String> {
         network: false,
         egress_default: Verdict::Deny,
         allow_private_egress_proxy: false,
+        capacity: 16,
+        cluster_store: None,
+        cluster_namespace: "default".to_string(),
+        node_id: None,
+        advertise_api: None,
+        advertise_proxy: None,
+        cluster_token: std::env::var("HV2_CLUSTER_TOKEN")
+            .ok()
+            .filter(|t| !t.is_empty()),
+        node_ttl: Duration::from_secs(9),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -187,6 +225,23 @@ fn parse_options() -> Result<Options, String> {
             "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--network" => opts.network = true,
+            "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
+            "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
+            "--node-id" => opts.node_id = Some(value(&mut i)?),
+            "--advertise-api" => opts.advertise_api = Some(value(&mut i)?),
+            "--advertise-proxy" => {
+                opts.advertise_proxy = Some(
+                    value(&mut i)?
+                        .parse()
+                        .map_err(|e| format!("--advertise-proxy: {e}"))?,
+                );
+            }
+            "--cluster-token" => opts.cluster_token = Some(value(&mut i)?),
+            "--node-ttl" => {
+                opts.node_ttl =
+                    Duration::from_secs(value(&mut i)?.parse().map_err(|e| format!("{e}"))?);
+            }
             "--allow-private-egress-proxy" => opts.allow_private_egress_proxy = true,
             "--egress-default" => {
                 opts.egress_default = match value(&mut i)?.as_str() {
@@ -197,9 +252,13 @@ fn parse_options() -> Result<Options, String> {
             }
             "--help" | "-h" => {
                 println!(
-                    "usage: e2b_compat [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
+                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
+                     [--capacity N] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
-                     [--tls-cert F --tls-key F]"
+                     [--tls-cert F --tls-key F] \
+                     [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
+                     [--node-id ID] [--cluster-namespace NS] [--cluster-token T] [--node-ttl SECS]]\n\
+                     HV2_KERNEL and HV2_INITRD name the guest; HV2_CLUSTER_TOKEN may carry the token."
                 );
                 std::process::exit(0);
             }
@@ -228,6 +287,9 @@ struct LiveSandbox {
     descriptor: SandboxResponse,
     /// The sandbox's network, when the server gives it one.
     network: Option<LiveNetwork>,
+    /// What listing, detail and the cluster store say about it -- including
+    /// when it ends, which the expiry task enforces.
+    record: SandboxRecord,
 }
 
 struct LiveNetwork {
@@ -243,11 +305,33 @@ struct AppState {
     authority: Option<Arc<Authority>>,
     sandboxes: Mutex<HashMap<String, LiveSandbox>>,
     next_cid: Mutex<u64>,
-    next_process_port: Mutex<u16>,
     /// What the proxy resolves a sandbox hostname to. Shared with the proxy
     /// task, which only reads it; every write happens here, on create and
     /// destroy, so a name stops resolving the moment its VM goes away.
     routes: Arc<PortMap>,
+    /// Creations in flight. Counted against capacity from the moment one is
+    /// accepted, not from when its VM is up: a boot takes most of a second,
+    /// and without this a burst of creates all see room for themselves.
+    booting: Mutex<u32>,
+    /// This node's membership of a cluster, if it has one.
+    node: Option<NodeAgent>,
+}
+
+impl AppState {
+    fn running(&self) -> u32 {
+        u32::try_from(self.sandboxes.lock().len()).unwrap_or(u32::MAX)
+    }
+}
+
+/// A slot against capacity, given back when dropped -- so a create that fails
+/// halfway, by error or by panic, does not leak one.
+struct Reservation<'a>(&'a Mutex<u32>);
+
+impl Drop for Reservation<'_> {
+    fn drop(&mut self) {
+        let mut booting = self.0.lock();
+        *booting = booting.saturating_sub(1);
+    }
 }
 
 // ── E2B wire shapes -- field names taken directly from e2b-dev/E2B's
@@ -255,13 +339,21 @@ struct AppState {
 
 #[derive(Debug, Deserialize)]
 struct NewSandbox {
-    #[allow(dead_code)]
     #[serde(rename = "templateID")]
     template_id: Option<String>,
+    /// Seconds to live. The spec's default differs by route: 15 on
+    /// `POST /sandboxes`, 300 on `POST /v2/sandboxes`.
+    timeout: Option<u64>,
+    #[serde(default)]
+    metadata: BTreeMap<String, String>,
     /// Snake case in the spec, unlike every other field.
     allow_internet_access: Option<bool>,
     network: Option<SandboxNetworkConfig>,
 }
+
+/// The longest a sandbox may be asked to live, in seconds: E2B's own limit
+/// for its paid tier, 24 hours. A lifetime is a resource claim.
+const MAX_TIMEOUT_SECS: u64 = 24 * 60 * 60;
 
 /// `SandboxNetworkConfig`, and `SandboxNetworkUpdateConfig` -- the same
 /// fields that matter here.
@@ -414,13 +506,10 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
         .into_response()
 }
 
-/// What `Sandbox.connect()` sends. Nothing here is used -- a sandbox that
-/// already exists has its own timeout and memory -- but the SDK always sends
-/// a body, and a handler that refused to decode one would refuse every
-/// connect.
+/// What `Sandbox.connect()` sends. `timeout` extends the sandbox's life --
+/// "TTL is only extended", in the spec's words, never shortened.
 #[derive(Debug, Deserialize)]
 struct ConnectSandbox {
-    #[allow(dead_code)]
     timeout: Option<u64>,
     #[allow(dead_code)]
     memory: Option<u64>,
@@ -436,20 +525,143 @@ async fn connect_sandbox(
     Path(sandbox_id): Path<String>,
     body: Option<Json<ConnectSandbox>>,
 ) -> Response {
-    // The body is accepted and ignored, but a malformed one is still a
-    // malformed request: `Option` here means "the SDK sent nothing", not
-    // "anything goes".
-    let _ = body;
-    let descriptor = state
+    // `Option` means "the SDK sent nothing", not "anything goes": a
+    // malformed body is still refused by the extractor.
+    let extend_to = body
+        .and_then(|Json(b)| b.timeout)
+        .map(|secs| now_ms() + secs.min(MAX_TIMEOUT_SECS) * 1000);
+    let found = {
+        let mut sandboxes = state.sandboxes.lock();
+        sandboxes.get_mut(&sandbox_id).map(|live| {
+            let mut changed = None;
+            if let Some(end) = extend_to {
+                if end > live.record.end_at_ms {
+                    live.record.end_at_ms = end;
+                    changed = Some(live.record.clone());
+                }
+            }
+            (live.descriptor.clone(), changed)
+        })
+    };
+
+    match found {
+        Some((descriptor, changed)) => {
+            if let (Some(record), Some(node)) = (changed, &state.node) {
+                if let Err(e) = node.updated(&record).await {
+                    tracing::warn!("recording {sandbox_id}'s new end time: {e}");
+                }
+            }
+            (StatusCode::OK, Json(descriptor)).into_response()
+        }
+        None => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct TimeoutRequest {
+    timeout: u64,
+}
+
+/// `POST /sandboxes/{id}/timeout` -- the sandbox now ends `timeout` seconds
+/// from this request, whether that is sooner or later than before.
+async fn set_timeout(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    Json(req): Json<TimeoutRequest>,
+) -> Response {
+    let record = {
+        let mut sandboxes = state.sandboxes.lock();
+        sandboxes.get_mut(&sandbox_id).map(|live| {
+            live.record.end_at_ms = now_ms() + req.timeout.min(MAX_TIMEOUT_SECS) * 1000;
+            live.record.clone()
+        })
+    };
+    let Some(record) = record else {
+        return api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"));
+    };
+    if let Some(node) = &state.node {
+        if let Err(e) = node.updated(&record).await {
+            tracing::warn!("recording {sandbox_id}'s new end time: {e}");
+        }
+    }
+    StatusCode::NO_CONTENT.into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct ListQuery {
+    metadata: Option<String>,
+    state: Option<String>,
+}
+
+/// `GET /sandboxes` and `GET /v2/sandboxes`, for this node alone. Every
+/// sandbox here is running, so a query for only paused ones gets none.
+async fn list_sandboxes(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ListQuery>,
+) -> Response {
+    let wanted = query
+        .metadata
+        .as_deref()
+        .map(parse_metadata_query)
+        .unwrap_or_default();
+    let wants_running = query
+        .state
+        .as_deref()
+        .is_none_or(|s| s.split(',').any(|s| s == "running"));
+    let mut records: Vec<SandboxRecord> = state
+        .sandboxes
+        .lock()
+        .values()
+        .map(|live| live.record.clone())
+        .filter(|r| wants_running && metadata_matches(r, &wanted))
+        .collect();
+    records.sort_by(|a, b| (a.started_at_ms, &a.sandbox_id).cmp(&(b.started_at_ms, &b.sandbox_id)));
+    Json(
+        records
+            .iter()
+            .map(SandboxRecord::listed)
+            .collect::<Vec<_>>(),
+    )
+    .into_response()
+}
+
+/// `GET /sandboxes/{id}` -- E2B's `SandboxDetail`.
+async fn sandbox_detail(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+) -> Response {
+    let record = state
         .sandboxes
         .lock()
         .get(&sandbox_id)
-        .map(|live| live.descriptor.clone());
-
-    match descriptor {
-        Some(descriptor) => (StatusCode::OK, Json(descriptor)).into_response(),
+        .map(|live| live.record.clone());
+    match record {
+        Some(record) => Json(record.detail()).into_response(),
         None => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
     }
+}
+
+/// Refuse any API call without the cluster token, when one is configured.
+async fn require_cluster_token(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    if let Some(token) = &state.opts.cluster_token {
+        use subtle::ConstantTimeEq;
+        let sent = request
+            .headers()
+            .get(CLUSTER_TOKEN_HEADER)
+            .map(axum::http::HeaderValue::as_bytes)
+            .unwrap_or_default();
+        if !bool::from(sent.ct_eq(token.as_bytes())) {
+            return api_error(
+                StatusCode::UNAUTHORIZED,
+                "this node answers its cluster's control plane only",
+            );
+        }
+    }
+    next.run(request).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -468,10 +680,37 @@ struct ExecResponse {
     timed_out: bool,
 }
 
-async fn create_sandbox(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<NewSandbox>,
-) -> Response {
+/// `POST /sandboxes`: E2B's v1 route, whose default lifetime is 15 seconds.
+async fn create_v1(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
+    create_sandbox(state, req, 15).await
+}
+
+/// `POST /v2/sandboxes`: what current SDKs call, default lifetime 300 s.
+async fn create_v2(State(state): State<Arc<AppState>>, Json(req): Json<NewSandbox>) -> Response {
+    create_sandbox(state, req, 300).await
+}
+
+async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+    // Room first, before anything is parsed or booted: a full node should
+    // answer at once so a control plane can try the next one.
+    let _slot = {
+        let mut booting = state.booting.lock();
+        let running = state.running();
+        if running + *booting >= state.opts.capacity {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                format!(
+                    "this node is full: {running} running and {} booting of {}",
+                    *booting, state.opts.capacity
+                ),
+            );
+        }
+        *booting += 1;
+        Reservation(&state.booting)
+    };
+    let lifetime_secs = req.timeout.unwrap_or(default_timeout).min(MAX_TIMEOUT_SECS);
+    let started_at_ms = now_ms();
+
     // Decided before anything boots, so a policy that does not parse costs a
     // 400 and not a VM.
     let wants_network = req.allow_internet_access == Some(true) || req.network.is_some();
@@ -508,7 +747,10 @@ async fn create_sandbox(
     // underscore is not legal in one. With `sbx_...` the SDK built a name its
     // own resolver then refused: "Label contains invalid characters". The
     // proxy splits on the *first* hyphen, so further hyphens are harmless.
-    let sandbox_id = format!("sbx-{}", uuid_like());
+    // Random, not a clock: in a cluster two nodes mint IDs into one
+    // namespace, and two creates in the same nanosecond on two hosts is not
+    // a case to rule out by hoping.
+    let sandbox_id = format!("sbx-{}", &uuid::Uuid::new_v4().simple().to_string()[..20]);
 
     let cid = {
         let mut next = state.next_cid.lock();
@@ -613,12 +855,29 @@ async fn create_sandbox(
     // Give this sandbox its own process.Process listener -- envd's real
     // shape, one daemon per sandbox, not one shared server multiplexing
     // by sandbox ID (see hv2_api::envd_process's doc comment).
-    let process_port = {
-        let mut next = state.next_process_port.lock();
-        let port = *next;
-        *next += 1;
-        port
+    //
+    // On loopback, on a port the kernel picks. Loopback because the proxy is
+    // the way in from anywhere else; kernel-picked because a counter handing
+    // out ports overflowed u16 after 56,000 sandboxes and reused ports still
+    // bound by the ones before.
+    let listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+        Ok(listener) => listener,
+        Err(e) => {
+            let _ = vm.stop().await;
+            return api_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("binding the sandbox's envd listener: {e}"),
+            );
+        }
     };
+    let local_process_addr = match listener.local_addr() {
+        Ok(addr) => addr,
+        Err(e) => {
+            let _ = vm.stop().await;
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+        }
+    };
+    let process_port = local_process_addr.port();
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
     // 244 bits from the OS RNG, via two v4 UUIDs.
     let access_token = format!(
@@ -628,17 +887,18 @@ async fn create_sandbox(
     );
     let listener_token = Some(access_token.clone());
     let process_vm = Arc::clone(&vm);
-    let process_addr: std::net::SocketAddr = format!("0.0.0.0:{process_port}").parse().unwrap();
-    // What the proxy dials. The listener binds 0.0.0.0; the proxy reaches it
-    // over loopback, and 0.0.0.0 is not an address you can connect *to*.
-    let local_process_addr: std::net::SocketAddr =
-        format!("127.0.0.1:{process_port}").parse().unwrap();
     let process_sandbox_id = sandbox_id.clone();
     tokio::spawn(async move {
-        if let Err(e) =
-            serve_for_sandbox(process_vm, process_addr, listener_token, shutdown_rx).await
-        {
-            tracing::warn!("process.Process listener for {process_sandbox_id} stopped: {e}");
+        let served = hv2_api::connect::serve_on(
+            listener,
+            hv2_api::envd_process::EnvdProcess::new(Arc::clone(&process_vm)),
+            hv2_api::envd_filesystem::EnvdFilesystem::new(process_vm),
+            listener_token,
+            shutdown_rx,
+        )
+        .await;
+        if let Err(e) = served {
+            tracing::warn!("envd listener for {process_sandbox_id} stopped: {e}");
         }
     });
 
@@ -651,7 +911,7 @@ async fn create_sandbox(
     // Built once and kept, so `POST /sandboxes/{id}/connect` answers with the
     // same description rather than a second one assembled from parts.
     let descriptor = SandboxResponse {
-        template_id,
+        template_id: template_id.clone(),
         sandbox_id: sandbox_id.clone(),
         client_id: sandbox_id.clone(),
         envd_version: ENVD_VERSION.to_string(),
@@ -660,16 +920,43 @@ async fn create_sandbox(
         proxy_port: state.opts.proxy_port,
         envd_access_token: access_token,
     };
+    let record = SandboxRecord {
+        sandbox_id: sandbox_id.clone(),
+        node_id: state
+            .node
+            .as_ref()
+            .map_or_else(|| "local".to_string(), |n| n.id().to_string()),
+        template_id,
+        started_at_ms,
+        end_at_ms: started_at_ms + lifetime_secs * 1000,
+        cpu_count: state.opts.cpu_cores,
+        memory_mb: state.opts.memory_gb * 1024,
+        metadata: req.metadata,
+        envd_version: ENVD_VERSION.to_string(),
+        descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
+    };
 
-    state.sandboxes.lock().insert(
-        sandbox_id,
-        LiveSandbox {
-            vm,
-            process_shutdown: shutdown_tx,
-            descriptor: descriptor.clone(),
-            network,
-        },
-    );
+    let running = {
+        let mut sandboxes = state.sandboxes.lock();
+        sandboxes.insert(
+            sandbox_id.clone(),
+            LiveSandbox {
+                vm,
+                process_shutdown: shutdown_tx,
+                descriptor: descriptor.clone(),
+                network,
+                record: record.clone(),
+            },
+        );
+        u32::try_from(sandboxes.len()).unwrap_or(u32::MAX)
+    };
+    // Recorded before answering, so a control plane that routes the next
+    // call by the store finds it.
+    if let Some(node) = &state.node {
+        if let Err(e) = node.created(&record, running).await {
+            tracing::warn!("recording {sandbox_id} in the cluster store: {e}");
+        }
+    }
 
     (StatusCode::CREATED, Json(descriptor)).into_response()
 }
@@ -879,40 +1166,62 @@ async fn destroy_sandbox(
     State(state): State<Arc<AppState>>,
     Path(sandbox_id): Path<String>,
 ) -> Response {
-    let removed = state.sandboxes.lock().remove(&sandbox_id);
-    match removed {
-        Some(live) => {
-            // Stop resolving the name first: a request that arrives during
-            // teardown should fail to route rather than be sent at a VM that
-            // is in the middle of stopping.
-            state.routes.remove_sandbox(&sandbox_id);
-            let _ = live.process_shutdown.send(());
-            // Dropping the bridge drops the gateway, whose stack task ends
-            // with it; open upstream connections close as their tasks see
-            // the guest side go away.
-            if let Some(network) = live.network {
-                network.bridge.abort();
-            }
-            if let Err(e) = live.vm.stop().await {
-                tracing::warn!("stopping sandbox {sandbox_id}: {e}");
-            }
-            StatusCode::NO_CONTENT.into_response()
-        }
-        None => api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")),
+    if end_sandbox(&state, &sandbox_id, "sandbox-deleted").await {
+        StatusCode::NO_CONTENT.into_response()
+    } else {
+        api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))
     }
 }
 
-/// A short, collision-resistant-enough id for a demo server. Not a real
-/// UUID implementation -- this crate doesn't otherwise depend on `uuid`
-/// and pulling it in for a demo binary's id string isn't worth the
-/// dependency.
-fn uuid_like() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    format!("{nanos:x}")
+/// Stop a sandbox and everything it had, and say why (`kind` is the cluster
+/// event). Returns whether there was such a sandbox.
+async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
+    let (removed, running) = {
+        let mut sandboxes = state.sandboxes.lock();
+        let removed = sandboxes.remove(sandbox_id);
+        (removed, u32::try_from(sandboxes.len()).unwrap_or(u32::MAX))
+    };
+    let Some(live) = removed else {
+        return false;
+    };
+    // Stop resolving the name first: a request that arrives during teardown
+    // should fail to route rather than be sent at a VM that is stopping.
+    state.routes.remove_sandbox(sandbox_id);
+    let _ = live.process_shutdown.send(());
+    // Dropping the bridge drops the gateway, whose stack task ends with it;
+    // open upstream connections close as their tasks see the guest side go.
+    if let Some(network) = live.network {
+        network.bridge.abort();
+    }
+    if let Err(e) = live.vm.stop().await {
+        tracing::warn!("stopping sandbox {sandbox_id}: {e}");
+    }
+    if let Some(node) = &state.node {
+        if let Err(e) = node.ended(sandbox_id, kind, running).await {
+            tracing::warn!("recording the end of {sandbox_id}: {e}");
+        }
+    }
+    true
+}
+
+/// End every sandbox whose time is up, once a second.
+async fn expire(state: Arc<AppState>) {
+    loop {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let now = now_ms();
+        let due: Vec<String> = state
+            .sandboxes
+            .lock()
+            .iter()
+            .filter(|(_, live)| live.record.end_at_ms <= now)
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in due {
+            if end_sandbox(&state, &id, "sandbox-expired").await {
+                tracing::info!("sandbox {id} reached its timeout");
+            }
+        }
+    }
 }
 
 #[tokio::main]
@@ -927,7 +1236,7 @@ async fn main() -> std::process::ExitCode {
     let opts = match parse_options() {
         Ok(opts) => opts,
         Err(e) => {
-            eprintln!("e2b_compat: {e}");
+            eprintln!("hv2-sandboxd: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
@@ -940,7 +1249,7 @@ async fn main() -> std::process::ExitCode {
         match Authority::generate() {
             Ok(authority) => Some(Arc::new(authority)),
             Err(e) => {
-                eprintln!("e2b_compat: generating the egress CA: {e}");
+                eprintln!("hv2-sandboxd: generating the egress CA: {e}");
                 return std::process::ExitCode::FAILURE;
             }
         }
@@ -956,15 +1265,70 @@ async fn main() -> std::process::ExitCode {
         "sandboxes get no network interface (--network to change that)".to_string()
     };
 
+    // Cluster membership, if asked for: checked and joined before anything
+    // listens, so a node that cannot reach its store fails at start rather
+    // than serving sandboxes no control plane can find.
+    let node = match &opts.cluster_store {
+        None => None,
+        Some(url) => {
+            let (Some(api), Some(proxy)) = (opts.advertise_api.clone(), opts.advertise_proxy)
+            else {
+                eprintln!(
+                    "hv2-sandboxd: --cluster-store needs --advertise-api and --advertise-proxy: \
+                     the addresses a control plane dials, which 0.0.0.0 is not"
+                );
+                return std::process::ExitCode::FAILURE;
+            };
+            if opts.cluster_token.is_none() {
+                tracing::warn!(
+                    "no --cluster-token: anyone who can reach this node's port can use it, \
+                     bypassing the control plane's API key"
+                );
+            }
+            let store = match hv2_cluster::store::open(url, &opts.cluster_namespace).await {
+                Ok(store) => store,
+                Err(e) => {
+                    eprintln!("hv2-sandboxd: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            };
+            let id = opts
+                .node_id
+                .clone()
+                .unwrap_or_else(|| format!("node-{}", proxy.to_string().replace([':', '.'], "-")));
+            let agent = NodeAgent::new(
+                store,
+                NodeConfig {
+                    id,
+                    api,
+                    proxy,
+                    capacity: opts.capacity,
+                    ttl: opts.node_ttl,
+                },
+            );
+            if let Err(e) = agent.join().await {
+                eprintln!("hv2-sandboxd: joining the cluster: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+            Some(agent)
+        }
+    };
+
     let routes = Arc::new(PortMap::new());
     let state = Arc::new(AppState {
         authority,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
-        next_process_port: Mutex::new(PROCESS_PORT_BASE),
         routes: Arc::clone(&routes),
+        booting: Mutex::new(0),
+        node: node.clone(),
     });
+    if let Some(node) = node.clone() {
+        let beating = Arc::clone(&state);
+        tokio::spawn(node.heartbeat(move || beating.running()));
+    }
+    tokio::spawn(expire(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
     //
@@ -978,7 +1342,7 @@ async fn main() -> std::process::ExitCode {
     let proxy_addr: std::net::SocketAddr = match format!("0.0.0.0:{proxy_port}").parse() {
         Ok(addr) => addr,
         Err(e) => {
-            eprintln!("e2b_compat: bad proxy port {proxy_port}: {e}");
+            eprintln!("hv2-sandboxd: bad proxy port {proxy_port}: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
@@ -987,7 +1351,7 @@ async fn main() -> std::process::ExitCode {
             match sandbox_proxy::tls_config(std::path::Path::new(cert), std::path::Path::new(key)) {
                 Ok(config) => Some(config),
                 Err(e) => {
-                    eprintln!("e2b_compat: TLS: {e}");
+                    eprintln!("hv2-sandboxd: TLS: {e}");
                     return std::process::ExitCode::FAILURE;
                 }
             }
@@ -996,7 +1360,7 @@ async fn main() -> std::process::ExitCode {
         // Half a TLS configuration is a mistake, and starting in plaintext
         // because one flag was missing is the wrong way to report it.
         _ => {
-            eprintln!("e2b_compat: --tls-cert and --tls-key must be given together");
+            eprintln!("hv2-sandboxd: --tls-cert and --tls-key must be given together");
             return std::process::ExitCode::FAILURE;
         }
     };
@@ -1017,27 +1381,42 @@ async fn main() -> std::process::ExitCode {
     });
 
     let app = Router::new()
-        .route("/sandboxes", post(create_sandbox))
+        .route("/sandboxes", post(create_v1).get(list_sandboxes))
         // What current SDKs (2.51+) call: `NewSandboxV2`, the same fields
         // used here, secure-only -- which every sandbox here already is.
-        .route("/v2/sandboxes", post(create_sandbox))
+        .route("/v2/sandboxes", post(create_v2).get(list_sandboxes))
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
+        .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
+        .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
-        .route("/sandboxes/{sandboxID}", delete(destroy_sandbox))
+        .route(
+            "/sandboxes/{sandboxID}",
+            get(sandbox_detail).delete(destroy_sandbox),
+        )
         .route("/sandboxes/{sandboxID}/network", put(update_network))
         .route(
             "/sandboxes/{sandboxID}/network/decisions",
             get(network_decisions),
         )
+        .route_layer(axum::middleware::from_fn_with_state(
+            Arc::clone(&state),
+            require_cluster_token,
+        ))
         // Even "no such route" has to be JSON: the SDK parses the body of
         // every non-2xx reply before it looks at the status.
         .fallback(|uri: axum::http::Uri| async move {
             api_error(StatusCode::NOT_FOUND, format!("no route {uri}"))
         })
-        .with_state(state);
+        .with_state(Arc::clone(&state));
 
     let addr = format!("0.0.0.0:{port}");
-    println!("e2b_compat: listening on {addr}");
+    println!(
+        "hv2-sandboxd: listening on {addr}, capacity {}{}",
+        state.opts.capacity,
+        node.as_ref()
+            .map(|n| format!(", cluster node {}", n.id()))
+            .unwrap_or_default()
+    );
     println!(
         "  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real \
          VM and its own process.Process gRPC listener (port in the response's processPort)"
@@ -1069,12 +1448,46 @@ async fn main() -> std::process::ExitCode {
     let listener = match tokio::net::TcpListener::bind(&addr).await {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("e2b_compat: could not bind {addr}: {e}");
+            eprintln!("hv2-sandboxd: could not bind {addr}: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
-    if let Err(e) = axum::serve(listener, app).await {
-        eprintln!("e2b_compat: server error: {e}");
+    // Ctrl-C or SIGTERM ends the server gracefully, then the node leaves the
+    // cluster at once instead of lingering until its TTL runs out -- which is
+    // what makes scaling a cluster down a non-event.
+    let served = axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            #[cfg(unix)]
+            {
+                let mut term =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    () = async {
+                        match term.as_mut() {
+                            Some(term) => { term.recv().await; }
+                            None => std::future::pending::<()>().await,
+                        }
+                    } => {}
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        })
+        .await;
+    let ids: Vec<String> = state.sandboxes.lock().keys().cloned().collect();
+    for id in ids {
+        end_sandbox(&state, &id, "sandbox-deleted").await;
+    }
+    if let Some(node) = &node {
+        if let Err(e) = node.leave().await {
+            tracing::warn!("leaving the cluster: {e}");
+        }
+    }
+    if let Err(e) = served {
+        eprintln!("hv2-sandboxd: server error: {e}");
         return std::process::ExitCode::FAILURE;
     }
     std::process::ExitCode::SUCCESS

@@ -10,24 +10,18 @@
 //! is never asked. A reader who assumes otherwise -- reasonably, from the name
 //! -- concludes a guest's traffic is filtered when it is not.
 //!
-//! The nearest thing to a live control is `hv2_net::egress::EgressPolicy`
-//! (not a link: `hv2-net` depends on this crate, not the other way round),
-//! which `hv2_net::bridge::Bridge` consults for every outbound frame. It is
-//! deliberately smaller than this: destination address, port and protocol, no
-//! connection tracking, because a bridge sees frames on the guest's own kick
-//! and whatever it does there is in the path of every packet.
+//! The control that does run is in `hv2-net` (not a link: `hv2-net` depends
+//! on this crate, not the other way round). A sandbox that `hv2-sandboxd`
+//! gives a network reaches it only through `hv2_net::gateway::Gateway`, which
+//! decides every TCP connection and DNS query against the sandbox's
+//! `hv2_net::network_policy::NetworkPolicy` before opening anything from the
+//! host. A sandbox without `--network` has no interface at all. Either way,
+//! nothing a guest sends passes through this module.
 //!
-//! "Nearest thing", and not "the control that runs", which is what this said
-//! until someone checked. `Bridge` is constructed in exactly one place
-//! outside its own module -- `hv2-net/examples/tap_bridge.rs` -- and no
-//! product path builds one. A sandbox as actually deployed gets no network
-//! interface at all (see `e2b_compat`), so guest traffic is unfiltered
-//! because there is no guest traffic path, not because a policy allowed it.
-//!
-//! The difference between the two modules is still real and worth the
-//! distinction: `EgressPolicy` is wired into the component that would carry
-//! the traffic, so standing up a `Bridge` enforces it. This module is wired
-//! to nothing, and standing anything up does not change that.
+//! This paragraph once named `EgressPolicy` inside `Bridge` as the live
+//! control, when no product path built a `Bridge`; that was corrected to
+//! "nearest thing", and is now superseded by the gateway, which is on the
+//! path. The history is in `docs/CUBESANDBOX_PARITY_ROADMAP.md`, Phase 3.
 //!
 //! This is kept rather than deleted because connection tracking is wanted for
 //! the L7 egress work in `docs/CUBESANDBOX_PARITY_ROADMAP.md`'s Phase 3, and

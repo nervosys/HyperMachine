@@ -1,13 +1,18 @@
 # Beating CubeSandbox: a feature and performance roadmap
 
-Status: **Phases 0-3 built and verified.** Phase 0 benchmarked honestly
+Status: **Phases 0-4 built and verified.** Phase 0 benchmarked honestly
 before anything was promised; Phase 1 met its exit criterion, an unmodified
 E2B SDK client running against a HyperMachine endpoint by changing only where
 it points; Phase 2 moves a guest between VMs through a file and restores
 faster than that guest boots; Phase 3 gives a sandbox a network whose every
 connection and DNS query passes E2B's own egress policy, with credentials
-injected on the host so the guest never holds them. Each section below
-carries its own status and the measurements behind it.
+injected on the host so the guest never holds them; Phase 4 runs many hosts
+behind stateless control planes coordinating through Redis/Valkey. Each
+section below carries its own status and the measurements behind it.
+
+`e2b_compat`, which the Phase 1-3 sections run, is now the `hv2-sandboxd`
+crate: same code, same flags, `cargo run -p hv2-sandboxd` instead of
+`--example e2b_compat`.
 
 This began as a planning document -- the line here read "nothing built as a
 result of it yet" until 2026-09-22, long after that stopped being true.
@@ -850,7 +855,7 @@ names that one item.
 ### Phase 3 — Network security (CubeVS/CubeEgress-equivalent) — **built, on the live path, verified with the real SDK**
 
 A sandbox can now have a network, and every packet of it passes a policy.
-`e2b_compat --network` gives each sandbox a virtio-net NIC whose far end is
+`hv2-sandboxd --network` gives each sandbox a virtio-net NIC whose far end is
 `hv2_net::gateway::Gateway`: a userspace TCP/IP stack (smoltcp) that is the
 guest's router (10.0.2.2) and DNS server (10.0.2.3), ends every TCP connection
 the guest opens, and opens the corresponding one from the host only if the
@@ -1019,15 +1024,121 @@ code execution by design". `hv2_core::networking::filter`, a packet filter
 with connection tracking, is still called by no data path; the gateway is
 the control that is.
 
-### Phase 4 — Multi-node cluster orchestration
+### Phase 4 — Multi-node cluster orchestration — **built, verified on a live cluster with the real SDK**
 
-Extend `hv2-runtime`'s VM-pool/scheduler concept from one host managing a
-pool to a stateless control plane coordinating multiple hosts (CubeMaster's
-actual shape: Redis-backed lifecycle events, any control-plane instance
-serves any request). `hv2-runtime`'s 8 tests are the thinnest coverage of
-any crate cited as a strength in this doc — expect this phase to surface
-real gaps between what its doc comments claim and what it does, the same way
-booting `hv2-unikernel` surfaced things `hv2-net`'s tests alone couldn't.
+CubeMaster's shape, and CubeMaster's store. Two new crates:
+
+- **`hv2-sandboxd`** -- the node daemon. What was `hv2-api/examples/e2b_compat.rs`
+  (moved with `git mv`, so its history follows), now with what a node needs:
+  a capacity it enforces, E2B sandbox lifetimes, and cluster membership.
+- **`hv2-cluster`** -- a shared store (Redis or Valkey; in-memory for tests
+  and one host), the node agent, a scheduler, a reaper, and
+  **`hv2-control-plane`**: E2B's API for the whole cluster, stateless.
+
+```text
+                     E2B SDK / any HTTP client
+                 X-API-Key │           │ envd (X-Access-Token)
+          ┌────────────────┴─┐   ┌─────┴────────────┐
+          │ hv2-control-plane│ … │ hv2-control-plane│   any number, no state
+          └────────┬─────────┘   └─────────┬────────┘
+                   │  schedule, forward,   │  route envd to the owning
+                   │  list from the store  │  node's proxy
+          ┌────────┴─────── Redis / Valkey ┴────────────┐
+          │ node:{id} (TTL) · sandbox:{id} · events      │
+          └────────┬───────────────────────────┬────────┘
+       heartbeat,  │ x-hv2-cluster-token        │
+       records     │                            │
+          ┌────────┴────────┐          ┌────────┴────────┐
+          │  hv2-sandboxd   │   …      │  hv2-sandboxd   │  microVMs
+          └─────────────────┘          └─────────────────┘
+```
+
+**Who is authoritative for what**, which is the design:
+
+- A **node** owns its sandboxes. It writes a record when it creates one and
+  deletes it when the sandbox ends -- by request, by timeout, by shutdown --
+  and on restart it deletes whatever records a previous run left behind,
+  because those VMs died with that process. The store says what nodes are
+  running, not what a control plane last asked for.
+- A node also owns **its capacity**. The scheduler's view of load is advice;
+  a full node refuses a create with 503 and the control plane tries the next
+  one. That is what lets any number of control planes schedule at once with
+  no lock between them -- verified with two control planes racing for the
+  last slot on each of two nodes.
+- **Liveness is the store's.** A node's record has a TTL each heartbeat
+  renews; a node that stops is simply absent. Control planes never judge
+  staleness. The reaper, which may run on every control plane at once,
+  removes records whose node is gone; whichever instance deletes a record
+  first is the only one that reports it.
+- A **control plane** owns nothing. Creates are scheduled and forwarded,
+  per-sandbox calls go to the owning node, list and detail come from the
+  store, and envd traffic is proxied to the owning node's proxy.
+
+**Verified on a live cluster** -- Valkey, two `hv2-sandboxd` nodes (capacity
+3, networking on) booting real microVMs, two control planes -- with the
+unmodified E2B SDK (`e2b` 2.51.0):
+
+```text
+OK   4 sandboxes created via cp-a in 3.0s
+OK   placement: {'node-a': 2, 'node-b': 2}
+OK   commands.run on all 4 through cp-a's envd proxy
+OK   via cp-b: 6.6.52                      # a sandbox cp-a created, run via cp-b
+OK   Sandbox.list via cp-b: 4 sandboxes
+OK   7th create refused: 503 ... no node has room (2 alive)
+```
+
+and then the failure cases, by hand:
+
+| scenario | result |
+| --- | --- |
+| control plane A killed with SIGKILL | B still serves all 6 sandboxes |
+| node API, no or wrong cluster token | 401 |
+| control plane, no API key | 401 |
+| node B killed with SIGKILL | gone from the store in 8 s (TTL 9 s); its 3 sandboxes reaped, 3 `sandbox-lost` events; connect to one: 404 |
+| node A full after the loss | create: 503, until a sandbox ends |
+| sandbox created with `timeout: 4` | gone at 6 s; `sandbox-expired` event |
+| node A sent SIGTERM | ends its sandboxes and leaves the store at once, not at its TTL |
+
+**Found by the tests, not by reading:**
+
+- **Bursts all landed on one node.** A node reported its load only on the
+  heartbeat -- every 3 s -- so for that long after each create it still
+  looked empty, and four creates in a row went to the same node. A node now
+  re-announces its load on every create and end; the heartbeat only renews
+  liveness. The spread test failed before this and passes after.
+- **A second proxy lost the route.** `sandbox_proxy` rewrites the authority
+  to the backend's, which erases a route that was read from the hostname: a
+  control plane's proxy in front of a node's proxy handed the node a request
+  it could not route. Once a proxy has resolved a route it now stamps
+  `e2b-sandbox-id`/`e2b-sandbox-port` onto the forwarded request.
+- **Per-sandbox ports came from a `u16` counter** that would overflow after
+  ~56,000 sandboxes and hand out ports still bound by earlier ones. Now the
+  kernel picks, on loopback -- the proxy is the way in from anywhere else.
+- **Sandbox IDs came from the clock.** Fine for one process, not for many
+  nodes minting into one namespace. Now random.
+
+**E2B surface added on the way**, because the SDK's list and detail models
+need it: sandbox lifetimes (`timeout`, defaulting to the spec's 15 s on v1
+and 300 s on v2, capped at 24 h), expiry, `POST /sandboxes/{id}/timeout`,
+`connect` extending the lifetime ("TTL is only extended"), `GET /sandboxes`,
+`GET /v2/sandboxes` with metadata/state filters and `x-next-token`
+pagination, `GET /sandboxes/{id}` (`SandboxDetail`), and
+`/v2/sandboxes/{id}/connect`.
+
+**Why not `hv2-runtime`**, which this section proposed extending: its own
+scaling table promises "Multi-host: per-host runtime, shared state store",
+and its store is an in-process `BTreeMap` behind a lock whose external
+backend is documented as "Placeholder for etcd, Postgres, S3". The shared
+store is the whole of a stateless control plane, so there was nothing to
+extend. The prediction above -- that this phase would find gaps between
+`hv2-runtime`'s doc comments and its code -- held.
+
+**Not built:** pause/resume and snapshots through the cluster API (Phase 2
+works per VM; nothing moves a sandbox between nodes yet), templates (every
+node boots the same kernel and initramfs), and TLS to the store (front it
+with a private network or a TLS tunnel). A store outage stops creates and
+routing -- running sandboxes keep running, and nodes re-announce when it
+returns -- so production wants a replicated Redis/Valkey.
 
 ### Phase 5 — Density, ops tooling, deployment convenience
 

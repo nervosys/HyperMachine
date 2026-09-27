@@ -239,8 +239,8 @@ SYNTHETIC_OK=" bandwidth queueing throughput "
 #   pic_timer_interrupts  Windows-gated; tools/sweep.ps1 builds it
 #   linux_boot_probe      wants a bzImage argument
 #   guest_exec_probe      wants a bzImage and an initramfs
-#   e2b_compat            wants HV2_KERNEL naming a bzImage; both print that
-#   envd_process          and exit 1, which is the check working
+#   envd_process          wants HV2_KERNEL naming a bzImage; it prints that
+#                         and exits 1, which is the check working
 #
 # `advanced` and `basic` used to be here, blamed on "pause a VM that has no
 # guest". That diagnosis was wrong, and the way it was wrong is worth keeping.
@@ -262,7 +262,7 @@ SYNTHETIC_OK=" bandwidth queueing throughput "
 # every example that runs a guest depends on it. So the three examples were
 # wrong, not the hypervisor, and they now raise lines instead of vectors. They
 # run.
-SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe e2b_compat envd_process "
+SKIP=" pic_timer_interrupts linux_boot_probe guest_exec_probe envd_process "
 
 examples=$(cargo metadata --format-version 1 --no-deps 2>/dev/null |
     python3 -c "

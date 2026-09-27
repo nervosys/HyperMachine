@@ -1,0 +1,36 @@
+[package]
+name = "hv2-sandboxd"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "HyperMachine sandbox node daemon: E2B's API and envd for microVMs on one host, alone or in a cluster"
+
+[dependencies]
+hv2-core = { path = "../hv2-core", version = "1.1.0" }
+hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
+hv2-api = { path = "../hv2-api", version = "1.1.0" }
+hv2-net = { path = "../hv2-net", version = "1.1.0" }
+hv2-cluster = { path = "../hv2-cluster", version = "1.1.0" }
+
+tokio = { workspace = true }
+axum = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+subtle = { version = "2.6", default-features = false }
+
+[[bin]]
+name = "hv2-sandboxd"
+path = "src/main.rs"
+
+[lints]
+workspace = true

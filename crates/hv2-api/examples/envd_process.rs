@@ -4,7 +4,7 @@
 //! verbatim into `proto/process.proto`), not a guessed shape.
 //!
 //! The actual service implementation lives in the crate itself now
-//! (`hv2_api::envd_process`), shared with `e2b_compat`'s per-sandbox gRPC
+//! (`hv2_api::envd_process`), shared with `hv2-sandboxd`'s per-sandbox gRPC
 //! listener -- see that module's doc comment for what's real here and what
 //! is not (output is polled at an interval rather than pushed; `Update`, and
 //! PTYs generally, are `unimplemented`). This example is the standalone case: one VM, booted
