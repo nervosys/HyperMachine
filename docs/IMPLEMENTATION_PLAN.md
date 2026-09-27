@@ -41,7 +41,7 @@ The project is complete when all of these hold:
 | CI on `master` | 19 of 22 green | three failures, all diagnosed below |
 | Stubs in shipping code | **none** | all 7 `unimplemented!()` are a test double in `vm_host.rs` |
 | Crypto | IronCrypto 0.1.1, from crates.io | published vectors pass; no private-repo credentials |
-| Parity roadmap | Phases 0–2 done | Phase 3 written but not on a live path; 4–5 not started |
+| Parity roadmap | Phases 0–5 built; 6 in progress | 3–6 are commits on a local `master`, not yet pushed (2026-09-26) |
 | Hardware | hv1, hv1-arm, WHPX never run on target | see Phase E |
 | Confidential computing | controls refuse honestly | no SEV/TDX backend exists |
 
@@ -76,6 +76,13 @@ Critical path. Everything else assumes a green, trustworthy CI.
   - [ ] The same `RUSTFLAGS` override as above.
 
   Done when: the job builds with `-D warnings` in effect.
+- [ ] **Push the Phase 3–6 commits, then merge `fix/tenant-reserved-egress`.**
+  🔒 *push approval.* *S.* The branch closes a hole found reviewing Phase 4:
+  a tenant's `allowOut: ["0.0.0.0/0"]` reached private addresses, which in a
+  cluster means the unauthenticated state store holding every sandbox's
+  envd access token. Before the fix the cloud metadata address was reachable
+  too. Reproduced on real KVM guests; `tools/e2e-egress.sh` fails on the old
+  code and passes on the branch.
 - [ ] **Pin `dtolnay/rust-toolchain@master`** to a commit. *S.*
   It is unpinned, and it was a silent upstream behaviour change that exposed
   the MSRV defect. Done when: no workflow references an action at `@master`.
@@ -110,8 +117,9 @@ less — than the code does. These are the known instances still outstanding.
   Done when: each is marked resolved with the commit that resolved it.
 - [ ] **`SECURITY_AUDIT.md` recommendation #3** ("retire the `rsa` timing
   advisory") — done; mark it. *S.*
-- [ ] **Parity roadmap, Phase 4**: "`hv2-runtime`'s 8 tests are the thinnest
-  coverage" — it has 279. *S.*
+- [x] **Parity roadmap, Phase 4**: "`hv2-runtime`'s 8 tests are the thinnest
+  coverage" — it has 279. Gone in the Phase 4 rewrite, which also records
+  why the cluster was not built on `hv2-runtime`.
 - [ ] **Upstream: correct the `ic-mldsa` and `ic-mlkem` crates.io
   descriptions.** 🔒 *IronCrypto repository.* *S.*
   They read "incomplete, no signature scheme yet" and "experimental, not
@@ -162,14 +170,21 @@ self-test in this repository is hand-written.
 
 ## Phase D — Parity roadmap Phase 3: network security 🔓
 
-The deployed sandbox has **no network interface at all**. Egress is denied by
-absence, not by policy — `EgressPolicy` exists and is correct, but nothing in
-a product path constructs the `Bridge` that would consult it.
+Largely built by the parity roadmap's Phase 3 (ddad478). `hv2-sandboxd
+--network` gives each sandbox a virtio-net NIC whose far end is
+`hv2_net::gateway`, a userspace TCP/IP stack that decides every connection and
+DNS query against E2B's `network` policy. The enforcement point is the gateway
+and `network_policy::NetworkPolicy`; the `Bridge` passes `EgressPolicy::allow_all()`.
 
-- [ ] **Put a `Bridge` on the product path** so a deployed sandbox has a
-  network and `EgressPolicy` governs it. *L.*
-  Done when: an end-to-end test shows a default-deny policy refusing an
-  outbound frame from a sandbox created through the E2B API.
+- [x] **Put a network with enforced egress on the product path.** *L.*
+  Done: on real KVM guests created through the E2B API, a sandbox with no
+  network config is refused (`default deny`), and the gateway's decision
+  log says so. The test is `tools/e2e-egress.sh` (branch
+  `fix/tenant-reserved-egress` until merged).
+- [ ] **Land the tenant/operator split for reserved addresses** (see Phase A).
+  A tenant's `allowOut` may open reserved ranges only where the operator
+  grants them (`--tenant-reserved-cidr`). The Helm chart also gains a store
+  password and an egress NetworkPolicy on node pods. *S, written.*
 - [ ] **Resolve `networking::filter`** (deprecated, wired to nothing): wire its
   connection tracking in beside `NatTable`, or delete it. *M.*
 - [ ] **Wire or remove `permission_middleware`.** *M.*
@@ -180,9 +195,14 @@ a product path constructs the `Bridge` that would consult it.
   It is offered through the CLI, the MCP tool schema and the ontology, and
   drives nothing — `hm-cli` does not depend on `hv2-gpu`. Wire it or remove
   it from all three.
-- [ ] **Name-based egress** (DNS or TLS SNI). 🔒 *design decision.* *L.*
-- [ ] **L7 egress proxy with credential injection**, so a sandboxed agent's
-  outbound calls never see the real secret. *L.*
+- [x] **Name-based egress.** Built in Phase 3. `allowOut` takes names and
+  `*.name`, and the gateway's own DNS answers and TLS SNI tie a connection to
+  a name. A name never opens a reserved address (DNS rebinding is tested).
+- [x] **L7 egress proxy with credential injection.** Built in Phase 3.
+  `network.rules[name].transform.headers` is injected by TLS interception
+  against a per-sandbox CA, and verified with the unmodified E2B SDK.
+  Known gap, from the roadmap: rustls-based clients stall after the
+  ServerHello under interception, while OpenSSL-based clients work.
 
 **Exit criterion:** a deployed sandbox has a network, and default-deny egress
 is enforced on it and proven by a test.
@@ -257,22 +277,31 @@ containment on the agent tool path. None of it protects a guest from the host.
 Deliberately last: none of it matters unless Phases 0–3 make the platform
 worth deploying.
 
-- [ ] **Multi-node control plane.** *XL.* A stateless control plane over a
-  shared lifecycle store, where any instance serves any request.
-- [ ] **Validate the Kubernetes and Terraform deploy path.** *L.* `deploy.yml`
-  has never reached its staging step: it depends on `STAGING_KUBECONFIG`, and
-  the build jobs before it have failed since 2026-09-07.
-- [ ] **WebUI.** *L.*
+- [x] **Multi-node control plane.** Built in Phase 4 (b4c0761) as
+  `hv2-cluster`: stateless control planes over a Valkey store, where any
+  instance serves any request. Its tests run the store contract against a
+  real Valkey when `HV2_TEST_REDIS` is set.
+- [ ] **Validate the Kubernetes and Terraform deploy path.** *L.* Partly done
+  in Phase 5: the Helm chart passes `helm lint` and `kubeconform -strict`,
+  `terraform validate` passes, both images build, and the Compose stack runs
+  the SDK lifecycle test. Still never deployed to a real cluster. The old
+  `deploy.yml` staging step still depends on `STAGING_KUBECONFIG`.
+- [x] **WebUI.** Built in Phase 5: `/ui` on any control plane, rendering with
+  `textContent` only. Its CSP still allows inline script
+  (`script-src 'unsafe-inline'`). That is safe while nothing is rendered as
+  HTML, but it is not the "strict CSP" the commit describes. Moving the script
+  to its own route would let `'unsafe-inline'` go.
 - [ ] **ARM64 as a supported platform** (depends on Phase E's `hv1-arm`
-  work). *L.*
+  work). *L.* The sandbox crates now build for aarch64, and the KVM backend
+  refuses clearly on non-x86_64 hosts.
 
 ---
 
 ## Phase H — Release and compliance
 
-- [ ] **Publish `hv2-sandbox` to crates.io.** 🔓 *S.* Now unblocked:
-  IronCrypto is public and `master` is pushed. The Lit project is waiting on
-  it. Version numbers are permanent — publish only from a green `master`.
+- [x] **Publish `hv2-sandbox` to crates.io.** 1.1.0, published from 81bc883
+  (its `.cargo_vcs_info.json` records that commit). Lit uses it (nervosys/Lit
+  4762d32).
 - [ ] **File the BIS/NSA notification (export item R-1)** before the next
   signed binary release. 🔒 *organisational.*
 - [ ] **Commercial-licence distribution terms (export item R-2).** 🔒
