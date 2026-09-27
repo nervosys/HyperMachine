@@ -58,12 +58,23 @@ pub trait GuestChannel: Send {
 
     /// Whether the channel is still usable.
     fn open(&self) -> bool;
+
+    /// Wait for something to happen on the channel, at most `timeout`.
+    ///
+    /// The default sleeps, which is right for a channel with no way to say.
+    fn wait(&mut self, timeout: Duration) {
+        std::thread::sleep(timeout);
+    }
 }
 
 /// A [`GuestChannel`] over one vsock connection.
 pub struct VsockChannel {
     device: Arc<Mutex<VsockDevice>>,
     id: VsockConnectionId,
+    /// The device's signal that the guest sent something, and the count last
+    /// seen, so a signal that arrives between a look and a wait is not lost.
+    progress: Arc<hv2_core::devices::virtio_vsock::Progress>,
+    seen: u64,
 }
 
 impl VsockChannel {
@@ -79,12 +90,21 @@ impl VsockChannel {
     pub fn connect(device: Arc<Mutex<VsockDevice>>, timeout: Duration) -> Result<Self> {
         let deadline = Instant::now() + timeout;
         let mut refusals = 0u32;
+        let progress = device.lock().progress();
 
         loop {
             let id = device.lock().connect_ephemeral(GUEST_AGENT_PORT)?;
 
-            match Self::settle(&device, id, deadline) {
-                Settled::Established => return Ok(Self { device, id }),
+            match Self::settle(&device, &progress, id, deadline) {
+                Settled::Established => {
+                    let seen = progress.current();
+                    return Ok(Self {
+                        device,
+                        id,
+                        progress,
+                        seen,
+                    });
+                }
                 Settled::Refused => {
                     // A refusal is not necessarily "nothing is listening". An
                     // agent that serves one caller at a time is still inside
@@ -122,10 +142,14 @@ impl VsockChannel {
     /// Wait for one connection attempt to resolve.
     fn settle(
         device: &Arc<Mutex<VsockDevice>>,
+        progress: &hv2_core::devices::virtio_vsock::Progress,
         id: VsockConnectionId,
         deadline: Instant,
     ) -> Settled {
         loop {
+            // Read before looking, so a signal between the look and the wait
+            // makes the wait return at once rather than time out.
+            let seen = progress.current();
             match device.lock().state(id) {
                 Some(VsockConnectionState::Established) => return Settled::Established,
                 Some(VsockConnectionState::Connecting) => {}
@@ -134,7 +158,7 @@ impl VsockChannel {
             if Instant::now() >= deadline {
                 return Settled::Deadline;
             }
-            std::thread::sleep(POLL_INTERVAL);
+            progress.wait_past(seen, POLL_INTERVAL);
         }
     }
 
@@ -182,6 +206,10 @@ impl GuestChannel for VsockChannel {
             self.device.lock().state(self.id),
             Some(VsockConnectionState::Established)
         )
+    }
+
+    fn wait(&mut self, timeout: Duration) {
+        self.seen = self.progress.wait_past(self.seen, timeout);
     }
 }
 
@@ -449,6 +477,37 @@ impl GuestAgent {
         }
     }
 
+    /// Tell a guest restored from a snapshot the time, and give it entropy to
+    /// reseed from. See [`Operation::Restored`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest refusing either step. An
+    /// agent too old to know the operation drops the connection, which
+    /// arrives as a transport failure.
+    pub fn restored(
+        &mut self,
+        unix_time_ns: u64,
+        entropy: Vec<u8>,
+        timeout: Duration,
+    ) -> Result<()> {
+        match self.request(
+            Operation::Restored {
+                unix_time_ns,
+                entropy,
+            },
+            timeout,
+        )? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(format!(
+                "the guest agent could not resynchronise after a restore: {message}"
+            ))),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a restore notice with {other:?}"
+            ))),
+        }
+    }
+
     /// Send a signal to a started program.
     ///
     /// # Errors
@@ -503,7 +562,7 @@ impl GuestAgent {
                             .to_string(),
                     ));
                 }
-                std::thread::sleep(POLL_INTERVAL);
+                self.channel.wait(POLL_INTERVAL);
             }
         }
         Ok(())
@@ -558,7 +617,7 @@ impl GuestAgent {
                     "the connection to the guest agent closed before it answered".to_string(),
                 ));
             }
-            std::thread::sleep(POLL_INTERVAL);
+            self.channel.wait(POLL_INTERVAL);
         }
     }
 }

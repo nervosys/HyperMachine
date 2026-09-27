@@ -369,8 +369,11 @@ impl HypervisorBackend for KvmBackend {
         // snapshot: `SNAPSHOT_MSRS` is what a guest might use, not what every
         // host implements, and an MSR this processor does not have is not part
         // of this guest's state. A restore only writes back what was read.
-        let mut msrs = Vec::with_capacity(SNAPSHOT_MSRS.len());
-        for index in SNAPSHOT_MSRS {
+        let clock_msrs = crate::snapshot::machine::CLOCK_MSRS;
+        let mut msrs = Vec::with_capacity(SNAPSHOT_MSRS.len() + clock_msrs.len());
+        // The clock MSRs are captured every time and restored only on request
+        // -- see `ClockOnRestore`. Capturing is free; deciding is the caller's.
+        for index in SNAPSHOT_MSRS.iter().chain(clock_msrs) {
             // SAFETY: `fd` is this vCPU's descriptor, as above.
             match unsafe { kvm_get_msr(fd, *index) } {
                 Ok(value) => msrs.push(Msr {
@@ -412,6 +415,24 @@ impl HypervisorBackend for KvmBackend {
             }
         };
 
+        let mut xcr_state = kvm_xcrs::default();
+        // SAFETY: as above.
+        let xcrs = match unsafe { kvm_get_xcrs(fd, &mut xcr_state) } {
+            Ok(()) => xcr_state
+                .xcrs
+                .iter()
+                .take((xcr_state.nr_xcrs as usize).min(KVM_MAX_XCRS))
+                .map(|x| Msr {
+                    index: x.xcr,
+                    value: x.value,
+                })
+                .collect(),
+            Err(e) => {
+                tracing::debug!("vCPU {}: no XCRs: {e}", vcpu.id());
+                Vec::new()
+            }
+        };
+
         Ok(VCpuSnapshot {
             id: vcpu.id(),
             general: general_from(&regs),
@@ -420,6 +441,7 @@ impl HypervisorBackend for KvmBackend {
             msrs,
             lapic,
             xsave,
+            xcrs,
             run_state: match mp_state.mp_state {
                 KVM_MP_STATE_RUNNABLE => RunState::Runnable,
                 KVM_MP_STATE_HALTED => RunState::Halted,
@@ -464,6 +486,22 @@ impl HypervisorBackend for KvmBackend {
         // second and wins. Writing only the legacy view over a guest that was
         // using AVX would leave half its register file from the snapshot and
         // half from whatever this vCPU had.
+        // XCR0 before the XSAVE area: the kernel validates the area against
+        // the components XCR0 enables, so the other order refuses AVX state
+        // the guest was using.
+        if !state.xcrs.is_empty() {
+            let mut xcrs = kvm_xcrs::default();
+            for (slot, xcr) in xcrs.xcrs.iter_mut().zip(state.xcrs.iter()) {
+                slot.xcr = xcr.index;
+                slot.value = xcr.value;
+            }
+            xcrs.nr_xcrs = state.xcrs.len().min(KVM_MAX_XCRS) as u32;
+            // SAFETY: `fd` is this vCPU's descriptor; `xcrs` is a struct this
+            // function owns.
+            unsafe { kvm_set_xcrs(fd, &xcrs) }
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_XCRS: {e}")))?;
+        }
+
         if !state.xsave.is_empty() {
             let mut area = kvm_xsave::default();
             if state.xsave.len() != area.region.len() * 4 {
@@ -526,6 +564,98 @@ impl HypervisorBackend for KvmBackend {
     /// answer differently, which is why the trait's default is `false`.
     fn guest_memory_starts_zeroed(&self) -> bool {
         true
+    }
+
+    async fn save_machine(&self) -> Result<Option<crate::snapshot::machine::MachineState>> {
+        let Some(kvm_vm) = self.vm.read().unwrap_or_else(|e| e.into_inner()).clone() else {
+            return Ok(None);
+        };
+        let chip = |id| kvm_vm.get_irqchip(id).map(|c| c.chip.to_vec());
+        let mut pit = kvm_pit_state2::default();
+        // SAFETY: a valid VM fd, and `create_vm` always creates the PIT.
+        unsafe { kvm_get_pit2(kvm_vm.vm_fd, &mut pit) }
+            .map_err(|e| Error::Hypervisor(format!("KVM_GET_PIT2: {e}")))?;
+        let mut clock = kvm_clock_data::default();
+        // SAFETY: a valid VM fd and a struct this function owns.
+        let clock_ns = match unsafe { kvm_get_clock(kvm_vm.vm_fd, &mut clock) } {
+            Ok(()) => Some(clock.clock),
+            Err(e) => {
+                tracing::debug!("no kvmclock to capture: {e}");
+                None
+            }
+        };
+        Ok(Some(crate::snapshot::machine::MachineState {
+            backend: "kvm".to_string(),
+            pic_master: chip(KVM_IRQCHIP_PIC_MASTER)?,
+            pic_slave: chip(KVM_IRQCHIP_PIC_SLAVE)?,
+            ioapic: chip(KVM_IRQCHIP_IOAPIC)?,
+            pit: pit.bytes.to_vec(),
+            clock_ns,
+        }))
+    }
+
+    async fn restore_machine(
+        &self,
+        state: &crate::snapshot::machine::MachineState,
+        restore_clock: bool,
+    ) -> Result<()> {
+        if state.backend != "kvm" {
+            return Err(Error::InvalidState(format!(
+                "this snapshot's machine state is for the {} backend",
+                state.backend
+            )));
+        }
+        let kvm_vm = self
+            .vm
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| Error::Hypervisor("no KVM VM to restore machine state into".into()))?;
+
+        for (id, bytes) in [
+            (KVM_IRQCHIP_PIC_MASTER, &state.pic_master),
+            (KVM_IRQCHIP_PIC_SLAVE, &state.pic_slave),
+            (KVM_IRQCHIP_IOAPIC, &state.ioapic),
+        ] {
+            let mut chip = kvm_irqchip {
+                chip_id: id,
+                pad: 0,
+                chip: [0u8; 512],
+            };
+            if bytes.len() != chip.chip.len() {
+                return Err(Error::InvalidState(format!(
+                    "irqchip {id} in this snapshot is {} bytes, not {}",
+                    bytes.len(),
+                    chip.chip.len()
+                )));
+            }
+            chip.chip.copy_from_slice(bytes);
+            kvm_vm.set_irqchip(&chip)?;
+        }
+
+        let mut pit = kvm_pit_state2::default();
+        if state.pit.len() != pit.bytes.len() {
+            return Err(Error::InvalidState(format!(
+                "the PIT in this snapshot is {} bytes, not {}",
+                state.pit.len(),
+                pit.bytes.len()
+            )));
+        }
+        pit.bytes.copy_from_slice(&state.pit);
+        // SAFETY: a valid VM fd, and a struct this function owns.
+        unsafe { kvm_set_pit2(kvm_vm.vm_fd, &pit) }
+            .map_err(|e| Error::Hypervisor(format!("KVM_SET_PIT2: {e}")))?;
+
+        if let (true, Some(ns)) = (restore_clock, state.clock_ns) {
+            let clock = kvm_clock_data {
+                clock: ns,
+                ..Default::default()
+            };
+            // SAFETY: as above.
+            unsafe { kvm_set_clock(kvm_vm.vm_fd, &clock) }
+                .map_err(|e| Error::Hypervisor(format!("KVM_SET_CLOCK: {e}")))?;
+        }
+        Ok(())
     }
 
     async fn map_shared_rom(&self, guest_addr: u64, host_addr: u64, len: u64) -> Result<()> {
@@ -619,6 +749,15 @@ impl HypervisorBackend for KvmBackend {
             return Ok(false);
         }
         vm.discard_guest_memory()?;
+        Ok(true)
+    }
+
+    fn map_guest_memory_from(&self, file: &std::fs::File) -> Result<bool> {
+        let vm = self.vm.read().unwrap_or_else(|e| e.into_inner());
+        let Some(vm) = vm.as_ref() else {
+            return Ok(false);
+        };
+        vm.map_guest_memory_file(file)?;
         Ok(true)
     }
 
@@ -1126,6 +1265,54 @@ impl KvmVm {
             return Err(Error::Memory(format!(
                 "discarding {} bytes of guest memory: {}",
                 self.memory_size,
+                std::io::Error::last_os_error()
+            )));
+        }
+        Ok(())
+    }
+
+    /// Replace guest RAM with a private, copy-on-write mapping of `file`.
+    ///
+    /// `MAP_FIXED` over the existing allocation, so the address -- KVM's slot
+    /// 0, `guest_memory_host_addr`, every pointer the device model holds --
+    /// does not move. Only safe before the guest has run on this memory,
+    /// which is when a restore does it.
+    ///
+    /// Private, so each VM's writes are its own; the pages it only reads stay
+    /// in the page cache, shared by every VM mapping the same file. That is
+    /// the whole density argument: N sandboxes from one template cost the
+    /// template once plus what each of them writes.
+    fn map_guest_memory_file(&self, file: &std::fs::File) -> Result<()> {
+        use std::os::unix::io::AsRawFd;
+        let Some(ptr) = self.guest_memory else {
+            return Err(Error::Memory("Guest memory not allocated".into()));
+        };
+        let len = file
+            .metadata()
+            .map_err(|e| Error::Memory(format!("reading the memory image's size: {e}")))?
+            .len();
+        if len != self.memory_size {
+            return Err(Error::Memory(format!(
+                "the memory image is {len} bytes and this guest has {}",
+                self.memory_size
+            )));
+        }
+        // SAFETY: `ptr`/`memory_size` are exactly the mapping `KvmVm::new`
+        // made, which `MAP_FIXED` replaces in place; `file` is open for
+        // reading and at least `memory_size` long, checked above.
+        let mapped = unsafe {
+            libc::mmap(
+                ptr.as_ptr() as *mut libc::c_void,
+                self.memory_size as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_PRIVATE | libc::MAP_FIXED | libc::MAP_NORESERVE,
+                file.as_raw_fd(),
+                0,
+            )
+        };
+        if mapped != ptr.as_ptr() as *mut libc::c_void {
+            return Err(Error::Memory(format!(
+                "mapping the memory image over guest RAM: {}",
                 std::io::Error::last_os_error()
             )));
         }

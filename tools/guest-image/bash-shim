@@ -1,0 +1,6 @@
+#!/bin/sh
+# Not bash. E2B's SDK wraps every command in `/bin/bash -l -c`, and this image
+# has busybox ash only, so this stands in for it. A template whose workloads
+# need bash itself ships a real one: build.sh --extra /path/to/static-bash:bash
+case "$1" in -l) shift ;; esac
+exec /bin/sh "$@"

@@ -145,6 +145,22 @@ pub trait VirtioMmioDevice: Send + Sync {
 
     /// Return to the post-reset state.
     fn reset(&mut self);
+
+    /// Host-side counters a restored guest depends on, by name.
+    ///
+    /// Not connection tables or queued data -- those refer to things outside
+    /// the VM and are dropped on restore. Counters are different: a guest
+    /// remembers values the device handed out, and a restored device that
+    /// starts counting from zero hands out the same ones again. The default is
+    /// none.
+    fn save_counters(&self) -> std::collections::BTreeMap<String, u64> {
+        std::collections::BTreeMap::new()
+    }
+
+    /// Put back what [`Self::save_counters`] captured.
+    fn restore_counters(&mut self, counters: &std::collections::BTreeMap<String, u64>) {
+        let _ = counters;
+    }
 }
 
 /// Registers the transport owns, as opposed to the device behind it.
@@ -252,10 +268,12 @@ impl VirtioMmioTransport {
             })
             .collect();
 
+        let counters = device.save_counters();
         MmioDeviceState {
             name: self.name.clone(),
             transport,
             queues,
+            counters,
         }
     }
 
@@ -288,6 +306,7 @@ impl VirtioMmioTransport {
         // feature set and driven under another is a wire-format mismatch the
         // guest cannot see.
         device.ack_features(state.transport.driver_features);
+        device.restore_counters(&state.counters);
 
         let queues = device.queues();
         if queues.len() != state.queues.len() {

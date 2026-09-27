@@ -333,6 +333,57 @@ impl crate::devices::virtio_vsock::PendingWake for QueuedPackets {
     }
 }
 
+/// Write guest memory as a raw image of `total` bytes at `path`: every byte
+/// at its guest-physical offset, with holes where a page is all zero.
+///
+/// Sparse because most of a guest is zero, and a hole costs nothing on disk
+/// and reads as zero -- through `read` or through a mapping.
+fn write_memory_image(
+    memory: &crate::memory::GuestMemory,
+    regions: &[snapshot_file::RegionRecord],
+    total: u64,
+    path: &std::path::Path,
+) -> Result<()> {
+    use std::io::{Seek, SeekFrom, Write};
+
+    let file = snapshot_file::create_new(path)?;
+    file.set_len(total)
+        .map_err(|e| Error::Config(format!("sizing {}: {e}", path.display())))?;
+    let mut out = std::io::BufWriter::with_capacity(1 << 20, file);
+    let page_size = snapshot_file::PAGE_SIZE;
+    let mut page = vec![0u8; page_size as usize];
+    // Where the writer's cursor is, so consecutive pages are one sequential
+    // write rather than a seek each.
+    let mut cursor = u64::MAX;
+    for region in regions.iter().filter(|r| !r.readonly) {
+        if region.guest_addr + region.size > total {
+            return Err(Error::InvalidState(format!(
+                "region at {:#x} ({} bytes) lies outside a {total}-byte image",
+                region.guest_addr, region.size
+            )));
+        }
+        let mut at = 0u64;
+        while at < region.size {
+            let take = (page_size as usize).min((region.size - at) as usize);
+            memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+            if page[..take].iter().any(|byte| *byte != 0) {
+                let offset = region.guest_addr + at;
+                if cursor != offset {
+                    out.seek(SeekFrom::Start(offset))
+                        .map_err(|e| Error::Config(format!("seeking {}: {e}", path.display())))?;
+                }
+                out.write_all(&page[..take])
+                    .map_err(|e| Error::Config(format!("writing {}: {e}", path.display())))?;
+                cursor = offset + take as u64;
+            }
+            at += page_size;
+        }
+    }
+    out.flush()
+        .map_err(|e| Error::Config(format!("finishing {}: {e}", path.display())))?;
+    Ok(())
+}
+
 /// Tells the delivery thread that a frame is waiting for the guest.
 ///
 /// The same shape and the same reason as [`QueuedPackets`].
@@ -630,6 +681,16 @@ impl VM {
     /// missing or malformed, if the images do not fit in guest memory, or if
     /// the backend does not support the configured boot protocol.
     pub async fn provision(&self) -> Result<()> {
+        self.provision_inner(true).await
+    }
+
+    /// [`Self::provision`], loading the boot image only if `load_boot`.
+    ///
+    /// A VM about to be restored from a snapshot needs everything provisioning
+    /// attaches -- the legacy PC devices a booted guest had -- and not the
+    /// kernel: its memory is replaced before it runs, so reading and copying
+    /// the image is work thrown away. Measured at 15 ms of a 60 ms restore.
+    async fn provision_inner(&self, load_boot: bool) -> Result<()> {
         if self.hv_vm.read().is_some() {
             return Ok(());
         }
@@ -640,7 +701,7 @@ impl VM {
         // going to run — and would hide the refusal behind whatever the backend
         // happened to say first.
         let boot = match &self.config.boot {
-            Some(source) => {
+            Some(source) if load_boot => {
                 let mut loaded = source.load()?;
 
                 // The kernel's memory map is built from this and has no other
@@ -668,7 +729,7 @@ impl VM {
                 }
                 Some(loaded)
             }
-            None => None,
+            _ => None,
         };
 
         // A VM with a kernel to boot needs the legacy PC set, and until this
@@ -686,7 +747,7 @@ impl VM {
         // `attach_absent` rather than `attach`: a caller who installed their
         // own machine model before provisioning keeps it, and is not refused
         // for having done the thing this is a default for.
-        if boot.is_some() {
+        if self.config.boot.is_some() {
             crate::machine::Machine::legacy_pc_with_pci_root(Arc::clone(&self.pci_root))
                 .attach_absent(&self.devices)
                 .await?;
@@ -696,7 +757,7 @@ impl VM {
         // everything below succeeds and the guest still never runs. Say so here
         // rather than leaving it to be inferred from a Running VM that produces
         // no output.
-        if boot.is_some() && !self.backend.executes_guest_code() {
+        if self.config.boot.is_some() && !self.backend.executes_guest_code() {
             tracing::warn!(
                 "VM {} on the {} backend: guest code will not execute, so the loaded image will not run. Use KVM, WHPX or HVF to boot it.",
                 self.config.name,
@@ -829,6 +890,12 @@ impl VM {
     /// [`VM::stop`], which awaits the loop and propagates its result.
     pub async fn launch(self: &Arc<Self>) -> Result<()> {
         self.provision().await?;
+        self.start_in_background().await
+    }
+
+    /// Start a provisioned VM and run it on a background task: everything
+    /// [`Self::launch`] does after provisioning.
+    async fn start_in_background(self: &Arc<Self>) -> Result<()> {
         self.start().await?;
 
         // Drain self-raised device interrupts for as long as the VM runs.
@@ -839,7 +906,14 @@ impl VM {
         // could only arrive once the guest had already exited for some other
         // reason -- which is the limitation this replaces.
         if let Some(mut queue) = self.interrupt_queue.lock().take() {
-            let vm = Arc::clone(self);
+            // Weak, like every delivery thread here: the sender this thread
+            // waits on lives in a device the VM owns, so a strong reference
+            // made a cycle -- the VM could never be dropped, and every VM
+            // ever started kept its guest memory until the process exited.
+            // Found measuring per-sandbox memory: deleting sandboxes freed
+            // nothing. With a weak one, dropping the VM drops its devices,
+            // the sender goes with them, and this loop ends.
+            let vm = Arc::downgrade(self);
             let handle = tokio::runtime::Handle::current();
 
             // A dedicated OS thread, not a task on this runtime, and the
@@ -860,9 +934,10 @@ impl VM {
             // latency of seconds, intermittently, which is a much harder thing
             // to see than a hang.
             std::thread::Builder::new()
-                .name(format!("hv2-irq-{}", vm.config.name))
+                .name(format!("hv2-irq-{}", self.config.name))
                 .spawn(move || {
                     while let Some((irq, level)) = queue.blocking_recv() {
+                        let Some(vm) = vm.upgrade() else { break };
                         handle.block_on(async {
                             match level {
                                 IrqLevel::Pulse => {
@@ -1021,6 +1096,22 @@ impl VM {
     /// exists or cannot be written; whatever [`Self::save_vcpu_states`]
     /// reports on a backend that cannot read its vCPUs.
     pub async fn snapshot(&self, path: &std::path::Path) -> Result<()> {
+        self.snapshot_with(path, false).await
+    }
+
+    /// [`Self::snapshot`], with guest memory written as a raw image beside the
+    /// snapshot (`<path>.mem`) when `memory_image` is set.
+    ///
+    /// The image is exactly guest-RAM-sized and sparse where pages were zero,
+    /// which is the layout a restore can map copy-on-write instead of copying
+    /// -- see [`Self::launch_from_snapshot`]. Meant for a template that many
+    /// VMs will be restored from; for one restore, the ordinary snapshot is
+    /// smaller.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::snapshot`]; also an image file that already exists.
+    pub async fn snapshot_with(&self, path: &std::path::Path, memory_image: bool) -> Result<()> {
         {
             let state = self.state.read();
             if *state != VMState::Paused {
@@ -1061,24 +1152,41 @@ impl VM {
         // memory as the guest has.
         let mut present = snapshot_file::PageMap::empty(total_pages);
         let mut page = vec![0u8; page_size as usize];
-        let mut index = 0u64;
-        for region in regions.iter().filter(|r| !r.readonly) {
-            let mut at = 0u64;
-            while at < region.size {
-                let take = (page_size as usize).min((region.size - at) as usize);
-                memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
-                // A page of zeroes is the common case by far -- a guest uses a
-                // few megabytes of the tens it is given -- and storing it is
-                // storing nothing at the cost of writing and reading it back.
-                if page[..take].iter().any(|byte| *byte != 0) {
-                    present.set(index);
+
+        // With an image, the pages go there and this file's map stays empty.
+        let image_name = if memory_image {
+            let name = format!(
+                "{}.mem",
+                path.file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "snapshot".to_string())
+            );
+            let image_path = path.with_file_name(&name);
+            write_memory_image(&memory, &regions, memory.total_size(), &image_path)?;
+            Some(name)
+        } else {
+            let mut index = 0u64;
+            for region in regions.iter().filter(|r| !r.readonly) {
+                let mut at = 0u64;
+                while at < region.size {
+                    let take = (page_size as usize).min((region.size - at) as usize);
+                    memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
+                    // A page of zeroes is the common case by far -- a guest
+                    // uses a few megabytes of the tens it is given -- and
+                    // storing it is storing nothing at the cost of writing
+                    // and reading it back.
+                    if page[..take].iter().any(|byte| *byte != 0) {
+                        present.set(index);
+                    }
+                    index += 1;
+                    at += page_size;
                 }
-                index += 1;
-                at += page_size;
             }
-        }
+            None
+        };
 
         let devices = self.device_states().await;
+        let machine = self.backend.save_machine().await?;
         let header = snapshot_file::Header {
             vm_name: self.config.name.clone(),
             memory_size: memory.total_size(),
@@ -1088,6 +1196,8 @@ impl VM {
             present_pages: present.count(),
             device_state_included: true,
             devices,
+            machine,
+            memory_image: image_name,
         };
 
         let mut file = std::io::BufWriter::new(snapshot_file::create_new(path)?);
@@ -1143,14 +1253,38 @@ impl VM {
     /// refused rather than partially applied, because a guest restored into
     /// the wrong shape runs until it touches the difference.
     pub async fn restore(&self, path: &std::path::Path) -> Result<()> {
-        {
-            let state = self.state.read();
-            if *state != VMState::Paused {
-                return Err(Error::InvalidState(format!(
-                    "a VM can only be restored while paused; this one is {:?}",
-                    *state
-                )));
-            }
+        self.restore_with(path, crate::snapshot::machine::ClockOnRestore::Fresh)
+            .await
+    }
+
+    /// Is nothing executing this VM's vCPUs? Paused, or provisioned and not
+    /// yet started -- both leave registers and memory safe to write.
+    fn is_quiescent(&self) -> bool {
+        let state = *self.state.read();
+        state == VMState::Paused || (state == VMState::Created && self.is_provisioned())
+    }
+
+    /// [`Self::restore`], choosing what the guest's clock reads afterwards.
+    ///
+    /// Also accepts a VM that has been provisioned and never started, which
+    /// is what [`Self::launch_from_snapshot`] restores into: the guest it
+    /// becomes never has to boot first.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::restore`]; also a snapshot whose machine state this
+    /// backend cannot restore.
+    pub async fn restore_with(
+        &self,
+        path: &std::path::Path,
+        clock: crate::snapshot::machine::ClockOnRestore,
+    ) -> Result<()> {
+        if !self.is_quiescent() {
+            return Err(Error::InvalidState(format!(
+                "a VM can only be restored while paused, or provisioned and not yet started; \
+                 this one is {:?}",
+                self.state()
+            )));
         }
 
         let file = std::fs::File::open(path)
@@ -1191,100 +1325,191 @@ impl VM {
             }
         }
 
-        let page_size = snapshot_file::PAGE_SIZE;
-        let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
-        let mut page = vec![0u8; page_size as usize];
-        // A megabyte, not a page: this fills runs of absent pages now, and a
-        // run is usually most of the guest.
-        let zeroes = vec![0u8; 1 << 20];
-        let mut scratch = vec![0u8; 1 << 20];
+        if let Some(name) = &snapshot.header.memory_image {
+            self.load_memory_image(&path.with_file_name(name), &memory)?;
+        } else {
+            let page_size = snapshot_file::PAGE_SIZE;
+            let present = snapshot_file::PageMap::read(&mut file, snapshot.header.total_pages)?;
+            let mut page = vec![0u8; page_size as usize];
+            // A megabyte, not a page: this fills runs of absent pages now, and a
+            // run is usually most of the guest.
+            let zeroes = vec![0u8; 1 << 20];
+            let mut scratch = vec![0u8; 1 << 20];
 
-        // Ask the backend to hand back guest RAM that already reads as zero.
-        //
-        // When it can, every absent page in the snapshot is already correct
-        // and the loop below has nothing to do for it -- no read to check, no
-        // write to fix. That is the whole of the remaining restore cost for a
-        // guest that has touched little of its memory, which is most of them.
-        //
-        // The fallback is not a lesser correctness, only a slower one: read
-        // each absent page and write zeroes over it if it is not already zero.
-        // That is what ran before this, and what still runs on a backend that
-        // answers `false`.
-        //
-        // Not attempted at all when any region is read-only. The loop below
-        // skips those, so anything the backend zeroed in one would never be
-        // written back -- it would be discarded and left discarded. No such
-        // region exists today (every `allocate_region` call in the tree passes
-        // `readonly: false`, and `adopt_backend_pages` accepts exactly one
-        // region at address 0), which is precisely why this is a check and not
-        // a comment: the reason it is safe is a fact about current callers,
-        // and those change.
-        let has_readonly = snapshot.header.regions.iter().any(|r| r.readonly);
-        let memory_pre_zeroed = !has_readonly && self.backend.reset_guest_memory_to_zero()?;
+            // Ask the backend to hand back guest RAM that already reads as zero.
+            //
+            // When it can, every absent page in the snapshot is already correct
+            // and the loop below has nothing to do for it -- no read to check, no
+            // write to fix. That is the whole of the remaining restore cost for a
+            // guest that has touched little of its memory, which is most of them.
+            //
+            // The fallback is not a lesser correctness, only a slower one: read
+            // each absent page and write zeroes over it if it is not already zero.
+            // That is what ran before this, and what still runs on a backend that
+            // answers `false`.
+            //
+            // Not attempted at all when any region is read-only. The loop below
+            // skips those, so anything the backend zeroed in one would never be
+            // written back -- it would be discarded and left discarded. No such
+            // region exists today (every `allocate_region` call in the tree passes
+            // `readonly: false`, and `adopt_backend_pages` accepts exactly one
+            // region at address 0), which is precisely why this is a check and not
+            // a comment: the reason it is safe is a fact about current callers,
+            // and those change.
+            let has_readonly = snapshot.header.regions.iter().any(|r| r.readonly);
+            let memory_pre_zeroed = !has_readonly && self.backend.reset_guest_memory_to_zero()?;
 
-        // Runs of absent pages are zeroed in one call rather than one call
-        // each. This is where the time actually goes: making the file sparse
-        // took it from 64 MiB to 0.1 MiB and the restore only from 92ms to
-        // 71ms, because the restore still wrote every page -- the absent ones
-        // as zeroes. The cost was never the file; it was 16,384 calls into
-        // guest memory, each translating an address to copy four kilobytes.
-        let mut index = 0u64;
-        for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
-            let mut at = 0u64;
-            while at < region.size {
-                if present.contains(index) {
-                    let take = (page_size as usize).min((region.size - at) as usize);
-                    std::io::Read::read_exact(&mut file, &mut page)
-                        .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
-                    memory.write_bytes(region.guest_addr + at, &page[..take])?;
-                    index += 1;
-                    at += page_size;
-                    continue;
-                }
-
-                // How far the absent run goes.
-                let run_start = at;
-                while at < region.size && !present.contains(index) {
-                    index += 1;
-                    at += page_size;
-                }
-                let run = (at.min(region.size) - run_start) as usize;
-
-                // Zeroed, not skipped. This VM has its own memory and has
-                // usually booted something into it; leaving those pages alone
-                // would restore a guest built half from the snapshot and half
-                // from whatever was there before -- which runs, and is not the
-                // guest that was captured.
-                // Read before writing, and skip what is already zero.
-                //
-                // Counter-intuitive but measured: writing 64 MiB of zeroes
-                // costs ~64ms because it *allocates* every page it touches,
-                // while reading an untouched anonymous page costs almost
-                // nothing -- the kernel maps one shared zero page. A
-                // destination that has merely booted has most of its memory
-                // in exactly that state, so checking is far cheaper than
-                // unconditionally overwriting.
-                if memory_pre_zeroed {
-                    continue;
-                }
-
-                let mut done = 0usize;
-                while done < run {
-                    let take = zeroes.len().min(run - done);
-                    let at = region.guest_addr + run_start + done as u64;
-                    memory.read_bytes_into(at, &mut scratch[..take])?;
-                    if scratch[..take].iter().any(|byte| *byte != 0) {
-                        memory.write_bytes(at, &zeroes[..take])?;
+            // Runs of absent pages are zeroed in one call rather than one call
+            // each. This is where the time actually goes: making the file sparse
+            // took it from 64 MiB to 0.1 MiB and the restore only from 92ms to
+            // 71ms, because the restore still wrote every page -- the absent ones
+            // as zeroes. The cost was never the file; it was 16,384 calls into
+            // guest memory, each translating an address to copy four kilobytes.
+            let mut index = 0u64;
+            for region in snapshot.header.regions.iter().filter(|r| !r.readonly) {
+                let mut at = 0u64;
+                while at < region.size {
+                    if present.contains(index) {
+                        let take = (page_size as usize).min((region.size - at) as usize);
+                        std::io::Read::read_exact(&mut file, &mut page)
+                            .map_err(|e| Error::Config(format!("reading guest memory: {e}")))?;
+                        memory.write_bytes(region.guest_addr + at, &page[..take])?;
+                        index += 1;
+                        at += page_size;
+                        continue;
                     }
-                    done += take;
+
+                    // How far the absent run goes.
+                    let run_start = at;
+                    while at < region.size && !present.contains(index) {
+                        index += 1;
+                        at += page_size;
+                    }
+                    let run = (at.min(region.size) - run_start) as usize;
+
+                    // Zeroed, not skipped. This VM has its own memory and has
+                    // usually booted something into it; leaving those pages alone
+                    // would restore a guest built half from the snapshot and half
+                    // from whatever was there before -- which runs, and is not the
+                    // guest that was captured.
+                    // Read before writing, and skip what is already zero.
+                    //
+                    // Counter-intuitive but measured: writing 64 MiB of zeroes
+                    // costs ~64ms because it *allocates* every page it touches,
+                    // while reading an untouched anonymous page costs almost
+                    // nothing -- the kernel maps one shared zero page. A
+                    // destination that has merely booted has most of its memory
+                    // in exactly that state, so checking is far cheaper than
+                    // unconditionally overwriting.
+                    if memory_pre_zeroed {
+                        continue;
+                    }
+
+                    let mut done = 0usize;
+                    while done < run {
+                        let take = zeroes.len().min(run - done);
+                        let at = region.guest_addr + run_start + done as u64;
+                        memory.read_bytes_into(at, &mut scratch[..take])?;
+                        if scratch[..take].iter().any(|byte| *byte != 0) {
+                            memory.write_bytes(at, &zeroes[..take])?;
+                        }
+                        done += take;
+                    }
                 }
             }
         }
 
-        self.restore_vcpu_states(&snapshot.header.vcpus).await?;
+        let keep_clock = clock == crate::snapshot::machine::ClockOnRestore::Continue;
+
+        // Interrupt controllers and the timer before the vCPUs: the LAPIC a
+        // vCPU restore writes is wired to them.
+        if let Some(machine) = &snapshot.header.machine {
+            self.backend.restore_machine(machine, keep_clock).await?;
+        }
+
+        let vcpus: Vec<VCpuSnapshot> = if keep_clock {
+            snapshot.header.vcpus.clone()
+        } else {
+            // Fresh: every clock register stays as this VM has it.
+            snapshot
+                .header
+                .vcpus
+                .iter()
+                .map(|v| {
+                    let mut v = v.clone();
+                    v.msrs
+                        .retain(|m| !crate::snapshot::machine::CLOCK_MSRS.contains(&m.index));
+                    v
+                })
+                .collect()
+        };
+        self.restore_vcpu_states(&vcpus).await?;
         self.restore_device_states(&snapshot.header.devices).await?;
 
         tracing::info!("VM '{}' restored from {}", self.config.name, path.display());
+        Ok(())
+    }
+
+    /// Make guest memory the contents of a raw image: mapped copy-on-write
+    /// when the backend can, copied when it cannot.
+    fn load_memory_image(
+        &self,
+        image: &std::path::Path,
+        memory: &crate::memory::GuestMemory,
+    ) -> Result<()> {
+        let file = std::fs::File::open(image)
+            .map_err(|e| Error::Config(format!("opening {}: {e}", image.display())))?;
+        if self.backend.map_guest_memory_from(&file)? {
+            return Ok(());
+        }
+        // The slow way: every byte, including the zeroes, because this VM's
+        // memory may hold whatever it booted before.
+        let mut reader = std::io::BufReader::with_capacity(1 << 20, file);
+        let mut chunk = vec![0u8; 1 << 20];
+        let mut at = 0u64;
+        let total = memory.total_size();
+        while at < total {
+            let take = (chunk.len() as u64).min(total - at) as usize;
+            std::io::Read::read_exact(&mut reader, &mut chunk[..take])
+                .map_err(|e| Error::Config(format!("reading {}: {e}", image.display())))?;
+            memory.write_bytes(at, &chunk[..take])?;
+            at += take as u64;
+        }
+        Ok(())
+    }
+
+    /// Become the guest in `path` and run it, without booting.
+    ///
+    /// The fast path for a fleet: a guest is booted once, snapshotted once,
+    /// and every VM after that is created by provisioning -- devices attached
+    /// as the original had them -- restoring, and starting. Nothing the
+    /// guest's boot did is repeated.
+    ///
+    /// Devices must be attached before this, with the shapes the snapshot's
+    /// VM had: the same vsock CID and network MAC, since those live in guest
+    /// memory the guest will not re-read.
+    ///
+    /// # Errors
+    ///
+    /// Provisioning, the restore, or starting failed.
+    pub async fn launch_from_snapshot(
+        self: &Arc<Self>,
+        path: &std::path::Path,
+        clock: crate::snapshot::machine::ClockOnRestore,
+    ) -> Result<()> {
+        let t0 = std::time::Instant::now();
+        self.provision_inner(false).await?;
+        let provisioned = t0.elapsed();
+        self.restore_with(path, clock).await?;
+        let restored = t0.elapsed();
+        self.start_in_background().await?;
+        tracing::debug!(
+            "VM '{}' from snapshot: provision {:?}, restore {:?}, start {:?}",
+            self.config.name,
+            provisioned,
+            restored - provisioned,
+            t0.elapsed() - restored
+        );
         Ok(())
     }
 
@@ -1409,14 +1634,12 @@ impl VM {
     /// partially applied, because half-restoring a multiprocessor guest leaves
     /// it in a state no execution ever produced.
     pub async fn restore_vcpu_states(&self, states: &[VCpuSnapshot]) -> Result<()> {
-        {
-            let state = self.state.read();
-            if *state != VMState::Paused {
-                return Err(Error::InvalidState(format!(
-                    "a vCPU's state can only be written while the VM is paused; this one is {:?}",
-                    *state
-                )));
-            }
+        if !self.is_quiescent() {
+            return Err(Error::InvalidState(format!(
+                "a vCPU's state can only be written while the VM is paused, or provisioned and \
+                 not yet started; this one is {:?}",
+                self.state()
+            )));
         }
 
         if states.len() != self.vcpus.len() {
@@ -1894,12 +2117,16 @@ impl VM {
             .lock()
             .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
 
-        let pump_vm = Arc::clone(self);
+        // Weak: see the interrupt delivery thread in `launch`.
+        let pump_vm = Arc::downgrade(self);
         let handle = tokio::runtime::Handle::current();
         std::thread::Builder::new()
             .name(format!("hv2-vsock-pci-{}", self.config.name))
             .spawn(move || {
                 while packet_rx.recv().is_ok() {
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
                     handle.block_on(async {
                         if let Err(e) = pump_vm.notify_vsock().await {
                             tracing::debug!("vsock: a queued packet could not be delivered: {e}");
@@ -2031,7 +2258,8 @@ impl VM {
             .lock()
             .set_frame_wake(Arc::new(QueuedFrames { sender: frame_tx }));
 
-        let pump_vm = Arc::clone(self);
+        // Weak: see the interrupt delivery thread in `launch`.
+        let pump_vm = Arc::downgrade(self);
         let handle = tokio::runtime::Handle::current();
         std::thread::Builder::new()
             .name(format!("hv2-net-{}", self.config.name))
@@ -2041,6 +2269,9 @@ impl VM {
                     // of wakes is one interrupt, not one per frame: each is
                     // an injection the guest has to take and answer.
                     while frame_rx.try_recv().is_ok() {}
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
                     handle.block_on(async {
                         if let Err(e) = pump_vm.notify_net().await {
                             tracing::debug!(
@@ -2191,12 +2422,16 @@ impl VM {
             .lock()
             .set_pending_wake(Arc::new(QueuedPackets { sender: packet_tx }));
 
-        let pump_vm = Arc::clone(self);
+        // Weak: see the interrupt delivery thread in `launch`.
+        let pump_vm = Arc::downgrade(self);
         let handle = tokio::runtime::Handle::current();
         std::thread::Builder::new()
             .name(format!("hv2-vsock-{}", self.config.name))
             .spawn(move || {
                 while packet_rx.recv().is_ok() {
+                    let Some(pump_vm) = pump_vm.upgrade() else {
+                        break;
+                    };
                     handle.block_on(async {
                         if let Err(e) = pump_vm.notify_vsock().await {
                             tracing::debug!("vsock: a queued packet could not be delivered: {e}");

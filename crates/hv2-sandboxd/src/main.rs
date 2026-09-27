@@ -170,6 +170,8 @@ struct Options {
     /// Required on every API call when set.
     cluster_token: Option<String>,
     node_ttl: Duration,
+    /// Boot every sandbox instead of restoring it from a template.
+    no_template: bool,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -204,6 +206,7 @@ fn parse_options() -> Result<Options, String> {
             .ok()
             .filter(|t| !t.is_empty()),
         node_ttl: Duration::from_secs(9),
+        no_template: false,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -225,6 +228,7 @@ fn parse_options() -> Result<Options, String> {
             "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--network" => opts.network = true,
+            "--no-template" => opts.no_template = true,
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -253,7 +257,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] \
+                     [--capacity N] [--no-template] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
                      [--cluster-store redis://H:P --advertise-api URL --advertise-proxy H:P \
@@ -315,6 +319,8 @@ struct AppState {
     booting: Mutex<u32>,
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
+    /// What sandboxes are restored from, when not booted.
+    template: Option<Template>,
 }
 
 impl AppState {
@@ -752,96 +758,76 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
     // a case to rule out by hoping.
     let sandbox_id = format!("sbx-{}", &uuid::Uuid::new_v4().simple().to_string()[..20]);
 
-    let cid = {
-        let mut next = state.next_cid.lock();
-        let cid = *next;
-        *next += 1;
-        cid
-    };
-
-    let mut capabilities = CapabilitySet::default();
-    capabilities.add(Capability::GuestExec);
-
-    let build = AgentVM::builder()
-        .name(sandbox_id.clone())
-        .cpu_cores(state.opts.cpu_cores)
-        .memory_gb(state.opts.memory_gb)
-        .capabilities(capabilities)
-        .boot_linux(
-            &state.opts.kernel,
-            Some(&state.opts.initrd),
-            format!(
-                "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}{}",
-                hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
-                // The guest configures its NIC from this before init runs.
-                if policy.is_some() {
-                    format!(" {}", gateway_config.kernel_ip_arg())
-                } else {
-                    String::new()
-                }
-            ),
-        )
-        .build()
-        .await;
-    let vm = match build {
-        Ok(vm) => vm,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": format!("building the VM: {e}") })),
-            )
-                .into_response();
-        }
-    };
-
-    if let Err(e) = vm.attach_guest_channel(GUEST_CID_BASE + cid).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": format!("attaching the guest channel: {e}") })),
-        )
-            .into_response();
-    }
-    // Attached before launch: virtio-mmio has no hotplug, and the kernel
-    // learns where to probe from the command line `attach_net` extends.
-    let nic = match &policy {
-        Some(_) => {
+    // From the template when there is one: every sandbox is then the same
+    // guest, restored, with the same CID and MAC it was snapshotted with --
+    // which is fine, because each has its own vsock device and its own
+    // gateway, and nothing outside this VM ever sees either.
+    let template = state.template.as_ref();
+    let (cid, mac) = match template {
+        Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
+        None => {
+            let mut next = state.next_cid.lock();
+            let cid = *next;
+            *next += 1;
             let [_, b, c, d] = u32::try_from(cid).unwrap_or(u32::MAX).to_be_bytes();
-            match vm.vm().attach_net([0x52, 0x54, 0x00, b, c, d]).await {
-                Ok(device) => Some(device),
-                Err(e) => {
-                    return api_error(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("attaching the network device: {e}"),
-                    );
-                }
-            }
+            (GUEST_CID_BASE + cid, [0x52, 0x54, 0x00, b, c, d])
         }
-        None => None,
     };
-    if let Err(e) = vm.launch().await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": format!("launching: {e}") })),
-        )
-            .into_response();
+
+    let (vm, nic) = match new_vm(
+        &state.opts,
+        &sandbox_id,
+        cid,
+        policy.is_some().then_some(mac),
+    )
+    .await
+    {
+        Ok(built) => built,
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    };
+    let launched = match template {
+        Some(template) => vm.launch_from_snapshot(&template.snapshot).await,
+        None => vm.launch().await,
+    };
+    if let Err(e) = launched {
+        let _ = vm.stop().await;
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, format!("launching: {e}"));
     }
     // A caller creating a sandbox waits for one it can actually use --
     // returning before the guest agent answers would hand back a
     // sandboxID that fails the first real request against it.
     if let Err(e) = vm.ping_guest(state.opts.ready_timeout).await {
         let _ = vm.stop().await;
-        return (
+        return api_error(
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({ "error": format!("guest never became ready: {e}") })),
-        )
-            .into_response();
+            format!("guest never became ready: {e}"),
+        );
+    }
+    // A restored guest has its template's clock and RNG. Refused rather than
+    // served if the reseed fails: a sandbox sharing random state with its
+    // siblings is not one to hand out.
+    if template.is_some() {
+        if let Err(e) = vm.after_restore(state.opts.ready_timeout).await {
+            let _ = vm.stop().await;
+            return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+        }
     }
 
     let vm = Arc::new(vm);
 
     let network = match (policy, nic) {
         (Some(policy), Some(device)) => {
-            match start_network(&state, &vm, device, policy, egress_proxy, gateway_config).await {
+            match start_network(
+                &state,
+                &vm,
+                device,
+                policy,
+                egress_proxy,
+                gateway_config,
+                template.is_none(),
+            )
+            .await
+            {
                 Ok(network) => Some(network),
                 Err(e) => {
                     let _ = vm.stop().await;
@@ -969,6 +955,7 @@ async fn start_network(
     policy: NetworkPolicy,
     egress_proxy: Option<Socks5Proxy>,
     config: GatewayConfig,
+    configure_guest: bool,
 ) -> Result<LiveNetwork, String> {
     let mut builder = Gateway::builder(policy).config(config);
     if let Some(authority) = &state.authority {
@@ -995,43 +982,174 @@ async fn start_network(
         }
     });
 
-    // The kernel wrote the nameserver to /proc/net/pnp, in resolv.conf's own
-    // format. The CA goes where OpenSSL, curl and Python's ssl look by
-    // default, so injection works for a client that was not told about it.
-    // `mkdir -p /etc` because a minimal initramfs need not have one -- the
-    // reference image here does not, which is how this was found.
-    let mut script = String::from("mkdir -p /etc && ln -sf /proc/net/pnp /etc/resolv.conf");
-    if let Some(ca) = handle.ca_pem() {
-        script.push_str(&format!(
-            " && mkdir -p /etc/ssl/certs && printf '%s' '{ca}' >> /etc/ssl/certs/ca-certificates.crt"
-        ));
-    }
-    let setup = match vm
-        .exec_in_guest(
-            "/bin/sh",
-            &["-c".to_string(), script],
-            Duration::from_secs(10),
-        )
-        .await
-    {
-        Ok(setup) => setup,
-        Err(e) => {
+    // A restored guest was configured once, in its template.
+    if configure_guest {
+        if let Err(e) = configure_guest_network(vm, handle.ca_pem().as_deref()).await {
             bridge.abort();
-            return Err(format!("configuring the guest's network: {e}"));
+            return Err(e);
         }
-    };
-    if setup.exit_code != Some(0) {
-        bridge.abort();
-        return Err(format!(
-            "configuring the guest's network exited {:?}: {}",
-            setup.exit_code, setup.stderr
-        ));
     }
 
     Ok(LiveNetwork {
         gateway: handle,
         bridge,
     })
+}
+
+/// Point a guest at its gateway's resolver and make it trust the egress CA.
+///
+/// The kernel wrote the nameserver to /proc/net/pnp, in resolv.conf's own
+/// format. The CA goes where OpenSSL, curl and Python's ssl look by default,
+/// so injection works for a client that was not told about it. `mkdir -p
+/// /etc` because a minimal initramfs need not have one -- the reference
+/// image here did not, which is how this was found.
+async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), String> {
+    let mut script = String::from("mkdir -p /etc && ln -sf /proc/net/pnp /etc/resolv.conf");
+    if let Some(ca) = ca {
+        script.push_str(&format!(
+            " && mkdir -p /etc/ssl/certs && printf '%s' '{ca}' >> /etc/ssl/certs/ca-certificates.crt"
+        ));
+    }
+    let setup = vm
+        .exec_in_guest(
+            "/bin/sh",
+            &["-c".to_string(), script],
+            Duration::from_secs(10),
+        )
+        .await
+        .map_err(|e| format!("configuring the guest's network: {e}"))?;
+    if setup.exit_code != Some(0) {
+        return Err(format!(
+            "configuring the guest's network exited {:?}: {}",
+            setup.exit_code, setup.stderr
+        ));
+    }
+    Ok(())
+}
+
+/// The vsock CID and NIC MAC every template-restored sandbox has: the
+/// template's. Only this VM's own devices ever see them.
+const TEMPLATE_CID: u64 = GUEST_CID_BASE;
+const TEMPLATE_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x00, 0x00, 0x01];
+
+/// A booted, configured guest written to disk, that sandboxes are restored
+/// from instead of booting.
+struct Template {
+    dir: std::path::PathBuf,
+    snapshot: std::path::PathBuf,
+}
+
+impl Drop for Template {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// The kernel command line every sandbox guest boots with.
+fn guest_cmdline(network: bool) -> String {
+    format!(
+        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}{}",
+        hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
+        // The guest configures its NIC from this before init runs.
+        if network {
+            format!(" {}", GatewayConfig::default().kernel_ip_arg())
+        } else {
+            String::new()
+        }
+    )
+}
+
+type NetDevice = Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>;
+
+/// A sandbox VM, built and wired but not started: guest channel on `cid`,
+/// and a NIC with `mac` when one is given.
+async fn new_vm(
+    opts: &Options,
+    name: &str,
+    cid: u64,
+    mac: Option<[u8; 6]>,
+) -> Result<(AgentVM, Option<NetDevice>), String> {
+    let mut capabilities = CapabilitySet::default();
+    capabilities.add(Capability::GuestExec);
+    let vm = AgentVM::builder()
+        .name(name.to_string())
+        .cpu_cores(opts.cpu_cores)
+        .memory_gb(opts.memory_gb)
+        .capabilities(capabilities)
+        .boot_linux(
+            &opts.kernel,
+            Some(&opts.initrd),
+            guest_cmdline(mac.is_some()),
+        )
+        .build()
+        .await
+        .map_err(|e| format!("building the VM: {e}"))?;
+    vm.attach_guest_channel(cid)
+        .await
+        .map_err(|e| format!("attaching the guest channel: {e}"))?;
+    // Attached before launch: virtio-mmio has no hotplug, and the kernel
+    // learns where to probe from the command line `attach_net` extends.
+    let nic = match mac {
+        Some(mac) => Some(
+            vm.vm()
+                .attach_net(mac)
+                .await
+                .map_err(|e| format!("attaching the network device: {e}"))?,
+        ),
+        None => None,
+    };
+    Ok((vm, nic))
+}
+
+/// Boot the template once, configure it as every sandbox needs, and write it
+/// to disk with its memory as an image a restore can map.
+async fn build_template(opts: &Options, authority: Option<&Authority>) -> Result<Template, String> {
+    let dir = std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let template = Template {
+        snapshot: dir.join("template.snap"),
+        dir,
+    };
+
+    let started = std::time::Instant::now();
+    let (vm, _nic) = new_vm(
+        opts,
+        "template",
+        TEMPLATE_CID,
+        opts.network.then_some(TEMPLATE_MAC),
+    )
+    .await?;
+    vm.launch().await.map_err(|e| format!("launching: {e}"))?;
+    let result = async {
+        vm.ping_guest(opts.ready_timeout)
+            .await
+            .map_err(|e| format!("the template's agent never answered: {e}"))?;
+        if opts.network {
+            configure_guest_network(&vm, authority.map(Authority::ca_pem)).await?;
+        }
+        // Touch the paths a sandbox's first requests take, so their pages are
+        // in the image rather than faulted in by every sandbox.
+        vm.exec_in_guest(
+            "/bin/sh",
+            &["-c".into(), "true".into()],
+            Duration::from_secs(5),
+        )
+        .await
+        .map_err(|e| format!("warming the template: {e}"))?;
+        vm.snapshot_to(&template.snapshot)
+            .await
+            .map_err(|e| format!("snapshotting the template: {e}"))
+    }
+    .await;
+    let _ = vm.stop().await;
+    result?;
+    tracing::info!(
+        "template ready in {:?} at {}",
+        started.elapsed(),
+        template.snapshot.display()
+    );
+    Ok(template)
 }
 
 /// `PUT /sandboxes/{id}/network` -- replace a running sandbox's egress rules.
@@ -1265,6 +1383,27 @@ async fn main() -> std::process::ExitCode {
         "sandboxes get no network interface (--network to change that)".to_string()
     };
 
+    // The template, before anything listens: a node that advertised itself
+    // and then spent a second booting would be scheduled onto meanwhile.
+    // Failing to build one is not fatal -- sandboxes boot instead, slower,
+    // and the log says why.
+    let template = if opts.no_template {
+        None
+    } else {
+        match build_template(&opts, authority.as_deref()).await {
+            Ok(template) => Some(template),
+            Err(e) => {
+                tracing::warn!("no template ({e}); every sandbox will boot instead");
+                None
+            }
+        }
+    };
+    let template_line = if template.is_some() {
+        "sandboxes are restored from a template snapshot"
+    } else {
+        "sandboxes boot from the kernel (no template)"
+    };
+
     // Cluster membership, if asked for: checked and joined before anything
     // listens, so a node that cannot reach its store fails at start rather
     // than serving sandboxes no control plane can find.
@@ -1322,6 +1461,7 @@ async fn main() -> std::process::ExitCode {
         next_cid: Mutex::new(0),
         routes: Arc::clone(&routes),
         booting: Mutex::new(0),
+        template,
         node: node.clone(),
     });
     if let Some(node) = node.clone() {
@@ -1433,6 +1573,7 @@ async fn main() -> std::process::ExitCode {
     println!("  PUT    /sandboxes/{{id}}/network  -- replace a running sandbox's egress rules");
     println!("  GET    /sandboxes/{{id}}/network/decisions -- NOT E2B's; the gateway's audit log");
     println!("{network_line}");
+    println!("{template_line}");
     println!();
     println!(
         "sandbox proxy on 0.0.0.0:{proxy_port} -- {scheme}, routed by the authority a client asks \

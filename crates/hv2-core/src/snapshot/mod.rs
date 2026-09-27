@@ -33,6 +33,7 @@
 
 pub mod device;
 pub mod file;
+pub mod machine;
 pub mod manager;
 pub mod memory;
 pub mod types;

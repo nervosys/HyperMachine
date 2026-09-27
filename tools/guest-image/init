@@ -1,0 +1,20 @@
+#!/bin/busybox sh
+# PID 1 of the sandbox guest image. Mounts the kernel filesystems, starts the
+# guest agent, and leaves a shell on the console for whoever is debugging.
+/bin/busybox --install -s /bin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts /etc /tmp /root
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+
+# The kernel configured the network from `ip=` on its command line and wrote
+# the nameserver to /proc/net/pnp, which is in resolv.conf's own format.
+[ -e /etc/resolv.conf ] || ln -s /proc/net/pnp /etc/resolv.conf
+ip link set lo up 2>/dev/null
+
+export PATH=/bin:/sbin HOME=/root
+/bin/hv2-guest-agentd &
+echo "=== HV2 READY ==="
+exec setsid sh -c "exec sh </dev/console >/dev/console 2>&1"

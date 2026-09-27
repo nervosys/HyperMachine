@@ -116,6 +116,20 @@ pub struct Header {
     /// device's queued frames -- which refer to things outside the VM that a
     /// restore cannot reconstitute. See this module's own documentation.
     pub device_state_included: bool,
+    /// Interrupt controllers, timer and clock, when the backend captures
+    /// them. `None` in a snapshot written before they were, which restores
+    /// exactly as it did then.
+    #[serde(default)]
+    pub machine: Option<super::machine::MachineState>,
+    /// When set, guest memory is not in this file: it is a raw image, named
+    /// here relative to this file's directory, exactly as large as guest RAM
+    /// and sparse where the guest's pages were zero. The page map in this
+    /// file is then empty.
+    ///
+    /// The layout a restore can *map* rather than copy -- see
+    /// `HypervisorBackend::map_guest_memory_from`.
+    #[serde(default)]
+    pub memory_image: Option<String>,
 }
 
 /// Which pages a snapshot carries.
@@ -375,6 +389,8 @@ mod tests {
             total_pages: 1,
             present_pages: 1,
             device_state_included: false,
+            machine: None,
+            memory_image: None,
         }
     }
 

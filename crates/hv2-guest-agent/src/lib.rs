@@ -160,6 +160,25 @@ pub enum Operation {
     /// redraws when it hears this, and never learns otherwise -- there is
     /// nothing else in the protocol that would tell it.
     ResizePty { pid: u32, size: PtySize },
+
+    /// Bring a guest restored from a snapshot back in step with the world:
+    /// set its wall clock, and reseed its random number generator.
+    ///
+    /// The reseed is the one that matters. Every guest restored from one
+    /// snapshot resumes with the same kernel RNG state, and Linux only
+    /// reseeds on its own every minute or so -- until then, two sandboxes
+    /// from one template draw the same "random" TLS keys, UUIDs and ASLR
+    /// offsets. Writing to `/dev/urandom` mixes bytes in without forcing a
+    /// reseed; this credits them (`RNDADDENTROPY`) and forces one
+    /// (`RNDRESEEDCRNG`), so the next read is already distinct.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    Restored {
+        /// The host's time, in nanoseconds since the Unix epoch.
+        unix_time_ns: u64,
+        /// Fresh randomness from the host, unique to this guest.
+        entropy: Vec<u8>,
+    },
 }
 
 /// A terminal's size, in character cells.

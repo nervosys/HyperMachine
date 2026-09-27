@@ -60,6 +60,10 @@ pub const KVM_IRQFD: u64 = 0x4020ae76; // _IOW(KVMIO, 0x76, struct kvm_irqfd)
 pub const KVM_CREATE_PIT2: u64 = 0x4040ae77; // _IOW(KVMIO, 0x77, struct kvm_pit_config)
 pub const KVM_IOEVENTFD: u64 = 0x4040ae79; // _IOW(KVMIO, 0x79, struct kvm_ioeventfd)
 pub const KVM_SIGNAL_MSI: u64 = 0x4020aea5; // _IOW(KVMIO, 0xa5, struct kvm_msi)
+pub const KVM_SET_CLOCK: u64 = 0x4030ae7b; // _IOW(KVMIO, 0x7b, struct kvm_clock_data)
+pub const KVM_GET_CLOCK: u64 = 0x8030ae7c; // _IOR(KVMIO, 0x7c, struct kvm_clock_data)
+pub const KVM_GET_PIT2: u64 = 0x8070ae9f; // _IOR(KVMIO, 0x9f, struct kvm_pit_state2)
+pub const KVM_SET_PIT2: u64 = 0x4070aea0; // _IOW(KVMIO, 0xa0, struct kvm_pit_state2)
 
 // vCPU ioctls (on vCPU fd)
 pub const KVM_RUN: u64 = 0xae80; // _IO(KVMIO, 0x80)
@@ -551,12 +555,13 @@ pub struct kvm_msr_entry {
 /// `EFER` is deliberately absent: it arrives with the special registers, and
 /// setting it twice from two places is a way for the two to disagree.
 ///
-/// The TSC is also absent, and that one is a judgement rather than an
-/// oversight. Restoring it makes the guest's clock jump backwards or forwards
-/// by however long the snapshot sat on disk; not restoring it makes the clock
-/// jump to the host's uptime. Both are wrong, and picking the lesser needs a
-/// caller who knows what the guest does with time, so neither is done
-/// silently here.
+/// The TSC and the kvm-clock registrations are not here: they are
+/// [`crate::snapshot::machine::CLOCK_MSRS`], captured into the same list and
+/// written back only when the caller chooses
+/// [`crate::snapshot::machine::ClockOnRestore::Continue`]. Restoring them
+/// makes the guest's clock stand still for as long as the snapshot sat on
+/// disk; not restoring them makes it jump to this host's counters. Both are
+/// wrong for some guest, so neither is done silently.
 pub const SNAPSHOT_MSRS: &[u32] = &[
     0xc000_0081, // STAR
     0xc000_0082, // LSTAR
@@ -569,6 +574,12 @@ pub const SNAPSHOT_MSRS: &[u32] = &[
     0x0000_0175, // SYSENTER_ESP
     0x0000_0176, // SYSENTER_EIP
     0x0000_0277, // PAT
+    // IA32_XSS: which supervisor components XSAVES saves. Linux saves every
+    // task's FPU state with XSAVES in the compacted format when the CPU has
+    // it, so those saved states name components XSS enables; restored with
+    // XSS at zero, every XRSTORS of an existing task faults and the kernel
+    // reports "Bad FPU state". Found restoring a Linux guest.
+    0x0000_0da0,
 ];
 
 /// Read one MSR.
@@ -1225,6 +1236,97 @@ pub unsafe fn kvm_get_irqchip(vm_fd: RawFd, chip: &mut kvm_irqchip) -> Result<()
 pub unsafe fn kvm_set_irqchip(vm_fd: RawFd, chip: &kvm_irqchip) -> Result<(), std::io::Error> {
     let ret = ioctl(vm_fd, KVM_SET_IRQCHIP, chip as *const _ as usize);
     if ret < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// `struct kvm_pit_state2`: three channel states, flags, reserved words.
+///
+/// Carried as bytes. Nothing on the host interprets it; it goes from
+/// `KVM_GET_PIT2` into a snapshot and back into `KVM_SET_PIT2`, and a layout
+/// spelled out field by field is one more thing to get wrong for no reader.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct kvm_pit_state2 {
+    pub bytes: [u8; 112],
+}
+
+impl Default for kvm_pit_state2 {
+    fn default() -> Self {
+        Self { bytes: [0; 112] }
+    }
+}
+
+/// `struct kvm_clock_data`.
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct kvm_clock_data {
+    /// kvmclock, in nanoseconds.
+    pub clock: u64,
+    pub flags: u32,
+    pub pad0: u32,
+    pub realtime: u64,
+    pub host_tsc: u64,
+    pub pad: [u32; 4],
+}
+
+// The ioctl numbers above encode these sizes; a struct that drifts from them
+// is an ioctl the kernel rejects, or worse, one it accepts.
+const _: () = assert!(size_of::<kvm_pit_state2>() == 0x70);
+const _: () = assert!(size_of::<kvm_clock_data>() == 0x30);
+const _: () = assert!(size_of::<kvm_irqchip>() == 0x208);
+
+/// Read the in-kernel PIT.
+///
+/// # Safety
+///
+/// - `vm_fd` must be a valid VM file descriptor with a PIT created.
+pub unsafe fn kvm_get_pit2(vm_fd: RawFd, pit: &mut kvm_pit_state2) -> Result<(), std::io::Error> {
+    if ioctl(vm_fd, KVM_GET_PIT2, pit as *mut _ as usize) < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Write the in-kernel PIT.
+///
+/// # Safety
+///
+/// - `vm_fd` must be a valid VM file descriptor with a PIT created.
+pub unsafe fn kvm_set_pit2(vm_fd: RawFd, pit: &kvm_pit_state2) -> Result<(), std::io::Error> {
+    if ioctl(vm_fd, KVM_SET_PIT2, pit as *const _ as usize) < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Read kvmclock.
+///
+/// # Safety
+///
+/// - `vm_fd` must be a valid VM file descriptor.
+pub unsafe fn kvm_get_clock(
+    vm_fd: RawFd,
+    clock: &mut kvm_clock_data,
+) -> Result<(), std::io::Error> {
+    if ioctl(vm_fd, KVM_GET_CLOCK, clock as *mut _ as usize) < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// Set kvmclock.
+///
+/// # Safety
+///
+/// - `vm_fd` must be a valid VM file descriptor.
+pub unsafe fn kvm_set_clock(vm_fd: RawFd, clock: &kvm_clock_data) -> Result<(), std::io::Error> {
+    if ioctl(vm_fd, KVM_SET_CLOCK, clock as *const _ as usize) < 0 {
         Err(std::io::Error::last_os_error())
     } else {
         Ok(())

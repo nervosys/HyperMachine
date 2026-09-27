@@ -291,6 +291,39 @@ pub trait HypervisorBackend: Send + Sync {
         )))
     }
 
+    /// Read the machine-level state a snapshot needs beyond vCPUs and
+    /// devices: interrupt controllers, timer, paravirtual clock.
+    ///
+    /// `None` from a backend that has none to capture, which the default
+    /// answers -- a snapshot without it restores as it always did. See
+    /// [`crate::snapshot::machine`].
+    ///
+    /// # Errors
+    ///
+    /// A backend that has the state and cannot read it.
+    async fn save_machine(&self) -> Result<Option<crate::snapshot::machine::MachineState>> {
+        Ok(None)
+    }
+
+    /// Put machine-level state back, the clock only if `restore_clock`.
+    ///
+    /// # Errors
+    ///
+    /// The default refuses: a snapshot that carries machine state was taken
+    /// on a backend that captures it, and restoring it on one that cannot
+    /// would resume a guest whose interrupts go nowhere.
+    async fn restore_machine(
+        &self,
+        state: &crate::snapshot::machine::MachineState,
+        restore_clock: bool,
+    ) -> Result<()> {
+        let _ = (state, restore_clock);
+        Err(Error::NotSupported(format!(
+            "{} backend cannot restore interrupt-controller and timer state",
+            self.platform()
+        )))
+    }
+
     /// Ask a vCPU to leave the guest and return from [`Self::run_vcpu`].
     ///
     /// Called from another thread, typically while `run_vcpu` is blocked. A
@@ -486,6 +519,23 @@ pub trait HypervisorBackend: Send + Sync {
     ///
     /// [`MemoryRegion`]: crate::memory::MemoryRegion
     fn reset_guest_memory_to_zero(&self) -> Result<bool> {
+        Ok(false)
+    }
+
+    /// Make guest RAM a private, copy-on-write mapping of `file`, a raw image
+    /// exactly as large as guest memory.
+    ///
+    /// `Ok(true)` means guest memory now *is* the file's contents, and a
+    /// restore need copy nothing. `Ok(false)`, the default, means the backend
+    /// cannot, and the caller copies the image instead -- slower, and each VM
+    /// then owns every page rather than sharing the ones it only reads.
+    ///
+    /// # Errors
+    ///
+    /// The backend tried and failed, which leaves guest memory in an unknown
+    /// state; the caller must not run the guest.
+    fn map_guest_memory_from(&self, file: &std::fs::File) -> Result<bool> {
+        let _ = file;
         Ok(false)
     }
 

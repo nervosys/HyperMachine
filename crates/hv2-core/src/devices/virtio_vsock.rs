@@ -312,6 +312,46 @@ pub struct VsockDevice {
     /// Packets dropped because [`MAX_PENDING_TX`] was reached, so a caller can
     /// tell "the guest is not reading" from "nothing happened".
     dropped: u64,
+    /// Bumped whenever the guest delivers packets; see [`Progress`].
+    progress: Arc<Progress>,
+}
+
+/// A signal that the guest has sent something, for a host caller waiting on
+/// a connection to be accepted or a response to arrive.
+///
+/// That caller used to sleep a fixed 5 ms between looks, twice per request
+/// -- once for the connection, once for the answer -- so every guest-agent
+/// call cost at least ~10 ms however fast the guest was: measured at 10.3 ms
+/// per ping on a warm guest. Now it waits on this and wakes when the guest's
+/// kick delivers. Safe to signal from the vCPU thread, which is where the
+/// kick is processed: it takes its own lock briefly and blocks on nothing
+/// else.
+#[derive(Debug, Default)]
+pub struct Progress {
+    seq: parking_lot::Mutex<u64>,
+    changed: parking_lot::Condvar,
+}
+
+impl Progress {
+    fn signal(&self) {
+        *self.seq.lock() += 1;
+        self.changed.notify_all();
+    }
+
+    /// How many times this has been signalled.
+    pub fn current(&self) -> u64 {
+        *self.seq.lock()
+    }
+
+    /// Wait until it has been signalled past `seen`, or `timeout` passes.
+    /// Returns the count then.
+    pub fn wait_past(&self, seen: u64, timeout: std::time::Duration) -> u64 {
+        let mut seq = self.seq.lock();
+        if *seq == seen {
+            let _ = self.changed.wait_for(&mut seq, timeout);
+        }
+        *seq
+    }
 }
 
 impl VsockDevice {
@@ -337,7 +377,13 @@ impl VsockDevice {
             pending_wake: None,
             next_host_port: EPHEMERAL_HOST_PORTS.start,
             dropped: 0,
+            progress: Arc::new(Progress::default()),
         })
+    }
+
+    /// Signalled whenever the guest delivers packets.
+    pub fn progress(&self) -> Arc<Progress> {
+        Arc::clone(&self.progress)
     }
 
     /// The guest's context ID.
@@ -685,6 +731,9 @@ impl VsockDevice {
             }
         }
 
+        if consumed {
+            self.progress.signal();
+        }
         Ok(consumed)
     }
 
@@ -827,6 +876,28 @@ impl VirtioMmioDevice for VsockDevice {
         // The guest CID is set by the host. A driver writing it is either
         // confused or hostile; either way the value does not change.
         tracing::debug!("vsock: ignoring a driver write to read-only config space");
+    }
+
+    /// Where ephemeral host ports continue from.
+    ///
+    /// Without it a restored device numbers its first connection from the
+    /// bottom of the range again -- the same host port the snapshotted VM's
+    /// first connection used, which the guest's kernel may still hold as a
+    /// live socket. The new connection's request then lands on the old one:
+    /// found by restoring a booted Linux guest, whose agent reported EOF on a
+    /// connection from before the snapshot and closed the new one unanswered.
+    fn save_counters(&self) -> std::collections::BTreeMap<String, u64> {
+        std::iter::once(("next_host_port".to_string(), u64::from(self.next_host_port))).collect()
+    }
+
+    fn restore_counters(&mut self, counters: &std::collections::BTreeMap<String, u64>) {
+        if let Some(port) = counters
+            .get("next_host_port")
+            .and_then(|p| u32::try_from(*p).ok())
+            .filter(|p| EPHEMERAL_HOST_PORTS.contains(p))
+        {
+            self.next_host_port = port;
+        }
     }
 
     fn notify(&mut self, queue: u16, mem: &GuestMemory) -> Result<bool> {

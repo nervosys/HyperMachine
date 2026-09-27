@@ -216,6 +216,54 @@ impl AgentVM {
         Ok(())
     }
 
+    /// Become the guest a snapshot holds and run it, instead of booting.
+    ///
+    /// Attach the guest channel (same CID) and any network device (same MAC)
+    /// first, as the snapshotted VM had them. The clock is continued, because
+    /// a guest agent runs on Linux and Linux schedules by time; its wall clock
+    /// is then stale by as long as the snapshot sat, which
+    /// [`Self::set_guest_clock`] corrects.
+    pub async fn launch_from_snapshot(&self, snapshot: &std::path::Path) -> Result<()> {
+        self.vm
+            .launch_from_snapshot(
+                snapshot,
+                hv2_core::snapshot::machine::ClockOnRestore::Continue,
+            )
+            .await?;
+        *self.started_at.write().await = Some(Instant::now());
+        Ok(())
+    }
+
+    /// Pause, write this VM to `snapshot`, and resume it.
+    pub async fn snapshot_to(&self, snapshot: &std::path::Path) -> Result<()> {
+        self.vm.pause().await?;
+        let written = self.vm.snapshot_with(snapshot, true).await;
+        self.vm.resume().await?;
+        written?;
+        Ok(())
+    }
+
+    /// Set the guest's wall clock to the host's, through the guest agent.
+    ///
+    /// # Errors
+    ///
+    /// The agent did not run `date`, or it failed.
+    pub async fn set_guest_clock(&self, timeout: Duration) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let exec = self
+            .exec_in_guest("/bin/date", &["-s".to_string(), format!("@{now}")], timeout)
+            .await?;
+        if exec.exit_code != Some(0) {
+            return Err(AgentError::Script(format!(
+                "setting the guest clock: {}",
+                exec.stderr.trim()
+            )));
+        }
+        Ok(())
+    }
+
     /// Whether this VM has a boot source configured.
     pub fn has_boot_source(&self) -> bool {
         self.vm.config().boot.is_some()
@@ -469,6 +517,43 @@ impl AgentVM {
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest resize task failed: {e}")))?
+    }
+
+    /// After [`Self::launch_from_snapshot`]: set the guest's clock and reseed
+    /// its random number generator from the host, so this guest does not
+    /// share the RNG state of every other guest restored from the same
+    /// snapshot.
+    ///
+    /// Against a guest agent too old to reseed, the clock is still set (with
+    /// `date`), and the error that comes back says the reseed did not happen
+    /// -- a caller should treat such a guest as sharing its randomness with
+    /// its siblings, not carry on as though it did not.
+    ///
+    /// # Errors
+    ///
+    /// The agent could not be reached, or could not reseed.
+    pub async fn after_restore(&self, timeout: Duration) -> Result<()> {
+        let device = self.guest_channel("resynchronise a restored guest")?;
+        let now_ns = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        let mut entropy = rand::random::<[u8; 32]>().to_vec();
+        entropy.extend_from_slice(&rand::random::<[u8; 32]>());
+        let reseeded = tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.restored(now_ns, entropy, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest restore task failed: {e}")))?;
+        if let Err(e) = reseeded {
+            // An older agent: the clock at least can still be set.
+            self.set_guest_clock(timeout).await?;
+            return Err(AgentError::Script(format!(
+                "the guest's clock is set, but its RNG was not reseeded ({e}); it shares \
+                 random state with every guest restored from the same snapshot"
+            )));
+        }
+        Ok(())
     }
 
     /// Send a signal to a started program.

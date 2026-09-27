@@ -251,6 +251,10 @@ mod linux {
                 signal: number,
             } => signal(pid, number),
             Operation::ResizePty { pid, size } => resize_pty(pid, size),
+            Operation::Restored {
+                unix_time_ns,
+                entropy,
+            } => restored(unix_time_ns, &entropy),
         };
 
         Response {
@@ -258,6 +262,57 @@ mod linux {
             version: PROTOCOL_VERSION,
             result,
         }
+    }
+
+    /// See [`Operation::Restored`]: clock first, then a forced reseed.
+    fn restored(unix_time_ns: u64, entropy: &[u8]) -> OpResult {
+        let now = libc::timespec {
+            tv_sec: (unix_time_ns / 1_000_000_000) as libc::time_t,
+            tv_nsec: (unix_time_ns % 1_000_000_000) as libc::c_long,
+        };
+        if unsafe { libc::clock_settime(libc::CLOCK_REALTIME, &now) } != 0 {
+            return OpResult::Failed {
+                message: format!("setting the clock: {}", std::io::Error::last_os_error()),
+            };
+        }
+        if entropy.is_empty() || entropy.len() > 512 {
+            return OpResult::Failed {
+                message: format!("{} bytes of entropy; want 1-512", entropy.len()),
+            };
+        }
+
+        // `struct rand_pool_info`: entropy bits credited, buffer length, buffer.
+        let mut info = Vec::with_capacity(8 + entropy.len());
+        info.extend_from_slice(&((entropy.len() * 8) as i32).to_ne_bytes());
+        info.extend_from_slice(&(entropy.len() as i32).to_ne_bytes());
+        info.extend_from_slice(entropy);
+
+        // _IOW('R', 0x03, int[2]) and _IO('R', 0x07).
+        const RNDADDENTROPY: libc::c_ulong = 0x4008_5203;
+        const RNDRESEEDCRNG: libc::c_ulong = 0x5207;
+        let path = b"/dev/urandom\0";
+        let fd = unsafe { libc::open(path.as_ptr().cast(), libc::O_WRONLY | libc::O_CLOEXEC) };
+        if fd < 0 {
+            return OpResult::Failed {
+                message: format!("opening /dev/urandom: {}", std::io::Error::last_os_error()),
+            };
+        }
+        let added = unsafe { libc::ioctl(fd, RNDADDENTROPY as _, info.as_ptr()) };
+        let added_err = std::io::Error::last_os_error();
+        let reseeded = unsafe { libc::ioctl(fd, RNDRESEEDCRNG as _, 0) };
+        let reseed_err = std::io::Error::last_os_error();
+        unsafe { libc::close(fd) };
+        if added != 0 {
+            return OpResult::Failed {
+                message: format!("RNDADDENTROPY: {added_err}"),
+            };
+        }
+        if reseeded != 0 {
+            return OpResult::Failed {
+                message: format!("RNDRESEEDCRNG: {reseed_err}"),
+            };
+        }
+        OpResult::Acknowledged
     }
 
     /// How a program ended: its exit code, and the signal that killed it.

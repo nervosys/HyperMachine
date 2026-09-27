@@ -214,6 +214,18 @@ pub struct VCpuSnapshot {
     /// and a restore prefers this when it is present.
     #[serde(default)]
     pub xsave: Vec<u8>,
+    /// Extended control registers, as `(index, value)` pairs -- in practice
+    /// `XCR0`, which says which of the XSAVE area's components the guest
+    /// enabled.
+    ///
+    /// Without it a restored vCPU has `XCR0` at its reset value, x87 only, and
+    /// the first AVX instruction the guest executes is an invalid opcode.
+    /// Found by restoring a Linux guest: its agent died of `#UD` and the
+    /// kernel reported "Bad FPU state" restoring registers XCR0 no longer
+    /// covered. The unikernel restored before never used AVX, so never
+    /// noticed.
+    #[serde(default)]
+    pub xcrs: Vec<Msr>,
     pub run_state: RunState,
 }
 
@@ -231,11 +243,16 @@ impl VCpuSnapshot {
     }
 
     /// What a complete capture would add, for an error message or a log line.
+    ///
+    /// The TSC used to lead this list. It is captured now, with the kvm-clock
+    /// registrations, and written back when the restorer chooses
+    /// [`crate::snapshot::machine::ClockOnRestore::Continue`] -- the choice
+    /// stayed with the caller; the capture no longer has to.
     #[must_use]
     pub fn missing() -> &'static [&'static str] {
         &[
-            "the TSC, deliberately: restoring it jumps the guest's clock and \
-             not restoring it jumps it too, so the choice belongs to a caller",
+            "MSRs outside the snapshot's list (model-specific performance and \
+             debug registers), which no guest here has been seen to depend on",
         ]
     }
 

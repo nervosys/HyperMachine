@@ -55,6 +55,11 @@ pub struct MmioDeviceState {
     pub name: String,
     pub transport: TransportState,
     pub queues: Vec<QueueState>,
+    /// Device-specific counters the guest's memory depends on but does not
+    /// hold -- see `VirtioMmioDevice::save_counters`. Empty in a snapshot
+    /// written before these were kept.
+    #[serde(default)]
+    pub counters: std::collections::BTreeMap<String, u64>,
 }
 
 /// Device state serialization result
