@@ -169,11 +169,24 @@ One library for all cryptography, and none of it hand-rolled.
   was an encrypt-then-decrypt round trip, and `kat_hmac_sha256` discarded its
   MAC. Done when: `FipsMode` self-tests delegate to `ic-fips`, and the
   published-vector tests still pass.
-- [ ] **Evaluate `ic-rustls`** as the rustls `CryptoProvider`, replacing
-  `ring`. *M.*
-  Done when: `cargo tree -i ring` and `cargo tree -i aws-lc-sys` both find
-  nothing, TLS tests pass, and `sandbox_proxy.rs` installs the IronCrypto
-  provider.
+- [x] **Evaluate `ic-rustls`** as the rustls `CryptoProvider`, replacing
+  `ring`. *M.* Evaluated 2026-09-28. **Adopt later, after two blockers.**
+  - *Suitable:* the published 0.1.3 is byte-identical to the repository. It
+    covers TLS 1.3 and 1.2, AES-GCM and ChaCha20-Poly1305, X25519/P-256/P-384,
+    and RSA PKCS#1/PSS, ECDSA and Ed25519 verification. That is enough for
+    the egress gateway, which talks to arbitrary servers.
+  - *Blocker 1, `ic-rsa`:* `ic-rustls` builds RSA signing keys with
+    `from_primes`, which panics at 4096 bits (K-8). An ordinary RSA-4096
+    certificate key would abort the process when the server starts.
+  - *Blocker 2, `ring` cannot fully leave:* `rcgen`, which issues the
+    egress gateway's per-sandbox CA and leaf certificates, has only `ring`
+    and `aws-lc-rs` backends, and `ic-pkix` neither parses nor issues
+    certificates. `reqwest`, `redis` and `hyper-rustls` would also need their
+    no-provider features. The old "done when `cargo tree -i ring` is empty"
+    is unreachable until IronCrypto can issue certificates.
+- [ ] **Adopt `ic-rustls`** once `ic-rsa` handles RSA-4096. *M.* Done when:
+  every rustls config in the workspace uses the IronCrypto provider, TLS
+  tests pass, and `ring` remains only under `rcgen`, with that recorded.
 - [ ] **Migrate ML-DSA to `ic-mldsa`: wait.** *M.* Corrected 2026-09-28:
   this item said `ic-mldsa` covers 44, 65 and 87. It covers **ML-DSA-65
   only** (`K = 6`, `L = 5` are constants), and `hv2-core` offers all three.
