@@ -51,14 +51,17 @@ The project is complete when all of these hold:
 
 Critical path. Everything else assumes a green, trustworthy CI.
 
-- [ ] **Merge #99** (`fix/ci-protoc-and-msrv`). *S.*
+- [x] **Merge #99** (`fix/ci-protoc-and-msrv`). *S.* Merged 2026-09-27.
   Done when: on `master`, Deploy's *Build Container Image* and *Build Windows
   Binaries* jobs pass, and *MSRV Check* passes. (MSRV already passes on the
   PR at 1.95 — confirmed, not assumed.)
-- [ ] **Rebase and merge #100** (IronCrypto 0.1.2) after #99. *S.*
+- [x] **Rebase and merge #100** (IronCrypto 0.1.2) after #99. *S.* Merged
+  2026-09-27; no rebase was needed.
   It fails MSRV only because it branches from a `master` without #99's fix.
   Done when: all checks on the rebased PR pass.
-- [ ] **Fix *HV1 Multiboot Image*.** *S.*
+- [x] **Fix *HV1 Multiboot Image*.** *S.* Merged in #102. The fix that
+  worked was `env -u RUSTFLAGS` on the build step: `RUSTFLAGS: ""` still
+  counts as set, and still replaces the target flags.
   Cause, reproduced locally: `ci.yml` sets a workflow-wide
   `RUSTFLAGS: -D warnings`, and an environment `RUSTFLAGS` *replaces* — does
   not merge with — the crate's `[target.x86_64-unknown-none] rustflags`. That
@@ -69,32 +72,44 @@ Critical path. Everything else assumes a green, trustworthy CI.
   own clippy step.
   Done when: the job builds, and its existing "loadable Multiboot image"
   checks pass.
-- [ ] **Fix *Unikernel Guest Build*.** *S.* Two causes, reproduced locally:
-  - [ ] `hv2-unikernel` defines `memset`/`memcpy`/`memmove`/`memcmp` in
+- [x] **Fix *Unikernel Guest Build*.** *S.* Merged in #102. Two causes,
+  reproduced locally:
+  - [x] `hv2-unikernel` defines `memset`/`memcpy`/`memmove`/`memcmp` in
     `*mut u8`; the compiler calls them as `*mut c_void`. Same fix as
     `fce2264` applied to `hv1-multiboot`.
-  - [ ] The same `RUSTFLAGS` override as above.
+  - [x] The same `RUSTFLAGS` override as above.
 
   Done when: the job builds with `-D warnings` in effect.
-- [ ] **Push the Phase 3–6 commits, then merge `fix/tenant-reserved-egress`.**
+- [x] **Push the Phase 3–6 commits, then merge `fix/tenant-reserved-egress`.**
+  Pushed, and merged as #103 on 2026-09-27.
   🔒 *push approval.* *S.* The branch closes a hole found reviewing Phase 4:
   a tenant's `allowOut: ["0.0.0.0/0"]` reached private addresses, which in a
   cluster means the unauthenticated state store holding every sandbox's
   envd access token. Before the fix the cloud metadata address was reachable
   too. Reproduced on real KVM guests; `tools/e2e-egress.sh` fails on the old
   code and passes on the branch.
-- [ ] **Pin `dtolnay/rust-toolchain@master`** to a commit. *S.*
+- [ ] **Pin `dtolnay/rust-toolchain@master`** to a commit. *S.* #108 pins
+  every action (136 references) to a commit SHA, not only this one.
   It is unpinned, and it was a silent upstream behaviour change that exposed
   the MSRV defect. Done when: no workflow references an action at `@master`.
-- [ ] **Triage the eight Dependabot PRs.** *M.*
-  `#91` (base64 0.22→0.23) and `#92` (tower-http 0.6→0.7) are semver-major;
-  `#98` bundles fourteen updates at once. Done when: each is merged or closed
-  with a reason.
+- [ ] **Triage the Dependabot PRs.** *M.* Triaged 2026-09-27. Every open
+  one is green on the current `master`, including `#91` (base64 0.23) and
+  `#92` (tower-http 0.7), both semver-major, and `#107`, the grouped update
+  that replaced `#98` and `#105`. `#89` (Slack v4) would have silently
+  stopped deployment notifications: v2 no longer reads the webhook from
+  `env`, and the step has `continue-on-error`. It was fixed on its branch.
+  `#85`/`#86`/`#88` bump actions only `deploy.yml` uses, which pull requests
+  do not run, so the first deploy after merging is their real test.
+  `#85`-`#89` and `#107` merged on 2026-09-28; `#91` and `#92` go one at a
+  time, because each rebases the shared `Cargo.lock`.
+  Done when: each is merged.
 - [ ] **Decide the branch-protection policy.** 🔒 *decision.*
   On 2026-09-23 a direct push bypassed "changes must be made through a pull
   request". Either require it for everyone or record who may bypass and when.
 
 **Exit criterion:** every job on `master` green for three consecutive runs.
+The first fully green run was c4c6d0c, on 2026-09-27: CI, Security,
+Deploy, Coverage and Benchmarks.
 
 ---
 
