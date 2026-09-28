@@ -1643,6 +1643,27 @@ Verified with the unmodified SDK:
 
 Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
 
+#### Guests larger than 3 GiB
+
+No guest above about 3.25 GiB could run, and the size check promised up to 64 GiB. Guest RAM was one flat range from address 0, so it ran into the virtio register windows at `0xd000_0000`, and from 4 GiB over the I/O APIC and local APICs. Found building E2B's Code Interpreter template at 8 GiB, which failed attaching its first device.
+
+Guest RAM now has a PC's hole below 4 GiB:
+- the first 3 GiB at address 0, the rest from 4 GiB, both from one host buffer;
+- two KVM memory slots (the read-only shared region moved from slot 1 to slot 2);
+- the device model maps two regions;
+- the `e820` map reports both ranges, and the initrd is placed below the hole;
+- a raw memory image -- a template's, a pause's, a layered snapshot's base -- is laid out by offset in the host buffer, which is what it is mapped over;
+- device windows are refused only if they overlap actual RAM.
+
+A guest of 3 GiB or less is laid out byte for byte as before, so existing templates and snapshots are unaffected.
+
+Verified:
+- a 4 GiB guest's kernel reported the three ranges in its `e820` map, and 3.5 GiB written to it survived pause and resume;
+- in an 8 GiB guest the kernel's `Normal` zone, its RAM above 4 GiB, went from 1,266,317 free pages to 3,025 as 6 GiB was written. That RAM was in use, and the 6 GiB was intact after pause (38.6 s) and resume (23.7 s) and in a fork;
+- the unit tests, and the build, lifecycle, volume, size, SMP-fork and port regressions, passed at the old sizes.
+
+An intermittent failure seen twice this session is not explained: an image template's guest (512 MiB once, 1 GiB once) did not answer within 120 s, and passed on the next runs. The node keeps no guest console output from a failed template boot, which is what finding it would need.
+
 #### A sandbox's own ports
 
 E2B's `sandbox.get_host(port)` -- `{port}-{sandboxID}.{domain}` -- reaches any port a sandbox serves, not only envd's: a web server, a dev server, the Code Interpreter's Jupyter. Until now the proxy routed envd's port alone, so every other one answered 404.

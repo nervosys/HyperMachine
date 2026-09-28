@@ -717,9 +717,10 @@ impl HypervisorBackend for KvmBackend {
             ));
         }
 
-        // Slot 0 is the guest's own RAM. Shared regions start at 1 and there is
-        // one per VM, which is all the model-weights case needs.
-        kvm_vm.map_memory_with_flags(1, guest_addr, len, host_addr, KVM_MEM_READONLY)
+        // Slots 0 and 1 are the guest's own RAM, either side of the hole
+        // below 4 GiB. Shared regions start at 2 and there is one per VM,
+        // which is all the model-weights case needs.
+        kvm_vm.map_memory_with_flags(2, guest_addr, len, host_addr, KVM_MEM_READONLY)
     }
 
     async fn kick_vcpu(&self, vcpu: &VCpu) -> Result<()> {
@@ -1189,22 +1190,31 @@ impl KvmVm {
                 }
                 let ptr = ptr as *mut u8;
 
-                // Map guest memory into KVM
-                let region = kvm_userspace_memory_region {
-                    slot: 0,
-                    flags: 0,
-                    guest_phys_addr: 0,
-                    memory_size,
-                    userspace_addr: ptr as u64,
-                };
+                // Map guest memory into KVM: one slot per RAM range, either side
+                // of the hole below 4 GiB, both from this one buffer (see
+                // `crate::memory::ram_ranges`). Slot 0 is the low range; slot 1
+                // the high one, when there is one.
+                let mut offset = 0u64;
+                for (slot, (guest_phys_addr, size)) in
+                    (0u32..).zip(crate::memory::ram_ranges(memory_size))
+                {
+                    let region = kvm_userspace_memory_region {
+                        slot,
+                        flags: 0,
+                        guest_phys_addr,
+                        memory_size: size,
+                        userspace_addr: ptr as u64 + offset,
+                    };
+                    offset += size;
 
-                if let Err(e) = kvm_set_user_memory_region(vm_fd, &region) {
-                    libc::munmap(ptr as *mut libc::c_void, memory_size as usize);
-                    libc::close(vm_fd);
-                    return Err(Error::Hypervisor(format!(
-                        "Failed to set user memory region: {}",
-                        e
-                    )));
+                    if let Err(e) = kvm_set_user_memory_region(vm_fd, &region) {
+                        libc::munmap(ptr as *mut libc::c_void, memory_size as usize);
+                        libc::close(vm_fd);
+                        return Err(Error::Hypervisor(format!(
+                            "Failed to set user memory region: {}",
+                            e
+                        )));
+                    }
                 }
 
                 match NonNull::new(ptr) {
@@ -1408,8 +1418,9 @@ impl KvmVm {
     /// Write `data` into guest physical memory at `addr`.
     ///
     /// The guest memory allocated in `KvmVm::new` is registered with KVM as
-    /// slot 0 covering GPA `0..memory_size`, so a host-side write through the
-    /// same allocation is visible to the guest immediately.
+    /// the RAM ranges of `crate::memory::ram_ranges`, so a host-side write
+    /// through the same allocation is visible to the guest immediately. A
+    /// write may not span the hole below 4 GiB.
     ///
     /// # Errors
     ///
@@ -1423,14 +1434,16 @@ impl KvmVm {
         let end = addr
             .checked_add(data.len() as u64)
             .ok_or_else(|| Error::Memory(format!("Write at {:#x} overflows a u64", addr)))?;
-        if end > self.memory_size {
+        let host = crate::memory::host_offset(self.memory_size, addr);
+        let last = end.checked_sub(1).and_then(|l| crate::memory::host_offset(self.memory_size, l));
+        let Some(host) = host.filter(|h| data.is_empty() || last == Some(h + data.len() as u64 - 1)) else {
             return Err(Error::Memory(format!(
-                "Write at {:#x} with length {} exceeds guest memory size {:#x}",
+                "Write at {:#x} with length {} is not within guest RAM of {:#x} bytes",
                 addr,
                 data.len(),
                 self.memory_size
             )));
-        }
+        };
 
         // SAFETY: The bounds check above guarantees `addr + data.len()` is
         // within the `memory_size` allocation `ptr` points at, and the source
@@ -1439,7 +1452,7 @@ impl KvmVm {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 data.as_ptr(),
-                ptr.as_ptr().add(addr as usize),
+                ptr.as_ptr().add(host as usize),
                 data.len(),
             );
         }

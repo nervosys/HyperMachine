@@ -590,6 +590,9 @@ struct Context {
     env: BTreeMap<String, String>,
     cwd: String,
     user: String,
+    /// The guest's own environment when the build began -- the image's
+    /// `ENV` among it -- which an `ENV` value's `$PATH` refers to.
+    base_env: BTreeMap<String, String>,
 }
 
 async fn steps_then_snapshot(
@@ -608,10 +611,22 @@ async fn steps_then_snapshot(
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
         .unwrap_or_default();
+    let base_env: BTreeMap<String, String> = vm
+        .exec_in_guest("/bin/busybox", &["env".to_string()], AGENT_TIMEOUT)
+        .await
+        .map(|out| {
+            out.stdout
+                .lines()
+                .filter_map(|l| l.split_once('='))
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut context = Context {
         env: inherited.env,
         cwd: inherited.cwd.unwrap_or_else(|| "/".into()),
         user: "root".into(),
+        base_env,
     };
 
     for (index, step) in spec.steps.iter().enumerate() {
@@ -645,7 +660,10 @@ async fn steps_then_snapshot(
             "ENV" => {
                 for pair in step.args.chunks(2) {
                     if let [key, value] = pair {
-                        context.env.insert(key.clone(), value.clone());
+                        let mut known = context.base_env.clone();
+                        known.extend(context.env.clone());
+                        let value = expand(value, &known);
+                        context.env.insert(key.clone(), value);
                     }
                 }
             }
@@ -779,6 +797,51 @@ fn shown(step: &Step) -> String {
         ),
         _ => step.args.join(" "),
     }
+}
+
+/// `$NAME` and `${NAME}` in an `ENV` value, from the variables set before
+/// it, as Docker expands them; one unset expands to nothing, and `\$` is a
+/// literal `$`.
+fn expand(value: &str, env: &BTreeMap<String, String>) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'$') => out.push(chars.next().unwrap_or('$')),
+            '$' => {
+                let braced = chars.peek() == Some(&'{');
+                if braced {
+                    chars.next();
+                }
+                let mut name = String::new();
+                while let Some(&n) = chars.peek() {
+                    if n.is_ascii_alphanumeric() || n == '_' {
+                        name.push(n);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if braced {
+                    if chars.peek() == Some(&'}') {
+                        chars.next();
+                    } else {
+                        // Not a reference after all: kept as written.
+                        out.push_str("${");
+                        out.push_str(&name);
+                        continue;
+                    }
+                }
+                if name.is_empty() {
+                    out.push('$');
+                } else if let Some(v) = env.get(&name) {
+                    out.push_str(v);
+                }
+            }
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 /// `path` from `cwd`, as `WORKDIR` and `COPY` resolve a relative path.
@@ -1156,6 +1219,18 @@ mod tests {
     fn nothing_matching_is_an_error_not_an_empty_copy() {
         let dir = upload(&[("a.txt", Some(b"a"))]);
         assert!(repack(&dir.path.join("u.tar"), "b.txt", "/x/").is_err());
+    }
+
+    /// `ENV` values refer to what was set before them, as in Docker.
+    #[test]
+    fn env_values_expand_as_dockers_do() {
+        let env: BTreeMap<String, String> =
+            [("PATH", "/usr/bin"), ("V", "11")].map(|(k, v)| (k.to_string(), v.to_string())).into();
+        assert_eq!(expand("/opt/bin:$PATH", &env), "/opt/bin:/usr/bin");
+        assert_eq!(expand("/jvm/jdk-${V}", &env), "/jvm/jdk-11");
+        assert_eq!(expand("$UNSET-x", &env), "-x");
+        assert_eq!(expand(r"cost \$5", &env), "cost $5");
+        assert_eq!(expand("${V", &env), "${V");
     }
 
     #[test]
