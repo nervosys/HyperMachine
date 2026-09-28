@@ -297,6 +297,13 @@ impl Drop for KeyPair {
 // FIPS Crypto Module
 // ============================================================================
 
+/// The GCM tag length, appended to every ciphertext this module produces.
+///
+/// One constant for both key sizes, so the wire format does not depend on
+/// the key; checked against both ciphers at compile time.
+const GCM_TAG_LEN: usize = <ic_cipher::Aes256Gcm as ic_core::traits::Aead>::TAG_LEN;
+const _: () = assert!(GCM_TAG_LEN == <ic_cipher::Aes128Gcm as ic_core::traits::Aead>::TAG_LEN);
+
 /// FIPS-compliant cryptographic operations
 pub struct FipsCrypto {
     mode: FipsMode,
@@ -454,23 +461,35 @@ impl FipsCrypto {
     ) -> CryptoResult<Vec<u8>> {
         use ic_core::traits::Aead;
 
-        // IronCrypto's AES-256-GCM (SP 800-38D), pure Rust and validated
+        // IronCrypto's AES-GCM (SP 800-38D), pure Rust and validated
         // against the published vectors. There is still no hand-rolled
         // fallback and there should not be one: the reason the old comment
         // here gave -- that a hand-written construction is not validated and
         // risks silently shipping non-conformant crypto -- is the same reason
         // the RSA modexp this module used to carry returned the wrong number.
-        let cipher = ic_cipher::Aes256Gcm::new(key)
-            .map_err(|e| CryptoError::EncryptionFailed(format!("AES-256-GCM key: {e}")))?;
-
+        //
+        // The cipher follows the key: IronCrypto's GCM types each take one
+        // key length, and this function once built AES-256 for every key, so
+        // the 16-byte keys `AesKeySize::Aes128` generates and the public entry
+        // points accept were refused here on every call.
+        //
         // Tag appended, which is what every caller of this function and the
         // wire format they use expects. `seal_detached` keeps them apart, so
         // the join happens here rather than in the cipher.
         let mut in_out = plaintext.to_vec();
-        let mut tag = [0u8; <ic_cipher::Aes256Gcm as Aead>::TAG_LEN];
-        cipher
-            .seal_detached(nonce, aad, &mut in_out, &mut tag)
-            .map_err(|e| CryptoError::EncryptionFailed(format!("AES-256-GCM seal: {e}")))?;
+        let mut tag = [0u8; GCM_TAG_LEN];
+        macro_rules! seal {
+            ($cipher:ty, $name:literal) => {
+                <$cipher>::new(key)
+                    .map_err(|e| CryptoError::EncryptionFailed(format!("{} key: {e}", $name)))?
+                    .seal_detached(nonce, aad, &mut in_out, &mut tag)
+                    .map_err(|e| CryptoError::EncryptionFailed(format!("{} seal: {e}", $name)))?
+            };
+        }
+        match key.len() {
+            16 => seal!(ic_cipher::Aes128Gcm, "AES-128-GCM"),
+            _ => seal!(ic_cipher::Aes256Gcm, "AES-256-GCM"),
+        }
         in_out.extend_from_slice(&tag);
         Ok(in_out)
     }
@@ -484,24 +503,30 @@ impl FipsCrypto {
     ) -> CryptoResult<Vec<u8>> {
         use ic_core::traits::Aead;
 
-        const TAG_LEN: usize = <ic_cipher::Aes256Gcm as Aead>::TAG_LEN;
-        if ciphertext.len() < TAG_LEN {
+        if ciphertext.len() < GCM_TAG_LEN {
             // Shorter than a tag means there is no tag, so there is nothing to
             // authenticate against and the answer is the same as a forgery.
             return Err(CryptoError::AuthenticationFailed);
         }
 
-        let cipher = ic_cipher::Aes256Gcm::new(key)
-            .map_err(|e| CryptoError::DecryptionFailed(format!("AES-256-GCM key: {e}")))?;
-
-        let (body, tag) = ciphertext.split_at(ciphertext.len() - TAG_LEN);
+        let (body, tag) = ciphertext.split_at(ciphertext.len() - GCM_TAG_LEN);
         let mut in_out = body.to_vec();
-        cipher
-            .open_detached(nonce, aad, &mut in_out, tag)
-            // Deliberately one error for every way this fails: a wrong key, a
-            // wrong nonce, altered ciphertext and altered AAD are
-            // indistinguishable to a caller, which is the point of an AEAD.
-            .map_err(|_| CryptoError::AuthenticationFailed)?;
+        macro_rules! open {
+            ($cipher:ty, $name:literal) => {
+                <$cipher>::new(key)
+                    .map_err(|e| CryptoError::DecryptionFailed(format!("{} key: {e}", $name)))?
+                    .open_detached(nonce, aad, &mut in_out, tag)
+            };
+        }
+        // The cipher follows the key, as in `aes_gcm_encrypt_internal`.
+        match key.len() {
+            16 => open!(ic_cipher::Aes128Gcm, "AES-128-GCM"),
+            _ => open!(ic_cipher::Aes256Gcm, "AES-256-GCM"),
+        }
+        // Deliberately one error for every way this fails: a wrong key, a
+        // wrong nonce, altered ciphertext and altered AAD are
+        // indistinguishable to a caller, which is the point of an AEAD.
+        .map_err(|_| CryptoError::AuthenticationFailed)?;
         Ok(in_out)
     }
 
@@ -971,6 +996,39 @@ mod tests {
             .aes_gcm_decrypt(key.as_bytes(), &ciphertext, aad)
             .expect("decrypt");
         assert_eq!(decrypted, plaintext);
+    }
+
+    /// `AesKeySize::Aes128` is offered and a 16-byte key passes validation,
+    /// so it has to work: a size accepted at the door and refused inside is
+    /// a claim with nothing behind it.
+    #[test]
+    fn test_aes_128_gcm_roundtrip() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
+        let key = crypto.generate_aes_key(AesKeySize::Aes128).unwrap();
+        assert_eq!(key.as_bytes().len(), 16);
+
+        let ciphertext = crypto
+            .aes_gcm_encrypt(key.as_bytes(), b"sixteen-byte key", b"aad")
+            .expect("encrypt with a 128-bit key");
+        let decrypted = crypto
+            .aes_gcm_decrypt(key.as_bytes(), &ciphertext, b"aad")
+            .expect("decrypt with a 128-bit key");
+        assert_eq!(decrypted, b"sixteen-byte key");
+    }
+
+    /// Test Case 2 of the GCM specification (McGrew & Viega): an all-zero
+    /// 128-bit key, IV and block. A round trip cannot tell AES-128 from
+    /// AES-256 run on a padded key; a known answer can.
+    #[test]
+    fn aes_128_gcm_matches_the_published_vector() {
+        let crypto = FipsCrypto::new(FipsMode::Disabled).unwrap();
+        let sealed = crypto
+            .aes_gcm_encrypt_internal(&[0u8; 16], &[0u8; 12], &[0u8; 16], b"")
+            .expect("AES-128-GCM");
+        assert_eq!(
+            hex(&sealed),
+            "0388dace60b6a392f328c2b971b2fe78ab6e47d42cec13bdf53a67b21257bddf"
+        );
     }
 
     #[test]
