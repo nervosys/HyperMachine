@@ -270,6 +270,7 @@ impl FipsCrypto {
     /// OS separately. All components (n, e, d, p, q, and the CRT values) are
     /// stored as raw big-endian byte strings.
     pub fn generate_rsa_keypair(&self, size: RsaKeySize) -> CryptoResult<RsaPrivateKey> {
+        self.require_approved("rsa-pss-sha256")?;
         let bits = size.bytes() * 8;
         // A modulus of exactly `bits` bits, top bit set: what `ic-rsa` would
         // be asked for, measured the same way a stored key is.
@@ -375,6 +376,7 @@ impl FipsCrypto {
     /// been burned by. Masking first is what makes the redraw rare; without it
     /// P-521 rejects almost every candidate.
     pub fn generate_ecdsa_keypair(&self, curve: EcCurve) -> CryptoResult<EcPrivateKey> {
+        self.require_approved(ecdsa_fips_id(curve))?;
         let (private_len, public_len) = key_lengths(curve);
         let mut d = vec![0u8; private_len];
         let mut public = vec![0u8; public_len];
@@ -436,6 +438,9 @@ impl FipsCrypto {
         data: &[u8],
         algorithm: SignatureAlgorithm,
     ) -> CryptoResult<Signature> {
+        if let Some(id) = rsa_fips_id(algorithm) {
+            self.require_approved(id)?;
+        }
         use ic_rsa::{Pkcs1Sha256, Pkcs1Sha384, Pkcs1Sha512, PssSha256, PssSha384, PssSha512};
 
         refuse_unsafe_rsa_width(&private_key.public.n)?;
@@ -487,6 +492,9 @@ impl FipsCrypto {
         data: &[u8],
         signature: &Signature,
     ) -> CryptoResult<bool> {
+        if let Some(id) = rsa_fips_id(signature.algorithm) {
+            self.require_approved(id)?;
+        }
         use ic_rsa::{Pkcs1Sha256, Pkcs1Sha384, Pkcs1Sha512, PssSha256, PssSha384, PssSha512};
 
         let key = ic_rsa::RsaPublicKey::from_components(&public_key.n, be_exponent(&public_key.e)?)
@@ -515,6 +523,7 @@ impl FipsCrypto {
 
     /// Sign data with ECDSA private key
     pub fn ecdsa_sign(&self, private_key: &EcPrivateKey, data: &[u8]) -> CryptoResult<Signature> {
+        self.require_approved(ecdsa_fips_id(private_key.public.curve))?;
         let algorithm = match private_key.public.curve {
             EcCurve::P256 => SignatureAlgorithm::EcdsaP256Sha256,
             EcCurve::P384 => SignatureAlgorithm::EcdsaP384Sha384,
@@ -541,6 +550,7 @@ impl FipsCrypto {
         data: &[u8],
         signature: &Signature,
     ) -> CryptoResult<bool> {
+        self.require_approved(ecdsa_fips_id(public_key.curve))?;
         // Verify algorithm matches curve
         let expected_algorithm = match public_key.curve {
             EcCurve::P256 => SignatureAlgorithm::EcdsaP256Sha256,
@@ -583,6 +593,30 @@ impl ic_core::traits::RandomSource for HostRandom<'_> {
         self.0
             .random_bytes(out)
             .map_err(|_| ic_core::err!(Internal, "the host RNG failed"))
+    }
+}
+
+/// The `ic-fips` identifier for an RSA signature algorithm, or `None` for one
+/// that is not RSA.
+fn rsa_fips_id(algorithm: SignatureAlgorithm) -> Option<&'static str> {
+    Some(match algorithm {
+        SignatureAlgorithm::RsaPkcs1Sha256 => "rsa-pkcs1-sha256",
+        SignatureAlgorithm::RsaPkcs1Sha384 => "rsa-pkcs1-sha384",
+        SignatureAlgorithm::RsaPkcs1Sha512 => "rsa-pkcs1-sha512",
+        SignatureAlgorithm::RsaPssSha256 => "rsa-pss-sha256",
+        SignatureAlgorithm::RsaPssSha384 => "rsa-pss-sha384",
+        SignatureAlgorithm::RsaPssSha512 => "rsa-pss-sha512",
+        _ => return None,
+    })
+}
+
+/// The `ic-fips` identifier for ECDSA on `curve`, with the hash this module
+/// pairs it with.
+fn ecdsa_fips_id(curve: EcCurve) -> &'static str {
+    match curve {
+        EcCurve::P256 => "ecdsa-p256-sha256",
+        EcCurve::P384 => "ecdsa-p384-sha384",
+        EcCurve::P521 => "ecdsa-p521-sha512",
     }
 }
 
@@ -678,6 +712,23 @@ mod tests {
             assert!(!crypto
                 .rsa_verify(&key.public, b"tampered", &sig)
                 .expect("RSA verify failed"));
+        }
+    }
+
+    /// `Strict` serves RSA and ECDSA, which IronCrypto implements and
+    /// `ic-fips` self-tests and indicates as approved.
+    #[test]
+    fn strict_mode_serves_rsa_and_ecdsa() {
+        let crypto = FipsCrypto::new(FipsMode::Strict).unwrap();
+        let rsa = crypto.generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let sig = crypto
+            .rsa_sign(&rsa, b"m", SignatureAlgorithm::RsaPssSha256)
+            .unwrap();
+        assert!(crypto.rsa_verify(&rsa.public, b"m", &sig).unwrap());
+        for curve in [EcCurve::P256, EcCurve::P384, EcCurve::P521] {
+            let ec = crypto.generate_ecdsa_keypair(curve).unwrap();
+            let sig = crypto.ecdsa_sign(&ec, b"m").unwrap();
+            assert!(crypto.ecdsa_verify(&ec.public, b"m", &sig).unwrap());
         }
     }
 

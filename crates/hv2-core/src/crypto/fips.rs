@@ -49,11 +49,20 @@ use zeroize::Zeroize;
 /// FIPS operating mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FipsMode {
-    /// FIPS mode disabled - use standard crypto
+    /// No FIPS discipline: no self-tests, and random bytes from the thread
+    /// CSPRNG.
     Disabled,
-    /// FIPS mode enabled - use validated implementations
+    /// The FIPS 140-3 discipline, as far as IronCrypto provides it: every
+    /// pre-operational self-test `ic-fips` runs must pass before construction
+    /// succeeds, and random bytes come from an SP 800-90A HMAC_DRBG. Nothing
+    /// is refused. This is not a validated module: IronCrypto holds no CMVP
+    /// certificate (`ic_fips::VALIDATION_STATEMENT`).
     Enabled,
-    /// FIPS mode strict - fail if non-FIPS operation attempted
+    /// [`Self::Enabled`], plus refusal: every operation is checked against
+    /// `ic-fips` before it runs, and anything it does not indicate as approved,
+    /// or anything implemented outside IronCrypto, fails with
+    /// [`CryptoError::AlgorithmNotApproved`]. The post-quantum algorithms come
+    /// from RustCrypto, so they are refused here.
     Strict,
 }
 
@@ -308,6 +317,11 @@ const _: () = assert!(GCM_TAG_LEN == <ic_cipher::Aes128Gcm as ic_core::traits::A
 pub struct FipsCrypto {
     mode: FipsMode,
     status: FipsStatus,
+    /// The SP 800-90A HMAC_DRBG that supplies random bytes in every mode but
+    /// [`FipsMode::Disabled`]. FIPS 140-3 does not let a module hand out raw
+    /// OS or ChaCha bytes as key material; OS entropy seeds this, and this
+    /// generates keys, nonces and IVs.
+    drbg: Option<parking_lot::Mutex<ic_drbg::Rng>>,
 }
 
 impl FipsCrypto {
@@ -316,14 +330,74 @@ impl FipsCrypto {
         let mut status = FipsStatus::default();
         status.mode = mode;
 
-        let mut crypto = Self { mode, status };
+        let drbg = if mode == FipsMode::Disabled {
+            None
+        } else {
+            // IronCrypto's pre-operational self-tests: a known-answer test for
+            // every algorithm `ic-fips` covers, the DRBG among them. A first
+            // failure latches `ic-fips` in its error state for the life of the
+            // process. A later call re-runs them and reports without latching,
+            // so the report is checked here too.
+            let report = ic_fips::initialize()
+                .map_err(|e| CryptoError::SelfTestFailed(format!("IronCrypto self-tests: {e}")))?;
+            if !report.all_passed() {
+                let failed: Vec<_> = report.failures().map(|f| f.algorithm).collect();
+                return Err(CryptoError::SelfTestFailed(format!(
+                    "IronCrypto self-tests failed: {}",
+                    failed.join(", ")
+                )));
+            }
+            let rng = ic_drbg::Rng::from_os()
+                .map_err(|e| CryptoError::RngFailed(format!("seeding HMAC_DRBG: {e}")))?;
+            Some(parking_lot::Mutex::new(rng))
+        };
 
-        // Run self-tests on initialization
+        let mut crypto = Self { mode, status, drbg };
+
+        // This module's own known-answer tests, of its wrapper layer rather
+        // than of IronCrypto: the tag it appends, the byte order it stores.
         if mode != FipsMode::Disabled {
             crypto.run_self_tests()?;
         }
 
         Ok(crypto)
+    }
+
+    /// In [`FipsMode::Strict`], refuse `algorithm` unless `ic-fips` indicates
+    /// it as approved. `algorithm` is an `ic-fips` identifier, such as
+    /// `"aes-256-gcm"`. Other modes do not refuse.
+    pub(crate) fn require_approved(&self, algorithm: &'static str) -> CryptoResult<()> {
+        if self.mode != FipsMode::Strict {
+            return Ok(());
+        }
+        match ic_fips::check(algorithm) {
+            Ok(ic_fips::ServiceIndicator::Approved) => Ok(()),
+            Ok(other) => Err(CryptoError::AlgorithmNotApproved(format!(
+                "{algorithm}: ic-fips indicates it as {}",
+                other.id()
+            ))),
+            Err(e) => Err(CryptoError::AlgorithmNotApproved(format!(
+                "{algorithm}: {e}"
+            ))),
+        }
+    }
+
+    /// In [`FipsMode::Strict`], refuse an algorithm this module implements
+    /// outside IronCrypto.
+    ///
+    /// Asking `ic-fips` about it would be wrong, not merely unhelpful: it
+    /// knows `"ml-kem-768"`, but as IronCrypto's own `ic-mlkem`, which it
+    /// self-tests. Its answer would vouch for an implementation it has never
+    /// run.
+    pub(crate) fn require_inside_boundary(&self, algorithm: &str) -> CryptoResult<()> {
+        if self.mode != FipsMode::Strict {
+            return Ok(());
+        }
+        Err(CryptoError::AlgorithmNotApproved(format!(
+            "{algorithm} is implemented by RustCrypto, outside the IronCrypto module \
+             boundary that FipsMode::Strict is held to; ic-fips neither self-tests \
+             nor indicates it"
+        )))
     }
 
     /// Get current FIPS status
@@ -362,6 +436,16 @@ impl FipsCrypto {
     /// Generate cryptographically secure random bytes
     pub fn random_bytes(&self, buffer: &mut [u8]) -> CryptoResult<()> {
         use rand::TryRng;
+
+        if let Some(drbg) = &self.drbg {
+            self.require_approved("hmac-drbg-sha2-256")?;
+            return drbg
+                .lock()
+                .fill(buffer)
+                .map_err(|e| CryptoError::RngFailed(format!("HMAC_DRBG: {e}")));
+        }
+
+        // Disabled mode only.
 
         // `rand::rng()` is the thread-local `ThreadRng`, a CSPRNG (ChaCha12)
         // periodically reseeded from the OS random source.
@@ -412,6 +496,12 @@ impl FipsCrypto {
             });
         }
 
+        self.require_approved(if key.len() == 16 {
+            "aes-128-gcm"
+        } else {
+            "aes-256-gcm"
+        })?;
+
         // Generate random 96-bit nonce
         let mut nonce = [0u8; 12];
         self.random_bytes(&mut nonce)?;
@@ -448,6 +538,11 @@ impl FipsCrypto {
             });
         }
 
+        self.require_approved(if key.len() == 16 {
+            "aes-128-gcm"
+        } else {
+            "aes-256-gcm"
+        })?;
         self.aes_gcm_decrypt_internal(key, &ciphertext.nonce, &ciphertext.ciphertext, aad)
     }
 
@@ -540,6 +635,7 @@ impl FipsCrypto {
     /// against the FIPS 180-4 vectors. It needs no feature flag, so the arm
     /// that used to return `NotImplemented` has nothing left to guard.
     pub fn sha256(&self, data: &[u8]) -> CryptoResult<[u8; 32]> {
+        self.require_approved("sha2-256")?;
         use ic_core::traits::Digest;
         Ok(ic_hash::Sha256::digest(data))
     }
@@ -550,6 +646,7 @@ impl FipsCrypto {
     /// against the FIPS 180-4 vectors. It needs no feature flag, so the arm
     /// that used to return `NotImplemented` has nothing left to guard.
     pub fn sha384(&self, data: &[u8]) -> CryptoResult<[u8; 48]> {
+        self.require_approved("sha2-384")?;
         use ic_core::traits::Digest;
         Ok(ic_hash::Sha384::digest(data))
     }
@@ -560,6 +657,7 @@ impl FipsCrypto {
     /// against the FIPS 180-4 vectors. It needs no feature flag, so the arm
     /// that used to return `NotImplemented` has nothing left to guard.
     pub fn sha512(&self, data: &[u8]) -> CryptoResult<[u8; 64]> {
+        self.require_approved("sha2-512")?;
         use ic_core::traits::Digest;
         Ok(ic_hash::Sha512::digest(data))
     }
@@ -570,6 +668,7 @@ impl FipsCrypto {
 
     /// HMAC-SHA256
     pub fn hmac_sha256(&self, key: &[u8], data: &[u8]) -> CryptoResult<[u8; 32]> {
+        self.require_approved("hmac-sha2-256")?;
         use ic_core::traits::Mac;
         ic_mac::Hmac::<ic_hash::Sha256>::mac(key, data)
             .map_err(|e| CryptoError::EncryptionFailed(format!("HMAC-SHA256: {e}")))
@@ -577,6 +676,7 @@ impl FipsCrypto {
 
     /// HMAC-SHA512
     pub fn hmac_sha512(&self, key: &[u8], data: &[u8]) -> CryptoResult<[u8; 64]> {
+        self.require_approved("hmac-sha2-512")?;
         use ic_core::traits::Mac;
         ic_mac::Hmac::<ic_hash::Sha512>::mac(key, data)
             .map_err(|e| CryptoError::EncryptionFailed(format!("HMAC-SHA512: {e}")))
@@ -594,6 +694,7 @@ impl FipsCrypto {
         info: &[u8],
         output_len: usize,
     ) -> CryptoResult<Vec<u8>> {
+        self.require_approved("hkdf-sha2-256")?;
         use ic_core::traits::Digest;
 
         // Extract then expand, RFC 5869's two steps, rather than `ring`'s
@@ -979,6 +1080,49 @@ mod tests {
         let key256 = crypto.generate_aes_key(AesKeySize::Aes256).unwrap();
         assert_eq!(key256.len(), 32);
         assert_eq!(key256.algorithm(), "AES-256");
+    }
+
+    /// `Strict` constructs only after IronCrypto's self-tests pass, and then
+    /// serves every operation `ic-fips` indicates as approved.
+    #[test]
+    fn strict_mode_runs_the_ironcrypto_self_tests_and_serves_approved_operations() {
+        let crypto = FipsCrypto::new(FipsMode::Strict).expect("Strict constructs");
+        assert!(matches!(ic_fips::state(), ic_fips::State::Operational(_)));
+
+        let key = crypto.generate_aes_key(AesKeySize::Aes256).unwrap();
+        let sealed = crypto.aes_gcm_encrypt(key.as_bytes(), b"p", b"a").unwrap();
+        assert_eq!(
+            crypto
+                .aes_gcm_decrypt(key.as_bytes(), &sealed, b"a")
+                .unwrap(),
+            b"p"
+        );
+        let key128 = crypto.generate_aes_key(AesKeySize::Aes128).unwrap();
+        crypto
+            .aes_gcm_encrypt(key128.as_bytes(), b"p", b"a")
+            .unwrap();
+        crypto.sha256(b"x").unwrap();
+        crypto.sha384(b"x").unwrap();
+        crypto.sha512(b"x").unwrap();
+        crypto.hmac_sha256(b"k", b"x").unwrap();
+        crypto.hmac_sha512(b"k", b"x").unwrap();
+        crypto.hkdf_sha256(b"salt", b"ikm", b"info", 32).unwrap();
+    }
+
+    /// Both FIPS modes draw random bytes from the SP 800-90A HMAC_DRBG, and
+    /// `Disabled` does not construct one.
+    #[test]
+    fn fips_modes_draw_from_the_drbg_and_disabled_does_not() {
+        for mode in [FipsMode::Enabled, FipsMode::Strict] {
+            let crypto = FipsCrypto::new(mode).unwrap();
+            assert!(crypto.drbg.is_some(), "{mode:?} has no DRBG");
+            let mut a = [0u8; 32];
+            let mut b = [0u8; 32];
+            crypto.random_bytes(&mut a).unwrap();
+            crypto.random_bytes(&mut b).unwrap();
+            assert_ne!(a, b, "{mode:?} repeated itself");
+        }
+        assert!(FipsCrypto::new(FipsMode::Disabled).unwrap().drbg.is_none());
     }
 
     #[test]

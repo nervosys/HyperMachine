@@ -510,6 +510,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **`FipsMode::Strict` refused nothing** (`hv2-core`). Documented as "fail if
+  non-FIPS operation attempted", it was never read: `AlgorithmNotApproved`
+  was defined and never returned, and `Strict` behaved exactly like
+  `Enabled`. Now every operation is checked against IronCrypto's `ic-fips`
+  before it runs. The post-quantum algorithms, which come from RustCrypto
+  and outside the boundary `ic-fips` self-tests, are refused with a reason.
+- **FIPS modes drew keys from ChaCha12** (`hv2-core`). `Enabled` and `Strict`
+  now construct only after `ic-fips` runs IronCrypto's pre-operational
+  self-tests, and they take random bytes from an SP 800-90A HMAC_DRBG
+  (`ic-drbg`). `Disabled` is unchanged. None of this is CMVP validation.
 - **RSA-4096 key generation and signing panicked** (`hv2-core`, in IronCrypto's
   `ic-rsa` 0.1.3), which under `panic = "abort"` ends the process. Both are now
   refused with `UnsupportedAlgorithm` until `ic-rsa` is fixed; RSA-2048 and
