@@ -467,6 +467,7 @@ impl FipsCrypto {
     /// Generate an ML-KEM key pair. The secret key stores the 64-byte FIPS 203
     /// seed; the public (encapsulation) key stores its canonical encoding.
     pub fn ml_kem_keygen(&self, params: MlKemParameterSet) -> CryptoResult<MlKemSecretKey> {
+        self.require_inside_boundary("ML-KEM")?;
         use ml_kem::kem::{Kem, KeyExport};
 
         let (secret_data, public_data) = mlkem_with!(params, P, {
@@ -491,6 +492,7 @@ impl FipsCrypto {
         &self,
         public_key: &MlKemPublicKey,
     ) -> CryptoResult<(MlKemCiphertext, Vec<u8>)> {
+        self.require_inside_boundary("ML-KEM")?;
         use ml_kem::kem::{Encapsulate, Key};
         use ml_kem::EncapsulationKey;
 
@@ -519,6 +521,7 @@ impl FipsCrypto {
         secret_key: &MlKemSecretKey,
         ciphertext: &MlKemCiphertext,
     ) -> CryptoResult<Vec<u8>> {
+        self.require_inside_boundary("ML-KEM")?;
         use ml_kem::kem::{Ciphertext, Decapsulate};
         use ml_kem::DecapsulationKey;
 
@@ -545,6 +548,7 @@ impl FipsCrypto {
 
     /// Generate an ML-DSA key pair.
     pub fn ml_dsa_keygen(&self, params: MlDsaParameterSet) -> CryptoResult<MlDsaSecretKey> {
+        self.require_inside_boundary("ML-DSA")?;
         use ml_dsa::signature::Keypair;
         use ml_dsa::{Generate, KeyExport, SigningKey};
 
@@ -569,6 +573,7 @@ impl FipsCrypto {
         secret_key: &MlDsaSecretKey,
         message: &[u8],
     ) -> CryptoResult<MlDsaSignature> {
+        self.require_inside_boundary("ML-DSA")?;
         use ml_dsa::signature::Signer;
         use ml_dsa::{KeyInit, SigningKey};
 
@@ -596,6 +601,7 @@ impl FipsCrypto {
         message: &[u8],
         signature: &MlDsaSignature,
     ) -> CryptoResult<bool> {
+        self.require_inside_boundary("ML-DSA")?;
         use ml_dsa::signature::Verifier;
         use ml_dsa::{KeyInit, Signature, VerifyingKey};
 
@@ -625,6 +631,7 @@ impl FipsCrypto {
 
     /// Generate an SLH-DSA key pair.
     pub fn slh_dsa_keygen(&self, params: SlhDsaParameterSet) -> CryptoResult<SlhDsaSecretKey> {
+        self.require_inside_boundary("SLH-DSA")?;
         let (secret_data, public_data) = slhdsa_with!(params, P, {
             let sk = slh_dsa::SigningKey::<P>::new(&mut PqcOsRng);
             let vk: &slh_dsa::VerifyingKey<P> = sk.as_ref();
@@ -646,6 +653,7 @@ impl FipsCrypto {
         secret_key: &SlhDsaSecretKey,
         message: &[u8],
     ) -> CryptoResult<SlhDsaSignature> {
+        self.require_inside_boundary("SLH-DSA")?;
         use slh_dsa::signature::Signer;
 
         let params = secret_key.public.parameter_set;
@@ -671,6 +679,7 @@ impl FipsCrypto {
         message: &[u8],
         signature: &SlhDsaSignature,
     ) -> CryptoResult<bool> {
+        self.require_inside_boundary("SLH-DSA")?;
         use slh_dsa::signature::Verifier;
 
         if signature.parameter_set != public_key.parameter_set {
@@ -707,6 +716,7 @@ impl FipsCrypto {
 
     /// ML-KEM key generation (requires the `pqc` feature).
     pub fn ml_kem_keygen(&self, _params: MlKemParameterSet) -> CryptoResult<MlKemSecretKey> {
+        self.require_inside_boundary("ML-KEM")?;
         Self::pqc_disabled()
     }
     /// ML-KEM encapsulation (requires the `pqc` feature).
@@ -714,6 +724,7 @@ impl FipsCrypto {
         &self,
         _public_key: &MlKemPublicKey,
     ) -> CryptoResult<(MlKemCiphertext, Vec<u8>)> {
+        self.require_inside_boundary("ML-KEM")?;
         Self::pqc_disabled()
     }
     /// ML-KEM decapsulation (requires the `pqc` feature).
@@ -722,10 +733,12 @@ impl FipsCrypto {
         _secret_key: &MlKemSecretKey,
         _ciphertext: &MlKemCiphertext,
     ) -> CryptoResult<Vec<u8>> {
+        self.require_inside_boundary("ML-KEM")?;
         Self::pqc_disabled()
     }
     /// ML-DSA key generation (requires the `pqc` feature).
     pub fn ml_dsa_keygen(&self, _params: MlDsaParameterSet) -> CryptoResult<MlDsaSecretKey> {
+        self.require_inside_boundary("ML-DSA")?;
         Self::pqc_disabled()
     }
     /// ML-DSA sign (requires the `pqc` feature).
@@ -734,6 +747,7 @@ impl FipsCrypto {
         _secret_key: &MlDsaSecretKey,
         _message: &[u8],
     ) -> CryptoResult<MlDsaSignature> {
+        self.require_inside_boundary("ML-DSA")?;
         Self::pqc_disabled()
     }
     /// ML-DSA verify (requires the `pqc` feature).
@@ -743,10 +757,12 @@ impl FipsCrypto {
         _message: &[u8],
         _signature: &MlDsaSignature,
     ) -> CryptoResult<bool> {
+        self.require_inside_boundary("ML-DSA")?;
         Self::pqc_disabled()
     }
     /// SLH-DSA key generation (requires the `pqc` feature).
     pub fn slh_dsa_keygen(&self, _params: SlhDsaParameterSet) -> CryptoResult<SlhDsaSecretKey> {
+        self.require_inside_boundary("SLH-DSA")?;
         Self::pqc_disabled()
     }
     /// SLH-DSA sign (requires the `pqc` feature).
@@ -755,6 +771,7 @@ impl FipsCrypto {
         _secret_key: &SlhDsaSecretKey,
         _message: &[u8],
     ) -> CryptoResult<SlhDsaSignature> {
+        self.require_inside_boundary("SLH-DSA")?;
         Self::pqc_disabled()
     }
     /// SLH-DSA verify (requires the `pqc` feature).
@@ -764,6 +781,7 @@ impl FipsCrypto {
         _message: &[u8],
         _signature: &SlhDsaSignature,
     ) -> CryptoResult<bool> {
+        self.require_inside_boundary("SLH-DSA")?;
         Self::pqc_disabled()
     }
 }
@@ -885,6 +903,36 @@ mod tests {
         assert!(!crypto
             .slh_dsa_verify(&sk.public, b"tampered", &sig)
             .unwrap());
+    }
+
+    /// `Strict` refuses the post-quantum algorithms: they come from RustCrypto,
+    /// outside the IronCrypto boundary `ic-fips` self-tests and indicates.
+    /// `Enabled` does not refuse, so they still work there.
+    #[cfg(feature = "pqc")]
+    #[test]
+    fn strict_mode_refuses_what_ic_fips_cannot_vouch_for() {
+        let strict = FipsCrypto::new(FipsMode::Strict).unwrap();
+        let refused = |r: CryptoResult<()>| matches!(r, Err(CryptoError::AlgorithmNotApproved(_)));
+        assert!(refused(
+            strict
+                .ml_kem_keygen(MlKemParameterSet::MlKem768)
+                .map(|_| ())
+        ));
+        assert!(refused(
+            strict.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).map(|_| ())
+        ));
+        assert!(refused(
+            strict
+                .slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f)
+                .map(|_| ())
+        ));
+
+        let enabled = FipsCrypto::new(FipsMode::Enabled).unwrap();
+        let sk = enabled.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).unwrap();
+        let sig = enabled.ml_dsa_sign(&sk, b"m").unwrap();
+        assert!(enabled.ml_dsa_verify(&sk.public, b"m", &sig).unwrap());
+        // A key made where it was allowed is still refused where it is not.
+        assert!(refused(strict.ml_dsa_sign(&sk, b"m").map(|_| ())));
     }
 
     /// Every ML-DSA parameter set signs and verifies, not only ML-DSA-65:

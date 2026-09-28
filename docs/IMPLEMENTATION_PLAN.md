@@ -163,8 +163,13 @@ less — than the code does. These are the known instances still outstanding.
 
 One library for all cryptography, and none of it hand-rolled.
 
-- [ ] **Adopt `ic-fips`** for FIPS module policy, self-tests and service
-  indicators. *M.*
+- [x] **Adopt `ic-fips`** for FIPS module policy, self-tests and service
+  indicators. *M.* Done 2026-09-28. `Enabled` and `Strict` run `ic-fips`'s
+  pre-operational self-tests and draw from `ic-drbg`'s HMAC_DRBG. `Strict`
+  checks every operation and refuses the RustCrypto post-quantum algorithms
+  as outside the boundary. Before this, `Strict` refused nothing. The
+  module-wide approved mode (`ic_fips::set_mode`) is left to the operator,
+  since a library switching process state behind its caller would be wrong.
   This is the layer the repository hand-rolled and got wrong: `kat_aes_gcm`
   was an encrypt-then-decrypt round trip, and `kat_hmac_sha256` discarded its
   MAC. Done when: `FipsMode` self-tests delegate to `ic-fips`, and the
