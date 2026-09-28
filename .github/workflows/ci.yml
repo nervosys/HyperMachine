@@ -22,13 +22,13 @@ jobs:
         name: Check
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -39,7 +39,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -53,13 +53,13 @@ jobs:
             matrix:
                 os: [ubuntu-latest, windows-latest, macos-latest]
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -70,7 +70,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -106,10 +106,10 @@ jobs:
         name: Sandbox Containment (Linux, all controls)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Allow unprivileged user namespaces
               run: |
@@ -153,13 +153,13 @@ jobs:
         name: Test Core (Linux only)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -171,7 +171,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -185,13 +185,13 @@ jobs:
         name: Test Core (Windows)
         runs-on: windows-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -209,13 +209,13 @@ jobs:
         name: Test Core (macOS)
         runs-on: macos-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -233,7 +233,7 @@ jobs:
         name: MSRV Check
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             # Read from Cargo.toml rather than pinned here. A hard-coded
             # number drifts: this job pinned 1.87 while the workspace declared
@@ -264,12 +264,12 @@ jobs:
                   echo "version=$version" >> "$GITHUB_OUTPUT"
 
             - name: Install MSRV toolchain
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
               with:
                   toolchain: ${{ steps.msrv.outputs.version }}
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -281,7 +281,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -292,10 +292,10 @@ jobs:
         name: Rustfmt
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
               with:
                   components: rustfmt
 
@@ -306,15 +306,15 @@ jobs:
         name: Clippy
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
               with:
                   components: clippy
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -326,7 +326,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -337,13 +337,13 @@ jobs:
         name: Documentation
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -374,13 +374,13 @@ jobs:
         # out: 359 KiB fits in cache, so it reports 11 GiB/s and measures the
         # probe rather than the memory bus.
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -417,13 +417,13 @@ jobs:
                       artifact: hm
                       extra_artifact: hv2
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -435,7 +435,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@v3
+              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
               with:
                   repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -445,14 +445,14 @@ jobs:
                   cargo build --release --package hv2-cli
 
             - name: Upload hm artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
               with:
                   name: hm-${{ matrix.target }}
                   path: target/release/${{ matrix.artifact }}
                   retention-days: 30
 
             - name: Upload hv2 artifact
-              uses: actions/upload-artifact@v4
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
               with:
                   name: hv2-${{ matrix.target }}
                   path: target/release/${{ matrix.extra_artifact }}
@@ -479,16 +479,16 @@ jobs:
         name: HV1 Check (nightly, bare-metal)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
               with:
                   toolchain: nightly-2026-08-17
                   components: rust-src
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -525,16 +525,16 @@ jobs:
         name: HV1 ARM64 Check (nightly, aarch64-unknown-none)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
               with:
                   toolchain: nightly-2026-08-17
                   components: rust-src
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -564,7 +564,7 @@ jobs:
         name: Unikernel Guest Build (stable, i686)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             # Stable, and no -Zbuild-std: `x86_64-unknown-none` is a real
             # freestanding target that rustup ships a prebuilt `core` for, so
@@ -573,13 +573,13 @@ jobs:
             # the Linux parts linked away -- until the guest outgrew a 4 GiB
             # address space.
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
               with:
                   targets: x86_64-unknown-none
                   components: clippy
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -658,7 +658,7 @@ jobs:
         name: HV1 Multiboot Image (stable, x86_64-unknown-none)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             # Stable and no -Zbuild-std: `x86_64-unknown-none` is a real
             # freestanding target with a prebuilt `core`. This is what makes an
@@ -666,13 +666,13 @@ jobs:
             # the `bootloader` crate, which needs nightly, and is why the Type-1
             # hypervisor went so long without ever being run.
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
               with:
                   targets: x86_64-unknown-none
                   components: clippy
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -746,13 +746,13 @@ jobs:
         name: HV1 ARM64 Test (host)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install Rust toolchain
-              uses: dtolnay/rust-toolchain@stable
+              uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -770,15 +770,15 @@ jobs:
         name: HV1 Test (nightly, host)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
               with:
                   toolchain: nightly-2026-08-17
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
@@ -796,16 +796,16 @@ jobs:
         name: HV1 Clippy (nightly)
         runs-on: ubuntu-latest
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
             - name: Install nightly toolchain
-              uses: dtolnay/rust-toolchain@master
+              uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
               with:
                   toolchain: nightly-2026-08-17
                   components: clippy, rust-src
 
             - name: Cache cargo registry
-              uses: actions/cache@v4
+              uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
               with:
                   path: |
                       ~/.cargo/registry
