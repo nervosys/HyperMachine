@@ -135,6 +135,8 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/v2/templates/{id}/builds/{build}", post(to_builder))
         .route("/templates/{id}/builds/{build}/status", get(to_builder))
         .route("/templates/aliases/{alias}", get(template_alias))
+        .route("/volumes", get(list_volumes).post(to_volume_node))
+        .route("/volumes/{id}", get(to_volume_node).delete(to_volume_node))
         .route("/sandboxes/{id}/refreshes", post(forward))
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
@@ -159,6 +161,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         // Without the key: the SDK sends none with an upload. The node
         // checks the token its authenticated link carried.
         .route("/templates/{id}/files/{hash}", axum::routing::put(to_builder))
+        // Volume content: each volume's bearer token, which its node checks.
+        .route("/volumecontent/{id}/file", any(to_volume_node))
+        .route("/volumecontent/{id}/dir", any(to_volume_node))
+        .route("/volumecontent/{id}/path", any(to_volume_node))
         .merge(e2b)
         .fallback(|uri: axum::http::Uri| async move {
             api_error(StatusCode::NOT_FOUND, format!("no route {uri}"))
@@ -887,14 +893,29 @@ async fn to_builder(
         Ok(node) => node,
         Err((status, message)) => return api_error(status, message),
     };
-    let path_and_query = uri.path_and_query().map_or(path, |p| p.as_str());
+    relay(&control, &node, &method, &uri, &headers, body).await
+}
+
+/// Pass one request to `node`, both bodies streamed: an upload or a
+/// download may be large. The host the caller reached goes along, so links
+/// a node makes point back here; so does a bearer token, which the volume
+/// content API authenticates with.
+async fn relay(
+    control: &ControlPlane,
+    node: &crate::model::NodeInfo,
+    method: &Method,
+    uri: &axum::http::Uri,
+    headers: &HeaderMap,
+    body: reqwest::Body,
+) -> Response {
+    let path_and_query = uri.path_and_query().map_or(uri.path(), |p| p.as_str());
     let reqwest_method =
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET);
     let mut request = control
         .http
         .request(reqwest_method, format!("{}{path_and_query}", node.api))
         .body(body);
-    for name in ["content-type", "content-length"] {
+    for name in ["content-type", "content-length", "authorization"] {
         if let Some(value) = headers.get(name) {
             request = request.header(name, value.as_bytes());
         }
@@ -918,13 +939,63 @@ async fn to_builder(
     let status =
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let content_type = response.headers().get("content-type").cloned();
-    let bytes = response.bytes().await.unwrap_or_default();
-    let mut out = Response::new(Body::from(bytes));
+    let mut out = Response::new(Body::from_stream(response.bytes_stream()));
     *out.status_mut() = status;
     if let Some(value) = content_type {
         out.headers_mut().insert("content-type", value);
     }
     out
+}
+
+/// A volume's calls -- its API and its content API -- to the node chosen
+/// for it by rendezvous over its ID, which its name determines: a create
+/// and every call after it meet on the same node. With a shared snapshot
+/// store every node holds every volume, and the choice only spreads load.
+async fn to_volume_node(
+    State(control): State<Arc<ControlPlane>>,
+    method: Method,
+    uri: axum::http::Uri,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let path = uri.path();
+    let (id, body) = if path == "/volumes" {
+        let bytes = match axum::body::to_bytes(body, 1 << 16).await {
+            Ok(bytes) => bytes,
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        };
+        let parsed = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
+        let name = parsed["name"].as_str().unwrap_or_default();
+        (crate::model::volume_id(name), reqwest::Body::from(bytes))
+    } else {
+        // /volumes/{id} and /volumecontent/{id}/...
+        let id = path.split('/').nth(2).unwrap_or_default().to_string();
+        (id, reqwest::Body::wrap_stream(body.into_data_stream()))
+    };
+    let node = match builder(&control, &id).await {
+        Ok(node) => node,
+        Err((status, message)) => return api_error(status, message),
+    };
+    relay(&control, &node, &method, &uri, &headers, body).await
+}
+
+/// `GET /volumes`: every live node's volumes, once each.
+async fn list_volumes(State(control): State<Arc<ControlPlane>>) -> Response {
+    let answers = match on_every_node(&control, Method::GET, "/volumes").await {
+        Ok(answers) => answers,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let mut merged: BTreeMap<String, Value> = BTreeMap::new();
+    for (_, status, answer) in answers {
+        if status == 200 {
+            for volume in answer.as_array().cloned().unwrap_or_default() {
+                if let Some(id) = volume["volumeID"].as_str() {
+                    merged.entry(id.to_string()).or_insert(volume);
+                }
+            }
+        }
+    }
+    Json(merged.into_values().collect::<Vec<_>>()).into_response()
 }
 
 /// `GET /templates/aliases/{alias}`: whether a live node offers a template

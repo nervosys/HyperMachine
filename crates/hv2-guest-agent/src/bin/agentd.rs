@@ -190,6 +190,34 @@ mod linux {
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?
             {
                 buf.drain(..used);
+                // A volume mount takes the connection itself: answered here,
+                // then handed to the kernel, and this loop is done with it.
+                if let Operation::MountVolume { path } = &request.op {
+                    let ready = prepare_mount_point(path);
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
+                        result: match &ready {
+                            Ok(()) => OpResult::Acknowledged,
+                            Err(message) => OpResult::Failed {
+                                message: message.clone(),
+                            },
+                        },
+                    };
+                    let bytes = encode(&response).map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                    })?;
+                    write_all_fd(fd, &bytes)?;
+                    if ready.is_ok() {
+                        if let Err(e) = mount_volume(fd, path) {
+                            eprintln!("hv2-guest-agentd: mounting a volume at {path}: {e}");
+                        }
+                        // Ours no more: the kernel holds its own reference,
+                        // and the caller's close drops only this one.
+                        return Ok(());
+                    }
+                    continue;
+                }
                 let response = handle(request);
                 let bytes = encode(&response).map_err(|e| {
                     std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
@@ -197,6 +225,49 @@ mod linux {
                 write_all_fd(fd, &bytes)?;
             }
         }
+    }
+
+    /// `path`, a directory with nothing mounted on it: made if missing, and
+    /// a mount left there -- one whose host end did not survive a snapshot's
+    /// restore -- detached, so the new one is what is seen.
+    fn prepare_mount_point(path: &str) -> Result<(), String> {
+        if !path.starts_with('/') {
+            return Err(format!("{path}: a volume mounts at an absolute path"));
+        }
+        let target = std::ffi::CString::new(path).map_err(|e| e.to_string())?;
+        // Detached first: a dead mount there -- restored from a snapshot,
+        // its server gone -- cannot even be looked at, so making the
+        // directory would fail on it. EINVAL: nothing mounted, as usual.
+        unsafe { libc::umount2(target.as_ptr(), libc::MNT_DETACH) };
+        std::fs::create_dir_all(path).map_err(|e| format!("{path}: {e}"))?;
+        Ok(())
+    }
+
+    /// Mount 9P over connection `fd` at `path`: the kernel reads and writes
+    /// the socket from here on, and this call returns once it has attached.
+    fn mount_volume(fd: libc::c_int, path: &str) -> std::io::Result<()> {
+        let source = c"hv2-volume";
+        let fstype = c"9p";
+        let target = std::ffi::CString::new(path)?;
+        // cache=none: other sandboxes, and the volume API, change the files
+        // too, and each must see the others' writes. access=user: each guest
+        // user attaches as itself, so the host records who made what.
+        let options = std::ffi::CString::new(format!(
+            "trans=fd,rfdno={fd},wfdno={fd},version=9p2000.L,msize=524288,cache=none,access=user"
+        ))?;
+        let rc = unsafe {
+            libc::mount(
+                source.as_ptr(),
+                target.as_ptr(),
+                fstype.as_ptr(),
+                0,
+                options.as_ptr().cast(),
+            )
+        };
+        if rc < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
     }
 
     fn read_fd(fd: libc::c_int, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -295,6 +366,10 @@ mod linux {
                 offset,
                 length,
             } => read_file(&path, offset, length),
+            // Served in `serve`, which owns the connection it takes.
+            Operation::MountVolume { .. } => OpResult::Failed {
+                message: "a volume mount must be the connection's own request".into(),
+            },
         };
 
         Response {

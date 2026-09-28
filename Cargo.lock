@@ -2855,6 +2855,7 @@ dependencies = [
  "hv2-core",
  "hv2-guest-agent",
  "hv2-net",
+ "libc",
  "parking_lot",
  "reqwest",
  "ring",

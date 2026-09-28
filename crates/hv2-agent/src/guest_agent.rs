@@ -579,6 +579,31 @@ impl GuestAgent {
         Ok(())
     }
 
+    /// Have the guest mount a volume at `path` over this connection, and
+    /// give the connection up to whoever serves it: after the agent's answer
+    /// every byte on it is 9P. Returns the channel and what already arrived
+    /// past the answer -- the kernel may have sent its `Tversion` by then.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest's reason for refusing.
+    pub fn mount_volume(
+        mut self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<(Box<dyn GuestChannel>, Vec<u8>)> {
+        let op = Operation::MountVolume {
+            path: path.to_string(),
+        };
+        match self.request(op, timeout)? {
+            OpResult::Acknowledged => Ok((self.channel, std::mem::take(&mut self.pending))),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a volume mount with {other:?}"
+            ))),
+        }
+    }
+
     /// Read all of `path` in the guest, up to `limit` bytes.
     ///
     /// # Errors

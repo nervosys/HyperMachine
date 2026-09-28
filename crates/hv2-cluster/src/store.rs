@@ -474,6 +474,7 @@ pub(crate) mod tests {
             descriptor: json!({"sandboxID": id}),
             paused: false,
             portable: false,
+            volume_mounts: Vec::new(),
         }
     }
 

@@ -94,6 +94,7 @@ async fn node_create(
                 descriptor: descriptor.clone(),
                 paused: false,
                 portable: false,
+                volume_mounts: Vec::new(),
             },
             running,
         )

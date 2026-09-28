@@ -117,8 +117,10 @@ use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 mod builds;
 mod identity;
 mod initramfs;
+mod ninep;
 mod oci;
 mod snapshots;
+mod volumes;
 
 const GUEST_CID_BASE: u64 = 100;
 
@@ -222,6 +224,9 @@ struct Options {
     /// What a template built from an OCI image gets beside it: the guest
     /// agent, busybox, init, and optionally a bash shim and CA bundle.
     guest_kit: Option<std::path::PathBuf>,
+    /// Where volumes are kept; the snapshot store's `volumes` when unset,
+    /// so every node sharing it has them.
+    volume_dir: Option<String>,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -270,6 +275,7 @@ fn parse_options() -> Result<Options, String> {
         no_net_offload: false,
         templates: Vec::new(),
         guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
+        volume_dir: None,
         snapshot_store: None,
         mtls_ca: None,
         mtls_cert: None,
@@ -306,6 +312,7 @@ fn parse_options() -> Result<Options, String> {
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
+            "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
             "--template" => {
                 let spec = value(&mut i)?;
                 let (name, path) = spec
@@ -520,6 +527,9 @@ struct NewSandbox {
     auto_resume: Option<AutoResume>,
     /// Workload identity: named tokens the egress gateway mints per request.
     iam: Option<SandboxIam>,
+    /// Volumes to mount, by name, at paths in the guest.
+    #[serde(rename = "volumeMounts", default)]
+    volume_mounts: Vec<hv2_cluster::model::VolumeMount>,
 }
 
 /// `SandboxIam`: a non-empty `tokens` map turns workload identity on.
@@ -1159,6 +1169,7 @@ async fn bring_up(
     template_id: &str,
     snapshot: Option<&std::path::Path>,
     network: Option<NetworkSpec>,
+    mounts: &[hv2_cluster::model::VolumeMount],
     access_token: &str,
 ) -> Result<Running, (StatusCode, String)> {
     let internal = |e: String| (StatusCode::INTERNAL_SERVER_ERROR, e);
@@ -1259,6 +1270,19 @@ async fn bring_up(
         }
         _ => None,
     };
+
+    // Its volumes, mounted before anyone can run a command that expects
+    // them. After a restore, a mount the snapshot held is detached and
+    // mounted anew: its host end was the node that took the snapshot.
+    if !mounts.is_empty() {
+        if let Err(e) = volumes::mount(state, &vm, mounts).await {
+            if let Some(network) = network {
+                network.bridge.abort();
+            }
+            let _ = vm.stop().await;
+            return Err(internal(e));
+        }
+    }
 
     // Give this sandbox its own process.Process listener -- envd's real
     // shape, one daemon per sandbox, not one shared server multiplexing
@@ -1413,6 +1437,12 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
             ),
         );
     }
+    // Volumes that do not exist are the caller's mistake, found before a
+    // slot is taken.
+    let mounts = req.volume_mounts.clone();
+    if let Err(e) = volumes::check(&state, &mounts) {
+        return api_error(StatusCode::BAD_REQUEST, e);
+    }
     // Room first, before anything is parsed or booted: a full node should
     // answer at once so a control plane can try the next one.
     let slot = match reserve(&state, create_park(&state)).await {
@@ -1481,6 +1511,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         &template_id,
         from_snapshot.as_ref().map(|s| s.file.as_path()),
         network,
+        &mounts,
         &access_token,
     )
     .await
@@ -1521,6 +1552,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
         paused: false,
         portable: false,
+        volume_mounts: mounts,
     };
     register(
         &state,
@@ -1956,6 +1988,7 @@ async fn resume_sandbox(
         &template_id,
         Some(&paused.snapshot),
         network,
+        &paused.record.volume_mounts,
         &paused.descriptor.envd_access_token,
     )
     .await
@@ -2090,7 +2123,7 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network, source_request) = {
+    let (template_id, metadata, network, source_request, volume_mounts) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -2110,10 +2143,12 @@ async fn fork_route(
                             .unwrap_or_default(),
                     }),
                     live.network_request.clone(),
+                    live.record.volume_mounts.clone(),
                 )
             })
         };
-        let Some((vm, template_id, metadata, network, source_request)) = source else {
+        let Some((vm, template_id, metadata, network, source_request, volume_mounts)) = source
+        else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
                     StatusCode::CONFLICT,
@@ -2132,7 +2167,13 @@ async fn fork_route(
             );
         }
         state.metrics.checkpoint_latency.observe(started.elapsed());
-        (template_id, metadata, network, source_request)
+        (
+            template_id,
+            metadata,
+            network,
+            source_request,
+            volume_mounts,
+        )
     };
 
     // Concurrently: each fork is independent, and they are what a caller
@@ -2145,6 +2186,7 @@ async fn fork_route(
             let metadata = metadata.clone();
             let network = network.clone();
             let network_request = source_request.clone();
+            let volume_mounts = volume_mounts.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
@@ -2157,6 +2199,7 @@ async fn fork_route(
                     &template_id,
                     Some(&checkpoint),
                     network,
+                    &volume_mounts,
                     &access_token,
                 )
                 .await?;
@@ -2188,6 +2231,7 @@ async fn fork_route(
                     descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
                     paused: false,
                     portable: false,
+                    volume_mounts: volume_mounts.clone(),
                 };
                 let lifecycle = Lifecycle {
                     lifetime_secs,
@@ -3835,6 +3879,8 @@ async fn main() -> std::process::ExitCode {
             get(builds::status),
         )
         .route("/templates/aliases/{alias}", get(builds::alias))
+        .route("/volumes", get(volumes::list).post(volumes::create))
+        .route("/volumes/{volumeID}", get(volumes::get).delete(volumes::delete))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
         .route(
             "/sandboxes/{sandboxID}",
@@ -3855,6 +3901,22 @@ async fn main() -> std::process::ExitCode {
         .route(
             "/templates/{templateID}/files/{hash}",
             put(builds::upload),
+        )
+        // E2B's volume content API: each volume's own bearer token, which
+        // the SDK's `Volume` sends in place of the API key.
+        .route(
+            "/volumecontent/{volumeID}/file",
+            get(volumes::read_file).put(volumes::write_file),
+        )
+        .route(
+            "/volumecontent/{volumeID}/dir",
+            get(volumes::list_dir).post(volumes::make_dir),
+        )
+        .route(
+            "/volumecontent/{volumeID}/path",
+            get(volumes::stat)
+                .patch(volumes::update)
+                .delete(volumes::remove_path),
         )
         // Public: a verifier of a sandbox's token fetches these. In a
         // cluster the control planes serve the same, for every node.

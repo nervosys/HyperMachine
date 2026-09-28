@@ -214,6 +214,17 @@ pub enum Operation {
         offset: u64,
         length: u64,
     },
+
+    /// Mount a volume at `path`, served by the host over *this connection*.
+    ///
+    /// Answered with [`OpResult::Acknowledged`] once `path` is ready -- a
+    /// directory, anything mounted there before detached -- and then the
+    /// connection stops being this protocol's: the agent hands its socket
+    /// to the kernel as a 9P2000.L mount (`trans=fd`), and every byte after
+    /// the answer is 9P, served by the host. The host learns whether the
+    /// mount took from that: a mount that failed closes the connection
+    /// without a `Tattach`.
+    MountVolume { path: String },
 }
 
 /// The most file data one [`Operation::WriteFile`] or

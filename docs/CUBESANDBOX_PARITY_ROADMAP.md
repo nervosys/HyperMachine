@@ -1629,9 +1629,52 @@ Verified, with the unmodified SDK:
   - a `POST /templates` of 2 vCPU / 768 MiB was listed with its size and ran at it;
   - out-of-range sizes are refused with a 400.
 
-Not done: registries' cloud logins (AWS, GCP) -- only `{"type":
-"registry"}`; memory hot-plug and ballooning (a sandbox's size is fixed at
-its template); and more than 32 vCPUs.
+#### Volumes
+
+E2B's persistent storage, as its SDK's `Volume` uses it:
+- the volume API (`POST/GET /volumes`, `GET/DELETE /volumes/{id}`);
+- the content API (`/volumecontent/{id}/{file,dir,path}`, authenticated by the volume's own bearer token);
+- `volumeMounts` on create.
+
+A volume is a directory on the node -- in the snapshot store when there is one, so every node has every volume -- mounted into sandboxes live and shared, and it outlives them.
+
+How a mount works: the guest agent answers a `MountVolume` request and then hands that very vsock connection to its kernel as a 9P2000.L mount (`trans=fd`). The node runs a 9P server on the other end, one thread per mount. The guest kernel had 9P already; nothing new was needed in it or in the VMM.
+
+The guest is treated as hostile:
+- Every path is resolved with `openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS)` beneath the volume.
+- Every name-taking operation acts on one validated name within a directory resolved that way.
+- Attributes change through the resolved inode.
+
+The guest's ownership is kept in an extended attribute, because the node's own user owns the host files. A mount the snapshot held is detached and remade on resume and on fork. A volume ID is derived from its name, so a control plane routes a create and every later call for it to the same node, streaming uploads and downloads through.
+
+Verified with the unmodified SDK:
+- **Mounting and sharing:**
+  - a sandbox came up with a volume mounted in 133-298 ms;
+  - a second sandbox read the first's 16 MiB file with a matching checksum;
+  - each saw the other's appends, renames and symlinks live;
+  - the API read what they wrote;
+  - 16 MiB read through 9P in 212-283 ms.
+- **Persistence and lifecycle:**
+  - files outlived every sandbox that mounted them;
+  - a sandbox paused and resumed wrote to its remounted volume;
+  - two forks of it each wrote there, and the API saw all three.
+- **Escapes:**
+  - `../../meta.json`, a host symlink planted in the volume, and a path through it were all refused by the API;
+  - through the mount, the host symlink resolves in the guest's own namespace, never the host's;
+  - unit tests walk, open and create through symlinks and `..` and reach nothing outside.
+- **Across two nodes and a control plane:**
+  - a volume made through the control plane was mounted on both nodes, each seeing the other's writes;
+  - a file written by the API as uid 1000, mode 600 showed exactly that in the guest;
+  - a `chown` in the guest showed in the API.
+
+`--volume-dir` places volumes elsewhere. Volumes must live on a filesystem with user extended attributes (ext4, xfs) for guest ownership to hold: on WSL's `/mnt/c` every file reads 777 and owners are not kept.
+
+Not done:
+- registries' cloud logins (AWS, GCP) -- only `{"type": "registry"}`;
+- memory hot-plug and ballooning (a sandbox's size is fixed at its template);
+- more than 32 vCPUs;
+- volume quotas;
+- volumes in a cluster without a shared snapshot store, where a volume lives on one node and a sandbox mounting it must be created there.
 
 What Agent Substrate has that this does not:
 

@@ -99,6 +99,36 @@ pub struct SandboxRecord {
     /// goes to whichever node has room.
     #[serde(default)]
     pub portable: bool,
+    /// Volumes mounted in it, remounted wherever it is resumed or forked.
+    #[serde(
+        default,
+        rename = "volumeMounts",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub volume_mounts: Vec<VolumeMount>,
+}
+
+/// The ID of the volume named `name`: derived, not drawn, so a control
+/// plane knows which node holds a volume from its name as from its ID.
+#[must_use]
+pub fn volume_id(name: &str) -> String {
+    let fnv = |seed: u64| {
+        name.bytes().fold(seed, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        })
+    };
+    format!(
+        "vol-{:016x}",
+        fnv(0xcbf2_9ce4_8422_2325) ^ fnv(0x8422_2325_cbf2_9ce4).rotate_left(29)
+    )
+}
+
+/// A volume, by name, mounted at a path in a sandbox: E2B's
+/// `SandboxVolumeMount`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VolumeMount {
+    pub name: String,
+    pub path: String,
 }
 
 impl SandboxRecord {
@@ -241,6 +271,7 @@ mod tests {
             descriptor: json!({"envdAccessToken": "tok", "sandboxID": "sbx-1"}),
             paused: false,
             portable: false,
+            volume_mounts: Vec::new(),
         }
     }
 

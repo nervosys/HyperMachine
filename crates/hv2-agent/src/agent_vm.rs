@@ -515,6 +515,27 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest file write task failed: {e}")))?
     }
 
+    /// Have the guest mount a volume at `path`, served over a connection of
+    /// its own: returned, with whatever already arrived on it, for a 9P
+    /// server to run on.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn mount_volume_in_guest(
+        &self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<(Box<dyn crate::GuestChannel>, Vec<u8>)> {
+        let device = self.file_channel()?;
+        let path = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.mount_volume(&path, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest mount task failed: {e}")))?
+    }
+
     /// Read `path` from the guest, up to `limit` bytes.
     ///
     /// # Errors
