@@ -887,6 +887,76 @@ mod tests {
             .unwrap());
     }
 
+    /// Every ML-DSA parameter set signs and verifies, not only ML-DSA-65:
+    /// generating a key of the right length says nothing about signing with it.
+    #[cfg(feature = "pqc")]
+    #[test]
+    fn every_ml_dsa_parameter_set_signs_and_verifies() {
+        let crypto = get_crypto();
+        for params in [
+            MlDsaParameterSet::MlDsa44,
+            MlDsaParameterSet::MlDsa65,
+            MlDsaParameterSet::MlDsa87,
+        ] {
+            let sk = crypto.ml_dsa_keygen(params).unwrap();
+            let sig = crypto
+                .ml_dsa_sign(&sk, b"every parameter set")
+                .unwrap_or_else(|e| panic!("{params:?} sign: {e}"));
+            assert_eq!(sig.data.len(), params.signature_bytes(), "{params:?}");
+            assert!(
+                crypto
+                    .ml_dsa_verify(&sk.public, b"every parameter set", &sig)
+                    .unwrap(),
+                "{params:?} did not verify its own signature"
+            );
+            assert!(
+                !crypto.ml_dsa_verify(&sk.public, b"tampered", &sig).unwrap(),
+                "{params:?} verified a tampered message"
+            );
+        }
+    }
+
+    /// Every SLH-DSA parameter set this module offers. Four of the six had
+    /// never been generated in a test, let alone signed with.
+    #[cfg(feature = "pqc")]
+    #[test]
+    fn every_slh_dsa_parameter_set_signs_and_verifies() {
+        let crypto = get_crypto();
+        for params in [
+            SlhDsaParameterSet::Sha2_128f,
+            SlhDsaParameterSet::Sha2_128s,
+            SlhDsaParameterSet::Sha2_192f,
+            SlhDsaParameterSet::Sha2_256f,
+            SlhDsaParameterSet::Shake128f,
+            SlhDsaParameterSet::Shake256f,
+        ] {
+            let sk = crypto
+                .slh_dsa_keygen(params)
+                .unwrap_or_else(|e| panic!("{params:?} keygen: {e}"));
+            assert_eq!(
+                sk.public.data.len(),
+                params.public_key_bytes(),
+                "{params:?}"
+            );
+            let sig = crypto
+                .slh_dsa_sign(&sk, b"every parameter set")
+                .unwrap_or_else(|e| panic!("{params:?} sign: {e}"));
+            assert_eq!(sig.data.len(), params.signature_bytes(), "{params:?}");
+            assert!(
+                crypto
+                    .slh_dsa_verify(&sk.public, b"every parameter set", &sig)
+                    .unwrap(),
+                "{params:?} did not verify its own signature"
+            );
+            assert!(
+                !crypto
+                    .slh_dsa_verify(&sk.public, b"tampered", &sig)
+                    .unwrap(),
+                "{params:?} verified a tampered message"
+            );
+        }
+    }
+
     #[cfg(not(feature = "pqc"))]
     #[test]
     fn test_pqc_disabled_returns_error() {

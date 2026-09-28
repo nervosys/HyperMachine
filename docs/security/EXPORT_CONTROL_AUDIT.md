@@ -1,7 +1,7 @@
 # HyperMachine — Export Control Posture (EAR / ITAR)
 
 **Project:** HyperMachine (nervosys/HyperMachine)  
-**Last reviewed:** 2026-03-25  
+**Last reviewed:** 2026-09-28 (implementation facts in §1, §3, §5.4, §6-§9; the legal positions are unchanged)  
 **Scope:** Full HyperMachine source tree (all crates, docs, deploy, examples).  
 **Classification:** Public — describes export-controlled categories applicable to the open-source release.  
 
@@ -46,202 +46,195 @@ their own legal analysis if relying on it.
 
 ## 1. CRYPTOGRAPHIC IMPLEMENTATIONS (EAR Category 5, Part 2)
 
+> **Revised 2026-09-28.** The version reviewed on 2026-03-25 described
+> `ring` wrappers, a custom AES-CTR+HMAC fallback, a from-scratch RSA and
+> placeholder post-quantum code. None of those remains. Since 93abff0 every
+> classical primitive in `hv2-core` and `hv2-api` comes from **IronCrypto**
+> (`ic-*` crates, AGPL-3.0-or-later, published on crates.io), which is
+> checked here against published test vectors. The post-quantum algorithms
+> come from the RustCrypto `ml-kem`, `ml-dsa` and `slh-dsa` crates (59ad48a).
+> `ring` remains in the build only beneath `rustls` (TLS), `rcgen`,
+> `quinn-proto` and `x509-parser`. Where a classification below rested on a
+> fact that has since changed, it is marked for re-review rather than
+> reassigned here.
+
 ### 1.1 Symmetric Cryptography — AES-GCM
 
-| Attribute                 | Detail                                                                                                                              |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](crates/hv2-core/src/crypto/fips.rs#L388-L470)                                                  |
-| **Algorithm**             | AES-128-GCM, AES-256-GCM                                                                                                            |
-| **Key Lengths**           | 128-bit, 256-bit                                                                                                                    |
-| **Type**                  | Symmetric AEAD                                                                                                                      |
-| **Implementation**        | **DUAL**: (1) Wrapper around `ring 0.17` crate when `ring` feature is enabled; (2) Custom software fallback when `ring` is disabled |
-| **Purpose**               | VM data encryption, secure communication, FIPS module                                                                               |
-| **FIPS Mode**             | FIPS 140-3 Level 1 targeted                                                                                                         |
-| **Likely ECCN**           | 5D002.c.1 — "Information security" software using symmetric >56-bit                                                                 |
-| **Open-Source Exception** | Likely eligible under §742.15(b)                                                                                                    |
+| Attribute                 | Detail                                                                                          |
+| ------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](../../crates/hv2-core/src/crypto/fips.rs)                  |
+| **Algorithm**             | AES-128-GCM, AES-256-GCM (NIST SP 800-38D)                                                      |
+| **Key Lengths**           | 128-bit, 256-bit                                                                                |
+| **Type**                  | Symmetric AEAD                                                                                  |
+| **Implementation**        | **Wrapper** around IronCrypto `ic_cipher::Aes128Gcm` / `Aes256Gcm`; no software fallback exists |
+| **Purpose**               | VM data encryption, secure communication, FIPS module                                           |
+| **FIPS Mode**             | FIPS 140-3 architecture; not CMVP-certified (R-3)                                               |
+| **Likely ECCN**           | 5D002.c.1 — "Information security" software using symmetric >56-bit                             |
+| **Open-Source Exception** | Likely eligible under §742.15(b)                                                                |
 
-**Detail:** The `ring` feature path uses `ring::aead::AES_256_GCM` for
-authenticated encryption (seal/open). The non-`ring` fallback at
-[fips.rs](crates/hv2-core/src/crypto/fips.rs#L437-L470) implements a custom
-AES-CTR + HMAC-SHA256 construction (encrypt-then-MAC). The fallback is
-explicitly marked "NOT FIPS-certified" in comments.
-
-**Risk:** The custom fallback is a from-scratch construction. While it is
-encrypt-then-MAC (correct composition), it is **not** standard AES-GCM and
-has not undergone cryptanalysis. Export reviewers may scrutinize custom
-crypto more heavily.
+**Detail:** Both key sizes are checked against the GCM specification's
+published vectors (Test Cases 2 and 14 / SP 800-38D). The custom fallback the
+2026-03-25 review described was deleted in 59ad48a. Despite its name it was not
+AES: its keystream was `SHA256(key || nonce || counter)`. AES-128-GCM was
+refused at runtime from 93abff0 until 2026-09-28, because the internals built
+an AES-256 cipher for every key. It now works.
 
 ---
 
 ### 1.2 Hash Functions — SHA-2 Family
 
-| Attribute                 | Detail                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](crates/hv2-core/src/crypto/fips.rs#L598-L650)                |
-| **Algorithms**            | SHA-256, SHA-384, SHA-512                                                                         |
-| **Implementation**        | **Wrapper** around `ring::digest` when `ring` feature enabled; returns `NotImplemented` otherwise |
-| **Purpose**               | Integrity verification, KAT self-tests, key derivation                                            |
-| **Likely ECCN**           | EAR99 — Hash functions alone are generally not controlled                                         |
-| **Open-Source Exception** | N/A (not controlled)                                                                              |
+| Attribute                 | Detail                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](../../crates/hv2-core/src/crypto/fips.rs) |
+| **Algorithms**            | SHA-256, SHA-384, SHA-512 (FIPS 180-4)                                         |
+| **Implementation**        | **Wrapper** around IronCrypto `ic_hash`; unconditional (no feature gate)       |
+| **Purpose**               | Integrity verification, KAT self-tests, key derivation, vTPM PCR chaining      |
+| **Likely ECCN**           | EAR99 — Hash functions alone are generally not controlled                      |
+| **Open-Source Exception** | N/A (not controlled)                                                           |
 
 ---
 
 ### 1.3 HMAC
 
-| Attribute                 | Detail                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](crates/hv2-core/src/crypto/fips.rs#L660-L700) |
-| **Algorithms**            | HMAC-SHA256, HMAC-SHA512                                                           |
-| **Implementation**        | **Wrapper** around `ring::hmac` when `ring` feature enabled                        |
-| **Purpose**               | Message authentication, AES-GCM fallback tag, key derivation                       |
-| **Likely ECCN**           | Part of 5D002 when used in encryption context                                      |
-| **Open-Source Exception** | Likely eligible                                                                    |
+| Attribute                 | Detail                                                                                                                                                      |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](../../crates/hv2-core/src/crypto/fips.rs), [crates/hv2-api/src/middleware.rs](../../crates/hv2-api/src/middleware.rs) |
+| **Algorithms**            | HMAC-SHA256, HMAC-SHA512 (FIPS 198-1)                                                                                                                       |
+| **Implementation**        | **Wrapper** around IronCrypto `ic_mac`; checked against RFC 4231                                                                                            |
+| **Purpose**               | Message authentication, key derivation, API request/response signing (`X-Signature`, off by default)                                                       |
+| **Likely ECCN**           | Part of 5D002 when used in encryption context                                                                                                               |
+| **Open-Source Exception** | Likely eligible                                                                                                                                             |
 
 ---
 
 ### 1.4 Key Derivation — HKDF
 
-| Attribute                 | Detail                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](crates/hv2-core/src/crypto/fips.rs#L710-L740) |
-| **Algorithm**             | HKDF-SHA256 (NIST SP 800-56C)                                                      |
-| **Implementation**        | **Wrapper** around `ring::hkdf`                                                    |
-| **Purpose**               | Key derivation for encryption keys, PQC key generation                             |
-| **Likely ECCN**           | Part of 5D002 when used with controlled encryption                                 |
-| **Open-Source Exception** | Likely eligible                                                                    |
+| Attribute                 | Detail                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| **Files**                 | [crates/hv2-core/src/crypto/fips.rs](../../crates/hv2-core/src/crypto/fips.rs) |
+| **Algorithm**             | HKDF-SHA256 (RFC 5869; NIST SP 800-56C)                                        |
+| **Implementation**        | **Wrapper** around IronCrypto `ic_kdf::Hkdf`; checked against RFC 5869         |
+| **Purpose**               | Key derivation for encryption keys                                             |
+| **Likely ECCN**           | Part of 5D002 when used with controlled encryption                             |
+| **Open-Source Exception** | Likely eligible                                                                |
 
 ---
 
 ### 1.5 RSA Asymmetric Cryptography
 
-| Attribute                 | Detail                                                                                                                |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/asymmetric.rs](crates/hv2-core/src/crypto/asymmetric.rs) (full file, ~800 lines)          |
-| **Algorithms**            | RSA-2048, RSA-3072, RSA-4096                                                                                          |
-| **Operations**            | Key generation (stub), encryption (PKCS#1 v1.5), decryption, signing (PKCS#1/PSS), verification                       |
-| **Key Lengths**           | 2048, 3072, 4096 bits                                                                                                 |
-| **Type**                  | Asymmetric                                                                                                            |
-| **Implementation**        | **MIXED**:                                                                                                            |
-|                           | — **Signing/Verification**: Wrapper around `ring::signature::RsaKeyPair` (when `ring` feature enabled)                |
-|                           | — **Encryption/Decryption**: **FROM-SCRATCH** software implementation using custom big-integer modular exponentiation |
-|                           | — **Key Generation**: Returns `NotImplemented` (ring doesn't support RSA keygen)                                      |
-| **Purpose**               | Digital signatures, Secure Boot verification, vTPM                                                                    |
-| **Likely ECCN**           | 5D002.c.1 — Asymmetric encryption >512-bit                                                                            |
-| **Open-Source Exception** | Likely eligible                                                                                                       |
+| Attribute                 | Detail                                                                                             |
+| ------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Files**                 | [crates/hv2-core/src/crypto/asymmetric.rs](../../crates/hv2-core/src/crypto/asymmetric.rs)         |
+| **Algorithms**            | RSA-2048, RSA-3072, RSA-4096                                                                       |
+| **Operations**            | Key generation, signing, verification. **No encryption or decryption.** RSA-4096 private-key operations are refused (K-8). |
+| **Key Lengths**           | 2048, 3072, 4096 bits                                                                              |
+| **Type**                  | Asymmetric (digital signature)                                                                     |
+| **Implementation**        | **Wrapper** around IronCrypto `ic_rsa` (`generate`, `RsaPrivateKey`, `RsaPublicKey`)               |
+| **Purpose**               | Digital signatures                                                                                 |
+| **Likely ECCN**           | **Re-review.** Recorded as 5D002.c.1 for "asymmetric encryption"; RSA now performs signatures only |
+| **Open-Source Exception** | Likely eligible                                                                                    |
 
-**Critical Finding — Custom RSA Implementation:**
-[asymmetric.rs](crates/hv2-core/src/crypto/asymmetric.rs#L701-L760) contains a
-from-scratch `mod_exp_bytes()` function implementing big-integer modular
-exponentiation (square-and-multiply) with custom `bytes_to_limbs()`,
-`limbs_to_bytes()`, `mod_limbs()`, and `mod_mul_limbs()` helper functions.
-This constitutes a **custom RSA encryption/decryption implementation** that
-does not depend on any external library. The `rsa_encrypt()` function at
-[asymmetric.rs](crates/hv2-core/src/crypto/asymmetric.rs#L260-L295) builds
-PKCS#1 v1.5 type-2 padding and calls `mod_exp_bytes()` directly.
-
-**Risk:** This is a **from-scratch implementation** of RSA encryption — the
-highest scrutiny category for export control. Custom implementations cannot
-rely on the "publicly available library" argument for the external dependency.
+**Resolved (814d0c0):** the from-scratch `mod_exp_bytes()` RSA
+encryption/decryption the 2026-03-25 review flagged as its critical finding
+was deleted, not fixed. It computed wrong results (4^13 mod 497 gave 121, not
+445) and had no callers. No ECDH is implemented either, so ML-KEM (§1.8.1) is
+the only key-establishment mechanism.
 
 ---
 
-### 1.6 ECDSA / ECDH Elliptic Curve Cryptography
+### 1.6 ECDSA Elliptic Curve Cryptography
 
-| Attribute                 | Detail                                                                                         |
-| ------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/asymmetric.rs](crates/hv2-core/src/crypto/asymmetric.rs#L345-L600) |
-| **Algorithms**            | ECDSA P-256/SHA-256, ECDSA P-384/SHA-384, ECDH P-256, ECDH P-384                               |
-| **Curves**                | NIST P-256 (secp256r1), P-384 (secp384r1), P-521 (defined but not implemented)                 |
-| **Implementation**        | **Wrapper** around `ring::signature::EcdsaKeyPair` for keygen/sign/verify                      |
-| **Purpose**               | Digital signatures, key exchange, TLS                                                          |
-| **Likely ECCN**           | 5D002.c.1 — Asymmetric encryption >512-bit                                                     |
-| **Open-Source Exception** | Likely eligible                                                                                |
+| Attribute                 | Detail                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------ |
+| **Files**                 | [crates/hv2-core/src/crypto/asymmetric.rs](../../crates/hv2-core/src/crypto/asymmetric.rs) |
+| **Algorithms**            | ECDSA P-256/SHA-256, P-384/SHA-384, P-521/SHA-512 (FIPS 186-5)                             |
+| **Operations**            | Key generation, signing, verification. **No ECDH** (named in comments, not implemented)    |
+| **Implementation**        | **Wrapper** around IronCrypto `ic_ec`                                                      |
+| **Purpose**               | Digital signatures                                                                         |
+| **Likely ECCN**           | **Re-review.** Recorded as 5D002.c.1; ECDSA here performs signatures only                  |
+| **Open-Source Exception** | Likely eligible                                                                            |
 
-**Note:** P-521 is defined in the type system but returns
-`UnsupportedAlgorithm` at runtime (ring does not support P-521).
+**Note:** P-521, which the 2026-03-25 review recorded as unsupported, is
+implemented. Its key generation masks the scalar's excess bits; before that
+fix about 46% of P-521 key generations failed.
 
 ---
 
-### 1.7 TLS Configuration
+### 1.7 TLS
 
-| Attribute                 | Detail                                                                           |
-| ------------------------- | -------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-api/src/tls.rs](crates/hv2-api/src/tls.rs) (entire file, ~130 lines) |
-| **Protocol**              | TLS 1.2+ (configured via `rustls 0.23` with `ring` backend)                      |
-| **Implementation**        | **Wrapper** — uses `rustls`, `tokio-rustls`, `rustls-pemfile`                    |
-| **Cipher Suites**         | Determined by rustls defaults (AES-256-GCM, ChaCha20-Poly1305, ECDHE)            |
-| **Purpose**               | HTTPS for REST/gRPC API server                                                   |
-| **Likely ECCN**           | 5D002.c.1                                                                        |
-| **Open-Source Exception** | Likely eligible (rustls is open-source)                                          |
+| Attribute                 | Detail                                                                                                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Files**                 | [crates/hv2-api/src/tls.rs](../../crates/hv2-api/src/tls.rs); `hv2-net`'s egress gateway ([gateway/mitm.rs](../../crates/hv2-net/src/gateway/mitm.rs)); `hm-cli` |
+| **Protocol**              | TLS 1.2/1.3 via `rustls 0.23` with its `ring` backend                                                                                                            |
+| **Implementation**        | **Wrapper** — `rustls`, `tokio-rustls`, `rustls-pki-types`; `rcgen` for certificate generation                                                                   |
+| **Cipher Suites**         | rustls defaults (AES-128/256-GCM, ChaCha20-Poly1305, ECDHE key exchange)                                                                                         |
+| **Purpose**               | HTTPS for the REST/gRPC API; the sandbox egress gateway's TLS interception                                                                                       |
+| **Likely ECCN**           | 5D002.c.1                                                                                                                                                        |
+| **Open-Source Exception** | Likely eligible (rustls is open-source)                                                                                                                          |
 
-**Note:** ALPN is configured for HTTP/2 (`h2`) and HTTP/1.1. No custom
-cipher suite selection beyond rustls defaults.
+**TLS interception (new since 2026-03-25):** for a sandbox whose network
+policy has header-injection rules, the `hv2-net` egress gateway terminates the
+sandbox's outbound TLS with a per-sandbox CA it generates (ECDSA P-256, via
+`rcgen`). It re-originates the connection upstream with ordinary rustls
+verification. The guest trusts that CA only because the gateway installs it
+in that guest. This lets an operator inject credentials the sandbox never
+sees. It is described here because it is encryption functionality a reviewer
+would otherwise not expect in a hypervisor.
 
 ---
 
 ### 1.8 Post-Quantum Cryptography (PQC)
 
-#### 1.8.1 ML-KEM (CRYSTALS-Kyber) — FIPS 203
+> **Resolved (59ad48a):** the 2026-03-25 review found all three algorithms
+> to be SHA-256/HMAC placeholders and classified two of them EAR99 on that
+> basis. They are now real implementations from the RustCrypto project, on
+> by default (`pqc` feature). **The ECCN entries below that rested on "no
+> actual PQC" need re-review.**
 
-| Attribute                 | Detail                                                                                                                                                          |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Files**                 | [crates/hv2-core/src/crypto/pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L25-L160) (types), [pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L340-L420) (implementation) |
-| **Parameter Sets**        | ML-KEM-512 (L1), ML-KEM-768 (L3), ML-KEM-1024 (L5)                                                                                                              |
-| **Type**                  | Key Encapsulation Mechanism (asymmetric)                                                                                                                        |
-| **Implementation**        | **SIMPLIFIED / PLACEHOLDER** — NOT a real ML-KEM implementation                                                                                                 |
-| **Purpose**               | Quantum-resistant key exchange                                                                                                                                  |
-| **Likely ECCN**           | 5D002.c.1 (asymmetric >512-bit equivalent)                                                                                                                      |
-| **Open-Source Exception** | Likely eligible                                                                                                                                                 |
+#### 1.8.1 ML-KEM — FIPS 203
 
-**Critical Finding:** The ML-KEM implementation is **not** a genuine
-lattice-based KEM. The `ml_kem_keygen()` function generates random bytes
-for keys; `ml_kem_encaps()` derives shared secrets using SHA-256 hashes of
-random values concatenated with the public key; `ml_kem_decaps()` similarly
-uses SHA-256 of the secret key and ciphertext. **There is no NTT, polynomial
-multiplication, or lattice arithmetic.** This is a simplified placeholder
-using SHA-256 as a PRF, not a cryptographically valid ML-KEM.
+| Attribute                 | Detail                                                                       |
+| ------------------------- | ---------------------------------------------------------------------------- |
+| **Files**                 | [crates/hv2-core/src/crypto/pqc.rs](../../crates/hv2-core/src/crypto/pqc.rs) |
+| **Parameter Sets**        | ML-KEM-512, ML-KEM-768, ML-KEM-1024                                          |
+| **Type**                  | Key Encapsulation Mechanism (key establishment)                              |
+| **Implementation**        | **Wrapper** around the RustCrypto `ml-kem` crate                             |
+| **Purpose**               | Quantum-resistant key establishment                                          |
+| **Likely ECCN**           | 5D002.c.1 (key establishment) — re-review; previously EAR99 as a placeholder |
+| **Open-Source Exception** | Likely eligible                                                              |
 
-**Export Control Implication:** This is *less* controlled than a real ML-KEM
-implementation because it does not implement the actual quantum-resistant
-algorithm. However, it claims to be ML-KEM in its API and documentation,
-which could create compliance confusion.
+#### 1.8.2 ML-DSA — FIPS 204
 
-#### 1.8.2 ML-DSA (CRYSTALS-Dilithium) — FIPS 204
+| Attribute          | Detail                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| **Files**          | [crates/hv2-core/src/crypto/pqc.rs](../../crates/hv2-core/src/crypto/pqc.rs)         |
+| **Parameter Sets** | ML-DSA-44, ML-DSA-65, ML-DSA-87                                                      |
+| **Type**           | Digital signature                                                                    |
+| **Implementation** | **Wrapper** around the RustCrypto `ml-dsa` crate                                     |
+| **Purpose**        | Quantum-resistant signatures                                                         |
+| **Likely ECCN**    | **Re-review** — previously EAR99 because "no actual PQC"; that is no longer the case |
 
-| Attribute          | Detail                                                                                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Files**          | [crates/hv2-core/src/crypto/pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L165-L265) (types), [pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L425-L530) (implementation) |
-| **Parameter Sets** | ML-DSA-44 (L2), ML-DSA-65 (L3), ML-DSA-87 (L5)                                                                                                                   |
-| **Type**           | Digital Signature Algorithm (asymmetric)                                                                                                                         |
-| **Implementation** | **SIMPLIFIED / PLACEHOLDER** — Uses HKDF + SHA-256/512 + HMAC, not real Dilithium                                                                                |
-| **Purpose**        | Quantum-resistant signatures                                                                                                                                     |
-| **Likely ECCN**    | 5D002 (if real); **EAR99** as implemented (no actual PQC)                                                                                                        |
+IronCrypto's `ic-mldsa` passes the NIST ACVP vectors for all three parameter
+sets. Migrating to it is planned (implementation plan, Phase C).
 
-**Same finding as ML-KEM:** Keygen expands a seed with HKDF; signing uses
-HMAC-SHA256(secret_key, SHA-512(message)); verification recomputes using
-public key. No polynomial arithmetic, no module-LWE.
+#### 1.8.3 SLH-DSA — FIPS 205
 
-#### 1.8.3 SLH-DSA (SPHINCS+) — FIPS 205
-
-| Attribute          | Detail                                                                                                                                                           |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Files**          | [crates/hv2-core/src/crypto/pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L270-L340) (types), [pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L535-L610) (implementation) |
-| **Parameter Sets** | SHA2-128f/s, SHA2-192f, SHA2-256f, SHAKE-128f, SHAKE-256f                                                                                                        |
-| **Type**           | Hash-based Digital Signature (asymmetric)                                                                                                                        |
-| **Implementation** | **SIMPLIFIED / PLACEHOLDER** — Uses HMAC-SHA256 chains, not real SPHINCS+                                                                                        |
-| **Purpose**        | Stateless quantum-resistant signatures                                                                                                                           |
-| **Likely ECCN**    | **EAR99** as implemented (no actual PQC Merkle tree)                                                                                                             |
-
-**Same finding:** No WOTS+, no FORS, no Hypertree. Just HMAC-SHA256
-deterministic expansion.
+| Attribute          | Detail                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| **Files**          | [crates/hv2-core/src/crypto/pqc.rs](../../crates/hv2-core/src/crypto/pqc.rs)                  |
+| **Parameter Sets** | SHA2-128f/s, SHA2-192f, SHA2-256f, SHAKE-128f, SHAKE-256f                                     |
+| **Type**           | Hash-based digital signature                                                                  |
+| **Implementation** | **Wrapper** around the RustCrypto `slh-dsa` crate (pinned `=0.2.0-rc.5`, a release candidate) |
+| **Purpose**        | Stateless quantum-resistant signatures                                                        |
+| **Likely ECCN**    | **Re-review** — previously EAR99 because "no actual PQC"; that is no longer the case          |
 
 #### 1.8.4 Hybrid Schemes
 
 | Attribute          | Detail                                                                                                                        |
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Files**          | [crates/hv2-core/src/crypto/pqc.rs](crates/hv2-core/src/crypto/pqc.rs#L300-L330)                                              |
+| **Files**          | [crates/hv2-core/src/crypto/pqc.rs](../../crates/hv2-core/src/crypto/pqc.rs)                                                  |
 | **Schemes**        | X25519+ML-KEM-768, ECDH-P256+ML-KEM-768, ECDH-P384+ML-KEM-1024, ECDSA-P256+ML-DSA-44, ECDSA-P384+ML-DSA-65, Ed25519+ML-DSA-65 |
-| **Implementation** | **Type definitions only** — No implementation code found                                                                      |
+| **Implementation** | **Type definitions only** — unchanged; no implementation code                                                                  |
 | **Likely ECCN**    | N/A (not implemented)                                                                                                         |
 
 ---
@@ -328,10 +321,11 @@ features documented in public Intel/AMD manuals. However:
 | **Likely ECCN**           | 5D002 (provides authentication/integrity services)                                                                                                                                          |
 | **Open-Source Exception** | Likely eligible                                                                                                                                                                             |
 
-**Note:** PCR extend uses XOR (simplified), not proper hash chaining.
-Comments explicitly note "Simplified: XOR for demonstration." The TPM
-command dispatch and key hierarchy are structurally complete but the
-underlying crypto operations delegate to the FIPS module.
+**Note (revised 2026-09-28):** PCR extend is a SHA-2 hash chain,
+`new = H(old || data)`, over IronCrypto, with property tests (922761f). Until
+then it was XOR, which made every register forgeable. No guest can reach the
+vTPM today: it is not wired to a device model, so it provides no service to a
+running guest.
 
 ### 3.2 Secure Boot
 
@@ -342,6 +336,12 @@ underlying crypto operations delegate to the FIPS module.
 | **Implementation**        | **From-scratch** — certificate and signature structures, verification chain logic                                                                                   |
 | **Likely ECCN**           | Part of 5D002 (authentication)                                                                                                                                      |
 | **Open-Source Exception** | Likely eligible                                                                                                                                                     |
+
+**Note (revised 2026-09-28):** signature verification is not implemented.
+The chain checks that a signer is trusted and not revoked, and then refuses
+rather than reporting success for a signature it never checked. Until
+2026-09-22 that path returned success. No cryptographic signature
+verification is performed by this module today.
 
 ### 3.3 Memory Encryption Management (SEV/TDX)
 
@@ -357,6 +357,11 @@ underlying crypto operations delegate to the FIPS module.
 **Note:** The encryption is performed by **hardware** (AMD SEV / Intel TDX
 engines). This module manages key IDs, page states, and configuration — it
 does not perform software encryption of memory contents.
+
+**Revised 2026-09-28:** no hardware backend exists, so `EncryptionManager::enable`
+refuses on every host, including one with SEV-SNP. Until 2026-09-22 it set a
+flag and reported memory as encrypted. No memory encryption is managed or
+performed today.
 
 ---
 
@@ -437,11 +442,13 @@ complete. Notes:
 
 | Dependency          | Role                                   | License            | Publicly Available |
 | ------------------- | -------------------------------------- | ------------------ | ------------------ |
-| `ring 0.17`         | AES-GCM, SHA-2, HMAC, HKDF, ECDSA, RSA | ISC                | ✅ Yes (GitHub)     |
-| `rustls 0.23`       | TLS protocol                           | Apache-2.0/ISC/MIT | ✅ Yes (GitHub)     |
-| `tokio-rustls 0.26` | Async TLS                              | MIT/Apache-2.0     | ✅ Yes              |
-| `rustls-pemfile 2`  | PEM parsing                            | MIT/Apache-2.0     | ✅ Yes              |
-| `rand`              | RNG (OS CSPRNG)                        | MIT/Apache-2.0     | ✅ Yes              |
+| `ic-cipher`, `ic-hash`, `ic-mac`, `ic-kdf`, `ic-rsa`, `ic-ec`, `ic-core` (IronCrypto) | AES-GCM, SHA-2, HMAC, HKDF, RSA signatures, ECDSA | AGPL-3.0-or-later | ✅ Yes (crates.io) |
+| `ml-kem`, `ml-dsa`, `slh-dsa` (RustCrypto) | ML-KEM, ML-DSA, SLH-DSA | MIT/Apache-2.0 | ✅ Yes (crates.io) |
+| `rustls 0.23` (with its `ring 0.17` backend) | TLS protocol | Apache-2.0/ISC/MIT | ✅ Yes (GitHub) |
+| `tokio-rustls 0.26` | Async TLS | MIT/Apache-2.0 | ✅ Yes |
+| `rustls-pki-types` | PEM/DER parsing | MIT/Apache-2.0 | ✅ Yes |
+| `rcgen` | Per-sandbox CA and leaf certificates for TLS interception | MIT/Apache-2.0 | ✅ Yes |
+| `rand` | RNG (OS CSPRNG) | MIT/Apache-2.0 | ✅ Yes |
 
 All cryptographic dependencies are publicly available open-source libraries.
 
@@ -451,18 +458,16 @@ All cryptographic dependencies are publicly available open-source libraries.
 
 | Component                                    | Likely ECCN    | Rationale                             | Exception              |
 | -------------------------------------------- | -------------- | ------------------------------------- | ---------------------- |
-| AES-128/256-GCM (ring wrapper)               | 5D002.c.1      | Symmetric encryption >56-bit          | §742.15(b) open-source |
-| AES-CTR+HMAC fallback (custom)               | 5D002.c.1      | Custom symmetric encryption >56-bit   | §742.15(b) if public   |
-| RSA encrypt/decrypt (custom `mod_exp_bytes`) | 5D002.c.1      | Custom asymmetric encryption >512-bit | §742.15(b) if public   |
-| RSA sign/verify (ring wrapper)               | 5D002.c.1      | Asymmetric >512-bit                   | §742.15(b) open-source |
-| ECDSA P-256/P-384 (ring wrapper)             | 5D002.c.1      | Asymmetric >512-bit equiv             | §742.15(b) open-source |
-| SHA-256/384/512 (ring wrapper)               | EAR99          | Hash functions                        | No license needed      |
-| HMAC-SHA256/512 (ring wrapper)               | Part of 5D002  | Authentication in crypto context      | §742.15(b)             |
-| HKDF-SHA256 (ring wrapper)                   | Part of 5D002  | Key derivation                        | §742.15(b)             |
-| TLS (rustls wrapper)                         | 5D002.c.1      | Network encryption                    | §742.15(b) open-source |
-| PQC ML-KEM (placeholder)                     | EAR99          | Not real PQC (SHA-256 PRF only)       | N/A                    |
-| PQC ML-DSA (placeholder)                     | EAR99          | Not real PQC (HMAC chain only)        | N/A                    |
-| PQC SLH-DSA (placeholder)                    | EAR99          | Not real PQC (HMAC chain only)        | N/A                    |
+| AES-128/256-GCM (IronCrypto wrapper)         | 5D002.c.1      | Symmetric encryption >56-bit          | §742.15(b) open-source |
+| RSA sign/verify, keygen (IronCrypto wrapper) | Re-review      | Signatures only; no RSA encryption    | §742.15(b) open-source |
+| ECDSA P-256/384/521 (IronCrypto wrapper)     | Re-review      | Signatures only; no ECDH              | §742.15(b) open-source |
+| SHA-256/384/512 (IronCrypto wrapper)         | EAR99          | Hash functions                        | No license needed      |
+| HMAC-SHA256/512 (IronCrypto wrapper)         | Part of 5D002  | Authentication in crypto context      | §742.15(b)             |
+| HKDF-SHA256 (IronCrypto wrapper)             | Part of 5D002  | Key derivation                        | §742.15(b)             |
+| TLS (rustls wrapper), incl. interception     | 5D002.c.1      | Network encryption                    | §742.15(b) open-source |
+| PQC ML-KEM (RustCrypto wrapper)              | Re-review      | Real FIPS 203 key establishment       | §742.15(b) open-source |
+| PQC ML-DSA (RustCrypto wrapper)              | Re-review      | Real FIPS 204 signatures              | §742.15(b) open-source |
+| PQC SLH-DSA (RustCrypto wrapper)             | Re-review      | Real FIPS 205 signatures              | §742.15(b) open-source |
 | vTPM 2.0                                     | 5D002          | Authentication/integrity services     | §742.15(b)             |
 | Secure Boot                                  | Part of 5D002  | Authentication chain                  | §742.15(b)             |
 | Memory Encryption Mgmt                       | Part of 5D002  | Manages HW encryption keys            | §742.15(b)             |
@@ -487,7 +492,7 @@ on source-code distribution under the open-source exception.
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **R-1** | **BIS notification for the open-source exception.** EAR §742.15(b) requires emailing `crypt@bis.doc.gov` and `enc@nsa.gov` with the repository URL and an encryption-functionality description. | File the notification prior to the next signed binary release. Notification text and acknowledgement will be archived under [docs/security/](.).                                                |
 | **R-2** | **Commercial-license distributions** under `LicenseRef-Commercial` and signed binary distributions are out of scope of the source-only exception.                                               | Obtain independent legal analysis and, if required, a BIS classification (CCATS) for binary / commercial distributions before publishing them. Source releases under AGPL-3.0 are not affected. |
-| **R-3** | **CMVP-validated FIPS 140-3 module.** The crypto module is FIPS-architected (NIST-approved algorithms via `ring`) but has not been submitted for CMVP validation.                               | Tracked in [FIPS_COMPLIANCE.md](FIPS_COMPLIANCE.md). All public docs and code comments use the phrase "FIPS 140-3 architecture; not yet CMVP-certified" to avoid misrepresentation.             |
+| **R-3** | **CMVP-validated FIPS 140-3 module.** The crypto module is FIPS-architected (NIST-approved algorithms via IronCrypto, and RustCrypto for PQC) but has not been submitted for CMVP validation.                               | Tracked in [FIPS_COMPLIANCE.md](FIPS_COMPLIANCE.md). All public docs and code comments use the phrase "FIPS 140-3 architecture; not yet CMVP-certified" to avoid misrepresentation.             |
 
 ### 7.2 Known Source-Code Limitations (K-series)
 
@@ -496,12 +501,14 @@ production-readiness, not the export-control status of the source release.
 
 | #       | Limitation                                                                                                                                                                                                        | Mitigation in current release                                                                                                                                                                                 |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **K-1** | **Custom RSA encrypt/decrypt** ([asymmetric.rs](../../crates/hv2-core/src/crypto/asymmetric.rs)): `mod_exp_bytes()` is a from-scratch big-integer modular exponentiation, not a validated library implementation. | Production deployments should enable the `ring` feature for all RSA signing/verification. The custom path is documented as non-production and is the leading candidate for removal in a future release.       |
-| **K-2** | **Custom AES-CTR+HMAC fallback** in `fips.rs` (non-`ring` path) implements encrypt-then-MAC composition without a validated library. Comments mark it as not FIPS-certified.                                      | Default builds enable `ring`. The fallback exists only for `no_std` / cross-compile experimentation; it will be moved behind a `dangerous-fallback` feature flag with compile-time warnings.                  |
-| **K-3** | **PQC modules (`pqc.rs`) implement API stubs**, not the FIPS 203 / 204 / 205 algorithms. Names and types match the standards but the underlying math is a SHA-256 / HMAC-SHA256 PRF chain.                        | The module is marked as an API preview in code comments and `FIPS_COMPLIANCE.md`. Real implementations will integrate `pqcrypto` or `oqs-rs`; until then, do not use these APIs for cryptographic protection. |
-| **K-4** | **vTPM PCR extend uses XOR** instead of proper hash chaining. Documented inline as "simplified for demonstration".                                                                                                | Correctness issue, not an export-control issue. Tracked in the issue tracker for replacement with proper SHA-2 chaining.                                                                                      |
+| **K-1** | ~~**Custom RSA encrypt/decrypt**: `mod_exp_bytes()` is a from-scratch big-integer modular exponentiation.~~ | **Resolved in 814d0c0.** Deleted rather than fixed: it computed wrong results (4^13 mod 497 gave 121, not 445) and had no callers. RSA is now IronCrypto `ic-rsa`, signatures only. |
+| **K-2** | ~~**Custom AES-CTR+HMAC fallback** in `fips.rs`.~~ | **Resolved in 59ad48a.** Deleted. It was not AES: its keystream was `SHA256(key \|\| nonce \|\| counter)`. AES-GCM is IronCrypto, with no fallback. |
+| **K-3** | ~~**PQC modules (`pqc.rs`) implement API stubs.**~~ | **Resolved in 59ad48a.** Real ML-KEM, ML-DSA and SLH-DSA via the RustCrypto crates, on by default. Their ECCN entries in §6 need re-review. SLH-DSA is pinned to a release candidate (`=0.2.0-rc.5`). |
+| **K-4** | ~~**vTPM PCR extend uses XOR.**~~ | **Resolved in 922761f.** A SHA-2 hash chain, `H(old \|\| data)`, with property tests. |
 | **K-5** | **SM3 hash algorithm** appears in the vTPM `HashAlgorithm` enum for TPM 2.0 specification completeness.                                                                                                           | SM3 is included for protocol parsing only; no HyperMachine security function uses SM3 to provide confidentiality, integrity, or authentication.                                                               |
-| **K-6** | The `ring` feature is currently optional. When disabled, most crypto APIs return `NotImplemented`, which can be confusing.                                                                                        | A future release will make `ring` a default feature so production builds always link a validated crypto provider.                                                                                             |
+| **K-6** | ~~The `ring` feature is optional; when disabled, most crypto APIs return `NotImplemented`.~~ | **Resolved in 93abff0.** The feature is gone. IronCrypto is pure Rust with no build script, so every classical primitive is unconditional. |
+| **K-8** | **RSA-4096 private-key operations are refused.** `ic-rsa` 0.1.3 panics deriving the private exponent at 4096 bits (an index one past its 64-limb integers), in both key generation and `from_primes`. Under `panic = "abort"` that ends the process. | **Mitigated 2026-09-28:** refused with `UnsupportedAlgorithm` before `ic-rsa` is called. Verification of 4096-bit signatures is unaffected. To be lifted when `ic-rsa` is fixed. |
+| **K-7** | **AES-128-GCM was accepted and refused.** `AesKeySize::Aes128` generated 16-byte keys that validation accepted, and the implementation then built an AES-256 cipher for every key. | **Resolved 2026-09-28.** The cipher follows the key length, and AES-128 is checked against GCM-spec Test Case 2. Broken from 93abff0 until then. |
 
 ---
 
@@ -511,35 +518,38 @@ production-readiness, not the export-control status of the source release.
 
 | Algorithm                  | Key Length    | Sym/Asym   | File          | Wrapper vs Custom | External Dep |
 | -------------------------- | ------------- | ---------- | ------------- | ----------------- | ------------ |
-| AES-256-GCM                | 256-bit       | Symmetric  | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| AES-128-GCM                | 128-bit       | Symmetric  | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| AES-CTR+HMAC fallback      | 128/256-bit   | Symmetric  | fips.rs       | **Custom**        | None         |
-| RSA-2048/3072/4096 sign    | 2048-4096-bit | Asymmetric | asymmetric.rs | Wrapper (ring)    | ring 0.17    |
-| RSA-2048/3072/4096 verify  | 2048-4096-bit | Asymmetric | asymmetric.rs | Wrapper (ring)    | ring 0.17    |
-| RSA-2048/3072/4096 encrypt | 2048-4096-bit | Asymmetric | asymmetric.rs | **Custom**        | None         |
-| RSA-2048/3072/4096 decrypt | 2048-4096-bit | Asymmetric | asymmetric.rs | **Custom**        | None         |
-| ECDSA P-256/SHA-256        | 256-bit       | Asymmetric | asymmetric.rs | Wrapper (ring)    | ring 0.17    |
-| ECDSA P-384/SHA-384        | 384-bit       | Asymmetric | asymmetric.rs | Wrapper (ring)    | ring 0.17    |
-| SHA-256                    | N/A           | Hash       | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| SHA-384                    | N/A           | Hash       | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| SHA-512                    | N/A           | Hash       | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| HMAC-SHA256                | 256-bit       | MAC        | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| HMAC-SHA512                | 512-bit       | MAC        | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| HKDF-SHA256                | Variable      | KDF        | fips.rs       | Wrapper (ring)    | ring 0.17    |
-| TLS 1.2/1.3                | Various       | Protocol   | tls.rs        | Wrapper (rustls)  | rustls 0.23  |
-| RNG (OS CSPRNG)            | N/A           | Random     | fips.rs       | Wrapper (rand)    | rand crate   |
+| AES-256-GCM                | 256-bit       | Symmetric  | fips.rs       | Wrapper           | ic-cipher (IronCrypto) |
+| AES-128-GCM                | 128-bit       | Symmetric  | fips.rs       | Wrapper           | ic-cipher (IronCrypto) |
+| RSA-2048/3072 keygen       | 2048-3072-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
+| RSA-2048/3072 sign         | 2048-3072-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
+| RSA-2048/3072/4096 verify  | 2048-4096-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
+| ECDSA P-256/SHA-256        | 256-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
+| ECDSA P-384/SHA-384        | 384-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
+| ECDSA P-521/SHA-512        | 521-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
+| ML-KEM-512/768/1024        | FIPS 203      | Asymmetric | pqc.rs        | Wrapper           | ml-kem (RustCrypto)    |
+| ML-DSA-44/65/87            | FIPS 204      | Asymmetric | pqc.rs        | Wrapper           | ml-dsa (RustCrypto)    |
+| SLH-DSA (6 parameter sets) | FIPS 205      | Asymmetric | pqc.rs        | Wrapper           | slh-dsa (RustCrypto, rc) |
+| SHA-256                    | N/A           | Hash       | fips.rs       | Wrapper           | ic-hash (IronCrypto)   |
+| SHA-384                    | N/A           | Hash       | fips.rs       | Wrapper           | ic-hash (IronCrypto)   |
+| SHA-512                    | N/A           | Hash       | fips.rs       | Wrapper           | ic-hash (IronCrypto)   |
+| HMAC-SHA256                | 256-bit       | MAC        | fips.rs, hv2-api middleware.rs | Wrapper | ic-mac (IronCrypto) |
+| HMAC-SHA512                | 512-bit       | MAC        | fips.rs       | Wrapper           | ic-mac (IronCrypto)    |
+| HKDF-SHA256                | Variable      | KDF        | fips.rs       | Wrapper           | ic-kdf (IronCrypto)    |
+| TLS 1.2/1.3                | Various       | Protocol   | hv2-api tls.rs, hv2-net gateway, hm-cli | Wrapper | rustls 0.23 (ring backend) |
+| X.509 CA / leaf generation | ECDSA P-256   | Asymmetric | hv2-net gateway/mitm.rs | Wrapper | rcgen          |
+| RNG (OS CSPRNG)            | N/A           | Random     | fips.rs       | Wrapper           | rand / OS              |
 
 ### 8.2 Algorithms Defined but Not Truly Implemented (Placeholders)
 
 | Algorithm                | Declared Standard | Actual Implementation              | File          |
 | ------------------------ | ----------------- | ---------------------------------- | ------------- |
-| ML-KEM-512/768/1024      | FIPS 203          | SHA-256 PRF (no lattice math)      | pqc.rs        |
-| ML-DSA-44/65/87          | FIPS 204          | HMAC-SHA256 chain (no module-LWE)  | pqc.rs        |
-| SLH-DSA variants         | FIPS 205          | HMAC-SHA256 chain (no Merkle tree) | pqc.rs        |
 | Hybrid KEM schemes       | N/A               | Type definitions only              | pqc.rs        |
 | Hybrid signature schemes | N/A               | Type definitions only              | pqc.rs        |
-| RSA key generation       | FIPS 186-5        | Returns `NotImplemented`           | asymmetric.rs |
-| ECDSA P-521              | FIPS 186-5        | Returns `UnsupportedAlgorithm`     | asymmetric.rs |
+| ECDH (P-256/P-384)       | SP 800-56A        | Named in comments; no code         | asymmetric.rs |
+| Secure Boot signature verification | UEFI     | Refuses; checks trust only (§3.2)  | secure_boot.rs |
+
+The PQC, RSA key generation and P-521 rows that the 2026-03-25 review listed
+here are now implemented (§8.1).
 
 ---
 
@@ -552,9 +562,10 @@ production-readiness, not the export-control status of the source release.
 > software using "non-standard cryptography."
 
 The software:
-1. Implements encryption (AES-GCM, RSA) with key lengths >56-bit symmetric /
-   >512-bit asymmetric
-2. Provides TLS network encryption
+1. Implements encryption (AES-GCM) with key lengths >56-bit symmetric, and
+   key establishment (ML-KEM). RSA and ECDSA perform signatures only.
+2. Provides TLS network encryption, including the egress gateway's TLS
+   interception (§1.7)
 3. Includes authentication services (vTPM, Secure Boot, digital signatures)
 
 The project's position is that the open-source exception under EAR

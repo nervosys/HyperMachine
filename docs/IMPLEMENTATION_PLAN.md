@@ -118,20 +118,27 @@ Deploy, Coverage and Benchmarks.
 The recurring defect in this project has been prose that claims more — or
 less — than the code does. These are the known instances still outstanding.
 
-- [ ] **Reconcile `security/EXPORT_CONTROL_AUDIT.md` §7.** *S.*
+- [x] **Reconcile `security/EXPORT_CONTROL_AUDIT.md` §7.** *S.* Done
+  2026-09-28, and further than §7: §1, §3, §5.4, §6, §8 and §9 described the
+  `ring`-era implementation too. Classifications that rested on changed facts
+  (the post-quantum algorithms' EAR99, RSA and ECDSA as "encryption") are
+  marked for re-review rather than reassigned. Checking the inventory also
+  found AES-128-GCM broken since 93abff0; that is now fixed and tested (K-7).
   Four of its five "known issues" are already resolved:
-  - [ ] **K-1** custom RSA encrypt/decrypt — deleted; it computed wrong
+  - [x] **K-1** custom RSA encrypt/decrypt — deleted; it computed wrong
     results and had no callers.
-  - [ ] **K-2** AES-CTR+HMAC fallback — gone; the only remaining mention is a
+  - [x] **K-2** AES-CTR+HMAC fallback — gone; the only remaining mention is a
     comment saying there should not be one.
-  - [ ] **K-3** "PQC modules implement API stubs" — false; `pqc.rs` is backed
+  - [x] **K-3** "PQC modules implement API stubs" — false; `pqc.rs` is backed
     by the `ml-kem`, `ml-dsa` and `slh-dsa` crates.
-  - [ ] **K-4** vTPM PCR extend uses XOR — fixed in `922761f`; now a SHA-2
+  - [x] **K-4** vTPM PCR extend uses XOR — fixed in `922761f`; now a SHA-2
     hash chain with property tests.
 
   Done when: each is marked resolved with the commit that resolved it.
-- [ ] **`SECURITY_AUDIT.md` recommendation #3** ("retire the `rsa` timing
-  advisory") — done; mark it. *S.*
+- [x] **`SECURITY_AUDIT.md` recommendation #3** ("retire the `rsa` timing
+  advisory") — done in 814d0c0; marked 2026-09-28. The accepted-advisory
+  table was also out of step with `deny.toml` (three entries for crates no
+  longer in the build, two missing) and now mirrors it.
 - [x] **Parity roadmap, Phase 4**: "`hv2-runtime`'s 8 tests are the thinnest
   coverage" — it has 279. Gone in the Phase 4 rewrite, which also records
   why the cluster was not built on `hv2-runtime`.
