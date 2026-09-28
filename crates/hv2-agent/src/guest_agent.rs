@@ -65,6 +65,12 @@ pub trait GuestChannel: Send {
     fn wait(&mut self, timeout: Duration) {
         std::thread::sleep(timeout);
     }
+
+    /// This channel as a plain byte stream, if it is a vsock connection: for
+    /// a connection the guest has turned over to something else.
+    fn into_stream(self: Box<Self>) -> Option<VsockStream> {
+        None
+    }
 }
 
 /// A [`GuestChannel`] over one vsock connection.
@@ -75,6 +81,8 @@ pub struct VsockChannel {
     /// seen, so a signal that arrives between a look and a wait is not lost.
     progress: Arc<hv2_core::devices::virtio_vsock::Progress>,
     seen: u64,
+    /// Handed on to a [`VsockStream`], which closes it instead.
+    detached: bool,
 }
 
 impl VsockChannel {
@@ -103,6 +111,7 @@ impl VsockChannel {
                         id,
                         progress,
                         seen,
+                        detached: false,
                     });
                 }
                 Settled::Refused => {
@@ -180,6 +189,9 @@ enum Settled {
 
 impl Drop for VsockChannel {
     fn drop(&mut self) {
+        if self.detached {
+            return;
+        }
         // Tell the guest, so its agent stops waiting on a peer that is gone,
         // and then release the port pair. The shutdown packet is queued by
         // `close` before this forgets the connection, so the guest still hears
@@ -210,6 +222,107 @@ impl GuestChannel for VsockChannel {
 
     fn wait(&mut self, timeout: Duration) {
         self.seen = self.progress.wait_past(self.seen, timeout);
+    }
+
+    fn into_stream(mut self: Box<Self>) -> Option<VsockStream> {
+        self.detached = true;
+        Some(VsockStream {
+            inner: Arc::new(StreamInner {
+                device: Arc::clone(&self.device),
+                id: self.id,
+                progress: Arc::clone(&self.progress),
+            }),
+        })
+    }
+}
+
+/// A vsock connection as a byte stream, for two threads at once: one
+/// reading, one writing. Closed when the last clone goes.
+#[derive(Clone)]
+pub struct VsockStream {
+    inner: Arc<StreamInner>,
+}
+
+struct StreamInner {
+    device: Arc<Mutex<VsockDevice>>,
+    id: VsockConnectionId,
+    progress: Arc<hv2_core::devices::virtio_vsock::Progress>,
+}
+
+impl Drop for StreamInner {
+    fn drop(&mut self) {
+        let mut device = self.device.lock();
+        let _ = device.close(self.id);
+        device.forget(self.id);
+    }
+}
+
+impl VsockStream {
+    /// What arrived, waiting for something; empty once the guest has
+    /// closed and everything it sent has been read.
+    ///
+    /// # Errors
+    ///
+    /// The connection is gone from the device.
+    pub fn read(&self) -> Result<Vec<u8>> {
+        loop {
+            let seen = self.inner.progress.current();
+            let (data, open) = {
+                let mut device = self.inner.device.lock();
+                let data = device.recv(self.inner.id)?;
+                let open = matches!(
+                    device.state(self.inner.id),
+                    Some(VsockConnectionState::Established)
+                );
+                (data, open)
+            };
+            if !data.is_empty() || !open {
+                return Ok(data);
+            }
+            self.inner.progress.wait_past(seen, Duration::from_secs(1));
+        }
+    }
+
+    /// Send all of `data`, waiting for credit as the guest grants it.
+    ///
+    /// # Errors
+    ///
+    /// The guest closed the connection first.
+    pub fn write_all(&self, mut data: &[u8]) -> Result<()> {
+        while !data.is_empty() {
+            let seen = self.inner.progress.current();
+            let sent = {
+                let mut device = self.inner.device.lock();
+                if !matches!(
+                    device.state(self.inner.id),
+                    Some(VsockConnectionState::Established)
+                ) {
+                    return Err(AgentError::Script("the guest closed the connection".into()));
+                }
+                device.send(self.inner.id, data)?
+            };
+            data = &data[sent..];
+            if sent == 0 {
+                self.inner
+                    .progress
+                    .wait_past(seen, Duration::from_millis(100));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the connection still carries anything.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        matches!(
+            self.inner.device.lock().state(self.inner.id),
+            Some(VsockConnectionState::Established)
+        )
+    }
+
+    /// Close both directions now, whoever else holds a clone.
+    pub fn close(&self) {
+        let _ = self.inner.device.lock().close(self.inner.id);
     }
 }
 
@@ -592,6 +705,29 @@ impl GuestAgent {
             append = true;
         }
         Ok(())
+    }
+
+    /// Have the guest carry this connection to its TCP `port`, and give the
+    /// connection up as a byte stream, with what already arrived past the
+    /// answer.
+    ///
+    /// # Errors
+    ///
+    /// Nothing listens on `port` in the guest, or the transport failed.
+    pub fn forward(mut self, port: u16, timeout: Duration) -> Result<(VsockStream, Vec<u8>)> {
+        match self.request(Operation::Forward { port }, timeout)? {
+            OpResult::Acknowledged => {
+                let early = std::mem::take(&mut self.pending);
+                let stream = self.channel.into_stream().ok_or_else(|| {
+                    AgentError::Script("only a vsock connection can be forwarded".into())
+                })?;
+                Ok((stream, early))
+            }
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a forward with {other:?}"
+            ))),
+        }
     }
 
     /// Have the guest mount a volume at `path` over this connection, and

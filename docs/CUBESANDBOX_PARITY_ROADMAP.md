@@ -1643,6 +1643,25 @@ Verified with the unmodified SDK:
 
 Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
 
+#### A sandbox's own ports
+
+E2B's `sandbox.get_host(port)` -- `{port}-{sandboxID}.{domain}` -- reaches any port a sandbox serves, not only envd's: a web server, a dev server, the Code Interpreter's Jupyter. Until now the proxy routed envd's port alone, so every other one answered 404.
+
+How it works:
+- The first request for a port makes a loopback listener for it on the node.
+- Each connection it accepts rides a vsock connection of its own: the guest agent connects to the port inside the guest, answers, and copies bytes both ways (`Forward`). No network interface is involved, so a sandbox without one serves its ports all the same.
+- For any port but envd's the proxy speaks HTTP/1.1 to its backend, at the node and between a control plane and a node, and splices upgraded connections, so WebSockets work.
+- A sandbox's listeners and connections close when it pauses or ends; the first request after a resume makes them again.
+
+Verified, through the unmodified SDK's `get_host`:
+- `busybox httpd` in a sandbox answered its first request in 90 ms (the listener made) and later ones in about 10 ms;
+- 64 MiB came through at 153 MiB/s with a matching checksum -- 91 MiB/s on a node without `--network`;
+- a port nothing listens on answered 502;
+- after pause and resume the server answered again;
+- a chunked response streamed: its first chunk arrived after 10 ms, the rest over 1.5 s;
+- a WebSocket upgrade came back `101` with the right `Sec-WebSocket-Accept`, and messages echoed both ways;
+- through a control plane over two nodes, 32 MiB came through at 261-274 MiB/s.
+
 #### Cloud registry logins
 
 E2B's `from_aws_registry` and `from_gcp_registry` work. For AWS the node signs `ecr:GetAuthorizationToken` with Signature Version 4 and logs in with the token it answers; `HV2_ECR_ENDPOINT` points at a FIPS or VPC endpoint instead of the region's. For Google the service account's key signs an RS256 JWT, which its token endpoint exchanges for an access token, used as the password of `oauth2accesstoken`. Neither credential is stored or logged.

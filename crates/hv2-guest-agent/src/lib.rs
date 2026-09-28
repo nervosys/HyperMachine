@@ -226,6 +226,14 @@ pub enum Operation {
     /// without a `Tattach`.
     MountVolume { path: String },
 
+    /// Carry *this connection* to a TCP port inside the guest: the agent
+    /// connects to `127.0.0.1:port` (or `[::1]:port`), answers
+    /// [`OpResult::Acknowledged`], and from then on copies bytes both ways
+    /// between the two until either closes -- a sandbox's web server,
+    /// reached from the host with no network interface involved. Answered
+    /// with [`OpResult::Failed`] if nothing listens there.
+    Forward { port: u16 },
+
     /// What the guest is using, as it sees it: CPU time, memory, and its
     /// root filesystem. Answered with [`OpResult::Stats`] -- one round trip,
     /// for a host sampling every sandbox every few seconds.

@@ -369,7 +369,7 @@ where
     // every request it made was rejected at the preface, before any routing
     // ran -- the connection log said `http2 error` and nothing else.
     if let Err(e) = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-        .serve_connection(TokioIo::new(stream), service)
+        .serve_connection_with_upgrades(TokioIo::new(stream), service)
         .await
     {
         tracing::debug!("sandbox proxy: connection from {peer} ended: {e}");
@@ -583,6 +583,12 @@ async fn proxy(
             }
         }
     };
+    // envd's port is gRPC and Connect over HTTP/2; every other port is
+    // whatever the sandbox serves there, which is HTTP/1.1 far more often,
+    // and WebSockets need its upgrades.
+    if port != ENVD_PORT {
+        return Ok(relay_http1(req, stream, target, sandbox, port, in_flight).await);
+    }
     let (mut sender, connection) =
         match hyper::client::conn::http2::handshake(TokioExecutor::new(), TokioIo::new(stream))
             .await
@@ -671,6 +677,117 @@ async fn proxy(
             ))
         }
     }
+}
+
+/// One request to a sandbox's own port, over HTTP/1.1. An upgrade -- a
+/// WebSocket -- is answered with the backend's `101` and then spliced: bytes
+/// both ways between the two upgraded connections until either closes, the
+/// in-flight guard held all the while.
+async fn relay_http1(
+    mut req: Request<Incoming>,
+    stream: Box<dyn BackendIo>,
+    target: SocketAddr,
+    sandbox: &str,
+    port: u16,
+    in_flight: InFlight,
+) -> Response<ProxyBody> {
+    let (mut sender, connection) =
+        match hyper::client::conn::http1::handshake(TokioIo::new(stream)).await {
+            Ok(pair) => pair,
+            Err(e) => {
+                tracing::warn!("sandbox proxy: http/1.1 with {target} failed: {e}");
+                return refuse(
+                    false,
+                    StatusCode::BAD_GATEWAY,
+                    grpc_status::UNAVAILABLE,
+                    "the sandbox is not serving HTTP on that port",
+                );
+            }
+        };
+    tokio::spawn(async move {
+        if let Err(e) = connection.with_upgrades().await {
+            tracing::debug!("sandbox proxy: backend connection ended: {e}");
+        }
+    });
+    let client_upgrade = req
+        .headers()
+        .contains_key(hyper::header::UPGRADE)
+        .then(|| hyper::upgrade::on(&mut req));
+    let authority = req.uri().authority().map(|a| a.as_str().to_owned());
+    let (mut parts, body) = req.into_parts();
+    if !parts.headers.contains_key("e2b-sandbox-id") {
+        if let Ok(value) = hyper::header::HeaderValue::from_str(sandbox) {
+            parts.headers.insert("e2b-sandbox-id", value);
+            parts
+                .headers
+                .insert("e2b-sandbox-port", hyper::header::HeaderValue::from(port));
+        }
+    }
+    // HTTP/1.1 carries the authority as `Host`, which a request that came in
+    // over HTTP/2 had as `:authority` instead.
+    if !parts.headers.contains_key(hyper::header::HOST) {
+        if let Some(value) = authority.and_then(|a| hyper::header::HeaderValue::from_str(&a).ok()) {
+            parts.headers.insert(hyper::header::HOST, value);
+        }
+    }
+    parts.version = hyper::Version::HTTP_11;
+    parts.uri = match parts
+        .uri
+        .path_and_query()
+        .map_or("/", hyper::http::uri::PathAndQuery::as_str)
+        .parse()
+    {
+        Ok(uri) => uri,
+        Err(_) => {
+            return refuse(
+                false,
+                StatusCode::BAD_REQUEST,
+                grpc_status::INVALID_ARGUMENT,
+                "unroutable request path",
+            )
+        }
+    };
+    let mut response = match sender.send_request(Request::from_parts(parts, body)).await {
+        Ok(response) => response,
+        Err(e) => {
+            tracing::warn!("sandbox proxy: forwarding to {target} failed: {e}");
+            return refuse(
+                false,
+                StatusCode::BAD_GATEWAY,
+                grpc_status::UNAVAILABLE,
+                "the sandbox's port did not answer",
+            );
+        }
+    };
+    if response.status() == StatusCode::SWITCHING_PROTOCOLS {
+        if let Some(client) = client_upgrade {
+            let server = hyper::upgrade::on(&mut response);
+            tokio::spawn(async move {
+                let _held = in_flight;
+                if let (Ok(client), Ok(server)) = tokio::join!(client, server) {
+                    let (mut client, mut server) = (TokioIo::new(client), TokioIo::new(server));
+                    let _ = tokio::io::copy_bidirectional(&mut client, &mut server).await;
+                }
+            });
+            let (parts, body) = response.into_parts();
+            let body = body
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                .boxed();
+            return Response::from_parts(parts, body);
+        }
+    }
+    let (parts, body) = response.into_parts();
+    let body = body
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        .boxed();
+    Response::from_parts(
+        parts,
+        GuardedBody {
+            inner: body,
+            _in_flight: in_flight,
+        }
+        .boxed(),
+    )
 }
 
 #[cfg(test)]

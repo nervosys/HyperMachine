@@ -190,6 +190,28 @@ mod linux {
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?
             {
                 buf.drain(..used);
+                // A forward takes the connection too: answered, then spliced.
+                if let Operation::Forward { port } = request.op {
+                    let target = std::net::TcpStream::connect(("127.0.0.1", port))
+                        .or_else(|_| std::net::TcpStream::connect(("::1", port)));
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
+                        result: match &target {
+                            Ok(_) => OpResult::Acknowledged,
+                            Err(e) => OpResult::Failed {
+                                message: format!("nothing is listening on port {port}: {e}"),
+                            },
+                        },
+                    };
+                    let bytes = encode(&response).map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                    })?;
+                    write_all_fd(fd, &bytes)?;
+                    let Ok(tcp) = target else { return Ok(()) };
+                    splice(fd, tcp, &buf);
+                    return Ok(());
+                }
                 // A volume mount takes the connection itself: answered here,
                 // then handed to the kernel, and this loop is done with it.
                 if let Operation::MountVolume { path } = &request.op {
@@ -273,6 +295,39 @@ mod linux {
             s.disk_used = (fs.f_blocks as u64).saturating_sub(fs.f_bfree as u64) * block;
         }
         s
+    }
+
+    /// Copy bytes both ways between the host's connection `fd` and `tcp`
+    /// until either side closes; `early` is what the host sent past the
+    /// forward request, which belongs to the stream.
+    fn splice(fd: libc::c_int, tcp: std::net::TcpStream, early: &[u8]) {
+        use std::io::Write as _;
+        // The caller closes `fd` when this returns: the copies use their
+        // own duplicates, so each closes its half cleanly.
+        let dup = |fd: libc::c_int| {
+            let d = unsafe { libc::dup(fd) };
+            (d >= 0).then(|| unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(d) })
+        };
+        let (Some(mut from_host), Some(mut to_host)) = (dup(fd), dup(fd)) else {
+            return;
+        };
+        let _ = tcp.set_nodelay(true);
+        let Ok(mut tcp_reader) = tcp.try_clone() else {
+            return;
+        };
+        let mut tcp_writer = tcp;
+        if !early.is_empty() && tcp_writer.write_all(early).is_err() {
+            return;
+        }
+        let upstream = std::thread::spawn(move || {
+            let _ = std::io::copy(&mut from_host, &mut tcp_writer);
+            let _ = tcp_writer.shutdown(std::net::Shutdown::Write);
+        });
+        let _ = std::io::copy(&mut tcp_reader, &mut to_host);
+        // The program closed its side: so does the host's, and the copy
+        // upstream ends when the host sees it.
+        unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+        let _ = upstream.join();
     }
 
     /// `path`, a directory with nothing mounted on it: made if missing, and
@@ -415,6 +470,10 @@ mod linux {
                 length,
             } => read_file(&path, offset, length),
             Operation::Stats => OpResult::Stats(stats()),
+            // Served in `serve`, which owns the connection it takes.
+            Operation::Forward { .. } => OpResult::Failed {
+                message: "a forward must be the connection's own request".into(),
+            },
             // Served in `serve`, which owns the connection it takes.
             Operation::MountVolume { .. } => OpResult::Failed {
                 message: "a volume mount must be the connection's own request".into(),

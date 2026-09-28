@@ -118,6 +118,7 @@ use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
 mod builds;
 mod cloud_login;
+mod forwards;
 mod identity;
 mod initramfs;
 mod ninep;
@@ -459,6 +460,8 @@ struct AppState {
     initrds: parking_lot::RwLock<BTreeMap<String, String>>,
     /// Templates being built, or whose build failed, by name.
     builds: Mutex<BTreeMap<String, TemplateBuild>>,
+    /// Guest ports reached through the proxy, by sandbox and port.
+    forwards: forwards::Forwards,
     /// Each sandbox's metric samples and log, by sandbox ID.
     telemetry: telemetry::Telemetry,
     /// Templates' sandboxes' sizes, where they are not the node's.
@@ -1911,6 +1914,7 @@ async fn pause_sandbox(
     let started = std::time::Instant::now();
     // Unroutable first: a request arriving now should resume it, not reach a
     // VM that is stopping.
+    forwards::stop(state, sandbox_id);
     state.routes.remove_sandbox(sandbox_id);
     let snapshot = state.suspend_dir.join(format!("{sandbox_id}.snap"));
     let _ = std::fs::remove_file(&snapshot);
@@ -2384,7 +2388,14 @@ impl ResumingRoutes {
             let live = sandboxes.get(sandbox)?;
             ActivityGuard::enter(&live.activity)
         };
-        let addr = self.state.routes.resolve(sandbox, port).await?;
+        let addr = match self.state.routes.resolve(sandbox, port).await {
+            Some(addr) => addr,
+            // Any port but envd's: the sandbox's own, carried into it.
+            None if port != sandbox_proxy::ENVD_PORT => {
+                forwards::listen(&self.state, sandbox, port).await?
+            }
+            None => return None,
+        };
         Some((addr, sandbox_proxy::InFlight::new(guard)))
     }
 }
@@ -3530,6 +3541,7 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     }
     // Stop resolving the name first: a request that arrives during teardown
     // should fail to route rather than be sent at a VM that is stopping.
+    forwards::stop(state, sandbox_id);
     state.routes.remove_sandbox(sandbox_id);
     let _ = live.process_shutdown.send(());
     // Dropping the bridge drops the gateway, whose stack task ends with it;
@@ -3825,6 +3837,7 @@ async fn main() -> std::process::ExitCode {
         builds: Mutex::new(BTreeMap::new()),
         sizes: parking_lot::RwLock::new(BTreeMap::new()),
         telemetry: parking_lot::Mutex::new(HashMap::new()),
+        forwards: forwards::Forwards::default(),
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
         upload_tokens: Mutex::new(HashMap::new()),

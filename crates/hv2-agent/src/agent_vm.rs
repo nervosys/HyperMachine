@@ -515,6 +515,25 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest file write task failed: {e}")))?
     }
 
+    /// A connection to TCP `port` inside the guest, carried over vsock: a
+    /// sandbox's web server reached from the host, with or without a network.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; nothing listening on `port`.
+    pub async fn forward_port(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.forward(port, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest forward task failed: {e}")))?
+    }
+
     /// Have the guest mount a volume at `path`, served over a connection of
     /// its own: returned, with whatever already arrived on it, for a 9P
     /// server to run on.
