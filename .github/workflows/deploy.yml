@@ -319,6 +319,10 @@ jobs:
       - name: Send Slack notification
         uses: slackapi/slack-github-action@v4
         with:
+          # From v2 the webhook is an input; SLACK_WEBHOOK_URL in env is no
+          # longer read, and with continue-on-error below a miss is silent.
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
           payload: |
             {
               "text": "HyperMachine Deployment ${{ job.status }}",
@@ -342,6 +346,4 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         continue-on-error: true
