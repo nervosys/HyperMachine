@@ -375,12 +375,32 @@ impl GuestAgent {
         pty: Option<PtySize>,
         timeout: Duration,
     ) -> Result<u32> {
+        self.start_as(program, args, cwd, envs, pty, None, timeout)
+    }
+
+    /// [`Self::start`], as `user`: `None` is the template's user, or root.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::start`]; and a user the guest has no account for.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_as(
+        &mut self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
+        user: Option<&str>,
+        timeout: Duration,
+    ) -> Result<u32> {
         let op = Operation::Start {
             program: program.to_string(),
             args: args.to_vec(),
             cwd: cwd.map(str::to_string),
             envs: envs.clone(),
             pty,
+            user: user.map(str::to_string),
         };
         match self.request(op, timeout)? {
             OpResult::Started { pid } => Ok(pid),
@@ -515,6 +535,22 @@ impl GuestAgent {
     ///
     /// Propagates a transport failure, or the guest's reason for refusing.
     pub fn write_file(&mut self, path: &str, data: &[u8], timeout: Duration) -> Result<()> {
+        self.write_file_as(path, data, None, timeout)
+    }
+
+    /// [`Self::write_file`], the file and the directories made for it owned
+    /// by `owner` (see [`Operation::WriteFile`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::write_file`]; and an owner the guest has no account for.
+    pub fn write_file_as(
+        &mut self,
+        path: &str,
+        data: &[u8],
+        owner: Option<&str>,
+        timeout: Duration,
+    ) -> Result<()> {
         let mut chunks = data.chunks(hv2_guest_agent::FILE_CHUNK).peekable();
         let mut append = false;
         // An empty file is still one write, which creates it.
@@ -526,6 +562,7 @@ impl GuestAgent {
                     path: path.to_string(),
                     data: hv2_guest_agent::b64::encode(chunk),
                     append,
+                    owner: owner.map(str::to_string),
                 },
                 timeout,
             )? {

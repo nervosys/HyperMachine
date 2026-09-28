@@ -480,11 +480,29 @@ impl AgentVM {
         data: Vec<u8>,
         timeout: Duration,
     ) -> Result<()> {
+        self.write_file_in_guest_as(path, data, None, timeout).await
+    }
+
+    /// [`Self::write_file_in_guest`], the file and the directories made for
+    /// it owned by `owner`: a user, or `hv2_guest_agent::TEMPLATE_USER` for
+    /// the template's.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::write_file_in_guest`]; and an owner with no account.
+    pub async fn write_file_in_guest_as(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        owner: Option<&str>,
+        timeout: Duration,
+    ) -> Result<()> {
         let device = self.file_channel()?;
         let path = path.to_string();
+        let owner = owner.map(str::to_string);
         tokio::task::spawn_blocking(move || {
             let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.write_file(&path, &data, timeout)
+            agent.write_file_as(&path, &data, owner.as_deref(), timeout)
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest file write task failed: {e}")))?
@@ -550,14 +568,44 @@ impl AgentVM {
         pty: Option<PtySize>,
         timeout: Duration,
     ) -> Result<u32> {
+        self.start_in_guest_as(program, args, cwd, envs, pty, None, timeout)
+            .await
+    }
+
+    /// [`Self::start_in_guest`], as `user`: `None` is the template's user --
+    /// a Dockerfile's last `USER` -- or root for a template that names none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::start_in_guest`]; and a user the guest has no account for.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn start_in_guest_as(
+        &self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
+        user: Option<&str>,
+        timeout: Duration,
+    ) -> Result<u32> {
         let device = self.guest_channel("start a program in the guest")?;
         let program = program.to_string();
         let args = args.to_vec();
         let cwd = cwd.map(str::to_string);
         let envs = envs.clone();
+        let user = user.map(str::to_string);
         tokio::task::spawn_blocking(move || {
             let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.start(&program, &args, cwd.as_deref(), &envs, pty, timeout)
+            agent.start_as(
+                &program,
+                &args,
+                cwd.as_deref(),
+                &envs,
+                pty,
+                user.as_deref(),
+                timeout,
+            )
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest start task failed: {e}")))?

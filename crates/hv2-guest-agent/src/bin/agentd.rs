@@ -52,7 +52,7 @@ mod linux {
     use hv2_guest_agent::{
         decode, encode, truncate_utf8, OpResult, Operation, PtySize, Request, Response,
         TemplateDefaults, GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
-        TEMPLATE_DEFAULTS_PATH,
+        TEMPLATE_DEFAULTS_PATH, TEMPLATE_USER,
     };
     use std::collections::{BTreeMap, HashMap};
     use std::io::{Read, Write};
@@ -271,7 +271,8 @@ mod linux {
                 cwd,
                 envs,
                 pty,
-            } => start(&program, &args, cwd.as_deref(), &envs, pty),
+                user,
+            } => start(&program, &args, cwd.as_deref(), &envs, pty, user.as_deref()),
             Operation::Poll { pid } => poll(pid),
             Operation::WriteStdin { pid, data, close } => write_stdin(pid, &data, close),
             Operation::Signal {
@@ -283,7 +284,12 @@ mod linux {
                 unix_time_ns,
                 entropy,
             } => restored(unix_time_ns, &entropy),
-            Operation::WriteFile { path, data, append } => write_file(&path, &data, append),
+            Operation::WriteFile {
+                path,
+                data,
+                append,
+                owner,
+            } => write_file(&path, &data, append, owner.as_deref()),
             Operation::ReadFile {
                 path,
                 offset,
@@ -299,13 +305,29 @@ mod linux {
     }
 
     /// See [`Operation::WriteFile`].
-    fn write_file(path: &str, data: &str, append: bool) -> OpResult {
+    fn write_file(path: &str, data: &str, append: bool, owner: Option<&str>) -> OpResult {
         let failed = |what: &str, e: &dyn std::fmt::Display| OpResult::Failed {
             message: format!("{what} {path}: {e}"),
         };
         let Some(bytes) = hv2_guest_agent::b64::decode(data) else {
             return failed("decoding the data for", &"not base64");
         };
+        let owner = match owner {
+            Some(TEMPLATE_USER) => template_defaults().user,
+            other => other.map(str::to_string),
+        };
+        let account = match owner.as_deref().map(Account::of).transpose() {
+            Ok(account) => account.filter(|a| a.uid != 0),
+            Err(e) => return failed("owning", &e),
+        };
+        // The directories this write makes, outermost first: the owner's
+        // too, or a file they own sits somewhere they cannot write.
+        let mut made = Vec::new();
+        let mut missing = std::path::Path::new(path).parent();
+        while let Some(dir) = missing.filter(|d| !d.as_os_str().is_empty() && !d.exists()) {
+            made.push(dir.to_path_buf());
+            missing = dir.parent();
+        }
         if let Some(parent) = std::path::Path::new(path).parent() {
             if let Err(e) = std::fs::create_dir_all(parent) {
                 return failed("creating the directory of", &e);
@@ -317,9 +339,75 @@ mod linux {
             .append(append)
             .truncate(!append)
             .open(path);
-        match file.and_then(|mut f| f.write_all(&bytes)) {
-            Ok(()) => OpResult::Acknowledged,
-            Err(e) => failed("writing", &e),
+        if let Err(e) = file.and_then(|mut f| f.write_all(&bytes)) {
+            return failed("writing", &e);
+        }
+        if let Some(account) = account {
+            for made in made.iter().rev().map(std::path::PathBuf::as_path) {
+                let _ = std::os::unix::fs::chown(made, Some(account.uid), Some(account.gid));
+            }
+            if let Err(e) = std::os::unix::fs::chown(path, Some(account.uid), Some(account.gid)) {
+                return failed("giving the owner", &e);
+            }
+        }
+        OpResult::Acknowledged
+    }
+
+    /// A user of this guest, from `/etc/passwd` and `/etc/group`.
+    struct Account {
+        name: String,
+        uid: u32,
+        gid: u32,
+        /// Every group listing the user, for `setgroups`.
+        groups: Vec<libc::gid_t>,
+        home: String,
+    }
+
+    impl Account {
+        /// `user` by name or number. Root needs no `/etc/passwd`: an image
+        /// with none still runs as root.
+        fn of(user: &str) -> Result<Self, String> {
+            if user == "root" || user == "0" {
+                return Ok(Self {
+                    name: "root".into(),
+                    uid: 0,
+                    gid: 0,
+                    groups: vec![0],
+                    home: "/root".into(),
+                });
+            }
+            let passwd = std::fs::read_to_string("/etc/passwd")
+                .map_err(|e| format!("reading /etc/passwd for user {user}: {e}"))?;
+            let fields = passwd
+                .lines()
+                .map(|line| line.split(':').collect::<Vec<_>>())
+                .find(|f| f.len() >= 6 && (f[0] == user || f[2] == user))
+                .ok_or_else(|| format!("no user {user} in this sandbox"))?;
+            let number = |s: &str| s.parse::<u32>().map_err(|e| format!("user {user}: {e}"));
+            let (name, uid, gid) = (
+                fields[0].to_string(),
+                number(fields[2])?,
+                number(fields[3])?,
+            );
+            let mut groups = vec![gid];
+            if let Ok(group) = std::fs::read_to_string("/etc/group") {
+                for f in group.lines().map(|l| l.split(':').collect::<Vec<_>>()) {
+                    if f.len() >= 4 && f[3].split(',').any(|m| m == name) {
+                        if let Ok(g) = f[2].parse::<u32>() {
+                            if !groups.contains(&g) {
+                                groups.push(g);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Self {
+                name,
+                uid,
+                gid,
+                groups,
+                home: fields[5].to_string(),
+            })
         }
     }
 
@@ -568,6 +656,7 @@ mod linux {
         cwd: Option<&str>,
         envs: &BTreeMap<String, String>,
         pty: Option<PtySize>,
+        user: Option<&str>,
     ) -> OpResult {
         let mut command = Command::new(program);
         command.args(args);
@@ -576,10 +665,45 @@ mod linux {
         // thing most of them do is look something up in it. The template's
         // defaults go under the request's own.
         let defaults = template_defaults();
+        let account = match user
+            .or(defaults.user.as_deref())
+            .map(Account::of)
+            .transpose()
+        {
+            Ok(account) => account.filter(|a| a.uid != 0),
+            Err(message) => return OpResult::Failed { message },
+        };
+        if let Some(account) = &account {
+            command
+                .env("HOME", &account.home)
+                .env("USER", &account.name)
+                .env("LOGNAME", &account.name);
+        }
         command.envs(&defaults.env);
         command.envs(envs);
-        if let Some(dir) = cwd.or(defaults.cwd.as_deref()) {
+        let home = account.as_ref().map(|a| a.home.as_str());
+        if let Some(dir) = cwd
+            .or(defaults.cwd.as_deref())
+            .or(home.filter(|h| std::path::Path::new(h).is_dir()))
+        {
             command.current_dir(dir);
+        }
+        if let Some(account) = account {
+            let (uid, gid, groups) = (account.uid, account.gid, account.groups);
+            // SAFETY: runs in the child between fork and exec, and calls only
+            // async-signal-safe functions. Groups before the gid, the gid
+            // before the uid: once the uid is dropped, neither may change.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::setgroups(groups.len(), groups.as_ptr()) < 0
+                        || libc::setgid(gid) < 0
+                        || libc::setuid(uid) < 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
         }
 
         // Opened before the fork so a failure is reported as a failure to

@@ -2616,6 +2616,7 @@ dependencies = [
  "hv2-agent",
  "hv2-context",
  "hv2-core",
+ "hv2-guest-agent",
  "hv2-runtime",
  "hv2-sandbox",
  "hyper",

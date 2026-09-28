@@ -628,6 +628,7 @@ async fn steps_then_snapshot(
     let defaults = TemplateDefaults {
         env: context.env.clone(),
         cwd: Some(context.cwd.clone()),
+        user: (context.user != "root").then(|| context.user.clone()),
     };
     let bytes = serde_json::to_vec(&defaults).map_err(|e| finalize(e.to_string()))?;
     vm.write_file_in_guest(TEMPLATE_DEFAULTS_PATH, bytes, AGENT_TIMEOUT)
@@ -636,13 +637,14 @@ async fn steps_then_snapshot(
 
     if let Some(command) = &spec.start_cmd {
         build.log("info", Some("finalize"), format!("Starting: {command}"));
-        let (program, args) = as_user(&context.user, command);
-        vm.start_in_guest(
+        let (program, args) = shell(command);
+        vm.start_in_guest_as(
             &program,
             &args,
             Some(&context.cwd),
             &context.env,
             None,
+            Some(&context.user),
             AGENT_TIMEOUT,
         )
         .await
@@ -652,14 +654,15 @@ async fn steps_then_snapshot(
         build.log("info", Some("finalize"), format!("Waiting for: {check}"));
         let deadline = Instant::now() + READY_TIMEOUT;
         loop {
-            let (program, args) = as_user(&context.user, check);
+            let (program, args) = shell(check);
             let passed = match vm
-                .start_in_guest(
+                .start_in_guest_as(
                     &program,
                     &args,
                     Some(&context.cwd),
                     &context.env,
                     None,
+                    Some(&context.user),
                     AGENT_TIMEOUT,
                 )
                 .await
@@ -734,18 +737,10 @@ fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
 }
 
-/// `command` in a shell, as `user`.
-fn as_user(user: &str, command: &str) -> (String, Vec<String>) {
-    if user == "root" || user == "0" {
-        ("/bin/sh".into(), vec!["-c".into(), command.into()])
-    } else {
-        (
-            "/bin/busybox".into(),
-            ["su", "-m", "-s", "/bin/sh", user, "-c", command]
-                .map(str::to_string)
-                .to_vec(),
-        )
-    }
+/// `command` in a shell. Who runs it is the agent's to arrange: it drops to
+/// the user from root itself, with that user's groups, `HOME` and `USER`.
+fn shell(command: &str) -> (String, Vec<String>) {
+    ("/bin/sh".into(), vec!["-c".into(), command.into()])
 }
 
 /// Run `command` in the build's sandbox as `user`, its output into the
@@ -758,20 +753,15 @@ async fn run_command(
     user: &str,
     context: &Context,
 ) -> Result<(), String> {
-    let (program, args) = as_user(user, command);
-    let mut env = context.env.clone();
-    if user != "root" {
-        env.entry("HOME".into())
-            .or_insert_with(|| format!("/home/{user}"));
-        env.entry("USER".into()).or_insert_with(|| user.to_string());
-    }
+    let (program, args) = shell(command);
     let pid = vm
-        .start_in_guest(
+        .start_in_guest_as(
             &program,
             &args,
             Some(&context.cwd),
-            &env,
+            &context.env,
             None,
+            Some(user),
             AGENT_TIMEOUT,
         )
         .await
@@ -1111,11 +1101,14 @@ mod tests {
     }
 
     #[test]
-    fn users_other_than_root_run_through_su() {
-        assert_eq!(as_user("root", "id").0, "/bin/sh");
-        let (program, args) = as_user("user", "id -u");
-        assert_eq!(program, "/bin/busybox");
-        assert_eq!(args, ["su", "-m", "-s", "/bin/sh", "user", "-c", "id -u"]);
+    fn commands_and_paths_as_a_step_writes_them() {
+        assert_eq!(
+            shell("id -u"),
+            (
+                "/bin/sh".to_string(),
+                vec!["-c".to_string(), "id -u".to_string()]
+            )
+        );
         assert_eq!(quote("it's"), r"'it'\''s'");
         assert_eq!(resolve("/home/user", "app"), "/home/user/app");
         assert_eq!(resolve("/", "app"), "/app");

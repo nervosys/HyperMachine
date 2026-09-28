@@ -431,6 +431,9 @@ pub async fn handle(
     }
 
     let path = request.uri().path().to_owned();
+    // Who a command runs as, which the SDK says in `Authorization`; kept
+    // for the call, as tonic keeps a gRPC client's headers.
+    let authorization = request.headers().get(hyper::header::AUTHORIZATION).cloned();
 
     // `StreamInput` reads its request as a stream, so it must not have the
     // body collected out from under it.
@@ -447,7 +450,7 @@ pub async fn handle(
         }
     };
 
-    dispatch(process, filesystem, &path, wire, body).await
+    dispatch(process, filesystem, &path, wire, body, authorization).await
 }
 
 /// Route one collected request to the method it names.
@@ -457,6 +460,7 @@ async fn dispatch(
     path: &str,
     wire: Wire,
     body: Bytes,
+    authorization: Option<hyper::header::HeaderValue>,
 ) -> Response<ConnectBody> {
     use filesystem_proto as fsp;
     use process_proto as pp;
@@ -494,9 +498,18 @@ async fn dispatch(
             .await
         }
         "/process.Process/Start" => {
-            server_stream::<pp::StartRequest, pp::StartResponse, _, _>(wire, body, |r| async move {
-                Process::start(&process, r).await
-            })
+            server_stream::<pp::StartRequest, pp::StartResponse, _, _>(
+                wire,
+                body,
+                |mut r| async move {
+                    if let Some(value) = authorization
+                        .and_then(|v| tonic::metadata::MetadataValue::try_from(v.as_bytes()).ok())
+                    {
+                        r.metadata_mut().insert("authorization", value);
+                    }
+                    Process::start(&process, r).await
+                },
+            )
             .await
         }
         "/process.Process/Connect" => {

@@ -128,6 +128,10 @@ async fn write(vm: Arc<AgentVM>, request: Request<Incoming>) -> Response<Connect
         );
     }
     let single = query(&request, "path");
+    // Owned by the user the SDK names, or by the template's when it names
+    // none -- as envd writes a file.
+    let owner =
+        query(&request, "username").unwrap_or_else(|| hv2_guest_agent::TEMPLATE_USER.to_string());
     let collected = match http_body_util::Limited::new(request.into_body(), MAX_FILE_BYTES as usize)
         .collect()
         .await
@@ -172,7 +176,10 @@ async fn write(vm: Arc<AgentVM>, request: Request<Incoming>) -> Response<Connect
             return error(StatusCode::BAD_REQUEST, "a file without a path");
         }
         let path = absolute(&path);
-        if let Err(e) = vm.write_file_in_guest(&path, data.to_vec(), TIMEOUT).await {
+        if let Err(e) = vm
+            .write_file_in_guest_as(&path, data.to_vec(), Some(&owner), TIMEOUT)
+            .await
+        {
             return error(StatusCode::INTERNAL_SERVER_ERROR, e);
         }
         let name = path.rsplit('/').next().unwrap_or(&path).to_string();

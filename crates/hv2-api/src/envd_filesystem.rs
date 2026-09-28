@@ -332,12 +332,13 @@ impl EnvdFilesystem {
             .vm
             // No terminal: a watcher is a loop whose output this parses, and
             // a pty would insert carriage returns and echo into it.
-            .start_in_guest(
+            .start_in_guest_as(
                 "/bin/sh",
                 &["-c".to_string(), script],
                 None,
                 &Default::default(),
                 None,
+                Some("root"),
                 EXEC_TIMEOUT,
             )
             .await

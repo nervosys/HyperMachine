@@ -1576,8 +1576,22 @@ and on either node. A sandbox of a built template paused in 7 ms, resumed in
 8-11 ms, created from in 17-30 ms on the taking node, the other node, or
 through the control plane.
 
-Not done: `USER` holds for the build's steps but a sandbox's commands still
-run as root; per-build CPU and memory sizes (a node's are fixed); and
+Users, as envd has them: a template's last `USER` is who its sandboxes'
+commands run as when the SDK names no one, and who owns what
+`files.write` makes, directories included; `user="root"` (the SDK's
+`Authorization: Basic` of `root:`, or `?username=` for files) overrides it.
+The agent drops from root itself -- supplementary groups, then gid, then
+uid, between fork and exec -- and sets `HOME`, `USER` and `LOGNAME` from
+`/etc/passwd`; a template with no `USER` runs as root, as before. Build
+steps switch user the same way, not through `su`. Verified: a Dockerfile
+ending `USER user` / `WORKDIR /home/user` ran `id -un` as `user` in
+`/home/user` with `HOME=/home/user`, an earlier `USER nobody` step had run
+as `nobody`, `user="root"` ran as root with `HOME=/root`, a `files.write`
+of `/home/user/notes/a.txt` left both the new directory and the file owned
+by `user` (with `user="root"`, root), and the default user could not
+overwrite a file a root step made.
+
+Not done: per-build CPU and memory sizes (a node's are fixed), and
 registries' cloud logins (AWS, GCP) -- only `{"type": "registry"}`.
 
 What Agent Substrate has that this does not:

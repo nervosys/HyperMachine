@@ -130,6 +130,12 @@ pub enum Operation {
         /// that empty `stderr` means merged, not silent.
         #[serde(default)]
         pty: Option<PtySize>,
+        /// Who runs it: a user in the guest's `/etc/passwd`, by name or
+        /// number. `None` is the template's user ([`TemplateDefaults::user`]),
+        /// or root for a template that names none -- as envd runs a command
+        /// that names no user as the template's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user: Option<String>,
     },
 
     /// Collect whatever a started program has printed since the last poll, and
@@ -193,6 +199,11 @@ pub enum Operation {
         /// Append rather than replace.
         #[serde(default)]
         append: bool,
+        /// Who owns the file, and the directories made for it: a user by
+        /// name or number, or [`TEMPLATE_USER`] for the template's user. `None`
+        /// leaves them root's, as the host's own writes are.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
     },
 
     /// Read up to `length` bytes of a file from `offset`.
@@ -225,7 +236,16 @@ pub struct TemplateDefaults {
     /// The working directory, when a request names none.
     #[serde(default)]
     pub cwd: Option<String>,
+    /// Who runs a program started without a user, and owns what is written
+    /// for [`TEMPLATE_USER`]: a Dockerfile's last `USER`. Root if `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
 }
+
+/// An [`Operation::WriteFile`] owner meaning the template's user, whoever
+/// that is: the host does not know, and envd writes a file for a caller
+/// who names no user as that user's.
+pub const TEMPLATE_USER: &str = "@template";
 
 /// A terminal's size, in character cells.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -561,6 +581,7 @@ mod tests {
                 cwd: Some("/tmp".to_string()),
                 envs: BTreeMap::new(),
                 pty: None,
+                user: None,
             },
             Operation::Poll { pid: 42 },
             Operation::WriteStdin {
@@ -600,6 +621,7 @@ mod tests {
                 cwd: None,
                 envs: BTreeMap::new(),
                 pty: None,
+                user: None,
             }
         );
     }
@@ -648,6 +670,7 @@ mod tests {
                     cols: 120,
                     rows: 40,
                 }),
+                user: None,
             },
             Operation::ResizePty {
                 pid: 7,
