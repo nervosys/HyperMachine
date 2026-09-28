@@ -169,19 +169,44 @@ One library for all cryptography, and none of it hand-rolled.
   was an encrypt-then-decrypt round trip, and `kat_hmac_sha256` discarded its
   MAC. Done when: `FipsMode` self-tests delegate to `ic-fips`, and the
   published-vector tests still pass.
-- [ ] **Evaluate `ic-rustls`** as the rustls `CryptoProvider`, replacing
-  `ring`. *M.*
-  Done when: `cargo tree -i ring` and `cargo tree -i aws-lc-sys` both find
-  nothing, TLS tests pass, and `sandbox_proxy.rs` installs the IronCrypto
-  provider.
-- [ ] **Migrate ML-DSA to `ic-mldsa`.** *M.* It covers 44, 65 and 87 —
-  everything `hv2-core` advertises. Done when: the PQC signature tests pass
-  against `ic-mldsa`.
+- [x] **Evaluate `ic-rustls`** as the rustls `CryptoProvider`, replacing
+  `ring`. *M.* Evaluated 2026-09-28. **Adopt later, after two blockers.**
+  - *Suitable:* the published 0.1.3 is byte-identical to the repository. It
+    covers TLS 1.3 and 1.2, AES-GCM and ChaCha20-Poly1305, X25519/P-256/P-384,
+    and RSA PKCS#1/PSS, ECDSA and Ed25519 verification. That is enough for
+    the egress gateway, which talks to arbitrary servers.
+  - *Blocker 1, `ic-rsa`:* `ic-rustls` builds RSA signing keys with
+    `from_primes`, which panics at 4096 bits (K-8). An ordinary RSA-4096
+    certificate key would abort the process when the server starts.
+  - *Blocker 2, `ring` cannot fully leave:* `rcgen`, which issues the
+    egress gateway's per-sandbox CA and leaf certificates, has only `ring`
+    and `aws-lc-rs` backends, and `ic-pkix` neither parses nor issues
+    certificates. `reqwest`, `redis` and `hyper-rustls` would also need their
+    no-provider features. The old "done when `cargo tree -i ring` is empty"
+    is unreachable until IronCrypto can issue certificates.
+- [ ] **Adopt `ic-rustls`** once `ic-rsa` handles RSA-4096. *M.* Done when:
+  every rustls config in the workspace uses the IronCrypto provider, TLS
+  tests pass, and `ring` remains only under `rcgen`, with that recorded.
+- [ ] **Migrate ML-DSA to `ic-mldsa`: wait.** *M.* Corrected 2026-09-28:
+  this item said `ic-mldsa` covers 44, 65 and 87. It covers **ML-DSA-65
+  only** (`K = 6`, `L = 5` are constants), and `hv2-core` offers all three.
+  Migrating now would run one algorithm through two libraries and remove no
+  dependency. Also, the ACVP-checked `ic-mldsa` exists only in the IronCrypto
+  repository. The crates.io release numbered 0.1.3 is older code whose
+  `sign.rs` reads "No ACVP vector is wired in", and the repository calls
+  itself 0.1.3 too. 🔒 *IronCrypto:* publish the vector-tested code as
+  0.1.4, and add ML-DSA-44 and -87.
+  Done when: all three parameter sets come from a published, vector-tested
+  `ic-mldsa`, and `ml-dsa` leaves `Cargo.lock`.
 - [ ] **ML-KEM: wait.** `ic-mlkem` has 768; `hv2-core` advertises 512, 768 and
   1024. Migrating now would narrow the published API.
 - [ ] **SLH-DSA: stay on RustCrypto** — IronCrypto has no FIPS 205 crate.
 - [ ] **Replace the `slh-dsa = "=0.2.0-rc.5"` pin** with a released version
   when one exists. *S.* A release candidate in a cryptographic path.
+  Checked 2026-09-28: rc.5 (2026-04-28) is still the newest release, and the
+  only stable one, 0.1.0, predates the final FIPS 205, so it would be a
+  downgrade. Blocked upstream. The exact `=` pin is right until then: it
+  stops cargo taking a later release candidate with breaking changes.
 - [ ] **CMVP decision (export item R-3).** 🔒 *decision.* Pursue validation
   for IronCrypto, or link a validated module for regulated deployments.
 
