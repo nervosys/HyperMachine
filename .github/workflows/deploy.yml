@@ -314,14 +314,23 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-binaries, deploy-staging, deploy-production]
     if: always()
+    # Through env because a step's `if` cannot read `secrets`.
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
     steps:
+      # Without the secret this step used to run and fail behind
+      # continue-on-error, so every deploy looked notified and none was.
+      - name: No Slack webhook configured
+        if: env.SLACK_WEBHOOK_URL == ''
+        run: echo "::warning title=No deployment notification::SLACK_WEBHOOK_URL is not set, so no Slack message was sent."
+
       - name: Send Slack notification
+        if: env.SLACK_WEBHOOK_URL != ''
         uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
         with:
-          # From v2 the webhook is an input; SLACK_WEBHOOK_URL in env is no
-          # longer read, and with continue-on-error below a miss is silent.
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # From v2 the webhook is an input; the action does not read env.
+          webhook: ${{ env.SLACK_WEBHOOK_URL }}
           webhook-type: incoming-webhook
           payload: |
             {

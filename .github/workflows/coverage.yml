@@ -23,6 +23,9 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    # Through env because a step's `if` cannot read `secrets`.
+    env:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -67,14 +70,19 @@ jobs:
           cargo llvm-cov report --codecov --output-path codecov.json
           cargo llvm-cov report --html
 
+      # Codecov refuses tokenless uploads here ("Token required"), and with
+      # fail_ci_if_error: false that refusal was green on every run.
+      - name: No Codecov token configured
+        if: env.CODECOV_TOKEN == ''
+        run: echo "::warning title=Coverage not uploaded::CODECOV_TOKEN is not set, so Codecov received nothing. The HTML report below is still uploaded."
+
       - name: Upload coverage to Codecov
+        if: env.CODECOV_TOKEN != ''
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: codecov.json
           fail_ci_if_error: false
           verbose: true
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload HTML report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
