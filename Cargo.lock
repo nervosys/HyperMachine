@@ -2686,12 +2686,14 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "sha2",
  "subtle",
  "thiserror 2.0.20",
  "tokio",
  "tokio-rustls",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

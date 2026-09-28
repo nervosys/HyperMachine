@@ -190,6 +190,9 @@ impl SandboxRecord {
 /// Something that happened, for the event stream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClusterEvent {
+    /// Unique, so a webhook delivery names the event it carried.
+    #[serde(default)]
+    pub id: String,
     pub at_ms: u64,
     /// `node-joined`, `sandbox-created`, `sandbox-deleted`, `sandbox-expired`,
     /// `sandbox-lost`.
@@ -199,17 +202,22 @@ pub struct ClusterEvent {
     pub sandbox_id: Option<String>,
     #[serde(default)]
     pub detail: Option<String>,
+    /// The template of the sandbox it concerns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_id: Option<String>,
 }
 
 impl ClusterEvent {
     #[must_use]
     pub fn new(kind: &str, node_id: &str, sandbox_id: Option<&str>) -> Self {
         Self {
+            id: uuid::Uuid::new_v4().to_string(),
             at_ms: now_ms(),
             kind: kind.to_string(),
             node_id: node_id.to_string(),
             sandbox_id: sandbox_id.map(str::to_string),
             detail: None,
+            template_id: None,
         }
     }
 
@@ -218,6 +226,49 @@ impl ClusterEvent {
         self.detail = Some(detail.into());
         self
     }
+
+    #[must_use]
+    pub fn with_template(mut self, template_id: impl Into<String>) -> Self {
+        self.template_id = Some(template_id.into());
+        self
+    }
+}
+
+/// A webhook: where a cluster sends the sandbox events it subscribes to,
+/// signed with its secret.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Webhook {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    /// E2B event types (`sandbox.lifecycle.created`, ...); empty is all.
+    pub events: Vec<String>,
+    pub enabled: bool,
+    /// Signs each payload; never returned by the API.
+    pub secret: String,
+    pub created_ms: u64,
+}
+
+/// One attempt to deliver an event to a webhook: E2B's `WebhookDelivery`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Delivery {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_id: String,
+    pub sandbox_id: String,
+    pub event_type: String,
+    /// `success` or `failed`.
+    pub status: String,
+    pub duration_ms: u64,
+    pub request_body: String,
+    pub request_url: String,
+    pub response_status: Option<u16>,
+    pub response_body: Option<String>,
+    /// E2B's `errorClass`: `http_error`, `dns_error`, `timeout`,
+    /// `transport_error`, `request_error`.
+    pub error_class: Option<String>,
+    pub error_message: Option<String>,
+    pub at_ms: u64,
 }
 
 /// E2B's `metadata` query parameter: a URL-encoded `key=value&key=value`

@@ -108,7 +108,9 @@ use hv2_agent::{AgentVM, Capability, CapabilitySet};
 use hv2_api::sandbox_proxy::{self, PortMap};
 use hv2_cluster::control::CLUSTER_TOKEN_HEADER;
 use hv2_cluster::metrics::{Counter, Exposition, Histogram};
-use hv2_cluster::model::{metadata_matches, now_ms, parse_metadata_query, SandboxRecord};
+use hv2_cluster::model::{
+    metadata_matches, now_ms, parse_metadata_query, ClusterEvent, SandboxRecord,
+};
 use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
@@ -228,6 +230,8 @@ struct Options {
     /// Where volumes are kept; the snapshot store's `volumes` when unset,
     /// so every node sharing it has them.
     volume_dir: Option<String>,
+    /// Let webhooks reach loopback, private and link-local addresses.
+    allow_private_webhooks: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -277,6 +281,7 @@ fn parse_options() -> Result<Options, String> {
         templates: Vec::new(),
         guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
         volume_dir: None,
+        allow_private_webhooks: false,
         snapshot_store: None,
         mtls_ca: None,
         mtls_cert: None,
@@ -314,6 +319,7 @@ fn parse_options() -> Result<Options, String> {
             "--no-net-offload" => opts.no_net_offload = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
             "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
+            "--allow-private-webhooks" => opts.allow_private_webhooks = true,
             "--template" => {
                 let spec = value(&mut i)?;
                 let (name, path) = spec
@@ -442,6 +448,9 @@ struct AppState {
     slots: Arc<tokio::sync::Semaphore>,
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
+    /// Sends lifecycle events to webhooks; over the cluster store, or this
+    /// node's own in memory when it has no cluster.
+    events: hv2_cluster::events::Dispatcher,
     /// What sandboxes are restored from, by template name, when not booted.
     /// Grows while the node runs, as templates are built.
     templates: parking_lot::RwLock<BTreeMap<String, Arc<Template>>>,
@@ -1426,15 +1435,65 @@ async fn register(
     };
     // Recorded before answering, so a control plane that routes the next
     // call by the store finds it.
-    if let Some(node) = &state.node {
-        let recorded = match event {
-            None => node.created(&record, count).await,
-            Some(kind) => node.transitioned(&record, kind, count).await,
-        };
-        if let Err(e) = recorded {
-            tracing::warn!("recording {sandbox_id} in the cluster store: {e}");
+    record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
+}
+
+/// Record a sandbox's lifecycle event -- in the cluster store, with its
+/// record, or in this node's own when it has no cluster -- and send it to
+/// the webhooks that want it.
+async fn record_event(state: &AppState, record: &SandboxRecord, kind: &str, running: u32) {
+    let event = match &state.node {
+        Some(node) => {
+            let recorded = if kind == "sandbox-created" {
+                node.created(record, running).await
+            } else {
+                node.transitioned(record, kind, running).await
+            };
+            match recorded {
+                Ok(event) => event,
+                Err(e) => {
+                    tracing::warn!("recording {} in the cluster store: {e}", record.sandbox_id);
+                    return;
+                }
+            }
         }
-    }
+        None => {
+            let event = ClusterEvent::new(kind, "local", Some(&record.sandbox_id))
+                .with_template(&record.template_id);
+            let _ = state.events.store().publish(&event).await;
+            event
+        }
+    };
+    state.events.deliver(&event);
+}
+
+/// Record that a sandbox ended, as [`record_event`] does.
+async fn ended(
+    state: &AppState,
+    sandbox_id: &str,
+    template_id: Option<&str>,
+    kind: &str,
+    running: u32,
+) {
+    let event = match &state.node {
+        Some(node) => match node.ended(sandbox_id, template_id, kind, running).await {
+            Ok(Some(event)) => event,
+            Ok(None) => return,
+            Err(e) => {
+                tracing::warn!("recording the end of {sandbox_id}: {e}");
+                return;
+            }
+        },
+        None => {
+            let mut event = ClusterEvent::new(kind, "local", Some(sandbox_id));
+            if let Some(template) = template_id {
+                event = event.with_template(template);
+            }
+            let _ = state.events.store().publish(&event).await;
+            event
+        }
+    };
+    state.events.deliver(&event);
 }
 
 async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
@@ -1912,14 +1971,7 @@ async fn pause_sandbox(
     state.metrics.pauses.inc();
     telemetry::log(state, sandbox_id, "info", "sandbox paused");
     state.metrics.pause_latency.observe(started.elapsed());
-    if let Some(node) = &state.node {
-        if let Err(e) = node
-            .transitioned(&record, "sandbox-paused", state.running())
-            .await
-        {
-            tracing::warn!("recording {sandbox_id}'s pause: {e}");
-        }
-    }
+    record_event(state, &record, "sandbox-paused", state.running()).await;
     Ok(())
 }
 
@@ -3456,11 +3508,8 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
             return false;
         }
         state.metrics.ended_deleted.inc();
-        if let Some(node) = &state.node {
-            if let Err(e) = node.ended(sandbox_id, kind, running).await {
-                tracing::warn!("recording the end of {sandbox_id}: {e}");
-            }
-        }
+        let template = paused.as_ref().map(|p| p.record.template_id.clone());
+        ended(state, sandbox_id, template.as_deref(), kind, running).await;
         return true;
     };
     drop(held);
@@ -3483,11 +3532,14 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     if let Err(e) = live.vm.stop().await {
         tracing::warn!("stopping sandbox {sandbox_id}: {e}");
     }
-    if let Some(node) = &state.node {
-        if let Err(e) = node.ended(sandbox_id, kind, running).await {
-            tracing::warn!("recording the end of {sandbox_id}: {e}");
-        }
-    }
+    ended(
+        state,
+        sandbox_id,
+        Some(&live.record.template_id),
+        kind,
+        running,
+    )
+    .await;
     true
 }
 
@@ -3746,7 +3798,14 @@ async fn main() -> std::process::ExitCode {
 
     let routes = Arc::new(PortMap::new());
     let opts_capacity = opts.capacity as usize;
+    let event_store: Arc<dyn hv2_cluster::store::ClusterStore> = match &node {
+        Some(node) => Arc::clone(node.store()),
+        None => Arc::new(hv2_cluster::store::MemoryStore::new()),
+    };
+    let events =
+        hv2_cluster::events::Dispatcher::new(Arc::clone(&event_store), opts.allow_private_webhooks);
     let state = Arc::new(AppState {
+        events,
         authority,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
@@ -3908,6 +3967,7 @@ async fn main() -> std::process::ExitCode {
             get(builds::status),
         )
         .route("/templates/aliases/{alias}", get(builds::alias))
+        .merge(hv2_cluster::events::router(event_store))
         .route("/volumes", get(volumes::list).post(volumes::create))
         .route("/volumes/{volumeID}", get(volumes::get).delete(volumes::delete))
         .route("/sandboxes/{sandboxID}/exec", post(exec))

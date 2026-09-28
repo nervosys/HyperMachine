@@ -145,16 +145,17 @@ impl NodeAgent {
     /// # Errors
     ///
     /// The store could not be reached.
-    pub async fn created(&self, record: &SandboxRecord, running: u32) -> crate::store::Result<()> {
+    pub async fn created(
+        &self,
+        record: &SandboxRecord,
+        running: u32,
+    ) -> crate::store::Result<ClusterEvent> {
         self.store.put_sandbox(record).await?;
         self.announce(running).await?;
-        self.store
-            .publish(&ClusterEvent::new(
-                "sandbox-created",
-                &self.config.id,
-                Some(&record.sandbox_id),
-            ))
-            .await
+        let event = ClusterEvent::new("sandbox-created", &self.config.id, Some(&record.sandbox_id))
+            .with_template(&record.template_id);
+        self.store.publish(&event).await?;
+        Ok(event)
     }
 
     /// Update a sandbox's record, e.g. its end time after a timeout change.
@@ -178,16 +179,13 @@ impl NodeAgent {
         record: &SandboxRecord,
         kind: &str,
         running: u32,
-    ) -> crate::store::Result<()> {
+    ) -> crate::store::Result<ClusterEvent> {
         self.store.put_sandbox(record).await?;
         self.announce(running).await?;
-        self.store
-            .publish(&ClusterEvent::new(
-                kind,
-                &self.config.id,
-                Some(&record.sandbox_id),
-            ))
-            .await
+        let event = ClusterEvent::new(kind, &self.config.id, Some(&record.sandbox_id))
+            .with_template(&record.template_id);
+        self.store.publish(&event).await?;
+        Ok(event)
     }
 
     /// Record that a sandbox ended, and why (`sandbox-deleted` or
@@ -199,16 +197,26 @@ impl NodeAgent {
     pub async fn ended(
         &self,
         sandbox_id: &str,
+        template_id: Option<&str>,
         kind: &str,
         running: u32,
-    ) -> crate::store::Result<()> {
+    ) -> crate::store::Result<Option<ClusterEvent>> {
         self.announce(running).await?;
-        if self.store.delete_sandbox(sandbox_id).await? {
-            self.store
-                .publish(&ClusterEvent::new(kind, &self.config.id, Some(sandbox_id)))
-                .await?;
+        if !self.store.delete_sandbox(sandbox_id).await? {
+            return Ok(None);
         }
-        Ok(())
+        let mut event = ClusterEvent::new(kind, &self.config.id, Some(sandbox_id));
+        if let Some(template) = template_id {
+            event = event.with_template(template);
+        }
+        self.store.publish(&event).await?;
+        Ok(Some(event))
+    }
+
+    /// The store this node records into.
+    #[must_use]
+    pub fn store(&self) -> &Arc<dyn ClusterStore> {
+        &self.store
     }
 
     /// Leave cleanly: the node's record goes now rather than at its TTL.
@@ -269,8 +277,8 @@ mod tests {
         let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
         let a = agent(Arc::clone(&store));
         a.created(&sandbox("s", "a"), 1).await.unwrap();
-        a.ended("s", "sandbox-expired", 0).await.unwrap();
-        a.ended("s", "sandbox-deleted", 0).await.unwrap();
+        a.ended("s", None, "sandbox-expired", 0).await.unwrap();
+        a.ended("s", None, "sandbox-deleted", 0).await.unwrap();
         let kinds: Vec<_> = store
             .events(10)
             .await

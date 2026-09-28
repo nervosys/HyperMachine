@@ -1643,6 +1643,27 @@ Verified with the unmodified SDK:
 
 Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
 
+#### Events and webhooks
+
+E2B's `GET /events/sandboxes[/{id}]` and `/events/webhooks` -- create, list, update, delete, deliveries grouped by event, and hourly stats -- served by a node alone and by a control plane, over the cluster store's event stream (a node without a cluster keeps its own in memory).
+
+Events:
+- Lifecycle events carry E2B's types: `sandbox.lifecycle.created`, `paused`, `resumed`, `killed`.
+- A delivery is signed as E2B signs one: `e2b-signature` is base64, unpadded, of SHA-256 over the secret followed by the body. That scheme is from E2B's documentation as recalled here -- its OpenAPI spec does not state it -- and is worth checking against a receiver built on E2B's own verifier.
+- A delivery is retried after 1 s and 4 s, and every attempt is recorded.
+- The node that emitted an event delivers it, so each goes out once however many control planes run.
+
+Webhook URLs are user-supplied, so an address that is not global -- loopback, private, link-local, which includes the cloud metadata service, and shared -- is refused unless the node runs with `--allow-private-webhooks`. The address checked is the one connected to, so DNS rebinding cannot swap it, and redirects are not followed.
+
+Verified:
+- on one node, a receiver checking signatures itself got created, paused, resumed and killed, all valid;
+- a receiver that answered 500 twice got the event on the third attempt, and the deliveries and stats showed all three;
+- a disabled webhook was listed as such; the secret is never returned;
+- without the flag, `127.0.0.1`, `169.254.169.254` and `localhost` were each refused with `request_error`;
+- through a control plane over two nodes, a webhook registered there got each node's created and killed exactly once, and the control plane listed both nodes' events.
+
+The regression run after this change passed with every result as before, but its timings -- pause 83 ms, one create from a snapshot 1.3 s -- were taken with the Windows host at 97% CPU from other work, and are not comparable to the earlier numbers; they were not re-measured.
+
 #### Volumes
 
 E2B's persistent storage, as its SDK's `Volume` uses it:

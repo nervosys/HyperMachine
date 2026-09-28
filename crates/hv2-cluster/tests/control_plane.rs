@@ -119,7 +119,7 @@ async fn node_delete(
         running.len() as u32
     };
     node.agent
-        .ended(&id, "sandbox-deleted", running)
+        .ended(&id, None, "sandbox-deleted", running)
         .await
         .unwrap();
     StatusCode::NO_CONTENT.into_response()
