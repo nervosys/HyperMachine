@@ -174,14 +174,26 @@ One library for all cryptography, and none of it hand-rolled.
   Done when: `cargo tree -i ring` and `cargo tree -i aws-lc-sys` both find
   nothing, TLS tests pass, and `sandbox_proxy.rs` installs the IronCrypto
   provider.
-- [ ] **Migrate ML-DSA to `ic-mldsa`.** *M.* It covers 44, 65 and 87 —
-  everything `hv2-core` advertises. Done when: the PQC signature tests pass
-  against `ic-mldsa`.
+- [ ] **Migrate ML-DSA to `ic-mldsa`: wait.** *M.* Corrected 2026-09-28:
+  this item said `ic-mldsa` covers 44, 65 and 87. It covers **ML-DSA-65
+  only** (`K = 6`, `L = 5` are constants), and `hv2-core` offers all three.
+  Migrating now would run one algorithm through two libraries and remove no
+  dependency. Also, the ACVP-checked `ic-mldsa` exists only in the IronCrypto
+  repository. The crates.io release numbered 0.1.3 is older code whose
+  `sign.rs` reads "No ACVP vector is wired in", and the repository calls
+  itself 0.1.3 too. 🔒 *IronCrypto:* publish the vector-tested code as
+  0.1.4, and add ML-DSA-44 and -87.
+  Done when: all three parameter sets come from a published, vector-tested
+  `ic-mldsa`, and `ml-dsa` leaves `Cargo.lock`.
 - [ ] **ML-KEM: wait.** `ic-mlkem` has 768; `hv2-core` advertises 512, 768 and
   1024. Migrating now would narrow the published API.
 - [ ] **SLH-DSA: stay on RustCrypto** — IronCrypto has no FIPS 205 crate.
 - [ ] **Replace the `slh-dsa = "=0.2.0-rc.5"` pin** with a released version
   when one exists. *S.* A release candidate in a cryptographic path.
+  Checked 2026-09-28: rc.5 (2026-04-28) is still the newest release, and the
+  only stable one, 0.1.0, predates the final FIPS 205, so it would be a
+  downgrade. Blocked upstream. The exact `=` pin is right until then: it
+  stops cargo taking a later release candidate with breaking changes.
 - [ ] **CMVP decision (export item R-3).** 🔒 *decision.* Pursue validation
   for IronCrypto, or link a validated module for regulated deployments.
 
