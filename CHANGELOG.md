@@ -510,6 +510,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **AES-128-GCM did not work** (`hv2-core`). It was listed among the approved
+  algorithms, `AesKeySize::Aes128` generated 16-byte keys, and
+  `aes_gcm_encrypt`/`aes_gcm_decrypt` accepted them, but the implementation
+  built IronCrypto's `Aes256Gcm` for every key, so every AES-128 call failed.
+  It had been broken since the move to IronCrypto. The cipher now follows the
+  key length, and AES-128 is checked against GCM-spec Test Case 2.
 - **A process limit that counted the user, not the workload** (`hv2-sandbox`,
   Linux). `Control::ProcessCount` set `RLIMIT_NPROC` beside the cgroup's
   `pids.max`. `RLIMIT_NPROC` counts every task the user owns, host-wide and
