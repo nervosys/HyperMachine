@@ -126,7 +126,7 @@ an AES-256 cipher for every key. It now works.
 | ------------------------- | -------------------------------------------------------------------------------------------------- |
 | **Files**                 | [crates/hv2-core/src/crypto/asymmetric.rs](../../crates/hv2-core/src/crypto/asymmetric.rs)         |
 | **Algorithms**            | RSA-2048, RSA-3072, RSA-4096                                                                       |
-| **Operations**            | Key generation, signing, verification. **No encryption or decryption.**                            |
+| **Operations**            | Key generation, signing, verification. **No encryption or decryption.** RSA-4096 private-key operations are refused (K-8). |
 | **Key Lengths**           | 2048, 3072, 4096 bits                                                                              |
 | **Type**                  | Asymmetric (digital signature)                                                                     |
 | **Implementation**        | **Wrapper** around IronCrypto `ic_rsa` (`generate`, `RsaPrivateKey`, `RsaPublicKey`)               |
@@ -507,6 +507,7 @@ production-readiness, not the export-control status of the source release.
 | **K-4** | ~~**vTPM PCR extend uses XOR.**~~ | **Resolved in 922761f.** A SHA-2 hash chain, `H(old \|\| data)`, with property tests. |
 | **K-5** | **SM3 hash algorithm** appears in the vTPM `HashAlgorithm` enum for TPM 2.0 specification completeness.                                                                                                           | SM3 is included for protocol parsing only; no HyperMachine security function uses SM3 to provide confidentiality, integrity, or authentication.                                                               |
 | **K-6** | ~~The `ring` feature is optional; when disabled, most crypto APIs return `NotImplemented`.~~ | **Resolved in 93abff0.** The feature is gone. IronCrypto is pure Rust with no build script, so every classical primitive is unconditional. |
+| **K-8** | **RSA-4096 private-key operations are refused.** `ic-rsa` 0.1.3 panics deriving the private exponent at 4096 bits (an index one past its 64-limb integers), in both key generation and `from_primes`. Under `panic = "abort"` that ends the process. | **Mitigated 2026-09-28:** refused with `UnsupportedAlgorithm` before `ic-rsa` is called. Verification of 4096-bit signatures is unaffected. To be lifted when `ic-rsa` is fixed. |
 | **K-7** | **AES-128-GCM was accepted and refused.** `AesKeySize::Aes128` generated 16-byte keys that validation accepted, and the implementation then built an AES-256 cipher for every key. | **Resolved 2026-09-28.** The cipher follows the key length, and AES-128 is checked against GCM-spec Test Case 2. Broken from 93abff0 until then. |
 
 ---
@@ -519,8 +520,8 @@ production-readiness, not the export-control status of the source release.
 | -------------------------- | ------------- | ---------- | ------------- | ----------------- | ------------ |
 | AES-256-GCM                | 256-bit       | Symmetric  | fips.rs       | Wrapper           | ic-cipher (IronCrypto) |
 | AES-128-GCM                | 128-bit       | Symmetric  | fips.rs       | Wrapper           | ic-cipher (IronCrypto) |
-| RSA-2048/3072/4096 keygen  | 2048-4096-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
-| RSA-2048/3072/4096 sign    | 2048-4096-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
+| RSA-2048/3072 keygen       | 2048-3072-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
+| RSA-2048/3072 sign         | 2048-3072-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
 | RSA-2048/3072/4096 verify  | 2048-4096-bit | Asymmetric | asymmetric.rs | Wrapper           | ic-rsa (IronCrypto)    |
 | ECDSA P-256/SHA-256        | 256-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
 | ECDSA P-384/SHA-384        | 384-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |

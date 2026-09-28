@@ -510,6 +510,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **RSA-4096 key generation and signing panicked** (`hv2-core`, in IronCrypto's
+  `ic-rsa` 0.1.3), which under `panic = "abort"` ends the process. Both are now
+  refused with `UnsupportedAlgorithm` until `ic-rsa` is fixed; RSA-2048 and
+  RSA-3072 are unaffected, and 4096-bit signatures still verify. Every
+  offered RSA signature algorithm is now tested, where two were.
 - **AES-128-GCM did not work** (`hv2-core`). It was listed among the approved
   algorithms, `AesKeySize::Aes128` generated 16-byte keys, and
   `aes_gcm_encrypt`/`aes_gcm_decrypt` accepted them, but the implementation
