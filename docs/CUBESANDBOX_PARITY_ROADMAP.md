@@ -1591,8 +1591,47 @@ of `/home/user/notes/a.txt` left both the new directory and the file owned
 by `user` (with `user="root"`, root), and the default user could not
 overwrite a file a root step made.
 
-Not done: per-build CPU and memory sizes (a node's are fixed), and
-registries' cloud logins (AWS, GCP) -- only `{"type": "registry"}`.
+#### Sizes, and guests with more than one CPU
+
+A template has its own size: `cpuCount` and `memoryMB` on
+`Template.build(...)` or `POST /templates`, a node's `--cpu-cores` and
+`--memory-mb` otherwise. The size is the template's snapshot's, so every
+sandbox restored from it, and every template built on it, is that size; a
+build asking to resize one is refused and told to build from the image. An
+image is pulled once per size.
+
+Sizing CPUs found that no guest had ever had more than one. hv2-core wrote
+no MP table and no ACPI MADT, so Linux said "SMP disabled" whatever the vCPU
+count. A VM of more than one vCPU now gets an MP table (spec 1.4, at
+`0x9FC00`, up to 32 processors, the I/O APIC routing ISA IRQs 0-23) and
+per-vCPU CPUID (APIC ID and logical count in leaf 1, x2APIC ID in 0xB and
+0x1F); one-vCPU VMs are untouched. The second CPU then still did not come
+up: `KVM_RUN` on an application processor blocks until its startup IPI and
+then returns `EAGAIN`, which the run loop treated as fatal, ending that
+vCPU's thread the moment Linux woke it ("CPU1 failed to report alive
+state"). It is retried now.
+
+A third defect, in every guest: the vsock device queued a host write as
+one packet of up to the credit window (256 KiB), but Linux posts 4 KiB rx
+buffers, so the packet fitted none, was dropped, and the stream stalled. An
+8 MiB `files.write` hung on one vCPU as on four. Stream data is now split
+across the buffers the guest offers.
+
+Verified, with the unmodified SDK:
+- **Guest sizes:**
+  - 1, 2 and 4-vCPU guests report `nproc` 1, 2 and 4;
+  - N busy loops take as long as one (0.11-0.12 s either way);
+  - an 8 MiB `files.write`, HTTPS egress, and pause/resume all work at each size;
+  - sandboxes are created from each size's template in 43-51 ms.
+- **Forks and snapshots:** three forks of a 4-vCPU sandbox with all four CPUs busy were made in 42 ms, each with its four busy loops still running; a snapshot of it restored with 4 CPUs.
+- **Per-template sizes:**
+  - templates of 2 vCPU / 2048 MiB and 1 vCPU / 512 MiB were built from `alpine:3.20` in 2.6-5.3 s and created in 17-37 ms, their guests seeing exactly that;
+  - a `POST /templates` of 2 vCPU / 768 MiB was listed with its size and ran at it;
+  - out-of-range sizes are refused with a 400.
+
+Not done: registries' cloud logins (AWS, GCP) -- only `{"type":
+"registry"}`; memory hot-plug and ballooning (a sandbox's size is fixed at
+its template); and more than 32 vCPUs.
 
 What Agent Substrate has that this does not:
 

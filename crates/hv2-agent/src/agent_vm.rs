@@ -45,6 +45,13 @@ impl AgentVMBuilder {
         self
     }
 
+    /// Guest memory in MiB, for sizes a whole GiB does not fit: E2B sizes
+    /// sandboxes in MiB.
+    pub fn memory_mb(mut self, mb: u64) -> Self {
+        self.config.memory_size = mb * 1024 * 1024;
+        self
+    }
+
     pub fn enable_gpu(mut self, enable: bool) -> Self {
         self.config.enable_gpu = enable;
         self

@@ -170,7 +170,8 @@ struct Options {
     tls_key: Option<String>,
     kernel: String,
     initrd: String,
-    memory_gb: u64,
+    /// A sandbox's memory and vCPUs, unless its template sets its own.
+    memory_mb: u64,
     cpu_cores: u32,
     ready_timeout: Duration,
     /// Give each sandbox a NIC behind a gateway. Off by default.
@@ -248,7 +249,7 @@ fn parse_options() -> Result<Options, String> {
         tls_key: None,
         kernel,
         initrd,
-        memory_gb: 1,
+        memory_mb: 1024,
         cpu_cores: 1,
         ready_timeout: Duration::from_secs(15),
         network: false,
@@ -295,7 +296,10 @@ fn parse_options() -> Result<Options, String> {
             }
             "--tls-cert" => opts.tls_cert = Some(value(&mut i)?),
             "--tls-key" => opts.tls_key = Some(value(&mut i)?),
-            "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--memory-gb" => {
+                opts.memory_mb = value(&mut i)?.parse::<u64>().map_err(|e| format!("{e}"))? * 1024;
+            }
+            "--memory-mb" => opts.memory_mb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--network" => opts.network = true,
             "--no-template" => opts.no_template = true,
@@ -353,7 +357,7 @@ fn parse_options() -> Result<Options, String> {
             }
             "--help" | "-h" => {
                 println!(
-                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
+                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
                      [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy]] \
                      [--tls-cert F --tls-key F] \
@@ -437,6 +441,8 @@ struct AppState {
     initrds: parking_lot::RwLock<BTreeMap<String, String>>,
     /// Templates being built, or whose build failed, by name.
     builds: Mutex<BTreeMap<String, TemplateBuild>>,
+    /// Templates' sandboxes' sizes, where they are not the node's.
+    sizes: parking_lot::RwLock<BTreeMap<String, Sizes>>,
     /// Sandboxes' snapshots, by name: templates too, to a create.
     snapshots: parking_lot::RwLock<BTreeMap<String, Arc<snapshots::Snapshot>>>,
     /// Template builds by steps (E2B's `Template.build`), by build ID.
@@ -1180,8 +1186,19 @@ async fn bring_up(
         .get(template_id)
         .cloned()
         .unwrap_or_else(|| state.opts.initrd.clone());
+    // The template's size, when it has its own: a restore is of a guest
+    // that size, and must be given the memory and vCPUs it was snapshotted
+    // with.
+    let sizes = sizes_of(state, template_id);
+    let sized;
+    let opts = if sizes == Sizes::of(&state.opts) {
+        &state.opts
+    } else {
+        sized = sizes.applied(&state.opts);
+        &sized
+    };
     let (vm, nic) = new_vm(
-        &state.opts,
+        opts,
         &initrd,
         sandbox_id,
         cid,
@@ -1487,6 +1504,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         proxy_port: state.opts.proxy_port,
         envd_access_token: access_token,
     };
+    let sizes = sizes_of(&state, &template_id);
     let record = SandboxRecord {
         sandbox_id: sandbox_id.clone(),
         node_id: state
@@ -1496,8 +1514,8 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         template_id,
         started_at_ms,
         end_at_ms: started_at_ms + lifetime_secs * 1000,
-        cpu_count: state.opts.cpu_cores,
-        memory_mb: state.opts.memory_gb * 1024,
+        cpu_count: sizes.cpus,
+        memory_mb: sizes.memory_mb,
         metadata: req.metadata,
         envd_version: ENVD_VERSION.to_string(),
         descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
@@ -2153,6 +2171,7 @@ async fn fork_route(
                     proxy_port: state.opts.proxy_port,
                     envd_access_token: access_token,
                 };
+                let sizes = sizes_of(&state, &template_id);
                 let record = SandboxRecord {
                     sandbox_id: fork_id,
                     node_id: state
@@ -2162,8 +2181,8 @@ async fn fork_route(
                     template_id,
                     started_at_ms,
                     end_at_ms: started_at_ms + lifetime_secs * 1000,
-                    cpu_count: state.opts.cpu_cores,
-                    memory_mb: state.opts.memory_gb * 1024,
+                    cpu_count: sizes.cpus,
+                    memory_mb: sizes.memory_mb,
                     metadata,
                     envd_version: ENVD_VERSION.to_string(),
                     descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
@@ -2505,7 +2524,7 @@ fn template_key(opts: &Options, authority: Option<&Authority>) -> Result<String,
     let config = format!(
         "{}\0{}\0{}\0{}\0{}",
         guest_cmdline(opts.network),
-        opts.memory_gb,
+        opts.memory_mb,
         opts.cpu_cores,
         opts.network,
         authority.map_or("", Authority::ca_pem)
@@ -2602,8 +2621,8 @@ async fn list_templates(State(state): State<Arc<AppState>>) -> Response {
                 "buildID": name,
                 "aliases": [name],
                 "public": false,
-                "cpuCount": state.opts.cpu_cores,
-                "memoryMB": state.opts.memory_gb * 1024,
+                "cpuCount": sizes_of(&state, name).cpus,
+                "memoryMB": sizes_of(&state, name).memory_mb,
                 "envdVersion": ENVD_VERSION,
                 "buildStatus": "ready",
                 "snapshot": snapshots.contains_key(name),
@@ -2642,6 +2661,11 @@ struct BuildTemplateRequest {
     /// A private registry's login, used for this pull and not kept.
     username: Option<String>,
     password: Option<String>,
+    /// Its sandboxes' size, E2B's fields; the node's when absent.
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
 }
 
 /// What a snapshot store keeps about a template a node built, so every node
@@ -2651,6 +2675,9 @@ struct BuiltTemplate {
     image: String,
     digest: String,
     initramfs: String,
+    /// Absent in records from before sizes: the node's own.
+    #[serde(default)]
+    sizes: Option<Sizes>,
 }
 
 /// `POST /templates`: build a template from an OCI image, pulled from its
@@ -2677,6 +2704,10 @@ async fn build_template_route(
     if state.initrds.read().contains_key(&name) {
         return api_error(StatusCode::CONFLICT, format!("template {name} exists"));
     }
+    let sizes = match Sizes::requested(req.cpu_count, req.memory_mb, Sizes::of(&state.opts)) {
+        Ok(sizes) => sizes,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
     {
         let mut builds = state.builds.lock();
         if matches!(builds.get(&name), Some(TemplateBuild::Building { .. })) {
@@ -2697,7 +2728,7 @@ async fn build_template_route(
     };
     tokio::spawn(async move {
         let started = std::time::Instant::now();
-        let outcome = build_from_image(&building, &task_name, &image, credentials).await;
+        let outcome = build_from_image(&building, &task_name, &image, credentials, sizes).await;
         let mut builds = building.builds.lock();
         match outcome {
             Ok(()) => {
@@ -2720,6 +2751,73 @@ async fn build_template_route(
         .into_response()
 }
 
+/// A template's sandboxes' size: E2B's `cpuCount` and `memoryMB`. Fixed when
+/// its image is made a template -- the template's snapshot is of a guest
+/// that size, and every sandbox restored from it is that guest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+struct Sizes {
+    #[serde(rename = "cpuCount")]
+    cpus: u32,
+    #[serde(rename = "memoryMB")]
+    memory_mb: u64,
+}
+
+impl Sizes {
+    /// The node's, from `--cpu-cores` and `--memory-mb`.
+    fn of(opts: &Options) -> Self {
+        Self {
+            cpus: opts.cpu_cores,
+            memory_mb: opts.memory_mb,
+        }
+    }
+
+    /// What a request asks for, `default` where it asks for nothing; refused
+    /// if it is no size a guest here can be.
+    fn requested(cpus: Option<u32>, memory_mb: Option<u64>, default: Self) -> Result<Self, String> {
+        let sizes = Self {
+            cpus: cpus.unwrap_or(default.cpus),
+            memory_mb: memory_mb.unwrap_or(default.memory_mb),
+        };
+        let host_cpus = std::thread::available_parallelism()
+            .map_or(1, |n| u32::try_from(n.get()).unwrap_or(u32::MAX));
+        if sizes.cpus == 0 || sizes.cpus > host_cpus.min(hv2_core::boot::mptable::MAX_CPUS) {
+            return Err(format!(
+                "cpuCount {}: between 1 and {}, this host's CPUs",
+                sizes.cpus,
+                host_cpus.min(hv2_core::boot::mptable::MAX_CPUS)
+            ));
+        }
+        if !(256..=MAX_MEMORY_MB).contains(&sizes.memory_mb) || !sizes.memory_mb.is_multiple_of(2) {
+            return Err(format!(
+                "memoryMB {}: an even number from 256 to {MAX_MEMORY_MB}",
+                sizes.memory_mb
+            ));
+        }
+        Ok(sizes)
+    }
+
+    /// `opts`, as for a guest this size.
+    fn applied(self, opts: &Options) -> Options {
+        let mut sized = opts.clone();
+        sized.cpu_cores = self.cpus;
+        sized.memory_mb = self.memory_mb;
+        sized
+    }
+}
+
+/// The most memory one sandbox may have.
+const MAX_MEMORY_MB: u64 = 64 * 1024;
+
+/// The size of `template`'s sandboxes: its own, or the node's.
+fn sizes_of(state: &AppState, template: &str) -> Sizes {
+    state
+        .sizes
+        .read()
+        .get(template)
+        .copied()
+        .unwrap_or_else(|| Sizes::of(&state.opts))
+}
+
 fn valid_template_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
@@ -2734,6 +2832,7 @@ async fn build_from_image(
     name: &str,
     image: &str,
     credentials: Option<oci::Credentials>,
+    sizes: Sizes,
 ) -> Result<(), String> {
     let kit_dir = state.opts.guest_kit.clone().ok_or("no --guest-kit")?;
     let kit = initramfs::GuestKit::check(&kit_dir)?;
@@ -2755,13 +2854,14 @@ async fn build_from_image(
     std::fs::rename(&scratch, &file).map_err(|e| format!("{}: {e}", file.display()))?;
     let initramfs = file.to_string_lossy().into_owned();
 
-    offer(state, name, &initramfs).await?;
+    offer(state, name, &initramfs, sizes).await?;
     if let Some(store) = &state.store {
         // Recorded for the other nodes, which adopt it from here.
         let built = BuiltTemplate {
             image: image.to_string(),
             digest,
             initramfs,
+            sizes: Some(sizes),
         };
         let dir = store.dir.join("built");
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -2773,9 +2873,10 @@ async fn build_from_image(
     Ok(())
 }
 
-/// Snapshot the template in `initramfs` and offer it as `name`.
-async fn offer(state: &AppState, name: &str, initramfs: &str) -> Result<(), String> {
-    let mut for_this = state.opts.clone();
+/// Snapshot the template in `initramfs`, its sandboxes `sizes`, and offer it
+/// as `name`.
+async fn offer(state: &AppState, name: &str, initramfs: &str, sizes: Sizes) -> Result<(), String> {
+    let mut for_this = sizes.applied(&state.opts);
     for_this.initrd = initramfs.to_string();
     if !state.opts.no_template {
         let built = match &state.store {
@@ -2791,6 +2892,7 @@ async fn offer(state: &AppState, name: &str, initramfs: &str) -> Result<(), Stri
             .write()
             .insert(name.to_string(), Arc::new(built));
     }
+    state.sizes.write().insert(name.to_string(), sizes);
     state
         .initrds
         .write()
@@ -2832,7 +2934,8 @@ async fn adopt_built(state: Arc<AppState>) {
                 else {
                     continue;
                 };
-                match offer(&state, name, &built.initramfs).await {
+                let sizes = built.sizes.unwrap_or_else(|| Sizes::of(&state.opts));
+                match offer(&state, name, &built.initramfs, sizes).await {
                     Ok(()) => tracing::info!(
                         "offering template {name} ({}), built by another node",
                         built.image
@@ -2954,7 +3057,7 @@ async fn new_vm(
     let vm = AgentVM::builder()
         .name(name.to_string())
         .cpu_cores(opts.cpu_cores)
-        .memory_gb(opts.memory_gb)
+        .memory_mb(opts.memory_mb)
         .capabilities(capabilities)
         .boot_linux(&opts.kernel, Some(initrd), guest_cmdline(mac.is_some()))
         .build()
@@ -3582,6 +3685,7 @@ async fn main() -> std::process::ExitCode {
         templates: parking_lot::RwLock::new(templates),
         initrds: parking_lot::RwLock::new(initrds),
         builds: Mutex::new(BTreeMap::new()),
+        sizes: parking_lot::RwLock::new(BTreeMap::new()),
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
         upload_tokens: Mutex::new(HashMap::new()),

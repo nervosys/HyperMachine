@@ -30,8 +30,8 @@ use hv2_guest_agent::{TemplateDefaults, TEMPLATE_DEFAULTS_PATH};
 
 use super::{
     api_error, bring_up, build_from_image, create_park, new_access_token, policy_from, reserve,
-    snapshots, valid_template_name, AppState, Arc, Deserialize, IntoResponse, Json, NetworkSpec,
-    Path, Query, Response, Running, State, StatusCode,
+    sizes_of, snapshots, valid_template_name, AppState, Arc, Deserialize, IntoResponse, Json,
+    NetworkSpec, Path, Query, Response, Running, Sizes, State, StatusCode,
 };
 use crate::oci::Credentials;
 
@@ -51,6 +51,8 @@ const AGENT_TIMEOUT: Duration = Duration::from_secs(60);
 pub(crate) struct Build {
     template: String,
     build_id: String,
+    /// The size asked for, if any: E2B's `cpuCount` and `memoryMB`.
+    sizes: Option<Sizes>,
     state: parking_lot::Mutex<Progress>,
 }
 
@@ -85,6 +87,10 @@ pub(crate) struct RequestBuild {
     alias: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
 }
 
 /// `POST /v3/templates`: name a build, to be started once its files are
@@ -116,6 +122,14 @@ pub(crate) async fn request(
             "this node builds no templates: start it with --guest-kit DIR",
         );
     }
+    let sizes = if req.cpu_count.is_some() || req.memory_mb.is_some() {
+        match Sizes::requested(req.cpu_count, req.memory_mb, Sizes::of(&state.opts)) {
+            Ok(sizes) => Some(sizes),
+            Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+        }
+    } else {
+        None
+    };
     let mut tags: Vec<String> = req.tags;
     if let Some((_, tag)) = requested.rsplit_once(':') {
         tags.insert(0, tag.to_string());
@@ -126,6 +140,7 @@ pub(crate) async fn request(
     let build = Arc::new(Build {
         template: name.clone(),
         build_id: uuid::Uuid::new_v4().to_string(),
+        sizes,
         state: parking_lot::Mutex::new(Progress {
             status: "waiting",
             ..Progress::default()
@@ -422,11 +437,15 @@ fn at(step: &str) -> impl Fn(String) -> Failure + '_ {
     move |message| (step.to_string(), message)
 }
 
-/// The template an image is pulled into, named for the image: a second
-/// build from it starts at once.
-fn image_template(image: &str) -> String {
+/// The template an image is pulled into, named for the image and the size of
+/// its guests: a second build from it at that size starts at once.
+fn image_template(image: &str, sizes: Sizes, default: Sizes) -> String {
     use sha2::Digest;
-    let digest = sha2::Sha256::digest(image.as_bytes());
+    let mut named = image.to_string();
+    if sizes != default {
+        named += &format!("\0{}\0{}", sizes.cpus, sizes.memory_mb);
+    }
+    let digest = sha2::Sha256::digest(named.as_bytes());
     let hex: String = digest.iter().take(8).map(|b| format!("{b:02x}")).collect();
     format!("image-{hex}")
 }
@@ -436,7 +455,9 @@ async fn run(state: &Arc<AppState>, build: &Build, spec: StartBuild) -> Result<(
     // The base: an image, pulled into a template of its own; or a template
     // -- one built from an image, or a snapshot, restored as it was left.
     let (base, from_snapshot) = if let Some(image) = &spec.from_image {
-        let name = image_template(image);
+        let default = Sizes::of(&state.opts);
+        let sizes = build.sizes.unwrap_or(default);
+        let name = image_template(image, sizes, default);
         if spec.force || !state.initrds.read().contains_key(&name) {
             build.log("info", Some("base"), format!("Pulling {image}"));
             let credentials = match &spec.registry {
@@ -453,7 +474,7 @@ async fn run(state: &Arc<AppState>, build: &Build, spec: StartBuild) -> Result<(
                     )));
                 }
             };
-            build_from_image(state, &name, image, credentials)
+            build_from_image(state, &name, image, credentials, sizes)
                 .await
                 .map_err(&base_step)?;
         } else {
@@ -469,6 +490,17 @@ async fn run(state: &Arc<AppState>, build: &Build, spec: StartBuild) -> Result<(
             None => return Err(base_step(format!("no template {requested:?}"))),
         }
     };
+    // A template's size is its snapshot's: one restored from it is that size.
+    if let Some(asked) = build.sizes {
+        let has = sizes_of(state, &base);
+        if asked != has {
+            return Err(base_step(format!(
+                "the base is {} vCPU and {} MiB, and a template built on it is too; \
+                 to size one, build it from an image",
+                has.cpus, has.memory_mb
+            )));
+        }
+    }
     if !state.templates.read().contains_key(&base) {
         return Err(base_step(
             "template builds need templates restored from snapshots, and this node boots them"
