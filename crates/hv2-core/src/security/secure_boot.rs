@@ -2,6 +2,27 @@
 //!
 //! This module provides secure boot infrastructure including UEFI Secure Boot
 //! verification, certificate management, and boot policy enforcement.
+//!
+//! # What a boot signature is
+//!
+//! A signature covers [`BootComponent::signed_message`]: the domain separator
+//! [`SIGNED_MESSAGE_PREFIX`], one byte naming the component type, then the
+//! component's image digest. The prefix keeps a signature made for anything
+//! else from being replayed here, and the type byte keeps a kernel's signature
+//! from admitting a module with the same digest.
+//!
+//! - RSA signatures are PKCS#1 v1.5 with the hash the algorithm names.
+//! - ECDSA signatures are fixed-width `r || s`, P-256 with SHA-256 and P-384
+//!   with SHA-384.
+//! - A [`Certificate`]'s `public_key` is a DER `SubjectPublicKeyInfo`. EC
+//!   points must be uncompressed.
+//!
+//! This is HyperMachine's own format. It does not parse or interoperate with
+//! UEFI Authenticode signatures embedded in PE images.
+//!
+//! A signature is checked against the public key of the **trusted database
+//! entry** its claimed signer names, never against the certificate travelling
+//! with it. That certificate is chosen by whoever built the component.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -200,7 +221,38 @@ pub struct BootComponent {
     pub load_address: u64,
 }
 
+/// The domain separator every boot signature's message starts with.
+pub const SIGNED_MESSAGE_PREFIX: &[u8] = b"HyperMachine secure boot v1\0";
+
+impl BootComponentType {
+    /// The byte that names this type in a signed message.
+    ///
+    /// Written out rather than `as u8`, so reordering the enum cannot change
+    /// what an existing signature covers.
+    fn wire_id(self) -> u8 {
+        match self {
+            Self::Firmware => 1,
+            Self::OptionRom => 2,
+            Self::BootLoader => 3,
+            Self::Kernel => 4,
+            Self::KernelModule => 5,
+            Self::InitRd => 6,
+            Self::Config => 7,
+        }
+    }
+}
+
 impl BootComponent {
+    /// The exact bytes a signature over this component covers: the prefix,
+    /// the type byte, then the image digest. A signing tool must sign these.
+    pub fn signed_message(&self) -> Vec<u8> {
+        let mut message = Vec::with_capacity(SIGNED_MESSAGE_PREFIX.len() + 1 + self.hash.len());
+        message.extend_from_slice(SIGNED_MESSAGE_PREFIX);
+        message.push(self.component_type.wire_id());
+        message.extend_from_slice(&self.hash);
+        message
+    }
+
     /// Create new boot component
     pub fn new(component_type: BootComponentType, name: impl Into<String>, hash: Vec<u8>) -> Self {
         Self {
@@ -578,21 +630,63 @@ impl SecureBootManager {
             self.verification_failures.fetch_add(1, Ordering::Relaxed);
             return VerificationResult::UntrustedCertificate;
         }
+        let Some(subject) = signature.signer.as_ref().map(|s| &s.subject) else {
+            // Unreachable: `claims_a_trusted_signer` needs a signer.
+            self.verification_failures.fetch_add(1, Ordering::Relaxed);
+            return VerificationResult::UntrustedCertificate;
+        };
 
-        // Claimed, not shown. Refuse.
-        //
-        // Real verification needs the signature checked against the *trusted
-        // database entry's* public key -- never the one attached to the
-        // signature, which the caller chose -- over the bytes the signature
-        // covers, with the certificate's validity window and status honoured.
-        // `Certificate::public_key` is an unspecified `Vec<u8>` today, and
-        // guessing a key encoding inside an admission check is how this file
-        // came to look verified without being so. The allowlist path above is
-        // the mechanism that does work: a known-good hash is integrity
-        // evidence, and it is what `security::image_registry` already enforces
-        // on boot images.
+        // Claimed; now shown, or not. The claim only selects which trusted
+        // entries to try. The key comes from the trusted entry, never from the
+        // certificate attached to the signature, which whoever built the
+        // component chose. Until 2026-09-28 this refused every signed
+        // component with `VerificationUnavailable`; before 2026-09-22 it
+        // admitted any whose claimed subject matched.
+        let message = component.signed_message();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let mut saw_expired = false;
+        for trusted in db.iter().filter(|c| &c.subject == subject) {
+            match trusted.status {
+                CertificateStatus::Valid => {}
+                CertificateStatus::Revoked => {
+                    self.verification_failures.fetch_add(1, Ordering::Relaxed);
+                    return VerificationResult::CertificateRevoked;
+                }
+                CertificateStatus::Expired => {
+                    saw_expired = true;
+                    continue;
+                }
+                CertificateStatus::NotYetValid | CertificateStatus::Untrusted => continue,
+            }
+            // A key in dbx is revoked under whatever subject it is enrolled.
+            if dbx.iter().any(|revoked| {
+                !revoked.public_key.is_empty() && revoked.public_key == trusted.public_key
+            }) {
+                self.verification_failures.fetch_add(1, Ordering::Relaxed);
+                return VerificationResult::CertificateRevoked;
+            }
+            if !trusted.is_valid_at(now) {
+                saw_expired = true;
+                continue;
+            }
+            if verify_boot_signature(
+                &trusted.public_key,
+                signature.algorithm,
+                &message,
+                &signature.data,
+            ) {
+                return VerificationResult::Success;
+            }
+        }
+
         self.verification_failures.fetch_add(1, Ordering::Relaxed);
-        VerificationResult::VerificationUnavailable
+        if saw_expired {
+            VerificationResult::CertificateExpired
+        } else {
+            VerificationResult::InvalidSignature
+        }
     }
 
     /// Get verification statistics
@@ -656,6 +750,89 @@ pub struct SecureBootStats {
     pub allowlist_count: usize,
     /// Number of blocklist entries
     pub blocklist_count: usize,
+}
+
+/// Whether `signature` over `message` verifies under the DER
+/// `SubjectPublicKeyInfo` `spki`, with `algorithm`.
+///
+/// `false` for anything that does not verify, including a key that does not
+/// parse, a key of the wrong type for `algorithm`, or a compressed EC point.
+/// None of those is a reason to admit a component, and the caller reports all
+/// of them as an invalid signature.
+fn verify_boot_signature(
+    spki: &[u8],
+    algorithm: SignatureAlgorithm,
+    message: &[u8],
+    signature: &[u8],
+) -> bool {
+    use crate::crypto::asymmetric::{
+        EcCurve, EcPublicKey, RsaKeySize, RsaPublicKey, Signature as CryptoSignature,
+        SignatureAlgorithm as Scheme,
+    };
+    use crate::crypto::{FipsCrypto, FipsMode};
+    use ic_pkix::{KeyAlgorithm, PublicKeyInfo};
+
+    let Ok(key) = PublicKeyInfo::from_der(spki) else {
+        return false;
+    };
+    let Ok(crypto) = FipsCrypto::new(FipsMode::Disabled) else {
+        return false;
+    };
+    let as_signature = |scheme| CryptoSignature {
+        data: signature.to_vec(),
+        algorithm: scheme,
+    };
+
+    match key {
+        PublicKeyInfo::Rsa { modulus, exponent } => {
+            let scheme = match algorithm {
+                SignatureAlgorithm::RsaSha256 => Scheme::RsaPkcs1Sha256,
+                SignatureAlgorithm::RsaSha384 => Scheme::RsaPkcs1Sha384,
+                SignatureAlgorithm::RsaSha512 => Scheme::RsaPkcs1Sha512,
+                _ => return false,
+            };
+            let size = match modulus.len() {
+                256 => RsaKeySize::Rsa2048,
+                384 => RsaKeySize::Rsa3072,
+                512 => RsaKeySize::Rsa4096,
+                _ => return false,
+            };
+            let public = RsaPublicKey {
+                n: modulus.to_vec(),
+                e: exponent.to_be_bytes().to_vec(),
+                size,
+            };
+            crypto
+                .rsa_verify(&public, message, &as_signature(scheme))
+                .unwrap_or(false)
+        }
+        PublicKeyInfo::Ec {
+            algorithm: curve_id,
+            point,
+        } => {
+            let (curve, scheme, width) = match (curve_id, algorithm) {
+                (KeyAlgorithm::EcP256, SignatureAlgorithm::EcdsaSha256) => {
+                    (EcCurve::P256, Scheme::EcdsaP256Sha256, 32)
+                }
+                (KeyAlgorithm::EcP384, SignatureAlgorithm::EcdsaSha384) => {
+                    (EcCurve::P384, Scheme::EcdsaP384Sha384, 48)
+                }
+                _ => return false,
+            };
+            if point.len() != 1 + 2 * width || point[0] != 0x04 {
+                return false;
+            }
+            let public = EcPublicKey {
+                x: point[1..=width].to_vec(),
+                y: point[1 + width..].to_vec(),
+                curve,
+            };
+            crypto
+                .ecdsa_verify(&public, message, &as_signature(scheme))
+                .unwrap_or(false)
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -950,11 +1127,240 @@ mod tests {
         //
         // Nothing about this component should admit it. Matching a subject
         // means it *claims* a trusted signer; the claim is a string the caller
-        // wrote.
+        // wrote. Since 2026-09-28 the signature is checked, and 256 zero
+        // bytes under a trusted entry whose key does not even parse are
+        // `InvalidSignature` -- a verdict, where before there was none.
         assert_eq!(
             manager.verify(&component),
-            VerificationResult::VerificationUnavailable,
-            "a signature that was never checked must not be a pass"
+            VerificationResult::InvalidSignature,
+            "zero bytes under a zero key must not be a pass"
+        );
+    }
+
+    // ---- Real signatures, 2026-09-28 -------------------------------------
+
+    use crate::crypto::asymmetric::{EcCurve, EcPrivateKey, RsaKeySize, RsaPrivateKey};
+    use crate::crypto::{FipsCrypto, FipsMode};
+
+    fn crypto() -> FipsCrypto {
+        FipsCrypto::new(FipsMode::Disabled).unwrap()
+    }
+
+    fn rsa_spki(key: &RsaPrivateKey) -> Vec<u8> {
+        let n = &key.public.n;
+        let first = n.iter().position(|&b| b != 0).unwrap_or(n.len());
+        let exponent = key
+            .public
+            .e
+            .iter()
+            .fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
+        let info = ic_pkix::PublicKeyInfo::Rsa {
+            modulus: &n[first..],
+            exponent,
+        };
+        let mut out = [0u8; 1024];
+        let len = info.to_der(&mut out).unwrap();
+        out[..len].to_vec()
+    }
+
+    fn ec_spki(key: &EcPrivateKey) -> Vec<u8> {
+        let mut point = vec![0x04];
+        point.extend_from_slice(&key.public.x);
+        point.extend_from_slice(&key.public.y);
+        let algorithm = match key.public.curve {
+            EcCurve::P256 => ic_pkix::KeyAlgorithm::EcP256,
+            EcCurve::P384 => ic_pkix::KeyAlgorithm::EcP384,
+            EcCurve::P521 => unreachable!("secure boot offers P-256 and P-384"),
+        };
+        let info = ic_pkix::PublicKeyInfo::Ec {
+            algorithm,
+            point: &point,
+        };
+        let mut out = [0u8; 256];
+        let len = info.to_der(&mut out).unwrap();
+        out[..len].to_vec()
+    }
+
+    fn trusting(subject: &str, spki: Vec<u8>, algorithm: SignatureAlgorithm) -> SecureBootManager {
+        let manager = SecureBootManager::new();
+        manager.enroll_pk(make_pk()).unwrap();
+        manager
+            .add_db(Certificate::new(
+                CertificateType::Database,
+                subject,
+                "Test KEK",
+                spki,
+                algorithm,
+            ))
+            .unwrap();
+        manager.enable().unwrap();
+        manager
+    }
+
+    /// A claim of `subject`, carrying whatever key the component's builder
+    /// chose. Verification must never use that key.
+    fn claiming(
+        subject: &str,
+        key_it_carries: Vec<u8>,
+        algorithm: SignatureAlgorithm,
+    ) -> Certificate {
+        Certificate::new(
+            CertificateType::Database,
+            subject,
+            "?",
+            key_it_carries,
+            algorithm,
+        )
+    }
+
+    fn kernel(hash: u8) -> BootComponent {
+        BootComponent::new(BootComponentType::Kernel, "vmlinuz", vec![hash; 32])
+    }
+
+    fn rsa_sign(key: &RsaPrivateKey, component: &BootComponent) -> Vec<u8> {
+        crypto()
+            .rsa_sign(
+                key,
+                &component.signed_message(),
+                crate::crypto::asymmetric::SignatureAlgorithm::RsaPkcs1Sha256,
+            )
+            .unwrap()
+            .data
+    }
+
+    #[test]
+    fn a_valid_rsa_signature_from_a_trusted_key_is_admitted() {
+        let key = crypto().generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let manager = trusting("Vendor", rsa_spki(&key), SignatureAlgorithm::RsaSha256);
+        let component = kernel(7);
+        let sig = Signature::new(SignatureAlgorithm::RsaSha256, rsa_sign(&key, &component))
+            .with_signer(claiming("Vendor", vec![], SignatureAlgorithm::RsaSha256));
+        assert_eq!(
+            manager.verify(&component.with_signature(sig)),
+            VerificationResult::Success
+        );
+    }
+
+    #[test]
+    fn valid_ecdsa_signatures_on_p256_and_p384_are_admitted() {
+        for (curve, algorithm, scheme) in [
+            (
+                EcCurve::P256,
+                SignatureAlgorithm::EcdsaSha256,
+                crate::crypto::asymmetric::SignatureAlgorithm::EcdsaP256Sha256,
+            ),
+            (
+                EcCurve::P384,
+                SignatureAlgorithm::EcdsaSha384,
+                crate::crypto::asymmetric::SignatureAlgorithm::EcdsaP384Sha384,
+            ),
+        ] {
+            let key = crypto().generate_ecdsa_keypair(curve).unwrap();
+            let manager = trusting("Vendor", ec_spki(&key), algorithm);
+            let component = kernel(9);
+            let signed = crypto()
+                .ecdsa_sign(&key, &component.signed_message())
+                .unwrap();
+            assert_eq!(signed.algorithm, scheme);
+            let sig = Signature::new(algorithm, signed.data).with_signer(claiming(
+                "Vendor",
+                vec![],
+                algorithm,
+            ));
+            assert_eq!(
+                manager.verify(&component.with_signature(sig)),
+                VerificationResult::Success,
+                "{curve:?}"
+            );
+        }
+    }
+
+    /// The plan's exit criterion: a forgery whose claimed signer matches a
+    /// trusted subject is refused. The forger signs with their own key and
+    /// attaches a certificate carrying *that* key under the trusted name,
+    /// which a verifier that used the attached key would accept.
+    #[test]
+    fn a_forgery_under_a_trusted_name_carrying_its_own_key_is_refused() {
+        let vendor = crypto().generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let forger = crypto().generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let manager = trusting("Vendor", rsa_spki(&vendor), SignatureAlgorithm::RsaSha256);
+        let component = kernel(7);
+        let sig = Signature::new(SignatureAlgorithm::RsaSha256, rsa_sign(&forger, &component))
+            .with_signer(claiming(
+                "Vendor",
+                rsa_spki(&forger),
+                SignatureAlgorithm::RsaSha256,
+            ));
+        assert_eq!(
+            manager.verify(&component.with_signature(sig)),
+            VerificationResult::InvalidSignature
+        );
+    }
+
+    #[test]
+    fn a_signature_does_not_transfer_to_another_digest_or_component_type() {
+        let key = crypto().generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let manager = trusting("Vendor", rsa_spki(&key), SignatureAlgorithm::RsaSha256);
+        let signed_for = kernel(7);
+        let sig = Signature::new(SignatureAlgorithm::RsaSha256, rsa_sign(&key, &signed_for))
+            .with_signer(claiming("Vendor", vec![], SignatureAlgorithm::RsaSha256));
+
+        // A different image.
+        assert_eq!(
+            manager.verify(&kernel(8).with_signature(sig.clone())),
+            VerificationResult::InvalidSignature
+        );
+        // The same image, presented as a module: the type byte differs.
+        let module = BootComponent::new(BootComponentType::KernelModule, "m.ko", vec![7; 32]);
+        assert_eq!(
+            manager.verify(&module.with_signature(sig)),
+            VerificationResult::InvalidSignature
+        );
+    }
+
+    #[test]
+    fn an_expired_trusted_certificate_does_not_verify() {
+        let key = crypto().generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let manager = SecureBootManager::new();
+        manager.enroll_pk(make_pk()).unwrap();
+        let mut cert = Certificate::new(
+            CertificateType::Database,
+            "Vendor",
+            "Test KEK",
+            rsa_spki(&key),
+            SignatureAlgorithm::RsaSha256,
+        );
+        cert.not_after = 1; // 1970.
+        manager.add_db(cert).unwrap();
+        manager.enable().unwrap();
+        let component = kernel(7);
+        let sig = Signature::new(SignatureAlgorithm::RsaSha256, rsa_sign(&key, &component))
+            .with_signer(claiming("Vendor", vec![], SignatureAlgorithm::RsaSha256));
+        assert_eq!(
+            manager.verify(&component.with_signature(sig)),
+            VerificationResult::CertificateExpired
+        );
+    }
+
+    #[test]
+    fn a_trusted_key_listed_in_dbx_under_another_name_is_revoked() {
+        let key = crypto().generate_rsa_keypair(RsaKeySize::Rsa2048).unwrap();
+        let manager = trusting("Vendor", rsa_spki(&key), SignatureAlgorithm::RsaSha256);
+        manager
+            .add_dbx(Certificate::new(
+                CertificateType::ForbiddenDatabase,
+                "Leaked key",
+                "Test KEK",
+                rsa_spki(&key),
+                SignatureAlgorithm::RsaSha256,
+            ))
+            .unwrap();
+        let component = kernel(7);
+        let sig = Signature::new(SignatureAlgorithm::RsaSha256, rsa_sign(&key, &component))
+            .with_signer(claiming("Vendor", vec![], SignatureAlgorithm::RsaSha256));
+        assert_eq!(
+            manager.verify(&component.with_signature(sig)),
+            VerificationResult::CertificateRevoked
         );
     }
 

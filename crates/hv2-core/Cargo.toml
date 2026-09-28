@@ -49,6 +49,8 @@ ic-kdf = "0.1.1"
 ic-cipher = "0.1.1"
 ic-ec = "0.1.1"
 ic-core = "0.1.1"
+# DER SubjectPublicKeyInfo parsing for secure boot's trusted keys.
+ic-pkix = "0.1.3"
 # The FIPS 140-3 discipline FipsMode::Enabled and ::Strict are held to:
 # ic-fips runs IronCrypto's pre-operational self-tests and answers, per
 # operation, whether an algorithm is approved; ic-drbg is the SP 800-90A

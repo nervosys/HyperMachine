@@ -19,7 +19,7 @@ pub use memory_encryption::{
 pub use secure_boot::{
     BootComponent, BootComponentType, Certificate, CertificateStatus, CertificateType,
     SecureBootError, SecureBootManager, SecureBootMode, SecureBootPolicy, SecureBootResult,
-    SecureBootStats, Signature, SignatureAlgorithm, VerificationResult,
+    SecureBootStats, Signature, SignatureAlgorithm, VerificationResult, SIGNED_MESSAGE_PREFIX,
 };
 
 pub use vtpm::{
