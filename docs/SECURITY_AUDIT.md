@@ -39,16 +39,23 @@ steps in §6.
 
 Dependency advisories are gated in CI via **`cargo deny`** against the RustSec
 advisory DB (`deny.toml`). Current status: **`advisories ok`** — no
-unacknowledged vulnerabilities. Five advisories are explicitly accepted with
-written justification:
+unacknowledged vulnerabilities. Four advisories are explicitly accepted, each
+with a written justification in `deny.toml` (this table mirrors it as of
+2026-09-28; `deny.toml` is the authority):
 
 | Advisory | Crate | Nature | Why accepted | Risk |
 |----------|-------|--------|--------------|------|
-| RUSTSEC‑2023‑0071 | `rsa` | Marvin timing side‑channel (RSA private‑key ops) | Only pure‑Rust RSA with keygen; **no online RSA decryption oracle is exposed**; tracked for migration to a constant‑time release | Low (in context) |
-| RUSTSEC‑2026‑0105 | `core2` | Unmaintained / yanked | Transitive via `arboard` clipboard (GUI); no fix exists; no known vuln | Low |
-| RUSTSEC‑2024‑0436 | `paste` | Archived | Transitive via `wasmtime`/`cranelift`; no known vuln | Low |
-| RUSTSEC‑2025‑0057 | `fxhash` | Unmaintained | Non‑cryptographic hashing only, transitive | Low |
-| RUSTSEC‑2025‑0141 | `bincode` 1.x | Unmaintained | Build‑time dependency only | Low |
+| RUSTSEC‑2025‑0141 | `bincode` 1.x | Unmaintained | Direct dependency of `hv2-core` for snapshot serialisation; stable, no known vulnerability | Low |
+| RUSTSEC‑2024‑0436 | `paste` | Archived | Transitive via `image`/`rav1e`, reached through `eframe` in `hm-gui`; no known vulnerability | Low |
+| RUSTSEC‑2026‑0249 | `smartstring` | Unmaintained | Transitive via `rhai`, the agent scripting engine; no known vulnerability | Low |
+| RUSTSEC‑2026‑0192 | `ttf-parser` | Unmaintained | Transitive via `egui` font rendering in the desktop GUI only; no known vulnerability | Low |
+
+**Retired:** RUSTSEC‑2023‑0071 (Marvin timing side‑channel in the `rsa`
+crate), which this table used to accept, no longer applies. `hv2-core` moved
+RSA to IronCrypto's `ic-rsa`, whose private-key path is constant-time in `d`,
+and the `rsa` crate left `Cargo.lock` entirely (814d0c0). The `core2`,
+`fxhash` and `wasmtime`-era entries are gone for the same reason: the crates
+are no longer in the build.
 
 **Controls in place**
 - License allow‑list and dependency bans enforced by `cargo deny` (`[licenses]`, `[bans]`).
@@ -56,7 +63,7 @@ written justification:
 - Reproducible builds via pinned `Cargo.lock`; nightly Type‑1 isolated behind `build-std`.
 
 **Gaps / recommendations**
-- The accepted `rsa` timing advisory should be retired by migrating RSA keygen/sign to a constant‑time backend (e.g., `aws-lc-rs`) when one supporting keygen is available.
+- ~~The accepted `rsa` timing advisory should be retired by migrating RSA keygen/sign to a constant‑time backend.~~ Done in 814d0c0: RSA is IronCrypto `ic-rsa`, and the `rsa` crate is out of the build.
 - Integrate scheduled `cargo audit`/`cargo deny` runs (not only PR‑gated) and SBOM generation (CycloneDX) for downstream consumers.
 - No third‑party SAST/DAST or fuzz‑at‑scale results are included here; a fuzz harness exists (`fuzz/`) but coverage is not quantified.
 
@@ -255,7 +262,7 @@ mitigations:
 | Defense Evasion | Impair Defenses / Disable Logging (T1562.x) | Append‑only, **bounded** MCP audit log + HTTP audit middleware; tamper window minimized | Partial — logs are in‑process; ship to external SIEM for non‑repudiation |
 | Discovery / Lateral Movement | within tenant boundary | **Capability‑based access control** (`AgentCapability` least‑privilege) + **multi‑tenant isolation** (`X‑Tenant‑Id`, owner‑only release) | Good for agent layer |
 | Initial Access / Execution | Exploit Public‑Facing App (T1190) | Rate limiting, circuit breakers, request‑replay protection, schema validation, bearer auth (defense‑in‑depth middleware stack) | Partial |
-| Collection / Exfiltration | timing side‑channels | **Accepted residual:** `rsa` Marvin timing (T1040‑adjacent) — not exposed as an online oracle | Accepted risk |
+| Collection / Exfiltration | timing side‑channels | `rsa` Marvin timing retired: RSA is IronCrypto `ic-rsa`, constant-time in `d` (814d0c0) | Mitigated |
 | Impact | Resource Hijacking (T1496) | Per‑tenant/per‑session quotas, rate limits, capacity reservations, session reclamation | Partial |
 
 **Residual attack surface (be explicit):** a Type‑2 hypervisor inherits host
@@ -301,7 +308,7 @@ which a codebase can satisfy on its own.
 **Pre‑deployment requirements (gating for accredited environments)**
 1. **FIPS:** link/run a CMVP‑validated crypto module in its validated config, or pursue validation; do not represent current state as FIPS 140‑3 validated.
 2. **Confidential compute:** complete activation/testing of SEV‑SNP / TDX paths before relying on memory encryption for CUI/classified data.
-3. **Supply chain:** retire the `rsa` timing advisory; publish an SBOM; add scheduled advisory scans.
+3. **Supply chain:** publish an SBOM; add scheduled advisory scans. (The `rsa` timing advisory is retired: 814d0c0.)
 4. **Audit:** forward audit logs to an external, tamper‑evident store (SIEM) for non‑repudiation.
 5. **Assessment:** independent pen‑test + SSP/POA&M + ATO for government use.
 
