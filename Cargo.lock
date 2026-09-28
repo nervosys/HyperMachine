@@ -2851,6 +2851,7 @@ dependencies = [
  "async-trait",
  "axum",
  "flate2",
+ "form_urlencoded",
  "hv2-agent",
  "hv2-api",
  "hv2-cluster",

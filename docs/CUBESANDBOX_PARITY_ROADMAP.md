@@ -1643,6 +1643,25 @@ Verified with the unmodified SDK:
 
 Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
 
+#### Cloud registry logins
+
+E2B's `from_aws_registry` and `from_gcp_registry` work. For AWS the node signs `ecr:GetAuthorizationToken` with Signature Version 4 and logs in with the token it answers; `HV2_ECR_ENDPOINT` points at a FIPS or VPC endpoint instead of the region's. For Google the service account's key signs an RS256 JWT, which its token endpoint exchanges for an access token, used as the password of `oauth2accesstoken`. Neither credential is stored or logged.
+
+Verified:
+- the SigV4 code reproduces AWS's published worked example (IAM `ListUsers`) to the signature;
+- a unit test signs a Google assertion with a throwaway key and verifies it with the public half;
+- end to end, against a password-protected `registry:2` and stand-ins for the two token endpoints:
+  - a fake ECR re-derived the node's signature in an independent Python implementation before answering;
+  - a fake Google endpoint verified the JWT with `openssl`;
+  - builds from both logins pulled the private image and their sandboxes ran;
+  - a wrong AWS key was refused with AWS's own message;
+  - no secret appeared in the node's log.
+- AWS and Google themselves were not called: there are no cloud credentials here.
+
+Found on the way: a forced rebuild (`skip_cache`) of a template on a node without a snapshot store deleted the new template's snapshot, because the old and new shared a directory and the old one cleaned up on drop. Each build now has its own directory.
+
+Note that a node caches an image by name: a second build from a private image reuses the first pull without logging in again, unless `skip_cache` is set. That fits a single-tenant cluster, which this is.
+
 #### Events and webhooks
 
 E2B's `GET /events/sandboxes[/{id}]` and `/events/webhooks` -- create, list, update, delete, deliveries grouped by event, and hourly stats -- served by a node alone and by a control plane, over the cluster store's event stream (a node without a cluster keeps its own in memory).
@@ -1705,7 +1724,6 @@ Verified with the unmodified SDK:
 `--volume-dir` places volumes elsewhere. Volumes must live on a filesystem with user extended attributes (ext4, xfs) for guest ownership to hold: on WSL's `/mnt/c` every file reads 777 and owners are not kept.
 
 Not done:
-- registries' cloud logins (AWS, GCP) -- only `{"type": "registry"}`;
 - memory hot-plug and ballooning (a sandbox's size is fixed at its template);
 - more than 32 vCPUs;
 - volume quotas;

@@ -310,6 +310,14 @@ struct RegistryLogin {
     kind: String,
     username: Option<String>,
     password: Option<String>,
+    #[serde(rename = "awsAccessKeyId")]
+    aws_access_key_id: Option<String>,
+    #[serde(rename = "awsSecretAccessKey")]
+    aws_secret_access_key: Option<String>,
+    #[serde(rename = "awsRegion")]
+    aws_region: Option<String>,
+    #[serde(rename = "serviceAccountJson")]
+    service_account_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -466,10 +474,27 @@ async fn run(state: &Arc<AppState>, build: &Build, spec: StartBuild) -> Result<(
                     username: login.username.clone().unwrap_or_default(),
                     password: login.password.clone().unwrap_or_default(),
                 }),
+                Some(login) if login.kind == "aws" => Some(
+                    crate::cloud_login::ecr(
+                        &state.http,
+                        login.aws_access_key_id.as_deref().unwrap_or_default(),
+                        login.aws_secret_access_key.as_deref().unwrap_or_default(),
+                        login.aws_region.as_deref().unwrap_or_default(),
+                    )
+                    .await
+                    .map_err(&base_step)?,
+                ),
+                Some(login) if login.kind == "gcp" => Some(
+                    crate::cloud_login::gcp(
+                        &state.http,
+                        login.service_account_json.as_deref().unwrap_or_default(),
+                    )
+                    .await
+                    .map_err(&base_step)?,
+                ),
                 Some(login) => {
                     return Err(base_step(format!(
-                        "registry logins of type {:?} are not supported here; \
-                         {{\"type\": \"registry\"}} with a username and password is",
+                        "registry logins of type {:?}: registry, aws and gcp are supported",
                         login.kind
                     )));
                 }

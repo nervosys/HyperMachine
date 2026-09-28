@@ -117,6 +117,7 @@ use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Headers, NetworkPolicy, Verdict};
 
 mod builds;
+mod cloud_login;
 mod identity;
 mod initramfs;
 mod ninep;
@@ -3004,8 +3005,15 @@ async fn offer(state: &AppState, name: &str, initramfs: &str, sizes: Sizes) -> R
         let built = match &state.store {
             Some(store) => shared_template(&for_this, state.authority.as_deref(), store).await,
             None => {
-                let dir = std::env::temp_dir()
-                    .join(format!("hv2-sandboxd-{}-{name}", std::process::id()));
+                // A directory of its own: a rebuild replaces the template
+                // under this name, and the one replaced deletes its own
+                // directory when dropped -- which, shared, took the new
+                // snapshot with it.
+                let dir = std::env::temp_dir().join(format!(
+                    "hv2-sandboxd-{}-{name}-{}",
+                    std::process::id(),
+                    &uuid::Uuid::new_v4().simple().to_string()[..8]
+                ));
                 build_template(&for_this, state.authority.as_deref(), dir).await
             }
         }?;
