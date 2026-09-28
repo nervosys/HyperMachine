@@ -225,6 +225,11 @@ pub enum Operation {
     /// mount took from that: a mount that failed closes the connection
     /// without a `Tattach`.
     MountVolume { path: String },
+
+    /// What the guest is using, as it sees it: CPU time, memory, and its
+    /// root filesystem. Answered with [`OpResult::Stats`] -- one round trip,
+    /// for a host sampling every sandbox every few seconds.
+    Stats,
 }
 
 /// The most file data one [`Operation::WriteFile`] or
@@ -251,6 +256,20 @@ pub struct TemplateDefaults {
     /// for [`TEMPLATE_USER`]: a Dockerfile's last `USER`. Root if `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user: Option<String>,
+}
+
+/// A guest's use of its resources, from `/proc/stat`, `/proc/meminfo` and
+/// `statvfs("/")`. CPU time is cumulative, in clock ticks: a rate needs two.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GuestStats {
+    pub cpus: u32,
+    pub cpu_busy_ticks: u64,
+    pub cpu_total_ticks: u64,
+    pub mem_total: u64,
+    pub mem_available: u64,
+    pub mem_cached: u64,
+    pub disk_total: u64,
+    pub disk_used: u64,
 }
 
 /// An [`Operation::WriteFile`] owner meaning the template's user, whoever
@@ -346,6 +365,8 @@ pub enum OpResult {
         /// The file's size, so a reader knows when it has everything.
         size: u64,
     },
+    /// Answer to [`Operation::Stats`].
+    Stats(GuestStats),
     /// The request could not be carried out at all.
     Failed { message: String },
 }

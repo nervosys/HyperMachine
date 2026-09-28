@@ -536,6 +536,18 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest mount task failed: {e}")))?
     }
 
+    /// What the guest is using, as it sees it.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn stats_in_guest(&self, timeout: Duration) -> Result<hv2_guest_agent::GuestStats> {
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || GuestAgent::over_vsock(device, timeout)?.stats(timeout))
+            .await
+            .map_err(|e| AgentError::Script(format!("guest stats task failed: {e}")))?
+    }
+
     /// Read `path` from the guest, up to `limit` bytes.
     ///
     /// # Errors

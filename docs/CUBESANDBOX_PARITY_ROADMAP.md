@@ -1629,6 +1629,20 @@ Verified, with the unmodified SDK:
   - a `POST /templates` of 2 vCPU / 768 MiB was listed with its size and ran at it;
   - out-of-range sizes are refused with a 400.
 
+#### Metrics and logs
+
+E2B's `GET /sandboxes/{id}/metrics` (`get_metrics`), `GET /sandboxes/metrics`, and `GET /sandboxes/{id}/logs` (v1 and v2). Metrics are the guest's own account -- CPU from `/proc/stat`, memory and page cache from `/proc/meminfo`, the root filesystem from `statvfs` -- read in one agent round trip (`Stats`) every 5 s, as E2B samples, and kept for an hour; paused sandboxes are not woken to be sampled. Logs are the node's lifecycle events for the sandbox: created, volumes mounted, paused, resumed, forked. A control plane forwards each to the sandbox's node and merges `/sandboxes/metrics` across nodes.
+
+Verified with the unmodified SDK:
+- an idle 2-vCPU sandbox read 0.1% CPU, 34 of 971 MiB and 9 of 481 MiB disk;
+- with one CPU spinning, steady samples read 40-47% (the guest's own `top`: 47%);
+- writing 200 MiB added 197 MiB of used memory, as page cache;
+- samples arrived every 5 s, and the start/end window filtered them;
+- the log read created, paused, resumed;
+- through a control plane over two nodes, four sandboxes each had metrics, `/sandboxes/metrics` returned all four, and logs came back.
+
+Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
+
 #### Volumes
 
 E2B's persistent storage, as its SDK's `Volume` uses it:

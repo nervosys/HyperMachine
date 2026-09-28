@@ -288,6 +288,21 @@ impl GuestAgent {
     ///
     /// The cheapest way to answer "is anything actually listening in there",
     /// and the check worth making before reporting that a VM is ready for work.
+    /// What the guest is using: CPU ticks, memory, its root filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or an agent too old to answer.
+    pub fn stats(&mut self, timeout: Duration) -> Result<hv2_guest_agent::GuestStats> {
+        match self.request(Operation::Stats, timeout)? {
+            OpResult::Stats(stats) => Ok(stats),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a stats request with {other:?}"
+            ))),
+        }
+    }
+
     pub fn ping(&mut self, timeout: Duration) -> Result<String> {
         match self.request(Operation::Ping, timeout)? {
             OpResult::Pong { agent_version } => Ok(agent_version),

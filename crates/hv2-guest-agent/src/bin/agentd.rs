@@ -227,6 +227,54 @@ mod linux {
         }
     }
 
+    /// See [`Operation::Stats`]. Whatever cannot be read reads as zero: a
+    /// partial answer is still a sample.
+    fn stats() -> hv2_guest_agent::GuestStats {
+        let mut s = hv2_guest_agent::GuestStats::default();
+        if let Ok(stat) = std::fs::read_to_string("/proc/stat") {
+            for line in stat.lines() {
+                let mut fields = line.split_whitespace();
+                match fields.next() {
+                    Some("cpu") => {
+                        let ticks: Vec<u64> = fields.filter_map(|f| f.parse().ok()).collect();
+                        // user nice system idle iowait irq softirq steal
+                        let idle =
+                            ticks.get(3).copied().unwrap_or(0) + ticks.get(4).copied().unwrap_or(0);
+                        let total: u64 = ticks.iter().take(8).sum();
+                        s.cpu_total_ticks = total;
+                        s.cpu_busy_ticks = total.saturating_sub(idle);
+                    }
+                    Some(name) if name.starts_with("cpu") => s.cpus += 1,
+                    _ => {}
+                }
+            }
+        }
+        if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
+            for line in meminfo.lines() {
+                let mut fields = line.split_whitespace();
+                let (Some(key), Some(kb)) = (
+                    fields.next(),
+                    fields.next().and_then(|v| v.parse::<u64>().ok()),
+                ) else {
+                    continue;
+                };
+                match key {
+                    "MemTotal:" => s.mem_total = kb * 1024,
+                    "MemAvailable:" => s.mem_available = kb * 1024,
+                    "Cached:" => s.mem_cached = kb * 1024,
+                    _ => {}
+                }
+            }
+        }
+        let mut fs: libc::statvfs = unsafe { std::mem::zeroed() };
+        if unsafe { libc::statvfs(c"/".as_ptr(), &mut fs) } == 0 {
+            let block = fs.f_frsize as u64;
+            s.disk_total = fs.f_blocks as u64 * block;
+            s.disk_used = (fs.f_blocks as u64).saturating_sub(fs.f_bfree as u64) * block;
+        }
+        s
+    }
+
     /// `path`, a directory with nothing mounted on it: made if missing, and
     /// a mount left there -- one whose host end did not survive a snapshot's
     /// restore -- detached, so the new one is what is seen.
@@ -366,6 +414,7 @@ mod linux {
                 offset,
                 length,
             } => read_file(&path, offset, length),
+            Operation::Stats => OpResult::Stats(stats()),
             // Served in `serve`, which owns the connection it takes.
             Operation::MountVolume { .. } => OpResult::Failed {
                 message: "a volume mount must be the connection's own request".into(),

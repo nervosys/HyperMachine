@@ -120,6 +120,7 @@ mod initramfs;
 mod ninep;
 mod oci;
 mod snapshots;
+mod telemetry;
 mod volumes;
 
 const GUEST_CID_BASE: u64 = 100;
@@ -448,6 +449,8 @@ struct AppState {
     initrds: parking_lot::RwLock<BTreeMap<String, String>>,
     /// Templates being built, or whose build failed, by name.
     builds: Mutex<BTreeMap<String, TemplateBuild>>,
+    /// Each sandbox's metric samples and log, by sandbox ID.
+    telemetry: telemetry::Telemetry,
     /// Templates' sandboxes' sizes, where they are not the node's.
     sizes: parking_lot::RwLock<BTreeMap<String, Sizes>>,
     /// Sandboxes' snapshots, by name: templates too, to a create.
@@ -1375,6 +1378,28 @@ async fn register(
     event: Option<&str>,
 ) {
     let sandbox_id = record.sandbox_id.clone();
+    telemetry::log(
+        state,
+        &sandbox_id,
+        "info",
+        match event {
+            None => format!("sandbox created from template {}", record.template_id),
+            Some(kind) => kind.replace('-', " "),
+        },
+    );
+    if !record.volume_mounts.is_empty() {
+        let mounts: Vec<String> = record
+            .volume_mounts
+            .iter()
+            .map(|m| format!("{} at {}", m.name, m.path))
+            .collect();
+        telemetry::log(
+            state,
+            &sandbox_id,
+            "info",
+            format!("volumes mounted: {}", mounts.join(", ")),
+        );
+    }
     // Resolvable by name before the sandbox is announced, so a client that
     // uses the response immediately does not race the registration.
     state
@@ -1885,6 +1910,7 @@ async fn pause_sandbox(
         },
     );
     state.metrics.pauses.inc();
+    telemetry::log(state, sandbox_id, "info", "sandbox paused");
     state.metrics.pause_latency.observe(started.elapsed());
     if let Some(node) = &state.node {
         if let Err(e) = node
@@ -3439,6 +3465,7 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     };
     drop(held);
     state.transitions.lock().remove(sandbox_id);
+    telemetry::forget(state, sandbox_id);
     if kind == "sandbox-expired" {
         state.metrics.ended_expired.inc();
     } else {
@@ -3730,6 +3757,7 @@ async fn main() -> std::process::ExitCode {
         initrds: parking_lot::RwLock::new(initrds),
         builds: Mutex::new(BTreeMap::new()),
         sizes: parking_lot::RwLock::new(BTreeMap::new()),
+        telemetry: parking_lot::Mutex::new(HashMap::new()),
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
         upload_tokens: Mutex::new(HashMap::new()),
@@ -3755,6 +3783,7 @@ async fn main() -> std::process::ExitCode {
     tokio::spawn(expire(Arc::clone(&state)));
     tokio::spawn(adopt_built(Arc::clone(&state)));
     tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
+    tokio::spawn(telemetry::sample(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
     //
@@ -3882,6 +3911,10 @@ async fn main() -> std::process::ExitCode {
         .route("/volumes", get(volumes::list).post(volumes::create))
         .route("/volumes/{volumeID}", get(volumes::get).delete(volumes::delete))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
+        .route("/sandboxes/metrics", get(telemetry::latest))
+        .route("/sandboxes/{sandboxID}/metrics", get(telemetry::metrics))
+        .route("/sandboxes/{sandboxID}/logs", get(telemetry::logs_v1))
+        .route("/v2/sandboxes/{sandboxID}/logs", get(telemetry::logs_v2))
         .route(
             "/sandboxes/{sandboxID}",
             get(sandbox_detail).delete(destroy_sandbox),

@@ -128,6 +128,10 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/resume", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
         .route("/sandboxes/{id}/snapshots", post(forward))
+        .route("/sandboxes/metrics", get(sandboxes_metrics))
+        .route("/sandboxes/{id}/metrics", get(forward))
+        .route("/sandboxes/{id}/logs", get(forward))
+        .route("/v2/sandboxes/{id}/logs", get(forward))
         .route("/snapshots", get(snapshots))
         .route("/templates/{id}", axum::routing::delete(delete_template))
         .route("/v3/templates", post(to_builder))
@@ -977,6 +981,30 @@ async fn to_volume_node(
         Err((status, message)) => return api_error(status, message),
     };
     relay(&control, &node, &method, &uri, &headers, body).await
+}
+
+/// `GET /sandboxes/metrics`: each sandbox's latest sample, from whichever
+/// node runs it.
+async fn sandboxes_metrics(
+    State(control): State<Arc<ControlPlane>>,
+    uri: axum::http::Uri,
+) -> Response {
+    let path = uri
+        .path_and_query()
+        .map_or("/sandboxes/metrics", axum::http::uri::PathAndQuery::as_str);
+    let answers = match on_every_node(&control, Method::GET, path).await {
+        Ok(answers) => answers,
+        Err((status, message)) => return api_error(status, message),
+    };
+    let mut merged = serde_json::Map::new();
+    for (_, status, answer) in answers {
+        if status == 200 {
+            if let Some(found) = answer["sandboxes"].as_object() {
+                merged.extend(found.clone());
+            }
+        }
+    }
+    Json(json!({ "sandboxes": merged })).into_response()
 }
 
 /// `GET /volumes`: every live node's volumes, once each.
