@@ -67,14 +67,25 @@ def load(root):
             if f.endswith('.rs'):
                 path = os.path.join(base, f)
                 try:
-                    sources.append((path, open(path, encoding='utf-8').read()))
+                    text = open(path, encoding='utf-8').read()
                 except Exception:
-                    pass
-    return sources
+                    continue
+                # One separator everywhere, then sorted: every platform reads
+                # the same paths in the same order and reports them alike.
+                sources.append((path.replace(os.sep, '/'), text))
+    return sorted(sources)
 
 
 def collect_enums(sources):
-    enums, defined_in = {}, defaultdict(list)
+    """Every enum definition, keyed by (path, name).
+
+    Keyed by definition, not by name: 32 enum names are defined in more than
+    one file. Keying by name let whichever file was walked last win, and walk
+    order differs between platforms, so Linux and Windows analysed different
+    enums. Merging same-named enums was no better for rule B: one enum's reads
+    made another's unread variants look like findings.
+    """
+    enums, by_name, defined_in = {}, defaultdict(list), defaultdict(list)
     for path, text in sources:
         lines = text.split('\n')
         for i, line in enumerate(lines):
@@ -92,13 +103,20 @@ def collect_enums(sources):
                 if depth <= 0 and j > i:
                     break
             if variants:
-                enums[name] = (path, variants)
-                defined_in[path].append(name)
-    return enums, defined_in
+                key = (path, name)
+                enums[key] = variants
+                by_name[name].append(key)
+                defined_in[path].append(key)
+    return enums, by_name, defined_in
 
 
-def classify(sources, enums, defined_in):
-    """Count, per (enum, variant), where it is built and where it is read."""
+def classify(sources, enums, by_name, defined_in):
+    """Count, per (definition, variant), where it is built and where it is read.
+
+    `Name::Variant` cannot say which same-named definition it means, so it
+    counts for every definition that has the variant: that can hide a finding,
+    never invent one. `Self::Variant` resolves within its own file.
+    """
     built, read = defaultdict(int), defaultdict(int)
     for path, text in sources:
         local = defined_in.get(path, [])
@@ -109,15 +127,13 @@ def classify(sources, enums, defined_in):
             for m in path_re.finditer(line):
                 qualifier, variant = m.group(1), m.group(2)
                 if qualifier == 'Self':
-                    owners = [e for e in local if variant in enums[e][1]]
+                    owners = [k for k in local if variant in enums[k]]
                     if len(owners) != 1:
                         continue
-                    name = owners[0]
                 else:
-                    name = qualifier
-                    if name not in enums or variant not in enums[name][1]:
+                    owners = [k for k in by_name.get(qualifier, []) if variant in enums[k]]
+                    if not owners:
                         continue
-                key = (name, variant)
                 before = line[:m.start()].rstrip()
                 after = line[m.end():].lstrip()
                 # Skip past a tuple/struct pattern's bindings to what follows.
@@ -130,33 +146,34 @@ def classify(sources, enums, defined_in):
                     or re.search(r'\b(if|while)\s+let\s*$', before)
                     or (before.endswith('let') and tail.startswith('='))
                 )
-                if reading:
-                    read[key] += 1
-                else:
-                    built[key] += 1
+                for key in owners:
+                    if reading:
+                        read[(key, variant)] += 1
+                    else:
+                        built[(key, variant)] += 1
     return built, read
 
 
 def rule_a(enums, built):
     return [
         (name, v, path)
-        for name, (path, variants) in sorted(enums.items())
+        for (path, name), variants in sorted(enums.items())
         if name.endswith('Error')
         for v in variants
-        if REFUSAL.search(v) and built[(name, v)] == 0
+        if REFUSAL.search(v) and built[((path, name), v)] == 0
     ]
 
 
 def rule_b(enums, built, read):
     out = []
-    for name, (path, variants) in sorted(enums.items()):
+    for (path, name), variants in sorted(enums.items()):
         if not name.endswith(CHOICE_SUFFIXES):
             continue
-        enum_is_read = any(read[(name, v)] for v in variants)
-        if not enum_is_read:
+        key = (path, name)
+        if not any(read[(key, v)] for v in variants):
             continue
         for v in variants:
-            if read[(name, v)] == 0:
+            if read[(key, v)] == 0:
                 out.append((name, v, path))
     return out
 
@@ -241,6 +258,11 @@ ACCEPTED = {
         'comment in verify() had claimed "log but do not enforce"; the code '
         'enforced. Fail-closed; audit-only admission is deliberately not built.'),
     'TimerMode::Reserved': 'The reserved LAPIC timer-mode encoding, correctly never acted on.',
+    'CpuMode::LongModeCompatibility': (
+        'WHPX CpuMode is an observation, not a choice: the backend reports the '
+        "guest's mode to callers and tests, and nothing in hv2 is meant to branch "
+        'on it. Matched only because the name ends in Mode.'),
+    'CpuMode::LongMode64Bit': 'As CpuMode::LongModeCompatibility.',
     'MsiDestMode::Physical': 'The `else` of `== MsiDestMode::Logical`.',
     'TimerMode::OneShot': 'The `else` of `== TimerMode::Periodic` in the LAPIC timer.',
     'VlanMode::None': 'Falls through the Access/Trunk match: no tag, no filtering.',
@@ -257,12 +279,12 @@ ACCEPTED = {
 
 def run(root):
     sources = load(root)
-    enums, defined_in = collect_enums(sources)
-    built, read = classify(sources, enums, defined_in)
+    enums, by_name, defined_in = collect_enums(sources)
+    built, read = classify(sources, enums, by_name, defined_in)
     findings = (
         [('A', f'{n}::{v}', p, 'error variant nothing returns') for n, v, p in rule_a(enums, built)]
         + [('B', f'{n}::{v}', p, 'choice nothing acts on') for n, v, p in rule_b(enums, built, read)]
-        + [('C', f"{p.replace(os.sep, '/')}:{name}", p, f'claim without a caller: "{s}"') for p, name, s in rule_c(sources)]
+        + [('C', f'{p}:{name}', p, f'claim without a caller: "{s}"') for p, name, s in rule_c(sources)]
     )
     return enums, findings
 
