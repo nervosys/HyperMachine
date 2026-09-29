@@ -2463,7 +2463,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "tower-http",
+ "tower-http 0.7.1",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2473,7 +2473,7 @@ name = "hm-gui"
 version = "1.1.0"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "eframe",
  "egui",
@@ -2722,10 +2722,13 @@ dependencies = [
  "hv2-sandbox",
  "ic-cipher",
  "ic-core",
+ "ic-drbg",
  "ic-ec",
+ "ic-fips",
  "ic-hash",
  "ic-kdf",
  "ic-mac",
+ "ic-pkix",
  "ic-rsa",
  "libc",
  "memmap2",
@@ -2858,6 +2861,8 @@ dependencies = [
  "hv2-core",
  "hv2-guest-agent",
  "hv2-net",
+ "ic-drbg",
+ "ic-rsa",
  "libc",
  "parking_lot",
  "reqwest",
@@ -3016,24 +3021,36 @@ dependencies = [
 
 [[package]]
 name = "ic-cipher"
-version = "0.1.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3979784067a76e8adc6cea819ac88dcb074e7ceeb0c0795a136ed8bebd87c5f4"
+checksum = "ea9d2504dc7bb76876f555a65d90ddf518dfc82b5ece9bd2f7cb60020b314441"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-core"
-version = "0.1.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c7dfccd38fd9c1610ccfe2e171a0390622e9af732fbae82999591775dff208a"
+checksum = "6e3703773af47dcad422d03b3364679873ce48c94dc53b47fa21f13e2bb20389"
+
+[[package]]
+name = "ic-drbg"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81b2b01ad1ac5dde2301ebf274672e211f0f25c7c70101b1ff2592f7292189b5"
+dependencies = [
+ "ic-cipher",
+ "ic-core",
+ "ic-hash",
+ "ic-mac",
+]
 
 [[package]]
 name = "ic-ec"
-version = "0.1.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c8917bfd9b00f768fa42df63e8b6739d88090c8498c210c560f8b1d6738cc24"
+checksum = "663a54421a2f535d517f1a6f90f332ab1f5489c4ccaef12b4de241b97df773ca"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3041,19 +3058,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-hash"
-version = "0.1.1"
+name = "ic-fips"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b080c348adaf33207cd46c0f6c7e8d9c163ed8ad2917734090a756d420f4dc56"
+checksum = "4c8a4c7a9e518c09b2b967adb4bbfb02b8feebd936143f566c3ead39696f7b7b"
+dependencies = [
+ "ic-cipher",
+ "ic-core",
+ "ic-drbg",
+ "ic-ec",
+ "ic-hash",
+ "ic-kdf",
+ "ic-mac",
+ "ic-mldsa",
+ "ic-mlkem",
+ "ic-ontology",
+ "ic-rsa",
+]
+
+[[package]]
+name = "ic-hash"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c67747657f44327250b7a2db6f892cd237f9029504183f688260749aee6b807b"
 dependencies = [
  "ic-core",
 ]
 
 [[package]]
 name = "ic-kdf"
-version = "0.1.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd01af1cb0e07f121e2d06215c35bf7e077a4b0e73e96e3d5d1b820226842e61"
+checksum = "d26885598431b653035c199d06919cc973c1a2e804ab0298d90e706d1127fffe"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -3062,9 +3098,9 @@ dependencies = [
 
 [[package]]
 name = "ic-mac"
-version = "0.1.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "931997ef87db5178a82c03b1886f9574b36b689f2a7f07ef62f6a1cacab81f1d"
+checksum = "488e0aacb4f376582f4bf428c32f7dd635d9e1f529a9db647ccdf87876126407"
 dependencies = [
  "ic-cipher",
  "ic-core",
@@ -3072,10 +3108,48 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-rsa"
-version = "0.1.1"
+name = "ic-mldsa"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "294a8d10d437f5c20ff8a2cc02e48003ebe3d00b8c3f8ecd0597068ee3acc840"
+checksum = "d59f8723fda240dc12586d56ef519856438f319c2e740a15a9d0c0ab07fee62d"
+dependencies = [
+ "ic-core",
+ "ic-hash",
+]
+
+[[package]]
+name = "ic-mlkem"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd40edee80e9d388ae79bed388c64dc185c98fcf4c4599869226094f65ef8a81"
+dependencies = [
+ "ic-core",
+ "ic-hash",
+]
+
+[[package]]
+name = "ic-ontology"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efddac95d13022bccbf090a7ba5580b65b1bd2daed4c326c1b1f1a6b836753d7"
+dependencies = [
+ "ic-core",
+]
+
+[[package]]
+name = "ic-pkix"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e5dbfe0ec62e8f5beda05ffaeadee95156fb3f4b66c7d3e5d0f647d0db1b565"
+dependencies = [
+ "ic-core",
+]
+
+[[package]]
+name = "ic-rsa"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ca09f0b09ffaf40806143c224b67a257d770d06dc0c649c0a47f3b2999649cf4"
 dependencies = [
  "ic-core",
  "ic-hash",
@@ -5361,7 +5435,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tower",
- "tower-http",
+ "tower-http 0.6.11",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -6618,6 +6692,21 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "url",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08a05a66a4fdd61cbbe0a1d755ffe0ca6aba159dd4820936a0ff8a8278245b9c"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytes",
+ "http",
+ "percent-encoding",
+ "pin-project-lite",
+ "tower-layer",
+ "tower-service",
 ]
 
 [[package]]
