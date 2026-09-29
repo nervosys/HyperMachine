@@ -65,7 +65,7 @@ HyperMachine models GPU interconnect topology (NVLink, NVSwitch, PCIe) and makes
 
 ### 4. Post-Quantum Cryptography
 
-Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine ships ML-KEM (Kyber) for key encapsulation, ML-DSA (Dilithium) for digital signatures, and SLH-DSA (SPHINCS+) for hash-based signatures — all NIST-standardized, quantum-resistant, and backed by the audited pure-Rust [RustCrypto](https://github.com/RustCrypto) implementations (not placeholders).
+Alongside classical FIPS-approved algorithms (AES-GCM, RSA, ECDSA), HyperMachine ships ML-KEM (Kyber) for key encapsulation, ML-DSA (Dilithium) for digital signatures, and SLH-DSA (SPHINCS+) for hash-based signatures — all NIST-standardized and quantum-resistant. ML-KEM and ML-DSA are IronCrypto's, checked against NIST's ACVP vectors for every parameter set; SLH-DSA is the pure-Rust [RustCrypto](https://github.com/RustCrypto) implementation.
 
 ### 5. Pure Rust, Zero Unsafe in Business Logic
 
@@ -238,10 +238,10 @@ This semantic approach is **superior to screen-based automation** (like Anthropi
 ## Cryptography
 
 Implementations of FIPS-approved classical algorithms plus the NIST
-post-quantum schemes. Classical AES-GCM/SHA come from the [`ring`](https://github.com/briansmith/ring)
-backend, RSA from the pure-Rust [`rsa`](https://github.com/RustCrypto/RSA) crate,
-and the post-quantum schemes from [RustCrypto](https://github.com/RustCrypto)
-(`ml-kem`, `ml-dsa`, `slh-dsa`). These are validated _algorithm_ implementations,
+post-quantum schemes. Every classical primitive, ML-KEM and ML-DSA come from
+IronCrypto (`ic-*` crates), each checked against published test vectors.
+SLH-DSA is still [RustCrypto](https://github.com/RustCrypto)'s `slh-dsa`,
+since IronCrypto has none yet. These are tested _algorithm_ implementations,
 not a FIPS 140-3 _validated module_.
 
 | Type             | Algorithms                                             |
