@@ -375,12 +375,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
-- **IronCrypto 0.2.1** (`hv2-core`, `hv2-api`), from 0.1.x: all 13 `ic-*`
-  crates. It brings faster SHA-256/HMAC/HKDF on SHA-NI and faster AES-GCM,
-  constant-time fixes in the NIST field code, and the vector-checked
-  `ic-mldsa`. None of 0.2.0's breaking changes reach HyperMachine's usage.
-  The RSA-4096 fix is not in 0.2.1: it lands in 0.2.2, after which the
-  4032-bit guard can come out.
+- **IronCrypto 0.2.2** (`hv2-core`, `hv2-api`), from 0.1.x: all 13 `ic-*`
+  crates. It brings the RSA-4096 fix reported from here, faster
+  SHA-256/HMAC/HKDF on SHA-NI and faster AES-GCM, constant-time fixes in the
+  NIST field code, and the vector-checked `ic-mldsa`. None of 0.2.0's
+  breaking changes reach HyperMachine's usage. RSA-4096 key generation and
+  signing work again, and the refusal below is gone.
 - **macOS no longer claims a process-count limit** (`hv2-sandbox`). Breaking
   for a caller that asked for one: a spec with `max_processes` set and not
   `best_effort` was accepted by 1.1.0 and is now refused with
@@ -550,10 +550,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-tests, and they take random bytes from an SP 800-90A HMAC_DRBG
   (`ic-drbg`). `Disabled` is unchanged. None of this is CMVP validation.
 - **RSA-4096 key generation and signing panicked** (`hv2-core`, in IronCrypto's
-  `ic-rsa` 0.1.3), which under `panic = "abort"` ends the process. Both are now
-  refused with `UnsupportedAlgorithm` until `ic-rsa` is fixed; RSA-2048 and
-  RSA-3072 are unaffected, and 4096-bit signatures still verify. Every
-  offered RSA signature algorithm is now tested, where two were.
+  `ic-rsa` 0.1.3), which under `panic = "abort"` ends the process. They were
+  refused with `UnsupportedAlgorithm` until IronCrypto 0.2.2 fixed the cause;
+  now RSA-4096 has an end-to-end test like every other size. Every offered
+  RSA signature algorithm is now tested, where two were.
 - **AES-128-GCM did not work** (`hv2-core`). It was listed among the approved
   algorithms, `AesKeySize::Aes128` generated 16-byte keys, and
   `aes_gcm_encrypt`/`aes_gcm_decrypt` accepted them, but the implementation
