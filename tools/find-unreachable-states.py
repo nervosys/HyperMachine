@@ -40,6 +40,11 @@ for base, dirs, files in os.walk(ROOT):
             except Exception:
                 pass
 
+# One separator and a sorted order, so every platform walks the tree alike.
+# Enum names repeat across files (32 of them); with an unsorted walk the last
+# definition seen won, and that differed between Linux and Windows.
+sources = sorted((p.replace(os.sep, '/'), x) for p, x in sources)
+
 enums = {}
 defined_in = defaultdict(list)          # path -> [enum names]
 for path, text in sources:
@@ -59,6 +64,10 @@ for path, text in sources:
             if depth <= 0 and j > i:
                 break
         if variants:
+            if name in enums:
+                # Same name, another file: keep the first in sorted order,
+                # as before but now the same on every platform.
+                continue
             enums[name] = (path, variants)
             defined_in[path].append(name)
 
@@ -104,6 +113,12 @@ ACCEPTED = {
         'True, and known. Nothing ever marks a vCPU Running, so VM::pause could '
         'never succeed -- it now returns NotSupported and says so. The variant '
         'stays because implementing suspend is still open; see docs/handoff.html.'
+    ),
+    ('PortState', 'Learning'): (
+        'The one guard (vswitch can_learn) accepts Learning OR Forwarding, and '
+        'ports start Forwarding, so it passes. The STP Learning state is not '
+        'modelled. Hidden until 2026-09-29 by a walk-order bug that made this '
+        'script analyse different same-named enums on Linux and Windows.'
     ),
     ('StoreBackend', 'File'): (
         'Public config field. `StoreConfig.backend` defaults to Memory and a '
