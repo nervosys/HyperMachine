@@ -1683,6 +1683,16 @@ Verified:
 
 An intermittent failure seen twice this session is not explained: an image template's guest (512 MiB once, 1 GiB once) did not answer within 120 s, and passed on the next runs. The node keeps no guest console output from a failed template boot, which is what finding it would need.
 
+#### A guest's console, kept for failures
+
+Every VM now has a serial console (COM1, `0x3F8`), and the guest kernel logs at `loglevel=3` (errors and worse) instead of not at all. When a template's guest or a sandbox's guest never answers, the error carries the last 15 lines the guest wrote -- or says it wrote nothing, which is itself a finding.
+
+Verified:
+- a template built on an initramfs whose init has no agent failed with `its console ended: broken init: no agent in this image | sleeping forever`, where before it said only that the agent never answered;
+- the build, lifecycle, port, SMP and volume regressions passed. Sandbox creates measured 50-112 ms in that run, against 27-66 ms before, on a host whose load varies; this was not separated from the change.
+
+The intermittent failure recurred once in that regression: a sandbox from a built template did not answer within 15 s, and **its guest wrote nothing to its console** -- no kernel error, no panic. Four reruns passed. A sandbox is restored from a running snapshot, so it has no boot to print, but a panic or an error would still appear. So the guest either did not run, or ran without error and its agent did not answer. The next step is to capture, on such a failure, whether its vCPUs ran at all.
+
 #### A sandbox's own ports
 
 E2B's `sandbox.get_host(port)` -- `{port}-{sandboxID}.{domain}` -- reaches any port a sandbox serves, not only envd's: a web server, a dev server, the Code Interpreter's Jupyter. Until now the proxy routed envd's port alone, so every other one answered 404.

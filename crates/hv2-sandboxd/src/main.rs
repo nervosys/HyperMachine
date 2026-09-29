@@ -1264,10 +1264,12 @@ async fn bring_up(
         None => vm.ping_guest(state.opts.ready_timeout).await.map(|_| ()),
     };
     if let Err(e) = ready {
+        let tail = console_tail(&vm).await;
+        tracing::warn!("{sandbox_id}: guest never became ready: {e}; {tail}");
         let _ = vm.stop().await;
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            format!("guest never became ready: {e}"),
+            format!("guest never became ready: {e}; {tail}"),
         ));
     }
     let answered = t0.elapsed();
@@ -3168,10 +3170,13 @@ fn shared_authority(store: &SnapshotStore) -> Result<Authority, String> {
     }
 }
 
-/// The kernel command line every sandbox guest boots with.
+/// The kernel command line every sandbox guest boots with. `loglevel=3`: the
+/// kernel's errors and panics reach the console, which a guest that never
+/// answers is reported with; nothing below that, which a booting guest
+/// would write a character at a time, an exit each.
 fn guest_cmdline(network: bool) -> String {
     format!(
-        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}{}",
+        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 {}{}",
         hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
         // The guest configures its NIC from this before init runs.
         if network {
@@ -3223,7 +3228,46 @@ async fn new_vm(
         }
         None => None,
     };
+    // A console, on every VM alike -- template, booted sandbox, restored
+    // one -- so a guest that never answers says why: its kernel's panic, its
+    // init's last words. On every VM, not only a template's, because a guest
+    // restored from a template whose kernel found a UART at boot must find
+    // one still there. Its buffer is capped (1 MiB), and a quiet kernel
+    // (`loglevel=0`) writes little to it.
+    {
+        use hv2_core::{Device, SerialDevice};
+        let mut console = SerialDevice::new("COM1".to_string(), 0x3F8);
+        console
+            .init()
+            .await
+            .map_err(|e| format!("attaching the console: {e}"))?;
+        vm.vm()
+            .devices()
+            .register_device("COM1", Arc::new(tokio::sync::RwLock::new(console)))
+            .await
+            .map_err(|e| format!("attaching the console: {e}"))?;
+        // Registered, a device is not yet reached: its ports route to it.
+        vm.vm()
+            .devices()
+            .register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF)
+            .await
+            .map_err(|e| format!("routing the console's ports: {e}"))?;
+    }
     Ok((vm, nic))
+}
+
+/// The last of what `vm`'s guest wrote to its console, for an error that
+/// says why a guest never answered.
+async fn console_tail(vm: &AgentVM) -> String {
+    let Some(output) = vm.console_output().await else {
+        return "no console".into();
+    };
+    let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.is_empty() {
+        return "the guest wrote nothing to its console".into();
+    }
+    let tail = lines[lines.len().saturating_sub(15)..].join(" | ");
+    format!("its console ended: {tail}")
 }
 
 /// Boot the template once, configure it as every sandbox needs, and write it
@@ -3256,9 +3300,15 @@ async fn build_template(
         // Booted once, at startup, so allowed longer than a sandbox is: a
         // template from an OCI image first unpacks its whole filesystem --
         // 130 MiB for python:3.12-slim -- and missed 15 s on a busy host.
-        vm.ping_guest(opts.ready_timeout.max(TEMPLATE_BOOT_TIMEOUT))
+        if let Err(e) = vm
+            .ping_guest(opts.ready_timeout.max(TEMPLATE_BOOT_TIMEOUT))
             .await
-            .map_err(|e| format!("the template's agent never answered: {e}"))?;
+        {
+            return Err(format!(
+                "the template's agent never answered: {e}; {}",
+                console_tail(&vm).await
+            ));
+        }
         if opts.network {
             configure_guest_network(&vm, authority.map(Authority::ca_pem)).await?;
         }
