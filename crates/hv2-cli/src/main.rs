@@ -314,7 +314,25 @@ async fn main() -> Result<()> {
                 cfg.server.shutdown_timeout_secs = secs;
             }
 
-            let config = cfg.into_server_config();
+            let mut config = cfg.into_server_config();
+
+            // A tamper-evident chain for the HTTP audit, when the operator
+            // asked for one. Failing to open it stops the server: an operator
+            // who configured an audit trail and silently got none has been
+            // misled. Asking for a chain is asking for auditing, so it also
+            // turns the audit middleware on, and says so.
+            if let Some(chain) = hv2_core::security::AuditChain::from_env()
+                .map_err(|e| anyhow::anyhow!("opening the audit chain: {e}"))?
+            {
+                if !config.middleware.enable_audit_log {
+                    println!(
+                        "  {} HV2_AUDIT_CHAIN is set, so HTTP audit logging is on",
+                        "audit".cyan()
+                    );
+                    config.middleware.enable_audit_log = true;
+                }
+                config.middleware.audit_log.chain = Some(chain);
+            }
 
             let server = hv2_api::server::Server::new(config);
 

@@ -1212,6 +1212,48 @@ mod tests {
             .contains_key("access-control-allow-origin"));
     }
 
+    /// The shipped server's router applies the audit middleware, and with a
+    /// chain configured a mutating request lands in a chain file that
+    /// verifies. `hv2 serve` builds exactly this.
+    #[tokio::test]
+    async fn the_server_router_writes_audited_requests_to_the_chain() {
+        let dir = std::env::temp_dir().join(format!("hv2-server-audit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("http.jsonl");
+        let _ = std::fs::remove_file(&path);
+        let key = [9u8; 32];
+        let chain = std::sync::Arc::new(
+            hv2_core::security::AuditChain::open_file(&path, key, false).unwrap(),
+        );
+        let middleware = MiddlewareConfig::none().audit_log_enabled(true).audit_log(
+            crate::middleware::AuditLogConfig {
+                chain: Some(chain),
+                ..Default::default()
+            },
+        );
+        let app = Server::new(test_config().middleware(middleware)).build_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/no-such-route")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            hv2_core::security::audit_chain::verify(text.lines(), &key),
+            Ok(1)
+        );
+        assert!(text.contains("/api/v1/no-such-route"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     // ── Shutdown & Lifecycle ──────────────────────────────────────────
 
     #[test]

@@ -328,11 +328,15 @@ containment on the agent tool path. None of it protects a guest from the host.
   both feed it, and `AuditChain::from_env` opens one from `HV2_AUDIT_CHAIN`
   and `HV2_AUDIT_KEY_FILE`. `verify_audit_log` checks a file, and an
   independent Python writer built from the documentation interoperates.
-- [ ] **Install the HTTP audit middleware in a shipped server.** *S–M.* Found
-  2026-09-28: `rest::serve` builds its router without the middleware stack,
-  so no binary audits HTTP requests at all, chained or not. Done when: the
-  REST server applies the stack, with audit on and the chain opened from
-  the environment.
+- [x] **Open the audit chain in the shipped server.** *S.* Done 2026-09-28:
+  `hv2 serve` opens it from `HV2_AUDIT_CHAIN` + `HV2_AUDIT_KEY_FILE`, turns
+  HTTP audit logging on when they are set, and refuses to start if the chain
+  cannot be opened. Verified with the real binary: two requests produced a
+  chain that `verify_audit_log` passes, and a bad key file exits 1 with no
+  listener. (This item first read "no shipped binary installs the HTTP audit
+  middleware". That was wrong: a search cut off at eight lines missed the
+  one production caller. `hv2 serve` runs `hv2_api::server::Server`, which
+  applies the full stack.)
 - [ ] **Independent penetration test, SSP/POA&M, ATO.** 🔒 *organisational.*
   Audit recommendation #5.
 

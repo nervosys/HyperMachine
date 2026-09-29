@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HV2_AUDIT_KEY_FILE`; and `cargo run -p hv2-core --example verify_audit_log`
   checks a file. Truncation at the tail needs a copy held elsewhere: point a
   SIEM collector at the file. Off by default.
+- **`hv2 serve` writes the audit chain** (`hv2-cli`). Setting
+  `HV2_AUDIT_CHAIN` and `HV2_AUDIT_KEY_FILE` opens it, turns HTTP audit
+  logging on, and makes a chain that cannot be opened, or no longer
+  verifies, stop the server from starting.
 - **A command runs inside a guest through the published API** (`hv2-agent`).
   Not the boot probe, which drives the vsock device by hand because it was
   written alongside it, but `AgentVM::ping_guest` and `exec_in_guest` -- the
