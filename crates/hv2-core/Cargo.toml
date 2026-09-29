@@ -42,22 +42,22 @@ reqwest = { workspace = true, optional = true }
 # published, not because a rev was wanted, so a version requirement is the
 # right shape now -- and it takes `net.git-fetch-with-cli`, a CI token and a
 # BuildKit secret out of the build with it.
-ic-rsa = "0.1.1"
-ic-hash = "0.1.1"
-ic-mac = "0.1.1"
-ic-kdf = "0.1.1"
-ic-cipher = "0.1.1"
-ic-ec = "0.1.1"
-ic-core = "0.1.1"
+ic-rsa = "0.2.1"
+ic-hash = "0.2.1"
+ic-mac = "0.2.1"
+ic-kdf = "0.2.1"
+ic-cipher = "0.2.1"
+ic-ec = "0.2.1"
+ic-core = "0.2.1"
 # DER SubjectPublicKeyInfo parsing for secure boot's trusted keys.
-ic-pkix = "0.1.3"
+ic-pkix = "0.2.1"
 # The FIPS 140-3 discipline FipsMode::Enabled and ::Strict are held to:
 # ic-fips runs IronCrypto's pre-operational self-tests and answers, per
 # operation, whether an algorithm is approved; ic-drbg is the SP 800-90A
 # HMAC_DRBG those modes draw random bytes from. Neither makes this a
 # validated module -- see ic_fips::VALIDATION_STATEMENT.
-ic-fips = "0.1.3"
-ic-drbg = "0.1.3"
+ic-fips = "0.2.1"
+ic-drbg = "0.2.1"
 # Zeroization of key material on drop. A plain loop or `fill(0)` writes to
 # memory that is never read again, which the optimizer is free to delete;
 # `zeroize` uses volatile writes so the erasure actually happens.

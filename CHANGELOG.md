@@ -375,6 +375,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **IronCrypto 0.2.1** (`hv2-core`, `hv2-api`), from 0.1.x: all 13 `ic-*`
+  crates. It brings faster SHA-256/HMAC/HKDF on SHA-NI and faster AES-GCM,
+  constant-time fixes in the NIST field code, and the vector-checked
+  `ic-mldsa`. None of 0.2.0's breaking changes reach HyperMachine's usage.
+  The RSA-4096 fix is not in 0.2.1: it lands in 0.2.2, after which the
+  4032-bit guard can come out.
 - **macOS no longer claims a process-count limit** (`hv2-sandbox`). Breaking
   for a caller that asked for one: a spec with `max_processes` set and not
   `best_effort` was accepted by 1.1.0 and is now refused with
