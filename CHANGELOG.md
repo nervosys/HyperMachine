@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **The API's `/agentic` auth exemption no longer covers writes**
+  (`hv2-api`). With API keys on, the default exempted every path under
+  `/agentic`, and `POST /agentic/plans/execute` starts and stops the
+  server's real VMs, so anyone who could reach the port could drive them.
+  Excluded paths now apply to GET, HEAD and OPTIONS only. Behaviour change:
+  `POST /agentic/plans/validate` and `POST /agentic/templates` need a key.
 - **A tenant's `allowOut` no longer reaches the host's or the cluster's
   network** (`hv2-net`, `hv2-sandboxd`, Helm chart). `allowOut` CIDRs were
   checked before reserved addresses, so a sandbox created with
