@@ -17,6 +17,7 @@ hv2-agent = { path = "../hv2-agent", version = "1.1.0" }
 hv2-api = { path = "../hv2-api", version = "1.1.0" }
 hv2-net = { path = "../hv2-net", version = "1.1.0" }
 hv2-cluster = { path = "../hv2-cluster", version = "1.1.0" }
+hv2-guest-agent = { path = "../hv2-guest-agent", version = "1.1.0" }
 
 tokio = { workspace = true }
 axum = { workspace = true }
@@ -27,6 +28,17 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
+sha2 = "0.11"
+ring = "0.17"
+reqwest = { workspace = true }
+flate2 = { workspace = true }
+tar = { version = "0.4", default-features = false }
+# zstd-compressed image layers; pure Rust, a decoder only.
+ruzstd = "0.8"
+tokio-stream = "0.1"
+libc = "0.2"
+form_urlencoded = "1"
+tokio-rustls = { workspace = true }
 subtle = { version = "2.6", default-features = false }
 
 [[bin]]

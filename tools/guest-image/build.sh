@@ -4,7 +4,8 @@
 #
 #   tools/guest-image/build.sh -o guest.cpio.gz \
 #       [--busybox /bin/busybox] [--agent path/to/hv2-guest-agentd] \
-#       [--extra /path/to/curl[:NAME] ...] [--ca-bundle /etc/ssl/certs/ca-certificates.crt]
+#       [--extra /path/to/curl[:NAME] ...] [--ca-bundle /etc/ssl/certs/ca-certificates.crt] \
+#       [--rootfs DIR]   # start from a root filesystem, e.g. from-oci.sh's
 #
 # Every binary must be static: the image has no libc of its own. The agent is
 # built static by default if --agent is not given:
@@ -23,6 +24,7 @@ out=""
 busybox=$(command -v busybox || true)
 agent=""
 ca_bundle=""
+rootfs=""
 extras=()
 
 while [ $# -gt 0 ]; do
@@ -32,6 +34,7 @@ while [ $# -gt 0 ]; do
         --agent) agent=$2; shift 2 ;;
         --extra) extras+=("$2"); shift 2 ;;
         --ca-bundle) ca_bundle=$2; shift 2 ;;
+        --rootfs) rootfs=$2; shift 2 ;;
         -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         *) echo "build.sh: unknown argument $1" >&2; exit 2 ;;
     esac
@@ -61,13 +64,20 @@ static "$agent"
 
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
+# A root filesystem to start from -- an OCI image's, from from-oci.sh -- in
+# which case what it already has is kept: its own shell, its own bash, its
+# libc for everything else. Busybox fills in what it lacks at boot.
+if [ -n "$rootfs" ]; then
+    cp -a "$rootfs"/. "$root"/
+fi
 mkdir -p "$root"/{bin,sbin,dev,proc,sys,tmp,etc,root}
 install -m 0755 "$busybox" "$root/bin/busybox"
-ln -s busybox "$root/bin/sh"
+[ -e "$root/bin/sh" ] || [ -L "$root/bin/sh" ] || ln -s busybox "$root/bin/sh"
 install -m 0755 "$agent" "$root/bin/hv2-guest-agentd"
 install -m 0755 "$here/init" "$root/init"
-# The SDK runs everything through /bin/bash; an --extra named bash replaces this.
-install -m 0755 "$here/bash-shim" "$root/bin/bash"
+# The SDK runs everything through /bin/bash; an --extra named bash, or the
+# rootfs's own, replaces this.
+[ -e "$root/bin/bash" ] || install -m 0755 "$here/bash-shim" "$root/bin/bash"
 for spec in "${extras[@]}"; do
     # SRC or SRC:NAME -- the name it has in the image, when not its own.
     x=${spec%%:*}

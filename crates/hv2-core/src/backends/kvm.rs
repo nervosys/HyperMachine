@@ -77,6 +77,27 @@ const CR0_ET: u64 = 1 << 4;
 /// The always-set reserved bit 1 of `RFLAGS`.
 const RFLAGS_RESERVED: u64 = 0x2;
 
+/// Tell vCPU `vcpu_id` of `vcpu_count` who it is: its initial APIC ID and the
+/// package's logical processor count in leaf 1 (with HTT, which says that
+/// count means something), and its x2APIC ID in every subleaf of leaves 0xB
+/// and 0x1F. KVM gives vCPU `i` local APIC ID `i`, and the MP table lists it
+/// so; CPUID has to agree.
+#[cfg(target_os = "linux")]
+fn patch_topology(entries: &mut [kvm_cpuid_entry2], vcpu_id: u32, vcpu_count: u32) {
+    for entry in entries {
+        match entry.function {
+            1 => {
+                entry.ebx = (entry.ebx & 0x0000_FFFF)
+                    | ((vcpu_id & 0xFF) << 24)
+                    | ((vcpu_count.min(0xFF)) << 16);
+                entry.edx |= 1 << 28;
+            }
+            0xB | 0x1F => entry.edx = vcpu_id,
+            _ => {}
+        }
+    }
+}
+
 /// Put `sregs` into 32-bit protected mode with flat 4 GB segments and paging
 /// off — the machine state both the Linux 32-bit boot protocol and Multiboot
 /// require on entry.
@@ -696,9 +717,10 @@ impl HypervisorBackend for KvmBackend {
             ));
         }
 
-        // Slot 0 is the guest's own RAM. Shared regions start at 1 and there is
-        // one per VM, which is all the model-weights case needs.
-        kvm_vm.map_memory_with_flags(1, guest_addr, len, host_addr, KVM_MEM_READONLY)
+        // Slots 0 and 1 are the guest's own RAM, either side of the hole
+        // below 4 GiB. Shared regions start at 2 and there is one per VM,
+        // which is all the model-weights case needs.
+        kvm_vm.map_memory_with_flags(2, guest_addr, len, host_addr, KVM_MEM_READONLY)
     }
 
     async fn kick_vcpu(&self, vcpu: &VCpu) -> Result<()> {
@@ -868,6 +890,25 @@ impl HypervisorBackend for KvmBackend {
                     .add_data_32bit(0, 0xFFFF_FFFF, 0)
                     .build();
                 kvm_vm.write_guest_memory(gdt_base, &gdt)?;
+
+                // More than one vCPU: an MP table, or Linux never learns of
+                // the others. One vCPU gets none, as before -- the guest stays
+                // on the PIC's virtual wire, the path every template so far
+                // was booted and snapshotted on.
+                if kvm_vm.vcpu_count > 1 {
+                    use crate::boot::mptable;
+                    if kvm_vm.vcpu_count > mptable::MAX_CPUS {
+                        return Err(Error::Config(format!(
+                            "{} vCPUs: a Linux guest here has at most {}",
+                            kvm_vm.vcpu_count,
+                            mptable::MAX_CPUS
+                        )));
+                    }
+                    kvm_vm.write_guest_memory(
+                        mptable::MPTABLE_ADDR,
+                        &mptable::build(kvm_vm.vcpu_count),
+                    )?;
+                }
 
                 let mut sregs = kvm_vcpu.get_sregs()?;
                 sregs.gdt.base = gdt_base;
@@ -1149,22 +1190,31 @@ impl KvmVm {
                 }
                 let ptr = ptr as *mut u8;
 
-                // Map guest memory into KVM
-                let region = kvm_userspace_memory_region {
-                    slot: 0,
-                    flags: 0,
-                    guest_phys_addr: 0,
-                    memory_size,
-                    userspace_addr: ptr as u64,
-                };
+                // Map guest memory into KVM: one slot per RAM range, either side
+                // of the hole below 4 GiB, both from this one buffer (see
+                // `crate::memory::ram_ranges`). Slot 0 is the low range; slot 1
+                // the high one, when there is one.
+                let mut offset = 0u64;
+                for (slot, (guest_phys_addr, size)) in
+                    (0u32..).zip(crate::memory::ram_ranges(memory_size))
+                {
+                    let region = kvm_userspace_memory_region {
+                        slot,
+                        flags: 0,
+                        guest_phys_addr,
+                        memory_size: size,
+                        userspace_addr: ptr as u64 + offset,
+                    };
+                    offset += size;
 
-                if let Err(e) = kvm_set_user_memory_region(vm_fd, &region) {
-                    libc::munmap(ptr as *mut libc::c_void, memory_size as usize);
-                    libc::close(vm_fd);
-                    return Err(Error::Hypervisor(format!(
-                        "Failed to set user memory region: {}",
-                        e
-                    )));
+                    if let Err(e) = kvm_set_user_memory_region(vm_fd, &region) {
+                        libc::munmap(ptr as *mut libc::c_void, memory_size as usize);
+                        libc::close(vm_fd);
+                        return Err(Error::Hypervisor(format!(
+                            "Failed to set user memory region: {}",
+                            e
+                        )));
+                    }
                 }
 
                 match NonNull::new(ptr) {
@@ -1251,7 +1301,7 @@ impl KvmVm {
         //
         // Handing the guest the host's supported set is the same choice the
         // established VMMs make for a VM with no CPU model configured.
-        vcpu.apply_supported_cpuid(self.kvm_fd)?;
+        vcpu.apply_supported_cpuid(self.kvm_fd, self.vcpu_count)?;
 
         self.vcpus
             .write()
@@ -1368,8 +1418,9 @@ impl KvmVm {
     /// Write `data` into guest physical memory at `addr`.
     ///
     /// The guest memory allocated in `KvmVm::new` is registered with KVM as
-    /// slot 0 covering GPA `0..memory_size`, so a host-side write through the
-    /// same allocation is visible to the guest immediately.
+    /// the RAM ranges of `crate::memory::ram_ranges`, so a host-side write
+    /// through the same allocation is visible to the guest immediately. A
+    /// write may not span the hole below 4 GiB.
     ///
     /// # Errors
     ///
@@ -1383,14 +1434,20 @@ impl KvmVm {
         let end = addr
             .checked_add(data.len() as u64)
             .ok_or_else(|| Error::Memory(format!("Write at {:#x} overflows a u64", addr)))?;
-        if end > self.memory_size {
+        let host = crate::memory::host_offset(self.memory_size, addr);
+        let last = end
+            .checked_sub(1)
+            .and_then(|l| crate::memory::host_offset(self.memory_size, l));
+        let Some(host) =
+            host.filter(|h| data.is_empty() || last == Some(h + data.len() as u64 - 1))
+        else {
             return Err(Error::Memory(format!(
-                "Write at {:#x} with length {} exceeds guest memory size {:#x}",
+                "Write at {:#x} with length {} is not within guest RAM of {:#x} bytes",
                 addr,
                 data.len(),
                 self.memory_size
             )));
-        }
+        };
 
         // SAFETY: The bounds check above guarantees `addr + data.len()` is
         // within the `memory_size` allocation `ptr` points at, and the source
@@ -1399,7 +1456,7 @@ impl KvmVm {
         unsafe {
             std::ptr::copy_nonoverlapping(
                 data.as_ptr(),
-                ptr.as_ptr().add(addr as usize),
+                ptr.as_ptr().add(host as usize),
                 data.len(),
             );
         }
@@ -1893,6 +1950,14 @@ impl KvmVcpu {
                 match kvm_run(self.vcpu_fd) {
                     Ok(()) => return self.convert_exit(),
                     Err(e) if e.raw_os_error() == Some(libc::EINTR) => continue,
+                    // An application processor that has not been started
+                    // blocks in KVM_RUN until an INIT or startup IPI reaches
+                    // it, then returns EAGAIN for the VMM to run it again --
+                    // which is how a guest's second CPU comes up. Treated as
+                    // an error, it ended that vCPU's thread at the moment the
+                    // guest woke it, and Linux gave up waiting ("CPU1 failed
+                    // to report alive state") ten seconds later.
+                    Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => continue,
                     Err(e) => {
                         return Err(Error::Hypervisor(format!(
                             "KVM_RUN failed for vCPU {}: {}",
@@ -2560,7 +2625,13 @@ impl KvmVcpu {
     /// # Errors
     ///
     /// Returns [`Error::Hypervisor`] if either ioctl fails.
-    pub fn apply_supported_cpuid(&self, kvm_fd: RawFd) -> Result<()> {
+    ///
+    /// In a VM of more than one vCPU, each is told its own APIC ID and how
+    /// many share the package (leaf 1, and the x2APIC ID of leaves 0xB and
+    /// 0x1F): the supported set describes whichever host CPU answered, the
+    /// same for every vCPU, and a guest reading one APIC ID from all of them
+    /// cannot tell them apart. A one-vCPU VM's CPUID is left as it was.
+    pub fn apply_supported_cpuid(&self, kvm_fd: RawFd, vcpu_count: u32) -> Result<()> {
         // KVM_GET_SUPPORTED_CPUID and KVM_SET_CPUID2 take the same layout: a
         // header whose `nent` counts the entries that follow it. Filling one
         // buffer and handing it straight back avoids rebuilding the tail.
@@ -2581,6 +2652,12 @@ impl KvmVcpu {
                 .map_err(|e| Error::Hypervisor(format!("Failed to get supported CPUID: {e}")))?;
 
             let entries = header.nent;
+            if vcpu_count > 1 {
+                let first = buf.as_mut_ptr().add(header_size) as *mut kvm_cpuid_entry2;
+                let table = std::slice::from_raw_parts_mut(first, entries as usize);
+                patch_topology(table, self.vcpu_id, vcpu_count);
+            }
+            let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
             kvm_set_cpuid2(self.vcpu_fd, header).map_err(|e| {
                 Error::Hypervisor(format!(
                     "Failed to set CPUID for vCPU {}: {e}",

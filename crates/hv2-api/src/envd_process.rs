@@ -112,6 +112,18 @@ const GUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// buffering without limit would grow until the host is out of memory.
 const EVENT_BACKLOG: usize = 256;
 
+/// The user a call names, as E2B's SDK names one: `Authorization: Basic`
+/// of `user:`, no password -- envd's own convention, not a credential.
+/// `None` when it names none, which runs as the template's user.
+pub fn user_of(metadata: &tonic::metadata::MetadataMap) -> Option<String> {
+    let value = metadata.get("authorization")?.to_str().ok()?;
+    let encoded = value.strip_prefix("Basic ")?.trim();
+    let decoded = hv2_guest_agent::b64::decode(encoded)?;
+    let text = String::from_utf8(decoded).ok()?;
+    let user = text.split_once(':').map_or(text.as_str(), |(user, _)| user);
+    (!user.is_empty()).then(|| user.to_string())
+}
+
 /// A process this service started and has not yet seen exit.
 struct Tracked {
     info: ProcessInfo,
@@ -351,6 +363,7 @@ impl Process for EnvdProcess {
         &self,
         request: Request<StartRequest>,
     ) -> Result<Response<Self::StartStream>, Status> {
+        let user = user_of(request.metadata());
         let req = request.into_inner();
         let config = req
             .process
@@ -372,12 +385,13 @@ impl Process for EnvdProcess {
 
         let pid = self
             .vm
-            .start_in_guest(
+            .start_in_guest_as(
                 &config.cmd,
                 &config.args,
                 config.cwd.as_deref(),
                 &config.envs.clone().into_iter().collect(),
                 pty,
+                user.as_deref(),
                 GUEST_TIMEOUT,
             )
             .await
