@@ -172,8 +172,8 @@ One library for all cryptography, and none of it hand-rolled.
 - [x] **Adopt `ic-fips`** for FIPS module policy, self-tests and service
   indicators. *M.* Done 2026-09-28. `Enabled` and `Strict` run `ic-fips`'s
   pre-operational self-tests and draw from `ic-drbg`'s HMAC_DRBG. `Strict`
-  checks every operation and refuses the RustCrypto post-quantum algorithms
-  as outside the boundary. Before this, `Strict` refused nothing. The
+  checks every operation and refuses SLH-DSA, the one post-quantum
+  algorithm still from RustCrypto, as outside the boundary. Before this, `Strict` refused nothing. The
   module-wide approved mode (`ic_fips::set_mode`) is left to the operator,
   since a library switching process state behind its caller would be wrong.
   This is the layer the repository hand-rolled and got wrong: `kat_aes_gcm`
@@ -198,19 +198,12 @@ One library for all cryptography, and none of it hand-rolled.
 - [ ] **Adopt `ic-rustls`.** *M.* Unblocked by IronCrypto 0.2.2. Done when:
   every rustls config in the workspace uses the IronCrypto provider, TLS
   tests pass, and `ring` remains only under `rcgen`, with that recorded.
-- [ ] **Migrate ML-DSA to `ic-mldsa`: wait.** *M.* Corrected 2026-09-28:
-  this item said `ic-mldsa` covers 44, 65 and 87. It covers **ML-DSA-65
-  only** (`K = 6`, `L = 5` are constants), and `hv2-core` offers all three.
-  Migrating now would run one algorithm through two libraries and remove no
-  dependency. Also, the ACVP-checked `ic-mldsa` exists only in the IronCrypto
-  repository. The crates.io release numbered 0.1.3 is older code whose
-  `sign.rs` reads "No ACVP vector is wired in", and the repository calls
-  itself 0.1.3 too. 🔒 *IronCrypto:* publish the vector-tested code as
-  0.1.4, and add ML-DSA-44 and -87.
-  Done when: all three parameter sets come from a published, vector-tested
-  `ic-mldsa`, and `ml-dsa` leaves `Cargo.lock`.
-- [ ] **ML-KEM: wait.** `ic-mlkem` has 768; `hv2-core` advertises 512, 768 and
-  1024. Migrating now would narrow the published API.
+- [x] **Migrate ML-KEM and ML-DSA to IronCrypto.** *M.* Done 2026-09-29 on
+  IronCrypto 0.2.3, which added ML-KEM-512/1024 and ML-DSA-44/87 with ACVP
+  vectors and `ic-fips` self-tests for all six sets. `ml-kem` and `ml-dsa`
+  are now dev-dependencies only, kept for tests proving that keys and
+  signatures from either implementation work with the other. `Strict` admits
+  both algorithms.
 - [ ] **SLH-DSA: stay on RustCrypto** — IronCrypto has no FIPS 205 crate.
 - [ ] **Replace the `slh-dsa = "=0.2.0-rc.5"` pin** with a released version
   when one exists. *S.* A release candidate in a cryptographic path.
@@ -313,9 +306,15 @@ containment on the agent tool path. None of it protects a guest from the host.
   Done when: `EncryptionManager::enable` succeeds only with a backend attached,
   and a guest's memory reads as ciphertext from the host.
 - [ ] **Hardware-rooted attestation** (SNP report or TDX quote). 🔒 *XL.*
-- [ ] **Make the vTPM reachable.** 🔓 *L.* No guest can use it today — there
-  is no command dispatcher and no device model. Needs both before it can do
-  anything for a guest.
+- [ ] **Make the vTPM reachable.** 🔓 *L.* No guest can use it today.
+  - [x] Command dispatcher: `VirtualTpm::execute` takes and returns TPM 2.0
+    wire-format buffers for Startup, Shutdown, SelfTest, GetRandom,
+    GetCapability, PCR_Read and PCR_Extend (password sessions only), with
+    byte-level tests. Done 2026-09-29.
+  - [ ] Device model: a CRB (or TIS) MMIO region that forwards to `execute`,
+    and the ACPI `TPM2` table that tells a guest where it is.
+  - [ ] Enough of the command set for Windows 11: sessions, CreatePrimary,
+    NV, and persistent state across restarts.
 - [x] **Real secure-boot signature verification.** 🔓 *M.* Done 2026-09-28:
   keys are DER SubjectPublicKeyInfo via `ic-pkix`, and the signed message is
   domain-separated and binds the component type. A forgery under a trusted

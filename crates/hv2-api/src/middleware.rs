@@ -328,6 +328,13 @@ pub struct ApiKeyConfig {
     /// Valid API keys. If empty, all requests are rejected when auth is on.
     pub keys: Vec<String>,
     /// Path prefixes excluded from authentication (e.g. `/health`).
+    ///
+    /// For safe methods only: GET, HEAD and OPTIONS. A POST, PUT, PATCH or
+    /// DELETE under an excluded prefix still needs a key. The default
+    /// excludes `/agentic` so agents can discover the API before holding a
+    /// key, and `POST /agentic/plans/execute` under that prefix starts and
+    /// stops real VMs: a path exemption that covered it made every VM
+    /// operation available to anyone who could reach the port.
     pub excluded_paths: Vec<String>,
     /// Header name to check (default: `authorization`).
     pub header_name: String,
@@ -383,8 +390,13 @@ fn api_key_handler(
     Box::pin(async move {
         let path = request.uri().path().to_string();
 
-        // Skip authentication for excluded paths
-        if config.is_excluded(&path) {
+        // Skip authentication for excluded paths, but only for requests that
+        // cannot change anything. See `ApiKeyConfig::excluded_paths`.
+        let safe = matches!(
+            *request.method(),
+            axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+        );
+        if safe && config.is_excluded(&path) {
             return next.run(request).await;
         }
 
@@ -7978,6 +7990,44 @@ mod tests {
     }
 
     // ── API Key Auth ──────────────────────────────────────────────────
+
+    /// The default exemption is the prefix `/agentic`, and
+    /// `POST /agentic/plans/execute` drives real VMs. An exemption must not
+    /// carry a mutating request past authentication; discovery still works.
+    #[tokio::test]
+    async fn excluded_paths_do_not_exempt_mutating_requests() {
+        let api_key = ApiKeyConfig {
+            keys: vec!["secret-key-123".to_string()],
+            ..ApiKeyConfig::default()
+        };
+        let app = Router::new()
+            .route("/agentic/tools", get(ok_handler))
+            .route("/agentic/plans/execute", any(ok_handler))
+            .layer(middleware::from_fn(move |req: Request, next: Next| {
+                let c = api_key.clone();
+                api_key_handler(c, req, next)
+            }));
+        let send = |method: &str, uri: &str, key: Option<&str>| {
+            let mut b = HttpRequest::builder().method(method).uri(uri);
+            if let Some(k) = key {
+                b = b.header("authorization", format!("Bearer {k}"));
+            }
+            app.clone().oneshot(b.body(Body::empty()).unwrap())
+        };
+
+        for method in ["POST", "PUT", "PATCH", "DELETE"] {
+            let r = send(method, "/agentic/plans/execute", None).await.unwrap();
+            assert_eq!(r.status(), StatusCode::UNAUTHORIZED, "{method}");
+        }
+        let r = send("POST", "/agentic/plans/execute", Some("secret-key-123"))
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::OK);
+        for method in ["GET", "HEAD"] {
+            let r = send(method, "/agentic/tools", None).await.unwrap();
+            assert_eq!(r.status(), StatusCode::OK, "{method}");
+        }
+    }
 
     #[tokio::test]
     async fn test_api_key_valid_bearer() {
