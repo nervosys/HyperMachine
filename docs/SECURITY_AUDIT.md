@@ -84,7 +84,7 @@ are no longer in the build.
 - **Approved asymmetric primitives:** RSA (FIPS key sizes), ECDSA on NIST curves
   (P‑256/384/521).
 - **NIST Post‑Quantum (CNSA 2.0‑relevant):** ML‑KEM (FIPS 203), ML‑DSA
-  (FIPS 204), SLH‑DSA (FIPS 205) via RustCrypto — directly relevant to defense
+  (FIPS 204) via IronCrypto, SLH‑DSA (FIPS 205) via RustCrypto — directly relevant to defense
   long‑term‑confidentiality requirements.
 
 ### 3.2 Honest limitations
@@ -95,8 +95,8 @@ are no longer in the build.
   requires either linking a validated module (e.g., a FIPS build of
   BoringSSL/OpenSSL/aws‑lc) and running it in its validated configuration, or
   pursuing module validation.
-- **PQC implementations** (RustCrypto) are standards‑conformant but not CAVP‑
-  certified.
+- **PQC implementations** (IronCrypto for ML‑KEM and ML‑DSA, RustCrypto for
+  SLH‑DSA) are checked against NIST's ACVP vectors but not CAVP‑certified.
 - **There is no memory encryption.** Stated more bluntly than a previous
   revision of this document, which said the layer was "not fully activated
   end‑to‑end" — that reads as partial, and it is not partial.
@@ -156,10 +156,11 @@ relying on them; the risk was that they read as controls.
   reversible. It is now `new = H(old || data)` over SHA‑2, with property
   tests. Banks whose hash is unavailable (SHA‑1, SM3) refuse to extend.
 - **Attestation.** There is none, and the vTPM is further from usable than
-  that sentence implies: there is no command dispatcher, nothing matches on
-  `TpmCommandCode`, and no device model presents a TPM to a guest, so **no
-  guest can reach it at all**. `VirtualTpm` has no consumer outside
-  re-exports. Even reachable, a software vTPM in the VMM's address space
+  that sentence implies. It has a command dispatcher now (seven commands,
+  password sessions only), but no device model presents a TPM to a guest, so
+  **no guest can reach it at all**. `VirtualTpm` has no consumer outside
+  re-exports. Its `GetRandom` was a fixed-seed counter, identical in every
+  vTPM; it is IronCrypto's HMAC_DRBG now, seeded from the OS. Even reachable, a software vTPM in the VMM's address space
   could not be a root of trust — whatever compromises the VMM can set a PCR
   to anything. The measurement log is now correct bookkeeping the host could
   keep on a guest's behalf, not evidence to a relying party.

@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- **The API's `/agentic` auth exemption no longer covers writes**
+  (`hv2-api`). With API keys on, the default exempted every path under
+  `/agentic`, and `POST /agentic/plans/execute` starts and stops the
+  server's real VMs, so anyone who could reach the port could drive them.
+  Excluded paths now apply to GET, HEAD and OPTIONS only. Behaviour change:
+  `POST /agentic/plans/validate` and `POST /agentic/templates` need a key.
 - **A tenant's `allowOut` no longer reaches the host's or the cluster's
   network** (`hv2-net`, `hv2-sandboxd`, Helm chart). `allowOut` CIDRs were
   checked before reserved addresses, so a sandbox created with
@@ -25,6 +31,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **vTPM command dispatcher** (`hv2-core`). `VirtualTpm::execute` takes a
+  TPM 2.0 command buffer and returns the response: Startup, Shutdown,
+  SelfTest, GetRandom, GetCapability, PCR_Read and PCR_Extend, password
+  sessions only, everything else `TPM_RC_COMMAND_CODE`. It is the interface a
+  device model will forward to; there is no device model yet, so no guest
+  reaches it. Along the way:
+  - `GetRandom` was a counter from a fixed seed, the same bytes in every
+    vTPM. It is IronCrypto's HMAC_DRBG, seeded from the OS.
+  - `Startup(Clear)` now resets the PCRs, and a second `Startup` is refused,
+    so a rebooted guest does not measure on top of its last boot.
+  - `TpmResponseCode::BadPcr` and `NvDefined` had the wrong values (they
+    decoded as `TPM_RC_BINDING` and `TPM_RC_NV_AUTHORIZATION`).
 - **Tamper-evident audit logs** (`hv2-core`, `hv2-agent`, `hv2-api`).
   `hv2_core::security::AuditChain` writes one JSON object per line, each
   carrying an HMAC-SHA256 over its sequence number, timestamp, source, event
@@ -375,6 +393,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **ML-KEM and ML-DSA come from IronCrypto** (`hv2-core`). All six
+  parameter sets now use `ic-mlkem` and `ic-mldsa` 0.2.3, checked against
+  NIST's ACVP vectors and self-tested by `ic-fips`, so `FipsMode::Strict`
+  admits them. Stored keys carry over: both use the same FIPS seeds as
+  RustCrypto's crates did, and tests prove each side's keys, ciphertexts and
+  signatures work with the other. ML-DSA signing is now hedged (FIPS 204's
+  default) rather than deterministic. SLH-DSA stays on RustCrypto.
 - **IronCrypto 0.2.2** (`hv2-core`, `hv2-api`), from 0.1.x: all 13 `ic-*`
   crates. It brings the RSA-4096 fix reported from here, faster
   SHA-256/HMAC/HKDF on SHA-NI and faster AES-GCM, constant-time fixes in the

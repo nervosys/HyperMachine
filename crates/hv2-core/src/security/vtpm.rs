@@ -21,12 +21,14 @@
 //! **Keys are not shielded.** They are a `HashMap` in host memory. A key
 //! handle here is a handle to an ordinary allocation.
 //!
-//! **And no guest can reach it.** There is no command dispatcher: nothing
-//! matches on [`TpmCommandCode`], whose `from_u32` is called only by its own
-//! test, and no device model presents a TPM interface to a guest. What exists
-//! is a host-side Rust API, and `VirtualTpm` has no consumer outside this
-//! crate's re-exports. So the measurement log described below is one the host
-//! could keep on a guest's behalf, not one a guest has ever extended.
+//! **And no guest can reach it yet.** [`VirtualTpm::execute`] speaks the TPM
+//! 2.0 wire format -- Startup, Shutdown, SelfTest, GetRandom, GetCapability,
+//! PCR_Read and PCR_Extend, with password sessions only -- but no device
+//! model (TIS or CRB) presents it to a guest, and `VirtualTpm` has no
+//! consumer outside this crate's re-exports. Windows 11 needs far more than
+//! these seven commands: key creation, sessions and NV at least. So the
+//! measurement log described below is one a guest *could* extend through the
+//! dispatcher, not one any guest has.
 //!
 //! # What is real
 //!
@@ -38,9 +40,27 @@
 //! order-dependent, and not steerable to a chosen value.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
+
+mod dispatch;
+
+pub use dispatch::MAX_COMMAND_SIZE;
+
+/// IronCrypto's HMAC_DRBG (SHA-256), seeded from the OS on first use.
+///
+/// Lazy so that [`VirtualTpm::new`] stays infallible: a seeding failure
+/// surfaces as `TPM_RC_FAILURE` from the command that needed randomness.
+struct TpmRng(Option<ic_drbg::Rng>);
+
+impl std::fmt::Debug for TpmRng {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TpmRng")
+            .field("seeded", &self.0.is_some())
+            .finish()
+    }
+}
 
 /// TPM 2.0 command codes
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,14 +145,42 @@ pub enum TpmResponseCode {
     BadParam = 0x0000_01C4,
     /// Authorization failure
     AuthFail = 0x0000_098E,
-    /// PCR index out of range
-    BadPcr = 0x0000_01E5,
+    /// PCR index out of range: `TPM_RC_VALUE` on handle 1.
+    ///
+    /// Was `0x1E5`, which decodes as `TPM_RC_BINDING` on parameter 1.
+    BadPcr = 0x0000_0184,
     /// NV space not found
     NvNotFound = 0x0000_018B,
-    /// NV space already defined
-    NvDefined = 0x0000_0149,
+    /// NV space already defined: `TPM_RC_NV_DEFINED`.
+    ///
+    /// Was `0x149`, which is `TPM_RC_NV_AUTHORIZATION`.
+    NvDefined = 0x0000_014C,
     /// Internal error
     Failure = 0x0000_0101,
+    /// The command's tag is neither `TPM_ST_NO_SESSIONS` nor `TPM_ST_SESSIONS`:
+    /// `TPM_RC_BAD_TAG`.
+    BadTag = 0x0000_001E,
+    /// The size in the header is not the buffer's length, or the buffer is
+    /// shorter than a header or longer than `TPM_PT_MAX_COMMAND_SIZE`:
+    /// `TPM_RC_COMMAND_SIZE`.
+    CommandSize = 0x0000_0142,
+    /// The command ended before a field it must carry: `TPM_RC_INSUFFICIENT`.
+    Insufficient = 0x0000_009A,
+    /// Bytes left over after the last parameter, or a list longer than this
+    /// TPM allows: `TPM_RC_SIZE`.
+    Size = 0x0000_0095,
+    /// A hash algorithm this TPM does not know, in parameter 1:
+    /// `TPM_RC_HASH` + `TPM_RC_P` + `TPM_RC_1`.
+    BadHash = 0x0000_01C3,
+    /// A command that needs an authorization arrived without sessions:
+    /// `TPM_RC_AUTH_MISSING`.
+    AuthMissing = 0x0000_0125,
+    /// The number of sessions does not match the command's authorized
+    /// handles: `TPM_RC_AUTH_CONTEXT`.
+    AuthContext = 0x0000_0145,
+    /// Session 1 is not the password session, the only kind this TPM has:
+    /// `TPM_RC_HANDLE` + `TPM_RC_S` + `TPM_RC_1`.
+    SessionHandle = 0x0000_098B,
 }
 
 /// TPM startup type
@@ -191,6 +239,18 @@ impl HashAlgorithm {
             Self::Sha384 => 0x000C,
             Self::Sha512 => 0x000D,
             Self::Sm3 => 0x0012,
+        }
+    }
+
+    /// The algorithm with this `TPM_ALG_ID`, if it is one of these.
+    pub fn from_algorithm_id(id: u16) -> Option<Self> {
+        match id {
+            0x0004 => Some(Self::Sha1),
+            0x000B => Some(Self::Sha256),
+            0x000C => Some(Self::Sha384),
+            0x000D => Some(Self::Sha512),
+            0x0012 => Some(Self::Sm3),
+            _ => None,
         }
     }
 }
@@ -398,8 +458,10 @@ pub struct VirtualTpm {
     next_handle: AtomicU64,
     /// Command count
     command_count: AtomicU64,
-    /// Random seed
-    random_state: AtomicU64,
+    /// Random number generator, seeded on first use; see [`Self::get_random`].
+    rng: Mutex<TpmRng>,
+    /// `pcrUpdateCounter`: bumped by every command that changes a PCR.
+    pcr_update_counter: AtomicU32,
     /// Self-test passed
     self_test_passed: AtomicBool,
 }
@@ -417,7 +479,8 @@ impl VirtualTpm {
             keys: RwLock::new(HashMap::new()),
             next_handle: AtomicU64::new(0x8000_0100),
             command_count: AtomicU64::new(0),
-            random_state: AtomicU64::new(0x1234_5678_9ABC_DEF0),
+            rng: Mutex::new(TpmRng(None)),
+            pcr_update_counter: AtomicU32::new(0),
             self_test_passed: AtomicBool::new(false),
         }
     }
@@ -428,11 +491,27 @@ impl VirtualTpm {
     }
 
     /// Startup TPM
+    ///
+    /// `TPM_RC_INITIALIZE` if it has already started: a TPM starts once per
+    /// reset, and a second `TPM2_Startup` is the guest's error, not a reset.
+    ///
+    /// `Clear` is a TPM Reset: every PCR in every bank returns to zero and
+    /// `pcrUpdateCounter` to 0. Without that, a rebooted guest would extend on
+    /// top of the previous boot's measurements. The PC Client convention of
+    /// starting the DRTM PCRs 17-22 at all-ones is not modelled.
     pub fn startup(&self, startup_type: StartupType) -> TpmResponseCode {
         let mut state = self.state.write();
+        if *state != TpmState::Uninitialized {
+            return TpmResponseCode::Initialize;
+        }
 
         match startup_type {
             StartupType::Clear => {
+                let mut banks = self.pcr_banks.write();
+                for bank in banks.values_mut() {
+                    *bank = PcrBank::new(bank.algorithm());
+                }
+                self.pcr_update_counter.store(0, Ordering::Release);
                 *state = TpmState::Ready;
                 self.self_test_passed.store(false, Ordering::Release);
             }
@@ -474,22 +553,36 @@ impl VirtualTpm {
     }
 
     /// Get random bytes
+    ///
+    /// From IronCrypto's HMAC_DRBG, seeded from the OS on first use.
+    ///
+    /// This was a Weyl sequence from a fixed seed: the top byte of a counter
+    /// stepped by a constant, so every vTPM produced the same bytes in the
+    /// same order. A guest takes `TPM2_GetRandom` output for nonces and key
+    /// material, and Linux and Windows both mix it into their own pools, so
+    /// that stream would have been handed to every guest as entropy.
     pub fn get_random(&self, count: usize) -> Result<Vec<u8>, TpmResponseCode> {
         if *self.state.read() != TpmState::Ready {
             return Err(TpmResponseCode::Initialize);
         }
 
-        let mut result = Vec::with_capacity(count);
-        for _ in 0..count {
-            // Simple PRNG (not cryptographically secure, just for testing)
-            let state = self
-                .random_state
-                .fetch_add(0x9E37_79B9_7F4A_7C15, Ordering::Relaxed);
-            result.push((state >> 24) as u8);
-        }
+        let mut guard = self.rng.lock();
+        let rng = match &mut guard.0 {
+            Some(rng) => rng,
+            empty => empty.insert(ic_drbg::Rng::from_os().map_err(|_| TpmResponseCode::Failure)?),
+        };
+        let mut result = vec![0u8; count];
+        rng.fill(&mut result)
+            .map_err(|_| TpmResponseCode::Failure)?;
 
         self.command_count.fetch_add(1, Ordering::Relaxed);
         Ok(result)
+    }
+
+    /// `pcrUpdateCounter`: how many commands have changed a PCR since the
+    /// last `Startup(Clear)`.
+    pub fn pcr_update_counter(&self) -> u32 {
+        self.pcr_update_counter.load(Ordering::Acquire)
     }
 
     /// Read PCR
@@ -530,6 +623,7 @@ impl VirtualTpm {
         if !bank.extend(index, data) {
             return TpmResponseCode::BadPcr;
         }
+        self.pcr_update_counter.fetch_add(1, Ordering::AcqRel);
 
         self.command_count.fetch_add(1, Ordering::Relaxed);
         TpmResponseCode::Success
@@ -550,6 +644,7 @@ impl VirtualTpm {
         if !bank.reset(index) {
             return TpmResponseCode::BadPcr;
         }
+        self.pcr_update_counter.fetch_add(1, Ordering::AcqRel);
 
         self.command_count.fetch_add(1, Ordering::Relaxed);
         TpmResponseCode::Success
