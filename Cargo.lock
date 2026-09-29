@@ -2701,6 +2701,7 @@ dependencies = [
  "ic-hash",
  "ic-kdf",
  "ic-mac",
+ "ic-pkix",
  "ic-rsa",
  "libc",
  "memmap2",
@@ -3092,6 +3093,15 @@ name = "ic-ontology"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1b8c8f8028440f5fd2d7b09eb9b6d93f7d36e0d760da5ee1e7d4080a54f8fd1"
+dependencies = [
+ "ic-core",
+]
+
+[[package]]
+name = "ic-pkix"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6d0b1b8349ddc611c8fc55cf8e8820f052783fb79379633eeb0dacaa6ae21883"
 dependencies = [
  "ic-core",
 ]

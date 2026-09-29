@@ -166,9 +166,16 @@ relying on them; the risk was that they read as controls.
 - **Secure boot signature verification.** `verify()` admitted a component
   when the signer certificate's `subject` **string** matched a trusted entry,
   under a comment reading "Would verify actual signature here". Forgery
-  required no key. It now returns `VerificationUnavailable`, which admission
-  must treat as refusal. The hash allowlist path, which is genuine integrity
-  evidence, is unchanged.
+  required no key. From 2026-09-22 it returned `VerificationUnavailable`, a
+  refusal. **Since 2026-09-28 it verifies.** A signature is checked against
+  the public key (DER SubjectPublicKeyInfo) of the *trusted database entry*
+  its claimed signer names, never the certificate travelling with it. It
+  covers a domain-separated message binding the component type to the image
+  digest. Validity windows, certificate status and keys listed in dbx are
+  honoured. A forgery under a trusted name, carrying the forger's own key, is
+  refused (tested, and mutation-checked). The format is HyperMachine's own;
+  it does not parse UEFI Authenticode. The hash allowlist path is
+  unchanged.
 
 ### Residual isolation exposure
 

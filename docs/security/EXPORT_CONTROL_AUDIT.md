@@ -337,11 +337,13 @@ running guest.
 | **Likely ECCN**           | Part of 5D002 (authentication)                                                                                                                                      |
 | **Open-Source Exception** | Likely eligible                                                                                                                                                     |
 
-**Note (revised 2026-09-28):** signature verification is not implemented.
-The chain checks that a signer is trusted and not revoked, and then refuses
-rather than reporting success for a signature it never checked. Until
-2026-09-22 that path returned success. No cryptographic signature
-verification is performed by this module today.
+**Note (revised 2026-09-28):** signatures are verified: RSA PKCS#1 v1.5
+(SHA-256/384/512) and ECDSA P-256/SHA-256 and P-384/SHA-384, through the
+IronCrypto primitives in §1.5-§1.6. Each is checked against the trusted
+database entry's key, never one supplied with the signature. This is
+authentication, not encryption. Until 2026-09-22 the path admitted any
+claimed trusted name; then it refused everything until verification landed
+on 2026-09-28.
 
 ### 3.3 Memory Encryption Management (SEV/TDX)
 
@@ -546,7 +548,6 @@ production-readiness, not the export-control status of the source release.
 | Hybrid KEM schemes       | N/A               | Type definitions only              | pqc.rs        |
 | Hybrid signature schemes | N/A               | Type definitions only              | pqc.rs        |
 | ECDH (P-256/P-384)       | SP 800-56A        | Named in comments; no code         | asymmetric.rs |
-| Secure Boot signature verification | UEFI     | Refuses; checks trust only (§3.2)  | secure_boot.rs |
 
 The PQC, RSA key generation and P-521 rows that the 2026-03-25 review listed
 here are now implemented (§8.1).

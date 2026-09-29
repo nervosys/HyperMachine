@@ -510,6 +510,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a tally should live is a design decision rather than an oversight.
 
 ### Fixed
+- **Secure boot verifies signatures** (`hv2-core`). It had admitted any
+  component whose claimed signer's subject string matched a trusted entry
+  (to 2026-09-22), then refused every signed component. Now each signature is
+  checked against the trusted database entry's public key, a DER
+  SubjectPublicKeyInfo, never the certificate travelling with it. It covers
+  `BootComponent::signed_message()`: a domain separator, the component type
+  and the image digest. RSA PKCS#1 v1.5 and ECDSA P-256/P-384 are supported,
+  and validity windows, status and dbx-listed keys are honoured. This is
+  HyperMachine's own format, not UEFI Authenticode.
 - **`FipsMode::Strict` refused nothing** (`hv2-core`). Documented as "fail if
   non-FIPS operation attempted", it was never read: `AlgorithmNotApproved`
   was defined and never returned, and `Strict` behaved exactly like

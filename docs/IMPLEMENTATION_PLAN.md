@@ -88,7 +88,7 @@ Critical path. Everything else assumes a green, trustworthy CI.
   envd access token. Before the fix the cloud metadata address was reachable
   too. Reproduced on real KVM guests; `tools/e2e-egress.sh` fails on the old
   code and passes on the branch.
-- [ ] **Pin `dtolnay/rust-toolchain@master`** to a commit. *S.* #108 pins
+- [x] **Pin `dtolnay/rust-toolchain@master`** to a commit. *S.* #108 pins
   every action (136 references) to a commit SHA, not only this one.
   It is unpinned, and it was a silent upstream behaviour change that exposed
   the MSRV defect. Done when: no workflow references an action at `@master`.
@@ -233,7 +233,8 @@ and `network_policy::NetworkPolicy`; the `Bridge` passes `EgressPolicy::allow_al
   network config is refused (`default deny`), and the gateway's decision
   log says so. The test is `tools/e2e-egress.sh` (branch
   `fix/tenant-reserved-egress` until merged).
-- [ ] **Land the tenant/operator split for reserved addresses** (see Phase A).
+- [x] **Land the tenant/operator split for reserved addresses** (see Phase A).
+  Merged as #103.
   A tenant's `allowOut` may open reserved ranges only where the operator
   grants them (`--tenant-reserved-cidr`). The Helm chart also gains a store
   password and an egress NetworkPolicy on node pods. *S, written.*
@@ -309,7 +310,11 @@ containment on the agent tool path. None of it protects a guest from the host.
 - [ ] **Make the vTPM reachable.** 🔓 *L.* No guest can use it today — there
   is no command dispatcher and no device model. Needs both before it can do
   anything for a guest.
-- [ ] **Real secure-boot signature verification.** 🔓 *M.* Define an encoding
+- [x] **Real secure-boot signature verification.** 🔓 *M.* Done 2026-09-28:
+  keys are DER SubjectPublicKeyInfo via `ic-pkix`, and the signed message is
+  domain-separated and binds the component type. A forgery under a trusted
+  name is refused, and so is the variant carrying the forger's own key. Both
+  are mutation-checked. Original note: Define an encoding
   for `Certificate::public_key` — SubjectPublicKeyInfo DER via `ic-pkix` is the
   natural choice — and verify against the **trusted database entry's** key,
   never the one travelling with the signature. Done when: a valid signature
