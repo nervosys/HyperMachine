@@ -1691,7 +1691,7 @@ Verified:
 - a template built on an initramfs whose init has no agent failed with `its console ended: broken init: no agent in this image | sleeping forever`, where before it said only that the agent never answered;
 - the build, lifecycle, port, SMP and volume regressions passed. Sandbox creates measured 50-112 ms in that run, against 27-66 ms before, on a host whose load varies; this was not separated from the change.
 
-The intermittent failure recurred once in that regression: a sandbox from a built template did not answer within 15 s, and **its guest wrote nothing to its console** -- no kernel error, no panic. Four reruns passed. A sandbox is restored from a running snapshot, so it has no boot to print, but a panic or an error would still appear. So the guest either did not run, or ran without error and its agent did not answer. The next step is to capture, on such a failure, whether its vCPUs ran at all.
+The intermittent failure recurred once in that regression: a sandbox from a built template did not answer within 15 s, and **its guest wrote nothing to its console** -- no kernel error, no panic. Four reruns passed. A sandbox is restored from a running snapshot, so it has no boot to print, but a panic or an error would still appear. So the guest either did not run, or ran without error and its agent did not answer. The error now also says whether they ran: each vCPU's VM exits over half a second, and in all, and the VM's state. A guest that never ran shows none; one spinning shows many; one halted and waiting shows a few timer exits (the broken initramfs above: 2 in 0.5 s, 99,919 in all). Ten more runs of the lifecycle regression passed, fourteen in a row, so the report is waiting for the failure to recur.
 
 #### A sandbox's own ports
 

@@ -1264,7 +1264,7 @@ async fn bring_up(
         None => vm.ping_guest(state.opts.ready_timeout).await.map(|_| ()),
     };
     if let Err(e) = ready {
-        let tail = console_tail(&vm).await;
+        let tail = guest_report(&vm).await;
         tracing::warn!("{sandbox_id}: guest never became ready: {e}; {tail}");
         let _ = vm.stop().await;
         return Err((
@@ -3270,6 +3270,41 @@ async fn console_tail(vm: &AgentVM) -> String {
     format!("its console ended: {tail}")
 }
 
+/// What `vm`'s guest had to say, and whether its vCPUs were running at all:
+/// each one's VM exits over half a second. A guest that wrote nothing could
+/// be one that never ran (no exits), one spinning (exits but no progress),
+/// or one halted and waiting (a few timer exits) -- and those are different
+/// bugs.
+async fn guest_report(vm: &AgentVM) -> String {
+    let console = console_tail(vm).await;
+    let machine = vm.vm();
+    let stats = machine.all_vcpu_stats();
+    let before: Vec<(u64, u64)> = stats
+        .iter()
+        .map(|s| {
+            (
+                s.exits(),
+                s.io_exits.load(std::sync::atomic::Ordering::Relaxed),
+            )
+        })
+        .collect();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let vcpus: Vec<String> = stats
+        .iter()
+        .zip(before)
+        .enumerate()
+        .map(|(i, (s, (exits, io)))| {
+            format!(
+                "vCPU {i}: {} exits ({} I/O) in 0.5 s, {} in all",
+                s.exits() - exits,
+                s.io_exits.load(std::sync::atomic::Ordering::Relaxed) - io,
+                s.exits()
+            )
+        })
+        .collect();
+    format!("{console}; VM {:?}; {}", vm.state(), vcpus.join(", "))
+}
+
 /// Boot the template once, configure it as every sandbox needs, and write it
 /// to disk with its memory as an image a restore can map.
 async fn build_template(
@@ -3306,7 +3341,7 @@ async fn build_template(
         {
             return Err(format!(
                 "the template's agent never answered: {e}; {}",
-                console_tail(&vm).await
+                guest_report(&vm).await
             ));
         }
         if opts.network {
