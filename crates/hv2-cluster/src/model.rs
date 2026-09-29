@@ -205,6 +205,10 @@ pub struct ClusterEvent {
     /// The template of the sandbox it concerns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template_id: Option<String>,
+    /// What E2B's webhook payload carries as `event_data`: the sandbox's
+    /// metadata, and for a pause or an end, its execution so far.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 impl ClusterEvent {
@@ -218,7 +222,29 @@ impl ClusterEvent {
             sandbox_id: sandbox_id.map(str::to_string),
             detail: None,
             template_id: None,
+            data: None,
         }
+    }
+
+    /// The event for `record`'s sandbox: its template, its metadata, and --
+    /// for a pause or an end -- how long it ran on what, as E2B reports it.
+    #[must_use]
+    pub fn with_record(mut self, record: &SandboxRecord) -> Self {
+        self.template_id = Some(record.template_id.clone());
+        let mut data = json!({ "sandbox_metadata": record.metadata });
+        if matches!(
+            self.kind.as_str(),
+            "sandbox-paused" | "sandbox-deleted" | "sandbox-expired" | "sandbox-lost"
+        ) {
+            data["execution"] = json!({
+                "started_at": rfc3339(record.started_at_ms),
+                "vcpu_count": record.cpu_count,
+                "memory_mb": record.memory_mb,
+                "execution_time": self.at_ms.saturating_sub(record.started_at_ms),
+            });
+        }
+        self.data = Some(data);
+        self
     }
 
     #[must_use]

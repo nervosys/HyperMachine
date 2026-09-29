@@ -1464,8 +1464,8 @@ async fn record_event(state: &AppState, record: &SandboxRecord, kind: &str, runn
             }
         }
         None => {
-            let event = ClusterEvent::new(kind, "local", Some(&record.sandbox_id))
-                .with_template(&record.template_id);
+            let event =
+                ClusterEvent::new(kind, "local", Some(&record.sandbox_id)).with_record(record);
             let _ = state.events.store().publish(&event).await;
             event
         }
@@ -1477,12 +1477,12 @@ async fn record_event(state: &AppState, record: &SandboxRecord, kind: &str, runn
 async fn ended(
     state: &AppState,
     sandbox_id: &str,
-    template_id: Option<&str>,
+    record: Option<&SandboxRecord>,
     kind: &str,
     running: u32,
 ) {
     let event = match &state.node {
-        Some(node) => match node.ended(sandbox_id, template_id, kind, running).await {
+        Some(node) => match node.ended(sandbox_id, record, kind, running).await {
             Ok(Some(event)) => event,
             Ok(None) => return,
             Err(e) => {
@@ -1492,8 +1492,8 @@ async fn ended(
         },
         None => {
             let mut event = ClusterEvent::new(kind, "local", Some(sandbox_id));
-            if let Some(template) = template_id {
-                event = event.with_template(template);
+            if let Some(record) = record {
+                event = event.with_record(record);
             }
             let _ = state.events.store().publish(&event).await;
             event
@@ -3612,8 +3612,14 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
             return false;
         }
         state.metrics.ended_deleted.inc();
-        let template = paused.as_ref().map(|p| p.record.template_id.clone());
-        ended(state, sandbox_id, template.as_deref(), kind, running).await;
+        ended(
+            state,
+            sandbox_id,
+            paused.as_ref().map(|p| &p.record),
+            kind,
+            running,
+        )
+        .await;
         return true;
     };
     drop(held);
@@ -3637,14 +3643,7 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     if let Err(e) = live.vm.stop().await {
         tracing::warn!("stopping sandbox {sandbox_id}: {e}");
     }
-    ended(
-        state,
-        sandbox_id,
-        Some(&live.record.template_id),
-        kind,
-        running,
-    )
-    .await;
+    ended(state, sandbox_id, Some(&live.record), kind, running).await;
     true
 }
 

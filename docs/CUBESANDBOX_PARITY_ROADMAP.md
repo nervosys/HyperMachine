@@ -1737,7 +1737,8 @@ E2B's `GET /events/sandboxes[/{id}]` and `/events/webhooks` -- create, list, upd
 
 Events:
 - Lifecycle events carry E2B's types: `sandbox.lifecycle.created`, `paused`, `resumed`, `killed`.
-- A delivery is signed as E2B signs one: `e2b-signature` is base64, unpadded, of SHA-256 over the secret followed by the body. That scheme is from E2B's documentation as recalled here -- its OpenAPI spec does not state it -- and is worth checking against a receiver built on E2B's own verifier.
+- A delivery is signed as E2B signs one: `e2b-signature` is base64, unpadded, of SHA-256 over the secret followed by the body. Since checked against E2B's webhook documentation (`docs.e2b.dev/sandbox/lifecycle-events-webhooks`): the scheme is as its Python, JavaScript and Go verifiers compute it, and a unit test pins it to a value computed independently with Python's `hashlib`.
+- A webhook's body is E2B's documented webhook payload, which is **not** the API's `SandboxEvent`: snake_case (`sandbox_id`, `event_data`, `events_ttl_days`), `version` `v2`, `event_label` `kill`, and `event_data` with `sandbox_metadata`, `execution` (`started_at`, `vcpu_count`, `memory_mb`, `execution_time` in ms) on a pause or an end, and `kill_reason`. Until this was checked, webhooks carried the API's camelCase shape, so a receiver written against E2B's documentation would have read nothing from them. `GET /events/sandboxes` keeps camelCase, as E2B's OpenAPI spec has it, with the same `eventData`. Not from E2B's documentation, so possibly different from what E2B sends: the labels other than `kill` (`create`, `pause`, `resume`, `update`), the kill reasons other than `request` (`timeout`, `lost`), and `node_id` in `event_data` (an extra key a receiver ignores).
 - A delivery is retried after 1 s and 4 s, and every attempt is recorded.
 - The node that emitted an event delivers it, so each goes out once however many control planes run.
 
@@ -1748,7 +1749,8 @@ Verified:
 - a receiver that answered 500 twice got the event on the third attempt, and the deliveries and stats showed all three;
 - a disabled webhook was listed as such; the secret is never returned;
 - without the flag, `127.0.0.1`, `169.254.169.254` and `localhost` were each refused with `request_error`;
-- through a control plane over two nodes, a webhook registered there got each node's created and killed exactly once, and the control plane listed both nodes' events.
+- through a control plane over two nodes, a webhook registered there got each node's created and killed exactly once, and the control plane listed both nodes' events;
+- after the payload change, a killed delivery had exactly the documented example's thirteen keys, with `event_data` `{"execution": {"execution_time": 155, "memory_mb": 1024, "started_at": …, "vcpu_count": 1}, "kill_reason": "request", "sandbox_metadata": {"owner": "test"}}` for a sandbox created with that metadata, and its signature verified with E2B's documented Python verifier.
 
 The regression run after this change passed with every result as before, but its timings -- pause 83 ms, one create from a snapshot 1.3 s -- were taken with the Windows host at 97% CPU from other work, and are not comparable to the earlier numbers; they were not re-measured.
 

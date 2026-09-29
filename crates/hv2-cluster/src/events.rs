@@ -50,30 +50,92 @@ pub fn e2b_type(kind: &str) -> Option<&'static str> {
     })
 }
 
-/// A cluster event as E2B's `SandboxEvent`.
+/// E2B's short label for an event type: `kill` for `sandbox.lifecycle.killed`.
+/// Only `kill` is in E2B's published example; the others follow it.
+fn label(kind: &str) -> &'static str {
+    match kind {
+        "sandbox.lifecycle.created" => "create",
+        "sandbox.lifecycle.paused" => "pause",
+        "sandbox.lifecycle.resumed" => "resume",
+        "sandbox.lifecycle.updated" => "update",
+        "sandbox.lifecycle.killed" => "kill",
+        _ => "",
+    }
+}
+
+/// `event_data`: the sandbox's metadata and execution as the event recorded
+/// them, and why a sandbox was killed -- `request` as E2B's example has it,
+/// `timeout` for one that ran out its time, `lost` for one whose node died.
+fn event_data(event: &ClusterEvent) -> Value {
+    let mut data = event.data.clone().unwrap_or_else(|| json!({}));
+    let reason = match event.kind.as_str() {
+        "sandbox-deleted" => Some("request"),
+        "sandbox-expired" => Some("timeout"),
+        "sandbox-lost" => Some("lost"),
+        _ => None,
+    };
+    if let Some(map) = data.as_object_mut() {
+        if let Some(reason) = reason {
+            map.insert("kill_reason".into(), reason.into());
+        }
+        // Not E2B's: which node ran it, and anything it noted. A receiver
+        // written for E2B ignores keys it does not know.
+        map.insert("node_id".into(), event.node_id.clone().into());
+        if let Some(detail) = &event.detail {
+            map.insert("detail".into(), detail.clone().into());
+        }
+    }
+    data
+}
+
+/// A cluster event as E2B's `SandboxEvent`, which `GET /events/sandboxes`
+/// answers with: camelCase, as E2B's API spec has it.
 #[must_use]
 pub fn to_e2b(event: &ClusterEvent) -> Option<Value> {
     let kind = e2b_type(&event.kind)?;
     let sandbox = event.sandbox_id.clone()?;
     let template = event.template_id.clone().unwrap_or_default();
-    let label = kind.rsplit('.').next().unwrap_or(kind);
     Some(json!({
         "id": event.id,
-        "version": "v1",
+        "version": "v2",
         "type": kind,
         "eventCategory": "lifecycle",
-        "eventLabel": format!("sandbox_{label}"),
-        "eventData": {
-            "reason": event.kind,
-            "nodeID": event.node_id,
-            "detail": event.detail,
-        },
+        "eventLabel": label(kind),
+        "eventData": event_data(event),
         "timestamp": rfc3339(event.at_ms),
         "sandboxId": sandbox,
         "sandboxExecutionId": sandbox,
         "sandboxTemplateId": template,
         "sandboxBuildId": template,
         "sandboxTeamId": TEAM_ID,
+    }))
+}
+
+/// Days an event is kept, as a webhook payload reports it.
+const EVENTS_TTL_DAYS: u32 = 30;
+
+/// A cluster event as E2B delivers it to a webhook: the same event in
+/// snake_case, as E2B's webhook documentation shows it -- not the API's
+/// camelCase, which a receiver written against E2B would not read.
+#[must_use]
+pub fn to_webhook(event: &ClusterEvent) -> Option<Value> {
+    let kind = e2b_type(&event.kind)?;
+    let sandbox = event.sandbox_id.clone()?;
+    let template = event.template_id.clone().unwrap_or_default();
+    Some(json!({
+        "id": event.id,
+        "version": "v2",
+        "type": kind,
+        "timestamp": rfc3339(event.at_ms),
+        "event_category": "lifecycle",
+        "event_label": label(kind),
+        "event_data": event_data(event),
+        "sandbox_id": sandbox,
+        "sandbox_execution_id": sandbox,
+        "sandbox_template_id": template,
+        "sandbox_build_id": template,
+        "sandbox_team_id": TEAM_ID,
+        "events_ttl_days": EVENTS_TTL_DAYS,
     }))
 }
 
@@ -451,7 +513,7 @@ impl Dispatcher {
     /// Send `event` to every enabled webhook that subscribes to it, each on
     /// a task of its own: a slow receiver delays nothing here.
     pub fn deliver(&self, event: &ClusterEvent) {
-        let Some(payload) = to_e2b(event) else {
+        let Some(payload) = to_webhook(event) else {
             return;
         };
         let this = self.clone();
@@ -495,7 +557,7 @@ impl Dispatcher {
             id: uuid::Uuid::new_v4().to_string(),
             webhook_id: hook.id.clone(),
             event_id: payload["id"].as_str().unwrap_or_default().to_string(),
-            sandbox_id: payload["sandboxId"]
+            sandbox_id: payload["sandbox_id"]
                 .as_str()
                 .unwrap_or_default()
                 .to_string(),
@@ -691,5 +753,76 @@ mod tests {
         assert_eq!(v["type"], "sandbox.lifecycle.killed");
         assert_eq!(v["sandboxTemplateId"], "base");
         assert!(to_e2b(&ClusterEvent::new("node-joined", "n", None)).is_none());
+    }
+
+    /// The payload of E2B's webhook documentation, key for key.
+    #[test]
+    fn a_webhook_payload_has_e2bs_documented_shape() {
+        let record = crate::model::SandboxRecord {
+            sandbox_id: "sb".into(),
+            node_id: "n".into(),
+            template_id: "base".into(),
+            started_at_ms: 1_000,
+            end_at_ms: 0,
+            cpu_count: 2,
+            memory_mb: 512,
+            metadata: [("k".to_string(), "v".to_string())].into(),
+            envd_version: String::new(),
+            descriptor: Value::Null,
+            paused: false,
+            portable: false,
+            volume_mounts: Vec::new(),
+        };
+        let mut e = ClusterEvent::new("sandbox-deleted", "n", Some("sb"));
+        e.at_ms = 2_000;
+        let v = to_webhook(&e.with_record(&record)).unwrap();
+        let mut keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "event_category",
+                "event_data",
+                "event_label",
+                "events_ttl_days",
+                "id",
+                "sandbox_build_id",
+                "sandbox_execution_id",
+                "sandbox_id",
+                "sandbox_team_id",
+                "sandbox_template_id",
+                "timestamp",
+                "type",
+                "version",
+            ]
+        );
+        assert_eq!(v["event_label"], "kill");
+        assert_eq!(v["event_data"]["kill_reason"], "request");
+        assert_eq!(v["event_data"]["sandbox_metadata"]["k"], "v");
+        let x = &v["event_data"]["execution"];
+        assert_eq!(x["vcpu_count"], 2);
+        assert_eq!(x["memory_mb"], 512);
+        assert_eq!(x["execution_time"], 1_000);
+        assert!(x["started_at"]
+            .as_str()
+            .unwrap()
+            .starts_with("1970-01-01T00:00:01"));
+        // A created event has metadata and no execution yet.
+        let c = ClusterEvent::new("sandbox-created", "n", Some("sb")).with_record(&record);
+        let c = to_webhook(&c).unwrap();
+        assert!(c["event_data"].get("execution").is_none());
+        assert!(c["event_data"].get("kill_reason").is_none());
+    }
+
+    /// E2B's documented Python verifier, transcribed: the signature it
+    /// computes for a body is the one sent.
+    #[test]
+    fn the_signature_is_what_e2bs_documented_verifier_expects() {
+        // base64(sha256("secret" + "{}")) with its padding stripped, computed
+        // independently with Python's hashlib.
+        assert_eq!(
+            sign("secret", "{}"),
+            "e9B8ejqc2/sG6v6Lh2cAHsXgRKkAkGentpGLCOuoSYs"
+        );
     }
 }

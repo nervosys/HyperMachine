@@ -153,7 +153,7 @@ impl NodeAgent {
         self.store.put_sandbox(record).await?;
         self.announce(running).await?;
         let event = ClusterEvent::new("sandbox-created", &self.config.id, Some(&record.sandbox_id))
-            .with_template(&record.template_id);
+            .with_record(record);
         self.store.publish(&event).await?;
         Ok(event)
     }
@@ -182,8 +182,8 @@ impl NodeAgent {
     ) -> crate::store::Result<ClusterEvent> {
         self.store.put_sandbox(record).await?;
         self.announce(running).await?;
-        let event = ClusterEvent::new(kind, &self.config.id, Some(&record.sandbox_id))
-            .with_template(&record.template_id);
+        let event =
+            ClusterEvent::new(kind, &self.config.id, Some(&record.sandbox_id)).with_record(record);
         self.store.publish(&event).await?;
         Ok(event)
     }
@@ -197,7 +197,7 @@ impl NodeAgent {
     pub async fn ended(
         &self,
         sandbox_id: &str,
-        template_id: Option<&str>,
+        record: Option<&SandboxRecord>,
         kind: &str,
         running: u32,
     ) -> crate::store::Result<Option<ClusterEvent>> {
@@ -206,8 +206,8 @@ impl NodeAgent {
             return Ok(None);
         }
         let mut event = ClusterEvent::new(kind, &self.config.id, Some(sandbox_id));
-        if let Some(template) = template_id {
-            event = event.with_template(template);
+        if let Some(record) = record {
+            event = event.with_record(record);
         }
         self.store.publish(&event).await?;
         Ok(Some(event))
