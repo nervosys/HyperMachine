@@ -1643,6 +1643,25 @@ Verified with the unmodified SDK:
 
 Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
 
+#### E2B's Code Interpreter template, and what building it taught the builder
+
+E2B's own open-source Code Interpreter template (`e2b-dev/code-interpreter`, `template/template.py`) builds on HyperMachine through the SDK's `Template.build`, with its Docker variant and Python kernels, at 4 vCPU and 8 GiB:
+- 29 steps: apt, NodeSource, the full pip requirements, the IJavascript kernel, E2B's server and its virtualenv, configuration;
+- then its start command.
+
+It does not yet come up here. E2B's `start-up.sh` gives Jupyter 10 s to become healthy, and its server gives each kernel 5 s to start. On this development host -- KVM nested under WSL2, the Windows host at about 75% CPU from other work -- Jupyter was healthy after 7-18 s and the kernel took longer than 5 s:
+- With the health window lengthened as a test, Jupyter came up, E2B's server started, and creating its default kernel then failed with `httpx.ConnectTimeout`.
+- In the sandbox, Jupyter itself reached `/api/status` 200 between 7 and 18 s after launch, at 100% of a CPU.
+- A second start in the same guest took 2-4 s.
+- CPU-bound Python ran at half the host's speed.
+
+This needs a faster host to finish. It is not a defect found in the sandbox, but it is also not shown to work: the SDK's `run_code` has not run here.
+
+What the builder gained from it:
+- **A step cache.** After the last step the build's sandbox is checkpointed under a key of its base, size and every step (files by hash). A build with the same steps starts from it, at the start command, as E2B's layer cache does; `skip_cache` forces the steps. The Code Interpreter's 55 minutes of steps then took 24.5 s to keep, and each later attempt at its start about a minute. A small template: 3.5 s built, 0.2 s again.
+- **The start command's output in the build log**, as it comes. A start command that exits before its readiness check passes ends the build at once, with its status. Without it, the Code Interpreter's failure was ten silent minutes.
+- **Bounded readiness attempts**, 30 s each: a check that hangs is a failed one.
+
 #### Guests larger than 3 GiB
 
 No guest above about 3.25 GiB could run, and the size check promised up to 64 GiB. Guest RAM was one flat range from address 0, so it ran into the virtio register windows at `0xd000_0000`, and from 4 GiB over the I/O APIC and local APICs. Found building E2B's Code Interpreter template at 8 GiB, which failed attaching its first device.

@@ -68,7 +68,9 @@ async fn run() -> Result<(), String> {
         .attach(&vm.devices())
         .await
         .map_err(|e| format!("devices: {e}"))?;
-    vm.provision().await.map_err(|e| format!("provision: {e}"))?;
+    vm.provision()
+        .await
+        .map_err(|e| format!("provision: {e}"))?;
     vm.launch().await.map_err(|e| format!("launch: {e}"))?;
     eprintln!("[hypermachine] guest launched; its serial console follows (Ctrl-D stops the VM)");
 

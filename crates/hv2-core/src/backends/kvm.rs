@@ -1435,8 +1435,12 @@ impl KvmVm {
             .checked_add(data.len() as u64)
             .ok_or_else(|| Error::Memory(format!("Write at {:#x} overflows a u64", addr)))?;
         let host = crate::memory::host_offset(self.memory_size, addr);
-        let last = end.checked_sub(1).and_then(|l| crate::memory::host_offset(self.memory_size, l));
-        let Some(host) = host.filter(|h| data.is_empty() || last == Some(h + data.len() as u64 - 1)) else {
+        let last = end
+            .checked_sub(1)
+            .and_then(|l| crate::memory::host_offset(self.memory_size, l));
+        let Some(host) =
+            host.filter(|h| data.is_empty() || last == Some(h + data.len() as u64 - 1))
+        else {
             return Err(Error::Memory(format!(
                 "Write at {:#x} with length {} is not within guest RAM of {:#x} bytes",
                 addr,

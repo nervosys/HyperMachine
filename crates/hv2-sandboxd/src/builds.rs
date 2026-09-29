@@ -458,11 +458,49 @@ fn image_template(image: &str, sizes: Sizes, default: Sizes) -> String {
     format!("image-{hex}")
 }
 
-async fn run(state: &Arc<AppState>, build: &Build, spec: StartBuild) -> Result<(), Failure> {
+/// The name the snapshot of a build's steps is kept under: a function of
+/// its base, its size, and every step, files included by their hash. A
+/// build whose steps are the same starts from it, at the start command --
+/// what E2B's layer cache does for the whole run of them.
+fn step_cache_name(spec: &StartBuild, sizes: Option<Sizes>) -> String {
+    use sha2::Digest;
+    let mut hash = sha2::Sha256::new();
+    let key = json!({
+        "image": spec.from_image,
+        "template": spec.from_template,
+        "sizes": sizes.map(|s| (s.cpus, s.memory_mb)),
+        "steps": spec.steps.iter().map(|s| json!([s.kind, s.args, s.files_hash])).collect::<Vec<_>>(),
+    });
+    hash.update(key.to_string().as_bytes());
+    let hex: String = hash
+        .finalize()
+        .iter()
+        .take(8)
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    format!("build-cache-{hex}")
+}
+
+async fn run(state: &Arc<AppState>, build: &Arc<Build>, spec: StartBuild) -> Result<(), Failure> {
     let base_step = at("base");
-    // The base: an image, pulled into a template of its own; or a template
-    // -- one built from an image, or a snapshot, restored as it was left.
-    let (base, from_snapshot) = if let Some(image) = &spec.from_image {
+    let cache_name = step_cache_name(&spec, build.sizes);
+    let cached = if spec.force || spec.steps.is_empty() {
+        None
+    } else {
+        snapshots::lookup(state, &cache_name)
+            .filter(|c| state.templates.read().contains_key(&c.base))
+    };
+    // The base: the snapshot of these steps, run before; an image, pulled
+    // into a template of its own; or a template -- one built from an image,
+    // or a snapshot, restored as it was left.
+    let (base, from_snapshot) = if let Some(cache) = &cached {
+        build.log(
+            "info",
+            Some("base"),
+            format!("Steps unchanged: starting from {cache_name}"),
+        );
+        (cache.base.clone(), Some(Arc::clone(cache)))
+    } else if let Some(image) = &spec.from_image {
         let default = Sizes::of(&state.opts);
         let sizes = build.sizes.unwrap_or(default);
         let name = image_template(image, sizes, default);
@@ -567,7 +605,18 @@ async fn run(state: &Arc<AppState>, build: &Build, spec: StartBuild) -> Result<(
     drop(from_snapshot);
     build.log("info", Some("base"), format!("Building in {sandbox_id}"));
 
-    let outcome = steps_then_snapshot(state, build, &running, &spec, &base, &sandbox_id).await;
+    let cache = (cached.is_none() && !spec.steps.is_empty()).then_some(cache_name.as_str());
+    let outcome = steps_then_snapshot(
+        state,
+        build,
+        &running,
+        &spec,
+        &base,
+        &sandbox_id,
+        cached.is_some(),
+        cache,
+    )
+    .await;
     tear_down(state, running, &sandbox_id).await;
     drop(slot);
     outcome
@@ -585,7 +634,9 @@ async fn tear_down(state: &AppState, running: Running, sandbox_id: &str) {
 }
 
 /// Where a step runs: the directory, user and environment the steps before
-/// it left.
+/// it left. Kept in the guest with a build's step cache, for the build that
+/// starts from it.
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Context {
     env: BTreeMap<String, String>,
     cwd: String,
@@ -595,15 +646,32 @@ struct Context {
     base_env: BTreeMap<String, String>,
 }
 
+/// Where a build's context is kept in its guest, for a step cache.
+const BUILD_CONTEXT_PATH: &str = "/etc/hv2/build-context.json";
+/// How long one attempt of a readiness check may take.
+const READY_ATTEMPT: Duration = Duration::from_secs(30);
+
+#[allow(clippy::too_many_arguments)]
 async fn steps_then_snapshot(
     state: &AppState,
-    build: &Build,
+    build: &Arc<Build>,
     running: &Running,
     spec: &StartBuild,
     base: &str,
     sandbox_id: &str,
+    cached: bool,
+    cache: Option<&str>,
 ) -> Result<(), Failure> {
     let vm = &running.vm;
+    if cached {
+        let context: Context = vm
+            .read_file_in_guest(BUILD_CONTEXT_PATH, 1 << 20, AGENT_TIMEOUT)
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .ok_or_else(|| at("base")("the step cache has no build context".into()))?;
+        return finalize(state, build, running, spec, base, sandbox_id, context).await;
+    }
     // A template built from one built by steps starts where that one ended.
     let inherited: TemplateDefaults = vm
         .read_file_in_guest(TEMPLATE_DEFAULTS_PATH, 1 << 20, AGENT_TIMEOUT)
@@ -700,6 +768,49 @@ async fn steps_then_snapshot(
         }
     }
 
+    // The steps' result, kept: a build with the same steps starts here, and
+    // a start command that fails costs one more try at it, not the steps.
+    if let Some(cache) = cache {
+        let kept = async {
+            let bytes = serde_json::to_vec(&context).map_err(|e| e.to_string())?;
+            vm.write_file_in_guest(BUILD_CONTEXT_PATH, bytes, AGENT_TIMEOUT)
+                .await
+                .map_err(|e| e.to_string())?;
+            let file = snapshots::new_file(state, cache)?;
+            let started = Instant::now();
+            vm.checkpoint_to(&file).await.map_err(|e| e.to_string())?;
+            snapshots::keep(state, cache, base.to_string(), file, sandbox_id.to_string()).await?;
+            Ok::<_, String>(started.elapsed())
+        }
+        .await;
+        match kept {
+            Ok(took) => build.log(
+                "info",
+                Some("finalize"),
+                format!("Steps kept as {cache} in {took:?}"),
+            ),
+            Err(e) => build.log(
+                "warn",
+                Some("finalize"),
+                format!("Steps not kept as {cache}: {e}"),
+            ),
+        }
+    }
+    finalize(state, build, running, spec, base, sandbox_id, context).await
+}
+
+/// After the steps: the template's defaults, its start command up and its
+/// readiness check passed, and the snapshot taken.
+async fn finalize(
+    state: &AppState,
+    build: &Arc<Build>,
+    running: &Running,
+    spec: &StartBuild,
+    base: &str,
+    sandbox_id: &str,
+    context: Context,
+) -> Result<(), Failure> {
+    let vm = &running.vm;
     let finalize = at("finalize");
     let defaults = TemplateDefaults {
         env: context.env.clone(),
@@ -711,25 +822,73 @@ async fn steps_then_snapshot(
         .await
         .map_err(|e| finalize(e.to_string()))?;
 
+    // The start command's output goes to the build's log as it comes, and
+    // its end, if it ends, is noticed: a server that exits is a readiness
+    // check that will never pass, and why is in what it printed.
+    let exited: Arc<parking_lot::Mutex<Option<Option<i32>>>> =
+        Arc::new(parking_lot::Mutex::new(None));
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
     if let Some(command) = &spec.start_cmd {
         build.log("info", Some("finalize"), format!("Starting: {command}"));
         let (program, args) = shell(command);
-        vm.start_in_guest_as(
-            &program,
-            &args,
-            Some(&context.cwd),
-            &context.env,
-            None,
-            Some(&context.user),
-            AGENT_TIMEOUT,
-        )
-        .await
-        .map_err(|e| finalize(format!("starting {command:?}: {e}")))?;
+        let pid = vm
+            .start_in_guest_as(
+                &program,
+                &args,
+                Some(&context.cwd),
+                &context.env,
+                None,
+                Some(&context.user),
+                AGENT_TIMEOUT,
+            )
+            .await
+            .map_err(|e| finalize(format!("starting {command:?}: {e}")))?;
+        let (vm, build, exited, stop) = (
+            Arc::clone(vm),
+            Arc::clone(build),
+            Arc::clone(&exited),
+            Arc::clone(&stop),
+        );
+        tokio::spawn(async move {
+            let mut partial = String::new();
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let Ok(output) = vm.poll_in_guest(pid, AGENT_TIMEOUT).await else {
+                    break;
+                };
+                partial.push_str(&output.stdout);
+                partial.push_str(&output.stderr);
+                while let Some(end) = partial.find('\n') {
+                    let line: String = partial.drain(..=end).collect();
+                    build.log(
+                        "info",
+                        Some("finalize"),
+                        format!("start: {}", line.trim_end()),
+                    );
+                }
+                if !output.running {
+                    if !partial.is_empty() {
+                        build.log("info", Some("finalize"), format!("start: {partial}"));
+                    }
+                    *exited.lock() = Some(output.exit_code);
+                    break;
+                }
+                tokio::time::sleep(POLL_INTERVAL).await;
+            }
+        });
     }
-    if let Some(check) = &spec.ready_cmd {
+    let ready = async {
+        let Some(check) = &spec.ready_cmd else {
+            return Ok(());
+        };
         build.log("info", Some("finalize"), format!("Waiting for: {check}"));
         let deadline = Instant::now() + READY_TIMEOUT;
         loop {
+            if let Some(code) = *exited.lock() {
+                return Err(finalize(format!(
+                    "the start command exited ({}) before {check:?} passed; its output is above",
+                    code.map_or_else(|| "killed".to_string(), |c| format!("status {c}"))
+                )));
+            }
             let (program, args) = shell(check);
             let passed = match vm
                 .start_in_guest_as(
@@ -743,13 +902,19 @@ async fn steps_then_snapshot(
                 )
                 .await
             {
-                Ok(pid) => finished(vm, pid, None)
-                    .await
-                    .is_ok_and(|code| code == Some(0)),
+                // Each attempt bounded: a check that hangs is a failed one.
+                Ok(pid) => match tokio::time::timeout(READY_ATTEMPT, finished(vm, pid, None)).await
+                {
+                    Ok(code) => code.is_ok_and(|code| code == Some(0)),
+                    Err(_) => {
+                        let _ = vm.signal_in_guest(pid, 9, AGENT_TIMEOUT).await;
+                        false
+                    }
+                },
                 Err(_) => false,
             };
             if passed {
-                break;
+                return Ok(());
             }
             if Instant::now() > deadline {
                 return Err(finalize(format!(
@@ -759,6 +924,11 @@ async fn steps_then_snapshot(
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
     }
+    .await;
+    // Past the check, the output is the template's own again: a snapshot
+    // with this poller mid-request would be of an agent answering no one.
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    ready?;
 
     let file = snapshots::new_file(state, &build.template).map_err(&finalize)?;
     let started = Instant::now();
@@ -1224,8 +1394,9 @@ mod tests {
     /// `ENV` values refer to what was set before them, as in Docker.
     #[test]
     fn env_values_expand_as_dockers_do() {
-        let env: BTreeMap<String, String> =
-            [("PATH", "/usr/bin"), ("V", "11")].map(|(k, v)| (k.to_string(), v.to_string())).into();
+        let env: BTreeMap<String, String> = [("PATH", "/usr/bin"), ("V", "11")]
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .into();
         assert_eq!(expand("/opt/bin:$PATH", &env), "/opt/bin:/usr/bin");
         assert_eq!(expand("/jvm/jdk-${V}", &env), "/jvm/jdk-11");
         assert_eq!(expand("$UNSET-x", &env), "-x");
