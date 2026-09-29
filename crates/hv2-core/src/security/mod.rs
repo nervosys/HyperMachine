@@ -5,11 +5,15 @@
 //! - Virtual TPM (vTPM 2.0)
 //! - Secure boot chain verification
 
+pub mod audit_chain;
 pub mod image_registry;
 pub mod memory_encryption;
 pub mod secure_boot;
 pub mod vtpm;
 
+pub use audit_chain::{
+    AuditChain, AuditRecord, AuditSink, JsonLinesFile, VerifyError as AuditVerifyError,
+};
 pub use memory_encryption::{
     CbitPosition, EncryptionConfig, EncryptionError, EncryptionManager, EncryptionResult,
     EncryptionStats, EncryptionTechnology, KeyId, KeyMetadata, KeyState, PageEncryptionState,

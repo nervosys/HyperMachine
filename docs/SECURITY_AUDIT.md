@@ -266,7 +266,7 @@ mitigations:
 |--------|----------------|--------------------------|----------|
 | Privilege Escalation / Defense Evasion | Exploitation for Priv. Esc. (T1068), Escape to Host (T1611) | Hardware isolation: VT‑d / AMD‑Vi **IOMMU** + interrupt remapping; EPT/NPT nested paging; `unsafe` confined + `# Safety`‑documented | Partial — reduces DMA/escape surface; a hypervisor remains a high‑value target |
 | Credential Access | Network Sniffing (T1040), AiTM (T1557) | TLS (`rustls`) for API; HMAC payload signing & replay protection middleware | Partial |
-| Defense Evasion | Impair Defenses / Disable Logging (T1562.x) | Append‑only, **bounded** MCP audit log + HTTP audit middleware; tamper window minimized | Partial — logs are in‑process; ship to external SIEM for non‑repudiation |
+| Defense Evasion | Impair Defenses / Disable Logging (T1562.x) | Append‑only, **bounded** MCP audit log + HTTP audit middleware, each optionally mirrored to an HMAC‑chained log (`hv2_core::security::audit_chain`) whose edits, deletions, reorderings and splices are detectable | Partial — tail truncation is only caught by a copy held elsewhere; ship the chain file to a SIEM. Off unless an embedder opts in (`AuditChain::from_env`) |
 | Discovery / Lateral Movement | within tenant boundary | **Capability‑based access control** (`AgentCapability` least‑privilege) + **multi‑tenant isolation** (`X‑Tenant‑Id`, owner‑only release) | Good for agent layer |
 | Initial Access / Execution | Exploit Public‑Facing App (T1190) | Rate limiting, circuit breakers, request‑replay protection, schema validation, bearer auth (defense‑in‑depth middleware stack) | Partial |
 | Collection / Exfiltration | timing side‑channels | `rsa` Marvin timing retired: RSA is IronCrypto `ic-rsa`, constant-time in `d` (814d0c0) | Mitigated |
@@ -290,7 +290,7 @@ responsibility.
 | CMMC Domain | Representative Practices | HyperMachine support | Status |
 |-------------|--------------------------|----------------------|--------|
 | **AC** Access Control | AC.L2‑3.1.1/.2/.5 (authorized access, least privilege) | Capability‑based agent access, tenant isolation, bearer auth, RBAC primitives | Supporting controls present |
-| **AU** Audit & Accountability | AU.L2‑3.3.1/.2 (audit events, traceability) | MCP audit log (session/tool/params/outcome), HTTP audit middleware, W3C trace propagation | Supporting controls present; export to SIEM required |
+| **AU** Audit & Accountability | AU.L2‑3.3.1/.2 (audit events, traceability) | MCP audit log (session/tool/params/outcome), HTTP audit middleware, W3C trace propagation, tamper‑evident audit chain (JSON Lines, HMAC‑SHA256 chained, with a verifier) | Supporting controls present; export to SIEM required for AU‑9 protection of the record |
 | **IA** Identification & Auth | IA.L2‑3.5.1/.2 (identify/authenticate) | Bearer‑token auth, per‑agent/session identity, API‑key middleware | Partial — no built‑in MFA/IdP federation |
 | **SC** System & Comms Protection | SC.L2‑3.13.8/.11 (encryption in transit, FIPS crypto) | TLS (`rustls`), FIPS‑approved algorithms, PQC; IOMMU isolation | Partial — see FIPS‑validation caveat (§3.2) |
 | **SI** System & Info Integrity | SI.L2‑3.14.1 (flaw remediation) | `cargo deny` advisory gating, pinned deps, bounded resource use | Supporting controls present |
@@ -316,7 +316,7 @@ which a codebase can satisfy on its own.
 1. **FIPS:** link/run a CMVP‑validated crypto module in its validated config, or pursue validation; do not represent current state as FIPS 140‑3 validated.
 2. **Confidential compute:** complete activation/testing of SEV‑SNP / TDX paths before relying on memory encryption for CUI/classified data.
 3. **Supply chain:** publish an SBOM; add scheduled advisory scans. (The `rsa` timing advisory is retired: 814d0c0.)
-4. **Audit:** forward audit logs to an external, tamper‑evident store (SIEM) for non‑repudiation.
+4. **Audit:** forward audit logs to an external, tamper‑evident store (SIEM) for non‑repudiation. *Since 2026‑09‑28:* both audit logs can write a tamper‑evident chain file (`HV2_AUDIT_CHAIN` + `HV2_AUDIT_KEY_FILE`) for a collector to forward, and `verify_audit_log` checks one. Two limits remain. Nothing turns it on by default. And **no shipped binary installs the HTTP audit middleware**: `rest::serve` builds its router without the middleware stack, so HTTP auditing exists only for embedders that apply it.
 5. **Assessment:** independent pen‑test + SSP/POA&M + ATO for government use.
 
 **Verdict:** **Fit for dual‑use deployment** in commercial production and

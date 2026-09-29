@@ -1163,6 +1163,10 @@ pub struct AuditLogConfig {
     pub max_body_log_bytes: usize,
     /// Whether to include the response status code.
     pub log_response_status: bool,
+    /// A tamper-evident chain every audit entry is also appended to, so the
+    /// log a SIEM collects can be proven unaltered. `None` keeps the entries
+    /// in `tracing` only. See `hv2_core::security::audit_chain`.
+    pub chain: Option<std::sync::Arc<hv2_core::security::AuditChain>>,
 }
 
 impl Default for AuditLogConfig {
@@ -1173,6 +1177,7 @@ impl Default for AuditLogConfig {
             log_request_body: false,
             max_body_log_bytes: 1024,
             log_response_status: true,
+            chain: None,
         }
     }
 }
@@ -1215,6 +1220,27 @@ pub struct AuditLogEntry {
     /// Truncated request body, if body logging is enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_body: Option<String>,
+}
+
+/// Emit one audit entry: to `tracing`, and to the tamper-evident chain when
+/// one is configured.
+///
+/// A chain that cannot take the record is reported at `error`, not dropped
+/// quietly: a gap in the audit trail is itself an event an operator must see.
+fn emit_audit(config: &AuditLogConfig, entry: &AuditLogEntry) {
+    if let Ok(json) = serde_json::to_string(entry) {
+        tracing::info!(target: "audit_log", "{}", json);
+    }
+    if let Some(chain) = &config.chain {
+        match serde_json::to_value(entry) {
+            Ok(event) => {
+                if let Err(e) = chain.append("http", event) {
+                    tracing::error!(target: "audit_log", "audit chain append failed: {e}");
+                }
+            }
+            Err(e) => tracing::error!(target: "audit_log", "audit entry not serialisable: {e}"),
+        }
+    }
 }
 
 /// Audit logging middleware handler.
@@ -1287,9 +1313,7 @@ fn audit_log_handler(
                 request_body: body_str,
             };
 
-            if let Ok(json) = serde_json::to_string(&entry) {
-                tracing::info!(target: "audit_log", "{}", json);
-            }
+            emit_audit(&config, &entry);
 
             return response;
         } else {
@@ -1322,9 +1346,7 @@ fn audit_log_handler(
             request_body,
         };
 
-        if let Ok(json) = serde_json::to_string(&entry) {
-            tracing::info!(target: "audit_log", "{}", json);
-        }
+        emit_audit(&config, &entry);
 
         response
     })
@@ -12449,6 +12471,46 @@ mod tests {
         assert!(config.is_audited_method(&Method::GET));
         assert!(config.is_audited_method(&Method::POST));
         assert!(!config.is_audited_method(&Method::DELETE));
+    }
+
+    /// With a chain configured, each emitted HTTP audit entry is appended to
+    /// it, and the file verifies.
+    #[test]
+    fn audit_entries_are_appended_to_a_configured_chain() {
+        let dir = std::env::temp_dir().join(format!("hv2-http-audit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("http.jsonl");
+        let _ = std::fs::remove_file(&path);
+        let key = [5u8; 32];
+        let config = AuditLogConfig {
+            chain: Some(std::sync::Arc::new(
+                hv2_core::security::AuditChain::open_file(&path, key, false).unwrap(),
+            )),
+            ..AuditLogConfig::default()
+        };
+        for status in [201, 404] {
+            emit_audit(
+                &config,
+                &AuditLogEntry {
+                    timestamp: "1234567890".to_string(),
+                    method: "POST".to_string(),
+                    path: "/api/v1/vms".to_string(),
+                    status: Some(status),
+                    duration_ms: 1,
+                    request_id: None,
+                    client_ip: Some("192.0.2.7".to_string()),
+                    request_body: None,
+                },
+            );
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            hv2_core::security::audit_chain::verify(text.lines(), &key),
+            Ok(2)
+        );
+        assert!(text.contains("\"source\":\"http\""));
+        assert!(text.contains("192.0.2.7"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
