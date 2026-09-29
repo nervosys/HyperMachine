@@ -102,6 +102,22 @@ jobs:
     # every namespace and cgroup test "passed" by skipping. This job grants
     # both, then fails if the probe falls short of all eight controls or if
     # any test still skips.
+    # The two searches rustc cannot do on `pub` items, run on every change so a
+    # hollow control cannot reach master unread: a state a guard demands that
+    # nothing constructs, and a refusal, mode or claimed enforcement that
+    # nothing acts on. Both exit 1 only for findings not already reviewed.
+    unread-controls:
+        name: Unread Controls
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+            - name: The unread-controls rules fire on planted examples
+              run: python3 tools/find-unread-controls.py --self-test
+            - name: No unreviewed unread controls
+              run: python3 tools/find-unread-controls.py
+            - name: No unreachable states
+              run: python3 tools/find-unreachable-states.py
+
     sandbox-containment:
         name: Sandbox Containment (Linux, all controls)
         runs-on: ubuntu-latest

@@ -329,13 +329,24 @@ pub enum VerificationResult {
 pub enum SecureBootMode {
     /// Secure boot disabled
     Disabled,
-    /// Setup mode (PK not enrolled)
+    /// Setup mode (PK not enrolled).
+    ///
+    /// Every mode but [`Self::Disabled`] verifies and refuses identically;
+    /// the others are recorded, not acted on. In particular, key-database
+    /// updates are not authenticated in any mode (UEFI requires that in
+    /// User mode). That is contained only because this manager is a host-side
+    /// API no guest can reach. `tools/find-unread-controls.py` lists these
+    /// variants, with this reason.
     Setup,
-    /// User mode (fully enabled)
+    /// User mode. Enforces exactly as [`Self::Setup`] does.
     User,
-    /// Deployed mode (most restrictive)
+    /// Deployed mode. Enforces exactly as [`Self::User`] does; nothing makes
+    /// it more restrictive.
     Deployed,
-    /// Audit mode (log but don't enforce)
+    /// Audit mode. **Enforces, like every mode but `Disabled`**: an
+    /// unverified component is refused, not logged and admitted. Audit-only
+    /// admission would loosen secure boot, and is deliberately not
+    /// implemented here.
     Audit,
 }
 
@@ -569,7 +580,8 @@ impl SecureBootManager {
             return VerificationResult::Success;
         }
 
-        // If not enabled or in audit mode, pass through
+        // Only a disabled manager passes components through. Audit mode is not
+        // an exception: it enforces (see `SecureBootMode::Audit`).
         let policy = self.policy.read();
         if !self.is_enabled() || policy.mode == SecureBootMode::Disabled {
             return VerificationResult::Success;

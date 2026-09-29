@@ -148,8 +148,14 @@ less — than the code does. These are the known instances still outstanding.
   vector-tested". Both are false — `ic-mldsa` has sign, verify, both prehash
   variants and a deterministic variant, with 55 NIST ACVP vectors; `ic-mlkem`
   has 50. The descriptions cost a recommendation in this repository.
-- [ ] **Add a claim-versus-caller check to the sweep.** *M. Optional, high
-  leverage.* A script flagging module headers that say "wires", "consults" or
+- [x] **Add a claim-versus-caller check to the sweep.** *M. Optional, high
+  leverage.* Done 2026-09-29 as `tools/find-unread-controls.py`, in the sweep
+  and in CI. Beyond this item's claims-without-callers rule, it finds refusal
+  variants nothing raises and mode variants nothing reads. On the tree before
+  #112 it flags both of that week's bugs (`FipsMode::Strict` and
+  `AlgorithmNotApproved`). On today's tree, 23 findings are reviewed with
+  reasons. One corrected a real mismatch: `SecureBootMode::Audit` was
+  documented as "log but don't enforce", and enforced. A script flagging module headers that say "wires", "consults" or
   "enforces" where the named subject has no caller outside its own file.
   Five such headers were found by hand on 2026-09-22.
   Done when: the script fails on a planted false claim and passes on the tree.

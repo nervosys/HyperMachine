@@ -146,6 +146,22 @@ else
     echo "  skipped: no python3"
 fi
 
+step "unread controls"
+# A refusal nothing raises, a mode nothing reads, a header claiming enforcement
+# nothing calls. FipsMode::Strict and CryptoError::AlgorithmNotApproved were
+# both; this finds each on the tree they lived in.
+if command -v python3 >/dev/null 2>&1; then
+    out=$(python3 tools/find-unread-controls.py 2>&1)
+    code=$?
+    echo "$out" | sed -n '2p' | sed 's/^/  /'
+    [ "$code" -eq 0 ] || {
+        echo "$out" | grep '^NEW' | sed 's/^/  /'
+        bad "a control claims to act and nothing acts on it; see tools/find-unread-controls.py"
+    }
+else
+    echo "  skipped: no python3"
+fi
+
 step "tests"
 log="$(mktemp)"
 cargo test --release --workspace >"$log" 2>&1
