@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **Sandbox `envVars`** (`hv2-sandboxd`), as E2B's `NewSandbox` has them:
+  variables every command in the sandbox sees, over its template's `ENV`.
+  Kept in the guest, so a pause, a resume on another node, a fork and a
+  snapshot carry them; never returned by the API. Checked on real KVM
+  guests by `tools/e2e-sandbox-env.sh`. `docs/PLATFORM_PARITY.md` tracks
+  HyperMachine against boxd and exe.dev.
 - **Tamper-evident audit logs** (`hv2-core`, `hv2-agent`, `hv2-api`).
   `hv2_core::security::AuditChain` writes one JSON object per line, each
   carrying an HMAC-SHA256 over its sequence number, timestamp, source, event
