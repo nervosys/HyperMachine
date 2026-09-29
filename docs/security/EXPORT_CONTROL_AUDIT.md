@@ -52,7 +52,9 @@ their own legal analysis if relying on it.
 > classical primitive in `hv2-core` and `hv2-api` comes from **IronCrypto**
 > (`ic-*` crates, AGPL-3.0-or-later, published on crates.io), which is
 > checked here against published test vectors. The post-quantum algorithms
-> come from the RustCrypto `ml-kem`, `ml-dsa` and `slh-dsa` crates (59ad48a).
+> come from the RustCrypto `ml-kem`, `ml-dsa` and `slh-dsa` crates (59ad48a);
+> since 2026-09-29 ML-KEM and ML-DSA are IronCrypto's `ic-mlkem` and
+> `ic-mldsa`, and only SLH-DSA remains RustCrypto's.
 > `ring` remains in the build only beneath `rustls` (TLS), `rcgen`,
 > `quinn-proto` and `x509-parser`. Where a classification below rested on a
 > fact that has since changed, it is marked for re-review rather than
@@ -198,7 +200,7 @@ would otherwise not expect in a hypervisor.
 | **Files**                 | [crates/hv2-core/src/crypto/pqc.rs](../../crates/hv2-core/src/crypto/pqc.rs) |
 | **Parameter Sets**        | ML-KEM-512, ML-KEM-768, ML-KEM-1024                                          |
 | **Type**                  | Key Encapsulation Mechanism (key establishment)                              |
-| **Implementation**        | **Wrapper** around the RustCrypto `ml-kem` crate                             |
+| **Implementation**        | **Wrapper** around IronCrypto's `ic-mlkem` (RustCrypto `ml-kem` until 2026-09-29) |
 | **Purpose**               | Quantum-resistant key establishment                                          |
 | **Likely ECCN**           | 5D002.c.1 (key establishment) — re-review; previously EAR99 as a placeholder |
 | **Open-Source Exception** | Likely eligible                                                              |
@@ -210,12 +212,13 @@ would otherwise not expect in a hypervisor.
 | **Files**          | [crates/hv2-core/src/crypto/pqc.rs](../../crates/hv2-core/src/crypto/pqc.rs)         |
 | **Parameter Sets** | ML-DSA-44, ML-DSA-65, ML-DSA-87                                                      |
 | **Type**           | Digital signature                                                                    |
-| **Implementation** | **Wrapper** around the RustCrypto `ml-dsa` crate                                     |
+| **Implementation** | **Wrapper** around IronCrypto's `ic-mldsa` (RustCrypto `ml-dsa` until 2026-09-29)    |
 | **Purpose**        | Quantum-resistant signatures                                                         |
 | **Likely ECCN**    | **Re-review** — previously EAR99 because "no actual PQC"; that is no longer the case |
 
 IronCrypto's `ic-mldsa` passes the NIST ACVP vectors for all three parameter
-sets. Migrating to it is planned (implementation plan, Phase C).
+sets, and `hv2-core` uses it since 2026-09-29. No new cryptographic
+function: the same three algorithms from a different implementation.
 
 #### 1.8.3 SLH-DSA — FIPS 205
 
@@ -445,7 +448,7 @@ complete. Notes:
 | Dependency          | Role                                   | License            | Publicly Available |
 | ------------------- | -------------------------------------- | ------------------ | ------------------ |
 | `ic-cipher`, `ic-hash`, `ic-mac`, `ic-kdf`, `ic-rsa`, `ic-ec`, `ic-core` (IronCrypto) | AES-GCM, SHA-2, HMAC, HKDF, RSA signatures, ECDSA | AGPL-3.0-or-later | ✅ Yes (crates.io) |
-| `ml-kem`, `ml-dsa`, `slh-dsa` (RustCrypto) | ML-KEM, ML-DSA, SLH-DSA | MIT/Apache-2.0 | ✅ Yes (crates.io) |
+| `slh-dsa` (RustCrypto) | SLH-DSA | MIT/Apache-2.0 | ✅ Yes (crates.io) |
 | `rustls 0.23` (with its `ring 0.17` backend) | TLS protocol | Apache-2.0/ISC/MIT | ✅ Yes (GitHub) |
 | `tokio-rustls 0.26` | Async TLS | MIT/Apache-2.0 | ✅ Yes |
 | `rustls-pki-types` | PEM/DER parsing | MIT/Apache-2.0 | ✅ Yes |
@@ -467,8 +470,8 @@ All cryptographic dependencies are publicly available open-source libraries.
 | HMAC-SHA256/512 (IronCrypto wrapper)         | Part of 5D002  | Authentication in crypto context      | §742.15(b)             |
 | HKDF-SHA256 (IronCrypto wrapper)             | Part of 5D002  | Key derivation                        | §742.15(b)             |
 | TLS (rustls wrapper), incl. interception     | 5D002.c.1      | Network encryption                    | §742.15(b) open-source |
-| PQC ML-KEM (RustCrypto wrapper)              | Re-review      | Real FIPS 203 key establishment       | §742.15(b) open-source |
-| PQC ML-DSA (RustCrypto wrapper)              | Re-review      | Real FIPS 204 signatures              | §742.15(b) open-source |
+| PQC ML-KEM (IronCrypto wrapper)              | Re-review      | Real FIPS 203 key establishment       | §742.15(b) open-source |
+| PQC ML-DSA (IronCrypto wrapper)              | Re-review      | Real FIPS 204 signatures              | §742.15(b) open-source |
 | PQC SLH-DSA (RustCrypto wrapper)             | Re-review      | Real FIPS 205 signatures              | §742.15(b) open-source |
 | vTPM 2.0                                     | 5D002          | Authentication/integrity services     | §742.15(b)             |
 | Secure Boot                                  | Part of 5D002  | Authentication chain                  | §742.15(b)             |
@@ -494,7 +497,7 @@ on source-code distribution under the open-source exception.
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **R-1** | **BIS notification for the open-source exception.** EAR §742.15(b) requires emailing `crypt@bis.doc.gov` and `enc@nsa.gov` with the repository URL and an encryption-functionality description. | File the notification prior to the next signed binary release. Notification text and acknowledgement will be archived under [docs/security/](.).                                                |
 | **R-2** | **Commercial-license distributions** under `LicenseRef-Commercial` and signed binary distributions are out of scope of the source-only exception.                                               | Obtain independent legal analysis and, if required, a BIS classification (CCATS) for binary / commercial distributions before publishing them. Source releases under AGPL-3.0 are not affected. |
-| **R-3** | **CMVP-validated FIPS 140-3 module.** The crypto module is FIPS-architected (NIST-approved algorithms via IronCrypto, and RustCrypto for PQC) but has not been submitted for CMVP validation.                               | Tracked in [FIPS_COMPLIANCE.md](FIPS_COMPLIANCE.md). All public docs and code comments use the phrase "FIPS 140-3 architecture; not yet CMVP-certified" to avoid misrepresentation.             |
+| **R-3** | **CMVP-validated FIPS 140-3 module.** The crypto module is FIPS-architected (NIST-approved algorithms via IronCrypto, and RustCrypto for SLH-DSA) but has not been submitted for CMVP validation.                               | Tracked in [FIPS_COMPLIANCE.md](FIPS_COMPLIANCE.md). All public docs and code comments use the phrase "FIPS 140-3 architecture; not yet CMVP-certified" to avoid misrepresentation.             |
 
 ### 7.2 Known Source-Code Limitations (K-series)
 
@@ -528,8 +531,8 @@ production-readiness, not the export-control status of the source release.
 | ECDSA P-256/SHA-256        | 256-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
 | ECDSA P-384/SHA-384        | 384-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
 | ECDSA P-521/SHA-512        | 521-bit       | Asymmetric | asymmetric.rs | Wrapper           | ic-ec (IronCrypto)     |
-| ML-KEM-512/768/1024        | FIPS 203      | Asymmetric | pqc.rs        | Wrapper           | ml-kem (RustCrypto)    |
-| ML-DSA-44/65/87            | FIPS 204      | Asymmetric | pqc.rs        | Wrapper           | ml-dsa (RustCrypto)    |
+| ML-KEM-512/768/1024        | FIPS 203      | Asymmetric | pqc.rs        | Wrapper           | ic-mlkem (IronCrypto)  |
+| ML-DSA-44/65/87            | FIPS 204      | Asymmetric | pqc.rs        | Wrapper           | ic-mldsa (IronCrypto)  |
 | SLH-DSA (6 parameter sets) | FIPS 205      | Asymmetric | pqc.rs        | Wrapper           | slh-dsa (RustCrypto, rc) |
 | SHA-256                    | N/A           | Hash       | fips.rs       | Wrapper           | ic-hash (IronCrypto)   |
 | SHA-384                    | N/A           | Hash       | fips.rs       | Wrapper           | ic-hash (IronCrypto)   |
