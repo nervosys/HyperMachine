@@ -25,6 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **Tamper-evident audit logs** (`hv2-core`, `hv2-agent`, `hv2-api`).
+  `hv2_core::security::AuditChain` writes one JSON object per line, each
+  carrying an HMAC-SHA256 over its sequence number, timestamp, source, event
+  and the previous record's MAC. Editing, deleting, reordering or splicing a
+  record breaks the chain at that line. The MCP tool-call log and the HTTP
+  audit middleware both append to it when configured (`audit_chain` /
+  `chain`); `AuditChain::from_env()` opens one from `HV2_AUDIT_CHAIN` and
+  `HV2_AUDIT_KEY_FILE`; and `cargo run -p hv2-core --example verify_audit_log`
+  checks a file. Truncation at the tail needs a copy held elsewhere: point a
+  SIEM collector at the file. Off by default.
 - **A command runs inside a guest through the published API** (`hv2-agent`).
   Not the boot probe, which drives the vsock device by hand because it was
   written alongside it, but `AgentVM::ping_guest` and `exec_in_guest` -- the

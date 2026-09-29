@@ -1076,6 +1076,9 @@ impl ConfigFile {
                 log_request_body: self.middleware.audit_log_request_body,
                 max_body_log_bytes: self.middleware.audit_log_max_body_bytes,
                 log_response_status: self.middleware.audit_log_response_status,
+                // Opened by the embedder, which can refuse to start if it
+                // fails: see `hv2_core::security::AuditChain::from_env`.
+                chain: None,
             },
             enable_response_cache: self.middleware.enable_response_cache,
             response_cache: ResponseCacheConfig {

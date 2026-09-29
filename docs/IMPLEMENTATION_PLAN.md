@@ -319,8 +319,20 @@ containment on the agent tool path. None of it protects a guest from the host.
   natural choice — and verify against the **trusted database entry's** key,
   never the one travelling with the signature. Done when: a valid signature
   is admitted, and a forged one with a matching subject string is refused.
-- [ ] **Forward audit logs to a tamper-evident store.** *M.* Audit
-  recommendation #4.
+- [x] **Forward audit logs to a tamper-evident store.** *M.* Audit
+  recommendation #4. Done 2026-09-28 at the library level.
+  `hv2_core::security::audit_chain` writes an HMAC-SHA256-chained JSON Lines
+  file a SIEM collector can tail. It catches an edited, deleted, reordered or
+  spliced record; the collector's copy catches tail truncation. The MCP log
+  (`McpConfig::audit_chain`) and the HTTP audit (`AuditLogConfig::chain`)
+  both feed it, and `AuditChain::from_env` opens one from `HV2_AUDIT_CHAIN`
+  and `HV2_AUDIT_KEY_FILE`. `verify_audit_log` checks a file, and an
+  independent Python writer built from the documentation interoperates.
+- [ ] **Install the HTTP audit middleware in a shipped server.** *S–M.* Found
+  2026-09-28: `rest::serve` builds its router without the middleware stack,
+  so no binary audits HTTP requests at all, chained or not. Done when: the
+  REST server applies the stack, with audit on and the chain opened from
+  the environment.
 - [ ] **Independent penetration test, SSP/POA&M, ATO.** 🔒 *organisational.*
   Audit recommendation #5.
 

@@ -133,6 +133,10 @@ pub struct McpConfig {
     /// when `create_session` hits `max_sessions`, so dead agent sessions don't
     /// permanently consume slots.
     pub session_idle_timeout: Duration,
+    /// A tamper-evident chain every audit entry is also appended to, beside
+    /// the bounded in-memory log. `None` keeps the in-memory log only. See
+    /// `hv2_core::security::audit_chain`.
+    pub audit_chain: Option<std::sync::Arc<hv2_core::security::AuditChain>>,
 }
 
 impl Default for McpConfig {
@@ -144,6 +148,7 @@ impl Default for McpConfig {
             rate_limit: 100,
             max_audit_entries: 10_000,
             session_idle_timeout: Duration::from_secs(30 * 60),
+            audit_chain: None,
         }
     }
 }
@@ -2040,11 +2045,7 @@ impl McpServer {
                 error: None,
                 execution_time_ms: 0,
             };
-            let mut log = self.audit_log.write().unwrap_or_else(|e| e.into_inner());
-            log.push_back(entry);
-            while log.len() > self.config.max_audit_entries {
-                log.pop_front();
-            }
+            self.record_audit(entry);
         }
 
         let hook = self
@@ -2322,6 +2323,26 @@ impl McpServer {
             execution_time_ms: response.execution_time_ms,
         };
 
+        self.record_audit(entry);
+    }
+
+    /// Keep `entry` in the bounded in-memory log, and append it to the
+    /// tamper-evident chain when one is configured.
+    ///
+    /// The chain is written before the in-memory lock is taken, so a slow
+    /// disk never extends that lock's hold time. A failed append is reported
+    /// at `error`: a gap in the audit trail is an event in its own right.
+    fn record_audit(&self, entry: AuditEntry) {
+        if let Some(chain) = &self.config.audit_chain {
+            match serde_json::to_value(&entry) {
+                Ok(event) => {
+                    if let Err(e) = chain.append("mcp", event) {
+                        tracing::error!(target: "audit_log", "audit chain append failed: {e}");
+                    }
+                }
+                Err(e) => tracing::error!(target: "audit_log", "audit entry not serialisable: {e}"),
+            }
+        }
         let mut log = self.audit_log.write().unwrap_or_else(|e| e.into_inner());
         log.push_back(entry);
         // Bound memory: drop the oldest entries beyond the configured cap. A
@@ -4282,6 +4303,42 @@ mod tests {
             let _ = session.call_tool(&server, "system.info", json!({})).await;
         }
         assert_eq!(server.get_audit_log(100).len(), 5);
+    }
+
+    /// With a chain configured, every tool call lands in it as well as in
+    /// the bounded in-memory log, and the file verifies.
+    #[tokio::test]
+    async fn tool_calls_are_appended_to_a_configured_audit_chain() {
+        let dir = std::env::temp_dir().join(format!("hv2-mcp-audit-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mcp.jsonl");
+        let _ = std::fs::remove_file(&path);
+        let key = [3u8; 32];
+        let chain = std::sync::Arc::new(
+            hv2_core::security::AuditChain::open_file(&path, key, false).unwrap(),
+        );
+
+        let server = McpServer::with_config(McpConfig {
+            rate_limit: u32::MAX,
+            audit_chain: Some(chain),
+            ..Default::default()
+        });
+        let session = server
+            .create_session("audited-agent", AgentCapabilities::full())
+            .unwrap();
+        for _ in 0..3 {
+            let _ = session.call_tool(&server, "system.info", json!({})).await;
+        }
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            hv2_core::security::audit_chain::verify(text.lines(), &key),
+            Ok(3)
+        );
+        assert!(text.contains("\"source\":\"mcp\""));
+        assert!(text.contains("system.info"));
+        assert!(text.contains("audited-agent"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]
