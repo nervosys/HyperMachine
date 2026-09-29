@@ -327,6 +327,14 @@ then it was XOR, which made every register forgeable. No guest can reach the
 vTPM today: it is not wired to a device model, so it provides no service to a
 running guest.
 
+**Note (2026-09-29):** the "command processing" above is now real for seven
+commands: `VirtualTpm::execute` parses TPM 2.0 wire-format buffers for
+Startup, Shutdown, SelfTest, GetRandom, GetCapability, PCR_Read and
+PCR_Extend. CreatePrimary, Sign, VerifySignature, Hash and Quote are not
+dispatched and answer `TPM_RC_COMMAND_CODE`. No new cryptography: PCR
+extension is the existing SHA-2 chain, and GetRandom is IronCrypto's
+HMAC_DRBG.
+
 ### 3.2 Secure Boot
 
 | Attribute                 | Detail                                                                                                                                                              |
