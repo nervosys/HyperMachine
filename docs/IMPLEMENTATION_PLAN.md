@@ -186,16 +186,16 @@ One library for all cryptography, and none of it hand-rolled.
     covers TLS 1.3 and 1.2, AES-GCM and ChaCha20-Poly1305, X25519/P-256/P-384,
     and RSA PKCS#1/PSS, ECDSA and Ed25519 verification. That is enough for
     the egress gateway, which talks to arbitrary servers.
-  - *Blocker 1, `ic-rsa`:* `ic-rustls` builds RSA signing keys with
-    `from_primes`, which panics at 4096 bits (K-8). An ordinary RSA-4096
-    certificate key would abort the process when the server starts.
+  - ~~*Blocker 1, `ic-rsa`:*~~ **Cleared 2026-09-29:** IronCrypto 0.2.2
+    fixed the RSA-4096 panic in `from_primes`, which `ic-rustls` uses to load
+    RSA keys.
   - *Blocker 2, `ring` cannot fully leave:* `rcgen`, which issues the
     egress gateway's per-sandbox CA and leaf certificates, has only `ring`
     and `aws-lc-rs` backends, and `ic-pkix` neither parses nor issues
     certificates. `reqwest`, `redis` and `hyper-rustls` would also need their
     no-provider features. The old "done when `cargo tree -i ring` is empty"
     is unreachable until IronCrypto can issue certificates.
-- [ ] **Adopt `ic-rustls`** once `ic-rsa` handles RSA-4096. *M.* Done when:
+- [ ] **Adopt `ic-rustls`.** *M.* Unblocked by IronCrypto 0.2.2. Done when:
   every rustls config in the workspace uses the IronCrypto provider, TLS
   tests pass, and `ring` remains only under `rcgen`, with that recorded.
 - [ ] **Migrate ML-DSA to `ic-mldsa`: wait.** *M.* Corrected 2026-09-28:

@@ -272,11 +272,6 @@ impl FipsCrypto {
     pub fn generate_rsa_keypair(&self, size: RsaKeySize) -> CryptoResult<RsaPrivateKey> {
         self.require_approved("rsa-pss-sha256")?;
         let bits = size.bytes() * 8;
-        // A modulus of exactly `bits` bits, top bit set: what `ic-rsa` would
-        // be asked for, measured the same way a stored key is.
-        let mut widest = vec![0u8; size.bytes()];
-        widest[0] = 0x80;
-        refuse_unsafe_rsa_width(&widest)?;
         let mut rng = HostRandom(self);
 
         let key = ic_rsa::generate(bits, &mut rng)
@@ -442,8 +437,6 @@ impl FipsCrypto {
             self.require_approved(id)?;
         }
         use ic_rsa::{Pkcs1Sha256, Pkcs1Sha384, Pkcs1Sha512, PssSha256, PssSha384, PssSha512};
-
-        refuse_unsafe_rsa_width(&private_key.public.n)?;
 
         // Rebuilt from the primes rather than from (n, e, d), so signing uses
         // the Chinese remainder theorem. Without them every signature is a
@@ -620,37 +613,6 @@ fn ecdsa_fips_id(curve: EcCurve) -> &'static str {
     }
 }
 
-/// The widest RSA modulus `ic-rsa` 0.1.3 can take a private-key path for.
-///
-/// Its big integers are 64 limbs (4096 bits), and deriving `d` computes
-/// `(1 + phi * k) / e` over `limbs + 1` limbs, one past the end of the array
-/// once the modulus fills all 64. Key generation and `from_primes` both take
-/// that path, so for a modulus above 4032 bits each panics with an index out
-/// of bounds. Under the workspace's `panic = "abort"`, that kills a release
-/// build outright. The same function also drops the product's top carry at
-/// that width, so a fix that only stopped the panic would still derive the
-/// wrong `d`.
-///
-/// Refused here, before `ic-rsa` is called, until a release fixes it.
-/// Verification is a public-key operation and never takes this path, so a
-/// 4096-bit signature from elsewhere still verifies.
-const RSA_PRIVATE_OPS_MAX_BITS: usize = 4032;
-
-/// Refuse a private-key operation on a modulus `ic-rsa` would panic on.
-fn refuse_unsafe_rsa_width(modulus: &[u8]) -> CryptoResult<()> {
-    let bits = modulus.iter().position(|&b| b != 0).map_or(0, |i| {
-        (modulus.len() - i) * 8 - modulus[i].leading_zeros() as usize
-    });
-    if bits > RSA_PRIVATE_OPS_MAX_BITS {
-        return Err(CryptoError::UnsupportedAlgorithm(format!(
-            "RSA private-key operations above {RSA_PRIVATE_OPS_MAX_BITS} bits (this key: \
-             {bits}): ic-rsa 0.1.3 overruns its 4096-bit integers deriving the private \
-             exponent. Use RSA-3072, or ECDSA P-384/P-521, until it is fixed"
-        )));
-    }
-    Ok(())
-}
-
 /// A big-endian public exponent as the `u64` IronCrypto takes.
 ///
 /// Stored here as bytes because that is how it arrives in a certificate. It is
@@ -790,56 +752,13 @@ mod tests {
         rsa_round_trip_at(RsaKeySize::Rsa3072);
     }
 
-    /// RSA-4096 is refused, not attempted: `ic-rsa` 0.1.3 panics deriving
-    /// the private exponent at that width (see `RSA_PRIVATE_OPS_MAX_BITS`),
-    /// and under `panic = "abort"` a panic is the whole process. When a fixed
-    /// release lands, replace this with `rsa_round_trip_at(RsaKeySize::Rsa4096)`.
+    /// RSA-4096 end to end. `ic-rsa` 0.1.x and 0.2.1 panicked deriving the
+    /// private exponent at this width, in key generation and in `from_primes`,
+    /// which signing calls; HyperMachine refused 4096 until 0.2.2 fixed it.
+    /// This is the round trip that would have caught it.
     #[test]
-    fn rsa_4096_private_key_operations_are_refused_not_attempted() {
-        let crypto = get_crypto();
-        assert!(matches!(
-            crypto.generate_rsa_keypair(RsaKeySize::Rsa4096),
-            Err(CryptoError::UnsupportedAlgorithm(_))
-        ));
-
-        // Signing rebuilds the key from its primes, the other path into the
-        // same code. A 4096-bit key from elsewhere must be refused before it.
-        let mut n = vec![0xffu8; 512];
-        n[511] = 0xfd;
-        let key = RsaPrivateKey {
-            public: RsaPublicKey {
-                n,
-                e: vec![0x01, 0x00, 0x01],
-                size: RsaKeySize::Rsa4096,
-            },
-            d: vec![1; 512],
-            p: vec![0xff; 256],
-            q: vec![0xff; 256],
-            dp: vec![1; 256],
-            dq: vec![1; 256],
-            qinv: vec![1; 256],
-        };
-        assert!(matches!(
-            crypto.rsa_sign(&key, b"x", SignatureAlgorithm::RsaPssSha256),
-            Err(CryptoError::UnsupportedAlgorithm(_))
-        ));
-    }
-
-    /// The guard measures bits, not bytes: 3072 bits passes, a leading zero
-    /// byte is not counted as width, and a full 4096-bit modulus is refused.
-    #[test]
-    fn the_rsa_width_guard_measures_bits_not_bytes() {
-        assert!(refuse_unsafe_rsa_width(&[0xff; 384]).is_ok());
-        // 3072 bits behind a leading zero byte: 385 bytes, still 3072 bits.
-        let mut padded = vec![0xffu8; 385];
-        padded[0] = 0;
-        assert!(
-            refuse_unsafe_rsa_width(&padded).is_ok(),
-            "3072 bits in 385 bytes"
-        );
-        let mut over = vec![0u8; 512];
-        over[0] = 0x80;
-        assert!(refuse_unsafe_rsa_width(&over).is_err(), "4096 bits");
+    fn rsa_4096_generates_signs_and_verifies() {
+        rsa_round_trip_at(RsaKeySize::Rsa4096);
     }
 
     #[test]
