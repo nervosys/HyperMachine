@@ -84,7 +84,7 @@ are no longer in the build.
 - **Approved asymmetric primitives:** RSA (FIPS key sizes), ECDSA on NIST curves
   (P‑256/384/521).
 - **NIST Post‑Quantum (CNSA 2.0‑relevant):** ML‑KEM (FIPS 203), ML‑DSA
-  (FIPS 204), SLH‑DSA (FIPS 205) via RustCrypto — directly relevant to defense
+  (FIPS 204) via IronCrypto, SLH‑DSA (FIPS 205) via RustCrypto — directly relevant to defense
   long‑term‑confidentiality requirements.
 
 ### 3.2 Honest limitations
@@ -95,8 +95,8 @@ are no longer in the build.
   requires either linking a validated module (e.g., a FIPS build of
   BoringSSL/OpenSSL/aws‑lc) and running it in its validated configuration, or
   pursuing module validation.
-- **PQC implementations** (RustCrypto) are standards‑conformant but not CAVP‑
-  certified.
+- **PQC implementations** (IronCrypto for ML‑KEM and ML‑DSA, RustCrypto for
+  SLH‑DSA) are checked against NIST's ACVP vectors but not CAVP‑certified.
 - **There is no memory encryption.** Stated more bluntly than a previous
   revision of this document, which said the layer was "not fully activated
   end‑to‑end" — that reads as partial, and it is not partial.

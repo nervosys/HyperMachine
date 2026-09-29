@@ -387,6 +387,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- **ML-KEM and ML-DSA come from IronCrypto** (`hv2-core`). All six
+  parameter sets now use `ic-mlkem` and `ic-mldsa` 0.2.3, checked against
+  NIST's ACVP vectors and self-tested by `ic-fips`, so `FipsMode::Strict`
+  admits them. Stored keys carry over: both use the same FIPS seeds as
+  RustCrypto's crates did, and tests prove each side's keys, ciphertexts and
+  signatures work with the other. ML-DSA signing is now hedged (FIPS 204's
+  default) rather than deterministic. SLH-DSA stays on RustCrypto.
 - **IronCrypto 0.2.2** (`hv2-core`, `hv2-api`), from 0.1.x: all 13 `ic-*`
   crates. It brings the RSA-4096 fix reported from here, faster
   SHA-256/HMAC/HKDF on SHA-NI and faster AES-GCM, constant-time fixes in the

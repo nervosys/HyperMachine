@@ -1,9 +1,11 @@
 //! Post-Quantum Cryptography Module
 //!
-//! Provides quantum-resistant cryptographic algorithms standardized by NIST,
-//! backed by the pure-Rust [RustCrypto] implementations `ml-kem`, `ml-dsa`, and
-//! `slh-dsa`. These are real lattice-based (ML-KEM/ML-DSA) and hash-based
-//! (SLH-DSA) schemes — not placeholders.
+//! Provides quantum-resistant cryptographic algorithms standardized by NIST.
+//! ML-KEM and ML-DSA are IronCrypto's `ic-mlkem` and `ic-mldsa`, each
+//! parameter set checked against NIST's ACVP vectors and self-tested by
+//! `ic-fips`, so they sit inside the module boundary `FipsMode::Strict` holds
+//! to. SLH-DSA is still the pure-Rust [RustCrypto] `slh-dsa`, which Strict
+//! refuses: IronCrypto has no SLH-DSA yet.
 //!
 //! The implementations are compiled when the `pqc` feature is enabled (on by
 //! default). With `--no-default-features` the operations return
@@ -21,9 +23,10 @@
 //! ## Key serialization
 //!
 //! The `data` field of each key/ciphertext/signature stores the canonical
-//! byte encoding from the underlying crate. ML-KEM decapsulation keys are
-//! stored as their 64-byte FIPS 203 seed (the preferred serialization), from
-//! which the full key is deterministically reconstructed.
+//! FIPS byte encoding. ML-KEM decapsulation keys are stored as their 64-byte
+//! FIPS 203 seed and ML-DSA signing keys as their 32-byte FIPS 204 seed, from
+//! which the full keys are deterministically reconstructed. Those are the
+//! encodings RustCrypto's crates used before, so stored keys carry over.
 //!
 //! ## Hybrid Mode
 //!
@@ -35,6 +38,8 @@
 use super::fips::{CryptoError, CryptoResult, FipsCrypto};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+#[cfg(feature = "pqc")]
+use zeroize::Zeroizing;
 
 // ============================================================================
 // ML-KEM (CRYSTALS-Kyber) - Key Encapsulation
@@ -78,6 +83,15 @@ impl MlKemParameterSet {
 
     pub fn shared_secret_bytes(&self) -> usize {
         32 // Always 256 bits
+    }
+
+    /// The name ic-fips self-tests and indicates this parameter set under.
+    pub fn fips_id(&self) -> &'static str {
+        match self {
+            MlKemParameterSet::MlKem512 => "ml-kem-512",
+            MlKemParameterSet::MlKem768 => "ml-kem-768",
+            MlKemParameterSet::MlKem1024 => "ml-kem-1024",
+        }
     }
 
     pub fn security_level(&self) -> u8 {
@@ -169,6 +183,15 @@ impl MlDsaParameterSet {
             MlDsaParameterSet::MlDsa44 => 2420,
             MlDsaParameterSet::MlDsa65 => 3309,
             MlDsaParameterSet::MlDsa87 => 4627,
+        }
+    }
+
+    /// The name ic-fips self-tests and indicates this parameter set under.
+    pub fn fips_id(&self) -> &'static str {
+        match self {
+            MlDsaParameterSet::MlDsa44 => "ml-dsa-44",
+            MlDsaParameterSet::MlDsa65 => "ml-dsa-65",
+            MlDsaParameterSet::MlDsa87 => "ml-dsa-87",
         }
     }
 
@@ -337,7 +360,7 @@ pub enum HybridSignatureScheme {
 }
 
 // ============================================================================
-// FipsCrypto Implementation (real, RustCrypto-backed)
+// FipsCrypto Implementation (IronCrypto for ML-KEM/ML-DSA, RustCrypto for SLH-DSA)
 // ============================================================================
 
 /// A `rand_core` 0.10 CSPRNG adapter sourcing entropy from the OS via `rand`'s
@@ -382,43 +405,47 @@ impl slh_dsa::signature::rand_core::TryRng for PqcOsRng {
 #[cfg(feature = "pqc")]
 impl slh_dsa::signature::rand_core::TryCryptoRng for PqcOsRng {}
 
-/// Dispatch an ML-KEM operation over the concrete parameter type, binding it to
-/// the type alias `$alias` inside `$body`.
+/// Dispatch an ML-KEM operation over the parameter set, binding the scheme
+/// type to `$kem` and its module (for the size constants) to `$m`.
 #[cfg(feature = "pqc")]
 macro_rules! mlkem_with {
-    ($params:expr, $alias:ident, $body:block) => {
+    ($params:expr, $kem:ident, $m:ident, $body:block) => {
         match $params {
             MlKemParameterSet::MlKem512 => {
-                type $alias = ml_kem::MlKem512;
+                use ic_mlkem::kem512 as $m;
+                type $kem = ic_mlkem::MlKem512;
                 $body
             }
             MlKemParameterSet::MlKem768 => {
-                type $alias = ml_kem::MlKem768;
+                use ic_mlkem::kem as $m;
+                type $kem = ic_mlkem::MlKem768;
                 $body
             }
             MlKemParameterSet::MlKem1024 => {
-                type $alias = ml_kem::MlKem1024;
+                use ic_mlkem::kem1024 as $m;
+                type $kem = ic_mlkem::MlKem1024;
                 $body
             }
         }
     };
 }
 
-/// Dispatch an ML-DSA operation over the concrete parameter type.
+/// Dispatch an ML-DSA operation over the parameter set, binding its module --
+/// functions and size constants alike -- to `$m`.
 #[cfg(feature = "pqc")]
 macro_rules! mldsa_with {
-    ($params:expr, $alias:ident, $body:block) => {
+    ($params:expr, $m:ident, $body:block) => {
         match $params {
             MlDsaParameterSet::MlDsa44 => {
-                type $alias = ml_dsa::MlDsa44;
+                use ic_mldsa::sign44 as $m;
                 $body
             }
             MlDsaParameterSet::MlDsa65 => {
-                type $alias = ml_dsa::MlDsa65;
+                use ic_mldsa::sign as $m;
                 $body
             }
             MlDsaParameterSet::MlDsa87 => {
-                type $alias = ml_dsa::MlDsa87;
+                use ic_mldsa::sign87 as $m;
                 $body
             }
         }
@@ -458,24 +485,54 @@ macro_rules! slhdsa_with {
     };
 }
 
+/// `d` and `z` from a 64-byte FIPS 203 seed.
+#[cfg(feature = "pqc")]
+fn split_seed(seed: &[u8; 64]) -> (&[u8; 32], &[u8; 32]) {
+    let (d, z) = seed.split_at(32);
+    (
+        d.try_into().expect("32 of 64"),
+        z.try_into().expect("32 of 64"),
+    )
+}
+
 #[cfg(feature = "pqc")]
 impl FipsCrypto {
     // ========================================================================
-    // ML-KEM Operations (FIPS 203, via `ml-kem`)
+    // ML-KEM Operations (FIPS 203, via IronCrypto's `ic-mlkem`)
     // ========================================================================
 
     /// Generate an ML-KEM key pair. The secret key stores the 64-byte FIPS 203
-    /// seed; the public (encapsulation) key stores its canonical encoding.
+    /// seed `d || z`; the public (encapsulation) key stores its encoding.
+    ///
+    /// The seed is the same one RustCrypto's `ml-kem` stored before this
+    /// module moved to IronCrypto, so keys generated then still decapsulate.
     pub fn ml_kem_keygen(&self, params: MlKemParameterSet) -> CryptoResult<MlKemSecretKey> {
-        self.require_inside_boundary("ML-KEM")?;
-        use ml_kem::kem::{Kem, KeyExport};
+        self.require_approved(params.fips_id())?;
+        let mut seed = Zeroizing::new([0u8; 64]);
+        self.random_bytes(&mut seed[..])?;
 
-        let (secret_data, public_data) = mlkem_with!(params, P, {
-            let (dk, ek) = P::generate_keypair();
-            let seed = dk.to_seed().ok_or_else(|| {
-                CryptoError::KeyDerivationFailed("ML-KEM seed unavailable".into())
-            })?;
-            (seed.to_vec(), ek.to_bytes().to_vec())
+        let public_data = mlkem_with!(params, Kem, m, {
+            let mut ek = [0u8; m::ENCAPS_KEY_LEN];
+            let mut dk = Zeroizing::new([0u8; m::DECAPS_KEY_LEN]);
+            let (d, z) = split_seed(&seed);
+            Kem::keygen_deterministic(d, z, &mut ek, &mut dk);
+
+            // FIPS 140-3's pairwise consistency test: the two halves must
+            // agree on a secret before the pair is handed to anyone.
+            let mut msg = Zeroizing::new([0u8; 32]);
+            self.random_bytes(&mut msg[..])?;
+            let mut ct = [0u8; m::CIPHERTEXT_LEN];
+            let mut sent = Zeroizing::new([0u8; m::SHARED_SECRET_LEN]);
+            let mut received = Zeroizing::new([0u8; m::SHARED_SECRET_LEN]);
+            Kem::encapsulate_deterministic(&msg, &ek, &mut ct, &mut sent);
+            Kem::decapsulate(&dk, &ct, &mut received)
+                .map_err(|e| CryptoError::KeyDerivationFailed(format!("ML-KEM: {e}")))?;
+            if *sent != *received {
+                return Err(CryptoError::KeyDerivationFailed(
+                    "ML-KEM key pair failed its pairwise consistency test".into(),
+                ));
+            }
+            ek.to_vec()
         });
 
         Ok(MlKemSecretKey {
@@ -483,7 +540,7 @@ impl FipsCrypto {
                 data: public_data,
                 parameter_set: params,
             },
-            data: secret_data,
+            data: seed.to_vec(),
         })
     }
 
@@ -492,17 +549,21 @@ impl FipsCrypto {
         &self,
         public_key: &MlKemPublicKey,
     ) -> CryptoResult<(MlKemCiphertext, Vec<u8>)> {
-        self.require_inside_boundary("ML-KEM")?;
-        use ml_kem::kem::{Encapsulate, Key};
-        use ml_kem::EncapsulationKey;
-
         let params = public_key.parameter_set;
-        let (ciphertext_data, shared_secret) = mlkem_with!(params, P, {
-            let arr = Key::<EncapsulationKey<P>>::try_from(&public_key.data[..])
+        self.require_approved(params.fips_id())?;
+        let mut msg = Zeroizing::new([0u8; 32]);
+        self.random_bytes(&mut msg[..])?;
+
+        let (ciphertext_data, shared_secret) = mlkem_with!(params, Kem, m, {
+            let ek: &[u8; m::ENCAPS_KEY_LEN] = public_key.data[..]
+                .try_into()
                 .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM public key".into()))?;
-            let ek = EncapsulationKey::<P>::new(&arr)
+            // FIPS 203's encapsulation-key check: every coefficient reduced.
+            Kem::validate_encapsulation_key(ek)
                 .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM public key".into()))?;
-            let (ct, ss) = ek.encapsulate();
+            let mut ct = [0u8; m::CIPHERTEXT_LEN];
+            let mut ss = [0u8; m::SHARED_SECRET_LEN];
+            Kem::encapsulate_deterministic(&msg, ek, &mut ct, &mut ss);
             (ct.to_vec(), ss.to_vec())
         });
 
@@ -521,41 +582,56 @@ impl FipsCrypto {
         secret_key: &MlKemSecretKey,
         ciphertext: &MlKemCiphertext,
     ) -> CryptoResult<Vec<u8>> {
-        self.require_inside_boundary("ML-KEM")?;
-        use ml_kem::kem::{Ciphertext, Decapsulate};
-        use ml_kem::DecapsulationKey;
+        let params = secret_key.public.parameter_set;
+        self.require_approved(params.fips_id())?;
 
-        if ciphertext.parameter_set != secret_key.public.parameter_set {
+        if ciphertext.parameter_set != params {
             return Err(CryptoError::InvalidInput("Parameter set mismatch".into()));
         }
+        let seed: &[u8; 64] = secret_key.data[..]
+            .try_into()
+            .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM secret key".into()))?;
 
-        let params = secret_key.public.parameter_set;
-        let shared_secret = mlkem_with!(params, P, {
-            let seed = ml_kem::Seed::try_from(&secret_key.data[..])
-                .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM secret key".into()))?;
-            let dk = DecapsulationKey::<P>::from_seed(seed);
-            let ct = Ciphertext::<P>::try_from(&ciphertext.data[..])
+        let shared_secret = mlkem_with!(params, Kem, m, {
+            let mut ek = [0u8; m::ENCAPS_KEY_LEN];
+            let mut dk = Zeroizing::new([0u8; m::DECAPS_KEY_LEN]);
+            let (d, z) = split_seed(seed);
+            Kem::keygen_deterministic(d, z, &mut ek, &mut dk);
+            let ct: &[u8; m::CIPHERTEXT_LEN] = ciphertext.data[..]
+                .try_into()
                 .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM ciphertext".into()))?;
-            dk.decapsulate(&ct).to_vec()
+            let mut ss = [0u8; m::SHARED_SECRET_LEN];
+            Kem::decapsulate(&dk, ct, &mut ss)
+                .map_err(|_| CryptoError::InvalidInput("invalid ML-KEM ciphertext".into()))?;
+            ss.to_vec()
         });
 
         Ok(shared_secret)
     }
 
     // ========================================================================
-    // ML-DSA Operations (FIPS 204, via `ml-dsa`)
+    // ML-DSA Operations (FIPS 204, via IronCrypto's `ic-mldsa`)
     // ========================================================================
 
-    /// Generate an ML-DSA key pair.
+    /// Generate an ML-DSA key pair. The secret key stores the 32-byte FIPS 204
+    /// seed `xi`, as RustCrypto's `ml-dsa` did, so earlier keys still sign.
+    ///
+    /// `keygen` runs FIPS 140-3's pairwise consistency test itself and
+    /// reports it: a failure is an error here, never a key.
     pub fn ml_dsa_keygen(&self, params: MlDsaParameterSet) -> CryptoResult<MlDsaSecretKey> {
-        self.require_inside_boundary("ML-DSA")?;
-        use ml_dsa::signature::Keypair;
-        use ml_dsa::{Generate, KeyExport, SigningKey};
+        self.require_approved(params.fips_id())?;
+        let mut xi = Zeroizing::new([0u8; 32]);
+        self.random_bytes(&mut xi[..])?;
 
-        let (secret_data, public_data) = mldsa_with!(params, P, {
-            let sk = SigningKey::<P>::generate();
-            let vk = sk.verifying_key();
-            (sk.to_bytes().to_vec(), vk.to_bytes().to_vec())
+        let public_data = mldsa_with!(params, m, {
+            let mut pk = [0u8; m::PUBLIC_KEY_LEN];
+            let mut sk = Zeroizing::new([0u8; m::SECRET_KEY_LEN]);
+            if !m::keygen(&xi, &mut pk, &mut sk) {
+                return Err(CryptoError::KeyDerivationFailed(
+                    "ML-DSA key pair failed its pairwise consistency test".into(),
+                ));
+            }
+            pk.to_vec()
         });
 
         Ok(MlDsaSecretKey {
@@ -563,29 +639,41 @@ impl FipsCrypto {
                 data: public_data,
                 parameter_set: params,
             },
-            data: secret_data,
+            data: xi.to_vec(),
         })
     }
 
-    /// ML-DSA sign.
+    /// ML-DSA sign: pure ML-DSA, empty context, hedged with fresh randomness
+    /// (FIPS 204's default). RustCrypto's `ml-dsa` signed deterministically;
+    /// both verify identically.
     pub fn ml_dsa_sign(
         &self,
         secret_key: &MlDsaSecretKey,
         message: &[u8],
     ) -> CryptoResult<MlDsaSignature> {
-        self.require_inside_boundary("ML-DSA")?;
-        use ml_dsa::signature::Signer;
-        use ml_dsa::{KeyInit, SigningKey};
-
         let params = secret_key.public.parameter_set;
-        let sig_data = mldsa_with!(params, P, {
-            let arr = ml_dsa::common::Key::<SigningKey<P>>::try_from(&secret_key.data[..])
-                .map_err(|_| CryptoError::InvalidInput("invalid ML-DSA secret key".into()))?;
-            let sk = SigningKey::<P>::new(&arr);
-            let sig = sk
-                .try_sign(message)
-                .map_err(|e| CryptoError::EncryptionFailed(format!("ML-DSA sign: {e}")))?;
-            sig.encode().to_vec()
+        self.require_approved(params.fips_id())?;
+        let xi: &[u8; 32] = secret_key.data[..]
+            .try_into()
+            .map_err(|_| CryptoError::InvalidInput("invalid ML-DSA secret key".into()))?;
+        let mut rnd = Zeroizing::new([0u8; 32]);
+        self.random_bytes(&mut rnd[..])?;
+
+        let sig_data = mldsa_with!(params, m, {
+            let mut pk = [0u8; m::PUBLIC_KEY_LEN];
+            let mut sk = Zeroizing::new([0u8; m::SECRET_KEY_LEN]);
+            if !m::keygen(xi, &mut pk, &mut sk) {
+                return Err(CryptoError::InvalidInput(
+                    "invalid ML-DSA secret key".into(),
+                ));
+            }
+            let mut sig = vec![0u8; m::SIGNATURE_LEN];
+            let sig_arr: &mut [u8; m::SIGNATURE_LEN] =
+                (&mut sig[..]).try_into().expect("sized above");
+            if !m::sign(&sk, message, &[], &rnd, sig_arr) {
+                return Err(CryptoError::EncryptionFailed("ML-DSA sign failed".into()));
+            }
+            sig
         });
 
         Ok(MlDsaSignature {
@@ -601,25 +689,20 @@ impl FipsCrypto {
         message: &[u8],
         signature: &MlDsaSignature,
     ) -> CryptoResult<bool> {
-        self.require_inside_boundary("ML-DSA")?;
-        use ml_dsa::signature::Verifier;
-        use ml_dsa::{KeyInit, Signature, VerifyingKey};
+        self.require_approved(public_key.parameter_set.fips_id())?;
 
         if signature.parameter_set != public_key.parameter_set {
             return Ok(false);
         }
 
-        let valid = mldsa_with!(public_key.parameter_set, P, {
-            let arr = match ml_dsa::common::Key::<VerifyingKey<P>>::try_from(&public_key.data[..]) {
-                Ok(a) => a,
-                Err(_) => return Ok(false),
+        let valid = mldsa_with!(public_key.parameter_set, m, {
+            let Ok(pk) = <&[u8; m::PUBLIC_KEY_LEN]>::try_from(&public_key.data[..]) else {
+                return Ok(false);
             };
-            let vk = VerifyingKey::<P>::new(&arr);
-            let sig = match Signature::<P>::try_from(&signature.data[..]) {
-                Ok(s) => s,
-                Err(_) => return Ok(false),
+            let Ok(sig) = <&[u8; m::SIGNATURE_LEN]>::try_from(&signature.data[..]) else {
+                return Ok(false);
             };
-            vk.verify(message, &sig).is_ok()
+            m::verify(pk, message, &[], sig)
         });
 
         Ok(valid)
@@ -716,7 +799,7 @@ impl FipsCrypto {
 
     /// ML-KEM key generation (requires the `pqc` feature).
     pub fn ml_kem_keygen(&self, _params: MlKemParameterSet) -> CryptoResult<MlKemSecretKey> {
-        self.require_inside_boundary("ML-KEM")?;
+        self.require_approved(_params.fips_id())?;
         Self::pqc_disabled()
     }
     /// ML-KEM encapsulation (requires the `pqc` feature).
@@ -724,7 +807,7 @@ impl FipsCrypto {
         &self,
         _public_key: &MlKemPublicKey,
     ) -> CryptoResult<(MlKemCiphertext, Vec<u8>)> {
-        self.require_inside_boundary("ML-KEM")?;
+        self.require_approved(_public_key.parameter_set.fips_id())?;
         Self::pqc_disabled()
     }
     /// ML-KEM decapsulation (requires the `pqc` feature).
@@ -733,12 +816,12 @@ impl FipsCrypto {
         _secret_key: &MlKemSecretKey,
         _ciphertext: &MlKemCiphertext,
     ) -> CryptoResult<Vec<u8>> {
-        self.require_inside_boundary("ML-KEM")?;
+        self.require_approved(_secret_key.public.parameter_set.fips_id())?;
         Self::pqc_disabled()
     }
     /// ML-DSA key generation (requires the `pqc` feature).
     pub fn ml_dsa_keygen(&self, _params: MlDsaParameterSet) -> CryptoResult<MlDsaSecretKey> {
-        self.require_inside_boundary("ML-DSA")?;
+        self.require_approved(_params.fips_id())?;
         Self::pqc_disabled()
     }
     /// ML-DSA sign (requires the `pqc` feature).
@@ -747,7 +830,7 @@ impl FipsCrypto {
         _secret_key: &MlDsaSecretKey,
         _message: &[u8],
     ) -> CryptoResult<MlDsaSignature> {
-        self.require_inside_boundary("ML-DSA")?;
+        self.require_approved(_secret_key.public.parameter_set.fips_id())?;
         Self::pqc_disabled()
     }
     /// ML-DSA verify (requires the `pqc` feature).
@@ -757,7 +840,7 @@ impl FipsCrypto {
         _message: &[u8],
         _signature: &MlDsaSignature,
     ) -> CryptoResult<bool> {
-        self.require_inside_boundary("ML-DSA")?;
+        self.require_approved(_public_key.parameter_set.fips_id())?;
         Self::pqc_disabled()
     }
     /// SLH-DSA key generation (requires the `pqc` feature).
@@ -905,34 +988,119 @@ mod tests {
             .unwrap());
     }
 
-    /// `Strict` refuses the post-quantum algorithms: they come from RustCrypto,
-    /// outside the IronCrypto boundary `ic-fips` self-tests and indicates.
-    /// `Enabled` does not refuse, so they still work there.
+    /// `Strict` admits ML-KEM and ML-DSA now that they are IronCrypto's and
+    /// `ic-fips` self-tests every parameter set, and still refuses SLH-DSA,
+    /// which is RustCrypto's and outside that boundary.
     #[cfg(feature = "pqc")]
     #[test]
-    fn strict_mode_refuses_what_ic_fips_cannot_vouch_for() {
+    fn strict_mode_admits_ironcrypto_pqc_and_refuses_the_rest() {
         let strict = FipsCrypto::new(FipsMode::Strict).unwrap();
         let refused = |r: CryptoResult<()>| matches!(r, Err(CryptoError::AlgorithmNotApproved(_)));
-        assert!(refused(
-            strict
-                .ml_kem_keygen(MlKemParameterSet::MlKem768)
-                .map(|_| ())
-        ));
-        assert!(refused(
-            strict.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).map(|_| ())
-        ));
+
+        let kem = strict.ml_kem_keygen(MlKemParameterSet::MlKem768).unwrap();
+        let (ct, sent) = strict.ml_kem_encaps(&kem.public).unwrap();
+        assert_eq!(strict.ml_kem_decaps(&kem, &ct).unwrap(), sent);
+
+        let sk = strict.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).unwrap();
+        let sig = strict.ml_dsa_sign(&sk, b"m").unwrap();
+        assert!(strict.ml_dsa_verify(&sk.public, b"m", &sig).unwrap());
+
         assert!(refused(
             strict
                 .slh_dsa_keygen(SlhDsaParameterSet::Sha2_128f)
                 .map(|_| ())
         ));
+    }
 
-        let enabled = FipsCrypto::new(FipsMode::Enabled).unwrap();
-        let sk = enabled.ml_dsa_keygen(MlDsaParameterSet::MlDsa65).unwrap();
-        let sig = enabled.ml_dsa_sign(&sk, b"m").unwrap();
-        assert!(enabled.ml_dsa_verify(&sk.public, b"m", &sig).unwrap());
-        // A key made where it was allowed is still refused where it is not.
-        assert!(refused(strict.ml_dsa_sign(&sk, b"m").map(|_| ())));
+    /// Keys stored before the move to IronCrypto were RustCrypto's seeds.
+    /// The same ML-KEM seed must give the same encapsulation key, and each
+    /// side must decapsulate what the other encapsulated.
+    #[cfg(feature = "pqc")]
+    #[test]
+    fn ml_kem_interoperates_with_rustcrypto_for_every_parameter_set() {
+        use ml_kem::kem::{Ciphertext, Decapsulate, Encapsulate, Key, KeyExport};
+        use ml_kem::{DecapsulationKey, EncapsulationKey};
+
+        // A macro, not a generic fn: ml-kem does not export its parameter trait.
+        macro_rules! check {
+            ($p:ty, $params:expr) => {{
+                let crypto = get_crypto();
+                let params = $params;
+                let ours = crypto.ml_kem_keygen(params).unwrap();
+                let seed = ml_kem::Seed::try_from(&ours.data[..]).unwrap();
+                let theirs = DecapsulationKey::<$p>::from_seed(seed);
+                let ek = theirs.encapsulation_key();
+                assert_eq!(ek.to_bytes().to_vec(), ours.public.data, "{params:?}");
+
+                // Theirs encapsulates, ours decapsulates.
+                let (ct, sent) = ek.encapsulate();
+                let ct_ours = MlKemCiphertext {
+                    data: ct.to_vec(),
+                    parameter_set: params,
+                };
+                assert_eq!(
+                    crypto.ml_kem_decaps(&ours, &ct_ours).unwrap(),
+                    sent.to_vec()
+                );
+
+                // Ours encapsulates, theirs decapsulates.
+                let (ct, sent) = crypto.ml_kem_encaps(&ours.public).unwrap();
+                let ct = Ciphertext::<$p>::try_from(&ct.data[..]).unwrap();
+                assert_eq!(theirs.decapsulate(&ct).to_vec(), sent, "{params:?}");
+
+                let _ = Key::<EncapsulationKey<$p>>::try_from(&ours.public.data[..]).unwrap();
+            }};
+        }
+
+        check!(ml_kem::MlKem512, MlKemParameterSet::MlKem512);
+        check!(ml_kem::MlKem768, MlKemParameterSet::MlKem768);
+        check!(ml_kem::MlKem1024, MlKemParameterSet::MlKem1024);
+    }
+
+    /// The same for ML-DSA: one seed, one verifying key, and each side's
+    /// signatures verify under the other.
+    #[cfg(feature = "pqc")]
+    #[test]
+    fn ml_dsa_interoperates_with_rustcrypto_for_every_parameter_set() {
+        use ml_dsa::signature::{Keypair, Signer, Verifier};
+        use ml_dsa::{KeyExport, KeyInit, Signature, SigningKey, VerifyingKey};
+
+        macro_rules! check {
+            ($p:ty, $params:expr) => {{
+                let crypto = get_crypto();
+                let params = $params;
+                let ours = crypto.ml_dsa_keygen(params).unwrap();
+                let seed = ml_dsa::common::Key::<SigningKey<$p>>::try_from(&ours.data[..]).unwrap();
+                let theirs = SigningKey::<$p>::new(&seed);
+                let vk = theirs.verifying_key();
+                assert_eq!(vk.to_bytes().to_vec(), ours.public.data, "{params:?}");
+
+                let message = b"signed on one side, verified on the other";
+                let sig = crypto.ml_dsa_sign(&ours, message).unwrap();
+                let parsed = Signature::<$p>::try_from(&sig.data[..]).unwrap();
+                assert!(vk.verify(message, &parsed).is_ok(), "{params:?}");
+
+                let theirs_sig = MlDsaSignature {
+                    data: theirs.try_sign(message).unwrap().encode().to_vec(),
+                    parameter_set: params,
+                };
+                assert!(crypto
+                    .ml_dsa_verify(&ours.public, message, &theirs_sig)
+                    .unwrap());
+                assert!(!crypto
+                    .ml_dsa_verify(&ours.public, b"other", &theirs_sig)
+                    .unwrap());
+
+                let vk_bytes =
+                    ml_dsa::common::Key::<VerifyingKey<$p>>::try_from(&ours.public.data[..])
+                        .unwrap();
+                let _ = VerifyingKey::<$p>::new(&vk_bytes);
+            }};
+        }
+
+        check!(ml_dsa::MlDsa44, MlDsaParameterSet::MlDsa44);
+        check!(ml_dsa::MlDsa65, MlDsaParameterSet::MlDsa65);
+        check!(ml_dsa::MlDsa87, MlDsaParameterSet::MlDsa87);
     }
 
     /// Every ML-DSA parameter set signs and verifies, not only ML-DSA-65:
