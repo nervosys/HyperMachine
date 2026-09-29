@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 pub mod agentic;
+pub mod jobs_cmd;
 pub mod mcp_server;
 pub mod sandbox_cmd;
 pub mod t1_manager;

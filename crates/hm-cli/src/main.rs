@@ -78,6 +78,14 @@ enum Commands {
         rest_port: u16,
     },
 
+    /// A durable queue of sandboxed host jobs, and the workers that run them
+    Jobs {
+        #[command(flatten)]
+        store: hm_cli::jobs_cmd::StoreArgs,
+        #[command(subcommand)]
+        command: hm_cli::jobs_cmd::JobsCommand,
+    },
+
     /// Run host programs under enforced limits (no VM needed)
     Sandbox {
         #[command(subcommand)]
@@ -310,6 +318,10 @@ async fn main() -> Result<()> {
             grpc_port,
             rest_port,
         } => handle_serve(grpc_port, rest_port).await?,
+        Commands::Jobs { store, command } => {
+            let code = hm_cli::jobs_cmd::run(&store, command).await?;
+            std::process::exit(code);
+        }
         Commands::Sandbox {
             command: SandboxCommands::Run(args),
         } => {

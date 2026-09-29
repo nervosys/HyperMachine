@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **`hm jobs`, a durable job queue** (`hv2-jobs`, `hm-cli`): programs
+  queued in a shared directory and run by workers under the process sandbox,
+  with labels (e.g. `gpu`), leases that requeue a lost worker's job,
+  graceful stops, `HM_JOB_ID`, kept logs and exit codes, and a REST mirror
+  (`hm jobs serve`, `/api/v1/jobs`). No VM, daemon or database. Claims are
+  exclusive file creations, because `rename` is not exclusive on Windows.
+  See `docs/JOBS.md`; checked by `tools/e2e-jobs.sh` on Windows and Linux.
 - **`hm sandbox run`** (`hm-cli`): run a host program under the process
   sandbox from the command line, with limits, network and filesystem policy,
   an enforcement report, live output and the program's exit code. No VM.
