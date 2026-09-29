@@ -118,6 +118,7 @@ use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
 mod builds;
 mod cloud_login;
+mod env_vars;
 mod forwards;
 mod identity;
 mod initramfs;
@@ -563,6 +564,10 @@ struct NewSandbox {
     /// Volumes to mount, by name, at paths in the guest.
     #[serde(rename = "volumeMounts", default)]
     volume_mounts: Vec<hv2_cluster::model::VolumeMount>,
+    /// Environment variables for every command the sandbox runs. Never
+    /// returned: see env_vars.rs.
+    #[serde(rename = "envVars", default)]
+    env_vars: BTreeMap<String, String>,
 }
 
 /// `SandboxIam`: a non-empty `tokens` map turns workload identity on.
@@ -1205,6 +1210,7 @@ async fn bring_up(
     snapshot: Option<&std::path::Path>,
     network: Option<NetworkSpec>,
     mounts: &[hv2_cluster::model::VolumeMount],
+    env: &BTreeMap<String, String>,
     access_token: &str,
 ) -> Result<Running, (StatusCode, String)> {
     let internal = |e: String| (StatusCode::INTERNAL_SERVER_ERROR, e);
@@ -1319,6 +1325,17 @@ async fn bring_up(
             let _ = vm.stop().await;
             return Err(internal(e));
         }
+    }
+
+    // Its envVars, in the guest before anyone can start a command. Only a
+    // create passes any: a resume, a fork and a build restore a guest that
+    // already holds its own.
+    if let Err(e) = env_vars::apply(&vm, env).await {
+        if let Some(network) = network {
+            network.bridge.abort();
+        }
+        let _ = vm.stop().await;
+        return Err(internal(e));
     }
 
     // Give this sandbox its own process.Process listener -- envd's real
@@ -1552,6 +1569,9 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
     if let Err(e) = volumes::check(&state, &mounts) {
         return api_error(StatusCode::BAD_REQUEST, e);
     }
+    if let Err(e) = env_vars::validate(&req.env_vars) {
+        return api_error(StatusCode::BAD_REQUEST, e);
+    }
     // Room first, before anything is parsed or booted: a full node should
     // answer at once so a control plane can try the next one.
     let slot = match reserve(&state, create_park(&state)).await {
@@ -1622,6 +1642,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         from_snapshot.as_ref().map(|s| s.file.as_path()),
         network,
         &mounts,
+        &req.env_vars,
         &access_token,
     )
     .await
@@ -2095,6 +2116,7 @@ async fn resume_sandbox(
         Some(&paused.snapshot),
         network,
         &paused.record.volume_mounts,
+        &BTreeMap::new(),
         &paused.descriptor.envd_access_token,
     )
     .await
@@ -2306,6 +2328,7 @@ async fn fork_route(
                     Some(&checkpoint),
                     network,
                     &volume_mounts,
+                    &BTreeMap::new(),
                     &access_token,
                 )
                 .await?;

@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **Sandbox `envVars`** (`hv2-sandboxd`), as E2B's `NewSandbox` has them:
+  variables every command in the sandbox sees, over its template's `ENV`.
+  Kept in the guest, so a pause, a resume on another node, a fork and a
+  snapshot carry them; never returned by the API. Checked on real KVM
+  guests by `tools/e2e-sandbox-env.sh`. `docs/PLATFORM_PARITY.md` tracks
+  HyperMachine against boxd and exe.dev.
 - **vTPM command dispatcher** (`hv2-core`). `VirtualTpm::execute` takes a
   TPM 2.0 command buffer and returns the response: Startup, Shutdown,
   SelfTest, GetRandom, GetCapability, PCR_Read and PCR_Extend, password
