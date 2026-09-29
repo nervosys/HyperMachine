@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **Idle pause** (`hv2-sandboxd`): `idleTimeout` on create, or
+  `--idle-pause-after` for a node, pauses a sandbox to disk once it is
+  unused; with `autoResume` the next request wakes it. Unused means no proxy
+  traffic, no `/exec`, and a guest CPU under 5% for the whole window, so
+  unwatched work is never frozen. `/exec` now counts as activity, which
+  also keeps node-full eviction from pausing a sandbox mid-command. Checked
+  on KVM guests by `tools/e2e-idle-pause.sh`.
 - **Sandbox `envVars`** (`hv2-sandboxd`), as E2B's `NewSandbox` has them:
   variables every command in the sandbox sees, over its template's `ENV`.
   Kept in the guest, so a pause, a resume on another node, a fork and a

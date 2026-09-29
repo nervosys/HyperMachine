@@ -37,6 +37,24 @@ pub(crate) struct Record {
 
 pub(crate) type Telemetry = parking_lot::Mutex<HashMap<String, Record>>;
 
+/// The highest CPU use `sandbox_id`'s guest reported in any sample taken at
+/// or after `since_ms`; `None` when no sample falls in that window.
+pub(crate) fn busiest_since(state: &AppState, sandbox_id: &str, since_ms: u64) -> Option<f64> {
+    let all = state.telemetry.lock();
+    all.get(sandbox_id)?
+        .samples
+        .iter()
+        .filter(|s| {
+            s["timestampUnix"]
+                .as_u64()
+                .is_some_and(|t| t * 1000 >= since_ms)
+        })
+        .filter_map(|s| s["cpuUsedPct"].as_f64())
+        .fold(None, |max: Option<f64>, pct| {
+            Some(max.map_or(pct, |m| m.max(pct)))
+        })
+}
+
 /// Note an event in `sandbox_id`'s log.
 pub(crate) fn log(
     state: &AppState,
