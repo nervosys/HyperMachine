@@ -313,9 +313,15 @@ containment on the agent tool path. None of it protects a guest from the host.
   Done when: `EncryptionManager::enable` succeeds only with a backend attached,
   and a guest's memory reads as ciphertext from the host.
 - [ ] **Hardware-rooted attestation** (SNP report or TDX quote). 🔒 *XL.*
-- [ ] **Make the vTPM reachable.** 🔓 *L.* No guest can use it today — there
-  is no command dispatcher and no device model. Needs both before it can do
-  anything for a guest.
+- [ ] **Make the vTPM reachable.** 🔓 *L.* No guest can use it today.
+  - [x] Command dispatcher: `VirtualTpm::execute` takes and returns TPM 2.0
+    wire-format buffers for Startup, Shutdown, SelfTest, GetRandom,
+    GetCapability, PCR_Read and PCR_Extend (password sessions only), with
+    byte-level tests. Done 2026-09-29.
+  - [ ] Device model: a CRB (or TIS) MMIO region that forwards to `execute`,
+    and the ACPI `TPM2` table that tells a guest where it is.
+  - [ ] Enough of the command set for Windows 11: sessions, CreatePrimary,
+    NV, and persistent state across restarts.
 - [x] **Real secure-boot signature verification.** 🔓 *M.* Done 2026-09-28:
   keys are DER SubjectPublicKeyInfo via `ic-pkix`, and the signed message is
   domain-separated and binds the component type. A forgery under a trusted
