@@ -42,30 +42,31 @@ reqwest = { workspace = true, optional = true }
 # published, not because a rev was wanted, so a version requirement is the
 # right shape now -- and it takes `net.git-fetch-with-cli`, a CI token and a
 # BuildKit secret out of the build with it.
-ic-rsa = "0.2.2"
-ic-hash = "0.2.2"
-ic-mac = "0.2.2"
-ic-kdf = "0.2.2"
-ic-cipher = "0.2.2"
-ic-ec = "0.2.2"
-ic-core = "0.2.2"
+ic-rsa = "0.2.3"
+ic-hash = "0.2.3"
+ic-mac = "0.2.3"
+ic-kdf = "0.2.3"
+ic-cipher = "0.2.3"
+ic-ec = "0.2.3"
+ic-core = "0.2.3"
 # DER SubjectPublicKeyInfo parsing for secure boot's trusted keys.
-ic-pkix = "0.2.2"
+ic-pkix = "0.2.3"
 # The FIPS 140-3 discipline FipsMode::Enabled and ::Strict are held to:
 # ic-fips runs IronCrypto's pre-operational self-tests and answers, per
 # operation, whether an algorithm is approved; ic-drbg is the SP 800-90A
 # HMAC_DRBG those modes draw random bytes from. Neither makes this a
 # validated module -- see ic_fips::VALIDATION_STATEMENT.
-ic-fips = "0.2.2"
-ic-drbg = "0.2.2"
+ic-fips = "0.2.3"
+ic-drbg = "0.2.3"
 # Zeroization of key material on drop. A plain loop or `fill(0)` writes to
 # memory that is never read again, which the optimizer is free to delete;
 # `zeroize` uses volatile writes so the erasure actually happens.
 zeroize = "1.9.0"
-# Post-quantum cryptography (pure-Rust RustCrypto implementations).
-# ml-kem: FIPS 203 (ML-KEM), ml-dsa: FIPS 204 (ML-DSA), slh-dsa: FIPS 205 (SLH-DSA).
-ml-kem = { version = "0.3.2", features = ["getrandom"], optional = true }
-ml-dsa = { version = "0.1.0", optional = true }
+# Post-quantum cryptography. ML-KEM (FIPS 203) and ML-DSA (FIPS 204) come from
+# IronCrypto, checked against NIST's ACVP vectors for every parameter set.
+# SLH-DSA (FIPS 205) is still RustCrypto's `slh-dsa`: IronCrypto has none yet.
+ic-mlkem = { version = "0.2.3", optional = true }
+ic-mldsa = { version = "0.2.3", optional = true }
 slh-dsa = { version = "=0.2.0-rc.5", optional = true }
 
 # CPU affinity (vCPU pinning) — platform-specific syscalls.
@@ -91,7 +92,7 @@ windows-sys = { version = "0.61", features = [
 # compiled out from under itself.
 default = ["pqc"]
 fips = []
-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+pqc = ["dep:ic-mlkem", "dep:ic-mldsa", "dep:slh-dsa"]
 remote-telemetry = ["dep:reqwest"]
 
 [dev-dependencies]
@@ -102,6 +103,11 @@ proptest = { workspace = true }
 criterion = { workspace = true }
 tracing-subscriber = { workspace = true }
 tempfile = "3.10"
+# RustCrypto's ML-KEM and ML-DSA, the implementations hv2-core used before
+# IronCrypto's: kept only so tests can prove that keys and signatures made by
+# either side still work with the other.
+ml-kem = { version = "0.3.2", features = ["getrandom"] }
+ml-dsa = "0.1.0"
 # `test-util` provides tokio::time::pause/advance, so timer tests assert on
 # virtual time instead of racing the wall clock on a loaded machine.
 tokio = { workspace = true, features = ["test-util"] }
