@@ -117,6 +117,7 @@ use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
 mod builds;
+mod checkpoints;
 mod cloud_login;
 mod env_vars;
 mod forwards;
@@ -506,6 +507,8 @@ struct AppState {
     /// Sandboxes this node suspended to disk, under `suspend_dir`.
     paused: Mutex<HashMap<String, PausedSandbox>>,
     suspend_dir: std::path::PathBuf,
+    /// Each sandbox's checkpoints on this node: see checkpoints.rs.
+    checkpoints: checkpoints::Index,
     /// Shared with other nodes, when `--snapshot-store` names one.
     store: Option<SnapshotStore>,
     /// This node's name in the cluster, or `local`.
@@ -1532,6 +1535,7 @@ async fn ended(
     kind: &str,
     running: u32,
 ) {
+    checkpoints::forget(state, sandbox_id);
     let event = match &state.node {
         Some(node) => match node.ended(sandbox_id, record, kind, running).await {
             Ok(Some(event)) => event,
@@ -3995,6 +3999,7 @@ async fn main() -> std::process::ExitCode {
         hv2_cluster::events::Dispatcher::new(Arc::clone(&event_store), opts.allow_private_webhooks);
     let state = Arc::new(AppState {
         events,
+        checkpoints: parking_lot::Mutex::new(HashMap::new()),
         authority,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
@@ -4144,6 +4149,18 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
         .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
+        .route(
+            "/sandboxes/{sandboxID}/checkpoints",
+            post(checkpoints::create).get(checkpoints::list),
+        )
+        .route(
+            "/sandboxes/{sandboxID}/checkpoints/{name}",
+            axum::routing::delete(checkpoints::delete),
+        )
+        .route(
+            "/sandboxes/{sandboxID}/checkpoints/{name}/restore",
+            post(checkpoints::restore),
+        )
         .route("/snapshots", get(snapshots::list))
         .route("/templates/{templateID}", axum::routing::delete(snapshots::delete))
         .route("/v3/templates", post(builds::request))
