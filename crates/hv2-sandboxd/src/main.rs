@@ -108,11 +108,31 @@ use hv2_agent::{AgentVM, Capability, CapabilitySet};
 use hv2_api::sandbox_proxy::{self, PortMap};
 use hv2_cluster::control::CLUSTER_TOKEN_HEADER;
 use hv2_cluster::metrics::{Counter, Exposition, Histogram};
-use hv2_cluster::model::{metadata_matches, now_ms, parse_metadata_query, SandboxRecord};
+use hv2_cluster::model::{
+    metadata_matches, now_ms, parse_metadata_query, ClusterEvent, SandboxRecord,
+};
 use hv2_cluster::node::{NodeAgent, NodeConfig};
 use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
+
+mod builds;
+mod cloud_login;
+mod forwards;
+mod identity;
+mod initramfs;
+// Volumes are served with openat2 and O_PATH, which only Linux has; see
+// volumes_unsupported.rs for what other hosts answer.
+#[cfg(target_os = "linux")]
+mod ninep;
+mod oci;
+mod snapshots;
+mod telemetry;
+#[cfg(target_os = "linux")]
+mod volumes;
+#[cfg(not(target_os = "linux"))]
+#[path = "volumes_unsupported.rs"]
+mod volumes;
 
 const GUEST_CID_BASE: u64 = 100;
 
@@ -142,17 +162,19 @@ const ENVD_PORT: u16 = 49983;
 /// | 0.3.0 | stdin on commands | yes |
 /// | 0.4.0 | default user | no users at all; the field is ignored |
 /// | 0.5.2 | CloseStdin | yes |
-/// | 0.5.7 | octet-stream upload | **no** -- no file-upload route exists |
+/// | 0.5.7 | octet-stream upload | yes -- `hv2_api::envd_files`, multipart too; not gzip |
 /// | 0.6.2 | xattr file metadata | **no** -- `metadata` is always empty |
 /// | 0.6.3 | entry info on watch events | yes |
 ///
 /// 0.6.3 is chosen because the alternative is worse: a lower number would
-/// turn off watch entry info, which really works, to avoid claiming upload
-/// and xattrs, which fail gracefully anyway -- upload has no route at any
-/// version, and absent metadata reads as empty rather than as an error.
-/// Claiming less would cost a working feature and buy nothing.
+/// turn off watch entry info, which really works, to avoid claiming xattrs,
+/// which fail gracefully anyway -- absent metadata reads as empty rather
+/// than as an error. Claiming less would cost a working feature and buy
+/// nothing. A gzip-compressed upload is refused with 415, which only a
+/// caller asking for `gzip=True` sends.
 const ENVD_VERSION: &str = "0.6.3";
 
+#[derive(Clone)]
 struct Options {
     port: u16,
     proxy_port: u16,
@@ -162,7 +184,8 @@ struct Options {
     tls_key: Option<String>,
     kernel: String,
     initrd: String,
-    memory_gb: u64,
+    /// A sandbox's memory and vCPUs, unless its template sets its own.
+    memory_mb: u64,
     cpu_cores: u32,
     ready_timeout: Duration,
     /// Give each sandbox a NIC behind a gateway. Off by default.
@@ -192,6 +215,35 @@ struct Options {
     node_ttl: Duration,
     /// Boot every sandbox instead of restoring it from a template.
     no_template: bool,
+    /// A directory shared by every node, mounted at the same path on each:
+    /// templates, the egress CA and paused sandboxes, so a sandbox paused on
+    /// one node resumes on any.
+    snapshot_store: Option<std::path::PathBuf>,
+    /// Mutual TLS for the API and the envd proxy: the CA peers must be
+    /// signed by, and this node's certificate (carrying the nodes' shared
+    /// name) and key.
+    mtls_ca: Option<String>,
+    mtls_cert: Option<String>,
+    mtls_key: Option<String>,
+    /// Workload identity: the issuer URL tokens name (and that serves their
+    /// keys), the SPIFFE trust domain, and a signing key to use rather than
+    /// share through the snapshot store or generate.
+    identity_issuer: Option<String>,
+    trust_domain: String,
+    identity_key: Option<std::path::PathBuf>,
+    /// Do not offer sandboxes' NICs checksum and segmentation offload.
+    no_net_offload: bool,
+    /// Templates beyond `base` (which is `HV2_INITRD`): name and initramfs,
+    /// from `--template NAME=PATH`.
+    templates: Vec<(String, String)>,
+    /// What a template built from an OCI image gets beside it: the guest
+    /// agent, busybox, init, and optionally a bash shim and CA bundle.
+    guest_kit: Option<std::path::PathBuf>,
+    /// Where volumes are kept; the snapshot store's `volumes` when unset,
+    /// so every node sharing it has them.
+    volume_dir: Option<String>,
+    /// Let webhooks reach loopback, private and link-local addresses.
+    allow_private_webhooks: bool,
     /// Prefault a restored guest's working set. Off by default: it halves
     /// the page faults and exits a restore takes, and did not change create
     /// latency measurably on the nested-KVM host it was tried on, where it
@@ -219,7 +271,7 @@ fn parse_options() -> Result<Options, String> {
         tls_key: None,
         kernel,
         initrd,
-        memory_gb: 1,
+        memory_mb: 1024,
         cpu_cores: 1,
         ready_timeout: Duration::from_secs(15),
         network: false,
@@ -238,6 +290,18 @@ fn parse_options() -> Result<Options, String> {
         node_ttl: Duration::from_secs(9),
         no_template: false,
         prefault: false,
+        no_net_offload: false,
+        templates: Vec::new(),
+        guest_kit: std::env::var_os("HV2_GUEST_KIT").map(Into::into),
+        volume_dir: None,
+        allow_private_webhooks: false,
+        snapshot_store: None,
+        mtls_ca: None,
+        mtls_cert: None,
+        mtls_key: None,
+        identity_issuer: None,
+        trust_domain: "hv2.local".to_string(),
+        identity_key: None,
         evict_idle_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -257,11 +321,41 @@ fn parse_options() -> Result<Options, String> {
             }
             "--tls-cert" => opts.tls_cert = Some(value(&mut i)?),
             "--tls-key" => opts.tls_key = Some(value(&mut i)?),
-            "--memory-gb" => opts.memory_gb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
+            "--memory-gb" => {
+                opts.memory_mb = value(&mut i)?.parse::<u64>().map_err(|e| format!("{e}"))? * 1024;
+            }
+            "--memory-mb" => opts.memory_mb = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--network" => opts.network = true,
             "--no-template" => opts.no_template = true,
             "--prefault" => opts.prefault = true,
+            "--no-net-offload" => opts.no_net_offload = true,
+            "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
+            "--volume-dir" => opts.volume_dir = Some(value(&mut i)?),
+            "--allow-private-webhooks" => opts.allow_private_webhooks = true,
+            "--template" => {
+                let spec = value(&mut i)?;
+                let (name, path) = spec
+                    .split_once('=')
+                    .ok_or_else(|| format!("--template is NAME=INITRAMFS, not {spec}"))?;
+                if name.is_empty()
+                    || !name
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+                {
+                    return Err(format!(
+                        "--template name {name:?}: letters, digits, - _ . only"
+                    ));
+                }
+                opts.templates.push((name.to_string(), path.to_string()));
+            }
+            "--snapshot-store" => opts.snapshot_store = Some(value(&mut i)?.into()),
+            "--mtls-ca" => opts.mtls_ca = Some(value(&mut i)?),
+            "--mtls-cert" => opts.mtls_cert = Some(value(&mut i)?),
+            "--mtls-key" => opts.mtls_key = Some(value(&mut i)?),
+            "--identity-issuer" => opts.identity_issuer = Some(value(&mut i)?),
+            "--trust-domain" => opts.trust_domain = value(&mut i)?,
+            "--identity-key" => opts.identity_key = Some(value(&mut i)?.into()),
             "--capacity" => opts.capacity = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--cluster-store" => opts.cluster_store = Some(value(&mut i)?),
             "--cluster-namespace" => opts.cluster_namespace = value(&mut i)?,
@@ -295,8 +389,8 @@ fn parse_options() -> Result<Options, String> {
             }
             "--help" | "-h" => {
                 println!(
-                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--evict-idle-after SECS] \
+                    "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
+                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
@@ -328,6 +422,9 @@ struct LiveSandbox {
     _slot: Slot,
     /// What its timeout does, and whether traffic resumes it.
     lifecycle: Lifecycle,
+    /// Its network as asked for, kept current by `PUT .../network`, for
+    /// when it pauses into a store another node may resume it from.
+    network_request: Option<NetworkRequest>,
     /// Requests in flight to it through the proxy, and when it was last used.
     activity: Arc<Activity>,
     /// What `POST /sandboxes` answered with.
@@ -370,12 +467,40 @@ struct AppState {
     slots: Arc<tokio::sync::Semaphore>,
     /// This node's membership of a cluster, if it has one.
     node: Option<NodeAgent>,
-    /// What sandboxes are restored from, when not booted.
-    template: Option<Template>,
+    /// Sends lifecycle events to webhooks; over the cluster store, or this
+    /// node's own in memory when it has no cluster.
+    events: hv2_cluster::events::Dispatcher,
+    /// What sandboxes are restored from, by template name, when not booted.
+    /// Grows while the node runs, as templates are built.
+    templates: parking_lot::RwLock<BTreeMap<String, Arc<Template>>>,
+    /// Every template this node offers, and its initramfs -- `base` always.
+    initrds: parking_lot::RwLock<BTreeMap<String, String>>,
+    /// Templates being built, or whose build failed, by name.
+    builds: Mutex<BTreeMap<String, TemplateBuild>>,
+    /// Guest ports reached through the proxy, by sandbox and port.
+    forwards: forwards::Forwards,
+    /// Each sandbox's metric samples and log, by sandbox ID.
+    telemetry: telemetry::Telemetry,
+    /// Templates' sandboxes' sizes, where they are not the node's.
+    sizes: parking_lot::RwLock<BTreeMap<String, Sizes>>,
+    /// Sandboxes' snapshots, by name: templates too, to a create.
+    snapshots: parking_lot::RwLock<BTreeMap<String, Arc<snapshots::Snapshot>>>,
+    /// Template builds by steps (E2B's `Template.build`), by build ID.
+    step_builds: builds::Builds,
+    /// What each offered `COPY` upload, by files hash, must present.
+    upload_tokens: Mutex<HashMap<String, String>>,
+    /// For pulling images to build templates from.
+    http: reqwest::Client,
     metrics: NodeMetrics,
-    /// Sandboxes suspended to disk, under `suspend_dir`.
+    /// Sandboxes this node suspended to disk, under `suspend_dir`.
     paused: Mutex<HashMap<String, PausedSandbox>>,
     suspend_dir: std::path::PathBuf,
+    /// Shared with other nodes, when `--snapshot-store` names one.
+    store: Option<SnapshotStore>,
+    /// This node's name in the cluster, or `local`.
+    node_id: String,
+    /// Signs sandboxes' workload tokens, when sandboxes have a network.
+    identity: Option<Arc<identity::Identity>>,
     /// One lock per sandbox that has paused, resumed or forked.
     transitions: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
@@ -433,6 +558,63 @@ struct NewSandbox {
     auto_pause_memory: Option<bool>,
     #[serde(rename = "autoResume")]
     auto_resume: Option<AutoResume>,
+    /// Workload identity: named tokens the egress gateway mints per request.
+    iam: Option<SandboxIam>,
+    /// Volumes to mount, by name, at paths in the guest.
+    #[serde(rename = "volumeMounts", default)]
+    volume_mounts: Vec<hv2_cluster::model::VolumeMount>,
+}
+
+/// `SandboxIam`: a non-empty `tokens` map turns workload identity on.
+#[derive(Debug, Default, Deserialize)]
+struct SandboxIam {
+    #[serde(default)]
+    tokens: BTreeMap<String, SandboxIamToken>,
+}
+
+/// `SandboxIamToken`: who a token is for, and what kind it is.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SandboxIamToken {
+    audience: String,
+    #[serde(rename = "tokenType")]
+    token_type: String,
+}
+
+/// E2B's `iam.tokens`, checked: names a placeholder can carry, and the one
+/// type the API accepts. A sandbox with tokens needs a network to use them
+/// through, and a node with an identity to mint them.
+fn iam_tokens(
+    iam: Option<&SandboxIam>,
+    network: bool,
+) -> Result<BTreeMap<String, SandboxIamToken>, String> {
+    let Some(iam) = iam else {
+        return Ok(BTreeMap::new());
+    };
+    for (name, token) in &iam.tokens {
+        if !identity::valid_token_name(name) {
+            return Err(format!(
+                "iam token name {name:?} cannot carry '{{', '}}' or control characters"
+            ));
+        }
+        if token.token_type != identity::JWT_SVID {
+            return Err(format!(
+                "iam token {name:?}: tokenType {:?} is not supported; {} is",
+                token.token_type,
+                identity::JWT_SVID
+            ));
+        }
+        if token.audience.is_empty() {
+            return Err(format!("iam token {name:?} needs an audience"));
+        }
+    }
+    if !iam.tokens.is_empty() && !network {
+        return Err(
+            "iam tokens are injected by the egress gateway, and this server gives sandboxes no \
+             network (start it with --network)"
+                .into(),
+        );
+    }
+    Ok(iam.tokens.clone())
 }
 
 /// `SandboxAutoResumeConfig`.
@@ -448,7 +630,7 @@ const MAX_TIMEOUT_SECS: u64 = 24 * 60 * 60;
 
 /// `SandboxNetworkConfig`, and `SandboxNetworkUpdateConfig` -- the same
 /// fields that matter here.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 struct SandboxNetworkConfig {
     #[serde(rename = "allowOut", default)]
     allow_out: Vec<String>,
@@ -462,7 +644,7 @@ struct SandboxNetworkConfig {
     allow_internet_access: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SandboxEgressProxyConfig {
     address: String,
     username: Option<String>,
@@ -504,12 +686,12 @@ async fn egress_proxy_from(
     Ok(Some(proxy))
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SandboxNetworkRule {
     transform: Option<SandboxNetworkTransform>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SandboxNetworkTransform {
     #[serde(default)]
     headers: Headers,
@@ -547,7 +729,7 @@ fn policy_from(
     .map_err(|e| e.to_string())
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct SandboxResponse {
     #[serde(rename = "templateID")]
     template_id: String,
@@ -633,7 +815,13 @@ async fn connect_sandbox(
     let requested = body.and_then(|b| b.timeout);
     // Paused: resumed, and answered 201 rather than 200, as E2B does.
     // `Ok(None)` means it was running after all, and falls through.
-    if state.paused.lock().contains_key(&sandbox_id) {
+    let paused_here = state.paused.lock().contains_key(&sandbox_id);
+    let paused_in_store = !state.sandboxes.lock().contains_key(&sandbox_id)
+        && state
+            .store
+            .as_ref()
+            .is_some_and(|store| store.peek(&sandbox_id).is_some());
+    if paused_here || paused_in_store {
         match resume_sandbox(&state, &sandbox_id, Some(requested.unwrap_or(300)), None).await {
             Ok(Some(descriptor)) => return (StatusCode::CREATED, Json(descriptor)).into_response(),
             Ok(None) => {}
@@ -854,8 +1042,8 @@ async fn node_metrics(State(state): State<Arc<AppState>>) -> Response {
     );
     e.gauge(
         "hv2_node_template",
-        "1 if sandboxes are restored from a template snapshot, 0 if booted.",
-        if state.template.is_some() { 1.0 } else { 0.0 },
+        "Templates sandboxes are restored from; 0 if they are booted.",
+        state.templates.read().len() as f64,
     );
     e.counters(
         "hv2_node_creates_total",
@@ -1013,8 +1201,10 @@ struct Running {
 async fn bring_up(
     state: &AppState,
     sandbox_id: &str,
+    template_id: &str,
     snapshot: Option<&std::path::Path>,
     network: Option<NetworkSpec>,
+    mounts: &[hv2_cluster::model::VolumeMount],
     access_token: &str,
 ) -> Result<Running, (StatusCode, String)> {
     let internal = |e: String| (StatusCode::INTERNAL_SERVER_ERROR, e);
@@ -1022,7 +1212,8 @@ async fn bring_up(
     // the same CID and MAC it was snapshotted with -- which is fine, because
     // each has its own vsock device and its own gateway, and nothing outside
     // this VM ever sees either.
-    let snapshot = snapshot.or(state.template.as_ref().map(|t| t.snapshot.as_path()));
+    let template = state.templates.read().get(template_id).cloned();
+    let snapshot = snapshot.or(template.as_ref().map(|t| t.snapshot.as_path()));
     let (cid, mac) = match snapshot {
         Some(_) => (TEMPLATE_CID, TEMPLATE_MAC),
         None => {
@@ -1035,8 +1226,26 @@ async fn bring_up(
     };
 
     let t0 = std::time::Instant::now();
+    let initrd = state
+        .initrds
+        .read()
+        .get(template_id)
+        .cloned()
+        .unwrap_or_else(|| state.opts.initrd.clone());
+    // The template's size, when it has its own: a restore is of a guest
+    // that size, and must be given the memory and vCPUs it was snapshotted
+    // with.
+    let sizes = sizes_of(state, template_id);
+    let sized;
+    let opts = if sizes == Sizes::of(&state.opts) {
+        &state.opts
+    } else {
+        sized = sizes.applied(&state.opts);
+        &sized
+    };
     let (vm, nic) = new_vm(
-        &state.opts,
+        opts,
+        &initrd,
         sandbox_id,
         cid,
         network.is_some().then_some(mac),
@@ -1046,8 +1255,7 @@ async fn bring_up(
     let built = t0.elapsed();
     let launched = match snapshot {
         Some(snapshot) => {
-            let working_set = state
-                .template
+            let working_set = template
                 .as_ref()
                 .map_or(&[][..], |t| t.working_set.as_slice());
             vm.launch_from_snapshot_prefaulted(snapshot, working_set)
@@ -1075,10 +1283,12 @@ async fn bring_up(
         None => vm.ping_guest(state.opts.ready_timeout).await.map(|_| ()),
     };
     if let Err(e) = ready {
+        let tail = guest_report(&vm).await;
+        tracing::warn!("{sandbox_id}: guest never became ready: {e}; {tail}");
         let _ = vm.stop().await;
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
-            format!("guest never became ready: {e}"),
+            format!("guest never became ready: {e}; {tail}"),
         ));
     }
     let answered = t0.elapsed();
@@ -1087,7 +1297,7 @@ async fn bring_up(
 
     let network = match (network, nic) {
         (Some(spec), Some(device)) => {
-            match start_network(state, &vm, device, spec, snapshot.is_none()).await {
+            match start_network(state, sandbox_id, &vm, device, spec, snapshot.is_none()).await {
                 Ok(network) => Some(network),
                 Err(e) => {
                     let _ = vm.stop().await;
@@ -1097,6 +1307,19 @@ async fn bring_up(
         }
         _ => None,
     };
+
+    // Its volumes, mounted before anyone can run a command that expects
+    // them. After a restore, a mount the snapshot held is detached and
+    // mounted anew: its host end was the node that took the snapshot.
+    if !mounts.is_empty() {
+        if let Err(e) = volumes::mount(state, &vm, mounts).await {
+            if let Some(network) = network {
+                network.bridge.abort();
+            }
+            let _ = vm.stop().await;
+            return Err(internal(e));
+        }
+    }
 
     // Give this sandbox its own process.Process listener -- envd's real
     // shape, one daemon per sandbox, not one shared server multiplexing
@@ -1185,9 +1408,32 @@ async fn register(
     descriptor: SandboxResponse,
     record: SandboxRecord,
     lifecycle: Lifecycle,
+    network_request: Option<NetworkRequest>,
     event: Option<&str>,
 ) {
     let sandbox_id = record.sandbox_id.clone();
+    telemetry::log(
+        state,
+        &sandbox_id,
+        "info",
+        match event {
+            None => format!("sandbox created from template {}", record.template_id),
+            Some(kind) => kind.replace('-', " "),
+        },
+    );
+    if !record.volume_mounts.is_empty() {
+        let mounts: Vec<String> = record
+            .volume_mounts
+            .iter()
+            .map(|m| format!("{} at {}", m.name, m.path))
+            .collect();
+        telemetry::log(
+            state,
+            &sandbox_id,
+            "info",
+            format!("volumes mounted: {}", mounts.join(", ")),
+        );
+    }
     // Resolvable by name before the sandbox is announced, so a client that
     // uses the response immediately does not race the registration.
     state
@@ -1206,6 +1452,7 @@ async fn register(
                 network: running.network,
                 record: record.clone(),
                 lifecycle,
+                network_request,
                 activity: Activity::new(),
             },
         );
@@ -1213,18 +1460,98 @@ async fn register(
     };
     // Recorded before answering, so a control plane that routes the next
     // call by the store finds it.
-    if let Some(node) = &state.node {
-        let recorded = match event {
-            None => node.created(&record, count).await,
-            Some(kind) => node.transitioned(&record, kind, count).await,
-        };
-        if let Err(e) = recorded {
-            tracing::warn!("recording {sandbox_id} in the cluster store: {e}");
+    record_event(state, &record, event.unwrap_or("sandbox-created"), count).await;
+}
+
+/// Record a sandbox's lifecycle event -- in the cluster store, with its
+/// record, or in this node's own when it has no cluster -- and send it to
+/// the webhooks that want it.
+async fn record_event(state: &AppState, record: &SandboxRecord, kind: &str, running: u32) {
+    let event = match &state.node {
+        Some(node) => {
+            let recorded = if kind == "sandbox-created" {
+                node.created(record, running).await
+            } else {
+                node.transitioned(record, kind, running).await
+            };
+            match recorded {
+                Ok(event) => event,
+                Err(e) => {
+                    tracing::warn!("recording {} in the cluster store: {e}", record.sandbox_id);
+                    return;
+                }
+            }
         }
-    }
+        None => {
+            let event =
+                ClusterEvent::new(kind, "local", Some(&record.sandbox_id)).with_record(record);
+            let _ = state.events.store().publish(&event).await;
+            event
+        }
+    };
+    state.events.deliver(&event);
+}
+
+/// Record that a sandbox ended, as [`record_event`] does.
+async fn ended(
+    state: &AppState,
+    sandbox_id: &str,
+    record: Option<&SandboxRecord>,
+    kind: &str,
+    running: u32,
+) {
+    let event = match &state.node {
+        Some(node) => match node.ended(sandbox_id, record, kind, running).await {
+            Ok(Some(event)) => event,
+            Ok(None) => return,
+            Err(e) => {
+                tracing::warn!("recording the end of {sandbox_id}: {e}");
+                return;
+            }
+        },
+        None => {
+            let mut event = ClusterEvent::new(kind, "local", Some(sandbox_id));
+            if let Some(record) = record {
+                event = event.with_record(record);
+            }
+            let _ = state.events.store().publish(&event).await;
+            event
+        }
+    };
+    state.events.deliver(&event);
 }
 
 async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: u64) -> Response {
+    // A template this node does not have is the caller's mistake, answered
+    // before a slot is taken -- as E2B answers an unknown template.
+    // A snapshot is created from as a fork is: its template restored, its
+    // pages copied in. Held until then: a delete meanwhile waits for it.
+    let requested = snapshots::untagged(req.template_id.as_deref().unwrap_or("base")).to_string();
+    let from_snapshot = snapshots::lookup(&state, &requested);
+    let template_id = from_snapshot
+        .as_ref()
+        .map_or_else(|| requested.clone(), |s| s.base.clone());
+    if !state.initrds.read().contains_key(&template_id) {
+        return api_error(
+            StatusCode::NOT_FOUND,
+            format!(
+                "template {template_id:?} not found; this node has {}",
+                state
+                    .initrds
+                    .read()
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+    }
+    // Volumes that do not exist are the caller's mistake, found before a
+    // slot is taken.
+    let mounts = req.volume_mounts.clone();
+    if let Err(e) = volumes::check(&state, &mounts) {
+        return api_error(StatusCode::BAD_REQUEST, e);
+    }
     // Room first, before anything is parsed or booted: a full node should
     // answer at once so a control plane can try the next one.
     let slot = match reserve(&state, create_park(&state)).await {
@@ -1238,7 +1565,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         Ok(lifecycle) => lifecycle,
         Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
     };
-    if lifecycle.pause_on_timeout && state.template.is_none() {
+    if lifecycle.pause_on_timeout && !state.templates.read().contains_key(&template_id) {
         return api_error(
             StatusCode::BAD_REQUEST,
             "autoPause needs sandboxes restored from a template, and this node boots them \
@@ -1248,6 +1575,10 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
 
     // Decided before anything boots, so a policy that does not parse costs a
     // 400 and not a VM.
+    let tokens = match iam_tokens(req.iam.as_ref(), state.opts.network) {
+        Ok(tokens) => tokens,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
     let wants_network = req.allow_internet_access == Some(true) || req.network.is_some();
     let network = if state.opts.network {
         let policy = match policy_from(
@@ -1263,7 +1594,11 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
             Ok(proxy) => proxy,
             Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
         };
-        Some(NetworkSpec { policy, proxy })
+        Some(NetworkSpec {
+            policy,
+            proxy,
+            tokens: tokens.clone(),
+        })
     } else if wants_network {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -1273,18 +1608,35 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         None
     };
 
-    let template_id = req.template_id.unwrap_or_else(|| "base".to_string());
+    let network_request = state.opts.network.then(|| NetworkRequest {
+        allow_internet_access: req.allow_internet_access,
+        network: req.network.clone(),
+        iam: tokens,
+    });
     let sandbox_id = new_sandbox_id();
     let access_token = new_access_token();
-    let running = match bring_up(&state, &sandbox_id, None, network, &access_token).await {
+    let running = match bring_up(
+        &state,
+        &sandbox_id,
+        &template_id,
+        from_snapshot.as_ref().map(|s| s.file.as_path()),
+        network,
+        &mounts,
+        &access_token,
+    )
+    .await
+    {
         Ok(running) => running,
         Err((status, e)) => return api_error(status, e),
     };
+    drop(from_snapshot);
 
     // Built once and kept, so `POST /sandboxes/{id}/connect` answers with the
-    // same description rather than a second one assembled from parts.
+    // same description rather than a second one assembled from parts. It
+    // names the snapshot asked for; the record, the template under it, which
+    // a pause, resume or fork of this sandbox is layered over.
     let descriptor = SandboxResponse {
-        template_id: template_id.clone(),
+        template_id: requested,
         sandbox_id: sandbox_id.clone(),
         client_id: sandbox_id.clone(),
         envd_version: ENVD_VERSION.to_string(),
@@ -1293,6 +1645,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         proxy_port: state.opts.proxy_port,
         envd_access_token: access_token,
     };
+    let sizes = sizes_of(&state, &template_id);
     let record = SandboxRecord {
         sandbox_id: sandbox_id.clone(),
         node_id: state
@@ -1302,12 +1655,14 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         template_id,
         started_at_ms,
         end_at_ms: started_at_ms + lifetime_secs * 1000,
-        cpu_count: state.opts.cpu_cores,
-        memory_mb: state.opts.memory_gb * 1024,
+        cpu_count: sizes.cpus,
+        memory_mb: sizes.memory_mb,
         metadata: req.metadata,
         envd_version: ENVD_VERSION.to_string(),
         descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
         paused: false,
+        portable: false,
+        volume_mounts: mounts,
     };
     register(
         &state,
@@ -1316,6 +1671,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
         descriptor.clone(),
         record,
         lifecycle,
+        network_request,
         None,
     )
     .await;
@@ -1324,7 +1680,7 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
 }
 
 /// What a sandbox does when its time is up, and whether traffic wakes it.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 struct Lifecycle {
     /// Pause rather than end at the timeout (E2B's `autoPause`).
     pause_on_timeout: bool,
@@ -1364,15 +1720,166 @@ impl Lifecycle {
 struct NetworkSpec {
     policy: NetworkPolicy,
     proxy: Option<Socks5Proxy>,
+    /// Workload tokens its injected headers may name.
+    tokens: BTreeMap<String, SandboxIamToken>,
 }
 
-/// A sandbox suspended to this node's disk.
+/// A sandbox's network as it was asked for, E2B's fields verbatim: what a
+/// paused sandbox's record keeps, so any node can build the same network
+/// for it -- a [`NetworkSpec`] is decided state, and not written down.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct NetworkRequest {
+    allow_internet_access: Option<bool>,
+    network: Option<SandboxNetworkConfig>,
+    /// `iam.tokens`, which only a network can use.
+    #[serde(default)]
+    iam: BTreeMap<String, SandboxIamToken>,
+}
+
+impl NetworkRequest {
+    /// The network this asks for, decided now -- the egress proxy is
+    /// resolved and checked again, as it would be on a create.
+    async fn decide(&self, opts: &Options) -> Result<NetworkSpec, String> {
+        Ok(NetworkSpec {
+            policy: policy_from(
+                self.allow_internet_access,
+                self.network.as_ref(),
+                opts.egress_default,
+                &opts.tenant_reserved,
+            )?,
+            proxy: egress_proxy_from(opts, self.network.as_ref()).await?,
+            tokens: self.iam.clone(),
+        })
+    }
+}
+
+/// A sandbox suspended to disk.
 struct PausedSandbox {
     snapshot: std::path::PathBuf,
     descriptor: SandboxResponse,
     record: SandboxRecord,
     lifecycle: Lifecycle,
+    /// Decided already, when this node paused it; built from
+    /// `network_request` when another node did.
     network: Option<NetworkSpec>,
+    network_request: Option<NetworkRequest>,
+}
+
+/// What a snapshot store keeps beside a paused sandbox's snapshot: enough
+/// for any node sharing the store to resume it.
+#[derive(Serialize, Deserialize)]
+struct PausedMeta {
+    descriptor: SandboxResponse,
+    record: SandboxRecord,
+    lifecycle: Lifecycle,
+    network: Option<NetworkRequest>,
+}
+
+/// A directory every node of a cluster mounts at the same path, holding
+/// what a paused sandbox needs to resume on any of them: the template its
+/// snapshot is layered over, the egress CA its guest trusts, and the
+/// snapshot and its description.
+///
+/// A paused sandbox is claimed by renaming its description, which is atomic
+/// on a POSIX filesystem: two nodes asked to resume the same sandbox at
+/// once cannot both get it. The descriptions hold what the sandbox's
+/// network was configured with, egress proxy credentials and injected
+/// headers included, so they are written owner-only.
+struct SnapshotStore {
+    dir: std::path::PathBuf,
+}
+
+impl SnapshotStore {
+    fn paused_dir(&self) -> std::path::PathBuf {
+        self.dir.join("paused")
+    }
+
+    fn snapshot(&self, sandbox_id: &str) -> std::path::PathBuf {
+        self.paused_dir().join(format!("{sandbox_id}.snap"))
+    }
+
+    fn meta(&self, sandbox_id: &str) -> std::path::PathBuf {
+        self.paused_dir().join(format!("{sandbox_id}.json"))
+    }
+
+    /// Describe a paused sandbox, unclaimed.
+    fn put(&self, sandbox_id: &str, meta: &PausedMeta) -> Result<(), String> {
+        let bytes = serde_json::to_vec(meta).map_err(|e| e.to_string())?;
+        let tmp = self.paused_dir().join(format!(
+            ".{sandbox_id}.{}.tmp",
+            uuid::Uuid::new_v4().simple()
+        ));
+        write_private(&tmp, &bytes)?;
+        std::fs::rename(&tmp, self.meta(sandbox_id)).map_err(|e| {
+            let _ = std::fs::remove_file(&tmp);
+            format!("recording paused {sandbox_id}: {e}")
+        })
+    }
+
+    /// Read a paused sandbox's description without claiming it.
+    fn peek(&self, sandbox_id: &str) -> Option<PausedMeta> {
+        if !valid_sandbox_id(sandbox_id) {
+            return None;
+        }
+        let bytes = std::fs::read(self.meta(sandbox_id)).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    }
+
+    /// Take a paused sandbox for this node: its description moves aside,
+    /// and no other node can take it until [`Self::release`] puts it back.
+    fn claim(&self, sandbox_id: &str, node: &str) -> Option<(std::path::PathBuf, PausedMeta)> {
+        if !valid_sandbox_id(sandbox_id) {
+            return None;
+        }
+        let claimed = self
+            .paused_dir()
+            .join(format!("{sandbox_id}.json.claimed-{node}"));
+        std::fs::rename(self.meta(sandbox_id), &claimed).ok()?;
+        let meta = std::fs::read(&claimed)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok());
+        match meta {
+            Some(meta) => Some((claimed, meta)),
+            None => {
+                let _ = std::fs::rename(&claimed, self.meta(sandbox_id));
+                None
+            }
+        }
+    }
+
+    /// Give a claim back, for a resume that failed.
+    fn release(&self, sandbox_id: &str, claimed: &std::path::Path) {
+        if let Err(e) = std::fs::rename(claimed, self.meta(sandbox_id)) {
+            tracing::warn!("giving back the claim on paused {sandbox_id}: {e}");
+        }
+    }
+
+    /// Forget a claimed sandbox: resumed, or deleted.
+    fn finish(&self, sandbox_id: &str, claimed: &std::path::Path) {
+        let _ = std::fs::remove_file(claimed);
+        let _ = std::fs::remove_file(self.snapshot(sandbox_id));
+    }
+}
+
+/// Whether `id` could be one this daemon minted -- checked before it goes
+/// into a path, since a request names it.
+fn valid_sandbox_id(id: &str) -> bool {
+    id.starts_with("sbx-") && id.len() <= 64 && id[4..].chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Write a file only its owner can read.
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> Result<(), String> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let mut file = options
+        .open(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
+    file.write_all(bytes)
+        .and_then(|()| file.sync_all())
+        .map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The lock a sandbox's pause, resume and fork take, so two of them never
@@ -1402,7 +1909,7 @@ async fn pause_sandbox(
             format!("sandbox {sandbox_id} is already paused"),
         ));
     }
-    if state.template.is_none() {
+    if state.templates.read().is_empty() {
         return Err((
             StatusCode::CONFLICT,
             "pausing needs sandboxes restored from a template, and this node boots them".into(),
@@ -1430,6 +1937,7 @@ async fn pause_sandbox(
     let started = std::time::Instant::now();
     // Unroutable first: a request arriving now should resume it, not reach a
     // VM that is stopping.
+    forwards::stop(state, sandbox_id);
     state.routes.remove_sandbox(sandbox_id);
     let snapshot = state.suspend_dir.join(format!("{sandbox_id}.snap"));
     let _ = std::fs::remove_file(&snapshot);
@@ -1447,15 +1955,36 @@ async fn pause_sandbox(
         ));
     }
     let _ = live.process_shutdown.send(());
+    let tokens = live
+        .network_request
+        .as_ref()
+        .map(|r| r.iam.clone())
+        .unwrap_or_default();
     let network = live.network.map(|network| {
         network.bridge.abort();
         NetworkSpec {
             policy: network.gateway.policy(),
             proxy: network.gateway.egress_proxy(),
+            tokens,
         }
     });
     let mut record = live.record;
     record.paused = true;
+    // In a shared store, described there too -- after the snapshot, so a
+    // node that finds the description finds a whole snapshot beside it.
+    if let Some(store) = &state.store {
+        record.portable = true;
+        let meta = PausedMeta {
+            descriptor: live.descriptor.clone(),
+            record: record.clone(),
+            lifecycle: live.lifecycle,
+            network: live.network_request.clone(),
+        };
+        if let Err(e) = store.put(sandbox_id, &meta) {
+            tracing::warn!("{e}; {sandbox_id} can resume only on this node");
+            record.portable = false;
+        }
+    }
     state.paused.lock().insert(
         sandbox_id.to_string(),
         PausedSandbox {
@@ -1464,18 +1993,13 @@ async fn pause_sandbox(
             record: record.clone(),
             lifecycle: live.lifecycle,
             network,
+            network_request: live.network_request,
         },
     );
     state.metrics.pauses.inc();
+    telemetry::log(state, sandbox_id, "info", "sandbox paused");
     state.metrics.pause_latency.observe(started.elapsed());
-    if let Some(node) = &state.node {
-        if let Err(e) = node
-            .transitioned(&record, "sandbox-paused", state.running())
-            .await
-        {
-            tracing::warn!("recording {sandbox_id}'s pause: {e}");
-        }
-    }
+    record_event(state, &record, "sandbox-paused", state.running()).await;
     Ok(())
 }
 
@@ -1492,7 +2016,12 @@ async fn resume_sandbox(
     if state.sandboxes.lock().contains_key(sandbox_id) {
         return Ok(None);
     }
-    if !state.paused.lock().contains_key(sandbox_id) {
+    let known_here = state.paused.lock().contains_key(sandbox_id);
+    let in_store = state
+        .store
+        .as_ref()
+        .is_some_and(|store| store.meta(sandbox_id).exists());
+    if !known_here && !in_store {
         return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")));
     }
     let started = std::time::Instant::now();
@@ -1500,30 +2029,95 @@ async fn resume_sandbox(
     let slot = reserve(state, park)
         .await
         .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
-    let Some(paused) = state.paused.lock().remove(sandbox_id) else {
-        return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}")));
+
+    // With a store, the store decides who resumes it: this node's own note
+    // of a sandbox it paused may be stale, if another node has resumed it
+    // since. Claimed first, then taken from the note or the description.
+    let mut claim = None;
+    let paused = match &state.store {
+        Some(store) => {
+            let Some((claimed, meta)) = store.claim(sandbox_id, &state.node_id) else {
+                state.paused.lock().remove(sandbox_id);
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    format!("paused {sandbox_id} was resumed or deleted elsewhere"),
+                ));
+            };
+            claim = Some(claimed);
+            match state.paused.lock().remove(sandbox_id) {
+                Some(paused) => paused,
+                None => PausedSandbox {
+                    snapshot: store.snapshot(sandbox_id),
+                    descriptor: meta.descriptor,
+                    record: meta.record,
+                    lifecycle: meta.lifecycle,
+                    network: None,
+                    network_request: meta.network,
+                },
+            }
+        }
+        None => match state.paused.lock().remove(sandbox_id) {
+            Some(paused) => paused,
+            None => return Err((StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"))),
+        },
     };
+    let give_back = |paused: PausedSandbox| match (&state.store, &claim) {
+        (Some(store), Some(claimed)) => store.release(sandbox_id, claimed),
+        _ => {
+            state.paused.lock().insert(sandbox_id.to_string(), paused);
+        }
+    };
+    // Decided here when this node did not pause it: the description holds
+    // the request, and this node decides it as it would a create's.
+    let network = match (&paused.network, &paused.network_request) {
+        (Some(spec), _) => Some(spec.clone()),
+        (None, Some(request)) if state.opts.network => match request.decide(&state.opts).await {
+            Ok(spec) => Some(spec),
+            Err(e) => {
+                give_back(paused);
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, e));
+            }
+        },
+        (None, Some(_)) => {
+            give_back(paused);
+            return Err((
+                StatusCode::CONFLICT,
+                format!("{sandbox_id} has a network and this node gives sandboxes none"),
+            ));
+        }
+        (None, None) => None,
+    };
+    let template_id = paused.record.template_id.clone();
     let running = match bring_up(
         state,
         sandbox_id,
+        &template_id,
         Some(&paused.snapshot),
-        paused.network.clone(),
+        network,
+        &paused.record.volume_mounts,
         &paused.descriptor.envd_access_token,
     )
     .await
     {
         Ok(running) => running,
         Err(e) => {
-            state.paused.lock().insert(sandbox_id.to_string(), paused);
+            give_back(paused);
             return Err(e);
         }
     };
-    let _ = std::fs::remove_file(&paused.snapshot);
+    match (&state.store, &claim) {
+        (Some(store), Some(claimed)) => store.finish(sandbox_id, claimed),
+        _ => {
+            let _ = std::fs::remove_file(&paused.snapshot);
+        }
+    }
 
     let mut descriptor = paused.descriptor;
     descriptor.process_port = running.process_addr.port();
     let mut record = paused.record;
     record.paused = false;
+    record.portable = false;
+    record.node_id.clone_from(&state.node_id);
     let lifetime = lifetime_secs
         .unwrap_or(paused.lifecycle.lifetime_secs)
         .min(MAX_TIMEOUT_SECS);
@@ -1536,6 +2130,7 @@ async fn resume_sandbox(
         descriptor.clone(),
         record,
         paused.lifecycle,
+        paused.network_request,
         Some("sandbox-resumed"),
     )
     .await;
@@ -1623,7 +2218,7 @@ async fn fork_route(
         return api_error(StatusCode::BAD_REQUEST, "count is between 1 and 100");
     }
     let lifetime_secs = body.timeout.unwrap_or(15).min(MAX_TIMEOUT_SECS);
-    if state.template.is_none() {
+    if state.templates.read().is_empty() {
         return api_error(
             StatusCode::CONFLICT,
             "forking needs sandboxes restored from a template, and this node boots them",
@@ -1634,7 +2229,7 @@ async fn fork_route(
         "{sandbox_id}-fork-{}.snap",
         uuid::Uuid::new_v4().simple()
     ));
-    let (template_id, metadata, network) = {
+    let (template_id, metadata, network, source_request, volume_mounts) = {
         let lock = transition_lock(&state, &sandbox_id);
         let _held = lock.lock().await;
         let source = {
@@ -1647,11 +2242,19 @@ async fn fork_route(
                     live.network.as_ref().map(|n| NetworkSpec {
                         policy: n.gateway.policy(),
                         proxy: n.gateway.egress_proxy(),
+                        tokens: live
+                            .network_request
+                            .as_ref()
+                            .map(|r| r.iam.clone())
+                            .unwrap_or_default(),
                     }),
+                    live.network_request.clone(),
+                    live.record.volume_mounts.clone(),
                 )
             })
         };
-        let Some((vm, template_id, metadata, network)) = source else {
+        let Some((vm, template_id, metadata, network, source_request, volume_mounts)) = source
+        else {
             return if state.paused.lock().contains_key(&sandbox_id) {
                 api_error(
                     StatusCode::CONFLICT,
@@ -1670,7 +2273,13 @@ async fn fork_route(
             );
         }
         state.metrics.checkpoint_latency.observe(started.elapsed());
-        (template_id, metadata, network)
+        (
+            template_id,
+            metadata,
+            network,
+            source_request,
+            volume_mounts,
+        )
     };
 
     // Concurrently: each fork is independent, and they are what a caller
@@ -1682,14 +2291,24 @@ async fn fork_route(
             let template_id = template_id.clone();
             let metadata = metadata.clone();
             let network = network.clone();
+            let network_request = source_request.clone();
+            let volume_mounts = volume_mounts.clone();
             async move {
                 let slot = reserve(&state, create_park(&state))
                     .await
                     .map_err(|e| (StatusCode::SERVICE_UNAVAILABLE, e))?;
                 let fork_id = new_sandbox_id();
                 let access_token = new_access_token();
-                let running =
-                    bring_up(&state, &fork_id, Some(&checkpoint), network, &access_token).await?;
+                let running = bring_up(
+                    &state,
+                    &fork_id,
+                    &template_id,
+                    Some(&checkpoint),
+                    network,
+                    &volume_mounts,
+                    &access_token,
+                )
+                .await?;
                 let started_at_ms = now_ms();
                 let descriptor = SandboxResponse {
                     template_id: template_id.clone(),
@@ -1701,6 +2320,7 @@ async fn fork_route(
                     proxy_port: state.opts.proxy_port,
                     envd_access_token: access_token,
                 };
+                let sizes = sizes_of(&state, &template_id);
                 let record = SandboxRecord {
                     sandbox_id: fork_id,
                     node_id: state
@@ -1710,12 +2330,14 @@ async fn fork_route(
                     template_id,
                     started_at_ms,
                     end_at_ms: started_at_ms + lifetime_secs * 1000,
-                    cpu_count: state.opts.cpu_cores,
-                    memory_mb: state.opts.memory_gb * 1024,
+                    cpu_count: sizes.cpus,
+                    memory_mb: sizes.memory_mb,
                     metadata,
                     envd_version: ENVD_VERSION.to_string(),
                     descriptor: serde_json::to_value(&descriptor).unwrap_or_default(),
                     paused: false,
+                    portable: false,
+                    volume_mounts: volume_mounts.clone(),
                 };
                 let lifecycle = Lifecycle {
                     lifetime_secs,
@@ -1728,6 +2350,7 @@ async fn fork_route(
                     descriptor.clone(),
                     record,
                     lifecycle,
+                    network_request,
                     None,
                 )
                 .await;
@@ -1788,7 +2411,14 @@ impl ResumingRoutes {
             let live = sandboxes.get(sandbox)?;
             ActivityGuard::enter(&live.activity)
         };
-        let addr = self.state.routes.resolve(sandbox, port).await?;
+        let addr = match self.state.routes.resolve(sandbox, port).await {
+            Some(addr) => addr,
+            // Any port but envd's: the sandbox's own, carried into it.
+            None if port != sandbox_proxy::ENVD_PORT => {
+                forwards::listen(&self.state, sandbox, port).await?
+            }
+            None => return None,
+        };
         Some((addr, sandbox_proxy::InFlight::new(guard)))
     }
 }
@@ -1823,12 +2453,19 @@ impl sandbox_proxy::SandboxRoutes for ResumingRoutes {
                 return Some(open);
             }
         }
-        let wakes = self
+        let known = self
             .state
             .paused
             .lock()
             .get(sandbox)
-            .is_some_and(|p| p.lifecycle.auto_resume);
+            .map(|p| p.lifecycle.auto_resume);
+        let wakes = known.unwrap_or_else(|| {
+            self.state
+                .store
+                .as_ref()
+                .and_then(|store| store.peek(sandbox))
+                .is_some_and(|meta| meta.lifecycle.auto_resume)
+        });
         if !wakes {
             tracing::debug!("proxy: {sandbox} is neither running nor paused to wake");
             return None;
@@ -1905,6 +2542,7 @@ impl Drop for ActivityGuard {
 /// Put a gateway behind a sandbox's NIC, and point the guest at it.
 async fn start_network(
     state: &AppState,
+    sandbox_id: &str,
     vm: &Arc<AgentVM>,
     device: Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::VirtioNetMmio>>,
     spec: NetworkSpec,
@@ -1919,6 +2557,24 @@ async fn start_network(
         .map_err(|e| format!("starting the gateway: {e}"))?;
     let handle = gateway.handle();
     handle.set_egress_proxy(spec.proxy);
+    // Workload tokens, minted here per request for the names this sandbox
+    // registered: the guest's request carries a placeholder, and the token
+    // exists only on the way out.
+    if let (Some(identity), false) = (&state.identity, spec.tokens.is_empty()) {
+        let identity = Arc::clone(identity);
+        let tokens = spec.tokens;
+        let sandbox = sandbox_id.to_string();
+        handle.set_token_source(Some(Arc::new(move |name: &str| {
+            let token = tokens.get(name)?;
+            match identity.mint(&sandbox, &token.audience) {
+                Ok(jwt) => Some(jwt),
+                Err(e) => {
+                    tracing::warn!("minting {name} for {sandbox}: {e}");
+                    None
+                }
+            }
+        })));
+    }
 
     // `allow_all` on the bridge because the gateway is the enforcement point:
     // it sees the guest's ARP, which a frame-level policy refuses by design,
@@ -1985,11 +2641,17 @@ async fn configure_guest_network(vm: &AgentVM, ca: Option<&str>) -> Result<(), S
 const TEMPLATE_CID: u64 = GUEST_CID_BASE;
 const TEMPLATE_MAC: [u8; 6] = [0x52, 0x54, 0x00, 0x00, 0x00, 0x01];
 
+/// How long a template's guest may take to boot and answer.
+const TEMPLATE_BOOT_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// A booted, configured guest written to disk, that sandboxes are restored
 /// from instead of booting.
 struct Template {
     dir: std::path::PathBuf,
     snapshot: std::path::PathBuf,
+    /// Deleted with this process. Not when it lives in a snapshot store,
+    /// where other nodes -- and paused sandboxes -- depend on it.
+    owned: bool,
     /// The guest pages a sandbox restored from this touches before it first
     /// answers, as guest-physical (address, length) ranges: prefaulted into
     /// every restore, so the guest does not take an exit for each. Empty
@@ -1999,14 +2661,543 @@ struct Template {
 
 impl Drop for Template {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.dir);
+        if self.owned {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
     }
 }
 
-/// The kernel command line every sandbox guest boots with.
+/// What a template is a function of, as a name: every input that changes
+/// the guest it holds. Nodes that agree on it can share one template, and
+/// only then can a snapshot layered over it resume on either.
+fn template_key(opts: &Options, authority: Option<&Authority>) -> Result<String, String> {
+    use sha2::Digest;
+    let mut hash = sha2::Sha256::new();
+    for path in [&opts.kernel, &opts.initrd] {
+        let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+        hash.update((bytes.len() as u64).to_le_bytes());
+        hash.update(&bytes);
+    }
+    let config = format!(
+        "{}\0{}\0{}\0{}\0{}",
+        guest_cmdline(opts.network),
+        opts.memory_mb,
+        opts.cpu_cores,
+        opts.network,
+        authority.map_or("", Authority::ca_pem)
+    );
+    hash.update(config.as_bytes());
+    Ok(hash
+        .finalize()
+        .iter()
+        .take(16)
+        .map(|b| format!("{b:02x}"))
+        .collect())
+}
+
+/// The template in `store` for this configuration: found if some node made
+/// it already, else made here and published -- into a scratch directory,
+/// then renamed into place, so another node never sees half of one. If two
+/// nodes race, the first rename wins and the other uses its template.
+async fn shared_template(
+    opts: &Options,
+    authority: Option<&Authority>,
+    store: &SnapshotStore,
+) -> Result<Template, String> {
+    let key = template_key(opts, authority)?;
+    let templates = store.dir.join("templates");
+    std::fs::create_dir_all(&templates).map_err(|e| format!("{}: {e}", templates.display()))?;
+    let dir = templates.join(&key);
+    let found = |dir: std::path::PathBuf| Template {
+        snapshot: dir.join("template.snap"),
+        dir,
+        owned: false,
+        working_set: Vec::new(),
+    };
+    if dir.join("template.snap").exists() {
+        tracing::info!("using the shared template {key}");
+        return Ok(found(dir));
+    }
+    let scratch = templates.join(format!(".{key}.{}", uuid::Uuid::new_v4().simple()));
+    // A few attempts, looking between them for one another node published:
+    // two nodes booting templates at once on one busy host have been seen
+    // to leave one guest unanswering past the ready timeout.
+    let mut attempt = 1;
+    let mut built = loop {
+        match build_template(opts, authority, scratch.clone()).await {
+            Ok(built) => break built,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&scratch);
+                if dir.join("template.snap").exists() {
+                    tracing::info!("building template {key} failed ({e}); another node's is there");
+                    return Ok(found(dir));
+                }
+                if attempt == 3 {
+                    return Err(e);
+                }
+                tracing::warn!("building template {key}, attempt {attempt}: {e}; again");
+                attempt += 1;
+            }
+        }
+    };
+    built.owned = false;
+    match std::fs::rename(&scratch, &dir) {
+        Ok(()) => {
+            tracing::info!("published the shared template {key}");
+            Ok(Template {
+                snapshot: dir.join("template.snap"),
+                dir,
+                owned: false,
+                working_set: std::mem::take(&mut built.working_set),
+            })
+        }
+        Err(_) if dir.join("template.snap").exists() => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            tracing::info!("another node published template {key} first; using theirs");
+            Ok(found(dir))
+        }
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            Err(format!("publishing template {key}: {e}"))
+        }
+    }
+}
+
+/// `GET /templates`: the templates this node offers, in E2B's `Template`
+/// shape as far as it applies -- what each is, and whether its sandboxes are
+/// restored from a snapshot or booted.
+async fn list_templates(State(state): State<Arc<AppState>>) -> Response {
+    let snapshots = state.templates.read();
+    let mut listed: Vec<serde_json::Value> = state
+        .initrds
+        .read()
+        .keys()
+        .map(|name| {
+            json!({
+                "templateID": name,
+                "buildID": name,
+                "aliases": [name],
+                "public": false,
+                "cpuCount": sizes_of(&state, name).cpus,
+                "memoryMB": sizes_of(&state, name).memory_mb,
+                "envdVersion": ENVD_VERSION,
+                "buildStatus": "ready",
+                "snapshot": snapshots.contains_key(name),
+            })
+        })
+        .collect();
+    for (name, build) in state.builds.lock().iter() {
+        let (status, detail) = match build {
+            TemplateBuild::Building { image } => ("building", image.clone()),
+            TemplateBuild::Failed { image, error } => ("error", format!("{image}: {error}")),
+        };
+        listed.push(json!({
+            "templateID": name,
+            "buildID": name,
+            "aliases": [name],
+            "public": false,
+            "buildStatus": status,
+            "detail": detail,
+        }));
+    }
+    Json(listed).into_response()
+}
+
+/// A template build in progress, or one that failed.
+enum TemplateBuild {
+    Building { image: String },
+    Failed { image: String, error: String },
+}
+
+#[derive(Debug, Deserialize)]
+struct BuildTemplateRequest {
+    #[serde(rename = "templateID")]
+    template_id: String,
+    /// An OCI image reference: `python:3.12-slim`, `ghcr.io/org/tool@sha256:...`.
+    image: String,
+    /// A private registry's login, used for this pull and not kept.
+    username: Option<String>,
+    password: Option<String>,
+    /// Its sandboxes' size, E2B's fields; the node's when absent.
+    #[serde(rename = "cpuCount")]
+    cpu_count: Option<u32>,
+    #[serde(rename = "memoryMB")]
+    memory_mb: Option<u64>,
+}
+
+/// What a snapshot store keeps about a template a node built, so every node
+/// sharing the store offers it too.
+#[derive(Serialize, Deserialize)]
+struct BuiltTemplate {
+    image: String,
+    digest: String,
+    initramfs: String,
+    /// Absent in records from before sizes: the node's own.
+    #[serde(default)]
+    sizes: Option<Sizes>,
+}
+
+/// `POST /templates`: build a template from an OCI image, pulled from its
+/// registry by this node -- no Docker daemon. Answers 202 at once; the
+/// build's progress is in `GET /templates`, and a create for the template
+/// works from the moment it is `ready`.
+async fn build_template_route(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<BuildTemplateRequest>,
+) -> Response {
+    let name = req.template_id;
+    if !valid_template_name(&name) {
+        return api_error(
+            StatusCode::BAD_REQUEST,
+            format!("template name {name:?}: letters, digits, - _ . only"),
+        );
+    }
+    if state.opts.guest_kit.is_none() {
+        return api_error(
+            StatusCode::NOT_IMPLEMENTED,
+            "this node builds no templates: start it with --guest-kit DIR",
+        );
+    }
+    if state.initrds.read().contains_key(&name) {
+        return api_error(StatusCode::CONFLICT, format!("template {name} exists"));
+    }
+    let sizes = match Sizes::requested(req.cpu_count, req.memory_mb, Sizes::of(&state.opts)) {
+        Ok(sizes) => sizes,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    {
+        let mut builds = state.builds.lock();
+        if matches!(builds.get(&name), Some(TemplateBuild::Building { .. })) {
+            return api_error(StatusCode::CONFLICT, format!("template {name} is building"));
+        }
+        builds.insert(
+            name.clone(),
+            TemplateBuild::Building {
+                image: req.image.clone(),
+            },
+        );
+    }
+    let building = Arc::clone(&state);
+    let (task_name, image) = (name.clone(), req.image.clone());
+    let credentials = match (req.username, req.password) {
+        (Some(username), Some(password)) => Some(oci::Credentials { username, password }),
+        _ => None,
+    };
+    tokio::spawn(async move {
+        let started = std::time::Instant::now();
+        let outcome = build_from_image(&building, &task_name, &image, credentials, sizes).await;
+        let mut builds = building.builds.lock();
+        match outcome {
+            Ok(()) => {
+                builds.remove(&task_name);
+                tracing::info!(
+                    "template {task_name} from {image} built in {:?}",
+                    started.elapsed()
+                );
+            }
+            Err(error) => {
+                tracing::warn!("building template {task_name} from {image}: {error}");
+                builds.insert(task_name, TemplateBuild::Failed { image, error });
+            }
+        }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(json!({ "templateID": name, "buildStatus": "building" })),
+    )
+        .into_response()
+}
+
+/// A template's sandboxes' size: E2B's `cpuCount` and `memoryMB`. Fixed when
+/// its image is made a template -- the template's snapshot is of a guest
+/// that size, and every sandbox restored from it is that guest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+struct Sizes {
+    #[serde(rename = "cpuCount")]
+    cpus: u32,
+    #[serde(rename = "memoryMB")]
+    memory_mb: u64,
+}
+
+impl Sizes {
+    /// The node's, from `--cpu-cores` and `--memory-mb`.
+    fn of(opts: &Options) -> Self {
+        Self {
+            cpus: opts.cpu_cores,
+            memory_mb: opts.memory_mb,
+        }
+    }
+
+    /// What a request asks for, `default` where it asks for nothing; refused
+    /// if it is no size a guest here can be.
+    fn requested(cpus: Option<u32>, memory_mb: Option<u64>, default: Self) -> Result<Self, String> {
+        let sizes = Self {
+            cpus: cpus.unwrap_or(default.cpus),
+            memory_mb: memory_mb.unwrap_or(default.memory_mb),
+        };
+        let host_cpus = std::thread::available_parallelism()
+            .map_or(1, |n| u32::try_from(n.get()).unwrap_or(u32::MAX));
+        if sizes.cpus == 0 || sizes.cpus > host_cpus.min(hv2_core::boot::mptable::MAX_CPUS) {
+            return Err(format!(
+                "cpuCount {}: between 1 and {}, this host's CPUs",
+                sizes.cpus,
+                host_cpus.min(hv2_core::boot::mptable::MAX_CPUS)
+            ));
+        }
+        if !(256..=MAX_MEMORY_MB).contains(&sizes.memory_mb) || !sizes.memory_mb.is_multiple_of(2) {
+            return Err(format!(
+                "memoryMB {}: an even number from 256 to {MAX_MEMORY_MB}",
+                sizes.memory_mb
+            ));
+        }
+        Ok(sizes)
+    }
+
+    /// `opts`, as for a guest this size.
+    fn applied(self, opts: &Options) -> Options {
+        let mut sized = opts.clone();
+        sized.cpu_cores = self.cpus;
+        sized.memory_mb = self.memory_mb;
+        sized
+    }
+}
+
+/// The most memory one sandbox may have.
+const MAX_MEMORY_MB: u64 = 64 * 1024;
+
+/// The size of `template`'s sandboxes: its own, or the node's.
+fn sizes_of(state: &AppState, template: &str) -> Sizes {
+    state
+        .sizes
+        .read()
+        .get(template)
+        .copied()
+        .unwrap_or_else(|| Sizes::of(&state.opts))
+}
+
+fn valid_template_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// Pull `image`, write its initramfs, snapshot it, and offer it.
+async fn build_from_image(
+    state: &Arc<AppState>,
+    name: &str,
+    image: &str,
+    credentials: Option<oci::Credentials>,
+    sizes: Sizes,
+) -> Result<(), String> {
+    let kit_dir = state.opts.guest_kit.clone().ok_or("no --guest-kit")?;
+    let kit = initramfs::GuestKit::check(&kit_dir)?;
+    let pulled = oci::pull(&state.http, image, credentials).await?;
+    let digest = pulled.digest.clone();
+    let bytes = tokio::task::spawn_blocking(move || initramfs::build(&pulled, &kit))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    let images = match &state.store {
+        Some(store) => store.dir.join("images"),
+        None => std::env::temp_dir().join(format!("hv2-sandboxd-{}-images", std::process::id())),
+    };
+    std::fs::create_dir_all(&images).map_err(|e| format!("{}: {e}", images.display()))?;
+    let short = digest.trim_start_matches("sha256:");
+    let file = images.join(format!("{name}-{}.cpio.gz", &short[..short.len().min(16)]));
+    let scratch = images.join(format!(".{}", uuid::Uuid::new_v4().simple()));
+    std::fs::write(&scratch, &bytes).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    std::fs::rename(&scratch, &file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let initramfs = file.to_string_lossy().into_owned();
+
+    offer(state, name, &initramfs, sizes).await?;
+    if let Some(store) = &state.store {
+        // Recorded for the other nodes, which adopt it from here.
+        let built = BuiltTemplate {
+            image: image.to_string(),
+            digest,
+            initramfs,
+            sizes: Some(sizes),
+        };
+        let dir = store.dir.join("built");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let record = serde_json::to_vec(&built).map_err(|e| e.to_string())?;
+        let tmp = dir.join(format!(".{name}.{}", uuid::Uuid::new_v4().simple()));
+        std::fs::write(&tmp, record).map_err(|e| e.to_string())?;
+        std::fs::rename(&tmp, dir.join(format!("{name}.json"))).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Snapshot the template in `initramfs`, its sandboxes `sizes`, and offer it
+/// as `name`.
+async fn offer(state: &AppState, name: &str, initramfs: &str, sizes: Sizes) -> Result<(), String> {
+    let mut for_this = sizes.applied(&state.opts);
+    for_this.initrd = initramfs.to_string();
+    if !state.opts.no_template {
+        let built = match &state.store {
+            Some(store) => shared_template(&for_this, state.authority.as_deref(), store).await,
+            None => {
+                // A directory of its own: a rebuild replaces the template
+                // under this name, and the one replaced deletes its own
+                // directory when dropped -- which, shared, took the new
+                // snapshot with it.
+                let dir = std::env::temp_dir().join(format!(
+                    "hv2-sandboxd-{}-{name}-{}",
+                    std::process::id(),
+                    &uuid::Uuid::new_v4().simple().to_string()[..8]
+                ));
+                build_template(&for_this, state.authority.as_deref(), dir).await
+            }
+        }?;
+        state
+            .templates
+            .write()
+            .insert(name.to_string(), Arc::new(built));
+    }
+    state.sizes.write().insert(name.to_string(), sizes);
+    state
+        .initrds
+        .write()
+        .insert(name.to_string(), initramfs.to_string());
+    advertise_templates(state);
+    Ok(())
+}
+
+/// Tell the cluster every template this node offers: those built, and the
+/// snapshots, which a create names the same way.
+fn advertise_templates(state: &AppState) {
+    if let Some(node) = &state.node {
+        let mut names: Vec<String> = state.initrds.read().keys().cloned().collect();
+        names.extend(state.snapshots.read().keys().cloned());
+        node.set_templates(names);
+    }
+}
+
+/// Offer every template another node built into the shared store that this
+/// one does not have yet -- at start, and every few seconds after.
+async fn adopt_built(state: Arc<AppState>) {
+    let Some(store) = &state.store else {
+        return;
+    };
+    let dir = store.dir.join("built");
+    loop {
+        if let Ok(listing) = std::fs::read_dir(&dir) {
+            for entry in listing.flatten() {
+                let file = entry.file_name().to_string_lossy().into_owned();
+                let Some(name) = file.strip_suffix(".json") else {
+                    continue;
+                };
+                if name.starts_with('.') || state.initrds.read().contains_key(name) {
+                    continue;
+                }
+                let Some(built) = std::fs::read(entry.path())
+                    .ok()
+                    .and_then(|b| serde_json::from_slice::<BuiltTemplate>(&b).ok())
+                else {
+                    continue;
+                };
+                let sizes = built.sizes.unwrap_or_else(|| Sizes::of(&state.opts));
+                match offer(&state, name, &built.initramfs, sizes).await {
+                    Ok(()) => tracing::info!(
+                        "offering template {name} ({}), built by another node",
+                        built.image
+                    ),
+                    Err(e) => tracing::warn!("adopting template {name}: {e}"),
+                }
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+}
+
+/// `GET /.well-known/jwks.json`: this node's workload-token key.
+async fn node_jwks(State(state): State<Arc<AppState>>) -> Response {
+    let keys: Vec<serde_json::Value> = state.identity.iter().map(|i| i.jwk()).collect();
+    Json(json!({ "keys": keys })).into_response()
+}
+
+/// `GET /.well-known/openid-configuration`, when an issuer is configured.
+async fn node_openid_configuration(State(state): State<Arc<AppState>>) -> Response {
+    match &state.opts.identity_issuer {
+        Some(issuer) => Json(identity::Identity::discovery(issuer)).into_response(),
+        None => api_error(
+            StatusCode::NOT_FOUND,
+            "no --identity-issuer: this node is not an OIDC issuer",
+        ),
+    }
+}
+
+/// The workload-token key every node sharing `store` signs with, published
+/// the same way the egress CA is.
+fn shared_identity(store: &SnapshotStore, opts: &Options) -> Result<identity::Identity, String> {
+    let dir = store.dir.join("identity");
+    let load = |dir: &std::path::Path| {
+        let der =
+            std::fs::read(dir.join("key.pk8")).map_err(|e| format!("{}: {e}", dir.display()))?;
+        identity::Identity::from_pkcs8(
+            &der,
+            opts.identity_issuer.clone(),
+            opts.trust_domain.clone(),
+        )
+    };
+    if dir.join("key.pk8").exists() {
+        return load(&dir);
+    }
+    let made =
+        identity::Identity::generate(opts.identity_issuer.clone(), opts.trust_domain.clone())?;
+    let scratch = store
+        .dir
+        .join(format!(".identity.{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    write_private(&scratch.join("key.pk8"), made.pkcs8())?;
+    match std::fs::rename(&scratch, &dir) {
+        Ok(()) => Ok(made),
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            load(&dir)
+        }
+    }
+}
+
+/// The egress CA every node sharing `store` signs with: loaded, or made
+/// here and published the same way a template is.
+fn shared_authority(store: &SnapshotStore) -> Result<Authority, String> {
+    let dir = store.dir.join("egress-ca");
+    let load = |dir: &std::path::Path| -> Result<Authority, String> {
+        let cert = std::fs::read_to_string(dir.join("ca.pem"))
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
+        let key = std::fs::read_to_string(dir.join("ca.key"))
+            .map_err(|e| format!("{}: {e}", dir.display()))?;
+        Authority::from_pem(&cert, &key).map_err(|e| format!("the shared egress CA: {e}"))
+    };
+    if dir.join("ca.key").exists() {
+        return load(&dir);
+    }
+    let authority = Authority::generate().map_err(|e| format!("generating the egress CA: {e}"))?;
+    let scratch = store
+        .dir
+        .join(format!(".egress-ca.{}", uuid::Uuid::new_v4().simple()));
+    std::fs::create_dir_all(&scratch).map_err(|e| format!("{}: {e}", scratch.display()))?;
+    write_private(&scratch.join("ca.key"), authority.key_pem().as_bytes())?;
+    write_private(&scratch.join("ca.pem"), authority.ca_pem().as_bytes())?;
+    match std::fs::rename(&scratch, &dir) {
+        Ok(()) => Ok(authority),
+        Err(_) => {
+            let _ = std::fs::remove_dir_all(&scratch);
+            load(&dir)
+        }
+    }
+}
+
+/// The kernel command line every sandbox guest boots with. `loglevel=3`: the
+/// kernel's errors and panics reach the console, which a guest that never
+/// answers is reported with; nothing below that, which a booting guest
+/// would write a character at a time, an exit each.
 fn guest_cmdline(network: bool) -> String {
     format!(
-        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=0 {}{}",
+        "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 {}{}",
         hv2_core::BootSource::MICROVM_FAST_BOOT_ARGS,
         // The guest configures its NIC from this before init runs.
         if network {
@@ -2023,6 +3214,7 @@ type NetDevice = Arc<parking_lot::Mutex<hv2_core::devices::virtio_net_mmio::Virt
 /// and a NIC with `mac` when one is given.
 async fn new_vm(
     opts: &Options,
+    initrd: &str,
     name: &str,
     cid: u64,
     mac: Option<[u8; 6]>,
@@ -2032,13 +3224,9 @@ async fn new_vm(
     let vm = AgentVM::builder()
         .name(name.to_string())
         .cpu_cores(opts.cpu_cores)
-        .memory_gb(opts.memory_gb)
+        .memory_mb(opts.memory_mb)
         .capabilities(capabilities)
-        .boot_linux(
-            &opts.kernel,
-            Some(&opts.initrd),
-            guest_cmdline(mac.is_some()),
-        )
+        .boot_linux(&opts.kernel, Some(initrd), guest_cmdline(mac.is_some()))
         .build()
         .await
         .map_err(|e| format!("building the VM: {e}"))?;
@@ -2048,32 +3236,116 @@ async fn new_vm(
     // Attached before launch: virtio-mmio has no hotplug, and the kernel
     // learns where to probe from the command line `attach_net` extends.
     let nic = match mac {
-        Some(mac) => Some(
-            vm.vm()
+        Some(mac) => {
+            let nic = vm
+                .vm()
                 .attach_net(mac)
                 .await
-                .map_err(|e| format!("attaching the network device: {e}"))?,
-        ),
+                .map_err(|e| format!("attaching the network device: {e}"))?;
+            // The far end is always the gateway, a userspace stack that takes
+            // a segment of any size: let the guest send 64 KiB at a time.
+            nic.lock().set_host_offloads(!opts.no_net_offload);
+            Some(nic)
+        }
         None => None,
     };
+    // A console, on every VM alike -- template, booted sandbox, restored
+    // one -- so a guest that never answers says why: its kernel's panic, its
+    // init's last words. On every VM, not only a template's, because a guest
+    // restored from a template whose kernel found a UART at boot must find
+    // one still there. Its buffer is capped (1 MiB), and a quiet kernel
+    // (`loglevel=0`) writes little to it.
+    {
+        use hv2_core::{Device, SerialDevice};
+        let mut console = SerialDevice::new("COM1".to_string(), 0x3F8);
+        console
+            .init()
+            .await
+            .map_err(|e| format!("attaching the console: {e}"))?;
+        vm.vm()
+            .devices()
+            .register_device("COM1", Arc::new(tokio::sync::RwLock::new(console)))
+            .await
+            .map_err(|e| format!("attaching the console: {e}"))?;
+        // Registered, a device is not yet reached: its ports route to it.
+        vm.vm()
+            .devices()
+            .register_io_port_range("COM1".to_string(), 0x3F8, 0x3FF)
+            .await
+            .map_err(|e| format!("routing the console's ports: {e}"))?;
+    }
     Ok((vm, nic))
+}
+
+/// The last of what `vm`'s guest wrote to its console, for an error that
+/// says why a guest never answered.
+async fn console_tail(vm: &AgentVM) -> String {
+    let Some(output) = vm.console_output().await else {
+        return "no console".into();
+    };
+    let lines: Vec<&str> = output.lines().filter(|l| !l.trim().is_empty()).collect();
+    if lines.is_empty() {
+        return "the guest wrote nothing to its console".into();
+    }
+    let tail = lines[lines.len().saturating_sub(15)..].join(" | ");
+    format!("its console ended: {tail}")
+}
+
+/// What `vm`'s guest had to say, and whether its vCPUs were running at all:
+/// each one's VM exits over half a second. A guest that wrote nothing could
+/// be one that never ran (no exits), one spinning (exits but no progress),
+/// or one halted and waiting (a few timer exits) -- and those are different
+/// bugs.
+async fn guest_report(vm: &AgentVM) -> String {
+    let console = console_tail(vm).await;
+    let machine = vm.vm();
+    let stats = machine.all_vcpu_stats();
+    let before: Vec<(u64, u64)> = stats
+        .iter()
+        .map(|s| {
+            (
+                s.exits(),
+                s.io_exits.load(std::sync::atomic::Ordering::Relaxed),
+            )
+        })
+        .collect();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let vcpus: Vec<String> = stats
+        .iter()
+        .zip(before)
+        .enumerate()
+        .map(|(i, (s, (exits, io)))| {
+            format!(
+                "vCPU {i}: {} exits ({} I/O) in 0.5 s, {} in all",
+                s.exits() - exits,
+                s.io_exits.load(std::sync::atomic::Ordering::Relaxed) - io,
+                s.exits()
+            )
+        })
+        .collect();
+    format!("{console}; VM {:?}; {}", vm.state(), vcpus.join(", "))
 }
 
 /// Boot the template once, configure it as every sandbox needs, and write it
 /// to disk with its memory as an image a restore can map.
-async fn build_template(opts: &Options, authority: Option<&Authority>) -> Result<Template, String> {
-    let dir = std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id()));
+async fn build_template(
+    opts: &Options,
+    authority: Option<&Authority>,
+    dir: std::path::PathBuf,
+) -> Result<Template, String> {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut template = Template {
         snapshot: dir.join("template.snap"),
         dir,
+        owned: true,
         working_set: Vec::new(),
     };
 
     let started = std::time::Instant::now();
     let (vm, _nic) = new_vm(
         opts,
+        &opts.initrd,
         "template",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
@@ -2081,9 +3353,18 @@ async fn build_template(opts: &Options, authority: Option<&Authority>) -> Result
     .await?;
     vm.launch().await.map_err(|e| format!("launching: {e}"))?;
     let result = async {
-        vm.ping_guest(opts.ready_timeout)
+        // Booted once, at startup, so allowed longer than a sandbox is: a
+        // template from an OCI image first unpacks its whole filesystem --
+        // 130 MiB for python:3.12-slim -- and missed 15 s on a busy host.
+        if let Err(e) = vm
+            .ping_guest(opts.ready_timeout.max(TEMPLATE_BOOT_TIMEOUT))
             .await
-            .map_err(|e| format!("the template's agent never answered: {e}"))?;
+        {
+            return Err(format!(
+                "the template's agent never answered: {e}; {}",
+                guest_report(&vm).await
+            ));
+        }
         if opts.network {
             configure_guest_network(&vm, authority.map(Authority::ca_pem)).await?;
         }
@@ -2131,6 +3412,7 @@ async fn working_set(
 ) -> Result<Vec<(u64, u64)>, String> {
     let (vm, _nic) = new_vm(
         opts,
+        &opts.initrd,
         "template-probe",
         TEMPLATE_CID,
         opts.network.then_some(TEMPLATE_MAC),
@@ -2188,6 +3470,20 @@ async fn update_network(
     // is a configuration nobody asked for.
     gateway.set_policy(policy);
     gateway.set_egress_proxy(proxy);
+    if let Some(live) = state.sandboxes.lock().get_mut(&sandbox_id) {
+        // The update replaces the rules; the tokens were registered at
+        // creation and are not part of it.
+        let iam = live
+            .network_request
+            .take()
+            .map(|r| r.iam)
+            .unwrap_or_default();
+        live.network_request = Some(NetworkRequest {
+            allow_internet_access: None,
+            network: Some(update),
+            iam,
+        });
+    }
     StatusCode::NO_CONTENT.into_response()
 }
 
@@ -2308,24 +3604,53 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
         (removed, u32::try_from(sandboxes.len()).unwrap_or(u32::MAX))
     };
     let Some(live) = removed else {
-        // A paused one has only its snapshot and its record to lose.
+        // A paused one has only its snapshot and its record to lose -- and
+        // in a store, only once it is claimed, so a sandbox another node is
+        // resuming is not deleted from under it.
         let paused = state.paused.lock().remove(sandbox_id);
+        let claimed = match &state.store {
+            Some(store) => match store.claim(sandbox_id, &state.node_id) {
+                Some((claimed, _)) => {
+                    store.finish(sandbox_id, &claimed);
+                    true
+                }
+                None => false,
+            },
+            None => false,
+        };
         drop(held);
         state.transitions.lock().remove(sandbox_id);
-        let Some(paused) = paused else {
-            return false;
-        };
-        let _ = std::fs::remove_file(&paused.snapshot);
-        state.metrics.ended_deleted.inc();
-        if let Some(node) = &state.node {
-            if let Err(e) = node.ended(sandbox_id, kind, running).await {
-                tracing::warn!("recording the end of {sandbox_id}: {e}");
+        if let Some(paused) = &paused {
+            if state.store.is_none() {
+                let _ = std::fs::remove_file(&paused.snapshot);
             }
         }
+        // With a store, only a claim makes it this node's to delete: a note
+        // of a sandbox this node paused, claimed since by another that has
+        // resumed it, is not a sandbox here -- and its record, which now
+        // names the other node, is not this node's to remove.
+        let ours = if state.store.is_some() {
+            claimed
+        } else {
+            paused.is_some()
+        };
+        if !ours {
+            return false;
+        }
+        state.metrics.ended_deleted.inc();
+        ended(
+            state,
+            sandbox_id,
+            paused.as_ref().map(|p| &p.record),
+            kind,
+            running,
+        )
+        .await;
         return true;
     };
     drop(held);
     state.transitions.lock().remove(sandbox_id);
+    telemetry::forget(state, sandbox_id);
     if kind == "sandbox-expired" {
         state.metrics.ended_expired.inc();
     } else {
@@ -2333,6 +3658,7 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     }
     // Stop resolving the name first: a request that arrives during teardown
     // should fail to route rather than be sent at a VM that is stopping.
+    forwards::stop(state, sandbox_id);
     state.routes.remove_sandbox(sandbox_id);
     let _ = live.process_shutdown.send(());
     // Dropping the bridge drops the gateway, whose stack task ends with it;
@@ -2343,11 +3669,7 @@ async fn end_sandbox(state: &AppState, sandbox_id: &str, kind: &str) -> bool {
     if let Err(e) = live.vm.stop().await {
         tracing::warn!("stopping sandbox {sandbox_id}: {e}");
     }
-    if let Some(node) = &state.node {
-        if let Err(e) = node.ended(sandbox_id, kind, running).await {
-            tracing::warn!("recording the end of {sandbox_id}: {e}");
-        }
-    }
+    ended(state, sandbox_id, Some(&live.record), kind, running).await;
     true
 }
 
@@ -2383,6 +3705,28 @@ async fn expire(state: Arc<AppState>) {
     }
 }
 
+/// Ctrl-C or SIGTERM.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut term =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            () = async {
+                match term.as_mut() {
+                    Some(term) => { term.recv().await; }
+                    None => std::future::pending::<()>().await,
+                }
+            } => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
     tracing_subscriber::fmt()
@@ -2404,11 +3748,55 @@ async fn main() -> std::process::ExitCode {
     let tls_cert = opts.tls_cert.clone();
     let tls_key = opts.tls_key.clone();
 
+    let store = match &opts.snapshot_store {
+        None => None,
+        Some(dir) => {
+            let store = SnapshotStore { dir: dir.clone() };
+            if let Err(e) = std::fs::create_dir_all(store.paused_dir()) {
+                eprintln!("hv2-sandboxd: {}: {e}", store.paused_dir().display());
+                return std::process::ExitCode::FAILURE;
+            }
+            Some(store)
+        }
+    };
     let authority = if opts.network {
-        match Authority::generate() {
+        let made = match &store {
+            Some(store) => shared_authority(store),
+            None => Authority::generate().map_err(|e| format!("generating the egress CA: {e}")),
+        };
+        match made {
             Ok(authority) => Some(Arc::new(authority)),
             Err(e) => {
-                eprintln!("hv2-sandboxd: generating the egress CA: {e}");
+                eprintln!("hv2-sandboxd: {e}");
+                return std::process::ExitCode::FAILURE;
+            }
+        }
+    } else {
+        None
+    };
+    // Workload identity, for sandboxes with a network: a key given, shared
+    // through the snapshot store so every node signs alike, or made here.
+    let identity = if opts.network {
+        let made = match (&opts.identity_key, &store) {
+            (Some(path), _) => std::fs::read(path)
+                .map_err(|e| format!("{}: {e}", path.display()))
+                .and_then(|der| {
+                    identity::Identity::from_pkcs8(
+                        &der,
+                        opts.identity_issuer.clone(),
+                        opts.trust_domain.clone(),
+                    )
+                }),
+            (None, Some(store)) => shared_identity(store, &opts),
+            (None, None) => identity::Identity::generate(
+                opts.identity_issuer.clone(),
+                opts.trust_domain.clone(),
+            ),
+        };
+        match made {
+            Ok(identity) => Some(Arc::new(identity)),
+            Err(e) => {
+                eprintln!("hv2-sandboxd: workload identity: {e}");
                 return std::process::ExitCode::FAILURE;
             }
         }
@@ -2428,21 +3816,43 @@ async fn main() -> std::process::ExitCode {
     // and then spent a second booting would be scheduled onto meanwhile.
     // Failing to build one is not fatal -- sandboxes boot instead, slower,
     // and the log says why.
-    let template = if opts.no_template {
-        None
-    } else {
-        match build_template(&opts, authority.as_deref()).await {
-            Ok(template) => Some(template),
-            Err(e) => {
-                tracing::warn!("no template ({e}); every sandbox will boot instead");
-                None
+    let mut initrds = BTreeMap::new();
+    initrds.insert("base".to_string(), opts.initrd.clone());
+    for (name, path) in &opts.templates {
+        initrds.insert(name.clone(), path.clone());
+    }
+    let mut templates = BTreeMap::new();
+    if !opts.no_template {
+        for (name, initrd) in &initrds {
+            // Each template is the guest its own initramfs boots: the same
+            // build, with that initramfs.
+            let mut for_this = opts.clone();
+            for_this.initrd.clone_from(initrd);
+            let built = match &store {
+                Some(store) => shared_template(&for_this, authority.as_deref(), store).await,
+                None => {
+                    let dir = std::env::temp_dir()
+                        .join(format!("hv2-sandboxd-{}-{name}", std::process::id()));
+                    build_template(&for_this, authority.as_deref(), dir).await
+                }
+            };
+            match built {
+                Ok(template) => {
+                    templates.insert(name.clone(), Arc::new(template));
+                }
+                Err(e) => tracing::warn!(
+                    "no snapshot for template {name} ({e}); its sandboxes will boot instead"
+                ),
             }
         }
-    };
-    let template_line = if template.is_some() {
-        "sandboxes are restored from a template snapshot"
+    }
+    let template_line = if templates.is_empty() {
+        "sandboxes boot from the kernel (no template snapshot)".to_string()
     } else {
-        "sandboxes boot from the kernel (no template)"
+        format!(
+            "sandboxes are restored from template snapshots: {}",
+            templates.keys().cloned().collect::<Vec<_>>().join(", ")
+        )
     };
 
     // Cluster membership, if asked for: checked and joined before anything
@@ -2492,6 +3902,8 @@ async fn main() -> std::process::ExitCode {
                     proxy,
                     capacity: opts.capacity,
                     ttl: opts.node_ttl,
+                    jwk: identity.as_ref().map(|i| i.jwk()),
+                    templates: initrds.keys().cloned().collect(),
                 },
             );
             if let Err(e) = agent.join().await {
@@ -2502,15 +3914,13 @@ async fn main() -> std::process::ExitCode {
         }
     };
 
-    // Where paused sandboxes and fork checkpoints go: beside the template,
-    // whose image every one of them is layered over.
-    let suspend_dir = template
-        .as_ref()
-        .map_or_else(
-            || std::env::temp_dir().join(format!("hv2-sandboxd-{}", std::process::id())),
-            |t| t.dir.clone(),
-        )
-        .join("suspended");
+    // Where paused sandboxes and fork checkpoints go: the store's, if there
+    // is one; else beside the template, whose image every one of them is
+    // layered over.
+    let suspend_dir = match &store {
+        Some(store) => store.paused_dir(),
+        None => std::env::temp_dir().join(format!("hv2-sandboxd-{}-suspended", std::process::id())),
+    };
     if let Err(e) = std::fs::create_dir_all(&suspend_dir) {
         eprintln!("hv2-sandboxd: {}: {e}", suspend_dir.display());
         return std::process::ExitCode::FAILURE;
@@ -2518,18 +3928,42 @@ async fn main() -> std::process::ExitCode {
 
     let routes = Arc::new(PortMap::new());
     let opts_capacity = opts.capacity as usize;
+    let event_store: Arc<dyn hv2_cluster::store::ClusterStore> = match &node {
+        Some(node) => Arc::clone(node.store()),
+        None => Arc::new(hv2_cluster::store::MemoryStore::new()),
+    };
+    let events =
+        hv2_cluster::events::Dispatcher::new(Arc::clone(&event_store), opts.allow_private_webhooks);
     let state = Arc::new(AppState {
+        events,
         authority,
         opts,
         sandboxes: Mutex::new(HashMap::new()),
         next_cid: Mutex::new(0),
         routes: Arc::clone(&routes),
         slots: Arc::new(tokio::sync::Semaphore::new(opts_capacity)),
-        template,
+        templates: parking_lot::RwLock::new(templates),
+        initrds: parking_lot::RwLock::new(initrds),
+        builds: Mutex::new(BTreeMap::new()),
+        sizes: parking_lot::RwLock::new(BTreeMap::new()),
+        telemetry: parking_lot::Mutex::new(HashMap::new()),
+        forwards: forwards::Forwards::default(),
+        snapshots: parking_lot::RwLock::new(BTreeMap::new()),
+        step_builds: parking_lot::Mutex::new(HashMap::new()),
+        upload_tokens: Mutex::new(HashMap::new()),
+        http: reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .unwrap_or_default(),
         metrics: NodeMetrics::default(),
         node: node.clone(),
         paused: Mutex::new(HashMap::new()),
         suspend_dir,
+        store,
+        identity,
+        node_id: node
+            .as_ref()
+            .map_or_else(|| "local".to_string(), |n| n.id().to_string()),
         transitions: Mutex::new(HashMap::new()),
     });
     if let Some(node) = node.clone() {
@@ -2537,6 +3971,9 @@ async fn main() -> std::process::ExitCode {
         tokio::spawn(node.heartbeat(move || beating.running()));
     }
     tokio::spawn(expire(Arc::clone(&state)));
+    tokio::spawn(adopt_built(Arc::clone(&state)));
+    tokio::spawn(snapshots::follow_store(Arc::clone(&state)));
+    tokio::spawn(telemetry::sample(Arc::clone(&state)));
 
     // The proxy, on its own port beside the control plane.
     //
@@ -2554,7 +3991,49 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    // Mutual TLS, when configured, for both of this node's ports: only a
+    // peer whose certificate the cluster's CA signed -- a control plane --
+    // gets a handshake at all. It replaces --tls-cert/--tls-key, which
+    // authenticate this end only.
+    let mtls = match (
+        &state.opts.mtls_ca,
+        &state.opts.mtls_cert,
+        &state.opts.mtls_key,
+    ) {
+        (None, None, None) => None,
+        (Some(ca), Some(cert), Some(key)) => {
+            let loaded = hv2_cluster::mtls::Mtls::load(
+                std::path::Path::new(ca),
+                std::path::Path::new(cert),
+                std::path::Path::new(key),
+                hv2_cluster::mtls::DEFAULT_NODE_NAME,
+            )
+            .and_then(|mtls| mtls.server_config());
+            match loaded {
+                Ok(config) => Some(config),
+                Err(e) => {
+                    eprintln!("hv2-sandboxd: mTLS: {e}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            }
+        }
+        _ => {
+            eprintln!("hv2-sandboxd: --mtls-ca, --mtls-cert and --mtls-key go together");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+    if mtls.is_some()
+        && state
+            .opts
+            .advertise_api
+            .as_deref()
+            .is_some_and(|api| !api.starts_with("https://"))
+    {
+        eprintln!("hv2-sandboxd: with mTLS, --advertise-api must be an https:// URL");
+        return std::process::ExitCode::FAILURE;
+    }
     let tls = match (&tls_cert, &tls_key) {
+        _ if mtls.is_some() => mtls.clone(),
         (Some(cert), Some(key)) => {
             match sandbox_proxy::tls_config(std::path::Path::new(cert), std::path::Path::new(key)) {
                 Ok(config) => Some(config),
@@ -2601,10 +4080,32 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
+        .route("/templates", get(list_templates).post(build_template_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))
         .route("/sandboxes/{sandboxID}/resume", post(resume_route))
         .route("/sandboxes/{sandboxID}/fork", post(fork_route))
+        .route("/sandboxes/{sandboxID}/snapshots", post(snapshots::create))
+        .route("/snapshots", get(snapshots::list))
+        .route("/templates/{templateID}", axum::routing::delete(snapshots::delete))
+        .route("/v3/templates", post(builds::request))
+        .route("/templates/{templateID}/files/{hash}", get(builds::file_link))
+        .route(
+            "/v2/templates/{templateID}/builds/{buildID}",
+            post(builds::start),
+        )
+        .route(
+            "/templates/{templateID}/builds/{buildID}/status",
+            get(builds::status),
+        )
+        .route("/templates/aliases/{alias}", get(builds::alias))
+        .merge(hv2_cluster::events::router(event_store))
+        .route("/volumes", get(volumes::list).post(volumes::create))
+        .route("/volumes/{volumeID}", get(volumes::get).delete(volumes::delete))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
+        .route("/sandboxes/metrics", get(telemetry::latest))
+        .route("/sandboxes/{sandboxID}/metrics", get(telemetry::metrics))
+        .route("/sandboxes/{sandboxID}/logs", get(telemetry::logs_v1))
+        .route("/v2/sandboxes/{sandboxID}/logs", get(telemetry::logs_v2))
         .route(
             "/sandboxes/{sandboxID}",
             get(sandbox_detail).delete(destroy_sandbox),
@@ -2619,6 +4120,35 @@ async fn main() -> std::process::ExitCode {
             require_cluster_token,
         ))
         .route("/metrics", get(node_metrics))
+        // No API key: the SDK sends none with an upload. The URL's token,
+        // from the authenticated `GET` of the same path, stands in.
+        .route(
+            "/templates/{templateID}/files/{hash}",
+            put(builds::upload),
+        )
+        // E2B's volume content API: each volume's own bearer token, which
+        // the SDK's `Volume` sends in place of the API key.
+        .route(
+            "/volumecontent/{volumeID}/file",
+            get(volumes::read_file).put(volumes::write_file),
+        )
+        .route(
+            "/volumecontent/{volumeID}/dir",
+            get(volumes::list_dir).post(volumes::make_dir),
+        )
+        .route(
+            "/volumecontent/{volumeID}/path",
+            get(volumes::stat)
+                .patch(volumes::update)
+                .delete(volumes::remove_path),
+        )
+        // Public: a verifier of a sandbox's token fetches these. In a
+        // cluster the control planes serve the same, for every node.
+        .route("/.well-known/jwks.json", get(node_jwks))
+        .route(
+            "/.well-known/openid-configuration",
+            get(node_openid_configuration),
+        )
         // Even "no such route" has to be JSON: the SDK parses the body of
         // every non-2xx reply before it looks at the status.
         .fallback(|uri: axum::http::Uri| async move {
@@ -2677,39 +4207,52 @@ async fn main() -> std::process::ExitCode {
     // Ctrl-C or SIGTERM ends the server gracefully, then the node leaves the
     // cluster at once instead of lingering until its TTL runs out -- which is
     // what makes scaling a cluster down a non-event.
-    let served = axum::serve(listener, app)
-        .with_graceful_shutdown(async {
-            #[cfg(unix)]
-            {
-                let mut term =
-                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-                tokio::select! {
-                    _ = tokio::signal::ctrl_c() => {}
-                    () = async {
-                        match term.as_mut() {
-                            Some(term) => { term.recv().await; }
-                            None => std::future::pending::<()>().await,
-                        }
-                    } => {}
-                }
+    let served = match mtls {
+        None => axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .map_err(|e| e.to_string()),
+        Some(config) => hv2_api::tls::serve_tls(
+            listener,
+            app,
+            tokio_rustls::TlsAcceptor::from(Arc::new(config)),
+            shutdown_signal(),
+        )
+        .await
+        .map_err(|e| e.to_string()),
+    };
+    // With a shared store, a node going away pauses what it runs rather
+    // than ending it: another node resumes each on its next request, so
+    // draining a node loses no sandbox. Without one, everything ends --
+    // paused ones too, whose snapshots are layered over a template this
+    // process is about to delete.
+    if state.store.is_some() && !state.templates.read().is_empty() {
+        let running: Vec<String> = state.sandboxes.lock().keys().cloned().collect();
+        for id in running {
+            match pause_sandbox(&state, &id, false).await {
+                Ok(()) => tracing::info!("paused {id} into the store for another node"),
+                Err((_, e)) => tracing::warn!("could not pause {id} on the way out: {e}"),
             }
-            #[cfg(not(unix))]
-            {
-                let _ = tokio::signal::ctrl_c().await;
-            }
-        })
-        .await;
-    // Paused ones too: their snapshots are layered over a template this
-    // process is about to delete, so they could not be resumed anyway.
-    let ids: Vec<String> = state
-        .sandboxes
-        .lock()
-        .keys()
-        .chain(state.paused.lock().keys())
-        .cloned()
-        .collect();
+        }
+    }
+    let ids: Vec<String> = if state.store.is_some() {
+        state.sandboxes.lock().keys().cloned().collect()
+    } else {
+        state
+            .sandboxes
+            .lock()
+            .keys()
+            .chain(state.paused.lock().keys())
+            .cloned()
+            .collect()
+    };
     for id in ids {
         end_sandbox(&state, &id, "sandbox-deleted").await;
+    }
+    // Without a store, paused sandboxes and fork checkpoints were this
+    // process's alone, and ended with it above.
+    if state.store.is_none() {
+        let _ = std::fs::remove_dir_all(&state.suspend_dir);
     }
     if let Some(node) = &node {
         if let Err(e) = node.leave().await {

@@ -303,7 +303,9 @@ impl LinuxBootProtocol {
             0 => DEFAULT_INITRD_ADDR_MAX,
             max => max,
         };
-        let ceiling = addr_max.min(params.memory_size.saturating_sub(1));
+        // Below the hole: RAM above 4 GB is not where a 32-bit field can point.
+        let low_ram = params.memory_size.min(crate::memory::RAM_HOLE_START);
+        let ceiling = addr_max.min(low_ram.saturating_sub(1));
 
         let addr = (ceiling + 1).checked_sub(initrd_len).ok_or_else(|| {
             Error::VM(format!(
@@ -348,14 +350,18 @@ impl LinuxBootProtocol {
 
     /// Write the `e820` memory map into `boot_params`.
     ///
-    /// Two entries, which is what a machine with no devices below 4 GB needs:
-    /// conventional memory below the EBDA, and everything from 1 MB up. The
-    /// legacy hole between them is left out of the map, which is how a region
-    /// is reported absent.
+    /// Conventional memory below the EBDA, everything from 1 MB up to the
+    /// hole below 4 GB, and -- for a guest larger than 3 GB -- the rest from
+    /// 4 GB (`crate::memory::ram_ranges`). The legacy hole and the device hole
+    /// are left out of the map, which is how a region is reported absent.
     fn write_e820_map(boot_params: &mut [u8], memory_size: u64) {
         let mut entries: Vec<(u64, u64, u32)> = vec![(0, EBDA_START, E820_RAM)];
-        if memory_size > HIGH_MEMORY_START {
-            entries.push((HIGH_MEMORY_START, memory_size - HIGH_MEMORY_START, E820_RAM));
+        for (start, len) in crate::memory::ram_ranges(memory_size) {
+            let end = start + len;
+            let start = start.max(HIGH_MEMORY_START);
+            if end > start {
+                entries.push((start, end - start, E820_RAM));
+            }
         }
 
         for (index, (addr, size, kind)) in entries.iter().enumerate() {
@@ -795,6 +801,25 @@ mod tests {
         let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
         let (addr, size, _) = e820_entry(&boot_params, 1);
         assert_eq!(addr + size, 64 * 1024 * 1024);
+    }
+
+    /// A guest larger than 3 GB: RAM stops at the hole below 4 GB, where the
+    /// devices are, and the rest resumes at 4 GB.
+    #[test]
+    fn the_memory_map_leaves_the_hole_below_4_gb_to_devices() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        let params = LinuxBootParams {
+            kernel_image: create_minimal_bzimage(),
+            memory_size: 8 * GIB,
+            ..LinuxBootParams::default()
+        };
+        let boot_params = LinuxBootProtocol::create_boot_params(&params, None, None);
+        assert_eq!(boot_params[E820_ENTRIES_OFFSET], 3);
+        assert_eq!(
+            e820_entry(&boot_params, 1),
+            (HIGH_MEMORY_START, 3 * GIB - HIGH_MEMORY_START, E820_RAM)
+        );
+        assert_eq!(e820_entry(&boot_params, 2), (4 * GIB, 5 * GIB, E820_RAM));
     }
 
     #[test]

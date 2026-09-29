@@ -69,8 +69,48 @@ node:
   # faults; measure on your hardware before turning it on (it made no
   # latency difference under nested virtualisation).
   prefault: false
+  # A ReadWriteMany volume every node mounts -- templates, the egress CA and
+  # paused sandboxes live there, so a sandbox paused on one node resumes on
+  # any, survives its node, and a node draining (SIGTERM) pauses what it
+  # runs into it instead of ending it. Name an existing PVC (NFS, EFS,
+  # Filestore, CephFS...) to turn it on; the filesystem must make rename
+  # atomic, which is how nodes claim a paused sandbox. Empty: paused
+  # sandboxes stay on their node's disk and end with it.
+  snapshotStore:
+    claimName: ""
+  # Templates beyond `base`, each an initramfs built from an OCI image by
+  # tools/guest-image/from-oci.sh, e.g.
+  #   - { name: python, initramfs: /templates/python.cpio.gz }
+  # with the files reached through extraVolumes/extraVolumeMounts (a PVC or
+  # an image volume). A control plane sends a create for a template only to
+  # nodes offering it.
+  templates: []
+  extraVolumes: []
+  extraVolumeMounts: []
   resources:
     requests: { cpu: 500m, memory: 512Mi }
+
+# Workload identity (E2B's `iam.tokens`): sandboxes' JWT-SVIDs, minted by
+# the egress gateway per request, with subject spiffe://TRUST_DOMAIN/sandbox/ID.
+# `issuer` is the URL tokens name as `iss` -- the control planes' public
+# address, which serves /.well-known/openid-configuration and jwks.json for
+# a cloud's OIDC federation to fetch. With a snapshot store every node signs
+# with one shared key; without one, each node its own, all in the JWKS.
+identity:
+  issuer: ""
+  trustDomain: hv2.local
+
+# Mutual TLS between control planes and nodes. Each names a Secret in
+# cert-manager's shape -- ca.crt, tls.crt, tls.key -- from one CA: nodes' with
+# DNS name hv2-node and server+client auth, control planes' with client auth
+# (tools/mtls-certs.sh makes both). Set both or neither. Without them nodes
+# are reached in plaintext, the cluster token and all envd traffic with them,
+# and only the NetworkPolicy stands between a node and the rest of the
+# cluster network. With them, a node's /metrics needs a client certificate
+# too.
+mtls:
+  nodeSecret: ""
+  controlPlaneSecret: ""
 
 store:
   # Deploy a single Valkey instance with the chart, password-protected. For
@@ -79,6 +119,11 @@ store:
   # `networkPolicy.externalStoreCidrs`.
   deploy: true
   url: ""
+  # For an external store over TLS (url: rediss://...): a Secret in
+  # cert-manager's shape -- ca.crt to verify the store, tls.crt and tls.key
+  # for a store that requires client certificates. The chart's own Valkey
+  # (deploy: true) is plaintext, and reached only through the NetworkPolicy.
+  tlsSecret: ""
   namespace: default
   image: valkey/valkey:8.1
   resources:

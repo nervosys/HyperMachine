@@ -51,7 +51,8 @@ fn main() {
 mod linux {
     use hv2_guest_agent::{
         decode, encode, truncate_utf8, OpResult, Operation, PtySize, Request, Response,
-        GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
+        TemplateDefaults, GUEST_AGENT_PORT, MAX_FRAME_BYTES, MAX_OUTPUT_BYTES, PROTOCOL_VERSION,
+        TEMPLATE_DEFAULTS_PATH, TEMPLATE_USER,
     };
     use std::collections::{BTreeMap, HashMap};
     use std::io::{Read, Write};
@@ -189,6 +190,56 @@ mod linux {
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?
             {
                 buf.drain(..used);
+                // A forward takes the connection too: answered, then spliced.
+                if let Operation::Forward { port } = request.op {
+                    let target = std::net::TcpStream::connect(("127.0.0.1", port))
+                        .or_else(|_| std::net::TcpStream::connect(("::1", port)));
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
+                        result: match &target {
+                            Ok(_) => OpResult::Acknowledged,
+                            Err(e) => OpResult::Failed {
+                                message: format!("nothing is listening on port {port}: {e}"),
+                            },
+                        },
+                    };
+                    let bytes = encode(&response).map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                    })?;
+                    write_all_fd(fd, &bytes)?;
+                    let Ok(tcp) = target else { return Ok(()) };
+                    splice(fd, tcp, &buf);
+                    return Ok(());
+                }
+                // A volume mount takes the connection itself: answered here,
+                // then handed to the kernel, and this loop is done with it.
+                if let Operation::MountVolume { path } = &request.op {
+                    let ready = prepare_mount_point(path);
+                    let response = Response {
+                        id: request.id,
+                        version: PROTOCOL_VERSION,
+                        result: match &ready {
+                            Ok(()) => OpResult::Acknowledged,
+                            Err(message) => OpResult::Failed {
+                                message: message.clone(),
+                            },
+                        },
+                    };
+                    let bytes = encode(&response).map_err(|e| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                    })?;
+                    write_all_fd(fd, &bytes)?;
+                    if ready.is_ok() {
+                        if let Err(e) = mount_volume(fd, path) {
+                            eprintln!("hv2-guest-agentd: mounting a volume at {path}: {e}");
+                        }
+                        // Ours no more: the kernel holds its own reference,
+                        // and the caller's close drops only this one.
+                        return Ok(());
+                    }
+                    continue;
+                }
                 let response = handle(request);
                 let bytes = encode(&response).map_err(|e| {
                     std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
@@ -196,6 +247,130 @@ mod linux {
                 write_all_fd(fd, &bytes)?;
             }
         }
+    }
+
+    /// See [`Operation::Stats`]. Whatever cannot be read reads as zero: a
+    /// partial answer is still a sample.
+    fn stats() -> hv2_guest_agent::GuestStats {
+        let mut s = hv2_guest_agent::GuestStats::default();
+        if let Ok(stat) = std::fs::read_to_string("/proc/stat") {
+            for line in stat.lines() {
+                let mut fields = line.split_whitespace();
+                match fields.next() {
+                    Some("cpu") => {
+                        let ticks: Vec<u64> = fields.filter_map(|f| f.parse().ok()).collect();
+                        // user nice system idle iowait irq softirq steal
+                        let idle =
+                            ticks.get(3).copied().unwrap_or(0) + ticks.get(4).copied().unwrap_or(0);
+                        let total: u64 = ticks.iter().take(8).sum();
+                        s.cpu_total_ticks = total;
+                        s.cpu_busy_ticks = total.saturating_sub(idle);
+                    }
+                    Some(name) if name.starts_with("cpu") => s.cpus += 1,
+                    _ => {}
+                }
+            }
+        }
+        if let Ok(meminfo) = std::fs::read_to_string("/proc/meminfo") {
+            for line in meminfo.lines() {
+                let mut fields = line.split_whitespace();
+                let (Some(key), Some(kb)) = (
+                    fields.next(),
+                    fields.next().and_then(|v| v.parse::<u64>().ok()),
+                ) else {
+                    continue;
+                };
+                match key {
+                    "MemTotal:" => s.mem_total = kb * 1024,
+                    "MemAvailable:" => s.mem_available = kb * 1024,
+                    "Cached:" => s.mem_cached = kb * 1024,
+                    _ => {}
+                }
+            }
+        }
+        let mut fs: libc::statvfs = unsafe { std::mem::zeroed() };
+        if unsafe { libc::statvfs(c"/".as_ptr(), &mut fs) } == 0 {
+            let block = fs.f_frsize as u64;
+            s.disk_total = fs.f_blocks as u64 * block;
+            s.disk_used = (fs.f_blocks as u64).saturating_sub(fs.f_bfree as u64) * block;
+        }
+        s
+    }
+
+    /// Copy bytes both ways between the host's connection `fd` and `tcp`
+    /// until either side closes; `early` is what the host sent past the
+    /// forward request, which belongs to the stream.
+    fn splice(fd: libc::c_int, tcp: std::net::TcpStream, early: &[u8]) {
+        use std::io::Write as _;
+        // The caller closes `fd` when this returns: the copies use their
+        // own duplicates, so each closes its half cleanly.
+        let dup = |fd: libc::c_int| {
+            let d = unsafe { libc::dup(fd) };
+            (d >= 0).then(|| unsafe { <std::fs::File as std::os::fd::FromRawFd>::from_raw_fd(d) })
+        };
+        let (Some(mut from_host), Some(mut to_host)) = (dup(fd), dup(fd)) else {
+            return;
+        };
+        let _ = tcp.set_nodelay(true);
+        let Ok(mut tcp_reader) = tcp.try_clone() else {
+            return;
+        };
+        let mut tcp_writer = tcp;
+        if !early.is_empty() && tcp_writer.write_all(early).is_err() {
+            return;
+        }
+        let upstream = std::thread::spawn(move || {
+            let _ = std::io::copy(&mut from_host, &mut tcp_writer);
+            let _ = tcp_writer.shutdown(std::net::Shutdown::Write);
+        });
+        let _ = std::io::copy(&mut tcp_reader, &mut to_host);
+        // The program closed its side: so does the host's, and the copy
+        // upstream ends when the host sees it.
+        unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+        let _ = upstream.join();
+    }
+
+    /// `path`, a directory with nothing mounted on it: made if missing, and
+    /// a mount left there -- one whose host end did not survive a snapshot's
+    /// restore -- detached, so the new one is what is seen.
+    fn prepare_mount_point(path: &str) -> Result<(), String> {
+        if !path.starts_with('/') {
+            return Err(format!("{path}: a volume mounts at an absolute path"));
+        }
+        let target = std::ffi::CString::new(path).map_err(|e| e.to_string())?;
+        // Detached first: a dead mount there -- restored from a snapshot,
+        // its server gone -- cannot even be looked at, so making the
+        // directory would fail on it. EINVAL: nothing mounted, as usual.
+        unsafe { libc::umount2(target.as_ptr(), libc::MNT_DETACH) };
+        std::fs::create_dir_all(path).map_err(|e| format!("{path}: {e}"))?;
+        Ok(())
+    }
+
+    /// Mount 9P over connection `fd` at `path`: the kernel reads and writes
+    /// the socket from here on, and this call returns once it has attached.
+    fn mount_volume(fd: libc::c_int, path: &str) -> std::io::Result<()> {
+        let source = c"hv2-volume";
+        let fstype = c"9p";
+        let target = std::ffi::CString::new(path)?;
+        // cache=none: other sandboxes, and the volume API, change the files
+        // too, and each must see the others' writes. access=user: each guest
+        // user attaches as itself, so the host records who made what.
+        let options = std::ffi::CString::new(format!(
+            "trans=fd,rfdno={fd},wfdno={fd},version=9p2000.L,msize=524288,cache=none,access=user"
+        ))?;
+        let rc = unsafe {
+            libc::mount(
+                source.as_ptr(),
+                target.as_ptr(),
+                fstype.as_ptr(),
+                0,
+                options.as_ptr().cast(),
+            )
+        };
+        if rc < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
     }
 
     fn read_fd(fd: libc::c_int, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -270,7 +445,8 @@ mod linux {
                 cwd,
                 envs,
                 pty,
-            } => start(&program, &args, cwd.as_deref(), &envs, pty),
+                user,
+            } => start(&program, &args, cwd.as_deref(), &envs, pty, user.as_deref()),
             Operation::Poll { pid } => poll(pid),
             Operation::WriteStdin { pid, data, close } => write_stdin(pid, &data, close),
             Operation::Signal {
@@ -282,12 +458,178 @@ mod linux {
                 unix_time_ns,
                 entropy,
             } => restored(unix_time_ns, &entropy),
+            Operation::WriteFile {
+                path,
+                data,
+                append,
+                owner,
+            } => write_file(&path, &data, append, owner.as_deref()),
+            Operation::ReadFile {
+                path,
+                offset,
+                length,
+            } => read_file(&path, offset, length),
+            Operation::Stats => OpResult::Stats(stats()),
+            // Served in `serve`, which owns the connection it takes.
+            Operation::Forward { .. } => OpResult::Failed {
+                message: "a forward must be the connection's own request".into(),
+            },
+            // Served in `serve`, which owns the connection it takes.
+            Operation::MountVolume { .. } => OpResult::Failed {
+                message: "a volume mount must be the connection's own request".into(),
+            },
         };
 
         Response {
             id,
             version: PROTOCOL_VERSION,
             result,
+        }
+    }
+
+    /// See [`Operation::WriteFile`].
+    fn write_file(path: &str, data: &str, append: bool, owner: Option<&str>) -> OpResult {
+        let failed = |what: &str, e: &dyn std::fmt::Display| OpResult::Failed {
+            message: format!("{what} {path}: {e}"),
+        };
+        let Some(bytes) = hv2_guest_agent::b64::decode(data) else {
+            return failed("decoding the data for", &"not base64");
+        };
+        let owner = match owner {
+            Some(TEMPLATE_USER) => template_defaults().user,
+            other => other.map(str::to_string),
+        };
+        let account = match owner.as_deref().map(Account::of).transpose() {
+            Ok(account) => account.filter(|a| a.uid != 0),
+            Err(e) => return failed("owning", &e),
+        };
+        // The directories this write makes, outermost first: the owner's
+        // too, or a file they own sits somewhere they cannot write.
+        let mut made = Vec::new();
+        let mut missing = std::path::Path::new(path).parent();
+        while let Some(dir) = missing.filter(|d| !d.as_os_str().is_empty() && !d.exists()) {
+            made.push(dir.to_path_buf());
+            missing = dir.parent();
+        }
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                return failed("creating the directory of", &e);
+            }
+        }
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(append)
+            .truncate(!append)
+            .open(path);
+        if let Err(e) = file.and_then(|mut f| f.write_all(&bytes)) {
+            return failed("writing", &e);
+        }
+        if let Some(account) = account {
+            for made in made.iter().rev().map(std::path::PathBuf::as_path) {
+                let _ = std::os::unix::fs::chown(made, Some(account.uid), Some(account.gid));
+            }
+            if let Err(e) = std::os::unix::fs::chown(path, Some(account.uid), Some(account.gid)) {
+                return failed("giving the owner", &e);
+            }
+        }
+        OpResult::Acknowledged
+    }
+
+    /// A user of this guest, from `/etc/passwd` and `/etc/group`.
+    struct Account {
+        name: String,
+        uid: u32,
+        gid: u32,
+        /// Every group listing the user, for `setgroups`.
+        groups: Vec<libc::gid_t>,
+        home: String,
+    }
+
+    impl Account {
+        /// `user` by name or number. Root needs no `/etc/passwd`: an image
+        /// with none still runs as root.
+        fn of(user: &str) -> Result<Self, String> {
+            if user == "root" || user == "0" {
+                return Ok(Self {
+                    name: "root".into(),
+                    uid: 0,
+                    gid: 0,
+                    groups: vec![0],
+                    home: "/root".into(),
+                });
+            }
+            let passwd = std::fs::read_to_string("/etc/passwd")
+                .map_err(|e| format!("reading /etc/passwd for user {user}: {e}"))?;
+            let fields = passwd
+                .lines()
+                .map(|line| line.split(':').collect::<Vec<_>>())
+                .find(|f| f.len() >= 6 && (f[0] == user || f[2] == user))
+                .ok_or_else(|| format!("no user {user} in this sandbox"))?;
+            let number = |s: &str| s.parse::<u32>().map_err(|e| format!("user {user}: {e}"));
+            let (name, uid, gid) = (
+                fields[0].to_string(),
+                number(fields[2])?,
+                number(fields[3])?,
+            );
+            let mut groups = vec![gid];
+            if let Ok(group) = std::fs::read_to_string("/etc/group") {
+                for f in group.lines().map(|l| l.split(':').collect::<Vec<_>>()) {
+                    if f.len() >= 4 && f[3].split(',').any(|m| m == name) {
+                        if let Ok(g) = f[2].parse::<u32>() {
+                            if !groups.contains(&g) {
+                                groups.push(g);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(Self {
+                name,
+                uid,
+                gid,
+                groups,
+                home: fields[5].to_string(),
+            })
+        }
+    }
+
+    /// See [`Operation::ReadFile`].
+    fn read_file(path: &str, offset: u64, length: u64) -> OpResult {
+        use std::io::{Seek, SeekFrom};
+        let failed = |e: std::io::Error| OpResult::Failed {
+            message: format!("reading {path}: {e}"),
+        };
+        let mut file = match std::fs::File::open(path) {
+            Ok(file) => file,
+            Err(e) => return failed(e),
+        };
+        let size = match file.metadata() {
+            Ok(meta) if meta.is_dir() => {
+                return OpResult::Failed {
+                    message: format!("reading {path}: it is a directory"),
+                }
+            }
+            Ok(meta) => meta.len(),
+            Err(e) => return failed(e),
+        };
+        let want = length.min(hv2_guest_agent::FILE_CHUNK as u64) as usize;
+        let mut buf = vec![0u8; want];
+        let mut got = 0;
+        if let Err(e) = file.seek(SeekFrom::Start(offset)) {
+            return failed(e);
+        }
+        while got < want {
+            match file.read(&mut buf[got..]) {
+                Ok(0) => break,
+                Ok(n) => got += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return failed(e),
+            }
+        }
+        OpResult::FileData {
+            data: hv2_guest_agent::b64::encode(&buf[..got]),
+            size,
         }
     }
 
@@ -481,21 +823,70 @@ mod linux {
     }
 
     /// Start a program and keep it.
+    /// This template's defaults, read fresh: a template build writes them
+    /// while this agent runs, and every sandbox restored from it keeps this
+    /// same agent. None, if the template was not built by steps.
+    fn template_defaults() -> TemplateDefaults {
+        std::fs::read(TEMPLATE_DEFAULTS_PATH)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
     fn start(
         program: &str,
         args: &[String],
         cwd: Option<&str>,
         envs: &BTreeMap<String, String>,
         pty: Option<PtySize>,
+        user: Option<&str>,
     ) -> OpResult {
         let mut command = Command::new(program);
         command.args(args);
         // Added to the agent's own environment rather than replacing it:
         // `env_clear` would leave the program without a `PATH`, and the first
-        // thing most of them do is look something up in it.
+        // thing most of them do is look something up in it. The template's
+        // defaults go under the request's own.
+        let defaults = template_defaults();
+        let account = match user
+            .or(defaults.user.as_deref())
+            .map(Account::of)
+            .transpose()
+        {
+            Ok(account) => account.filter(|a| a.uid != 0),
+            Err(message) => return OpResult::Failed { message },
+        };
+        if let Some(account) = &account {
+            command
+                .env("HOME", &account.home)
+                .env("USER", &account.name)
+                .env("LOGNAME", &account.name);
+        }
+        command.envs(&defaults.env);
         command.envs(envs);
-        if let Some(dir) = cwd {
+        let home = account.as_ref().map(|a| a.home.as_str());
+        if let Some(dir) = cwd
+            .or(defaults.cwd.as_deref())
+            .or(home.filter(|h| std::path::Path::new(h).is_dir()))
+        {
             command.current_dir(dir);
+        }
+        if let Some(account) = account {
+            let (uid, gid, groups) = (account.uid, account.gid, account.groups);
+            // SAFETY: runs in the child between fork and exec, and calls only
+            // async-signal-safe functions. Groups before the gid, the gid
+            // before the uid: once the uid is dropped, neither may change.
+            unsafe {
+                command.pre_exec(move || {
+                    if libc::setgroups(groups.len(), groups.as_ptr()) < 0
+                        || libc::setgid(gid) < 0
+                        || libc::setuid(uid) < 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    Ok(())
+                });
+            }
         }
 
         // Opened before the fork so a failure is reported as a failure to
@@ -810,7 +1201,9 @@ mod linux {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        if let Some(dir) = cwd {
+        let defaults = template_defaults();
+        command.envs(&defaults.env);
+        if let Some(dir) = cwd.or(defaults.cwd.as_deref()) {
             command.current_dir(dir);
         }
 

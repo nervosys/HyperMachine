@@ -334,7 +334,10 @@ impl crate::devices::virtio_vsock::PendingWake for QueuedPackets {
 }
 
 /// Write guest memory as a raw image of `total` bytes at `path`: every byte
-/// at its guest-physical offset, with holes where a page is all zero.
+/// at its offset in the host buffer backing RAM -- its guest-physical address
+/// below the hole at 3 GiB, less the hole's size above it (see
+/// `crate::memory::ram_ranges`) -- with holes where a page is all zero. That
+/// is the layout an image is mapped over the buffer in.
 ///
 /// Sparse because most of a guest is zero, and a hole costs nothing on disk
 /// and reads as zero -- through `read` or through a mapping.
@@ -356,18 +359,21 @@ fn write_memory_image(
     // write rather than a seek each.
     let mut cursor = u64::MAX;
     for region in regions.iter().filter(|r| !r.readonly) {
-        if region.guest_addr + region.size > total {
+        let Some(base) = memory
+            .host_offset(region.guest_addr)
+            .filter(|b| b + region.size <= total)
+        else {
             return Err(Error::InvalidState(format!(
                 "region at {:#x} ({} bytes) lies outside a {total}-byte image",
                 region.guest_addr, region.size
             )));
-        }
+        };
         let mut at = 0u64;
         while at < region.size {
             let take = (page_size as usize).min((region.size - at) as usize);
             memory.read_bytes_into(region.guest_addr + at, &mut page[..take])?;
             if page[..take].iter().any(|byte| *byte != 0) {
-                let offset = region.guest_addr + at;
+                let offset = base + at;
                 if cursor != offset {
                     out.seek(SeekFrom::Start(offset))
                         .map_err(|e| Error::Config(format!("seeking {}: {e}", path.display())))?;
@@ -717,7 +723,7 @@ impl VM {
         )?);
 
         // Initialize main memory region
-        memory.allocate_region(config.memory_size, false)?;
+        memory.allocate_ram()?;
 
         // Create device manager
         let devices = Arc::new(DeviceManager::new());
@@ -1696,16 +1702,19 @@ impl VM {
         }
         // The slow way: every byte, including the zeroes, because this VM's
         // memory may hold whatever it booted before.
+        // The image is the host buffer's layout: RAM's ranges, one after
+        // the other (`crate::memory::ram_ranges`).
         let mut reader = std::io::BufReader::with_capacity(1 << 20, file);
         let mut chunk = vec![0u8; 1 << 20];
-        let mut at = 0u64;
-        let total = memory.total_size();
-        while at < total {
-            let take = (chunk.len() as u64).min(total - at) as usize;
-            std::io::Read::read_exact(&mut reader, &mut chunk[..take])
-                .map_err(|e| Error::Config(format!("reading {}: {e}", image.display())))?;
-            memory.write_bytes(at, &chunk[..take])?;
-            at += take as u64;
+        for (start, len) in crate::memory::ram_ranges(memory.total_size()) {
+            let mut at = 0u64;
+            while at < len {
+                let take = (chunk.len() as u64).min(len - at) as usize;
+                std::io::Read::read_exact(&mut reader, &mut chunk[..take])
+                    .map_err(|e| Error::Config(format!("reading {}: {e}", image.display())))?;
+                memory.write_bytes(start + at, &chunk[..take])?;
+                at += take as u64;
+            }
         }
         Ok(())
     }
@@ -2223,7 +2232,7 @@ impl VM {
         // The same rule the vsock window follows, for the same reason: two
         // meanings for one address is memory corruption wearing a bad address's
         // clothes.
-        if guest_addr < self.memory.total_size() {
+        if self.memory.host_offset(guest_addr).is_some() {
             return Err(Error::Device(format!(
                 "a shared region at {guest_addr:#x} overlaps {} bytes of guest RAM",
                 self.memory.total_size()
@@ -2328,7 +2337,7 @@ impl VM {
         // The BAR window is not RAM. Placing it inside the guest's memory
         // would give two different meanings to one address, and the failure
         // would surface as memory corruption rather than as a bad address.
-        if bar_base < self.memory.total_size() {
+        if self.memory.host_offset(bar_base).is_some() {
             return Err(Error::Device(format!(
                 "vsock BAR window at {bar_base:#x} overlaps {} bytes of guest RAM",
                 self.memory.total_size()
@@ -2477,7 +2486,7 @@ impl VM {
 
         // The register window is not RAM, for the reason given at the same
         // check in `attach_vsock_at`.
-        if base_address < self.memory.total_size() {
+        if self.memory.host_offset(base_address).is_some() {
             return Err(Error::Device(format!(
                 "network register window at {base_address:#x} overlaps {} bytes of guest RAM",
                 self.memory.total_size()
@@ -2630,7 +2639,7 @@ impl VM {
         // The register window is not RAM. Placing it inside the guest's memory
         // would give two different meanings to one address, and the failure
         // would surface as memory corruption rather than as a bad address.
-        if base_address < self.memory.total_size() {
+        if self.memory.host_offset(base_address).is_some() {
             return Err(Error::Device(format!(
                 "vsock register window at {base_address:#x} overlaps {} bytes of guest RAM",
                 self.memory.total_size()

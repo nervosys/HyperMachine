@@ -93,6 +93,8 @@ async fn node_create(
                 envd_version: "0.6.3".into(),
                 descriptor: descriptor.clone(),
                 paused: false,
+                portable: false,
+                volume_mounts: Vec::new(),
             },
             running,
         )
@@ -117,7 +119,7 @@ async fn node_delete(
         running.len() as u32
     };
     node.agent
-        .ended(&id, "sandbox-deleted", running)
+        .ended(&id, None, "sandbox-deleted", running)
         .await
         .unwrap();
     StatusCode::NO_CONTENT.into_response()
@@ -148,6 +150,17 @@ async fn fake_node(
             proxy: SocketAddr::from(([127, 0, 0, 1], 40000 + addr.port() % 1000)),
             capacity: capacity as u32,
             ttl,
+            // Nodes a and b share a key; any other has its own.
+            jwk: Some(json!({
+                "kty": "EC",
+                "kid": if id == "a" || id == "b" { "shared".to_string() } else { format!("key-{id}") },
+            })),
+            // Node c alone offers the python template.
+            templates: if id == "c" {
+                vec!["base".into(), "python".into()]
+            } else {
+                Vec::new()
+            },
         },
     );
     agent.join().await.unwrap();
@@ -181,6 +194,7 @@ async fn control_plane(store: Arc<dyn ClusterStore>, api_key: Option<&str>) -> S
             cluster_token: Some(TOKEN.into()),
             proxy_port: 5981,
             create_timeout: Duration::from_secs(10),
+            identity_issuer: Some("https://issuer.test".into()),
         },
     );
     tokio::spawn(async move {
@@ -438,4 +452,88 @@ async fn envd_routes_go_to_the_owning_nodes_proxy() {
     let routes = ClusterRoutes::new(Arc::clone(&store), Duration::from_secs(2));
     assert_eq!(routes.resolve(id, 49983).await, Some(node.proxy));
     assert_eq!(routes.resolve("sbx-nope", 49983).await, None);
+}
+
+/// The cluster's JWKS is every live node's workload-token key, each once,
+/// and discovery points at it -- what a cloud verifying a sandbox's token
+/// fetches, without an API key.
+#[tokio::test]
+async fn the_jwks_lists_each_nodes_key_once_and_discovery_points_at_it() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let _a = fake_node(Arc::clone(&store), "a", 4, Duration::from_secs(30)).await;
+    let _b = fake_node(Arc::clone(&store), "b", 4, Duration::from_secs(30)).await;
+    let _c = fake_node(Arc::clone(&store), "c", 4, Duration::from_secs(30)).await;
+    let base = control_plane(Arc::clone(&store), Some("the-key")).await;
+
+    let jwks: Value = client()
+        .get(format!("{base}/.well-known/jwks.json"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut kids: Vec<String> = jwks["keys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|k| k["kid"].as_str().unwrap().to_string())
+        .collect();
+    kids.sort();
+    assert_eq!(kids, ["key-c", "shared"]);
+
+    let discovery: Value = client()
+        .get(format!("{base}/.well-known/openid-configuration"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(discovery["issuer"], "https://issuer.test");
+    assert_eq!(
+        discovery["jwks_uri"],
+        "https://issuer.test/.well-known/jwks.json"
+    );
+}
+
+/// A create for a template goes only to a node that offers it; one no node
+/// offers is refused as not found, and the templates are listed.
+#[tokio::test]
+async fn creates_go_to_a_node_with_the_template() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (a, _) = fake_node(Arc::clone(&store), "a", 4, Duration::from_secs(30)).await;
+    let (c, _) = fake_node(Arc::clone(&store), "c", 4, Duration::from_secs(30)).await;
+    let base = control_plane(Arc::clone(&store), None).await;
+
+    for _ in 0..3 {
+        let (status, body) = create(&base, json!({"templateID": "python"})).await;
+        assert_eq!(status, 201, "{body}");
+    }
+    assert_eq!(
+        c.running.lock().len(),
+        3,
+        "all on the node with the template"
+    );
+    assert_eq!(a.running.lock().len(), 0);
+
+    let (status, body) = create(&base, json!({"templateID": "rust"})).await;
+    assert_eq!(status, 404, "{body}");
+
+    let listed: Value = client()
+        .get(format!("{base}/templates"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let mut names: Vec<&str> = listed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["templateID"].as_str().unwrap())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["base", "python"]);
 }
