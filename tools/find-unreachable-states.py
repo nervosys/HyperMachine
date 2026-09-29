@@ -125,6 +125,10 @@ ACCEPTED = {
         'caller sets File; the guard reads a choice made outside this crate.'
     ),
     ('StoreBackend', 'External'): 'As StoreBackend::File.',
+    ('Report', 'None'): (
+        'hm sandbox run --report none: clap builds it from the command line '
+        '(ValueEnum), which this script cannot see.'
+    ),
     ('MigrationStage', 'PostCopy'): (
         'Post-copy migration is declared and unimplemented. The controller drives '
         'Idle -> Setup -> PreCopy -> StopAndCopy -> Completed and never enters it. '
