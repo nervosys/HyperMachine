@@ -44,7 +44,7 @@ use windows_sys::Win32::System::Threading::{
 };
 
 use crate::{
-    Control, Controls, FilesystemPolicy, NetworkPolicy, SandboxCommand, SandboxError,
+    Control, Controls, FilesystemPolicy, NetworkPolicy, RunIo, SandboxCommand, SandboxError,
     SandboxOutput, SandboxSpec,
 };
 
@@ -214,6 +214,7 @@ impl Drop for Job {
 pub(super) fn run(
     command: &SandboxCommand,
     spec: &SandboxSpec,
+    io: &RunIo,
 ) -> Result<SandboxOutput, SandboxError> {
     if let FilesystemPolicy::Isolated { .. } = spec.filesystem {
         return Err(SandboxError::InvalidSpec(
@@ -282,7 +283,7 @@ pub(super) fn run(
         )));
     }
 
-    driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, || {
+    driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, io, || {
         // Terminate the job, not the process: a workload that spawned children
         // would otherwise leave them running past its own deadline.
         job.terminate();

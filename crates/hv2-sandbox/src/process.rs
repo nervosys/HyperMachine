@@ -18,7 +18,10 @@
 //! Probing costs a few forks, once, so [`ProcessSandbox::new`] is meant to be
 //! called at startup and the result kept.
 
-use crate::{Control, Controls, Sandbox, SandboxCommand, SandboxError, SandboxOutput, SandboxSpec};
+use crate::{
+    Control, Controls, OutputSink, OutputStream, RunIo, Sandbox, SandboxCommand, SandboxError,
+    SandboxOutput, SandboxSpec,
+};
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -71,6 +74,15 @@ impl Sandbox for ProcessSandbox {
         command: &SandboxCommand,
         spec: &SandboxSpec,
     ) -> Result<SandboxOutput, SandboxError> {
+        self.run_with(command, spec, &RunIo::default())
+    }
+
+    fn run_with(
+        &self,
+        command: &SandboxCommand,
+        spec: &SandboxSpec,
+        io: &RunIo,
+    ) -> Result<SandboxOutput, SandboxError> {
         if command.program.trim().is_empty() {
             return Err(SandboxError::InvalidSpec("no program to run".to_string()));
         }
@@ -95,7 +107,7 @@ impl Sandbox for ProcessSandbox {
         // "run with what we have" into "fail anyway, later and less clearly".
         let effective = spec.without_controls(&unenforced);
 
-        let mut output = run_confined(command, &effective)?;
+        let mut output = run_confined(command, &effective, io)?;
         output.unenforced = unenforced;
         Ok(output)
     }
@@ -126,18 +138,19 @@ fn probe() -> Controls {
 fn run_confined(
     command: &SandboxCommand,
     spec: &SandboxSpec,
+    io: &RunIo,
 ) -> Result<SandboxOutput, SandboxError> {
     #[cfg(target_os = "linux")]
     {
-        linux::run(command, spec)
+        linux::run(command, spec, io)
     }
     #[cfg(windows)]
     {
-        windows::run(command, spec)
+        windows::run(command, spec, io)
     }
     #[cfg(all(unix, not(target_os = "linux")))]
     {
-        unix_fallback::run(command, spec)
+        unix_fallback::run(command, spec, io)
     }
     #[cfg(not(any(unix, windows)))]
     {
@@ -170,6 +183,7 @@ pub(crate) mod driver {
         mut child: Child,
         stdin: Option<&[u8]>,
         deadline: Option<Duration>,
+        io: &RunIo,
         kill: impl FnOnce(),
     ) -> Result<SandboxOutput, SandboxError> {
         if let Some(data) = stdin {
@@ -192,49 +206,59 @@ pub(crate) mod driver {
         let (out_tx, out_rx) = mpsc::channel();
         let (err_tx, err_rx) = mpsc::channel();
 
+        let sink = io.on_output.clone();
         std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(pipe) = stdout_pipe.as_mut() {
-                let _ = pipe.read_to_end(&mut buf);
-            }
-            let _ = out_tx.send(buf);
+            let _ = out_tx.send(drain(
+                stdout_pipe.as_mut(),
+                OutputStream::Stdout,
+                sink.as_ref(),
+            ));
         });
+        let sink = io.on_output.clone();
         std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            if let Some(pipe) = stderr_pipe.as_mut() {
-                let _ = pipe.read_to_end(&mut buf);
-            }
-            let _ = err_tx.send(buf);
+            let _ = err_tx.send(drain(
+                stderr_pipe.as_mut(),
+                OutputStream::Stderr,
+                sink.as_ref(),
+            ));
         });
 
-        let (status, killed) = match deadline {
-            None => (
+        let cancelled = || {
+            io.cancel
+                .as_ref()
+                .is_some_and(|c| c.load(std::sync::atomic::Ordering::SeqCst))
+        };
+        let (status, killed) = if deadline.is_none() && io.cancel.is_none() {
+            (
                 child
                     .wait()
                     .map_err(|e| SandboxError::Runtime(format!("waiting for workload: {e}")))?,
                 false,
-            ),
-            Some(limit) => {
-                let start = std::time::Instant::now();
-                loop {
-                    match child.try_wait() {
-                        Ok(Some(status)) => break (status, false),
-                        Ok(None) => {}
-                        Err(e) => {
-                            return Err(SandboxError::Runtime(format!("waiting for workload: {e}")))
-                        }
+            )
+        } else {
+            let start = std::time::Instant::now();
+            let mut kill = Some(kill);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break (status, false),
+                    Ok(None) => {}
+                    Err(e) => {
+                        return Err(SandboxError::Runtime(format!("waiting for workload: {e}")))
                     }
-                    if start.elapsed() >= limit {
-                        kill();
-                        // Reap it, so the deadline does not leave a zombie
-                        // behind every time it fires.
-                        let status = child.wait().map_err(|e| {
-                            SandboxError::Runtime(format!("reaping killed workload: {e}"))
-                        })?;
-                        break (status, true);
-                    }
-                    std::thread::sleep(POLL);
                 }
+                let expired = deadline.is_some_and(|limit| start.elapsed() >= limit);
+                if expired || cancelled() {
+                    if let Some(kill) = kill.take() {
+                        kill();
+                    }
+                    // Reap it, so a kill does not leave a zombie behind every
+                    // time it fires.
+                    let status = child.wait().map_err(|e| {
+                        SandboxError::Runtime(format!("reaping killed workload: {e}"))
+                    })?;
+                    break (status, expired);
+                }
+                std::thread::sleep(POLL);
             }
         };
 
@@ -249,6 +273,31 @@ pub(crate) mod driver {
             killed_by: killed.then_some(Control::WallClock),
             unenforced: Vec::new(),
         })
+    }
+
+    /// Read `pipe` to its end: into a buffer returned at the end, or, with a
+    /// sink, into the sink as each chunk arrives, keeping none of it.
+    fn drain(
+        pipe: Option<&mut impl Read>,
+        stream: OutputStream,
+        sink: Option<&OutputSink>,
+    ) -> Vec<u8> {
+        let mut kept = Vec::new();
+        let Some(pipe) = pipe else { return kept };
+        let Some(sink) = sink else {
+            let _ = pipe.read_to_end(&mut kept);
+            return kept;
+        };
+        let mut chunk = vec![0u8; 64 * 1024];
+        loop {
+            match pipe.read(&mut chunk) {
+                Ok(0) => break,
+                Ok(n) => sink(stream, &chunk[..n]),
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(_) => break,
+            }
+        }
+        kept
     }
 
     /// How often the deadline is checked. Small enough that a limit means what
@@ -272,7 +321,165 @@ pub(crate) mod driver {
 mod tests {
     use super::*;
     use crate::NetworkPolicy;
+    use std::sync::Arc;
     use std::time::Duration;
+
+    /// Under this variable, [`slow_helper`] is the workload: it prints
+    /// `first`, waits this many milliseconds, prints `second`, then waits as
+    /// long again before exiting.
+    const SLOW_HELPER_MS: &str = "HV2_SANDBOX_SLOW_HELPER_MS";
+
+    #[test]
+    fn slow_helper() {
+        use std::io::Write;
+        let Ok(ms) = std::env::var(SLOW_HELPER_MS) else {
+            return;
+        };
+        let pause = Duration::from_millis(ms.parse().expect("milliseconds"));
+        println!("first");
+        std::io::stdout().flush().unwrap();
+        std::thread::sleep(pause);
+        eprintln!("second");
+        std::thread::sleep(pause);
+    }
+
+    /// This test binary, re-run as [`slow_helper`] with `pause_ms`.
+    fn slow_command(pause_ms: u64) -> SandboxCommand {
+        let exe = std::env::current_exe().expect("this test binary's own path");
+        let command = SandboxCommand::new(exe.to_string_lossy())
+            .args(["--exact", "process::tests::slow_helper", "--nocapture"])
+            .env(SLOW_HELPER_MS, pause_ms.to_string());
+        #[cfg(windows)]
+        let command = command
+            .env("SystemRoot", r"C:\Windows")
+            .env("PATH", r"C:\Windows\System32");
+        command
+    }
+
+    /// Output reaches the sink while the workload is still running -- the
+    /// point of streaming -- and is not also collected.
+    #[test]
+    fn output_is_streamed_as_it_arrives_not_after_the_exit() {
+        use std::sync::Mutex;
+        type Seen = Vec<(std::time::Instant, OutputStream, Vec<u8>)>;
+        let seen: Arc<Mutex<Seen>> = Arc::new(Mutex::new(Vec::new()));
+        let sink_seen = Arc::clone(&seen);
+        let io = RunIo {
+            on_output: Some(Arc::new(move |stream, bytes: &[u8]| {
+                sink_seen
+                    .lock()
+                    .unwrap()
+                    .push((std::time::Instant::now(), stream, bytes.to_vec()));
+            })),
+            cancel: None,
+        };
+        let output = ProcessSandbox::new()
+            .run_with(&slow_command(1500), &SandboxSpec::unconfined(), &io)
+            .expect("run");
+        let ended = std::time::Instant::now();
+        assert_eq!(output.exit_code, Some(0));
+        assert!(
+            output.stdout.is_empty() && output.stderr.is_empty(),
+            "collected as well"
+        );
+
+        let seen = seen.lock().unwrap();
+        let text = |want: OutputStream| -> String {
+            seen.iter()
+                .filter(|(_, s, _)| *s == want)
+                .map(|(_, _, b)| String::from_utf8_lossy(b).into_owned())
+                .collect()
+        };
+        assert!(text(OutputStream::Stdout).contains("first"), "{seen:?}");
+        assert!(text(OutputStream::Stderr).contains("second"), "{seen:?}");
+        let first_at = seen
+            .iter()
+            .find(|(_, _, b)| String::from_utf8_lossy(b).contains("first"))
+            .map(|(t, _, _)| *t)
+            .unwrap();
+        assert!(
+            ended.duration_since(first_at) >= Duration::from_millis(2000),
+            "`first` arrived only {:?} before the run ended",
+            ended.duration_since(first_at)
+        );
+    }
+
+    /// Setting the cancel flag stops the workload, and the run returns.
+    #[test]
+    fn a_cancelled_run_stops_the_workload_and_returns() {
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let io = RunIo {
+            on_output: None,
+            cancel: Some(Arc::clone(&cancel)),
+        };
+        let flag = Arc::clone(&cancel);
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(500));
+            flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+        let started = std::time::Instant::now();
+        let output = ProcessSandbox::new()
+            .run_with(&slow_command(60_000), &SandboxSpec::unconfined(), &io)
+            .expect("run");
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "{:?}",
+            started.elapsed()
+        );
+        assert!(!output.succeeded(), "{output:?}");
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("second"),
+            "it ran on past the cancel"
+        );
+    }
+
+    /// The trait's default, for a backend with no streaming of its own:
+    /// the output still reaches the sink, once the run is over.
+    #[test]
+    fn the_default_run_with_hands_collected_output_to_the_sink() {
+        struct Canned;
+        impl Sandbox for Canned {
+            fn name(&self) -> &str {
+                "canned"
+            }
+            fn controls(&self) -> Controls {
+                Controls::none()
+            }
+            fn run(
+                &self,
+                _: &SandboxCommand,
+                _: &SandboxSpec,
+            ) -> Result<SandboxOutput, SandboxError> {
+                Ok(SandboxOutput {
+                    exit_code: Some(0),
+                    signal: None,
+                    stdout: b"out".to_vec(),
+                    stderr: b"err".to_vec(),
+                    killed_by: None,
+                    unenforced: Vec::new(),
+                })
+            }
+        }
+        let got = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let g = Arc::clone(&got);
+        let io = RunIo {
+            on_output: Some(Arc::new(move |s, b: &[u8]| {
+                g.lock().unwrap().push((s, b.to_vec()));
+            })),
+            cancel: None,
+        };
+        let out = Canned
+            .run_with(&SandboxCommand::new("x"), &SandboxSpec::unconfined(), &io)
+            .unwrap();
+        assert!(out.stdout.is_empty());
+        assert_eq!(
+            *got.lock().unwrap(),
+            vec![
+                (OutputStream::Stdout, b"out".to_vec()),
+                (OutputStream::Stderr, b"err".to_vec())
+            ]
+        );
+    }
 
     /// A program that exists on every platform CI runs on, printing its
     /// argument.

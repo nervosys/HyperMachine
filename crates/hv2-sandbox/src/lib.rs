@@ -54,6 +54,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Duration;
 
 pub mod process;
@@ -454,6 +456,47 @@ impl SandboxOutput {
     }
 }
 
+/// Which of a workload's output streams a chunk came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputStream {
+    /// Standard output.
+    Stdout,
+    /// Standard error.
+    Stderr,
+}
+
+/// Called with each chunk of a workload's output as it arrives.
+pub type OutputSink = Arc<dyn Fn(OutputStream, &[u8]) + Send + Sync>;
+
+/// How a caller watches and steers a run while it happens, rather than only
+/// reading what it did afterwards.
+///
+/// For work that runs for hours: [`Sandbox::run`] hands back everything the
+/// workload printed once it has finished, which is too late to watch and, for
+/// a chatty workload, too much to hold.
+#[derive(Clone, Default)]
+pub struct RunIo {
+    /// Receives output as it arrives, in chunks, from reader threads.
+    ///
+    /// When set, output is not also collected: [`SandboxOutput::stdout`] and
+    /// [`SandboxOutput::stderr`] come back empty, so a long run's output is
+    /// held nowhere but wherever the sink puts it.
+    pub on_output: Option<OutputSink>,
+    /// Set to stop the workload -- all of it, as the wall-clock deadline
+    /// does. A cancelled run returns normally, with the exit status the kill
+    /// left; the caller that set the flag knows why.
+    pub cancel: Option<Arc<AtomicBool>>,
+}
+
+impl fmt::Debug for RunIo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RunIo")
+            .field("on_output", &self.on_output.is_some())
+            .field("cancel", &self.cancel)
+            .finish()
+    }
+}
+
 /// Something that runs a program under enforced limits.
 pub trait Sandbox: Send + Sync {
     /// A short name for this backend, for logs and errors.
@@ -477,6 +520,29 @@ pub trait Sandbox: Send + Sync {
         command: &SandboxCommand,
         spec: &SandboxSpec,
     ) -> Result<SandboxOutput, SandboxError>;
+
+    /// [`Self::run`], watched and steerable as it runs: see [`RunIo`].
+    ///
+    /// The default runs to completion and then hands the collected output to
+    /// the sink, and cannot cancel -- correct, but not live. A backend that
+    /// can do better overrides it; [`ProcessSandbox`] does.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::run`].
+    fn run_with(
+        &self,
+        command: &SandboxCommand,
+        spec: &SandboxSpec,
+        io: &RunIo,
+    ) -> Result<SandboxOutput, SandboxError> {
+        let mut output = self.run(command, spec)?;
+        if let Some(sink) = &io.on_output {
+            sink(OutputStream::Stdout, &std::mem::take(&mut output.stdout));
+            sink(OutputStream::Stderr, &std::mem::take(&mut output.stderr));
+        }
+        Ok(output)
+    }
 }
 
 /// Why a sandboxed run could not happen, or could not be trusted.

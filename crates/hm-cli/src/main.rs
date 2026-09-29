@@ -78,6 +78,12 @@ enum Commands {
         rest_port: u16,
     },
 
+    /// Run host programs under enforced limits (no VM needed)
+    Sandbox {
+        #[command(subcommand)]
+        command: SandboxCommands,
+    },
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
@@ -87,6 +93,14 @@ enum Commands {
 
     /// Show version and system information
     Info,
+}
+
+/// Sandboxed host processes, confined by the OS (namespaces and cgroups on
+/// Linux, job objects on Windows) rather than a VM.
+#[derive(Subcommand)]
+enum SandboxCommands {
+    /// Run a program under limits, streaming its output; exits with its code
+    Run(hm_cli::sandbox_cmd::RunArgs),
 }
 
 /// Type 1 (bare-metal) hypervisor commands - runs directly on hardware
@@ -296,6 +310,12 @@ async fn main() -> Result<()> {
             grpc_port,
             rest_port,
         } => handle_serve(grpc_port, rest_port).await?,
+        Commands::Sandbox {
+            command: SandboxCommands::Run(args),
+        } => {
+            let code = hm_cli::sandbox_cmd::run(args).await?;
+            std::process::exit(code);
+        }
         Commands::Completions { shell } => {
             generate(shell, &mut Cli::command(), "hm", &mut io::stdout());
         }

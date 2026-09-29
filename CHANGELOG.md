@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **`hm sandbox run`** (`hm-cli`): run a host program under the process
+  sandbox from the command line, with limits, network and filesystem policy,
+  an enforcement report, live output and the program's exit code. No VM.
+- **Streaming and cancellation in `hv2-sandbox`**: `Sandbox::run_with` takes
+  a `RunIo` with an output sink, called as each chunk arrives, and a cancel
+  flag that kills the whole workload. `run` is unchanged, and the trait's
+  default `run_with` keeps other backends working.
 - **Tamper-evident audit logs** (`hv2-core`, `hv2-agent`, `hv2-api`).
   `hv2_core::security::AuditChain` writes one JSON object per line, each
   carrying an HMAC-SHA256 over its sequence number, timestamp, source, event

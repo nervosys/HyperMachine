@@ -17,7 +17,8 @@ use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 
 use crate::{
-    Control, Controls, FilesystemPolicy, SandboxCommand, SandboxError, SandboxOutput, SandboxSpec,
+    Control, Controls, FilesystemPolicy, RunIo, SandboxCommand, SandboxError, SandboxOutput,
+    SandboxSpec,
 };
 
 use super::driver;
@@ -70,6 +71,7 @@ pub(super) fn probe() -> Controls {
 pub(super) fn run(
     command: &SandboxCommand,
     spec: &SandboxSpec,
+    io: &RunIo,
 ) -> Result<SandboxOutput, SandboxError> {
     if let FilesystemPolicy::Isolated { .. } = spec.filesystem {
         return Err(SandboxError::InvalidSpec(format!(
@@ -112,7 +114,7 @@ pub(super) fn run(
     })?;
     let pid = child.id() as libc::pid_t;
 
-    driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, || {
+    driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, io, || {
         // SAFETY: signalling a process group we created.
         unsafe {
             libc::kill(-pid, libc::SIGKILL);

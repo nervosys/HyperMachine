@@ -228,6 +228,55 @@ over-reached instead of under-delivering.
 can enforce, and asks a confined workload what it can see. Run it on any host
 before trusting a limit there.
 
+## From the command line: `hm sandbox run`
+
+```
+hm sandbox run [--memory 4G] [--cpu-time SECS] [--wall-clock SECS] [--max-processes N]
+               [--net deny|host] [--fs host|isolated:ROOT [--ro PATH]...]
+               [--workdir DIR] [--env K=V]... [--pass-env NAME]... [--clean-env]
+               [--isolate-processes] [--no-new-privileges]
+               [--strict] [--report text|json|none] -- CMD [ARGS...]
+```
+
+Runs a host program under `ProcessSandbox`. Output is streamed as it arrives, through
+`Sandbox::run_with` and a `RunIo` sink, and none of it is buffered, so a run can last hours.
+`hm` exits with the program's exit code.
+
+**The enforcement report.** Before the program starts, stderr lists every control the flags
+asked for, marked `enforced` or `NOT ENFORCED` with the reason and the fix. An example is the
+missing cgroup delegation that leaves the memory limit unenforced for an unprivileged Linux
+user.
+
+**Best effort by default.** A control this host cannot enforce is dropped, and it is named
+again after the run. `--strict` refuses the run instead, exiting with 125.
+
+**The environment.** It starts from what a program needs to run: `PATH`, `HOME`, `TEMP` and,
+on Windows, `SystemRoot`. Nothing else crosses from the host unless it is named with
+`--pass-env` or set with `--env`, so credentials in the caller's environment stay out.
+`--clean-env` starts from nothing.
+
+**Exit codes:**
+- the program's own code;
+- 124 when the wall-clock deadline killed the whole process tree;
+- 128+N for signal N (on Linux the CPU-time limit ends in SIGKILL, so 137);
+- 125 when the run was refused or confinement failed;
+- 127 when the program could not start;
+- 130 on Ctrl-C, which kills the tree through `RunIo::cancel`.
+
+Checked by hand on this repo's hosts:
+- **Windows:**
+  - exit codes pass through;
+  - `--wall-clock 2` kills a 30-second `ping` at 2 s (exit 124);
+  - a 512 MB allocation under `--memory 64M` is refused;
+  - output lines arrive live, 3.4 s apart, as the program prints them.
+- **Linux, as an unprivileged user:**
+  - the network is loopback only, and `--net host` sees the host's interfaces;
+  - the program is PID 1 under `--isolate-processes`;
+  - `--cpu-time 1` kills a spin loop (137);
+  - a variable in the caller's environment does not reach the program;
+  - without a delegated cgroup, the report marks the memory and process limits NOT ENFORCED
+    and says what to change.
+
 ## Reaching it as an agent
 
 Two tools, dispatched against a `SandboxHost` the way `vm.*` dispatches against
