@@ -575,8 +575,13 @@ async fn run(state: &Arc<AppState>, build: &Arc<Build>, spec: StartBuild) -> Res
         .await
         .map_err(&base_step)?;
     let network = if state.opts.network {
-        let policy =
-            policy_from(Some(true), None, state.opts.egress_default).map_err(&base_step)?;
+        let policy = policy_from(
+            Some(true),
+            None,
+            state.opts.egress_default,
+            &state.opts.tenant_reserved,
+        )
+        .map_err(&base_step)?;
         Some(NetworkSpec {
             policy,
             proxy: None,

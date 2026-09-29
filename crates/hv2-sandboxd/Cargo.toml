@@ -41,6 +41,11 @@ form_urlencoded = "1"
 tokio-rustls = { workspace = true }
 subtle = { version = "2.6", default-features = false }
 
+[dev-dependencies]
+# A fresh RSA key per test run; see cloud_login.rs.
+ic-rsa = "0.2.2"
+ic-drbg = "0.2.2"
+
 [[bin]]
 name = "hv2-sandboxd"
 path = "src/main.rs"

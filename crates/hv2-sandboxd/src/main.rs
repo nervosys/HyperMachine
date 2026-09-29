@@ -121,10 +121,17 @@ mod cloud_login;
 mod forwards;
 mod identity;
 mod initramfs;
+// Volumes are served with openat2 and O_PATH, which only Linux has; see
+// volumes_unsupported.rs for what other hosts answer.
+#[cfg(target_os = "linux")]
 mod ninep;
 mod oci;
 mod snapshots;
 mod telemetry;
+#[cfg(target_os = "linux")]
+mod volumes;
+#[cfg(not(target_os = "linux"))]
+#[path = "volumes_unsupported.rs"]
 mod volumes;
 
 const GUEST_CID_BASE: u64 = 100;
@@ -1738,6 +1745,7 @@ impl NetworkRequest {
                 self.allow_internet_access,
                 self.network.as_ref(),
                 opts.egress_default,
+                &opts.tenant_reserved,
             )?,
             proxy: egress_proxy_from(opts, self.network.as_ref()).await?,
             tokens: self.iam.clone(),

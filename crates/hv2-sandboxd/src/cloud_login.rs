@@ -310,12 +310,85 @@ mod tests {
         );
     }
 
+    /// A fresh RSA-2048 key as a PKCS#8 PEM, the form a service account's
+    /// JSON carries.
+    ///
+    /// Generated per run rather than read from a checked-in file: the file
+    /// was `*.pem`, which `.gitignore` excludes, so it was never committed and
+    /// the test could not build anywhere but the machine that made it -- and
+    /// a committed private key, even a throwaway, is what secret scanning is
+    /// for. `ic-pkix` will not serialise RSA keys, hence the DER by hand.
+    fn test_rsa_pkcs8_pem() -> String {
+        fn tlv(tag: u8, content: &[u8]) -> Vec<u8> {
+            let mut out = vec![tag];
+            match content.len() {
+                n if n < 0x80 => out.push(n as u8),
+                n if n < 0x100 => out.extend_from_slice(&[0x81, n as u8]),
+                n => out.extend_from_slice(&[0x82, (n >> 8) as u8, n as u8]),
+            }
+            out.extend_from_slice(content);
+            out
+        }
+        // An unsigned big-endian INTEGER: minimal, with a zero byte when the
+        // high bit would otherwise make it negative.
+        fn int(be: &[u8]) -> Vec<u8> {
+            let start = be.iter().position(|&b| b != 0).unwrap_or(be.len() - 1);
+            let mut v = be[start..].to_vec();
+            if v[0] & 0x80 != 0 {
+                v.insert(0, 0);
+            }
+            tlv(0x02, &v)
+        }
+
+        let mut rng = ic_drbg::Rng::from_os().unwrap();
+        let key = ic_rsa::generate(2048, &mut rng).unwrap();
+        let (size, half) = (key.size(), key.size() / 2);
+        let mut n = vec![0u8; size];
+        key.public_key().modulus_bytes(&mut n).unwrap();
+        let mut d = vec![0u8; size];
+        key.exponent_bytes(&mut d).unwrap();
+        let (mut p, mut q) = (vec![0u8; half], vec![0u8; half]);
+        key.prime_bytes(&mut p, &mut q).unwrap();
+        let (mut dp, mut dq, mut qinv) = (vec![0u8; half], vec![0u8; half], vec![0u8; half]);
+        key.crt_exponent_bytes(&mut dp, &mut dq, &mut qinv).unwrap();
+        let e = key.public_key().exponent().to_be_bytes();
+
+        let mut rsa_key = int(&[0]);
+        for field in [&n[..], &e[..], &d, &p, &q, &dp, &dq, &qinv] {
+            rsa_key.extend_from_slice(&int(field));
+        }
+        let rsa_key = tlv(0x30, &rsa_key);
+        // AlgorithmIdentifier { rsaEncryption, NULL }
+        let algorithm = tlv(
+            0x30,
+            &[
+                0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D, 0x01, 0x01, 0x01, 0x05, 0x00,
+            ],
+        );
+        let mut info = int(&[0]);
+        info.extend_from_slice(&algorithm);
+        info.extend_from_slice(&tlv(0x04, &rsa_key));
+        let der = tlv(0x30, &info);
+
+        let body = hv2_guest_agent::b64::encode(&der);
+        // The label is spliced in so this source is not itself a PEM block
+        // to a secret scanner.
+        let label = "PRIVATE KEY";
+        let mut pem = format!("-----BEGIN {label}-----\n");
+        for line in body.as_bytes().chunks(64) {
+            pem.push_str(std::str::from_utf8(line).unwrap());
+            pem.push('\n');
+        }
+        pem.push_str(&format!("-----END {label}-----\n"));
+        pem
+    }
+
     /// The assertion Google verifies: RS256 over header and claims, signed
     /// by the service account's key. The key is a throwaway made for this
     /// test, and signs nothing else.
     #[test]
     fn gcp_assertions_are_signed_jwts() {
-        let pem = include_str!("../testdata/test-only-rsa-key.pem");
+        let pem = &test_rsa_pkcs8_pem()[..];
         let key = serde_json::json!({
             "client_email": "builder@project.iam.gserviceaccount.com",
             "private_key": pem,
