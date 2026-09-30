@@ -38,9 +38,7 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 }
 
 if (-not (Test-Path $CriterionDir)) {
-    Write-Warning "Criterion output directory '$CriterionDir' does not exist; writing empty results."
-    Write-Utf8NoBom -Path $OutFile -Content "[]"
-    exit 0
+    throw "Criterion output directory '$CriterionDir' does not exist."
 }
 
 # Every completed benchmark leaves its latest run's data under a `new/`
@@ -50,12 +48,12 @@ $benchmarkFiles = Get-ChildItem -Path $CriterionDir -Recurse -Filter "benchmark.
     Where-Object { $_.Directory.Name -eq "new" }
 
 $results = @()
+$names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
 
 foreach ($bf in $benchmarkFiles) {
     $estimatesPath = Join-Path $bf.Directory.FullName "estimates.json"
     if (-not (Test-Path $estimatesPath)) {
-        Write-Warning "No estimates.json next to $($bf.FullName); skipping."
-        continue
+        throw "No estimates.json next to $($bf.FullName)."
     }
 
     $benchmark = Get-Content $bf.FullName -Raw | ConvertFrom-Json
@@ -68,9 +66,22 @@ foreach ($bf in $benchmarkFiles) {
     $meanNs = $estimates.mean.point_estimate
     $stdErrNs = $estimates.mean.standard_error
 
-    if ($null -eq $meanNs) {
-        Write-Warning "No mean.point_estimate in $estimatesPath; skipping."
-        continue
+    foreach ($metric in @($meanNs, $stdErrNs)) {
+        if ($null -eq $metric -or $metric -is [bool] -or $metric -isnot [ValueType]) {
+            throw "Missing or nonnumeric mean estimate in $estimatesPath."
+        }
+        if ([double]::IsNaN([double]$metric) -or [double]::IsInfinity([double]$metric)) {
+            throw "Nonfinite mean estimate in $estimatesPath."
+        }
+    }
+    if ([double]$meanNs -le 0 -or [double]$stdErrNs -lt 0) {
+        throw "Invalid mean or standard error in $estimatesPath."
+    }
+    if ($name -isnot [string] -or [string]::IsNullOrWhiteSpace($name)) {
+        throw "Invalid benchmark name in $($bf.FullName)."
+    }
+    if (-not $names.Add($name)) {
+        throw "Duplicate benchmark name '$name'."
     }
 
     $results += [ordered]@{
@@ -81,7 +92,10 @@ foreach ($bf in $benchmarkFiles) {
     }
 }
 
-$results = $results | Sort-Object { $_.name }
+$results = @($results | Sort-Object { $_.name })
+if (@($results).Count -eq 0) {
+    throw 'Criterion produced no completed benchmark measurements.'
+}
 
 $json = ConvertTo-Json -InputObject @($results) -Depth 5
 Write-Utf8NoBom -Path $OutFile -Content $json

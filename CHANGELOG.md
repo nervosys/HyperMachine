@@ -463,6 +463,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- CI crypto/API measurements use a fresh Criterion directory outside the Cargo
+  cache. Benchmark execution failures and missing, incomplete or invalid
+  measurement data fail the workflow; raw artifacts are retained on failure.
 - Successful SDK stdin, EOF and signal requests wake the affected process's
   output poller rather than waiting for its next 50 ms tick. Unsolicited output
   retains periodic polling. The guest agent publishes process exit only after
