@@ -47,6 +47,7 @@ def summary(values):
 
 def sample(factory, args, nonce, index):
     sandbox = None
+    cleanup = []
     record = {"index": index, "success": False}
     started = time.perf_counter()
     phase = "create"
@@ -57,11 +58,58 @@ def sample(factory, args, nonce, index):
                                  api_url=args.api_url, sandbox_url=args.sandbox_url,
                                  request_timeout=args.request_timeout, retries=0)
         record["sandbox_id"] = sandbox.sandbox_id
+        cleanup.append(sandbox)
         record["create_ms"] = (time.perf_counter() - started) * 1000
         phase = "ready"
         marker = f"hm-sdk-ready-{nonce}-{index}"
         command = (f"printf '%s' {shlex.quote(marker)}" if args.workload == "posix"
                    else "python3 -c " + shlex.quote(f"import sys; sys.stdout.write({marker!r})"))
+        if args.operation != "create":
+            phase = "prepare-state"
+            directory = f"/tmp/hm-sdk-state-{nonce}-{index}"
+            child = f"env HM_SDK_MEMORY={shlex.quote(marker)} sleep 86400"
+            prepare = (f"mkdir {directory} && printf '%s' {shlex.quote(marker)} > {directory}/state && "
+                       f"cat /proc/sys/kernel/random/boot_id > {directory}/boot && {{ "
+                       f"{child} < /dev/null > /dev/null 2>&1 & echo $! > {directory}/pid; }}")
+            prepared = sandbox.commands.run(prepare, timeout=args.command_timeout)
+            if prepared.exit_code != 0:
+                raise RuntimeError("failed to prepare the live-process state probe")
+            verify = (f"test \"$(cat {directory}/state)\" = {shlex.quote(marker)} && "
+                      f"test \"$(cat {directory}/boot)\" = \"$(cat /proc/sys/kernel/random/boot_id)\" && "
+                      f"kill -0 \"$(cat {directory}/pid)\" && "
+                      f"tr '\\000' '\\n' < /proc/$(cat {directory}/pid)/environ | "
+                      f"grep -Fx {shlex.quote('HM_SDK_MEMORY=' + marker)} > /dev/null")
+            # Validate before snapshotting, including the asynchronous child's startup.
+            precheck = sandbox.commands.run(
+                f"for attempt in 1 2 3 4 5 6 7 8 9 10; do {verify} && exit 0; sleep 0.1; done; exit 1",
+                timeout=args.command_timeout)
+            if precheck.exit_code != 0:
+                raise RuntimeError("live process, memory marker or filesystem state probe was not ready")
+            command = verify + " && " + command
+            if args.operation == "resume":
+                phase = "pause"
+                paused_at = time.perf_counter()
+                sandbox.pause(keep_memory=True, request_timeout=args.request_timeout)
+                record["pause_ms"] = (time.perf_counter() - paused_at) * 1000
+                if sandbox.get_info(request_timeout=args.request_timeout).state != "paused":
+                    raise RuntimeError("pause did not leave the sandbox in the paused state")
+                phase = "resume"
+                started = time.perf_counter()
+                sandbox.connect(timeout=300, on_resume="restore", request_timeout=args.request_timeout)
+            else:
+                phase = "fork"
+                started = time.perf_counter()
+                forks = sandbox.fork(count=1, timeout=300, request_timeout=args.request_timeout)
+                cleanup.extend(fork for fork in forks if not isinstance(fork, Exception))
+                if len(forks) != 1 or isinstance(forks[0], Exception):
+                    raise RuntimeError("fork did not return exactly one successful sandbox")
+                record["parent_sandbox_id"] = sandbox.sandbox_id
+                sandbox = forks[0]
+                record["sandbox_id"] = sandbox.sandbox_id
+                if record["sandbox_id"] == record["parent_sandbox_id"]:
+                    raise RuntimeError("fork returned the parent instead of a distinct sandbox")
+            record["operation_ms"] = (time.perf_counter() - started) * 1000
+            phase = "ready"
         execution_started = time.perf_counter()
         result = sandbox.commands.run(command, timeout=args.command_timeout)
         record["exec_ms"] = (time.perf_counter() - execution_started) * 1000
@@ -70,19 +118,28 @@ def sample(factory, args, nonce, index):
             raise RuntimeError("readiness command did not produce its expected marker with exit 0")
         phase = "resources"
         info = sandbox.get_info(request_timeout=args.request_timeout)
+        if info.state != "running":
+            raise RuntimeError("verified command sandbox is not reported as running")
         record["cpu_count"] = info.cpu_count
         record["memory_mb"] = info.memory_mb
         if info.cpu_count != args.expected_cpus or info.memory_mb != args.expected_memory_mb:
             raise RuntimeError("server guest resources differ from the requested comparison baseline")
+        if args.operation == "fork":
+            phase = "parent-state"
+            parent = cleanup[0].commands.run(command, timeout=args.command_timeout)
+            if parent.exit_code != 0 or parent.stdout != marker:
+                raise RuntimeError("fork parent did not retain its live-process and filesystem state")
         record["success"] = True
     except Exception as error:
         record.update(phase=phase, error=str(error).replace(os.environ["E2B_API_KEY"], "[redacted]"))
     finally:
-        if sandbox is not None:
+        for known_sandbox in reversed(cleanup):
             try:
-                sandbox.kill(request_timeout=args.request_timeout)
+                known_sandbox.kill(request_timeout=args.request_timeout)
             except Exception as error:
-                record.update(success=False, cleanup_error=str(error).replace(os.environ["E2B_API_KEY"], "[redacted]"))
+                record["success"] = False
+                record.setdefault("cleanup_errors", []).append({"sandbox_id": known_sandbox.sandbox_id,
+                    "error": str(error).replace(os.environ["E2B_API_KEY"], "[redacted]")})
     return record
 
 
@@ -97,6 +154,8 @@ def main():
     parser.add_argument("--expected-cpus", required=True, type=positive)
     parser.add_argument("--expected-memory-mb", required=True, type=positive)
     parser.add_argument("--workload", choices=("posix", "python"), default="posix")
+    parser.add_argument("--operation", choices=("create", "resume", "fork"), default="create",
+                        help="Lifecycle operation through first verified command; resume/fork also check live process memory and filesystem state")
     parser.add_argument("--samples", type=positive, default=100)
     parser.add_argument("--concurrency", type=positive, default=1)
     parser.add_argument("--request-timeout", type=positive, default=120)
@@ -134,6 +193,7 @@ def main():
                       "provider": args.provider, "api_url": args.api_url, "sandbox_url": args.sandbox_url,
                       "template": args.template, "environment": args.environment, "image_description": args.image_description,
                       "workload": args.workload, "expected_cpus": args.expected_cpus, "expected_memory_mb": args.expected_memory_mb,
+                      "operation": args.operation,
                       "internet_access": False, "sdk_debug": False, "sdk_retries": 0, "sandbox_lifetime_seconds": 300,
                       "request_timeout_seconds": args.request_timeout, "command_timeout_seconds": args.command_timeout,
                       "samples_requested": args.samples, "concurrency": args.concurrency, "successful_samples": len(successful),
@@ -143,6 +203,8 @@ def main():
                       "finished_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                       "create_ms": summary([record["create_ms"] for record in successful]),
                       "exec_ms": summary([record["exec_ms"] for record in successful]), "ready_ms": ready,
+                      "operation_ms": summary([record["operation_ms"] for record in successful if "operation_ms" in record]),
+                      "pause_ms": summary([record["pause_ms"] for record in successful if "pause_ms" in record]),
                       "max_p99_ready_ms": args.max_p99_ready_ms, "threshold_passed": passed, "samples": records}, indent=2))
     return 0 if len(successful) == args.samples and passed is not False else 1
 
