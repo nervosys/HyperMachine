@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- Restored guests receive host time sampled after their agent connection is
+  established, avoiding stale timestamps captured before worker scheduling
+  and connection waits. Host clock conversion failures are reported rather
+  than sending zero or truncating the timestamp; RNG reseeding still must
+  succeed.
 - **The API's `/agentic` auth exemption no longer covers writes**
   (`hv2-api`). With API keys on, the default exempted every path under
   `/agentic`, and `POST /agentic/plans/execute` starts and stops the

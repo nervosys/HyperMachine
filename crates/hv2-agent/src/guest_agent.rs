@@ -625,6 +625,26 @@ impl GuestAgent {
         }
     }
 
+    /// Resynchronise a restored guest with host time sampled on this connected
+    /// channel, rather than before waiting for a worker or guest connection.
+    /// Transport and guest processing still take time; this is not a clock
+    /// synchronisation protocol with round-trip compensation.
+    ///
+    /// # Errors
+    ///
+    /// Fails if host time cannot be represented as Unix nanoseconds, or if the
+    /// guest refuses clock correction or RNG reseeding.
+    pub fn restored_now(&mut self, entropy: Vec<u8>, timeout: Duration) -> Result<()> {
+        let elapsed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|error| {
+                AgentError::Script(format!("host clock precedes Unix epoch: {error}"))
+            })?;
+        let unix_time_ns = u64::try_from(elapsed.as_nanos())
+            .map_err(|_| AgentError::Script("host time exceeds Unix nanosecond range".into()))?;
+        self.restored(unix_time_ns, entropy, timeout)
+    }
+
     /// Tell a guest restored from a snapshot the time, and give it entropy to
     /// reseed from. See [`Operation::Restored`].
     ///
@@ -987,6 +1007,58 @@ mod tests {
                 timed_out: false,
             },
         }
+    }
+
+    #[test]
+    fn restore_samples_time_after_channel_creation_and_preserves_entropy() {
+        let lower_bound = Arc::new(Mutex::new(0u64));
+        let observed_bound = lower_bound.clone();
+        let mut agent = GuestAgent::new(FakeGuest::new(move |request| {
+            match request.op {
+                Operation::Restored {
+                    unix_time_ns,
+                    entropy,
+                } => {
+                    let received_at = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64;
+                    assert!(unix_time_ns >= *observed_bound.lock());
+                    assert!(unix_time_ns <= received_at);
+                    assert_eq!(entropy, vec![0x5a; 64]);
+                }
+                other => panic!("unexpected operation {other:?}"),
+            }
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::Acknowledged,
+            })
+        }));
+        *lower_bound.lock() = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        agent
+            .restored_now(vec![0x5a; 64], Duration::from_secs(1))
+            .unwrap();
+    }
+
+    #[test]
+    fn fresh_restore_does_not_hide_a_failed_rng_reseed() {
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::Failed {
+                    message: "RNDRESEEDCRNG refused".into(),
+                },
+            })
+        }));
+        let error = agent
+            .restored_now(vec![0x5a; 64], Duration::from_secs(1))
+            .unwrap_err();
+        assert!(error.to_string().contains("RNDRESEEDCRNG refused"));
     }
 
     #[test]
