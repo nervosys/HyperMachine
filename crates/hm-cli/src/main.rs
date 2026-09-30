@@ -304,6 +304,7 @@ async fn main() -> Result<()> {
 
     // Initialize tracing
     let subscriber = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_max_level(if cli.verbose {
             tracing::Level::DEBUG
         } else {

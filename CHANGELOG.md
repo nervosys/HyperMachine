@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- `hm sandbox vm mcp` serves 12 real remote sandbox lifecycle, execution and
+  checkpoint tools over MCP 2025-11-25 stdio. It validates arguments before
+  HTTP requests, bounds input frames, omits structured sandbox access tokens,
+  reports guest and partial-fork failures, and keeps tracing on stderr.
 - Protected control-plane API access tracing with request correlation,
   credential categories, configured-key fingerprints, route templates and
   response status/timing. Logs omit raw credentials and request contents;
