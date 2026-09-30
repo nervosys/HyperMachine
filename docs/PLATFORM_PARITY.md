@@ -37,7 +37,7 @@ container. The comparison is about what surrounds the VM.
 | Backups to object storage | yes | no | **Absent** |
 | Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks only |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
-| MCP for agents | skill + MCP | Shelley agent | **Partial**: 48 tools in `hv2-agent`, not served by any binary |
+| MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 remote sandbox lifecycle/exec/checkpoint tools shipped over MCP stdio and checked with the official client on real KVM; the wider `hv2-agent` library surface is not served |
 | Email in and out | no | yes | **Absent** |
 | Multi-node, self-hosted | contact sales | enterprise | **Real**: control plane, Redis store, cross-node resume, mTLS, Helm chart |
 | GPU | no | no | **Partial**: VFIO code, not wired to sandboxes |
@@ -595,6 +595,52 @@ emitting empty or partial results. Fifteen standalone PowerShell fixture checks
 passed, including single/multiple JSON array serialization and sorting;
 actionlint passed. CI runs these checks before benchmarks and uploads raw
 measurement JSON and logs even when a benchmark fails. This prevents cached
-measurements from being reported as a fresh run; remote execution of this
-change remains pending. These Criterion means and standard errors are component
+measurements from being reported as a fresh run. The primary Performance
+Benchmarks job passed at `518fe70` (run 36781437624); its separate baseline
+comparison is still running. These Criterion means and standard errors are component
 microbenchmarks, not VM lifecycle P50/P95/P99 or matched competitor measurements.
+
+## Shipped MCP sandbox interface
+
+`hm sandbox vm --endpoint https://sandbox-api.example.com mcp` serves MCP
+2025-11-25 over standard input/output. It follows the
+[stdio transport](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports),
+[initialization lifecycle](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle)
+and [tool result](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
+interfaces. Configure `HV2_API_KEY` in the server process environment through
+your client's environment settings or secret store. `HV2_SANDBOX_URL` also
+sets the endpoint. API scope and expiry are enforced by the control plane.
+The command opens no additional network listener and uses the same remote
+API client as the VM CLI, with redirects disabled and a 120-second default
+HTTP deadline. CLI tracing goes to stderr so stdout contains protocol only.
+
+The tools are `sandbox_create`, `sandbox_list`, `sandbox_inspect`,
+`sandbox_exec`, `sandbox_pause`, `sandbox_resume`, `sandbox_fork`,
+`sandbox_delete`, `checkpoint_save`, `checkpoint_list`, `checkpoint_restore`
+and `checkpoint_delete`. Execution accepts an argv array, quotes it for the
+guest shell, and reports guest failure/timeout as `isError`. Partial forks
+also report `isError` while retaining successful child IDs. Structured
+`envdAccessToken` and `accessToken` fields are removed recursively; upstream
+HTTP error bodies are not echoed. Guest command output is still returned as
+requested and may contain data the command itself prints.
+
+Discovery and tool calls require initialization; notifications do not execute
+tool calls or receive responses. Invalid IDs/arguments are protocol errors,
+and input frames larger than 1 MiB terminate the session. Operations execute
+sequentially. Streaming output, in-flight cancellation, Streamable HTTP,
+resources/prompts/tasks, file tools and the wider `hv2-agent` tool surface
+remain unsupported. Created VMs persist until deleted or their lifetime
+expires; closing the client does not delete them. Interrupted creations can
+leave IDs unknown to the client, as with the other API clients.
+
+Six protocol/failure-accounting tests, all six existing shipped CLI HTTP tests,
+and strict all-targets CLI Clippy passed.
+`tools/e2e-mcp-sandbox.py` used the unmodified official MCP Python client 1.23.3
+to launch the shipped debug binary and complete 21 tool calls through all 12
+tools on a real nested-KVM release node. It verified exact guest output,
+1 vCPU/1024 MiB resources, checkpoint rollback, pause/resume file state,
+distinct fork identity and private-file independence, guest exit code 7,
+HTTP failure reporting and deletion of both parent and child. The node's
+sandbox list was then confirmed empty. Raw functional evidence, with client,
+script and binary identities, is `benchmarks/2026-09-30/mcp-stdio-lifecycle.json`.
+This is compatibility evidence, not a latency benchmark or a competitor win.

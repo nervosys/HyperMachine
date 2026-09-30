@@ -7,6 +7,9 @@ use clap::{Args, Subcommand};
 use reqwest::{Client, Method, Url};
 use serde_json::{json, Value};
 
+#[path = "sandbox_vm_mcp.rs"]
+mod mcp;
+
 /// Connection and operation for a remote VM sandbox.
 #[derive(Debug, Args)]
 pub struct VmArgs {
@@ -23,6 +26,8 @@ pub struct VmArgs {
 /// VM sandbox lifecycle commands. Responses are JSON for shell automation.
 #[derive(Debug, Subcommand)]
 pub enum VmCommand {
+    /// Serve remote sandbox lifecycle tools using the MCP stdio protocol
+    Mcp,
     /// Measure creation through a verified guest command, with bounded concurrency
     Benchmark {
         #[arg(long, default_value = "base")]
@@ -199,6 +204,10 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         std::env::var("HV2_API_KEY").ok(),
     )?;
     let value = match args.command {
+        VmCommand::Mcp => {
+            mcp::serve(api, args.request_timeout).await?;
+            return Ok(0);
+        }
         VmCommand::Benchmark {
             template,
             samples,
