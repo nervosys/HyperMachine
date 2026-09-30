@@ -373,8 +373,11 @@ volume APIs and webhook APIs: their credentials can grant mutation through
 other interfaces. Public health/metrics/OIDC endpoints and existing bearer-token
 upload/content routes retain their existing authentication model. Expiring an
 API key does not revoke previously issued envd, upload or volume bearer tokens,
-terminate running guest operations, or expire the legacy `HV2_API_KEY` admin
-credential. Keep that admin key distinct from scoped credentials. Nodes in a
+terminate running guest operations, or expire a distinct legacy `HV2_API_KEY`
+admin credential. Startup rejects an admin key whose digest appears in any
+scoped policy, including an expired one. Embedded library instances that skip
+startup validation enforce the scoped policy rather than granting legacy admin
+access for an overlapping credential. Nodes in a
 cluster must require their cluster token so direct node calls cannot bypass the
 control plane. Policies load at startup; rotation requires restarting every
 control-plane replica with the same updated policy. Dynamic key administration,
@@ -408,10 +411,11 @@ configuration rejection. Four render tests and Helm 3.17.3 lint passed. These
 checks parse rendered YAML and validate mount/argument consistency; no live
 Kubernetes deployment has been performed for this change.
 
-Validation: 26 cluster library tests, 12 real-HTTP integration tests and strict
+Validation: 27 cluster library tests, 13 real-HTTP integration tests and strict
 cluster Clippy passed. `tools/e2e-control-keys.py --control-plane BINARY` checks
 the shipped Windows binary's scope enforcement, live expiry, token-access
-denial and fail-closed empty-policy startup without modifying user credentials.
+denial, fail-closed empty-policy startup and rejection of admin/scoped credential
+overlap without modifying user credentials. Startup errors omit the credential.
 Real-HTTP node fixtures additionally verify sandbox creation by a scoped key,
 token-free inventory, denied writes and legacy admin compatibility. This
 validation does not establish multi-tenant isolation or a performance win.

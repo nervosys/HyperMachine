@@ -197,13 +197,21 @@ async fn require_api_key(
             .get("x-api-key")
             .map(HeaderValue::as_bytes)
             .unwrap_or_default();
+        use sha2::{Digest, Sha256};
+        let digest: [u8; 32] = Sha256::digest(sent).into();
+        // Library callers can construct a conflicting configuration without
+        // the binary's startup validation. Never turn a scoped key into an
+        // unrestricted, non-expiring credential in that case.
+        let scoped = control
+            .config
+            .api_keys
+            .iter()
+            .any(|policy| policy.has_digest(&digest));
         if let Some(key) = &control.config.api_key {
-            if !sent.is_empty() && bool::from(sent.ct_eq(key.as_bytes())) {
+            if !scoped && !sent.is_empty() && bool::from(sent.ct_eq(key.as_bytes())) {
                 return next.run(request).await;
             }
         }
-        use sha2::{Digest, Sha256};
-        let digest: [u8; 32] = Sha256::digest(sent).into();
         let now = chrono::Utc::now().timestamp();
         let policy = control
             .config

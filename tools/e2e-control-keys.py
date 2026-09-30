@@ -43,6 +43,12 @@ def main():
             for key, expires, scopes in [(inventory, expiry, ["inventory"]),
                                         (admin, expiry + 60, ["admin"]),
                                         (sandboxes, expiry + 60, ["sandboxes"])]]))
+        collision_environment = dict(environment, HV2_API_KEY=inventory)
+        collision = subprocess.run([binary, "--api-keys-file", str(policy_file)],
+                                   env=collision_environment, capture_output=True, timeout=10)
+        assert collision.returncode != 0, "admin/scoped credential collision must fail startup"
+        assert b"must differ" in collision.stderr
+        assert inventory.encode() not in collision.stderr, "startup errors must not expose credentials"
         api_port, proxy_port = port(), port()
         while api_port == proxy_port:
             proxy_port = port()
@@ -90,7 +96,7 @@ def main():
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=10)
-    print("PASS: shipped control-plane scope enforcement, live expiry, token-access denial and fail-closed policy startup")
+    print("PASS: shipped control-plane scopes, live expiry, token-access denial and fail-closed policy/collision startup")
 
 
 if __name__ == "__main__":
