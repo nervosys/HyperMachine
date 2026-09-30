@@ -39,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- Protected control-plane API access tracing with request correlation,
+  credential categories, configured-key fingerprints, route templates and
+  response status/timing. Logs omit raw credentials and request contents;
+  durable audit storage and bearer/proxy-route coverage are not provided.
 - Sandbox Helm chart policy-Secret mounting and optional policy-only API
   authentication, with configuration validation and rotation instructions.
   Disabling legacy admin authentication requires a scoped-key policy Secret.
