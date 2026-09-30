@@ -108,6 +108,7 @@ def main():
     parser.add_argument("--environment", required=True)
     parser.add_argument("--pairs", type=int, default=20)
     parser.add_argument("--timeout", type=int, default=30)
+    parser.add_argument("--hypermachine-log-filter", default="warn", help="Diagnostic tracing changes timing; default warn is used for benchmarks")
     args = parser.parse_args()
     if platform.system() != "Linux" or platform.machine() != "x86_64": parser.error("requires Linux x86_64")
     if not 1 <= args.pairs <= 1000 or not 1 <= args.timeout <= 300: parser.error("invalid pair count/timeout")
@@ -133,7 +134,7 @@ def main():
         try:
             with (directory/"node.log").open("wb") as log:
                 process = subprocess.Popen(command,env={"PATH":"/usr/local/bin:/usr/bin:/bin",
-                    "HV2_KERNEL":str(paths["kernel"]),"HV2_INITRD":str(paths["initrd"]),"RUST_LOG":"warn"},
+                    "HV2_KERNEL":str(paths["kernel"]),"HV2_INITRD":str(paths["initrd"]),"RUST_LOG":args.hypermachine_log_filter},
                     stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT)
                 deadline = time.perf_counter() + 30
                 while time.perf_counter() < deadline:
@@ -154,10 +155,14 @@ def main():
                         row = hm_sample(url,index,process.pid) if engine == "hypermachine" else fc.sample(args,index)
                         row["engine"] = engine
                         row["pair"] = index
+                        if engine == "hypermachine" and not row["success"]:
+                            with (directory/"node.log").open("rb") as source:
+                                source.seek(max(0,(directory/"node.log").stat().st_size-8000))
+                                row["node_log_tail"] = source.read(8000).decode(errors="replace")
                         records.append(row)
                 if request(url,"GET","/sandboxes") != []:
                     cleanup_error = "isolated node has remaining sandbox records"
-                if any(not row["success"] for row in records):
+                if args.hypermachine_log_filter != "warn" or any(not row["success"] for row in records):
                     with (directory/"node.log").open("rb") as source:
                         source.seek(max(0,(directory/"node.log").stat().st_size-8000))
                         node_log_tail = source.read(8000).decode(errors="replace")
@@ -179,6 +184,7 @@ def main():
         unchanged = False
     passed = not setup_error and not cleanup_error and unchanged and len(records) == args.pairs*2 and all(row["success"] and row["cleanup_success"] for row in records)
     print(json.dumps({"schema_version":1,"lifecycle":"native-cold-create-to-command","concurrency":1,
+        "hypermachine_log_filter":args.hypermachine_log_filter,"diagnostic_tracing":args.hypermachine_log_filter != "warn",
         "pairs":args.pairs,"order":"alternating AB/BA","environment":args.environment,"host":platform.platform(),
         "artifact_sha256":identities,"artifacts_unchanged":unchanged,"cpu_count":1,"memory_mb":1024,
         "common_boot_args":fc.BOOT_ARGS,"hypermachine_template_preflight":preflight,
