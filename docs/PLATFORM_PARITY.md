@@ -13,7 +13,7 @@ container. The comparison is about what surrounds the VM.
 | Capability | boxd | exe.dev | HyperMachine |
 |---|---|---|---|
 | Create, list, delete over an API | yes | yes | **Real**: E2B's API (`hv2-sandboxd`, `hv2-control-plane`), so the unmodified E2B SDKs work |
-| A CLI | yes | yes (over ssh) | **Partial**: `hm sandbox vm` manages sandboxd lifecycle, commands and checkpoints; protocol tests pass, real-guest client verification pending |
+| A CLI | yes | yes (over ssh) | **Partial**: `hm sandbox vm` manages sandboxd lifecycle, commands and checkpoints; verified on a real KVM node; file transfers and control-plane verification remain |
 | Fork a running VM, memory included | ~160 ms | `cp` | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | no | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
@@ -69,13 +69,28 @@ HyperMachine's 3.19 ms minimal-unikernel boot is not a Linux/Python sandbox
 creation benchmark. Its measured SDK creates are 59 ms for base and 91 ms
 for Python. Nested KVM measurements are not substitutes for bare-metal ones.
 
+| Product | Published or repository measurement | Feature comparison target | Comparable win verified? |
+|---|---|---|---|
+| HyperMachine | Historical nested-KVM SDK create: base 59 ms, Python 91 ms; template restore to answering agent median 12.9 ms | VM lifecycle, checkpoints, forks, egress policy, workload identity, shared volumes | Baseline only; fresh measurements below must specify hardware and workload |
+| CubeSandbox | Advertises startup below 60 ms; 50 concurrent starts average 67 ms, P95 90 ms, P99 137 ms on its benchmark host | E2B compatibility, ARM64, BPF networking, secret injection, Kubernetes/Terraform, object-storage resume | No matched run |
+| Agent Substrate | Advertises resume below 500 ms and more than 500 activations/second | Kubernetes, gVisor/microVM backends, stateful oversubscription | No matched run |
+| Blaxel | Advertises approximately 25 ms stateful resume | Managed lifecycle and automatic suspension | No matched run |
+| Daytona | Advertises sandbox startup below 90 ms; default sandbox is a container | Linux/Windows VMs and GPU workloads | No matched run; container startup differs from VM readiness |
+| Modal | Reports below 500 ms median API-to-user-code latency in its million-concurrent-sandbox benchmark | Managed fleet scale and GPU workloads | No matched run or equivalent fleet |
+| E2B | No precise current latency verified in this review | SDK compatibility and managed execution | No matched run |
+| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | No matched run; init time and VMM overhead differ from application readiness and incremental PSS |
+
+These figures describe the linked providers' own claims or repository runs,
+not an independently reproduced ranking. A lower headline number does not
+pass the acceptance criteria below.
+
 | Workstream | Acceptance criterion | Current gap |
 |---|---|---|
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Comparable competitor runs and bare-metal HyperMachine runs are missing |
 | Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Existing measurements need a common protocol and competitor adapters |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
-| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI implemented; file transfers and real-guest CLI verification remain |
+| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node; file transfers and control-plane CLI verification remain |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | The sandbox platform remains single-team |
 | Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
@@ -93,7 +108,8 @@ or the control plane, selected by `--endpoint` or `HV2_SANDBOX_URL`.
 Use TLS when connecting to a remote endpoint.
 
 ```sh
-hm sandbox vm --endpoint http://127.0.0.1:8080 create --template base
+export HV2_SANDBOX_URL=http://127.0.0.1:3980
+hm sandbox vm create --template base
 hm sandbox vm list
 hm sandbox vm exec SANDBOX_ID -- /bin/sh -c 'printf hello'
 hm sandbox vm checkpoint save SANDBOX_ID before-change
@@ -125,6 +141,37 @@ preparation happens outside the run and must be reported separately. This
 benchmark uses HyperMachine's `/exec` extension, so other providers require
 equivalent execution adapters before their results can be compared. It does
 not measure memory, stateful resume, or general application initialization.
+
+### Fresh KVM readiness baseline
+
+The shipped Windows debug client was checked against the release daemon on
+2026-09-30 using `tools/e2e-sandbox-vm-cli.py`. Quoted arguments remained
+literal, guest exit 7 propagated, checkpoints restored a changed file,
+pause/resume preserved it, both forks inherited it, and deletion cleaned up
+the created guests. This verifies the node interface, not the control plane.
+
+Eight runs of 100 samples each completed with **zero failed samples**.
+Raw JSON is in [benchmarks/2026-09-30](benchmarks/2026-09-30/), named
+`readiness-cN.json` and `readiness-prefault-cN.json`.
+
+| Concurrency | Default P50 / P95 / P99 ready (ms) | Prefault P50 / P95 / P99 ready (ms) |
+|---|---|---|
+| 1 | 67.37 / 103.12 / 142.32 | 44.88 / 205.65 / 216.17 |
+| 8 | 113.36 / 140.62 / 149.04 | 53.94 / 106.48 / 121.42 |
+| 50 | 947.43 / 1493.28 / 1641.66 | 882.99 / 1363.84 / 1453.71 |
+| 100 | 2679.86 / 2934.73 / 3038.36 | 1848.60 / 2132.19 / 2153.59 |
+
+Hardware: Ryzen 9 9900X, 24 logical CPUs, 45.9 GiB available to WSL2 Debian,
+nested Hyper-V/KVM, one vCPU and 1024 MiB per guest, prewarmed BusyBox/static
+agent template, networking disabled. Kernel and initrd hashes, client build
+mode and run timestamps are recorded in each JSON. The daemon code is based
+on commit `2dbf31f`; the client includes the subsequent metadata/default-port
+fixes on this branch. Other host workloads were active. Runs were sequential,
+with default runs preceding prefault runs, so host variation and order effects
+prevent attributing the differences solely to prefaulting. No default changes
+or competitor wins follow from this experiment. High-concurrency tail latency
+remains an optimization target; dedicated-host repeats and equivalent provider
+runs are required.
 
 ## Changelog of this page
 

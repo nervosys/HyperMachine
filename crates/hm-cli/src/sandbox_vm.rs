@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 /// Connection and operation for a remote VM sandbox.
 #[derive(Debug, Args)]
 pub struct VmArgs {
-    /// Sandbox API URL; defaults to HV2_SANDBOX_URL or http://127.0.0.1:8080
+    /// Sandbox API URL; defaults to HV2_SANDBOX_URL or http://127.0.0.1:3980
     #[arg(long, global = true)]
     pub endpoint: Option<String>,
     /// HTTP deadline in seconds, including guest command execution
@@ -163,7 +163,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
     let endpoint = args
         .endpoint
         .or_else(|| std::env::var("HV2_SANDBOX_URL").ok())
-        .unwrap_or_else(|| "http://127.0.0.1:8080".into());
+        .unwrap_or_else(|| "http://127.0.0.1:3980".into());
     let api = Api::new(
         &endpoint,
         args.request_timeout,
@@ -434,7 +434,9 @@ async fn benchmark(
     println!(
         "{}",
         serde_json::to_string_pretty(&json!({
-            "schema_version": 1, "client_version": env!("CARGO_PKG_VERSION"), "environment": environment,
+        "schema_version": 1, "client_version": env!("CARGO_PKG_VERSION"), "environment": environment,
+        "client_os": std::env::consts::OS, "client_arch": std::env::consts::ARCH,
+        "client_debug_assertions": cfg!(debug_assertions), "finished_at": chrono::Utc::now().to_rfc3339(),
             "template": template, "requested_samples": samples, "concurrency": concurrency,
             "successful_samples": success, "failed_samples": samples as usize - success,
             "elapsed_seconds": elapsed, "completed_lifecycles_per_second": success as f64 / elapsed,
