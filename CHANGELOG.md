@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Benchmark evidence
+- Add a checksum-pinned Firecracker installer and alternating same-host cold
+  sandbox comparison with exact guest workload verification, failure retention,
+  cleanup checks and source provenance. Record two cohorts exposing HyperMachine
+  startup failures and slower median readiness; no performance win is claimed.
+- Gate local engine benchmark failure accounting in CI.
+
 ### Security
 - Reject control-plane credentials configured as both a legacy admin key and
   a scoped key. Embedded instances enforce the scoped key's permissions and
