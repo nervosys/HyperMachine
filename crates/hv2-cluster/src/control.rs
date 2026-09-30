@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{MatchedPath, Path, Query, Request, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -190,52 +190,114 @@ async fn require_api_key(
     request: Request,
     next: Next,
 ) -> Response {
-    if control.config.api_key.is_some() || !control.config.api_keys.is_empty() {
-        use subtle::ConstantTimeEq;
+    let started = Instant::now();
+    let request_id = uuid::Uuid::new_v4();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unknown", MatchedPath::as_str)
+        .to_owned();
+    let method = match request.method().as_str() {
+        "GET" => "GET",
+        "HEAD" => "HEAD",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "DELETE" => "DELETE",
+        "PATCH" => "PATCH",
+        "OPTIONS" => "OPTIONS",
+        "CONNECT" => "CONNECT",
+        "TRACE" => "TRACE",
+        _ => "OTHER",
+    };
+    let (kind, key_id, rejection) = authorize(&control.config, &request);
+    let allowed = rejection.is_none();
+    let response = match rejection {
+        Some(response) => response,
+        None => {
+            tracing::info!(target: "hv2_cluster::access", %request_id, route, method,
+                principal = kind, key_id, "control-plane access started");
+            next.run(request).await
+        }
+    };
+    tracing::info!(target: "hv2_cluster::access", %request_id, route, method,
+        principal = kind, key_id, allowed, status = response.status().as_u16(),
+        elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+        "control-plane access completed");
+    response
+}
+
+/// Identity is a category plus a short digest of a configured credential.
+/// Never log unknown credential digests, headers, bodies, query strings or IDs
+/// supplied in paths. Library callers get scoped precedence for collisions.
+fn authorize(
+    config: &ControlConfig,
+    request: &Request,
+) -> (&'static str, String, Option<Response>) {
+    use sha2::{Digest, Sha256};
+    use subtle::ConstantTimeEq;
+    let fingerprint = |digest: &[u8; 32]| -> String {
+        digest[..8]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    };
+    if config.api_key.is_some() || !config.api_keys.is_empty() {
         let sent = request
             .headers()
             .get("x-api-key")
             .map(HeaderValue::as_bytes)
             .unwrap_or_default();
-        use sha2::{Digest, Sha256};
         let digest: [u8; 32] = Sha256::digest(sent).into();
         // Library callers can construct a conflicting configuration without
         // the binary's startup validation. Never turn a scoped key into an
         // unrestricted, non-expiring credential in that case.
-        let scoped = control
-            .config
-            .api_keys
-            .iter()
-            .any(|policy| policy.has_digest(&digest));
-        if let Some(key) = &control.config.api_key {
-            if !scoped && !sent.is_empty() && bool::from(sent.ct_eq(key.as_bytes())) {
-                return next.run(request).await;
-            }
-        }
         let now = chrono::Utc::now().timestamp();
-        let policy = control
-            .config
+        let policy = config
             .api_keys
             .iter()
-            .find(|policy| policy.matches(&digest, now));
+            .find(|policy| policy.has_digest(&digest));
         match policy {
             Some(policy) if !sent.is_empty() => {
-                if !policy.permits(request.method(), request.uri().path()) {
-                    return api_error(
-                        StatusCode::FORBIDDEN,
-                        "API key scope does not permit this operation",
+                if !policy.matches(&digest, now) {
+                    return (
+                        "expired",
+                        fingerprint(&digest),
+                        Some(api_error(
+                            StatusCode::UNAUTHORIZED,
+                            "missing, expired or wrong X-API-Key",
+                        )),
                     );
                 }
+                if !policy.permits(request.method(), request.uri().path()) {
+                    return (
+                        "scoped",
+                        fingerprint(&digest),
+                        Some(api_error(
+                            StatusCode::FORBIDDEN,
+                            "API key scope does not permit this operation",
+                        )),
+                    );
+                }
+                return ("scoped", fingerprint(&digest), None);
             }
             _ => {
-                return api_error(
-                    StatusCode::UNAUTHORIZED,
-                    "missing, expired or wrong X-API-Key",
-                )
+                if let Some(key) = &config.api_key {
+                    if !sent.is_empty() && bool::from(sent.ct_eq(key.as_bytes())) {
+                        return ("legacy_admin", fingerprint(&digest), None);
+                    }
+                }
+                return (
+                    "unauthenticated",
+                    "none".into(),
+                    Some(api_error(
+                        StatusCode::UNAUTHORIZED,
+                        "missing, expired or wrong X-API-Key",
+                    )),
+                );
             }
         }
     }
-    next.run(request).await
+    ("anonymous", "none".into(), None)
 }
 
 async fn health(State(control): State<Arc<ControlPlane>>) -> Response {

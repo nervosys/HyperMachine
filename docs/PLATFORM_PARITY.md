@@ -91,7 +91,7 @@ pass the acceptance criteria below.
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
-| Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring control-plane keys verified; tenant boundaries, roles and access auditing remain incomplete |
+| Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys and protected API tracing verified; tenant boundaries, roles, durable audit retention and resource attribution remain incomplete |
 | Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
 | Operations | Object-storage backups and recovery, quota enforcement, scheduling/event triggers, load-tested multi-node failover | Shared-directory snapshots and host job queues do not cover all these capabilities |
@@ -437,8 +437,35 @@ checksum-locked protoc 23.4 from fixed official release URLs, without release
 enumeration, and preserves independent platform jobs when one fails. The
 installer rejects altered archives and unsupported hosts; its platform and
 checksum tests pass, and the pinned Windows and Linux x86-64 compilers run
-locally. Remote compilation, macOS execution and authentication checks still
-need their own completed CI results.
+locally. On CI run `36770058106`, pinned compiler installation and execution
+passed on Linux, Windows and macOS. Workspace tests and shipped authentication
+checks still need their own completed results; successful setup is not proof
+of those downstream checks.
+
+### Protected API access records
+
+The control plane emits structured tracing events under `hv2_cluster::access`
+for protected API requests. Accepted requests have a start event and a response
+event sharing a generated request ID. Denied requests also have response events.
+Fields include the route template, a standard HTTP method category, credential
+category, HTTP status and elapsed time until the response is constructed.
+Configured credentials are identified by the first 16 hex characters of their
+SHA-256 digest; unknown credentials are never fingerprinted. Request headers,
+bodies, queries, supplied path values and nonstandard method strings are omitted.
+The existing info-level logger emits these events by default; an operator can
+select them with `RUST_LOG=warn,hv2_cluster::access=info`.
+
+The shipped Windows binary checks verify allowed and denied status records,
+expired-key records, matching start/response IDs and absence of fixture
+credentials or private request values from the logs. All 13 real-HTTP
+authorization tests and strict cluster Clippy passed after this change.
+
+These are diagnostic access records, not a durable or tamper-evident audit
+store. Route templates omit resource attribution. Public and independently
+authenticated bearer/proxy routes are outside this middleware. A response
+record reports headers/status, not completion of a streamed body; interrupted
+accepted requests may have only a start event. Retention, comprehensive guest
+activity auditing and performance impact under load remain unverified.
 
 ## Changelog of this page
 
