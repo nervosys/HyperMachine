@@ -584,3 +584,17 @@ on failure. These are sequential crypto microbenchmarks on a shared runner,
 with regression reporting rather than a latency gate; they do not establish
 sandbox readiness or superiority over any competing product. Remote execution
 of the corrected workflow remains pending.
+
+The primary crypto/API benchmark job also separates measurements from the
+restored Cargo cache: a fresh `CRITERION_HOME` under the runner temporary
+directory is used for execution, conversion and artifact collection. Both
+benchmark commands must succeed before results are stored. The converter
+rejects missing/empty results, incomplete estimates, nonnumeric/nonfinite or
+invalid timing values, invalid names and duplicate names instead of silently
+emitting empty or partial results. Fifteen standalone PowerShell fixture checks
+passed, including single/multiple JSON array serialization and sorting;
+actionlint passed. CI runs these checks before benchmarks and uploads raw
+measurement JSON and logs even when a benchmark fails. This prevents cached
+measurements from being reported as a fresh run; remote execution of this
+change remains pending. These Criterion means and standard errors are component
+microbenchmarks, not VM lifecycle P50/P95/P99 or matched competitor measurements.
