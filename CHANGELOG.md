@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **`hm sandbox vm`** (`hm-cli`): a client for sandboxd lifecycle, guest
+  commands and checkpoints. `benchmark` measures creation through checked
+  guest output, with concurrency, raw samples, tail latencies, failure
+  accounting and an optional P99 gate. Commands retain guest exit codes;
+  benchmark failures and cleanup errors fail the run.
 - **`hm jobs`, a durable job queue** (`hv2-jobs`, `hm-cli`): programs
   queued in a shared directory and run by workers under the process sandbox,
   with labels (e.g. `gpu`), leases that requeue a lost worker's job,

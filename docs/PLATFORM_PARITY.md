@@ -13,7 +13,7 @@ container. The comparison is about what surrounds the VM.
 | Capability | boxd | exe.dev | HyperMachine |
 |---|---|---|---|
 | Create, list, delete over an API | yes | yes | **Real**: E2B's API (`hv2-sandboxd`, `hv2-control-plane`), so the unmodified E2B SDKs work |
-| A CLI | yes | yes (over ssh) | **Partial**: `hv2` has demo handlers; no client for sandboxd yet |
+| A CLI | yes | yes (over ssh) | **Partial**: `hm sandbox vm` manages sandboxd lifecycle, commands and checkpoints; protocol tests pass, real-guest client verification pending |
 | Fork a running VM, memory included | ~160 ms | `cp` | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | no | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
@@ -52,6 +52,79 @@ container. The comparison is about what surrounds the VM.
 - Live shared volumes.
 - Paused sandboxes resume on any node.
 - About 30x oversubscription, with paused sandboxes at about 2.2 MiB each.
+
+## Competitive verification work (2026-09-30)
+
+The scope now includes [CubeSandbox](https://github.com/TencentCloud/CubeSandbox),
+[Agent Substrate](https://github.com/agent-substrate/substrate),
+[E2B](https://e2b.dev/), [Daytona](https://www.daytona.io/docs/en/sandboxes/),
+[Blaxel](https://blaxel.ai/platform/sandboxes),
+[Modal](https://modal.com/blog/scaling-to-1-million-concurrent-sandboxes-in-seconds),
+and [Firecracker](https://github.com/firecracker-microvm/firecracker/blob/main/SPECIFICATION.md).
+Firecracker is an engine baseline; the others are sandbox platforms.
+
+**No across-the-board win is established.** Published figures use different
+hardware, guest images, concurrency, and readiness criteria. In particular,
+HyperMachine's 3.19 ms minimal-unikernel boot is not a Linux/Python sandbox
+creation benchmark. Its measured SDK creates are 59 ms for base and 91 ms
+for Python. Nested KVM measurements are not substitutes for bare-metal ones.
+
+| Workstream | Acceptance criterion | Current gap |
+|---|---|---|
+| Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Comparable competitor runs and bare-metal HyperMachine runs are missing |
+| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Existing measurements need a common protocol and competitor adapters |
+| Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
+| Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
+| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI implemented; file transfers and real-guest CLI verification remain |
+| Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | The sandbox platform remains single-team |
+| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
+| Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
+| Operations | Object-storage backups and recovery, quota enforcement, scheduling/event triggers, load-tested multi-node failover | Shared-directory snapshots and host job queues do not cover all these capabilities |
+
+Mark a capability complete only after checking its effect through a shipped
+interface. Mark a performance win only after equivalent runs establish it;
+do not infer it from a vendor headline or a component microbenchmark.
+
+### VM client and readiness benchmark
+
+Build the client with `cargo build -p hm-cli --bin hm`. It talks to sandboxd
+or the control plane, selected by `--endpoint` or `HV2_SANDBOX_URL`.
+`HV2_API_KEY` supplies authentication without putting the key in shell arguments.
+Use TLS when connecting to a remote endpoint.
+
+```sh
+hm sandbox vm --endpoint http://127.0.0.1:8080 create --template base
+hm sandbox vm list
+hm sandbox vm exec SANDBOX_ID -- /bin/sh -c 'printf hello'
+hm sandbox vm checkpoint save SANDBOX_ID before-change
+hm sandbox vm checkpoint restore SANDBOX_ID before-change
+hm sandbox vm pause SANDBOX_ID
+hm sandbox vm resume SANDBOX_ID --lifetime 300
+hm sandbox vm fork SANDBOX_ID --count 2
+hm sandbox vm delete SANDBOX_ID
+
+hm sandbox vm benchmark --template base --samples 100 --concurrency 8 \
+  --environment 'CPU model; RAM; OS; nested/bare-metal; image hash; daemon commit' \
+  --max-p99-ready-ms 150 > readiness.json
+```
+
+The benchmark includes CLI HTTP calls, guest execution, and client-side
+queueing within each sample's creation-to-ready interval. A sample is ready
+only when `/bin/sh` produces its expected unique marker with exit 0 and no
+timeout. Creation and first-execution times are reported separately.
+Every known sandbox is deleted, including after a failed readiness command;
+a cleanup error fails the sample. Raw records and nearest-rank percentiles
+are JSON. An empty successful sample set has null latency statistics, not
+zero. Any failed sample or exceeded threshold makes the CLI exit nonzero.
+The throughput field measures complete create/execute/delete lifecycles,
+including cleanup; it is not a create-only throughput figure.
+
+The 150 ms command above demonstrates setting a gate; it is not evidence of
+a performance win or a universal target. No warmups are discarded. Template
+preparation happens outside the run and must be reported separately. This
+benchmark uses HyperMachine's `/exec` extension, so other providers require
+equivalent execution adapters before their results can be compared. It does
+not measure memory, stateful resume, or general application initialization.
 
 ## Changelog of this page
 

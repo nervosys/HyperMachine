@@ -86,7 +86,7 @@ enum Commands {
         command: hm_cli::jobs_cmd::JobsCommand,
     },
 
-    /// Run host programs under enforced limits (no VM needed)
+    /// Run host programs under limits or manage remote VM sandboxes
     Sandbox {
         #[command(subcommand)]
         command: SandboxCommands,
@@ -103,12 +103,13 @@ enum Commands {
     Info,
 }
 
-/// Sandboxed host processes, confined by the OS (namespaces and cgroups on
-/// Linux, job objects on Windows) rather than a VM.
+/// Host process confinement and remote VM sandbox management.
 #[derive(Subcommand)]
 enum SandboxCommands {
     /// Run a program under limits, streaming its output; exits with its code
     Run(hm_cli::sandbox_cmd::RunArgs),
+    /// Manage VM sandboxes on a sandboxd node or control plane
+    Vm(hm_cli::sandbox_vm::VmArgs),
 }
 
 /// Type 1 (bare-metal) hypervisor commands - runs directly on hardware
@@ -326,6 +327,12 @@ async fn main() -> Result<()> {
             command: SandboxCommands::Run(args),
         } => {
             let code = hm_cli::sandbox_cmd::run(args).await?;
+            std::process::exit(code);
+        }
+        Commands::Sandbox {
+            command: SandboxCommands::Vm(args),
+        } => {
+            let code = hm_cli::sandbox_vm::run(args).await?;
             std::process::exit(code);
         }
         Commands::Completions { shell } => {
