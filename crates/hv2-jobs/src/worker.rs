@@ -2,7 +2,7 @@
 //! [`hv2_sandbox::ProcessSandbox`], one per slot.
 //!
 //! While a job runs, a watcher beside it renews the worker's lease and
-//! watches for a cancel. A cancel with a [`GracefulStop`] creates the stop
+//! watches for a cancel. A cancel with a [`GracefulStop`](crate::GracefulStop) creates the stop
 //! file first and gives the program its grace period; then, or without one,
 //! the whole process tree is killed. A worker that finds its lease taken --
 //! it was too slow, and the job was requeued -- kills its run at once, so a
