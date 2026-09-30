@@ -1,3 +1,6 @@
+{{- if and (not .Values.auth.legacyAdminEnabled) (not .Values.auth.apiKeysSecret) }}
+{{- fail "auth.apiKeysSecret is required when auth.legacyAdminEnabled is false" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,6 +40,10 @@ spec:
             - "5981"
             - --reap-interval
             - {{ .Values.controlPlane.reapIntervalSeconds | quote }}
+            {{- if .Values.auth.apiKeysSecret }}
+            - --api-keys-file
+            - /etc/hv2-api-keys/keys.json
+            {{- end }}
             {{- with .Values.identity.issuer }}
             - --identity-issuer
             - {{ . | quote }}
@@ -50,8 +57,10 @@ spec:
             - /etc/hv2-mtls/tls.key
             {{- end }}
           env:
+            {{- if .Values.auth.legacyAdminEnabled }}
             - name: HV2_API_KEY
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: api-key } }
+            {{- end }}
             - name: HV2_CLUSTER_TOKEN
               valueFrom: { secretKeyRef: { name: {{ include "hv2.secretName" . }}, key: cluster-token } }
             - name: HV2_STORE_PASSWORD
@@ -75,8 +84,11 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities: { drop: [ALL] }
-          {{- if or .Values.mtls.controlPlaneSecret .Values.store.tlsSecret }}
+          {{- if or .Values.mtls.controlPlaneSecret .Values.store.tlsSecret .Values.auth.apiKeysSecret }}
           volumeMounts:
+            {{- if .Values.auth.apiKeysSecret }}
+            - { name: api-keys, mountPath: /etc/hv2-api-keys, readOnly: true }
+            {{- end }}
             {{- if .Values.mtls.controlPlaneSecret }}
             - { name: mtls, mountPath: /etc/hv2-mtls, readOnly: true }
             {{- end }}
@@ -84,6 +96,13 @@ spec:
             - { name: store-tls, mountPath: /etc/hv2-store-tls, readOnly: true }
             {{- end }}
       volumes:
+        {{- if .Values.auth.apiKeysSecret }}
+        - name: api-keys
+          secret:
+            secretName: {{ .Values.auth.apiKeysSecret | quote }}
+            items:
+              - { key: {{ .Values.auth.apiKeysSecretKey | quote }}, path: keys.json }
+        {{- end }}
         {{- if .Values.mtls.controlPlaneSecret }}
         - name: mtls
           secret: { secretName: {{ .Values.mtls.controlPlaneSecret | quote }} }

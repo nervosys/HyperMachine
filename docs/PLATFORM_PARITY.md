@@ -380,6 +380,34 @@ control plane. Policies load at startup; rotation requires restarting every
 control-plane replica with the same updated policy. Dynamic key administration,
 immediate bearer revocation, tenant roles and access audit logs remain open.
 
+The sandbox Helm chart supports a read-only policy Secret:
+
+```yaml
+auth:
+  apiKeysSecret: sandbox-api-policies
+  apiKeysSecretKey: keys.json
+  legacyAdminEnabled: false
+```
+
+Create the Secret from the policy file in the release namespace, then deploy
+with these values and a control-plane image built from this revision. The
+existing published image tag is not evidence that it supports the new flag.
+The chart projects the selected Secret key to `/etc/hv2-api-keys/keys.json`
+and passes `--api-keys-file`. Policy-only mode removes `HV2_API_KEY` from the
+control-plane environment; cluster authentication and the store password remain.
+The default keeps legacy admin authentication. The chart rejects disabling it
+without a policy Secret, nonboolean mode values and an empty policy Secret key.
+Missing or malformed policy data prevents startup. After changing the policy,
+run `kubectl rollout restart deployment/RELEASE-hv2-control-plane` and wait for
+the rollout in the release namespace. Every replica must load the same policy;
+Secret projection updates alone do not reload it.
+
+`tools/test-sandbox-chart.py --helm HELM_BINARY` verifies default and policy-only
+authentication, all eight policy/mTLS/store-TLS mount combinations and invalid
+configuration rejection. Four render tests and Helm 3.17.3 lint passed. These
+checks parse rendered YAML and validate mount/argument consistency; no live
+Kubernetes deployment has been performed for this change.
+
 Validation: 26 cluster library tests, 12 real-HTTP integration tests and strict
 cluster Clippy passed. `tools/e2e-control-keys.py --control-plane BINARY` checks
 the shipped Windows binary's scope enforcement, live expiry, token-access

@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- Sandbox Helm chart policy-Secret mounting and optional policy-only API
+  authentication, with configuration validation and rotation instructions.
+  Disabling legacy admin authentication requires a scoped-key policy Secret.
 - Control-plane `--api-keys-file` provisions hashed, expiring credentials with
   admin, inventory, sandbox, template, volume and event capability scopes.
   Inventory access excludes credential-bearing detail responses. Expiration
