@@ -359,6 +359,49 @@ fn client() -> reqwest::Client {
 }
 
 #[tokio::test]
+async fn embedded_admin_collision_never_bypasses_scope_or_expiry() {
+    use sha2::{Digest, Sha256};
+    let key = "collision-fixture";
+    let hash: String = Sha256::digest(key.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let now = chrono::Utc::now().timestamp();
+    for (expiry, expected) in [(now + 60, 200), (now - 60, 401)] {
+        let policies = hv2_cluster::keys::ApiKeyPolicy::from_json(
+            &json!([
+                {"sha256": hash, "expires_at": expiry, "scopes": ["inventory"]}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let base = control_plane_with_keys(store, Some(key), policies).await;
+        assert_eq!(
+            client()
+                .get(format!("{base}/sandboxes"))
+                .header("x-api-key", key)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            expected
+        );
+        assert_eq!(
+            client()
+                .post(format!("{base}/sandboxes"))
+                .header("x-api-key", key)
+                .json(&json!({"templateID": "base"}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            if expected == 200 { 403 } else { 401 }
+        );
+    }
+}
+
+#[tokio::test]
 async fn scoped_keys_expire_and_inventory_cannot_leak_guest_credentials() {
     use sha2::{Digest, Sha256};
     let now = chrono::Utc::now().timestamp();

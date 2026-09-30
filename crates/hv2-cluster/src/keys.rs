@@ -82,8 +82,27 @@ impl ApiKeyPolicy {
             .collect()
     }
 
+    /// Reject a legacy admin credential also present in scoped policies.
+    ///
+    /// # Errors
+    /// Returns a credential-free error when a policy duplicates the admin key,
+    /// including when that policy has already expired.
+    pub fn validate_legacy_admin(policies: &[Self], admin: Option<&str>) -> Result<(), String> {
+        if let Some(admin) = admin {
+            let digest: [u8; 32] = Sha256::digest(admin.as_bytes()).into();
+            if policies.iter().any(|policy| policy.has_digest(&digest)) {
+                return Err("legacy admin credential must differ from every scoped API key".into());
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn has_digest(&self, digest: &[u8; 32]) -> bool {
+        bool::from(self.digest.ct_eq(digest))
+    }
+
     pub(crate) fn matches(&self, digest: &[u8; 32], now: i64) -> bool {
-        bool::from(self.digest.ct_eq(digest)) && now < self.expires_at
+        self.has_digest(digest) && now < self.expires_at
     }
 
     pub(crate) fn permits(&self, method: &Method, path: &str) -> bool {
@@ -139,6 +158,21 @@ mod tests {
         assert!(policy.matches(&digest, 99));
         assert!(!policy.matches(&digest, 100));
         assert!(!policy.matches(&Sha256::digest(b"wrong").into(), 99));
+    }
+
+    #[test]
+    fn legacy_admin_collision_is_rejected_even_for_expired_policies() {
+        let policy = policy("inventory");
+        let error =
+            ApiKeyPolicy::validate_legacy_admin(std::slice::from_ref(&policy), Some("fixture-key"))
+                .unwrap_err();
+        assert!(!error.contains("fixture-key"));
+        assert!(ApiKeyPolicy::validate_legacy_admin(
+            std::slice::from_ref(&policy),
+            Some("different-admin")
+        )
+        .is_ok());
+        assert!(ApiKeyPolicy::validate_legacy_admin(&[policy], None).is_ok());
     }
     #[test]
     fn inventory_cannot_obtain_access_tokens_or_modify_resources() {

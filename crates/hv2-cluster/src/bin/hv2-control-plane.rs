@@ -139,6 +139,12 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    if let Err(error) =
+        hv2_cluster::keys::ApiKeyPolicy::validate_legacy_admin(&api_keys, opts.api_key.as_deref())
+    {
+        eprintln!("hv2-control-plane: {error}");
+        return std::process::ExitCode::FAILURE;
+    }
     let store = match store::open(&opts.store, &opts.namespace).await {
         Ok(store) => store,
         Err(e) => {

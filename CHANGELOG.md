@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- Reject control-plane credentials configured as both a legacy admin key and
+  a scoped key. Embedded instances enforce the scoped key's permissions and
+  expiry, preventing legacy admin access from overriding those restrictions.
 - Restored guests receive host time sampled after their agent connection is
   established, avoiding stale timestamps captured before worker scheduling
   and connection waits. Host clock conversion failures are reported rather
