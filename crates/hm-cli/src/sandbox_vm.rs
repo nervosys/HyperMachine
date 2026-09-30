@@ -79,10 +79,33 @@ pub enum VmCommand {
     },
     /// Destroy a VM sandbox
     Delete { id: String },
+    /// Transfer binary files through the sandbox's authenticated envd endpoint
+    Files {
+        id: String,
+        /// Reachable envd listener or sandbox proxy URL; use TLS remotely
+        #[arg(long)]
+        envd_endpoint: String,
+        #[command(subcommand)]
+        command: VmFileCommand,
+    },
     /// Save, list, restore, or delete a checkpoint belonging to a VM
     Checkpoint {
         #[command(subcommand)]
         command: CheckpointCommand,
+    },
+}
+
+/// File bytes travel through envd, without shell interpretation.
+#[derive(Debug, Subcommand)]
+pub enum VmFileCommand {
+    Upload {
+        source: std::path::PathBuf,
+        path: String,
+    },
+    /// Download atomically; refuses to overwrite an existing destination
+    Download {
+        path: String,
+        destination: std::path::PathBuf,
     },
 }
 
@@ -206,6 +229,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             api.request(Method::DELETE, &["sandboxes", &id], None)
                 .await?
         }
+        VmCommand::Files {
+            id,
+            envd_endpoint,
+            command,
+        } => transfer_file(&api, &id, &envd_endpoint, args.request_timeout, command).await?,
         VmCommand::Pause { id } => {
             api.request(Method::POST, &["sandboxes", &id, "pause"], None)
                 .await?
@@ -298,6 +326,123 @@ pub async fn run(args: VmArgs) -> Result<i32> {
     Ok(0)
 }
 
+const MAX_FILE_BYTES: u64 = 512 * 1024 * 1024;
+
+async fn transfer_file(
+    api: &Api,
+    id: &str,
+    endpoint: &str,
+    timeout: u64,
+    command: VmFileCommand,
+) -> Result<Value> {
+    use std::io::{Read, Write};
+    let envd = Api::new(endpoint, timeout, None)?;
+    let path = match &command {
+        VmFileCommand::Upload { path, .. } | VmFileCommand::Download { path, .. } => path,
+    };
+    if path.is_empty() || path.contains('\0') {
+        bail!("guest file path must be nonempty and cannot contain NUL");
+    }
+    let mut url = envd.base.clone();
+    url.path_segments_mut()
+        .map_err(|_| anyhow::anyhow!("invalid envd endpoint"))?
+        .pop_if_empty()
+        .push("files");
+    url.query_pairs_mut().append_pair("path", path);
+    // Check local inputs before extending or resuming the remote sandbox.
+    let upload = if let VmFileCommand::Upload { source, .. } = &command {
+        let file =
+            std::fs::File::open(source).with_context(|| format!("opening {}", source.display()))?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() {
+            bail!("upload source must be a regular file");
+        }
+        if metadata.len() > MAX_FILE_BYTES {
+            bail!("file exceeds envd's 512 MiB limit");
+        }
+        let mut bytes = Vec::new();
+        file.take(MAX_FILE_BYTES + 1).read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_FILE_BYTES {
+            bail!("file exceeds envd's 512 MiB limit");
+        }
+        Some(bytes)
+    } else {
+        None
+    };
+    if let VmFileCommand::Download { destination, .. } = &command {
+        if destination.try_exists()? {
+            bail!(
+                "download destination already exists: {}",
+                destination.display()
+            );
+        }
+    }
+    let descriptor = api
+        .request(
+            Method::POST,
+            &["sandboxes", id, "connect"],
+            Some(json!({"timeout": 300})),
+        )
+        .await?;
+    let token = descriptor["envdAccessToken"]
+        .as_str()
+        .filter(|token| !token.is_empty())
+        .context("connect response missing envdAccessToken")?;
+    let mut token = reqwest::header::HeaderValue::from_str(token)
+        .map_err(|_| anyhow::anyhow!("invalid sandbox access token"))?;
+    token.set_sensitive(true);
+    // This is a separate client: never forward the platform's x-api-key to envd.
+    let request = if let Some(bytes) = upload {
+        envd.client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .body(bytes)
+    } else {
+        envd.client.get(url)
+    };
+    let mut response = request
+        .header("x-access-token", token)
+        .send()
+        .await
+        .context("envd file request failed")?;
+    if !response.status().is_success() {
+        let status = response.status();
+        bail!("envd returned {status}: {}", response.text().await?);
+    }
+    match command {
+        VmFileCommand::Upload { .. } => response
+            .json()
+            .await
+            .context("invalid envd upload response"),
+        VmFileCommand::Download { path, destination } => {
+            if response
+                .content_length()
+                .is_some_and(|size| size > MAX_FILE_BYTES)
+            {
+                bail!("file exceeds envd's 512 MiB limit");
+            }
+            let parent = destination
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+                .unwrap_or_else(|| std::path::Path::new("."));
+            let mut file = tempfile::NamedTempFile::new_in(parent)?;
+            let mut size = 0u64;
+            while let Some(chunk) = response.chunk().await? {
+                size += chunk.len() as u64;
+                if size > MAX_FILE_BYTES {
+                    bail!("file exceeds envd's 512 MiB limit");
+                }
+                file.write_all(&chunk)?;
+            }
+            file.flush()?;
+            file.persist_noclobber(&destination)
+                .map_err(|error| error.error)
+                .with_context(|| format!("saving {} without overwriting", destination.display()))?;
+            Ok(json!({"path": path, "destination": destination, "bytes": size}))
+        }
+    }
+}
+
 fn exec_exit_code(value: &Value, timed_out: bool) -> Result<i32> {
     if timed_out {
         return Ok(124);
@@ -373,10 +518,10 @@ async fn benchmark_sample(api: Api, template: String, index: u32) -> Value {
     let cleanup = api.request(Method::DELETE, &["sandboxes", id], None).await;
     match (ready, cleanup) {
         (Ok(()), Ok(_)) => {
-            json!({"index": index, "success": true, "create_ms": create_ms, "exec_ms": exec_ms, "ready_ms": ready_ms})
+            json!({"index": index, "sandbox_id": id, "success": true, "create_ms": create_ms, "exec_ms": exec_ms, "ready_ms": ready_ms})
         }
         (ready, cleanup) => {
-            json!({"index": index, "success": false, "phase": "ready_or_cleanup", "create_ms": create_ms,
+            json!({"index": index, "sandbox_id": id, "success": false, "phase": "ready_or_cleanup", "create_ms": create_ms,
             "ready_error": ready.err().map(|e| format!("{e:#}")), "cleanup_error": cleanup.err().map(|e| format!("{e:#}"))})
         }
     }
