@@ -84,7 +84,54 @@ async fn benchmark_does_not_report_wrong_output_as_a_fast_success() {
     assert_eq!(report["successful_samples"], 0);
     assert_eq!(report["failed_samples"], 1);
     assert!(report["ready_ms"].is_null());
+    assert!(report["template_metadata"].is_null());
+    assert!(report["template_metadata_error"]
+        .as_str()
+        .unwrap()
+        .contains("404"));
     assert!(deleted.load(Ordering::SeqCst));
+    server.abort();
+}
+
+#[tokio::test]
+async fn benchmark_snapshot_gate_rejects_cold_boot_before_creating_a_guest() {
+    let created = Arc::new(AtomicBool::new(false));
+    let app = Router::new()
+        .route(
+            "/templates",
+            axum::routing::get(|| async {
+                Json(json!([{"templateID": "base", "snapshot": false, "buildStatus": "ready"}]))
+            }),
+        )
+        .route(
+            "/v2/sandboxes",
+            post(|State(created): State<Arc<AtomicBool>>| async move {
+                created.store(true, Ordering::SeqCst);
+                Json(json!({"sandboxID": "unexpected"}))
+            }),
+        )
+        .with_state(created.clone());
+    let (endpoint, server) = server(app).await;
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "--endpoint",
+            &endpoint,
+            "benchmark",
+            "--samples",
+            "1",
+            "--environment",
+            "protocol fixture",
+            "--require-snapshot",
+        ])
+        .env_remove("HV2_API_KEY")
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--require-snapshot"));
+    assert!(!created.load(Ordering::SeqCst));
     server.abort();
 }
 
@@ -99,6 +146,9 @@ async fn benchmark_bounds_live_sandboxes_and_fails_a_missed_latency_gate() {
     }
     let counts = Arc::new(Counts::default());
     let app = Router::new()
+        .route("/templates", axum::routing::get(|| async {
+            Json(json!([{"templateID": "base", "snapshot": true, "cpuCount": 1, "memoryMB": 1024}]))
+        }))
         .route(
             "/v2/sandboxes",
             post(|State(counts): State<Arc<Counts>>| async move {
@@ -144,6 +194,7 @@ async fn benchmark_bounds_live_sandboxes_and_fails_a_missed_latency_gate() {
             "2",
             "--max-p99-ready-ms",
             "1",
+            "--require-snapshot",
             "--environment",
             "delayed protocol fixture, not a performance result",
         ])
@@ -156,6 +207,9 @@ async fn benchmark_bounds_live_sandboxes_and_fails_a_missed_latency_gate() {
     assert_eq!(report["successful_samples"], 4);
     assert_eq!(report["failed_samples"], 0);
     assert_eq!(report["threshold_passed"], false);
+    assert_eq!(report["template_metadata"]["snapshot"], true);
+    assert_eq!(report["template_metadata"]["memoryMB"], 1024);
+    assert!(report["template_metadata_error"].is_null());
     assert_eq!(report["samples"].as_array().unwrap().len(), 4);
     assert_eq!(counts.created.load(Ordering::SeqCst), 4);
     assert_eq!(counts.live.load(Ordering::SeqCst), 0);

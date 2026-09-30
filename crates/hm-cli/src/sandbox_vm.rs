@@ -37,6 +37,9 @@ pub enum VmCommand {
         /// Fail if successful samples' P99 ready time exceeds this deadline
         #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
         max_p99_ready_ms: Option<u64>,
+        /// Refuse a run unless the server confirms a prepared snapshot template
+        #[arg(long)]
+        require_snapshot: bool,
     },
     /// Create a VM from a prepared template
     Create {
@@ -176,6 +179,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             concurrency,
             environment,
             max_p99_ready_ms,
+            require_snapshot,
         } => {
             return benchmark(
                 api,
@@ -184,6 +188,7 @@ pub async fn run(args: VmArgs) -> Result<i32> {
                 concurrency,
                 environment,
                 max_p99_ready_ms,
+                require_snapshot,
             )
             .await;
         }
@@ -338,7 +343,7 @@ async fn benchmark_sample(api: Api, template: String, index: u32) -> Value {
     {
         Ok(created) => created,
         Err(error) => {
-            return json!({"index": index, "success": false, "phase": "create", "error": error.to_string()})
+            return json!({"index": index, "success": false, "phase": "create", "error": format!("{error:#}")})
         }
     };
     let create_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -372,7 +377,7 @@ async fn benchmark_sample(api: Api, template: String, index: u32) -> Value {
         }
         (ready, cleanup) => {
             json!({"index": index, "success": false, "phase": "ready_or_cleanup", "create_ms": create_ms,
-            "ready_error": ready.err().map(|e| e.to_string()), "cleanup_error": cleanup.err().map(|e| e.to_string())})
+            "ready_error": ready.err().map(|e| format!("{e:#}")), "cleanup_error": cleanup.err().map(|e| format!("{e:#}"))})
         }
     }
 }
@@ -395,9 +400,36 @@ async fn benchmark(
     concurrency: u32,
     environment: String,
     max_p99_ready_ms: Option<u64>,
+    require_snapshot: bool,
 ) -> Result<i32> {
     if environment.trim().is_empty() {
         bail!("--environment must describe the test environment");
+    }
+    // Preparation is outside the timed lifecycle, but its state is evidence:
+    // a node can fall back to cold boot when building its template fails.
+    let (template_metadata, template_metadata_error) =
+        match api.request(Method::GET, &["templates"], None).await {
+            Ok(list) => (
+                list.as_array()
+                    .and_then(|entries| {
+                        entries.iter().find(|entry| {
+                            entry["templateID"] == template
+                                || entry["aliases"].as_array().is_some_and(|aliases| {
+                                    aliases.iter().any(|alias| alias == &template)
+                                })
+                        })
+                    })
+                    .cloned(),
+                None,
+            ),
+            Err(error) => (None, Some(format!("{error:#}"))),
+        };
+    if require_snapshot
+        && !template_metadata
+            .as_ref()
+            .is_some_and(|entry| entry["snapshot"] == true)
+    {
+        bail!("--require-snapshot needs server confirmation of a prepared template; metadata: {template_metadata:?}; error: {template_metadata_error:?}");
     }
     let mut pending = tokio::task::JoinSet::new();
     let mut records = Vec::new();
@@ -438,6 +470,8 @@ async fn benchmark(
         "client_os": std::env::consts::OS, "client_arch": std::env::consts::ARCH,
         "client_debug_assertions": cfg!(debug_assertions), "finished_at": chrono::Utc::now().to_rfc3339(),
             "template": template, "requested_samples": samples, "concurrency": concurrency,
+            "template_metadata": template_metadata, "template_metadata_error": template_metadata_error,
+            "require_snapshot": require_snapshot,
             "successful_samples": success, "failed_samples": samples as usize - success,
             "elapsed_seconds": elapsed, "completed_lifecycles_per_second": success as f64 / elapsed,
             "readiness": "creation followed by /bin/sh producing a checked unique marker",

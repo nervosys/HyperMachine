@@ -121,7 +121,7 @@ hm sandbox vm delete SANDBOX_ID
 
 hm sandbox vm benchmark --template base --samples 100 --concurrency 8 \
   --environment 'CPU model; RAM; OS; nested/bare-metal; image hash; daemon commit' \
-  --max-p99-ready-ms 150 > readiness.json
+  --require-snapshot --max-p99-ready-ms 150 > readiness.json
 ```
 
 The benchmark includes CLI HTTP calls, guest execution, and client-side
@@ -141,6 +141,11 @@ preparation happens outside the run and must be reported separately. This
 benchmark uses HyperMachine's `/exec` extension, so other providers require
 equivalent execution adapters before their results can be compared. It does
 not measure memory, stateful resume, or general application initialization.
+Before timing samples it queries `/templates` and records the selected template's
+server metadata, including snapshot availability, CPU and memory sizes. Failure
+to obtain metadata is recorded explicitly. `--require-snapshot` refuses to create
+any guests unless the server confirms snapshot mode; omit it when intentionally
+measuring cold boots. Errors include their underlying cause.
 
 ### Fresh KVM readiness baseline
 
@@ -172,6 +177,14 @@ prevent attributing the differences solely to prefaulting. No default changes
 or competitor wins follow from this experiment. High-concurrency tail latency
 remains an optimization target; dedicated-host repeats and equivalent provider
 runs are required.
+
+A subsequent diagnostic daemon startup failed its 120-second template-agent
+readiness check and fell back to cold boots. Its API was not yet available when
+the diagnostic benchmark began: all 100 requests failed, with null latency
+statistics. This is an additional startup-reliability gap, not a measured restore
+latency. The original eight runs explicitly announced snapshot-backed templates.
+The new snapshot gate prevents comparing an unnoticed fallback with those runs;
+the underlying intermittent guest startup failure still needs diagnosis.
 
 ## Changelog of this page
 
