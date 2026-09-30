@@ -247,6 +247,52 @@ the offering node, guest sizes and snapshot state. This validates the shipped
 benchmark through the cluster interface; the small shared-host cohort does not
 establish a latency advantage over other products.
 
+## Shared SDK comparison harness
+
+`tools/bench-e2b-sdk.py` measures create-to-verified-command readiness through
+the unmodified [E2B Python SDK 2.51.0](https://pypi.org/project/e2b/2.51.0/).
+Install it in an isolated virtual environment. Configure `E2B_API_KEY` in the
+environment and supply explicit endpoints; leave `E2B_API_URL`,
+`E2B_SANDBOX_URL` and `E2B_ENVD_POOL_SHARDS` unset. For the local fixture:
+
+```powershell
+python tools/bench-e2b-sdk.py --provider HyperMachine `
+  --api-url http://localhost:14095 --sandbox-url http://localhost:14096 `
+  --template base --environment 'Describe the actual client and host' `
+  --image-description 'Describe the matched image and preparation' `
+  --expected-cpus 1 --expected-memory-mb 1024 --samples 100 --concurrency 8
+```
+
+For compatible managed providers, omit `--sandbox-url` to use their sandbox
+domains. The harness disables internet access and retries, forces normal SDK
+mode so deletion actually occurs, checks server-reported CPU/RAM, and deletes
+every known sandbox. Incorrect output, resource mismatch or cleanup failure
+fails the run. Dependency versions and raw samples are recorded. The default
+workload verifies POSIX command readiness; `--workload python` requires a real
+Python image. Unknown IDs after an interrupted create cannot be cleaned up by
+the client. Provider labels and guest sizes do not establish matched hardware,
+image contents or snapshot preparation; those need independent evidence.
+
+The first recorded SDK cohort completed 20/20 samples at concurrency 8 with
+1 vCPU and 1024 MiB: readiness P50 **260.40 ms**, P95 **491.52 ms**, P99
+**511.19 ms**. Raw evidence is `benchmarks/2026-09-30/readiness-e2b-sdk-c8.json`.
+It uses Windows SDK transport, a BusyBox snapshot guest, debug profiling and
+a shared nested-KVM host. It is distinct from the native CLI cohorts and does
+not demonstrate a performance improvement. Lifecycle throughput also includes
+the resource-info check and deletion. All sandboxes were confirmed deleted.
+
+Correlated internal stages for the same 20 IDs are in
+`benchmarks/2026-09-30/readiness-e2b-sdk-stages-c8.json`: blocking queue P50/P99
+0.08/6.99 ms, guest connection 61.34/134.18 ms, restored clock/entropy exchange
+15.77/31.93 ms. Independent percentiles must not be added. The connection
+stage is the largest of these measured stages; this does not explain all SDK
+latency or establish the cause of earlier concurrency-100 tails. Debug events
+record timings and VM IDs without entropy, tokens or request contents.
+
+No competitor endpoints or matched host are available from the user. Published
+competitor claims remain separate from measured HyperMachine results; universal
+feature or performance superiority is unverified.
+
 ## Changelog of this page
 
 - **2026-09-29, checkpoints.** `POST /sandboxes/{id}/checkpoints` saves a running sandbox, and

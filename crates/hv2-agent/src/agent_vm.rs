@@ -751,9 +751,30 @@ impl AgentVM {
             .map_or(0, |d| d.as_nanos() as u64);
         let mut entropy = rand::random::<[u8; 32]>().to_vec();
         entropy.extend_from_slice(&rand::random::<[u8; 32]>());
+        let vm_name = self.vm.config().name.clone();
+        let queued_at = std::time::Instant::now();
         let reseeded = tokio::task::spawn_blocking(move || {
-            let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.restored(now_ns, entropy, timeout)
+            let started_at = std::time::Instant::now();
+            let mut agent = match GuestAgent::over_vsock(device, timeout) {
+                Ok(agent) => agent,
+                Err(error) => {
+                    tracing::debug!(vm = %vm_name,
+                        blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                        connect_ms = started_at.elapsed().as_secs_f64() * 1000.0,
+                        succeeded = false, phase = "connect",
+                        "restored guest readiness stages");
+                    return Err(error);
+                }
+            };
+            let connected_at = std::time::Instant::now();
+            let result = agent.restored(now_ns, entropy, timeout);
+            tracing::debug!(vm = %vm_name,
+                blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,
+                restored_ms = connected_at.elapsed().as_secs_f64() * 1000.0,
+                succeeded = result.is_ok(), phase = "restored",
+                "restored guest readiness stages");
+            result
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest restore task failed: {e}")))?;
