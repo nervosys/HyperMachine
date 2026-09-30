@@ -85,6 +85,9 @@ pub enum VmCommand {
         /// Reachable envd listener or sandbox proxy URL; use TLS remotely
         #[arg(long)]
         envd_endpoint: String,
+        /// Virtual host for a sandbox proxy reached by IP or a shared hostname
+        #[arg(long)]
+        envd_host: Option<String>,
         #[command(subcommand)]
         command: VmFileCommand,
     },
@@ -232,8 +235,19 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         VmCommand::Files {
             id,
             envd_endpoint,
+            envd_host,
             command,
-        } => transfer_file(&api, &id, &envd_endpoint, args.request_timeout, command).await?,
+        } => {
+            transfer_file(
+                &api,
+                &id,
+                &envd_endpoint,
+                envd_host.as_deref(),
+                args.request_timeout,
+                command,
+            )
+            .await?
+        }
         VmCommand::Pause { id } => {
             api.request(Method::POST, &["sandboxes", &id, "pause"], None)
                 .await?
@@ -332,11 +346,16 @@ async fn transfer_file(
     api: &Api,
     id: &str,
     endpoint: &str,
+    host: Option<&str>,
     timeout: u64,
     command: VmFileCommand,
 ) -> Result<Value> {
     use std::io::{Read, Write};
     let envd = Api::new(endpoint, timeout, None)?;
+    let virtual_host = host
+        .map(reqwest::header::HeaderValue::from_str)
+        .transpose()
+        .map_err(|_| anyhow::anyhow!("invalid envd virtual host"))?;
     let path = match &command {
         VmFileCommand::Upload { path, .. } | VmFileCommand::Download { path, .. } => path,
     };
@@ -392,7 +411,7 @@ async fn transfer_file(
         .map_err(|_| anyhow::anyhow!("invalid sandbox access token"))?;
     token.set_sensitive(true);
     // This is a separate client: never forward the platform's x-api-key to envd.
-    let request = if let Some(bytes) = upload {
+    let mut request = if let Some(bytes) = upload {
         envd.client
             .post(url)
             .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
@@ -400,6 +419,9 @@ async fn transfer_file(
     } else {
         envd.client.get(url)
     };
+    if let Some(host) = virtual_host {
+        request = request.header(reqwest::header::HOST, host);
+    }
     let mut response = request
         .header("x-access-token", token)
         .send()

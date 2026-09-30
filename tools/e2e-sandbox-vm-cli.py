@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--endpoint", required=True)
+    parser.add_argument("--envd-proxy", help="Check file transfers through this sandbox proxy instead of a direct loopback listener")
     args = parser.parse_args()
     owned = set()
 
@@ -41,6 +42,10 @@ def main():
         assert execute(sandbox, "/bin/sh", "-c", "printf guest-failure; exit 7", expected=7) == "guest-failure"
         # The real-node check runs locally; envd binds its listener on loopback.
         envd = f"http://127.0.0.1:{created['processPort']}"
+        envd = args.envd_proxy or envd
+        file_route = ["files", sandbox, "--envd-endpoint", envd]
+        if args.envd_proxy:
+            file_route.extend(["--envd-host", f"{created['envdHost']}.sandbox.local"])
         with tempfile.TemporaryDirectory(prefix="hm-cli-files-") as directory:
             source = os.path.join(directory, "source.bin")
             destination = os.path.join(directory, "destination.bin")
@@ -48,13 +53,13 @@ def main():
             with open(source, "wb") as file:
                 file.write(payload)
             guest_path = "/root/cli-binary'&query=literal.bin"
-            run("files", sandbox, "--envd-endpoint", envd, "upload", source, guest_path)
+            run(*file_route, "upload", source, guest_path)
             checksum = execute(sandbox, "/bin/busybox", "sha256sum", guest_path).split()[0]
             assert checksum == hashlib.sha256(payload).hexdigest()
-            run("files", sandbox, "--envd-endpoint", envd, "download", guest_path, destination)
+            run(*file_route, "download", guest_path, destination)
             with open(destination, "rb") as file:
                 assert file.read() == payload
-            run("files", sandbox, "--envd-endpoint", envd, "download", guest_path, destination, expected=1)
+            run(*file_route, "download", guest_path, destination, expected=1)
             with open(destination, "rb") as file:
                 assert file.read() == payload
         execute(sandbox, "/bin/sh", "-c", "printf before > /root/cli-state")

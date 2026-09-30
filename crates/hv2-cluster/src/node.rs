@@ -35,13 +35,21 @@ pub struct NodeAgent {
     config: NodeConfig,
     /// The templates it offers now: set at start from the config, and
     /// again as templates are built while it runs.
-    templates: Arc<parking_lot::Mutex<Vec<String>>>,
+    templates: Arc<parking_lot::Mutex<TemplateAdvertisement>>,
+}
+
+struct TemplateAdvertisement {
+    names: Vec<String>,
+    metadata: std::collections::BTreeMap<String, crate::model::TemplateInfo>,
 }
 
 impl NodeAgent {
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, config: NodeConfig) -> Self {
-        let templates = Arc::new(parking_lot::Mutex::new(config.templates.clone()));
+        let templates = Arc::new(parking_lot::Mutex::new(TemplateAdvertisement {
+            names: config.templates.clone(),
+            metadata: std::collections::BTreeMap::new(),
+        }));
         Self {
             store,
             config,
@@ -51,7 +59,21 @@ impl NodeAgent {
 
     /// Offer these templates from the next heartbeat on.
     pub fn set_templates(&self, templates: Vec<String>) {
-        *self.templates.lock() = templates;
+        *self.templates.lock() = TemplateAdvertisement {
+            names: templates,
+            metadata: std::collections::BTreeMap::new(),
+        };
+    }
+
+    /// Atomically offer templates with their preparation state and resources.
+    pub fn set_template_metadata(
+        &self,
+        metadata: std::collections::BTreeMap<String, crate::model::TemplateInfo>,
+    ) {
+        *self.templates.lock() = TemplateAdvertisement {
+            names: metadata.keys().cloned().collect(),
+            metadata,
+        };
     }
 
     #[must_use]
@@ -60,6 +82,7 @@ impl NodeAgent {
     }
 
     fn info(&self, running: u32) -> NodeInfo {
+        let templates = self.templates.lock();
         NodeInfo {
             id: self.config.id.clone(),
             api: self.config.api.clone(),
@@ -69,7 +92,8 @@ impl NodeAgent {
             heartbeat_ms: now_ms(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             jwk: self.config.jwk.clone(),
-            templates: self.templates.lock().clone(),
+            templates: templates.names.clone(),
+            template_metadata: templates.metadata.clone(),
         }
     }
 
@@ -248,6 +272,41 @@ mod tests {
                 templates: Vec::new(),
             },
         )
+    }
+
+    #[tokio::test]
+    async fn template_metadata_is_published_with_names_and_legacy_updates_clear_it() {
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let node = agent(store.clone());
+        node.set_template_metadata(
+            [(
+                "python".into(),
+                crate::model::TemplateInfo {
+                    snapshot: true,
+                    cpu_count: 2,
+                    memory_mb: 256,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        );
+        node.announce(0).await.unwrap();
+        let published = store.nodes().await.unwrap().remove(0);
+        assert_eq!(published.templates, ["python"]);
+        assert!(published.template_metadata["python"].snapshot);
+        let mut old_wire = serde_json::to_value(&published).unwrap();
+        old_wire
+            .as_object_mut()
+            .unwrap()
+            .remove("template_metadata");
+        let old: NodeInfo = serde_json::from_value(old_wire).unwrap();
+        assert!(old.template_metadata.is_empty());
+        assert!(old.offers("python"));
+        node.set_templates(vec!["base".into()]);
+        node.announce(0).await.unwrap();
+        let changed = store.nodes().await.unwrap().remove(0);
+        assert_eq!(changed.templates, ["base"]);
+        assert!(changed.template_metadata.is_empty());
     }
 
     /// A node that restarts lost every VM it had; the store must not go on

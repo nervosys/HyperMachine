@@ -3136,9 +3136,37 @@ async fn offer(state: &AppState, name: &str, initramfs: &str, sizes: Sizes) -> R
 /// snapshots, which a create names the same way.
 fn advertise_templates(state: &AppState) {
     if let Some(node) = &state.node {
-        let mut names: Vec<String> = state.initrds.read().keys().cloned().collect();
-        names.extend(state.snapshots.read().keys().cloned());
-        node.set_templates(names);
+        let names: Vec<String> = state.initrds.read().keys().cloned().collect();
+        let mut metadata: BTreeMap<_, _> = names
+            .into_iter()
+            .map(|name| {
+                let sizes = sizes_of(state, &name);
+                let info = hv2_cluster::model::TemplateInfo {
+                    snapshot: state.templates.read().contains_key(&name),
+                    cpu_count: sizes.cpus,
+                    memory_mb: sizes.memory_mb,
+                };
+                (name, info)
+            })
+            .collect();
+        let snapshots: Vec<_> = state
+            .snapshots
+            .read()
+            .iter()
+            .map(|(name, snapshot)| (name.clone(), snapshot.base.clone()))
+            .collect();
+        for (name, base) in snapshots {
+            let sizes = sizes_of(state, &base);
+            metadata.insert(
+                name,
+                hv2_cluster::model::TemplateInfo {
+                    snapshot: state.templates.read().contains_key(&base),
+                    cpu_count: sizes.cpus,
+                    memory_mb: sizes.memory_mb,
+                },
+            );
+        }
+        node.set_template_metadata(metadata);
     }
 }
 
@@ -3979,6 +4007,21 @@ async fn main() -> std::process::ExitCode {
                     jwk: identity.as_ref().map(|i| i.jwk()),
                     templates: initrds.keys().cloned().collect(),
                 },
+            );
+            agent.set_template_metadata(
+                initrds
+                    .keys()
+                    .map(|name| {
+                        (
+                            name.clone(),
+                            hv2_cluster::model::TemplateInfo {
+                                snapshot: templates.contains_key(name),
+                                cpu_count: opts.cpu_cores,
+                                memory_mb: opts.memory_mb,
+                            },
+                        )
+                    })
+                    .collect(),
             );
             if let Err(e) = agent.join().await {
                 eprintln!("hv2-sandboxd: joining the cluster: {e}");

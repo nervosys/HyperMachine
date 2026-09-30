@@ -620,6 +620,7 @@ pub(crate) mod tests {
             version: "test".into(),
             jwk: None,
             templates: Vec::new(),
+            template_metadata: std::collections::BTreeMap::new(),
         }
     }
 

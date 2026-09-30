@@ -13,7 +13,7 @@ container. The comparison is about what surrounds the VM.
 | Capability | boxd | exe.dev | HyperMachine |
 |---|---|---|---|
 | Create, list, delete over an API | yes | yes | **Real**: E2B's API (`hv2-sandboxd`, `hv2-control-plane`), so the unmodified E2B SDKs work |
-| A CLI | yes | yes (over ssh) | **Partial**: `hm sandbox vm` manages lifecycle, commands, binary files and checkpoints; verified on a real KVM node; control-plane verification remains |
+| A CLI | yes | yes (over ssh) | **Yes**: `hm sandbox vm` manages lifecycle, commands, binary files and checkpoints; verified on a real KVM node and authenticated control plane/proxy |
 | Fork a running VM, memory included | ~160 ms | `cp` | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | no | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
@@ -90,7 +90,7 @@ pass the acceptance criteria below.
 | Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Existing measurements need a common protocol and competitor adapters |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
-| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI and binary transfers verified on a real KVM node; control-plane CLI verification remains |
+| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | The sandbox platform remains single-team |
 | Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
@@ -163,6 +163,22 @@ Use TLS for remote envd URLs. A node's direct envd listeners bind on loopback;
 remote clients need the proxy. The local KVM check verified a 256 KiB binary
 upload/download and guest SHA-256, plus refusal to overwrite the downloaded file.
 Protocol fixtures also checked HTTP failures and a concurrent destination creator.
+For a proxy reached by IP or a shared hostname, `--envd-host` sets the sandbox's
+virtual host while TLS still authenticates the supplied endpoint URL. The
+`tools/e2e-sandbox-vm-cli.py --envd-proxy URL` check exercised binary transfers
+through the real control-plane proxy, with an API key and separate cluster token.
+Lifecycle, checkpoint rollback, pause/resume, forked state and cleanup also passed
+through that control plane. Checkpoint routes require the API key and forward
+to the sandbox's owning node with the cluster token.
+
+The control plane's `/templates` now reports snapshot state and guest sizes from
+node heartbeats. Snapshot readiness is true only when every offering node confirms
+it, false if any reports cold boot, and null when confirmation is missing.
+CPU/memory sizes are null unless all offering nodes report identical sizes;
+per-node details remain visible. Legacy heartbeats remain readable and are
+treated as unknown, so `--require-snapshot` cannot infer readiness from a name.
+Advertisements update names and metadata together. These are point-in-time
+heartbeat observations; they do not guarantee a fleet cannot change afterward.
 
 The shipped Windows debug client was checked against the release daemon on
 2026-09-30 using `tools/e2e-sandbox-vm-cli.py`. Quoted arguments remained
@@ -222,6 +238,14 @@ percentiles are independent and must not be added. Guest readiness dominates
 the measured create path and is the next profiling target. Host workloads and
 logging settings changed between cohorts, so this is diagnostic evidence,
 not proof of an optimization or competitor win.
+
+The authenticated control-plane diagnostic cohort completed 20 samples at
+concurrency 8 with no failures, server-confirmed snapshot mode, P50 readiness
+223.15 ms and P99 325.55 ms. Raw evidence is
+`benchmarks/2026-09-30/readiness-control-plane-c8.json`. Its metadata includes
+the offering node, guest sizes and snapshot state. This validates the shipped
+benchmark through the cluster interface; the small shared-host cohort does not
+establish a latency advantage over other products.
 
 ## Changelog of this page
 
