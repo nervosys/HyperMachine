@@ -19,8 +19,10 @@ spec.loader.exec_module(benchmark)
 
 class AdapterTests(unittest.TestCase):
     def run_sample(self, *, wrong_marker=False, wrong_resources=False, cleanup_fails=False,
-                   operation="create", lost_state=False, partial_fork=False, ignored_pause=False):
+                   operation="create", lost_state=False, partial_fork=False, ignored_pause=False,
+                   shared_filesystem=False):
         killed = []
+        isolation = {"mutated": False}
         class FakeSandbox:
             sandbox_id = "fixture"
             changed = False
@@ -30,6 +32,10 @@ class AdapterTests(unittest.TestCase):
                 def run(command, timeout):
                     marker = shlex.split(command)[-1] if "printf '%s'" in command else ""
                     failed = self.changed and lost_state and "kill -0" in command
+                    if self.sandbox_id == "child" and command.startswith("printf '%s' "):
+                        isolation["mutated"] = True
+                    if self.sandbox_id == "fixture" and shared_filesystem and isolation["mutated"]:
+                        failed = True
                     return SimpleNamespace(exit_code=1 if failed else 0,
                                            stdout="wrong" if wrong_marker else marker)
                 return SimpleNamespace(run=run)
@@ -112,6 +118,16 @@ class AdapterTests(unittest.TestCase):
         record = self.run_sample(operation="fork", cleanup_fails=True)
         self.assertFalse(record["success"])
         self.assertEqual(len(record["cleanup_errors"]), 2)
+
+    def test_shared_fork_filesystem_is_rejected_and_both_sandboxes_cleaned_up(self):
+        record = self.run_sample(operation="fork", shared_filesystem=True)
+        self.assertFalse(record["success"])
+        self.assertEqual(record["phase"], "parent-state")
+
+    def test_fork_success_requires_a_child_write_that_preserves_parent_state(self):
+        record = self.run_sample(operation="fork")
+        self.assertTrue(record["success"])
+        self.assertTrue(record["fork_filesystem_isolation_verified"])
 
     def test_changed_harness_invalidates_an_otherwise_successful_report(self):
         arguments = ["benchmark", "--provider", "fixture", "--api-url", "http://fixture",

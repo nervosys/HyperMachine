@@ -132,10 +132,19 @@ def sample(factory, args, nonce, index):
         if info.cpu_count != args.expected_cpus or info.memory_mb != args.expected_memory_mb:
             raise RuntimeError("server guest resources differ from the requested comparison baseline")
         if args.operation == "fork":
+            phase = "child-isolation"
+            child_marker = marker + "-child"
+            mutate = (f"printf '%s' {shlex.quote(child_marker)} > {directory}/state && "
+                      f"test \"$(cat {directory}/state)\" = {shlex.quote(child_marker)} && "
+                      f"printf '%s' {shlex.quote(child_marker)}")
+            changed = sandbox.commands.run(mutate, timeout=args.command_timeout)
+            if changed.exit_code != 0 or changed.stdout != child_marker:
+                raise RuntimeError("fork child could not independently update and verify its filesystem state")
             phase = "parent-state"
             parent = cleanup[0].commands.run(command, timeout=args.command_timeout)
             if parent.exit_code != 0 or parent.stdout != marker:
                 raise RuntimeError("fork parent did not retain its live-process and filesystem state")
+            record["fork_filesystem_isolation_verified"] = True
         record["success"] = True
     except Exception as error:
         record.update(phase=phase, error=str(error).replace(os.environ["E2B_API_KEY"], "[redacted]"))
