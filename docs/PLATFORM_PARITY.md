@@ -78,7 +78,7 @@ for Python. Nested KVM measurements are not substitutes for bare-metal ones.
 | Daytona | Advertises sandbox startup below 90 ms; default sandbox is a container | Linux/Windows VMs and GPU workloads | No matched run; container startup differs from VM readiness |
 | Modal | Reports below 500 ms median API-to-user-code latency in its million-concurrent-sandbox benchmark | Managed fleet scale and GPU workloads | No matched run or equivalent fleet |
 | E2B | No precise current latency verified in this review | SDK compatibility and managed execution | No matched run |
-| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | No matched run; init time and VMM overhead differ from application readiness and incremental PSS |
+| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Same-host cold native-control cohorts recorded below; HyperMachine startup failures prevent a passing comparison. Specification metrics differ from application readiness and incremental PSS |
 
 These figures describe the linked providers' own claims or repository runs,
 not an independently reproduced ranking. A lower headline number does not
@@ -597,7 +597,7 @@ actionlint passed. CI runs these checks before benchmarks and uploads raw
 measurement JSON and logs even when a benchmark fails. This prevents cached
 measurements from being reported as a fresh run. The primary Performance
 Benchmarks job passed at `518fe70` (run 36781437624); its separate baseline
-comparison is still running. These Criterion means and standard errors are component
+comparison was cancelled by the newer MCP commit; the new-head comparison remains unverified. These Criterion means and standard errors are component
 microbenchmarks, not VM lifecycle P50/P95/P99 or matched competitor measurements.
 
 ## Shipped MCP sandbox interface
@@ -644,3 +644,46 @@ HTTP failure reporting and deletion of both parent and child. The node's
 sandbox list was then confirmed empty. Raw functional evidence, with client,
 script and binary identities, is `benchmarks/2026-09-30/mcp-stdio-lifecycle.json`.
 This is compatibility evidence, not a latency benchmark or a competitor win.
+
+
+## Same-host Firecracker cold comparison (2026-09-30)
+
+The user has no competitor endpoints or dedicated matched host. We therefore
+ran Firecracker v1.17.0 locally against HyperMachine on the same shared WSL
+nested-KVM host. Each cohort contains 20 alternating AB/BA pairs, concurrency
+one, 1 vCPU and 1024 MiB. Both engines boot the exact same Linux kernel and
+BusyBox guest-agent initrd and must return an exact unique shell marker.
+HyperMachine uses a prestarted HTTP daemon with `--no-template`; Firecracker
+starts a process and configures its UNIX API for each sample. Timings end at
+the verified first command response. These native control paths differ, and
+the host has other workloads and no CPU pinning. This is a cold sandbox
+comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
+
+| Cohort | Engine | Valid / attempted | Readiness P50 (ms) | Readiness P99 (ms) |
+|---|---|---:|---:|---:|
+| Initial | HyperMachine | 19 / 20 | 1913.34 | 4222.52 |
+| Initial | Firecracker 1.17.0 | 20 / 20 | 1137.38 | 2468.34 |
+| Repeat with memory diagnostics | HyperMachine | 18 / 20 | 1230.74 | 1819.96 |
+| Repeat with memory diagnostics | Firecracker 1.17.0 | 20 / 20 | 816.65 | 2408.49 |
+
+Percentiles use nearest rank over successful, cleaned-up samples only; failures
+are retained in the reports and invalidate both overall comparisons. The lower
+HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
+failed 3/40 attempts while Firecracker passed 40/40, and HyperMachine's median
+was slower in both cohorts. We have not achieved across-the-board superiority.
+
+Both repeat failures were 15-second guest-agent readiness timeouts with no
+console output and 2401 total vCPU exits, with no further exits during the
+0.5-second diagnostic window. The startup stall's root cause is not yet known.
+Node PSS fell after deletion and plateaued around 72 MiB in the latter half of
+the repeat, arguing against a growing per-VM memory leak in this cohort; it
+is not a density benchmark. Memory collection occurs outside readiness timing.
+
+Raw evidence: [initial cohort](benchmarks/2026-09-30/local-engines-cold-c1.json),
+[diagnostic repeat](benchmarks/2026-09-30/local-engines-cold-memory-c1.json),
+and [Firecracker bring-up](benchmarks/2026-09-30/firecracker-cold-bringup.json).
+The reports retain failures, cleanup outcomes and before/after source hashes.
+`tools/install-firecracker-benchmark.py` pins the official
+[1.17.0 release](https://github.com/firecracker-microvm/firecracker/releases/tag/v1.17.0)
+archive checksum before executing its binary. `tools/bench-local-engines.py`
+reproduces the alternating comparison; its failure-accounting tests run in CI.

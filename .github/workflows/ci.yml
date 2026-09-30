@@ -118,6 +118,8 @@ jobs:
             - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
             - name: Verify benchmark failure accounting and provenance gates
               run: python3 tools/test-bench-e2b-sdk.py
+            - name: Verify local engine benchmark failure accounting
+              run: python3 tools/test-local-engines.py
             - name: Verify protoc checksum and platform selection gates
               run: python3 tools/test-ci-install-protoc.py
             - name: Install pinned Helm
