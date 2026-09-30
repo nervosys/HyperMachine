@@ -16,7 +16,7 @@ container. The comparison is about what surrounds the VM.
 | A CLI | yes | yes (over ssh) | **Partial**: `hv2` has demo handlers; no client for sandboxd yet |
 | Fork a running VM, memory included | ~160 ms | `cp` | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
-| Checkpoint and restore in place | yes, 10 per VM | no | **Absent** |
+| Checkpoint and restore in place | yes, 10 per VM | no | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
 | Pause and resume | yes | no | **Real**: to disk; any node resumes |
 | Suspend when idle, wake on traffic | yes | no | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
 | HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; you bring the wildcard certificate (no ACME) |
@@ -55,6 +55,14 @@ container. The comparison is about what surrounds the VM.
 
 ## Changelog of this page
 
+- **2026-09-29, checkpoints.** `POST /sandboxes/{id}/checkpoints` saves a running sandbox, and
+  `POST .../checkpoints/{name}/restore` rolls it back in place. The sandbox keeps its ID, access
+  token and URL, and its memory and filesystem go back to the saved state. List and delete are
+  also available, with at most 10 per sandbox; checkpoints end with the sandbox.
+  - The replacement guest boots before the old one stops, so a failed restore changes nothing.
+  - Checked on KVM guests (`tools/e2e-checkpoints.sh`: 26 checks). The key check: a process killed
+    after the checkpoint runs again after the restore.
+  - Limitation: checkpoints stay on the node that took them.
 - **2026-09-29, idle pause.** A sandbox pauses to disk after `idleTimeout` seconds unused, set per
   sandbox or node-wide with `--idle-pause-after`. With `autoResume`, the next request through the
   proxy wakes it and is answered.

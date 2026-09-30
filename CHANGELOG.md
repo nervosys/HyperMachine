@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **Checkpoints** (`hv2-sandboxd`): save a running sandbox and roll it
+  back in place -- memory and filesystem, under the same ID, token and URL
+  (`/sandboxes/{id}/checkpoints`, `.../{name}/restore`, list, delete; ten
+  per sandbox). A restore boots the checkpoint before stopping the current
+  guest, so one that fails changes nothing. Checked on KVM guests by
+  `tools/e2e-checkpoints.sh`.
 - **Idle pause** (`hv2-sandboxd`): `idleTimeout` on create, or
   `--idle-pause-after` for a node, pauses a sandbox to disk once it is
   unused; with `autoResume` the next request wakes it. Unused means no proxy
