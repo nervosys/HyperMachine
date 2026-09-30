@@ -9,6 +9,7 @@ members = [
     "crates/hv2-agent",
     "crates/hv2-guest-agent",
     "crates/hv2-sandbox",
+    "crates/hv2-jobs",
     "crates/hv2-swarm",
     "crates/hv2-agent-proto",
     "crates/hv2-infer",

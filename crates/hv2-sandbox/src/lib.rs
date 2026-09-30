@@ -456,6 +456,36 @@ impl SandboxOutput {
     }
 }
 
+/// Host variables a program needs to find its tools and a place to write,
+/// and nothing else: [`SandboxCommand::env`] starts empty, and a caller that
+/// wants a usable environment without handing over every credential in its
+/// own starts from these. `SystemRoot` and the rest are Windows's; without
+/// `SystemRoot` many programs there cannot load at all.
+pub const HOST_BASE_ENV: &[&str] = &[
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "TERM",
+    "TMPDIR",
+    "SystemRoot",
+    "SystemDrive",
+    "windir",
+    "USERPROFILE",
+    "TEMP",
+    "TMP",
+    "PATHEXT",
+    "COMSPEC",
+];
+
+/// [`HOST_BASE_ENV`], with this process's values, for the variables it has.
+pub fn host_base_env() -> BTreeMap<String, String> {
+    HOST_BASE_ENV
+        .iter()
+        .filter_map(|name| std::env::var(name).ok().map(|v| ((*name).to_string(), v)))
+        .collect()
+}
+
 /// Which of a workload's output streams a chunk came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputStream {

@@ -27,27 +27,6 @@ use hv2_sandbox::{
     SandboxCommand, SandboxError, SandboxSpec,
 };
 
-/// Host variables passed through unless `--clean-env`: what a program needs
-/// to find its tools and a place to write. Nothing else -- in particular no
-/// credentials -- crosses unless named with `--pass-env` or `--env`.
-const BASE_ENV: &[&str] = &[
-    "PATH",
-    "HOME",
-    "USER",
-    "LANG",
-    "TERM",
-    "TMPDIR",
-    // Windows: without SystemRoot many programs cannot load at all.
-    "SystemRoot",
-    "SystemDrive",
-    "windir",
-    "USERPROFILE",
-    "TEMP",
-    "TMP",
-    "PATHEXT",
-    "COMSPEC",
-];
-
 /// How the enforcement report is written.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Report {
@@ -189,7 +168,7 @@ pub fn env_of(
 ) -> Result<BTreeMap<String, String>> {
     let mut env = BTreeMap::new();
     if !args.clean_env {
-        for name in BASE_ENV {
+        for name in hv2_sandbox::HOST_BASE_ENV {
             if let Some(v) = host(name) {
                 env.insert((*name).to_string(), v);
             }

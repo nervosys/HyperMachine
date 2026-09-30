@@ -2459,6 +2459,7 @@ dependencies = [
  "dirs",
  "hv2-agent",
  "hv2-core",
+ "hv2-jobs",
  "hv2-sandbox",
  "reqwest",
  "serde",
@@ -2796,6 +2797,24 @@ dependencies = [
  "half",
  "memmap2",
  "rayon",
+]
+
+[[package]]
+name = "hv2-jobs"
+version = "1.1.0"
+dependencies = [
+ "axum",
+ "hv2-sandbox",
+ "serde",
+ "serde_json",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
