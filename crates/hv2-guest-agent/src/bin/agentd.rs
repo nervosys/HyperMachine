@@ -1072,56 +1072,6 @@ mod linux {
         }
     }
 
-    #[cfg(test)]
-    mod process_output_tests {
-        use super::*;
-
-        #[test]
-        fn rapid_polls_preserve_final_stdout_and_stderr() {
-            for _ in 0..100 {
-                let OpResult::Started { pid } = start(
-                    "/bin/sh",
-                    &["-c".into(), "printf final-out; printf final-err >&2".into()],
-                    None,
-                    &BTreeMap::new(),
-                    None,
-                    None,
-                ) else {
-                    panic!("could not start test process")
-                };
-                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-                let mut out = String::new();
-                let mut err = String::new();
-                loop {
-                    let OpResult::Output {
-                        stdout,
-                        stderr,
-                        running,
-                        exit_code,
-                        ..
-                    } = poll(pid)
-                    else {
-                        panic!("could not poll test process")
-                    };
-                    out.push_str(&stdout);
-                    err.push_str(&stderr);
-                    if !running {
-                        assert_eq!(exit_code, Some(0));
-                        break;
-                    }
-                    assert!(
-                        std::time::Instant::now() < deadline,
-                        "process did not finish"
-                    );
-                    std::thread::yield_now();
-                }
-                procs().lock().unwrap().remove(&pid);
-                assert_eq!(out, "final-out");
-                assert_eq!(err, "final-err");
-            }
-        }
-    }
-
     /// Write to a started program's standard input.
     fn write_stdin(pid: u32, data: &str, close: bool) -> OpResult {
         let mut table = match procs().lock() {
@@ -1337,6 +1287,56 @@ mod linux {
             stderr,
             truncated: out_cut || err_cut,
             timed_out,
+        }
+    }
+
+    #[cfg(test)]
+    mod process_output_tests {
+        use super::*;
+
+        #[test]
+        fn rapid_polls_preserve_final_stdout_and_stderr() {
+            for _ in 0..100 {
+                let OpResult::Started { pid } = start(
+                    "/bin/sh",
+                    &["-c".into(), "printf final-out; printf final-err >&2".into()],
+                    None,
+                    &BTreeMap::new(),
+                    None,
+                    None,
+                ) else {
+                    panic!("could not start test process")
+                };
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut out = String::new();
+                let mut err = String::new();
+                loop {
+                    let OpResult::Output {
+                        stdout,
+                        stderr,
+                        running,
+                        exit_code,
+                        ..
+                    } = poll(pid)
+                    else {
+                        panic!("could not poll test process")
+                    };
+                    out.push_str(&stdout);
+                    err.push_str(&stderr);
+                    if !running {
+                        assert_eq!(exit_code, Some(0));
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "process did not finish"
+                    );
+                    std::thread::yield_now();
+                }
+                procs().lock().unwrap().remove(&pid);
+                assert_eq!(out, "final-out");
+                assert_eq!(err, "final-err");
+            }
         }
     }
 }

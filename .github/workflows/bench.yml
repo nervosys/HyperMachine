@@ -191,7 +191,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ github.base_ref }}
+          ref: ${{ github.event.pull_request.base.sha }}
           path: baseline
 
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -202,26 +202,43 @@ jobs:
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Install protoc
+        working-directory: pr
         run: python tools/ci-install-protoc.py
+
+      - name: Record comparison environment
+        run: |
+          $baselineCommit = git -C baseline rev-parse HEAD
+          $candidateCommit = git -C pr rev-parse HEAD
+          $cpu = Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
+          @{
+            baseline_commit = $baselineCommit
+            candidate_commit = $candidateCommit
+            rust = (rustc --version)
+            protoc = (protoc --version)
+            runner_os = $env:RUNNER_OS
+            cpu = $cpu
+            captured_at_utc = (Get-Date).ToUniversalTime().ToString('o')
+            limitations = 'Sequential crypto microbenchmarks on a shared runner; not sandbox readiness or a competitor comparison.'
+          } | ConvertTo-Json -Depth 4 | Set-Content comparison-environment.json
 
       - name: Run baseline benchmarks
         working-directory: baseline
         run: |
           cargo bench -p hv2-core --bench crypto_bench -- --noplot --save-baseline baseline
-        continue-on-error: true
 
       - name: Copy baseline results to PR directory
         run: |
-          if (Test-Path baseline/target/criterion) {
-            Copy-Item -Recurse -Force baseline/target/criterion pr/target/criterion
+          if (-not (Test-Path baseline/target/criterion)) {
+            throw 'Baseline benchmark produced no Criterion directory'
           }
-        continue-on-error: true
+          New-Item -ItemType Directory -Force pr/target/criterion | Out-Null
+          Copy-Item -Recurse -Force baseline/target/criterion/* pr/target/criterion
 
       - name: Run PR benchmarks and compare
         working-directory: pr
         run: |
           cargo bench -p hv2-core --bench crypto_bench -- --noplot --baseline baseline | Tee-Object -FilePath comparison.txt
-        continue-on-error: true
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # Reported, not enforced, and the distinction matters here.
       #
@@ -246,8 +263,19 @@ jobs:
       - name: Report regressions
         run: |
           if (Select-String -Path pr/comparison.txt -Pattern "regressed" -Quiet) {
-            Write-Warning "Criterion reports slower measurements than baseline. On a shared runner this is usually noise -- compare against the alert-threshold job before treating it as real:"
+            Write-Warning "Criterion reports slower measurements than baseline. Shared-runner contention and sequential builds limit attribution; inspect the raw results and repeat before attributing a regression:"
             Get-Content pr/comparison.txt | Select-String "regressed"
           } else {
             Write-Output "No benchmarks measured slower than baseline."
           }
+
+      - name: Upload comparison evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: benchmark-comparison
+          path: |
+            comparison-environment.json
+            pr/comparison.txt
+            pr/target/criterion/**/estimates.json
+          retention-days: 30

@@ -561,5 +561,26 @@ shipped control-plane authorization checks, benchmark/chart gates and Clippy.
 This predates the interactive wake/output-drain change; its new-head CI must
 pass separately. Local checks for that change passed the three notification
 tests, strict API Clippy, 15 Linux guest-protocol tests, the 100-process regression,
-and 300 real SDK operations. Debian's local toolchain lacks Clippy, so Linux
-binary Clippy remains a CI check.
+and 300 real SDK operations. New-head CI at `d306f4a` found the regression test
+module placed before production functions (`items_after_test_module`). An
+all-targets local check found the same issue in the API notification tests.
+Moving both modules to the end preserves runtime behavior; strict Linux guest Clippy
+then passed locally using an extracted Debian Clippy 1.95 package matching the
+installed Rust compiler. Strict API Clippy also passed with all targets included.
+The corrected head still needs its own CI result.
+
+### CI baseline comparison reliability
+
+The separate Benchmarks workflow at `a422192` failed in its comparison job
+before any baseline ran: both repositories are checked out under `baseline/`
+and `pr/`, but the protoc installer was invoked from the empty workspace root.
+It now runs from `pr/`; the baseline checkout uses the exact PR base commit,
+and the artifact records both actual commits, compiler versions and runner CPU.
+Baseline execution, copying and candidate execution failures now fail the job
+instead of being ignored. A fixture verified that nested Criterion baseline
+files reach an initially absent candidate target directory. Actionlint passed.
+Raw comparison estimates, output and environment metadata are uploaded even
+on failure. These are sequential crypto microbenchmarks on a shared runner,
+with regression reporting rather than a latency gate; they do not establish
+sandbox readiness or superiority over any competing product. Remote execution
+of the corrected workflow remains pending.
