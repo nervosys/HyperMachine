@@ -87,3 +87,78 @@ async fn benchmark_does_not_report_wrong_output_as_a_fast_success() {
     assert!(deleted.load(Ordering::SeqCst));
     server.abort();
 }
+
+#[tokio::test]
+async fn benchmark_bounds_live_sandboxes_and_fails_a_missed_latency_gate() {
+    use std::sync::atomic::AtomicUsize;
+    #[derive(Default)]
+    struct Counts {
+        created: AtomicUsize,
+        live: AtomicUsize,
+        peak: AtomicUsize,
+    }
+    let counts = Arc::new(Counts::default());
+    let app = Router::new()
+        .route(
+            "/v2/sandboxes",
+            post(|State(counts): State<Arc<Counts>>| async move {
+                let id = counts.created.fetch_add(1, Ordering::SeqCst);
+                let live = counts.live.fetch_add(1, Ordering::SeqCst) + 1;
+                counts.peak.fetch_max(live, Ordering::SeqCst);
+                Json(json!({"sandboxID": format!("fixture-{id}")}))
+            }),
+        )
+        .route(
+            "/sandboxes/{id}/exec",
+            post(|Json(body): Json<Value>| async move {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                let marker = body["cmd"]
+                    .as_str()
+                    .unwrap()
+                    .split('\'')
+                    .rev()
+                    .nth(1)
+                    .unwrap();
+                Json(json!({"stdout": marker, "stderr": "", "exit_code": 0, "timed_out": false}))
+            }),
+        )
+        .route(
+            "/sandboxes/{id}",
+            delete(|State(counts): State<Arc<Counts>>| async move {
+                counts.live.fetch_sub(1, Ordering::SeqCst);
+                axum::http::StatusCode::NO_CONTENT
+            }),
+        )
+        .with_state(counts.clone());
+    let (endpoint, server) = server(app).await;
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "--endpoint",
+            &endpoint,
+            "benchmark",
+            "--samples",
+            "4",
+            "--concurrency",
+            "2",
+            "--max-p99-ready-ms",
+            "1",
+            "--environment",
+            "delayed protocol fixture, not a performance result",
+        ])
+        .env_remove("HV2_API_KEY")
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(report["successful_samples"], 4);
+    assert_eq!(report["failed_samples"], 0);
+    assert_eq!(report["threshold_passed"], false);
+    assert_eq!(report["samples"].as_array().unwrap().len(), 4);
+    assert_eq!(counts.created.load(Ordering::SeqCst), 4);
+    assert_eq!(counts.live.load(Ordering::SeqCst), 0);
+    assert!(counts.peak.load(Ordering::SeqCst) <= 2);
+    server.abort();
+}
