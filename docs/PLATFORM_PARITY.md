@@ -278,7 +278,13 @@ For compatible managed providers, omit `--sandbox-url` to use their sandbox
 domains. The harness disables internet access and retries, forces normal SDK
 mode so deletion actually occurs, checks server-reported CPU/RAM, and deletes
 every known sandbox. Incorrect output, resource mismatch or cleanup failure
-fails the run. Dependency versions and raw samples are recorded. The default
+fails the run. Dependency versions are captured before execution. Reports also
+record `harness_sha256` for the exact script bytes (including checkout line
+endings) and `harness_unchanged_during_run`. A source change during the run
+fails its overall exit status even when every sample succeeds. This detects
+ordinary edits, not malicious source replacement or guest-image equivalence.
+Historical reports without these fields retain their original evidence; no
+fingerprint is retroactively attributed to them. The default
 workload verifies POSIX command readiness; `--workload python` requires a real
 Python image. Unknown IDs after an interrupted create cannot be cleaned up by
 the client. Provider labels and guest sizes do not establish matched hardware,
