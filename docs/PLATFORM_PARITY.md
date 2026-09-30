@@ -87,7 +87,7 @@ pass the acceptance criteria below.
 | Workstream | Acceptance criterion | Current gap |
 |---|---|---|
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Comparable competitor runs and bare-metal HyperMachine runs are missing |
-| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Existing measurements need a common protocol and competitor adapters |
+| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Shared SDK harness and real concurrency-8 cohorts verified; full concurrency sweep and matched competitor runs remain missing |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
@@ -263,6 +263,17 @@ python tools/bench-e2b-sdk.py --provider HyperMachine `
   --expected-cpus 1 --expected-memory-mb 1024 --samples 100 --concurrency 8
 ```
 
+Use `--operation resume` or `--operation fork` to measure stateful lifecycle
+readiness. Before the timed request, the harness starts a long-lived process
+with a unique marker in its environment and writes a file and boot identity.
+The first command after the operation must verify all three plus the original
+live PID. Resume requires the API to report `paused` before connecting; fork
+requires a distinct child ID and also verifies the parent's state afterward.
+These probes detect cold boots and lost process state; they do not exhaustively
+validate every application or open socket. Creation and preparation are outside
+resume/fork readiness timing. Lifecycle throughput includes them, state checks,
+resource inspection and deletion. `pause_ms` measures the pause response alone.
+
 For compatible managed providers, omit `--sandbox-url` to use their sandbox
 domains. The harness disables internet access and retries, forces normal SDK
 mode so deletion actually occurs, checks server-reported CPU/RAM, and deletes
@@ -292,6 +303,20 @@ record timings and VM IDs without entropy, tokens or request contents.
 No competitor endpoints or matched host are available from the user. Published
 competitor claims remain separate from measured HyperMachine results; universal
 feature or performance superiority is unverified.
+
+Stateful SDK diagnostics on the same shared host completed 20/20 samples per
+operation at concurrency 8, with every known sandbox confirmed deleted:
+
+| Operation | Readiness P50 | P95 | P99 | State evidence |
+|---|---:|---:|---:|---|
+| Resume | 129.73 ms | 183.29 ms | 188.91 ms | Explicit paused state; original live process, memory marker, file and boot identity |
+| Fork | 126.63 ms | 183.93 ms | 186.61 ms | Distinct child; preserved child and parent process/memory/file/boot state |
+
+Raw reports are `benchmarks/2026-09-30/readiness-e2b-sdk-resume-state-c8.json`
+and `readiness-e2b-sdk-fork-state-c8.json`. Earlier exploratory cohorts without
+the explicit paused/running-state gate remain in `readiness-e2b-sdk-resume-c8.json`
+and `readiness-e2b-sdk-fork-c8.json`; do not combine their percentiles. Neither
+cohort is a matched competitor comparison or proof of a performance improvement.
 
 ## Changelog of this page
 
