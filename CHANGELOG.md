@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- `hv2-sandboxd --require-template` refuses startup when any configured snapshot
+  template cannot be prepared, before listening or joining the cluster. It
+  conflicts with `--no-template`; the default cold-boot fallback is unchanged.
 - **`hm sandbox vm`** (`hm-cli`): a client for sandboxd lifecycle, guest
   commands and checkpoints. `benchmark` measures creation through checked
   guest output, with concurrency, raw samples, tail latencies, failure
