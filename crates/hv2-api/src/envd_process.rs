@@ -249,50 +249,6 @@ async fn wait_for_poll(wake: &Notify) {
     }
 }
 
-#[cfg(test)]
-mod wake_tests {
-    use super::*;
-    use std::future::Future;
-    use std::task::{Context, Poll, Waker};
-
-    #[tokio::test]
-    async fn input_before_wait_is_not_lost_or_delayed_until_the_timer() {
-        let wake = Notify::new();
-        wake.notify_one();
-        let wait = wait_for_poll(&wake);
-        tokio::pin!(wait);
-        assert!(matches!(
-            wait.as_mut().poll(&mut Context::from_waker(Waker::noop())),
-            Poll::Ready(())
-        ));
-    }
-
-    #[tokio::test]
-    async fn idle_wait_is_pending_and_a_later_input_wakes_it() {
-        let wake = Notify::new();
-        let wait = wait_for_poll(&wake);
-        tokio::pin!(wait);
-        let mut context = Context::from_waker(Waker::noop());
-        assert!(wait.as_mut().poll(&mut context).is_pending());
-        wake.notify_one();
-        assert!(wait.as_mut().poll(&mut context).is_ready());
-    }
-
-    #[tokio::test]
-    async fn queued_inputs_coalesce_instead_of_causing_an_idle_poll_storm() {
-        let wake = Notify::new();
-        wake.notify_one();
-        wake.notify_one();
-        wait_for_poll(&wake).await;
-        let next = wait_for_poll(&wake);
-        tokio::pin!(next);
-        assert!(next
-            .as_mut()
-            .poll(&mut Context::from_waker(Waker::noop()))
-            .is_pending());
-    }
-}
-
 /// Turn a process's broadcast into a gRPC response stream.
 ///
 /// A watcher that falls `EVENT_BACKLOG` behind is told what it missed
@@ -659,4 +615,48 @@ pub async fn serve_for_sandbox(
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
     crate::connect::serve(vm, addr, access_token, shutdown).await
+}
+
+#[cfg(test)]
+mod wake_tests {
+    use super::*;
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+
+    #[tokio::test]
+    async fn input_before_wait_is_not_lost_or_delayed_until_the_timer() {
+        let wake = Notify::new();
+        wake.notify_one();
+        let wait = wait_for_poll(&wake);
+        tokio::pin!(wait);
+        assert!(matches!(
+            wait.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+            Poll::Ready(())
+        ));
+    }
+
+    #[tokio::test]
+    async fn idle_wait_is_pending_and_a_later_input_wakes_it() {
+        let wake = Notify::new();
+        let wait = wait_for_poll(&wake);
+        tokio::pin!(wait);
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(wait.as_mut().poll(&mut context).is_pending());
+        wake.notify_one();
+        assert!(wait.as_mut().poll(&mut context).is_ready());
+    }
+
+    #[tokio::test]
+    async fn queued_inputs_coalesce_instead_of_causing_an_idle_poll_storm() {
+        let wake = Notify::new();
+        wake.notify_one();
+        wake.notify_one();
+        wait_for_poll(&wake).await;
+        let next = wait_for_poll(&wake);
+        tokio::pin!(next);
+        assert!(next
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending());
+    }
 }
