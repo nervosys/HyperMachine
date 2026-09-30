@@ -8,8 +8,10 @@
 //! route envd traffic there.
 
 pub mod control;
+pub mod events;
 pub mod metrics;
 pub mod model;
+pub mod mtls;
 pub mod node;
 pub mod scheduler;
 pub mod store;

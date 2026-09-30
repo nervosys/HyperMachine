@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
-use crate::model::{ClusterEvent, NodeInfo, SandboxRecord};
+use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 
 /// A store error. Opaque on purpose: a caller's only decision is whether to
 /// retry, and the message is for the log.
@@ -50,7 +50,21 @@ pub trait ClusterStore: Send + Sync {
     async fn publish(&self, event: &ClusterEvent) -> Result<()>;
     /// The most recent `count` events, newest first.
     async fn events(&self, count: usize) -> Result<Vec<ClusterEvent>>;
+
+    /// Register or replace a webhook.
+    async fn put_webhook(&self, hook: &Webhook) -> Result<()>;
+    /// Every webhook, oldest first.
+    async fn webhooks(&self) -> Result<Vec<Webhook>>;
+    /// Remove a webhook and its deliveries; whether there was one.
+    async fn delete_webhook(&self, id: &str) -> Result<bool>;
+    /// Keep a delivery attempt, of a bounded tail per webhook.
+    async fn record_delivery(&self, delivery: &Delivery) -> Result<()>;
+    /// A webhook's most recent `count` deliveries, newest first.
+    async fn deliveries(&self, webhook_id: &str, count: usize) -> Result<Vec<Delivery>>;
 }
+
+/// Deliveries kept per webhook, at most.
+pub const DELIVERY_TAIL: usize = 1_000;
 
 /// Events kept, at most.
 pub const EVENT_TAIL: usize = 10_000;
@@ -63,6 +77,8 @@ pub struct MemoryStore {
     nodes: Mutex<HashMap<String, (NodeInfo, Instant)>>,
     sandboxes: Mutex<HashMap<String, SandboxRecord>>,
     events: Mutex<std::collections::VecDeque<ClusterEvent>>,
+    webhooks: Mutex<Vec<Webhook>>,
+    deliveries: Mutex<HashMap<String, std::collections::VecDeque<Delivery>>>,
 }
 
 impl MemoryStore {
@@ -145,6 +161,45 @@ impl ClusterStore for MemoryStore {
             .cloned()
             .collect())
     }
+
+    async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
+        let mut hooks = self.webhooks.lock();
+        hooks.retain(|h| h.id != hook.id);
+        hooks.push(hook.clone());
+        hooks.sort_by_key(|h| h.created_ms);
+        Ok(())
+    }
+
+    async fn webhooks(&self) -> Result<Vec<Webhook>> {
+        Ok(self.webhooks.lock().clone())
+    }
+
+    async fn delete_webhook(&self, id: &str) -> Result<bool> {
+        let mut hooks = self.webhooks.lock();
+        let before = hooks.len();
+        hooks.retain(|h| h.id != id);
+        self.deliveries.lock().remove(id);
+        Ok(hooks.len() != before)
+    }
+
+    async fn record_delivery(&self, delivery: &Delivery) -> Result<()> {
+        let mut all = self.deliveries.lock();
+        let tail = all.entry(delivery.webhook_id.clone()).or_default();
+        if tail.len() == DELIVERY_TAIL {
+            tail.pop_front();
+        }
+        tail.push_back(delivery.clone());
+        Ok(())
+    }
+
+    async fn deliveries(&self, webhook_id: &str, count: usize) -> Result<Vec<Delivery>> {
+        Ok(self
+            .deliveries
+            .lock()
+            .get(webhook_id)
+            .map(|t| t.iter().rev().take(count).cloned().collect())
+            .unwrap_or_default())
+    }
 }
 
 // ── Redis / Valkey ──────────────────────────────────────────────────────────
@@ -178,11 +233,51 @@ impl RedisStore {
     /// Connect to `url` (`redis://host:6379/0`), keeping keys under
     /// `namespace`.
     ///
+    /// A `rediss://` URL is TLS. The server is verified against the system's
+    /// roots, or against the CA in the PEM file `HV2_STORE_CA` names -- a
+    /// private store's usual case; `HV2_STORE_CERT` and `HV2_STORE_KEY`, both
+    /// or neither, add a client certificate for a server that asks for one.
+    ///
     /// # Errors
     ///
-    /// The URL does not parse, or the first connection fails.
+    /// The URL does not parse, a named file cannot be read, or the first
+    /// connection fails.
     pub async fn connect(url: &str, namespace: &str) -> Result<Self> {
-        let client = redis::Client::open(url).map_err(redis_error)?;
+        let client = if url.starts_with("rediss://") {
+            // The workspace's one provider, for a crate that asks for the
+            // process default. Already installed is fine.
+            let _ = rustls::crypto::ring::default_provider().install_default();
+            let read = |var: &str| -> Result<Option<Vec<u8>>> {
+                match std::env::var_os(var) {
+                    None => Ok(None),
+                    Some(path) => std::fs::read(&path)
+                        .map(Some)
+                        .map_err(|e| StoreError(format!("{var}={}: {e}", path.to_string_lossy()))),
+                }
+            };
+            let client_tls = match (read("HV2_STORE_CERT")?, read("HV2_STORE_KEY")?) {
+                (Some(client_cert), Some(client_key)) => Some(redis::ClientTlsConfig {
+                    client_cert,
+                    client_key,
+                }),
+                (None, None) => None,
+                _ => {
+                    return Err(StoreError(
+                        "HV2_STORE_CERT and HV2_STORE_KEY go together".into(),
+                    ))
+                }
+            };
+            redis::Client::build_with_tls(
+                url,
+                redis::TlsCertificates {
+                    client_tls,
+                    root_cert: read("HV2_STORE_CA")?,
+                },
+            )
+            .map_err(redis_error)?
+        } else {
+            redis::Client::open(url).map_err(redis_error)?
+        };
         let connection = client.get_connection_manager().await.map_err(redis_error)?;
         Ok(Self {
             connection,
@@ -378,6 +473,86 @@ impl ClusterStore for RedisStore {
         }
         Ok(events)
     }
+
+    async fn put_webhook(&self, hook: &Webhook) -> Result<()> {
+        let json = serde_json::to_string(hook).map_err(json_error)?;
+        let mut c = self.connection.clone();
+        redis::cmd("HSET")
+            .arg(self.key("webhooks"))
+            .arg(&hook.id)
+            .arg(json)
+            .query_async::<()>(&mut c)
+            .await
+            .map_err(redis_error)
+    }
+
+    async fn webhooks(&self) -> Result<Vec<Webhook>> {
+        let mut c = self.connection.clone();
+        let all: HashMap<String, String> = redis::cmd("HGETALL")
+            .arg(self.key("webhooks"))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let mut hooks: Vec<Webhook> = all
+            .values()
+            .filter_map(|json| serde_json::from_str(json).ok())
+            .collect();
+        hooks.sort_by_key(|h| h.created_ms);
+        Ok(hooks)
+    }
+
+    async fn delete_webhook(&self, id: &str) -> Result<bool> {
+        let mut c = self.connection.clone();
+        let removed: u64 = redis::cmd("HDEL")
+            .arg(self.key("webhooks"))
+            .arg(id)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let _: u64 = redis::cmd("DEL")
+            .arg(self.key(&format!("deliveries:{id}")))
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(removed > 0)
+    }
+
+    async fn record_delivery(&self, delivery: &Delivery) -> Result<()> {
+        let json = serde_json::to_string(delivery).map_err(json_error)?;
+        let key = self.key(&format!("deliveries:{}", delivery.webhook_id));
+        let mut c = self.connection.clone();
+        redis::pipe()
+            .cmd("LPUSH")
+            .arg(&key)
+            .arg(json)
+            .ignore()
+            .cmd("LTRIM")
+            .arg(&key)
+            .arg(0)
+            .arg(DELIVERY_TAIL - 1)
+            .ignore()
+            .query_async::<()>(&mut c)
+            .await
+            .map_err(redis_error)
+    }
+
+    async fn deliveries(&self, webhook_id: &str, count: usize) -> Result<Vec<Delivery>> {
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        let mut c = self.connection.clone();
+        let all: Vec<String> = redis::cmd("LRANGE")
+            .arg(self.key(&format!("deliveries:{webhook_id}")))
+            .arg(0)
+            .arg(count - 1)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(all
+            .iter()
+            .filter_map(|json| serde_json::from_str(json).ok())
+            .collect())
+    }
 }
 
 /// Open the store `url` names: `memory:` for [`MemoryStore`], `redis://` or
@@ -443,6 +618,8 @@ pub(crate) mod tests {
             running,
             heartbeat_ms: now_ms(),
             version: "test".into(),
+            jwk: None,
+            templates: Vec::new(),
         }
     }
 
@@ -459,6 +636,8 @@ pub(crate) mod tests {
             envd_version: "0.6.3".into(),
             descriptor: json!({"sandboxID": id}),
             paused: false,
+            portable: false,
+            volume_mounts: Vec::new(),
         }
     }
 
@@ -511,6 +690,49 @@ pub(crate) mod tests {
             .map(|e| e.kind)
             .collect();
         assert_eq!(kinds, vec!["three".to_string(), "two".to_string()]);
+
+        // Webhooks, and their deliveries newest first.
+        let hook = crate::model::Webhook {
+            id: format!("wh-{}", uuid::Uuid::new_v4()),
+            name: "n".into(),
+            url: "https://example.com/hook".into(),
+            events: vec![],
+            enabled: true,
+            secret: "s".into(),
+            created_ms: 1,
+        };
+        store.put_webhook(&hook).await.unwrap();
+        assert!(store.webhooks().await.unwrap().contains(&hook));
+        for n in 0..3u64 {
+            let delivery = crate::model::Delivery {
+                id: n.to_string(),
+                webhook_id: hook.id.clone(),
+                event_id: "e".into(),
+                sandbox_id: "s".into(),
+                event_type: "sandbox.lifecycle.created".into(),
+                status: "success".into(),
+                duration_ms: n,
+                request_body: String::new(),
+                request_url: hook.url.clone(),
+                response_status: Some(200),
+                response_body: None,
+                error_class: None,
+                error_message: None,
+                at_ms: n,
+            };
+            store.record_delivery(&delivery).await.unwrap();
+        }
+        let ids: Vec<_> = store
+            .deliveries(&hook.id, 2)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(ids, ["2", "1"]);
+        assert!(store.delete_webhook(&hook.id).await.unwrap());
+        assert!(!store.webhooks().await.unwrap().contains(&hook));
+        assert!(store.deliveries(&hook.id, 10).await.unwrap().is_empty());
     }
 
     #[tokio::test]

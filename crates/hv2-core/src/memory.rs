@@ -11,6 +11,43 @@ pub type GuestAddress = u64;
 /// Host virtual address
 pub type HostAddress = u64;
 
+/// Where the hole below 4 GiB begins, as on a PC: from here to 4 GiB the
+/// guest-physical space is devices' -- virtio register windows at
+/// `0xd000_0000`, the I/O APIC at `0xfec0_0000`, local APICs at
+/// `0xfee0_0000` -- and RAM beyond this much is placed from [`HIGH_RAM_START`].
+pub const RAM_HOLE_START: u64 = 0xC000_0000;
+
+/// Where RAM resumes above the hole.
+pub const HIGH_RAM_START: u64 = 0x1_0000_0000;
+
+/// Guest RAM of `size` bytes as the guest sees it: `(guest address, length)`
+/// ranges, lowest first. The host keeps it as one buffer, the ranges
+/// consecutive in it: host offset = guest address below the hole, and guest
+/// address minus the hole's size above it. A guest of 3 GiB or less has one
+/// range at 0, exactly as before there was a hole.
+#[must_use]
+pub fn ram_ranges(size: u64) -> Vec<(GuestAddress, u64)> {
+    if size <= RAM_HOLE_START {
+        vec![(0, size)]
+    } else {
+        vec![(0, RAM_HOLE_START), (HIGH_RAM_START, size - RAM_HOLE_START)]
+    }
+}
+
+/// Where guest address `gpa` of `size` bytes of RAM is in the host buffer;
+/// `None` if it is not RAM.
+#[must_use]
+pub fn host_offset(size: u64, gpa: GuestAddress) -> Option<u64> {
+    let mut offset = 0;
+    for (start, len) in ram_ranges(size) {
+        if gpa >= start && gpa - start < len {
+            return Some(offset + (gpa - start));
+        }
+        offset += len;
+    }
+    None
+}
+
 /// Memory region in guest physical address space
 #[derive(Debug, Clone)]
 pub struct MemoryRegion {
@@ -107,25 +144,58 @@ impl GuestMemory {
     /// mapping the backend does not currently describe.
     pub fn adopt_backend_pages(&self, host_addr: u64) -> Result<()> {
         let mut regions = self.regions.write();
-        if regions.len() != 1 {
+        let layout = ram_ranges(self.total_size);
+        let matches = regions.len() == layout.len()
+            && regions
+                .iter()
+                .zip(&layout)
+                .all(|(r, (gpa, len))| r.guest_addr == *gpa && r.size == *len);
+        if !matches {
             return Err(Error::Memory(format!(
-                "expected one guest memory region to rebind, found {}",
-                regions.len()
+                "guest memory regions {:?} are not the RAM layout {layout:?} the backend maps",
+                regions
+                    .iter()
+                    .map(|r| (r.guest_addr, r.size))
+                    .collect::<Vec<_>>()
             )));
         }
-
-        let region = &mut regions[0];
-        if region.guest_addr != 0 {
-            return Err(Error::Memory(format!(
-                "the main guest region should start at 0, not {:#x}",
-                region.guest_addr
-            )));
+        // One buffer, the ranges consecutive in it: see [`ram_ranges`].
+        let mut offset = 0;
+        for region in regions.iter_mut() {
+            region.host_addr = host_addr + offset;
+            offset += region.size;
         }
-        region.host_addr = host_addr;
         drop(regions);
 
         self.mappings.write().clear();
         Ok(())
+    }
+
+    /// Allocate a guest's RAM: one region, or two either side of the hole
+    /// below 4 GiB (see [`ram_ranges`]).
+    ///
+    /// # Errors
+    ///
+    /// The host could not map the memory.
+    pub fn allocate_ram(&self) -> Result<()> {
+        for (guest_addr, size) in ram_ranges(self.total_size) {
+            let mapping = MemoryMapping::new_on_node(size, self.numa_node)?;
+            self.regions.write().push(MemoryRegion {
+                guest_addr,
+                size,
+                host_addr: mapping.as_ptr() as u64,
+                readonly: false,
+            });
+            self.mappings.write().push(mapping);
+        }
+        Ok(())
+    }
+
+    /// Where guest address `gpa` is in the host buffer backing RAM -- the
+    /// offset a raw memory image is laid out by; `None` if it is not RAM.
+    #[must_use]
+    pub fn host_offset(&self, gpa: GuestAddress) -> Option<u64> {
+        host_offset(self.total_size, gpa)
     }
 
     /// Translate guest address to host address

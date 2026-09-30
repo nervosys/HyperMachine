@@ -90,7 +90,9 @@ pub use events::{
     EventReceiver, EventResult, EventSeverity, VmEvent,
 };
 pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
-pub use guest_agent::{GuestAgent, GuestChannel, GuestExec, GuestOutput, VsockChannel};
+pub use guest_agent::{
+    GuestAgent, GuestChannel, GuestExec, GuestOutput, VsockChannel, VsockStream,
+};
 /// A terminal size, re-exported so callers need no direct guest-agent dependency.
 pub use hv2_guest_agent::PtySize;
 pub use image_host::{AdmissionVerdict, ImageDescriptor, ImageHost, RegistryImageHost};

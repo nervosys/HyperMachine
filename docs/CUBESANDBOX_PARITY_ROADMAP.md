@@ -982,14 +982,18 @@ signals when it has frames, so a round trip no longer waits out two 1 ms
 sleeps. And the send buffer is 256 KiB. Receive-side interrupts are also
 coalesced now: one per burst rather than one per frame.
 
-**Upload is still slow: 5.1 MB/s.** 64 MiB in 13 s is ~3,500 frames/s, about
-280 µs per frame the guest transmits. The device offers no notification
-suppression (`VIRTIO_F_EVENT_IDX`, or `NO_NOTIFY` while a host thread
-drains), so the likely cost is one MMIO exit per transmitted frame -- which
-nested virtualization makes expensive. Not yet confirmed. Download does not
-pay it because host-to-guest delivery is batched. The fix is the vhost-net
-shape: drain the transmit ring from a host thread with guest notifications
-suppressed while it runs.
+~~**Upload is still slow: 5.1 MB/s.**~~ **Corrected in Phase 6: upload was
+never slow; the benchmark was.** It piped `dd` into busybox `nc`, which writes
+about 1 KiB per system call -- the guest's own counters showed 1,080-byte
+packets, each a kick, an interrupt and a legacy-PIC acknowledgement, ~12 VM
+exits apiece. An HTTP POST with curl from the same guest, through the same
+gateway, runs at **146-163 MB/s** with nothing else changed. What was changed
+on the way, measured separately: the gateway now acknowledges at once
+(smoltcp's default delays an ACK 10 ms) with a 256 KiB receive window, and
+sandboxes' NICs offer checksum and TCP segmentation offload to a host side
+that takes a segment of any size, which took uploads to **165-174 MB/s**
+(~9%, 32 KiB segments instead of 1.5 KiB frames; `--no-net-offload` turns it
+off). Download on the same runs: 370-485 MB/s either way.
 
 #### What is still not built
 
@@ -1268,7 +1272,7 @@ a GICv3 through `KVM_CREATE_DEVICE`, a device tree describing the
 virtio-mmio devices, the arm64 `Image` boot protocol and PSCI. That is real
 work and cannot be verified on the x86 machine this was written on.
 
-### Phase 6 — Suspend, resume, fork and oversubscription (Agent Substrate) — **built, verified with the real SDK; storage is node-local**
+### Phase 6 — Suspend, resume, fork and oversubscription (Agent Substrate) — **built, verified with the real SDK, across nodes**
 
 Google's [Agent Substrate](https://github.com/agent-substrate/substrate)
 (Apache-2.0, pre-1.0; on GKE for evaluation) is a second competitor with a
@@ -1333,17 +1337,471 @@ creates, since nothing is shared but the store. What limits a node here is
 CPU: a create costs ~25 ms of host CPU, about its whole latency, and
 concurrency past eight adds contention.
 
+#### Restore on any node
+
+Agent Substrate's snapshots go to Cloud Storage and restore on any worker.
+Here, with `--snapshot-store DIR` -- a directory every node mounts at the
+same path (NFS, EFS, Filestore, CephFS; a ReadWriteMany PVC in the chart):
+
+- **The template is shared, by content.** Its name is a hash of everything
+  that makes the guest what it is -- kernel, initramfs, command line, size,
+  the egress CA. The first node to need it builds it in a scratch directory
+  and renames it into place; a node that loses the race uses the winner's.
+  A layered snapshot names its template, so every node sharing the store can
+  lay it over the same bytes.
+- **So is the egress CA**, published the same way: a guest trusts the CA it
+  was created with, and must still after resuming elsewhere. Its key and the
+  paused sandboxes' descriptions -- which hold egress-proxy credentials and
+  injected headers -- are written owner-only.
+- **A paused sandbox is claimed, not assumed.** Resuming renames its
+  description aside, which is atomic, so two nodes asked at once cannot
+  both resume it; a node's own note of a sandbox it paused is checked
+  against the store, since another may have resumed it since.
+- **It outlives its node.** The record says it is paused into shared
+  storage; a restarting node keeps it, the reaper keeps it, and a control
+  plane sends a request for it to any node with room when its own has gone
+  -- `connect`, `resume`, `DELETE`, and the envd proxy, where the request
+  that wakes it is served by whichever node resumed it. A proxy whose cached
+  route no longer connects asks again once.
+- **Draining a node loses nothing.** On SIGTERM a node pauses what it runs
+  into the store instead of ending it, and the next request for each
+  resumes it elsewhere.
+
+Verified on two nodes sharing a directory, two control planes, the
+unmodified SDK: a sandbox with a counting loop and an injected header,
+paused on node A; node A SIGKILLed; `Sandbox.connect` through the other
+control plane resumed it **on node B in 53 ms**, file kept, loop still
+counting, and the header still injected -- the guest trusted node B's
+leaves. Node A drained by SIGTERM: a command through a control plane's
+proxy resumed its sandbox on node B in 95 ms. A paused sandbox whose node
+was dead deleted cleanly, record and snapshot. The two nodes started at
+once and raced to publish the template; one won and the other used it.
+
+What it does not do: move a *running* sandbox (it pauses first), or keep
+paused sandboxes anywhere but a filesystem -- object storage would need the
+template fetched to local disk before it can be mapped.
+
+#### Mutual TLS inside the cluster
+
+Agent Substrate uses Kubernetes pod certificates between its components.
+Until this, a node here trusted a control plane by a shared token sent over
+plain HTTP -- anyone on the path had the token, and the envd traffic a
+control plane relays (commands, their output, files) with it. Now, with
+`--mtls-ca/--mtls-cert/--mtls-key` on both sides (`tools/mtls-certs.sh`
+makes a CA and both certificates; the chart takes cert-manager-shaped
+Secrets):
+
+- a node serves its API **and** its envd proxy only to a peer presenting a
+  certificate the cluster's CA signed; a control plane talks only to a node
+  whose certificate it signed too, and relays envd traffic over TLS;
+- nodes are verified by one shared DNS name (`hv2-node`) rather than by
+  address, since a node's address is whatever its pod got -- the chain, the
+  signatures and validity are all still checked;
+- the cluster token still rides every request: TLS says the peer holds a
+  key the CA vouched for, the token says it is this cluster's.
+
+Verified: a node answers plain HTTP, HTTPS without a client certificate,
+and HTTPS with another CA's certificate by refusing the handshake, and the
+token with the cluster's certificate with 200. A control plane given another
+CA's certificate reaches no node ("every node refused"). The cluster SDK
+tests -- pause, resume, fork, auto-resume through the proxy, a node
+SIGKILLed and its sandbox resumed elsewhere, a node drained -- pass over
+mTLS unchanged. A unit test does real handshakes for each case.
+
+The store too: a `rediss://` URL is TLS, verified against the system's
+roots or `HV2_STORE_CA`, with `HV2_STORE_CERT`/`HV2_STORE_KEY` for a store
+that requires client certificates (the chart's `store.tlsSecret`), through
+rustls on the same `ring` provider. Verified against Valkey built with TLS
+and `--tls-auth-clients yes`: it refused a plaintext client and a TLS client
+without a certificate; two nodes and two control planes ran on it, and the
+cluster SDK test -- pause, resume, fork, auto-resume -- passed.
+
+Still plaintext unless configured: the client-facing E2B API
+(`--tls-cert/--tls-key`, or an ingress), and the chart's own single Valkey,
+which only its NetworkPolicy reaches.
+
+#### Workload identity
+
+Agent Substrate authenticates agents to Google Cloud through GKE Workload
+Identity. E2B has its own design, which the SDK already speaks, and which
+this now implements: `iam.tokens` registers named tokens (an audience, and
+`tokenType: JWT-SVID`, the one type E2B accepts), and a network rule writes
+`${e2b.identity.tokens.NAME}` into a header it injects. The egress gateway
+replaces the placeholder with a token minted for that request. The guest
+wrote a placeholder and never holds a token; the token exists only between
+the gateway and the destination.
+
+- The token is an ES256 JWT-SVID: `sub` the sandbox's SPIFFE ID
+  (`spiffe://TRUST_DOMAIN/sandbox/ID`), `aud` the registered audience,
+  five minutes, a fresh `jti` each request, `iss` the configured issuer.
+- Nodes and control planes serve `/.well-known/jwks.json` and
+  `openid-configuration` without an API key -- what AWS STS
+  `AssumeRoleWithWebIdentity` or GCP workload identity federation fetch.
+  A control plane's JWKS is every live node's key, once each.
+- With a snapshot store, every node signs with one key published there,
+  so a sandbox paused on one node and resumed on another keeps its identity
+  and one JWKS entry covers the cluster.
+
+Verified with the unmodified SDK, and checked by a verifier that shares no
+code with the signer -- `openssl dgst -verify` against a public key rebuilt
+from the JWKS: a sandbox with `Authorization: Bearer
+${ctx.iam.tokens['aws']}` curled httpbin twice; the upstream saw two
+different JWTs, both verified, with the right subject, audience, issuer and
+expiry; nothing in the guest held one; a type other than `JWT-SVID` was
+refused with 400. Across nodes: tokens minted on node A and, after it was
+SIGKILLed and the sandbox resumed, on node B carried one SPIFFE ID and one
+key, and both verified against a control plane's JWKS.
+
+Not verified: federation with a real cloud provider, which needs the
+issuer reachable from it over public HTTPS.
+
+#### Templates and files
+
+Until this, every sandbox was the one `base` guest and `templateID` was
+echoed back unread -- while E2B, CubeSandbox and Agent Substrate all start
+agents from images their users build. Now:
+
+- **Templates from OCI images.** `tools/guest-image/from-oci.sh IMAGE`
+  exports any image (with `docker`), adds the guest agent and init, and
+  writes an initramfs; its `ENV` is loaded before the agent starts.
+  `--template NAME=INITRAMFS`, as many as wanted, beside `base`; each is
+  booted and snapshotted once, and `Sandbox.create(template=NAME)`
+  restores from its own. An unknown template is a 404, before a slot is
+  taken. `GET /templates` lists them, on a node and on a control plane.
+- **Scheduling by template.** Nodes advertise the templates they offer, and
+  a control plane sends a create only to one that has it.
+- **Files.** envd's `GET /files` and `POST /files` (multipart and
+  octet-stream), on the same port as its RPCs, through two new guest-agent
+  operations that move bytes in 4 MiB chunks -- binary content arrives as
+  sent. `sandbox.files.write` and `files.read` work; before this they had
+  no route at all.
+
+Verified with the unmodified SDK and `python:3.12-slim` (130 MiB of root
+filesystem, 45 MiB compressed): `Sandbox.create(template="python")` in
+**91 ms**, Python 3.12 running with the image's `ENV` and Debian root; a
+script written with `files.write` ran; five more Python sandboxes, each
+having run Python, cost **7.7 MiB** each -- the root filesystem is in the
+template's memory image, shared copy-on-write. Booted rather than restored
+-- as happened once when the template's boot outlasted a 15 s timeout, now
+120 s for templates -- the same sandbox took 4.9 s and 282 MiB. In a
+cluster where one node of two had the template, four Python creates through
+a control plane all went to it; base creates went anywhere.
+
+#### Templates built by the platform
+
+`from-oci.sh` needs Docker on the operator's machine. Now a node builds a
+template itself: `POST /templates {"templateID": "node", "image":
+"node:22-slim"}` answers 202, and the node
+
+- pulls the image from its registry over HTTPS -- anonymous bearer tokens
+  as Docker Hub and most registries issue them, the `linux/amd64` manifest
+  chosen from an index -- verifying every blob against its sha256 digest;
+- applies the layers in memory with OCI whiteouts (`.wh.NAME`, opaque
+  directories), never unpacking a layer's paths onto the host;
+- writes the initramfs itself, `newc` cpio, deterministic, hard links kept
+  as links (busybox's image is ~400 links to one binary: as copies it was
+  270 MiB, as links 4 MiB), with the guest kit (`--guest-kit`, in the node
+  image at `/opt/hv2/kit`) added where the image lacks it -- an image's own
+  busybox is kept;
+- snapshots it and offers it; `GET /templates` shows `building`, `ready` or
+  `error`.
+
+With a shared snapshot store, the other nodes adopt a template one node
+built -- its record and initramfs are in the store and its snapshot is
+content-addressed there -- within a few seconds and without pulling. A
+control plane's `POST /templates` fans the build out to every node, which
+a cluster without a store needs.
+
+Verified: `alpine:3.20` built in 5-6 s and `node:22-slim` in 27-42 s on one
+node, pulled from Docker Hub by the node; through the unmodified SDK a
+`node` sandbox was created in 136-236 ms and ran Node.js 22, npm, and a
+script written with `files.write`; `alpine` ran `apk`. With two nodes and a
+store, `alpine` built on node A was offered by node B without a pull; a
+`busybox:1.36` build through a control plane reached both nodes, and
+sandboxes of both templates ran through the control plane. In the Compose
+stack the node container, with the kit its image now carries, built `alpine`
+through a control plane and a create from it answered in 85 ms.
+
+Private registries and zstd: a registry's `Basic` challenge is answered with
+a username and password, a `Bearer` challenge's token requested with them
+(`POST /templates` takes `username`/`password`; the SDK's
+`from_image(image, username=, password=)` sends them), never stored or
+logged. Layers are decompressed by their magic bytes: gzip, zstd (a pure
+Rust decoder), or plain tar. Verified against a password-protected
+`registry:2` holding an image built with zstd layers only: no login was
+refused ("the registry wants a username and password"), a wrong password
+refused with 401, the right one built in 2.0 s and a sandbox read the zstd
+layer's file; the password appeared nowhere in the node's log. A
+`localhost` registry is spoken to over plain HTTP, as Docker does.
+
+#### Snapshots and builds: E2B's Template SDK and Dockerfiles
+
+`sandbox.create_snapshot()` (`POST /sandboxes/{id}/snapshots`) checkpoints a
+running sandbox in place -- layered, only what it changed since its
+template -- and offers it as a template; `Sandbox.create(snapshot_id)`
+restores it as a fork is restored. `GET /snapshots` and
+`Sandbox.delete_snapshot` (`DELETE /templates/{id}`) complete E2B's set. With
+a store, a snapshot taken on one node restores on any node at once: a
+create for a name a node has not seen yet reads the store's record, and the
+taking node announces it to the cluster without waiting for a heartbeat.
+
+On that sits E2B's build API -- `POST /v3/templates`, file upload links and
+uploads, `POST /v2/templates/{id}/builds/{build}`, build status with logs --
+which is what `Template.build()` calls, and so what
+`Template().from_dockerfile(...)` builds with, the SDK having turned the
+Dockerfile into steps. A build restores its base (an image, pulled into a
+template of its own and cached by name; or a template, or a snapshot), runs
+`RUN`, `COPY`, `ENV`, `WORKDIR` and `USER` in that sandbox with each line of
+output in the build log, starts the start command, waits for the readiness
+check, and snapshots the sandbox into the template. Every sandbox created
+from it is restored with that process already running. The build's commands
+run in a microVM, never on the node, with no container runtime; a `COPY`'s
+upload is repacked on the host with Docker's placement rules and unpacked
+by the guest's own tar. `ENV` and `WORKDIR` hold for every later command:
+the agent reads them from the template at each start. Through a control
+plane, a template's build calls all reach one node, chosen from its name by
+rendezvous hashing, and uploads stream through unbuffered.
+
+Verified with the unmodified SDK: a builder template on `base` (COPY, ENV,
+WORKDIR, RUN, `busybox httpd` started with a `wget` readiness check) built in
+0.9 s, and a sandbox from it answered in 42 ms with httpd already serving
+the copied file, in the template's directory and environment. A Dockerfile
+(`FROM python:3.12-slim`, `ENV`, `RUN pip install six`, `WORKDIR`, `COPY
+app.py`, `RUN python app.py`) built in 24.7 s including the pull from Docker
+Hub; its sandbox was created in 126 ms and ran the app with the installed
+package. Through a control plane over two nodes and a store, a build took
+0.9 s and its sandboxes were created in 23-29 ms through the control plane
+and on either node. A sandbox of a built template paused in 7 ms, resumed in
+20 ms and forked with its server and state intact. Snapshots: taken in
+8-11 ms, created from in 17-30 ms on the taking node, the other node, or
+through the control plane.
+
+Users, as envd has them: a template's last `USER` is who its sandboxes'
+commands run as when the SDK names no one, and who owns what
+`files.write` makes, directories included; `user="root"` (the SDK's
+`Authorization: Basic` of `root:`, or `?username=` for files) overrides it.
+The agent drops from root itself -- supplementary groups, then gid, then
+uid, between fork and exec -- and sets `HOME`, `USER` and `LOGNAME` from
+`/etc/passwd`; a template with no `USER` runs as root, as before. Build
+steps switch user the same way, not through `su`. Verified: a Dockerfile
+ending `USER user` / `WORKDIR /home/user` ran `id -un` as `user` in
+`/home/user` with `HOME=/home/user`, an earlier `USER nobody` step had run
+as `nobody`, `user="root"` ran as root with `HOME=/root`, a `files.write`
+of `/home/user/notes/a.txt` left both the new directory and the file owned
+by `user` (with `user="root"`, root), and the default user could not
+overwrite a file a root step made.
+
+#### Sizes, and guests with more than one CPU
+
+A template has its own size: `cpuCount` and `memoryMB` on
+`Template.build(...)` or `POST /templates`, a node's `--cpu-cores` and
+`--memory-mb` otherwise. The size is the template's snapshot's, so every
+sandbox restored from it, and every template built on it, is that size; a
+build asking to resize one is refused and told to build from the image. An
+image is pulled once per size.
+
+Sizing CPUs found that no guest had ever had more than one. hv2-core wrote
+no MP table and no ACPI MADT, so Linux said "SMP disabled" whatever the vCPU
+count. A VM of more than one vCPU now gets an MP table (spec 1.4, at
+`0x9FC00`, up to 32 processors, the I/O APIC routing ISA IRQs 0-23) and
+per-vCPU CPUID (APIC ID and logical count in leaf 1, x2APIC ID in 0xB and
+0x1F); one-vCPU VMs are untouched. The second CPU then still did not come
+up: `KVM_RUN` on an application processor blocks until its startup IPI and
+then returns `EAGAIN`, which the run loop treated as fatal, ending that
+vCPU's thread the moment Linux woke it ("CPU1 failed to report alive
+state"). It is retried now.
+
+A third defect, in every guest: the vsock device queued a host write as
+one packet of up to the credit window (256 KiB), but Linux posts 4 KiB rx
+buffers, so the packet fitted none, was dropped, and the stream stalled. An
+8 MiB `files.write` hung on one vCPU as on four. Stream data is now split
+across the buffers the guest offers.
+
+Verified, with the unmodified SDK:
+- **Guest sizes:**
+  - 1, 2 and 4-vCPU guests report `nproc` 1, 2 and 4;
+  - N busy loops take as long as one (0.11-0.12 s either way);
+  - an 8 MiB `files.write`, HTTPS egress, and pause/resume all work at each size;
+  - sandboxes are created from each size's template in 43-51 ms.
+- **Forks and snapshots:** three forks of a 4-vCPU sandbox with all four CPUs busy were made in 42 ms, each with its four busy loops still running; a snapshot of it restored with 4 CPUs.
+- **Per-template sizes:**
+  - templates of 2 vCPU / 2048 MiB and 1 vCPU / 512 MiB were built from `alpine:3.20` in 2.6-5.3 s and created in 17-37 ms, their guests seeing exactly that;
+  - a `POST /templates` of 2 vCPU / 768 MiB was listed with its size and ran at it;
+  - out-of-range sizes are refused with a 400.
+
+#### Metrics and logs
+
+E2B's `GET /sandboxes/{id}/metrics` (`get_metrics`), `GET /sandboxes/metrics`, and `GET /sandboxes/{id}/logs` (v1 and v2). Metrics are the guest's own account -- CPU from `/proc/stat`, memory and page cache from `/proc/meminfo`, the root filesystem from `statvfs` -- read in one agent round trip (`Stats`) every 5 s, as E2B samples, and kept for an hour; paused sandboxes are not woken to be sampled. Logs are the node's lifecycle events for the sandbox: created, volumes mounted, paused, resumed, forked. A control plane forwards each to the sandbox's node and merges `/sandboxes/metrics` across nodes.
+
+Verified with the unmodified SDK:
+- an idle 2-vCPU sandbox read 0.1% CPU, 34 of 971 MiB and 9 of 481 MiB disk;
+- with one CPU spinning, steady samples read 40-47% (the guest's own `top`: 47%);
+- writing 200 MiB added 197 MiB of used memory, as page cache;
+- samples arrived every 5 s, and the start/end window filtered them;
+- the log read created, paused, resumed;
+- through a control plane over two nodes, four sandboxes each had metrics, `/sandboxes/metrics` returned all four, and logs came back.
+
+Not done: logs of the guest's own processes (only lifecycle events are logged), and events/webhooks.
+
+#### E2B's Code Interpreter template, and what building it taught the builder
+
+E2B's own open-source Code Interpreter template (`e2b-dev/code-interpreter`, `template/template.py`) builds on HyperMachine through the SDK's `Template.build`, with its Docker variant and Python kernels, at 4 vCPU and 8 GiB:
+- 29 steps: apt, NodeSource, the full pip requirements, the IJavascript kernel, E2B's server and its virtualenv, configuration;
+- then its start command.
+
+It does not yet come up here. E2B's `start-up.sh` gives Jupyter 10 s to become healthy, and its server gives each kernel 5 s to start. On this development host -- KVM nested under WSL2, the Windows host at about 75% CPU from other work -- Jupyter was healthy after 7-18 s and the kernel took longer than 5 s:
+- With the health window lengthened as a test, Jupyter came up, E2B's server started, and creating its default kernel then failed with `httpx.ConnectTimeout`.
+- In the sandbox, Jupyter itself reached `/api/status` 200 between 7 and 18 s after launch, at 100% of a CPU.
+- A second start in the same guest took 2-4 s.
+- CPU-bound Python ran at half the host's speed.
+
+This needs a faster host to finish. It is not a defect found in the sandbox, but it is also not shown to work: the SDK's `run_code` has not run here.
+
+What the builder gained from it:
+- **A step cache.** After the last step the build's sandbox is checkpointed under a key of its base, size and every step (files by hash). A build with the same steps starts from it, at the start command, as E2B's layer cache does; `skip_cache` forces the steps. The Code Interpreter's 55 minutes of steps then took 24.5 s to keep, and each later attempt at its start about a minute. A small template: 3.5 s built, 0.2 s again.
+- **The start command's output in the build log**, as it comes. A start command that exits before its readiness check passes ends the build at once, with its status. Without it, the Code Interpreter's failure was ten silent minutes.
+- **Bounded readiness attempts**, 30 s each: a check that hangs is a failed one.
+
+#### Guests larger than 3 GiB
+
+No guest above about 3.25 GiB could run, and the size check promised up to 64 GiB. Guest RAM was one flat range from address 0, so it ran into the virtio register windows at `0xd000_0000`, and from 4 GiB over the I/O APIC and local APICs. Found building E2B's Code Interpreter template at 8 GiB, which failed attaching its first device.
+
+Guest RAM now has a PC's hole below 4 GiB:
+- the first 3 GiB at address 0, the rest from 4 GiB, both from one host buffer;
+- two KVM memory slots (the read-only shared region moved from slot 1 to slot 2);
+- the device model maps two regions;
+- the `e820` map reports both ranges, and the initrd is placed below the hole;
+- a raw memory image -- a template's, a pause's, a layered snapshot's base -- is laid out by offset in the host buffer, which is what it is mapped over;
+- device windows are refused only if they overlap actual RAM.
+
+A guest of 3 GiB or less is laid out byte for byte as before, so existing templates and snapshots are unaffected.
+
+Verified:
+- a 4 GiB guest's kernel reported the three ranges in its `e820` map, and 3.5 GiB written to it survived pause and resume;
+- in an 8 GiB guest the kernel's `Normal` zone, its RAM above 4 GiB, went from 1,266,317 free pages to 3,025 as 6 GiB was written. That RAM was in use, and the 6 GiB was intact after pause (38.6 s) and resume (23.7 s) and in a fork;
+- the unit tests, and the build, lifecycle, volume, size, SMP-fork and port regressions, passed at the old sizes.
+
+An intermittent failure seen twice this session is not explained: an image template's guest (512 MiB once, 1 GiB once) did not answer within 120 s, and passed on the next runs. The node keeps no guest console output from a failed template boot, which is what finding it would need.
+
+#### A guest's console, kept for failures
+
+Every VM now has a serial console (COM1, `0x3F8`), and the guest kernel logs at `loglevel=3` (errors and worse) instead of not at all. When a template's guest or a sandbox's guest never answers, the error carries the last 15 lines the guest wrote -- or says it wrote nothing, which is itself a finding.
+
+Verified:
+- a template built on an initramfs whose init has no agent failed with `its console ended: broken init: no agent in this image | sleeping forever`, where before it said only that the agent never answered;
+- the build, lifecycle, port, SMP and volume regressions passed. Sandbox creates measured 50-112 ms in that run, against 27-66 ms before, on a host whose load varies; this was not separated from the change.
+
+The intermittent failure recurred once in that regression: a sandbox from a built template did not answer within 15 s, and **its guest wrote nothing to its console** -- no kernel error, no panic. Four reruns passed. A sandbox is restored from a running snapshot, so it has no boot to print, but a panic or an error would still appear. So the guest either did not run, or ran without error and its agent did not answer. The error now also says whether they ran: each vCPU's VM exits over half a second, and in all, and the VM's state. A guest that never ran shows none; one spinning shows many; one halted and waiting shows a few timer exits (the broken initramfs above: 2 in 0.5 s, 99,919 in all). Ten more runs of the lifecycle regression passed, fourteen in a row, so the report is waiting for the failure to recur.
+
+#### A sandbox's own ports
+
+E2B's `sandbox.get_host(port)` -- `{port}-{sandboxID}.{domain}` -- reaches any port a sandbox serves, not only envd's: a web server, a dev server, the Code Interpreter's Jupyter. Until now the proxy routed envd's port alone, so every other one answered 404.
+
+How it works:
+- The first request for a port makes a loopback listener for it on the node.
+- Each connection it accepts rides a vsock connection of its own: the guest agent connects to the port inside the guest, answers, and copies bytes both ways (`Forward`). No network interface is involved, so a sandbox without one serves its ports all the same.
+- For any port but envd's the proxy speaks HTTP/1.1 to its backend, at the node and between a control plane and a node, and splices upgraded connections, so WebSockets work.
+- A sandbox's listeners and connections close when it pauses or ends; the first request after a resume makes them again.
+
+Verified, through the unmodified SDK's `get_host`:
+- `busybox httpd` in a sandbox answered its first request in 90 ms (the listener made) and later ones in about 10 ms;
+- 64 MiB came through at 153 MiB/s with a matching checksum -- 91 MiB/s on a node without `--network`;
+- a port nothing listens on answered 502;
+- after pause and resume the server answered again;
+- a chunked response streamed: its first chunk arrived after 10 ms, the rest over 1.5 s;
+- a WebSocket upgrade came back `101` with the right `Sec-WebSocket-Accept`, and messages echoed both ways;
+- through a control plane over two nodes, 32 MiB came through at 261-274 MiB/s.
+
+#### Cloud registry logins
+
+E2B's `from_aws_registry` and `from_gcp_registry` work. For AWS the node signs `ecr:GetAuthorizationToken` with Signature Version 4 and logs in with the token it answers; `HV2_ECR_ENDPOINT` points at a FIPS or VPC endpoint instead of the region's. For Google the service account's key signs an RS256 JWT, which its token endpoint exchanges for an access token, used as the password of `oauth2accesstoken`. Neither credential is stored or logged.
+
+Verified:
+- the SigV4 code reproduces AWS's published worked example (IAM `ListUsers`) to the signature;
+- a unit test signs a Google assertion with a throwaway key and verifies it with the public half;
+- end to end, against a password-protected `registry:2` and stand-ins for the two token endpoints:
+  - a fake ECR re-derived the node's signature in an independent Python implementation before answering;
+  - a fake Google endpoint verified the JWT with `openssl`;
+  - builds from both logins pulled the private image and their sandboxes ran;
+  - a wrong AWS key was refused with AWS's own message;
+  - no secret appeared in the node's log.
+- AWS and Google themselves were not called: there are no cloud credentials here.
+
+Found on the way: a forced rebuild (`skip_cache`) of a template on a node without a snapshot store deleted the new template's snapshot, because the old and new shared a directory and the old one cleaned up on drop. Each build now has its own directory.
+
+Note that a node caches an image by name: a second build from a private image reuses the first pull without logging in again, unless `skip_cache` is set. That fits a single-tenant cluster, which this is.
+
+#### Events and webhooks
+
+E2B's `GET /events/sandboxes[/{id}]` and `/events/webhooks` -- create, list, update, delete, deliveries grouped by event, and hourly stats -- served by a node alone and by a control plane, over the cluster store's event stream (a node without a cluster keeps its own in memory).
+
+Events:
+- Lifecycle events carry E2B's types: `sandbox.lifecycle.created`, `paused`, `resumed`, `killed`.
+- A delivery is signed as E2B signs one: `e2b-signature` is base64, unpadded, of SHA-256 over the secret followed by the body. Since checked against E2B's webhook documentation (`docs.e2b.dev/sandbox/lifecycle-events-webhooks`): the scheme is as its Python, JavaScript and Go verifiers compute it, and a unit test pins it to a value computed independently with Python's `hashlib`.
+- A webhook's body is E2B's documented webhook payload, which is **not** the API's `SandboxEvent`: snake_case (`sandbox_id`, `event_data`, `events_ttl_days`), `version` `v2`, `event_label` `kill`, and `event_data` with `sandbox_metadata`, `execution` (`started_at`, `vcpu_count`, `memory_mb`, `execution_time` in ms) on a pause or an end, and `kill_reason`. Until this was checked, webhooks carried the API's camelCase shape, so a receiver written against E2B's documentation would have read nothing from them. `GET /events/sandboxes` keeps camelCase, as E2B's OpenAPI spec has it, with the same `eventData`. Not from E2B's documentation, so possibly different from what E2B sends: the labels other than `kill` (`create`, `pause`, `resume`, `update`), the kill reasons other than `request` (`timeout`, `lost`), and `node_id` in `event_data` (an extra key a receiver ignores).
+- A delivery is retried after 1 s and 4 s, and every attempt is recorded.
+- The node that emitted an event delivers it, so each goes out once however many control planes run.
+
+Webhook URLs are user-supplied, so an address that is not global -- loopback, private, link-local, which includes the cloud metadata service, and shared -- is refused unless the node runs with `--allow-private-webhooks`. The address checked is the one connected to, so DNS rebinding cannot swap it, and redirects are not followed.
+
+Verified:
+- on one node, a receiver checking signatures itself got created, paused, resumed and killed, all valid;
+- a receiver that answered 500 twice got the event on the third attempt, and the deliveries and stats showed all three;
+- a disabled webhook was listed as such; the secret is never returned;
+- without the flag, `127.0.0.1`, `169.254.169.254` and `localhost` were each refused with `request_error`;
+- through a control plane over two nodes, a webhook registered there got each node's created and killed exactly once, and the control plane listed both nodes' events;
+- after the payload change, a killed delivery had exactly the documented example's thirteen keys, with `event_data` `{"execution": {"execution_time": 155, "memory_mb": 1024, "started_at": …, "vcpu_count": 1}, "kill_reason": "request", "sandbox_metadata": {"owner": "test"}}` for a sandbox created with that metadata, and its signature verified with E2B's documented Python verifier.
+
+The regression run after this change passed with every result as before, but its timings -- pause 83 ms, one create from a snapshot 1.3 s -- were taken with the Windows host at 97% CPU from other work, and are not comparable to the earlier numbers; they were not re-measured.
+
+#### Volumes
+
+E2B's persistent storage, as its SDK's `Volume` uses it:
+- the volume API (`POST/GET /volumes`, `GET/DELETE /volumes/{id}`);
+- the content API (`/volumecontent/{id}/{file,dir,path}`, authenticated by the volume's own bearer token);
+- `volumeMounts` on create.
+
+A volume is a directory on the node -- in the snapshot store when there is one, so every node has every volume -- mounted into sandboxes live and shared, and it outlives them.
+
+How a mount works: the guest agent answers a `MountVolume` request and then hands that very vsock connection to its kernel as a 9P2000.L mount (`trans=fd`). The node runs a 9P server on the other end, one thread per mount. The guest kernel had 9P already; nothing new was needed in it or in the VMM.
+
+The guest is treated as hostile:
+- Every path is resolved with `openat2(RESOLVE_BENEATH | RESOLVE_NO_SYMLINKS)` beneath the volume.
+- Every name-taking operation acts on one validated name within a directory resolved that way.
+- Attributes change through the resolved inode.
+
+The guest's ownership is kept in an extended attribute, because the node's own user owns the host files. A mount the snapshot held is detached and remade on resume and on fork. A volume ID is derived from its name, so a control plane routes a create and every later call for it to the same node, streaming uploads and downloads through.
+
+Verified with the unmodified SDK:
+- **Mounting and sharing:**
+  - a sandbox came up with a volume mounted in 133-298 ms;
+  - a second sandbox read the first's 16 MiB file with a matching checksum;
+  - each saw the other's appends, renames and symlinks live;
+  - the API read what they wrote;
+  - 16 MiB read through 9P in 212-283 ms.
+- **Persistence and lifecycle:**
+  - files outlived every sandbox that mounted them;
+  - a sandbox paused and resumed wrote to its remounted volume;
+  - two forks of it each wrote there, and the API saw all three.
+- **Escapes:**
+  - `../../meta.json`, a host symlink planted in the volume, and a path through it were all refused by the API;
+  - through the mount, the host symlink resolves in the guest's own namespace, never the host's;
+  - unit tests walk, open and create through symlinks and `..` and reach nothing outside.
+- **Across two nodes and a control plane:**
+  - a volume made through the control plane was mounted on both nodes, each seeing the other's writes;
+  - a file written by the API as uid 1000, mode 600 showed exactly that in the guest;
+  - a `chown` in the guest showed in the API.
+
+`--volume-dir` places volumes elsewhere. Volumes must live on a filesystem with user extended attributes (ext4, xfs) for guest ownership to hold: on WSL's `/mnt/c` every file reads 777 and owners are not kept.
+
+Not done:
+- memory hot-plug and ballooning (a sandbox's size is fixed at its template);
+- more than 32 vCPUs;
+- volume quotas;
+- volumes in a cluster without a shared snapshot store, where a volume lives on one node and a sandbox mounting it must be created there.
+
 What Agent Substrate has that this does not:
 
-- **Restore on any worker.** Snapshots here stay on the node that paused
-  them, layered over that node's template -- which is not byte-identical to
-  another node's -- so a paused sandbox resumes where it paused, and a
-  node's loss takes its paused sandboxes with it. Moving them needs either
-  deterministic templates or shipping the full image, and a shared store.
-- **Workload identity and mTLS.** Substrate authenticates to cloud APIs
-  through GKE Workload Identity and uses pod certificates. Here a node
-  trusts its control plane by a shared token over plain HTTP, and a sandbox
-  gets credentials only by header injection into its egress.
 - **Kubernetes-native objects** (`ActorTemplate`, `WorkerPool`,
   `kubectl-ate`). This is E2B's API instead, deployed by a Helm chart.
 

@@ -738,6 +738,7 @@ async fn interception_injects_the_header_and_the_guest_never_holds_it() {
             upstream,
             "api.example.com",
             &headers,
+            None,
             server,
             client,
         )
@@ -793,6 +794,7 @@ async fn interception_refuses_an_upstream_that_is_not_the_name() {
             upstream,
             "api.example.com",
             &headers,
+            None,
             server,
             client,
         )

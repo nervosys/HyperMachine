@@ -89,3 +89,7 @@ BUILD_STATUS.md
 PROJECT_SUMMARY.md
 STATUS.md
 PROGRESS.md
+
+# Python bytecode: build output, and it embeds the absolute path it was compiled from.
+__pycache__/
+*.pyc

@@ -663,7 +663,22 @@ impl VsockDevice {
             let Some(chain) = self.queues[RX_QUEUE].pop(mem)? else {
                 break;
             };
-            let packet = self.pending.pop_front().expect("checked non-empty");
+            let mut packet = self.pending.pop_front().expect("checked non-empty");
+
+            // Stream data larger than the buffer is split across buffers, as
+            // a stream may be: Linux's driver posts 4 KiB rx buffers, and
+            // `send` queues whatever the credit allows -- up to 256 KiB. Sent
+            // whole, such a packet fitted no buffer, was dropped, and a
+            // large write to the guest (an 8 MiB `files.write`) stalled
+            // with its bytes lost.
+            let room = chain.writable_len().saturating_sub(VSOCK_HEADER_SIZE);
+            if packet.header.op == op::RW && room > 0 && packet.data.len() > room {
+                let rest = packet.data.split_off(room);
+                let mut header = packet.header;
+                header.len = u32::try_from(rest.len()).unwrap_or(u32::MAX);
+                packet.header.len = u32::try_from(room).unwrap_or(u32::MAX);
+                self.pending.push_front(VsockPacket { header, data: rest });
+            }
             let bytes = packet.encoded();
 
             if chain.writable_len() < bytes.len() {
@@ -1401,6 +1416,33 @@ mod tests {
         driver.offer_rx_buffer();
         device.notify(0, &driver.mem).expect("notify");
         assert!(driver.next_rx_packet().is_some());
+    }
+
+    /// Stream data larger than the driver's rx buffers arrives in pieces
+    /// that fit them, in order, none dropped -- as Linux's 4 KiB buffers
+    /// meet a send of up to the whole credit window.
+    #[test]
+    fn stream_data_larger_than_a_buffer_is_split_across_buffers() {
+        let (mut device, mut driver, id) = established();
+        let data: Vec<u8> = (0..6000u32).map(|i| (i % 251) as u8).collect();
+        assert_eq!(device.send(id, &data).expect("send"), data.len());
+
+        let mut received = Vec::new();
+        for _ in 0..8 {
+            driver.offer_rx_buffer();
+            device.notify(0, &driver.mem).expect("notify");
+            while let Some(packet) = driver.next_rx_packet() {
+                assert_eq!(packet.header.op, op::RW);
+                assert_eq!(packet.header.len as usize, packet.data.len());
+                assert!(packet.data.len() <= BUF_SIZE as usize - VSOCK_HEADER_SIZE);
+                received.extend_from_slice(&packet.data);
+            }
+            if received.len() == data.len() {
+                break;
+            }
+        }
+        assert_eq!(device.dropped_packets(), 0, "nothing dropped");
+        assert_eq!(received, data, "every byte, in order");
     }
 
     #[test]

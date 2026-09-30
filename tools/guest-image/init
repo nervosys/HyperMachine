@@ -14,7 +14,10 @@ mount -t tmpfs tmpfs /tmp
 [ -e /etc/resolv.conf ] || ln -s /proc/net/pnp /etc/resolv.conf
 ip link set lo up 2>/dev/null
 
-export PATH=/bin:/sbin HOME=/root
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root
+# An image built from an OCI image carries that image's ENV here, so what the
+# agent runs sees the environment the image was made for (its PATH first).
+[ -f /etc/hv2-env ] && . /etc/hv2-env
 /bin/hv2-guest-agentd &
 echo "=== HV2 READY ==="
 exec setsid sh -c "exec sh </dev/console >/dev/console 2>&1"

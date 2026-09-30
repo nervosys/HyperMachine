@@ -45,6 +45,13 @@ impl AgentVMBuilder {
         self
     }
 
+    /// Guest memory in MiB, for sizes a whole GiB does not fit: E2B sizes
+    /// sandboxes in MiB.
+    pub fn memory_mb(mut self, mb: u64) -> Self {
+        self.config.memory_size = mb * 1024 * 1024;
+        self
+    }
+
     pub fn enable_gpu(mut self, enable: bool) -> Self {
         self.config.enable_gpu = enable;
         self
@@ -469,6 +476,137 @@ impl AgentVM {
         .map_err(|e| AgentError::Script(format!("guest exec task failed: {e}")))?
     }
 
+    /// Write `data` to `path` in the guest, creating its directories.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn write_file_in_guest(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        timeout: Duration,
+    ) -> Result<()> {
+        self.write_file_in_guest_as(path, data, None, timeout).await
+    }
+
+    /// [`Self::write_file_in_guest`], the file and the directories made for
+    /// it owned by `owner`: a user, or `hv2_guest_agent::TEMPLATE_USER` for
+    /// the template's.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::write_file_in_guest`]; and an owner with no account.
+    pub async fn write_file_in_guest_as(
+        &self,
+        path: &str,
+        data: Vec<u8>,
+        owner: Option<&str>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let device = self.file_channel()?;
+        let path = path.to_string();
+        let owner = owner.map(str::to_string);
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.write_file_as(&path, &data, owner.as_deref(), timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest file write task failed: {e}")))?
+    }
+
+    /// A connection to TCP `port` inside the guest, carried over vsock: a
+    /// sandbox's web server reached from the host, with or without a network.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; nothing listening on `port`.
+    pub async fn forward_port(
+        &self,
+        port: u16,
+        timeout: Duration,
+    ) -> Result<(crate::guest_agent::VsockStream, Vec<u8>)> {
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.forward(port, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest forward task failed: {e}")))?
+    }
+
+    /// Have the guest mount a volume at `path`, served over a connection of
+    /// its own: returned, with whatever already arrived on it, for a 9P
+    /// server to run on.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn mount_volume_in_guest(
+        &self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<(Box<dyn crate::GuestChannel>, Vec<u8>)> {
+        let device = self.file_channel()?;
+        let path = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            GuestAgent::over_vsock(device, timeout)?.mount_volume(&path, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest mount task failed: {e}")))?
+    }
+
+    /// What the guest is using, as it sees it.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn stats_in_guest(&self, timeout: Duration) -> Result<hv2_guest_agent::GuestStats> {
+        let device = self.file_channel()?;
+        tokio::task::spawn_blocking(move || GuestAgent::over_vsock(device, timeout)?.stats(timeout))
+            .await
+            .map_err(|e| AgentError::Script(format!("guest stats task failed: {e}")))?
+    }
+
+    /// Read `path` from the guest, up to `limit` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Requires the `GuestExec` capability; propagates the guest's refusal.
+    pub async fn read_file_in_guest(
+        &self,
+        path: &str,
+        limit: u64,
+        timeout: Duration,
+    ) -> Result<Vec<u8>> {
+        let device = self.file_channel()?;
+        let path = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut agent = GuestAgent::over_vsock(device, timeout)?;
+            agent.read_file(&path, limit, timeout)
+        })
+        .await
+        .map_err(|e| AgentError::Script(format!("guest file read task failed: {e}")))?
+    }
+
+    /// The guest channel, for moving files: gated as running a command is,
+    /// since writing any file is as much power over the guest.
+    fn file_channel(
+        &self,
+    ) -> Result<std::sync::Arc<parking_lot::Mutex<hv2_core::devices::virtio_vsock::VsockDevice>>>
+    {
+        if !self.capabilities.has(Capability::GuestExec) {
+            return Err(AgentError::PermissionDenied(
+                "moving files in the guest requires the GuestExec capability".to_string(),
+            ));
+        }
+        self.vm.vsock().ok_or_else(|| {
+            AgentError::Script(
+                "this VM has no guest channel: call attach_guest_channel() before the guest boots"
+                    .to_string(),
+            )
+        })
+    }
+
     /// Start a program in the guest and leave it running.
     ///
     /// Returns the guest pid. Unlike [`Self::exec_in_guest`], the program is
@@ -489,14 +627,44 @@ impl AgentVM {
         pty: Option<PtySize>,
         timeout: Duration,
     ) -> Result<u32> {
+        self.start_in_guest_as(program, args, cwd, envs, pty, None, timeout)
+            .await
+    }
+
+    /// [`Self::start_in_guest`], as `user`: `None` is the template's user --
+    /// a Dockerfile's last `USER` -- or root for a template that names none.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::start_in_guest`]; and a user the guest has no account for.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn start_in_guest_as(
+        &self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
+        user: Option<&str>,
+        timeout: Duration,
+    ) -> Result<u32> {
         let device = self.guest_channel("start a program in the guest")?;
         let program = program.to_string();
         let args = args.to_vec();
         let cwd = cwd.map(str::to_string);
         let envs = envs.clone();
+        let user = user.map(str::to_string);
         tokio::task::spawn_blocking(move || {
             let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.start(&program, &args, cwd.as_deref(), &envs, pty, timeout)
+            agent.start_as(
+                &program,
+                &args,
+                cwd.as_deref(),
+                &envs,
+                pty,
+                user.as_deref(),
+                timeout,
+            )
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest start task failed: {e}")))?

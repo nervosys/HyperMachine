@@ -42,9 +42,29 @@ pub struct NodeInfo {
     pub running: u32,
     pub heartbeat_ms: u64,
     pub version: String,
+    /// The public key this node signs sandboxes' workload tokens with, as
+    /// a JWK -- what a control plane's JWKS publishes, so a token from any
+    /// node verifies against the cluster's issuer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub jwk: Option<Value>,
+    /// The templates this node can start sandboxes from. Empty from a node
+    /// older than templates, which offered `base` alone.
+    #[serde(default)]
+    pub templates: Vec<String>,
 }
 
 impl NodeInfo {
+    /// Whether this node can start a sandbox from `template`.
+    #[must_use]
+    pub fn offers(&self, template: &str) -> bool {
+        let template = untagged(template);
+        if self.templates.is_empty() {
+            template == "base"
+        } else {
+            self.templates.iter().any(|t| t == template)
+        }
+    }
+
     /// Room for one more, as of its last heartbeat. The node itself is the
     /// authority -- it refuses a create it has no room for -- so this is a
     /// scheduling hint and a stale one is safe.
@@ -74,9 +94,50 @@ pub struct SandboxRecord {
     /// counts against no capacity until something resumes it.
     #[serde(default)]
     pub paused: bool,
+    /// Paused into a snapshot store every node shares, so any node can
+    /// resume it: it outlives the node that paused it, and a request for it
+    /// goes to whichever node has room.
+    #[serde(default)]
+    pub portable: bool,
+    /// Volumes mounted in it, remounted wherever it is resumed or forked.
+    #[serde(
+        default,
+        rename = "volumeMounts",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub volume_mounts: Vec<VolumeMount>,
+}
+
+/// The ID of the volume named `name`: derived, not drawn, so a control
+/// plane knows which node holds a volume from its name as from its ID.
+#[must_use]
+pub fn volume_id(name: &str) -> String {
+    let fnv = |seed: u64| {
+        name.bytes().fold(seed, |hash, byte| {
+            (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3)
+        })
+    };
+    format!(
+        "vol-{:016x}",
+        fnv(0xcbf2_9ce4_8422_2325) ^ fnv(0x8422_2325_cbf2_9ce4).rotate_left(29)
+    )
+}
+
+/// A volume, by name, mounted at a path in a sandbox: E2B's
+/// `SandboxVolumeMount`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VolumeMount {
+    pub name: String,
+    pub path: String,
 }
 
 impl SandboxRecord {
+    /// Whether this sandbox survives its node: paused, into shared storage.
+    #[must_use]
+    pub fn survives_its_node(&self) -> bool {
+        self.paused && self.portable
+    }
+
     /// E2B's `SandboxState`: `running` or `paused`.
     #[must_use]
     pub fn state(&self) -> &'static str {
@@ -129,6 +190,9 @@ impl SandboxRecord {
 /// Something that happened, for the event stream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClusterEvent {
+    /// Unique, so a webhook delivery names the event it carried.
+    #[serde(default)]
+    pub id: String,
     pub at_ms: u64,
     /// `node-joined`, `sandbox-created`, `sandbox-deleted`, `sandbox-expired`,
     /// `sandbox-lost`.
@@ -138,18 +202,49 @@ pub struct ClusterEvent {
     pub sandbox_id: Option<String>,
     #[serde(default)]
     pub detail: Option<String>,
+    /// The template of the sandbox it concerns.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_id: Option<String>,
+    /// What E2B's webhook payload carries as `event_data`: the sandbox's
+    /// metadata, and for a pause or an end, its execution so far.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<Value>,
 }
 
 impl ClusterEvent {
     #[must_use]
     pub fn new(kind: &str, node_id: &str, sandbox_id: Option<&str>) -> Self {
         Self {
+            id: uuid::Uuid::new_v4().to_string(),
             at_ms: now_ms(),
             kind: kind.to_string(),
             node_id: node_id.to_string(),
             sandbox_id: sandbox_id.map(str::to_string),
             detail: None,
+            template_id: None,
+            data: None,
         }
+    }
+
+    /// The event for `record`'s sandbox: its template, its metadata, and --
+    /// for a pause or an end -- how long it ran on what, as E2B reports it.
+    #[must_use]
+    pub fn with_record(mut self, record: &SandboxRecord) -> Self {
+        self.template_id = Some(record.template_id.clone());
+        let mut data = json!({ "sandbox_metadata": record.metadata });
+        if matches!(
+            self.kind.as_str(),
+            "sandbox-paused" | "sandbox-deleted" | "sandbox-expired" | "sandbox-lost"
+        ) {
+            data["execution"] = json!({
+                "started_at": rfc3339(record.started_at_ms),
+                "vcpu_count": record.cpu_count,
+                "memory_mb": record.memory_mb,
+                "execution_time": self.at_ms.saturating_sub(record.started_at_ms),
+            });
+        }
+        self.data = Some(data);
+        self
     }
 
     #[must_use]
@@ -157,6 +252,49 @@ impl ClusterEvent {
         self.detail = Some(detail.into());
         self
     }
+
+    #[must_use]
+    pub fn with_template(mut self, template_id: impl Into<String>) -> Self {
+        self.template_id = Some(template_id.into());
+        self
+    }
+}
+
+/// A webhook: where a cluster sends the sandbox events it subscribes to,
+/// signed with its secret.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Webhook {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    /// E2B event types (`sandbox.lifecycle.created`, ...); empty is all.
+    pub events: Vec<String>,
+    pub enabled: bool,
+    /// Signs each payload; never returned by the API.
+    pub secret: String,
+    pub created_ms: u64,
+}
+
+/// One attempt to deliver an event to a webhook: E2B's `WebhookDelivery`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Delivery {
+    pub id: String,
+    pub webhook_id: String,
+    pub event_id: String,
+    pub sandbox_id: String,
+    pub event_type: String,
+    /// `success` or `failed`.
+    pub status: String,
+    pub duration_ms: u64,
+    pub request_body: String,
+    pub request_url: String,
+    pub response_status: Option<u16>,
+    pub response_body: Option<String>,
+    /// E2B's `errorClass`: `http_error`, `dns_error`, `timeout`,
+    /// `transport_error`, `request_error`.
+    pub error_class: Option<String>,
+    pub error_message: Option<String>,
+    pub at_ms: u64,
 }
 
 /// E2B's `metadata` query parameter: a URL-encoded `key=value&key=value`
@@ -176,9 +314,25 @@ pub fn metadata_matches(record: &SandboxRecord, wanted: &BTreeMap<String, String
         .all(|(k, v)| record.metadata.get(k).is_some_and(|have| have == v))
 }
 
+/// A template name as E2B's clients may spell it -- `team/name:tag` -- as
+/// a node names it. Template names hold neither `/` nor `:`.
+#[must_use]
+pub fn untagged(template: &str) -> &str {
+    let name = template.rsplit_once('/').map_or(template, |(_, name)| name);
+    name.split_once(':').map_or(name, |(name, _)| name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn template_names_as_e2b_spells_them() {
+        assert_eq!(untagged("my-snap"), "my-snap");
+        assert_eq!(untagged("my-snap:default"), "my-snap");
+        assert_eq!(untagged("team/my-snap:v2"), "my-snap");
+        assert_eq!(untagged("team/my-snap"), "my-snap");
+    }
 
     fn record() -> SandboxRecord {
         SandboxRecord {
@@ -193,6 +347,8 @@ mod tests {
             envd_version: "0.6.3".into(),
             descriptor: json!({"envdAccessToken": "tok", "sandboxID": "sbx-1"}),
             paused: false,
+            portable: false,
+            volume_mounts: Vec::new(),
         }
     }
 
