@@ -83,6 +83,13 @@ jobs:
             - name: Run tests
               run: cargo test --workspace --exclude hv2-core ${{ runner.arch == 'ARM64' && '--exclude hv1-core' || '' }}
 
+            - name: Build shipped control plane for authentication checks
+              run: cargo build -p hv2-cluster --bin hv2-control-plane
+
+            - name: Verify shipped scoped-key enforcement and live expiry
+              shell: bash
+              run: python tools/e2e-control-keys.py --control-plane "target/debug/hv2-control-plane${{ runner.os == 'Windows' && '.exe' || '' }}"
+
             # What hv2-sandbox can enforce on this runner, probed rather than
             # assumed -- in particular whether a GitHub runner gives an
             # unprivileged process a writable cgroup v2 hierarchy, which the
@@ -106,6 +113,29 @@ jobs:
     # hollow control cannot reach master unread: a state a guard demands that
     # nothing constructs, and a refusal, mode or claimed enforcement that
     # nothing acts on. Both exit 1 only for findings not already reviewed.
+    sandbox-tools:
+        name: Sandbox Benchmark and Chart Gates
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+            - name: Verify benchmark failure accounting and provenance gates
+              run: python3 tools/test-bench-e2b-sdk.py
+            - name: Install pinned Helm
+              uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+              with:
+                  version: v3.17.3
+            - name: Install isolated chart test dependency
+              run: |
+                  python3 -m venv "${RUNNER_TEMP}/hm-chart-tests"
+                  "${RUNNER_TEMP}/hm-chart-tests/bin/python" -m pip install PyYAML==6.0.3
+            - name: Verify chart authentication and TLS mount combinations
+              run: '"${RUNNER_TEMP}/hm-chart-tests/bin/python" tools/test-sandbox-chart.py'
+            - name: Lint default and policy-only sandbox charts
+              run: |
+                  helm lint deploy/helm/hypermachine-sandbox
+                  helm lint deploy/helm/hypermachine-sandbox --set auth.apiKeysSecret=policies,auth.legacyAdminEnabled=false
+
     unread-controls:
         name: Unread Controls
         runs-on: ubuntu-latest

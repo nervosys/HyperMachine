@@ -284,8 +284,11 @@ endings) and `harness_unchanged_during_run`. A source change during the run
 fails its overall exit status even when every sample succeeds. This detects
 ordinary edits, not malicious source replacement or guest-image equivalence.
 Historical reports without these fields retain their original evidence; no
-fingerprint is retroactively attributed to them. The default
-workload verifies POSIX command readiness; `--workload python` requires a real
+fingerprint is retroactively attributed to them. Failure accounting and
+provenance are checked by `tools/test-bench-e2b-sdk.py` (10 tests). The CI
+`Sandbox Benchmark and Chart Gates` job runs these tests without
+SDK/cloud credentials, and also runs the chart render tests and Helm lint.
+The default workload verifies POSIX command readiness; `--workload python` requires a real
 Python image. Unknown IDs after an interrupted create cannot be cleaned up by
 the client. Provider labels and guest sizes do not establish matched hardware,
 image contents or snapshot preparation; those need independent evidence.
@@ -425,6 +428,9 @@ overlap without modifying user credentials. Startup errors omit the credential.
 Real-HTTP node fixtures additionally verify sandbox creation by a scoped key,
 token-free inventory, denied writes and legacy admin compatibility. This
 validation does not establish multi-tenant isolation or a performance win.
+The CI test matrix is configured to build the shipped control-plane binary
+and run `e2e-control-keys.py` on Linux, Windows and macOS. Local Windows
+execution is verified; remote matrix results remain subject to CI completion.
 
 ## Changelog of this page
 
