@@ -697,3 +697,10 @@ immediate node log tail. Reports mark non-default logging as diagnostic
 tracing; the extra register ioctls and log writes perturb timing, so those
 reports must not be used as performance comparisons. Normal runs retain the
 `warn` default. The tracing is investigative instrumentation, not a startup fix.
+
+
+Five installer integrity tests cover checksum rejection before execution,
+linked/duplicate binary rejection, preservation of an existing different
+binary, extraction of only the selected binary, official version parsing with
+its extra exit log, and refusal of a mismatched executable version. They run
+in the benchmark CI gate without downloading or executing fixture binaries.

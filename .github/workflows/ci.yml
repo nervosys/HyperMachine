@@ -120,6 +120,8 @@ jobs:
               run: python3 tools/test-bench-e2b-sdk.py
             - name: Verify local engine benchmark failure accounting
               run: python3 tools/test-local-engines.py
+            - name: Verify Firecracker benchmark artifact integrity
+              run: python3 tools/test-install-firecracker-benchmark.py
             - name: Verify protoc checksum and platform selection gates
               run: python3 tools/test-ci-install-protoc.py
             - name: Install pinned Helm
