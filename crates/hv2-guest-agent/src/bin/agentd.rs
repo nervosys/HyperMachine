@@ -722,7 +722,10 @@ mod linux {
     }
 
     /// Drain a pipe into a buffer until it closes.
-    fn drain<R: Read + Send + 'static>(mut source: R, into: Arc<Mutex<Vec<u8>>>) {
+    fn drain<R: Read + Send + 'static>(
+        mut source: R,
+        into: Arc<Mutex<Vec<u8>>>,
+    ) -> std::thread::JoinHandle<()> {
         std::thread::spawn(move || {
             let mut chunk = [0u8; 8192];
             loop {
@@ -746,7 +749,7 @@ mod linux {
                     }
                 }
             }
-        });
+        })
     }
 
     /// Take everything buffered so far, leaving the buffer empty.
@@ -950,6 +953,7 @@ mod linux {
         let pid = child.id();
         let stdout = Arc::new(Mutex::new(Vec::new()));
         let stderr = Arc::new(Mutex::new(Vec::new()));
+        let mut readers = Vec::new();
 
         // The parent's copy of the slave is dropped here. It has to be: the
         // master reads end-of-file only when *every* slave handle is closed,
@@ -962,7 +966,7 @@ mod linux {
                     Ok(reader) => {
                         // stderr stays empty for a pty: a terminal has one
                         // stream, and inventing a split would mean guessing.
-                        drain(reader, Arc::clone(&stdout));
+                        readers.push(drain(reader, Arc::clone(&stdout)));
                         (Some(master), None)
                     }
                     Err(e) => {
@@ -974,10 +978,10 @@ mod linux {
             }
             None => {
                 if let Some(pipe) = child.stdout.take() {
-                    drain(pipe, Arc::clone(&stdout));
+                    readers.push(drain(pipe, Arc::clone(&stdout)));
                 }
                 if let Some(pipe) = child.stderr.take() {
-                    drain(pipe, Arc::clone(&stderr));
+                    readers.push(drain(pipe, Arc::clone(&stderr)));
                 }
                 // Taken before `child` moves into the waiter below, or there
                 // would be no way to write to the program after starting it --
@@ -993,6 +997,11 @@ mod linux {
         let done = Arc::clone(&finished);
         std::thread::spawn(move || {
             let status = child.wait();
+            // Publish exit only after both streams have reached EOF. Otherwise
+            // a fast host poll can discard bytes still held by a reader.
+            for reader in readers {
+                let _ = reader.join();
+            }
             let mut slot = match done.lock() {
                 Ok(slot) => slot,
                 Err(poisoned) => poisoned.into_inner(),
@@ -1033,12 +1042,14 @@ mod linux {
             };
         };
 
-        let stdout = take(&proc.stdout);
-        let stderr = take(&proc.stderr);
         let finished = match proc.finished.lock() {
             Ok(slot) => *slot,
             Err(poisoned) => *poisoned.into_inner(),
         };
+        // Observe completion before draining: completion guarantees all final
+        // bytes are buffered, and a later completion waits for another poll.
+        let stdout = take(&proc.stdout);
+        let stderr = take(&proc.stderr);
 
         let pty = proc.pty.is_some();
         match finished {
@@ -1058,6 +1069,56 @@ mod linux {
                 exit_code,
                 signal,
             },
+        }
+    }
+
+    #[cfg(test)]
+    mod process_output_tests {
+        use super::*;
+
+        #[test]
+        fn rapid_polls_preserve_final_stdout_and_stderr() {
+            for _ in 0..100 {
+                let OpResult::Started { pid } = start(
+                    "/bin/sh",
+                    &["-c".into(), "printf final-out; printf final-err >&2".into()],
+                    None,
+                    &BTreeMap::new(),
+                    None,
+                    None,
+                ) else {
+                    panic!("could not start test process")
+                };
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut out = String::new();
+                let mut err = String::new();
+                loop {
+                    let OpResult::Output {
+                        stdout,
+                        stderr,
+                        running,
+                        exit_code,
+                        ..
+                    } = poll(pid)
+                    else {
+                        panic!("could not poll test process")
+                    };
+                    out.push_str(&stdout);
+                    err.push_str(&stderr);
+                    if !running {
+                        assert_eq!(exit_code, Some(0));
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "process did not finish"
+                    );
+                    std::thread::yield_now();
+                }
+                procs().lock().unwrap().remove(&pid);
+                assert_eq!(out, "final-out");
+                assert_eq!(err, "final-err");
+            }
         }
     }
 
