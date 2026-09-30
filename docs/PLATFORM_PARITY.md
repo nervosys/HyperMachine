@@ -185,6 +185,16 @@ statistics. This is an additional startup-reliability gap, not a measured restor
 latency. The original eight runs explicitly announced snapshot-backed templates.
 The new snapshot gate prevents comparing an unnoticed fallback with those runs;
 the underlying intermittent guest startup failure still needs diagnosis.
+Operators can now start `hv2-sandboxd --require-template` to fail startup if
+any configured snapshot template cannot be prepared, before API/proxy listeners
+or cluster registration. It conflicts with `--no-template`. The default still
+permits cold-boot fallback. `tools/e2e-template-policy.py` checks failure behavior
+and, with `--check-ready`, verifies successful snapshot-backed startup using
+the images supplied through `HV2_KERNEL` and `HV2_INITRD`.
+The conflicting-option, strict missing-image failure and default fallback checks
+passed against the shipped Windows daemon binary. Successful strict startup on
+KVM remains pending while the externally removed Linux build/image cache is
+recreated.
 
 ## Changelog of this page
 

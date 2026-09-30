@@ -218,6 +218,8 @@ struct Options {
     node_ttl: Duration,
     /// Boot every sandbox instead of restoring it from a template.
     no_template: bool,
+    /// Refuse startup if any configured snapshot template cannot be prepared.
+    require_template: bool,
     /// A directory shared by every node, mounted at the same path on each:
     /// templates, the egress CA and paused sandboxes, so a sandbox paused on
     /// one node resumes on any.
@@ -295,6 +297,7 @@ fn parse_options() -> Result<Options, String> {
             .filter(|t| !t.is_empty()),
         node_ttl: Duration::from_secs(9),
         no_template: false,
+        require_template: false,
         prefault: false,
         no_net_offload: false,
         templates: Vec::new(),
@@ -335,6 +338,7 @@ fn parse_options() -> Result<Options, String> {
             "--cpu-cores" => opts.cpu_cores = value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
             "--network" => opts.network = true,
             "--no-template" => opts.no_template = true,
+            "--require-template" => opts.require_template = true,
             "--prefault" => opts.prefault = true,
             "--no-net-offload" => opts.no_net_offload = true,
             "--guest-kit" => opts.guest_kit = Some(value(&mut i)?.into()),
@@ -402,7 +406,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                     [--capacity N] [--no-template | --require-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
@@ -415,6 +419,9 @@ fn parse_options() -> Result<Options, String> {
             other => return Err(format!("unrecognised argument {other}")),
         }
         i += 1;
+    }
+    if opts.no_template && opts.require_template {
+        return Err("--require-template conflicts with --no-template".to_string());
     }
     Ok(opts)
 }
@@ -3877,8 +3884,8 @@ async fn main() -> std::process::ExitCode {
 
     // The template, before anything listens: a node that advertised itself
     // and then spent a second booting would be scheduled onto meanwhile.
-    // Failing to build one is not fatal -- sandboxes boot instead, slower,
-    // and the log says why.
+    // Normally a failed build falls back to cold boot. Operators requiring
+    // snapshot latency can refuse that fallback before listening or joining.
     let mut initrds = BTreeMap::new();
     initrds.insert("base".to_string(), opts.initrd.clone());
     for (name, path) in &opts.templates {
@@ -3902,6 +3909,10 @@ async fn main() -> std::process::ExitCode {
             match built {
                 Ok(template) => {
                     templates.insert(name.clone(), Arc::new(template));
+                }
+                Err(e) if opts.require_template => {
+                    eprintln!("hv2-sandboxd: required template {name} failed: {e}");
+                    return std::process::ExitCode::FAILURE;
                 }
                 Err(e) => tracing::warn!(
                     "no snapshot for template {name} ({e}); its sandboxes will boot instead"
