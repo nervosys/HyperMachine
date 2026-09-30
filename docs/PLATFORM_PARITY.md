@@ -687,3 +687,13 @@ The reports retain failures, cleanup outcomes and before/after source hashes.
 [1.17.0 release](https://github.com/firecracker-microvm/firecracker/releases/tag/v1.17.0)
 archive checksum before executing its binary. `tools/bench-local-engines.py`
 reproduces the alternating comparison; its failure-accounting tests run in CI.
+
+
+Cold-start investigation can opt in to
+`--hypermachine-log-filter warn,hv2_core::backends::kvm::boot=trace`.
+The KVM trace samples exit reason, RIP, flags and I/O port on the vCPU owner
+thread after `KVM_RUN` returns. Each failed HyperMachine sample preserves its
+immediate node log tail. Reports mark non-default logging as diagnostic
+tracing; the extra register ioctls and log writes perturb timing, so those
+reports must not be used as performance comparisons. Normal runs retain the
+`warn` default. The tracing is investigative instrumentation, not a startup fix.

@@ -2022,6 +2022,29 @@ impl KvmVcpu {
         let run = self.run.as_ref();
         let exit_reason = run.exit_reason;
 
+        // Opt-in diagnostics run on the owning thread after KVM_RUN returns.
+        // Register ioctls and trace output change timing; disable for benchmarks.
+        if tracing::enabled!(target: "hv2_core::backends::kvm::boot", tracing::Level::TRACE) {
+            match self.get_regs() {
+                Ok(regs) => tracing::trace!(
+                    target: "hv2_core::backends::kvm::boot",
+                    vcpu = self.vcpu_id,
+                    exit_reason,
+                    io_port = if exit_reason == KVM_EXIT_IO { Some(run.exit_data.io.port) } else { None },
+                    rip = format_args!("{:#x}", regs.rip),
+                    rflags = format_args!("{:#x}", regs.rflags),
+                    "KVM boot exit"
+                ),
+                Err(error) => tracing::trace!(
+                    target: "hv2_core::backends::kvm::boot",
+                    vcpu = self.vcpu_id,
+                    exit_reason,
+                    %error,
+                    "KVM boot register read failed"
+                ),
+            }
+        }
+
         match exit_reason {
             KVM_EXIT_HLT => Ok(VmExit::Hlt),
 

@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cleanup checks and source provenance. Record two cohorts exposing HyperMachine
   startup failures and slower median readiness; no performance win is claimed.
 - Gate local engine benchmark failure accounting in CI.
+- Add opt-in KVM boot exit tracing on the vCPU owner thread and retain node
+  log tails at each failed benchmark sample. Mark tracing reports as diagnostics
+  because register sampling and log output perturb performance.
 
 ### Security
 - Reject control-plane credentials configured as both a legacy admin key and
