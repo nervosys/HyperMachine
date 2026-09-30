@@ -46,6 +46,10 @@ COPY --from=build /src/target/x86_64-unknown-linux-gnu/release/hv2-guest-agentd 
 RUN mkdir -p /out && /guest-image/build.sh -o /out/initramfs.cpio.gz \
         --busybox /bin/busybox --agent /hv2-guest-agentd \
         --ca-bundle /etc/ssl/certs/ca-certificates.crt
+# The same pieces, loose, for templates the node builds from OCI images
+# while it runs (POST /templates).
+RUN mkdir -p /out/kit && cp /hv2-guest-agentd /bin/busybox /guest-image/init \
+        /guest-image/bash-shim /etc/ssl/certs/ca-certificates.crt /out/kit/
 
 # --- control-plane: no state, no privilege -----------------------------------
 FROM gcr.io/distroless/cc-debian12:nonroot AS control-plane
@@ -58,6 +62,8 @@ FROM debian:bookworm-slim AS node
 COPY --from=build /src/target/release/hv2-sandboxd /usr/local/bin/hv2-sandboxd
 COPY --from=kernel /out/bzImage /opt/hv2/bzImage
 COPY --from=guest /out/initramfs.cpio.gz /opt/hv2/initramfs.cpio.gz
-ENV HV2_KERNEL=/opt/hv2/bzImage HV2_INITRD=/opt/hv2/initramfs.cpio.gz
+COPY --from=guest /out/kit /opt/hv2/kit
+ENV HV2_KERNEL=/opt/hv2/bzImage HV2_INITRD=/opt/hv2/initramfs.cpio.gz \
+    HV2_GUEST_KIT=/opt/hv2/kit
 EXPOSE 3980 3981
 ENTRYPOINT ["/usr/local/bin/hv2-sandboxd"]

@@ -45,6 +45,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a `RunIo` with an output sink, called as each chunk arrives, and a cancel
   flag that kills the whole workload. `run` is unchanged, and the trait's
   default `run_with` keeps other backends working.
+- **Checkpoints** (`hv2-sandboxd`): save a running sandbox and roll it
+  back in place -- memory and filesystem, under the same ID, token and URL
+  (`/sandboxes/{id}/checkpoints`, `.../{name}/restore`, list, delete; ten
+  per sandbox). A restore boots the checkpoint before stopping the current
+  guest, so one that fails changes nothing. Checked on KVM guests by
+  `tools/e2e-checkpoints.sh`.
+- **Idle pause** (`hv2-sandboxd`): `idleTimeout` on create, or
+  `--idle-pause-after` for a node, pauses a sandbox to disk once it is
+  unused; with `autoResume` the next request wakes it. Unused means no proxy
+  traffic, no `/exec`, and a guest CPU under 5% for the whole window, so
+  unwatched work is never frozen. `/exec` now counts as activity, which
+  also keeps node-full eviction from pausing a sandbox mid-command. Checked
+  on KVM guests by `tools/e2e-idle-pause.sh`.
+- **Sandbox `envVars`** (`hv2-sandboxd`), as E2B's `NewSandbox` has them:
+  variables every command in the sandbox sees, over its template's `ENV`.
+  Kept in the guest, so a pause, a resume on another node, a fork and a
+  snapshot carry them; never returned by the API. Checked on real KVM
+  guests by `tools/e2e-sandbox-env.sh`. `docs/PLATFORM_PARITY.md` tracks
+  HyperMachine against boxd and exe.dev.
 - **vTPM command dispatcher** (`hv2-core`). `VirtualTpm::execute` takes a
   TPM 2.0 command buffer and returns the response: Startup, Shutdown,
   SelfTest, GetRandom, GetCapability, PCR_Read and PCR_Extend, password

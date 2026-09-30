@@ -59,6 +59,7 @@
 pub mod descriptor;
 pub mod linux;
 pub mod mode;
+pub mod mptable;
 pub mod multiboot;
 pub mod sector;
 pub mod source;

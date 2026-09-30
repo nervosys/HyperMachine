@@ -130,6 +130,12 @@ pub enum Operation {
         /// that empty `stderr` means merged, not silent.
         #[serde(default)]
         pty: Option<PtySize>,
+        /// Who runs it: a user in the guest's `/etc/passwd`, by name or
+        /// number. `None` is the template's user ([`TemplateDefaults::user`]),
+        /// or root for a template that names none -- as envd runs a command
+        /// that names no user as the template's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        user: Option<String>,
     },
 
     /// Collect whatever a started program has printed since the last poll, and
@@ -179,7 +185,105 @@ pub enum Operation {
         /// Fresh randomness from the host, unique to this guest.
         entropy: Vec<u8>,
     },
+
+    /// Write bytes to a file, creating it and its parent directories.
+    ///
+    /// A large file goes as several of these, the first truncating and the
+    /// rest appending: one frame holds [`FILE_CHUNK`] bytes of it.
+    ///
+    /// Answered with [`OpResult::Acknowledged`].
+    WriteFile {
+        path: String,
+        /// The bytes, base64 (standard alphabet, padded).
+        data: String,
+        /// Append rather than replace.
+        #[serde(default)]
+        append: bool,
+        /// Who owns the file, and the directories made for it: a user by
+        /// name or number, or [`TEMPLATE_USER`] for the template's user. `None`
+        /// leaves them root's, as the host's own writes are.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        owner: Option<String>,
+    },
+
+    /// Read up to `length` bytes of a file from `offset`.
+    ///
+    /// Answered with [`OpResult::FileData`].
+    ReadFile {
+        path: String,
+        offset: u64,
+        length: u64,
+    },
+
+    /// Mount a volume at `path`, served by the host over *this connection*.
+    ///
+    /// Answered with [`OpResult::Acknowledged`] once `path` is ready -- a
+    /// directory, anything mounted there before detached -- and then the
+    /// connection stops being this protocol's: the agent hands its socket
+    /// to the kernel as a 9P2000.L mount (`trans=fd`), and every byte after
+    /// the answer is 9P, served by the host. The host learns whether the
+    /// mount took from that: a mount that failed closes the connection
+    /// without a `Tattach`.
+    MountVolume { path: String },
+
+    /// Carry *this connection* to a TCP port inside the guest: the agent
+    /// connects to `127.0.0.1:port` (or `[::1]:port`), answers
+    /// [`OpResult::Acknowledged`], and from then on copies bytes both ways
+    /// between the two until either closes -- a sandbox's web server,
+    /// reached from the host with no network interface involved. Answered
+    /// with [`OpResult::Failed`] if nothing listens there.
+    Forward { port: u16 },
+
+    /// What the guest is using, as it sees it: CPU time, memory, and its
+    /// root filesystem. Answered with [`OpResult::Stats`] -- one round trip,
+    /// for a host sampling every sandbox every few seconds.
+    Stats,
 }
+
+/// The most file data one [`Operation::WriteFile`] or
+/// [`OpResult::FileData`] carries: base64 makes it a third larger, and the
+/// frame must stay under [`MAX_FRAME_BYTES`].
+pub const FILE_CHUNK: usize = 4 * 1024 * 1024;
+
+/// Where a template built by steps keeps [`TemplateDefaults`], in the guest.
+pub const TEMPLATE_DEFAULTS_PATH: &str = "/etc/hv2/defaults.json";
+
+/// What a template built by steps -- a Dockerfile's `ENV` and `WORKDIR` --
+/// gives every program started in its sandboxes. Read by the agent at each
+/// start, so it holds in every sandbox restored from the template's
+/// snapshot, whose agent was running long before the file was written.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateDefaults {
+    /// Under what a request sets: a request's own variable wins.
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    /// The working directory, when a request names none.
+    #[serde(default)]
+    pub cwd: Option<String>,
+    /// Who runs a program started without a user, and owns what is written
+    /// for [`TEMPLATE_USER`]: a Dockerfile's last `USER`. Root if `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+}
+
+/// A guest's use of its resources, from `/proc/stat`, `/proc/meminfo` and
+/// `statvfs("/")`. CPU time is cumulative, in clock ticks: a rate needs two.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GuestStats {
+    pub cpus: u32,
+    pub cpu_busy_ticks: u64,
+    pub cpu_total_ticks: u64,
+    pub mem_total: u64,
+    pub mem_available: u64,
+    pub mem_cached: u64,
+    pub disk_total: u64,
+    pub disk_used: u64,
+}
+
+/// An [`Operation::WriteFile`] owner meaning the template's user, whoever
+/// that is: the host does not know, and envd writes a file for a caller
+/// who names no user as that user's.
+pub const TEMPLATE_USER: &str = "@template";
 
 /// A terminal's size, in character cells.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -262,6 +366,15 @@ pub enum OpResult {
     /// Answer to [`Operation::WriteStdin`] and [`Operation::Signal`]: the agent
     /// did it. Nothing is reported back because neither produces anything.
     Acknowledged,
+    /// Answer to [`Operation::ReadFile`].
+    FileData {
+        /// The bytes read, base64 (standard alphabet, padded).
+        data: String,
+        /// The file's size, so a reader knows when it has everything.
+        size: u64,
+    },
+    /// Answer to [`Operation::Stats`].
+    Stats(GuestStats),
     /// The request could not be carried out at all.
     Failed { message: String },
 }
@@ -295,6 +408,67 @@ impl std::fmt::Display for FrameError {
 impl std::error::Error for FrameError {}
 
 /// Encode a value as a length-prefixed frame.
+/// Base64, standard alphabet with padding, for file data in a JSON frame --
+/// a third larger than the bytes, where a JSON array of numbers is three
+/// to four times larger.
+pub mod b64 {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    /// Encode `bytes`.
+    #[must_use]
+    pub fn encode(bytes: &[u8]) -> String {
+        let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+        for chunk in bytes.chunks(3) {
+            let n = chunk
+                .iter()
+                .enumerate()
+                .fold(0u32, |n, (i, b)| n | u32::from(*b) << (16 - 8 * i));
+            for i in 0..4 {
+                if i <= chunk.len() {
+                    out.push(char::from(ALPHABET[(n >> (18 - 6 * i) & 0x3f) as usize]));
+                } else {
+                    out.push('=');
+                }
+            }
+        }
+        out
+    }
+
+    /// Decode `text`, or `None` if it is not base64.
+    #[must_use]
+    pub fn decode(text: &str) -> Option<Vec<u8>> {
+        let text = text.as_bytes();
+        if !text.len().is_multiple_of(4) {
+            return None;
+        }
+        let value = |c: u8| -> Option<u32> {
+            Some(match c {
+                b'A'..=b'Z' => c - b'A',
+                b'a'..=b'z' => c - b'a' + 26,
+                b'0'..=b'9' => c - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => return None,
+            } as u32)
+        };
+        let mut out = Vec::with_capacity(text.len() / 4 * 3);
+        for (index, quad) in text.chunks(4).enumerate() {
+            let last = index == text.len() / 4 - 1;
+            let pad = quad.iter().rev().take_while(|c| **c == b'=').count();
+            if pad > 2 || (pad > 0 && !last) {
+                return None;
+            }
+            let mut n = 0u32;
+            for (i, c) in quad[..4 - pad].iter().enumerate() {
+                n |= value(*c)? << (18 - 6 * i);
+            }
+            let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+            out.extend_from_slice(&bytes[..3 - pad]);
+        }
+        Some(out)
+    }
+}
+
 pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, FrameError> {
     let body = serde_json::to_vec(value).map_err(|e| FrameError::Malformed(e.to_string()))?;
     if body.len() > MAX_FRAME_BYTES {
@@ -447,6 +621,7 @@ mod tests {
                 cwd: Some("/tmp".to_string()),
                 envs: BTreeMap::new(),
                 pty: None,
+                user: None,
             },
             Operation::Poll { pid: 42 },
             Operation::WriteStdin {
@@ -486,6 +661,7 @@ mod tests {
                 cwd: None,
                 envs: BTreeMap::new(),
                 pty: None,
+                user: None,
             }
         );
     }
@@ -534,6 +710,7 @@ mod tests {
                     cols: 120,
                     rows: 40,
                 }),
+                user: None,
             },
             Operation::ResizePty {
                 pid: 7,
@@ -594,6 +771,32 @@ mod tests {
             assert!(cut.len() <= limit.min(s.len()));
             assert_eq!(truncated, limit < s.len());
             assert!(s.starts_with(&cut));
+        }
+    }
+}
+
+#[cfg(test)]
+mod b64_tests {
+    use super::b64;
+
+    #[test]
+    fn base64_round_trips_and_matches_the_rfc() {
+        for (plain, encoded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(b64::encode(plain.as_bytes()), encoded);
+            assert_eq!(b64::decode(encoded).as_deref(), Some(plain.as_bytes()));
+        }
+        let all: Vec<u8> = (0..=255).collect();
+        assert_eq!(b64::decode(&b64::encode(&all)), Some(all));
+        for bad in ["Zg=", "Z===", "Zg==Zg==", "Zm9v!", "Zg=a"] {
+            assert_eq!(b64::decode(bad), None, "{bad}");
         }
     }
 }

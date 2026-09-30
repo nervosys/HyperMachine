@@ -65,6 +65,12 @@ pub trait GuestChannel: Send {
     fn wait(&mut self, timeout: Duration) {
         std::thread::sleep(timeout);
     }
+
+    /// This channel as a plain byte stream, if it is a vsock connection: for
+    /// a connection the guest has turned over to something else.
+    fn into_stream(self: Box<Self>) -> Option<VsockStream> {
+        None
+    }
 }
 
 /// A [`GuestChannel`] over one vsock connection.
@@ -75,6 +81,8 @@ pub struct VsockChannel {
     /// seen, so a signal that arrives between a look and a wait is not lost.
     progress: Arc<hv2_core::devices::virtio_vsock::Progress>,
     seen: u64,
+    /// Handed on to a [`VsockStream`], which closes it instead.
+    detached: bool,
 }
 
 impl VsockChannel {
@@ -103,6 +111,7 @@ impl VsockChannel {
                         id,
                         progress,
                         seen,
+                        detached: false,
                     });
                 }
                 Settled::Refused => {
@@ -180,6 +189,9 @@ enum Settled {
 
 impl Drop for VsockChannel {
     fn drop(&mut self) {
+        if self.detached {
+            return;
+        }
         // Tell the guest, so its agent stops waiting on a peer that is gone,
         // and then release the port pair. The shutdown packet is queued by
         // `close` before this forgets the connection, so the guest still hears
@@ -210,6 +222,107 @@ impl GuestChannel for VsockChannel {
 
     fn wait(&mut self, timeout: Duration) {
         self.seen = self.progress.wait_past(self.seen, timeout);
+    }
+
+    fn into_stream(mut self: Box<Self>) -> Option<VsockStream> {
+        self.detached = true;
+        Some(VsockStream {
+            inner: Arc::new(StreamInner {
+                device: Arc::clone(&self.device),
+                id: self.id,
+                progress: Arc::clone(&self.progress),
+            }),
+        })
+    }
+}
+
+/// A vsock connection as a byte stream, for two threads at once: one
+/// reading, one writing. Closed when the last clone goes.
+#[derive(Clone)]
+pub struct VsockStream {
+    inner: Arc<StreamInner>,
+}
+
+struct StreamInner {
+    device: Arc<Mutex<VsockDevice>>,
+    id: VsockConnectionId,
+    progress: Arc<hv2_core::devices::virtio_vsock::Progress>,
+}
+
+impl Drop for StreamInner {
+    fn drop(&mut self) {
+        let mut device = self.device.lock();
+        let _ = device.close(self.id);
+        device.forget(self.id);
+    }
+}
+
+impl VsockStream {
+    /// What arrived, waiting for something; empty once the guest has
+    /// closed and everything it sent has been read.
+    ///
+    /// # Errors
+    ///
+    /// The connection is gone from the device.
+    pub fn read(&self) -> Result<Vec<u8>> {
+        loop {
+            let seen = self.inner.progress.current();
+            let (data, open) = {
+                let mut device = self.inner.device.lock();
+                let data = device.recv(self.inner.id)?;
+                let open = matches!(
+                    device.state(self.inner.id),
+                    Some(VsockConnectionState::Established)
+                );
+                (data, open)
+            };
+            if !data.is_empty() || !open {
+                return Ok(data);
+            }
+            self.inner.progress.wait_past(seen, Duration::from_secs(1));
+        }
+    }
+
+    /// Send all of `data`, waiting for credit as the guest grants it.
+    ///
+    /// # Errors
+    ///
+    /// The guest closed the connection first.
+    pub fn write_all(&self, mut data: &[u8]) -> Result<()> {
+        while !data.is_empty() {
+            let seen = self.inner.progress.current();
+            let sent = {
+                let mut device = self.inner.device.lock();
+                if !matches!(
+                    device.state(self.inner.id),
+                    Some(VsockConnectionState::Established)
+                ) {
+                    return Err(AgentError::Script("the guest closed the connection".into()));
+                }
+                device.send(self.inner.id, data)?
+            };
+            data = &data[sent..];
+            if sent == 0 {
+                self.inner
+                    .progress
+                    .wait_past(seen, Duration::from_millis(100));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether the connection still carries anything.
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        matches!(
+            self.inner.device.lock().state(self.inner.id),
+            Some(VsockConnectionState::Established)
+        )
+    }
+
+    /// Close both directions now, whoever else holds a clone.
+    pub fn close(&self) {
+        let _ = self.inner.device.lock().close(self.inner.id);
     }
 }
 
@@ -288,6 +401,21 @@ impl GuestAgent {
     ///
     /// The cheapest way to answer "is anything actually listening in there",
     /// and the check worth making before reporting that a VM is ready for work.
+    /// What the guest is using: CPU ticks, memory, its root filesystem.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or an agent too old to answer.
+    pub fn stats(&mut self, timeout: Duration) -> Result<hv2_guest_agent::GuestStats> {
+        match self.request(Operation::Stats, timeout)? {
+            OpResult::Stats(stats) => Ok(stats),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a stats request with {other:?}"
+            ))),
+        }
+    }
+
     pub fn ping(&mut self, timeout: Duration) -> Result<String> {
         match self.request(Operation::Ping, timeout)? {
             OpResult::Pong { agent_version } => Ok(agent_version),
@@ -375,12 +503,32 @@ impl GuestAgent {
         pty: Option<PtySize>,
         timeout: Duration,
     ) -> Result<u32> {
+        self.start_as(program, args, cwd, envs, pty, None, timeout)
+    }
+
+    /// [`Self::start`], as `user`: `None` is the template's user, or root.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::start`]; and a user the guest has no account for.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_as(
+        &mut self,
+        program: &str,
+        args: &[String],
+        cwd: Option<&str>,
+        envs: &BTreeMap<String, String>,
+        pty: Option<PtySize>,
+        user: Option<&str>,
+        timeout: Duration,
+    ) -> Result<u32> {
         let op = Operation::Start {
             program: program.to_string(),
             args: args.to_vec(),
             cwd: cwd.map(str::to_string),
             envs: envs.clone(),
             pty,
+            user: user.map(str::to_string),
         };
         match self.request(op, timeout)? {
             OpResult::Started { pid } => Ok(pid),
@@ -505,6 +653,147 @@ impl GuestAgent {
             other => Err(AgentError::Script(format!(
                 "the guest answered a restore notice with {other:?}"
             ))),
+        }
+    }
+
+    /// Write `data` to `path` in the guest, replacing it -- in chunks, each
+    /// its own request, so a file of any size fits the frame limit.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest's reason for refusing.
+    pub fn write_file(&mut self, path: &str, data: &[u8], timeout: Duration) -> Result<()> {
+        self.write_file_as(path, data, None, timeout)
+    }
+
+    /// [`Self::write_file`], the file and the directories made for it owned
+    /// by `owner` (see [`Operation::WriteFile`]).
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::write_file`]; and an owner the guest has no account for.
+    pub fn write_file_as(
+        &mut self,
+        path: &str,
+        data: &[u8],
+        owner: Option<&str>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let mut chunks = data.chunks(hv2_guest_agent::FILE_CHUNK).peekable();
+        let mut append = false;
+        // An empty file is still one write, which creates it.
+        let empty: &[u8] = &[];
+        let first = chunks.next().unwrap_or(empty);
+        for chunk in std::iter::once(first).chain(chunks) {
+            match self.request(
+                Operation::WriteFile {
+                    path: path.to_string(),
+                    data: hv2_guest_agent::b64::encode(chunk),
+                    append,
+                    owner: owner.map(str::to_string),
+                },
+                timeout,
+            )? {
+                OpResult::Acknowledged => {}
+                OpResult::Failed { message } => return Err(AgentError::Script(message)),
+                other => {
+                    return Err(AgentError::Script(format!(
+                        "the guest answered a file write with {other:?}"
+                    )))
+                }
+            }
+            append = true;
+        }
+        Ok(())
+    }
+
+    /// Have the guest carry this connection to its TCP `port`, and give the
+    /// connection up as a byte stream, with what already arrived past the
+    /// answer.
+    ///
+    /// # Errors
+    ///
+    /// Nothing listens on `port` in the guest, or the transport failed.
+    pub fn forward(mut self, port: u16, timeout: Duration) -> Result<(VsockStream, Vec<u8>)> {
+        match self.request(Operation::Forward { port }, timeout)? {
+            OpResult::Acknowledged => {
+                let early = std::mem::take(&mut self.pending);
+                let stream = self.channel.into_stream().ok_or_else(|| {
+                    AgentError::Script("only a vsock connection can be forwarded".into())
+                })?;
+                Ok((stream, early))
+            }
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a forward with {other:?}"
+            ))),
+        }
+    }
+
+    /// Have the guest mount a volume at `path` over this connection, and
+    /// give the connection up to whoever serves it: after the agent's answer
+    /// every byte on it is 9P. Returns the channel and what already arrived
+    /// past the answer -- the kernel may have sent its `Tversion` by then.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, or the guest's reason for refusing.
+    pub fn mount_volume(
+        mut self,
+        path: &str,
+        timeout: Duration,
+    ) -> Result<(Box<dyn GuestChannel>, Vec<u8>)> {
+        let op = Operation::MountVolume {
+            path: path.to_string(),
+        };
+        match self.request(op, timeout)? {
+            OpResult::Acknowledged => Ok((self.channel, std::mem::take(&mut self.pending))),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a volume mount with {other:?}"
+            ))),
+        }
+    }
+
+    /// Read all of `path` in the guest, up to `limit` bytes.
+    ///
+    /// # Errors
+    ///
+    /// Propagates a transport failure, the guest's reason for refusing, or
+    /// a file larger than `limit`.
+    pub fn read_file(&mut self, path: &str, limit: u64, timeout: Duration) -> Result<Vec<u8>> {
+        let mut out = Vec::new();
+        loop {
+            match self.request(
+                Operation::ReadFile {
+                    path: path.to_string(),
+                    offset: out.len() as u64,
+                    length: hv2_guest_agent::FILE_CHUNK as u64,
+                },
+                timeout,
+            )? {
+                OpResult::FileData { data, size } => {
+                    if size > limit {
+                        return Err(AgentError::Script(format!(
+                            "{path} is {size} bytes, over the {limit}-byte limit"
+                        )));
+                    }
+                    let bytes = hv2_guest_agent::b64::decode(&data).ok_or_else(|| {
+                        AgentError::Script("the guest sent file data that is not base64".into())
+                    })?;
+                    let done = bytes.is_empty();
+                    out.extend_from_slice(&bytes);
+                    if done || out.len() as u64 >= size {
+                        return Ok(out);
+                    }
+                }
+                OpResult::Failed { message } => return Err(AgentError::Script(message)),
+                other => {
+                    return Err(AgentError::Script(format!(
+                        "the guest answered a file read with {other:?}"
+                    )))
+                }
+            }
         }
     }
 
