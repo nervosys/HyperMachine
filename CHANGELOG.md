@@ -36,6 +36,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- Control-plane `--api-keys-file` provisions hashed, expiring credentials with
+  admin, inventory, sandbox, template, volume and event capability scopes.
+  Inventory access excludes credential-bearing detail responses. Expiration
+  is enforced per API request; policies load at startup and apply to the single
+  configured team. Existing admin and independently issued bearer credentials
+  keep their existing lifetimes.
 - Cluster template listings report node-advertised snapshot availability and
   guest resources, with unknown metadata for legacy nodes and per-node details
   for heterogeneous fleets. Checkpoint operations now forward through the

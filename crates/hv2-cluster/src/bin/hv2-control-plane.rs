@@ -20,6 +20,7 @@ struct Options {
     port: u16,
     proxy_port: u16,
     api_key: Option<String>,
+    api_keys_file: Option<String>,
     cluster_token: Option<String>,
     reap_interval: Duration,
     tls_cert: Option<String>,
@@ -41,6 +42,7 @@ fn parse() -> Result<Options, String> {
         proxy_port: 5981,
         // From the environment by default, so a key need not sit in `ps`.
         api_key: std::env::var("HV2_API_KEY").ok().filter(|k| !k.is_empty()),
+        api_keys_file: None,
         cluster_token: std::env::var("HV2_CLUSTER_TOKEN")
             .ok()
             .filter(|k| !k.is_empty()),
@@ -71,6 +73,7 @@ fn parse() -> Result<Options, String> {
                 opts.proxy_port = value()?.parse().map_err(|e| format!("--proxy-port: {e}"))?;
             }
             "--api-key" => opts.api_key = Some(value()?),
+            "--api-keys-file" => opts.api_keys_file = Some(value()?),
             "--cluster-token" => opts.cluster_token = Some(value()?),
             "--reap-interval" => {
                 opts.reap_interval = Duration::from_secs(
@@ -90,7 +93,7 @@ fn parse() -> Result<Options, String> {
                 println!(
                     "usage: hv2-control-plane [--store memory:|redis://host:port] [--namespace N] \
                      [--port N] [--proxy-port N] [--api-key K] [--cluster-token T] \
-                     [--reap-interval SECS] [--tls-cert F --tls-key F] \
+                     [--api-keys-file F] [--reap-interval SECS] [--tls-cert F --tls-key F] \
                      [--mtls-ca F --mtls-cert F --mtls-key F [--mtls-node-name N]] \
                      [--identity-issuer URL]\n\
                      HV2_API_KEY and HV2_CLUSTER_TOKEN are read from the environment too."
@@ -120,6 +123,22 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
+    let api_keys = match opts
+        .api_keys_file
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path)
+                .map_err(|error| format!("read API key policy: {error}"))
+                .and_then(|json| hv2_cluster::keys::ApiKeyPolicy::from_json(&json))
+        })
+        .transpose()
+    {
+        Ok(keys) => keys.unwrap_or_default(),
+        Err(error) => {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
     let store = match store::open(&opts.store, &opts.namespace).await {
         Ok(store) => store,
         Err(e) => {
@@ -127,7 +146,7 @@ async fn main() -> std::process::ExitCode {
             return std::process::ExitCode::FAILURE;
         }
     };
-    if opts.api_key.is_none() {
+    if opts.api_key.is_none() && api_keys.is_empty() {
         tracing::warn!("no --api-key: anyone who can reach this port can create sandboxes");
     }
 
@@ -204,6 +223,7 @@ async fn main() -> std::process::ExitCode {
 
     let config = ControlConfig {
         api_key: opts.api_key,
+        api_keys,
         cluster_token: opts.cluster_token,
         proxy_port: opts.proxy_port,
         create_timeout: Duration::from_secs(60),
