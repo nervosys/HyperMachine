@@ -300,6 +300,22 @@ stage is the largest of these measured stages; this does not explain all SDK
 latency or establish the cause of earlier concurrency-100 tails. Debug events
 record timings and VM IDs without entropy, tokens or request contents.
 
+This profiling exposed a restore-clock correctness issue: host time was
+captured before worker scheduling and guest connection, so those waits became
+clock lag when the guest applied the timestamp. The restored guest now receives
+time sampled on the connected channel. Invalid host clock ranges fail instead
+of becoming zero or wrapping. Protocol tests verify sampling after channel
+creation, entropy preservation and propagation of RNG reseed failure. Remaining
+transport and guest-processing delay is not compensated; this is a correctness
+fix, not evidence of a latency reduction or competitor advantage.
+The corrected release daemon passed five real SDK creates, five stateful
+resumes and five stateful forks at concurrency 1, with no failures and all
+known sandboxes deleted. Raw validation reports are
+`benchmarks/2026-09-30/readiness-e2b-sdk-fresh-clock-{create,resume,fork}-c1.json`.
+These small cohorts validate runtime compatibility and state preservation;
+the protocol tests establish timestamp placement, not a measured bound on
+guest clock offset. All 13 guest-protocol tests and strict agent Clippy passed.
+
 No competitor endpoints or matched host are available from the user. Published
 competitor claims remain separate from measured HyperMachine results; universal
 feature or performance superiority is unverified.

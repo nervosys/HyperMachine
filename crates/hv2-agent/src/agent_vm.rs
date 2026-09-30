@@ -746,9 +746,6 @@ impl AgentVM {
     /// The agent could not be reached, or could not reseed.
     pub async fn after_restore(&self, timeout: Duration) -> Result<()> {
         let device = self.guest_channel("resynchronise a restored guest")?;
-        let now_ns = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |d| d.as_nanos() as u64);
         let mut entropy = rand::random::<[u8; 32]>().to_vec();
         entropy.extend_from_slice(&rand::random::<[u8; 32]>());
         let vm_name = self.vm.config().name.clone();
@@ -767,7 +764,7 @@ impl AgentVM {
                 }
             };
             let connected_at = std::time::Instant::now();
-            let result = agent.restored(now_ns, entropy, timeout);
+            let result = agent.restored_now(entropy, timeout);
             tracing::debug!(vm = %vm_name,
                 blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
                 connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,
