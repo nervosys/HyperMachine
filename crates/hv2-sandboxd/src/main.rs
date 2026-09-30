@@ -121,6 +121,7 @@ mod cloud_login;
 mod env_vars;
 mod forwards;
 mod identity;
+mod idle;
 mod initramfs;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
@@ -254,6 +255,9 @@ struct Options {
     /// When full, pause a sandbox that resumes on traffic and has been idle
     /// this long, to make room.
     evict_idle_after: Option<Duration>,
+    /// Pause a sandbox that has been idle this long, whether or not the node
+    /// is full, unless its create set `idleTimeout` itself. See idle.rs.
+    idle_pause_after: Option<Duration>,
 }
 
 fn parse_options() -> Result<Options, String> {
@@ -304,6 +308,7 @@ fn parse_options() -> Result<Options, String> {
         trust_domain: "hv2.local".to_string(),
         identity_key: None,
         evict_idle_after: None,
+        idle_pause_after: None,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut i = 0;
@@ -376,6 +381,11 @@ fn parse_options() -> Result<Options, String> {
                 opts.tenant_reserved
                     .push(Cidr::parse(&text).map_err(|e| format!("--tenant-reserved-cidr: {e}"))?);
             }
+            "--idle-pause-after" => {
+                let secs: u64 = value(&mut i)?.parse().map_err(|e| format!("{e}"))?;
+                idle::check_window(secs).map_err(|e| format!("--idle-pause-after: {e}"))?;
+                opts.idle_pause_after = (secs > 0).then(|| Duration::from_secs(secs));
+            }
             "--evict-idle-after" => {
                 opts.evict_idle_after = Some(Duration::from_secs(
                     value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
@@ -391,7 +401,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] \
+                     [--capacity N] [--no-template] [--prefault] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
@@ -568,6 +578,11 @@ struct NewSandbox {
     /// returned: see env_vars.rs.
     #[serde(rename = "envVars", default)]
     env_vars: BTreeMap<String, String>,
+    /// Seconds without use after which the sandbox pauses -- to disk, and
+    /// resumed by the next request when `autoResume` is on. 0 turns off a
+    /// node's `--idle-pause-after`. Not E2B's: see idle.rs.
+    #[serde(rename = "idleTimeout")]
+    idle_timeout: Option<u64>,
 }
 
 /// `SandboxIam`: a non-empty `tokens` map turns workload identity on.
@@ -1581,15 +1596,18 @@ async fn create_sandbox(state: Arc<AppState>, req: NewSandbox, default_timeout: 
     let lifetime_secs = req.timeout.unwrap_or(default_timeout).min(MAX_TIMEOUT_SECS);
     let started_at_ms = now_ms();
 
-    let lifecycle = match Lifecycle::from_request(&req, lifetime_secs) {
+    let lifecycle = match Lifecycle::from_request(&req, lifetime_secs, state.opts.idle_pause_after)
+    {
         Ok(lifecycle) => lifecycle,
         Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
     };
-    if lifecycle.pause_on_timeout && !state.templates.read().contains_key(&template_id) {
+    if (lifecycle.pause_on_timeout || lifecycle.idle_pause_secs > 0)
+        && !state.templates.read().contains_key(&template_id)
+    {
         return api_error(
             StatusCode::BAD_REQUEST,
-            "autoPause needs sandboxes restored from a template, and this node boots them \
-             (--no-template, or the template failed to build)",
+            "autoPause and idleTimeout need sandboxes restored from a template, and this node \
+             boots them (--no-template, or the template failed to build)",
         );
     }
 
@@ -1712,10 +1730,17 @@ struct Lifecycle {
     /// The lifetime it was created with, which an automatic resume grants
     /// again.
     lifetime_secs: u64,
+    /// Pause after this many seconds unused; 0 never. See idle.rs.
+    #[serde(default)]
+    idle_pause_secs: u64,
 }
 
 impl Lifecycle {
-    fn from_request(req: &NewSandbox, lifetime_secs: u64) -> Result<Self, String> {
+    fn from_request(
+        req: &NewSandbox,
+        lifetime_secs: u64,
+        node_idle: Option<Duration>,
+    ) -> Result<Self, String> {
         // A filesystem-only pause keeps the disk and drops memory. The root
         // filesystem here *is* memory -- an initramfs -- so there is nothing
         // to keep, and the spec says to refuse rather than silently take a
@@ -1727,10 +1752,18 @@ impl Lifecycle {
                     .into(),
             );
         }
+        let idle_pause_secs = match req.idle_timeout {
+            Some(secs) => {
+                idle::check_window(secs).map_err(|e| format!("idleTimeout: {e}"))?;
+                secs
+            }
+            None => node_idle.map_or(0, |d| d.as_secs()),
+        };
         Ok(Self {
             pause_on_timeout: req.auto_pause.unwrap_or(false),
             auto_resume: req.auto_resume.as_ref().is_some_and(|a| a.enabled),
             lifetime_secs,
+            idle_pause_secs,
         })
     }
 }
@@ -3558,10 +3591,12 @@ async fn exec(
     Path(sandbox_id): Path<String>,
     Json(req): Json<ExecRequest>,
 ) -> Response {
-    let vm = {
+    let (vm, _active) = {
         let sandboxes = state.sandboxes.lock();
         match sandboxes.get(&sandbox_id) {
-            Some(s) => Arc::clone(&s.vm),
+            // In use for as long as the command runs: an idle pause must not
+            // freeze a quiet command halfway (see idle.rs).
+            Some(s) => (Arc::clone(&s.vm), ActivityGuard::enter(&s.activity)),
             None => {
                 return (
                     StatusCode::NOT_FOUND,
@@ -3725,6 +3760,7 @@ async fn expire(state: Arc<AppState>) {
                 tracing::info!("sandbox {id} reached its timeout");
             }
         }
+        idle::pause_idle(&state, now).await;
     }
 }
 

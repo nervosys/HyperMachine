@@ -18,7 +18,7 @@ container. The comparison is about what surrounds the VM.
 | Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | no | **Absent** |
 | Pause and resume | yes | no | **Real**: to disk; any node resumes |
-| Suspend when idle, wake on traffic | yes | no | **Partial**: wake on traffic (`autoResume`) is real; idle pause is next |
+| Suspend when idle, wake on traffic | yes | no | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
 | HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; you bring the wildcard certificate (no ACME) |
 | Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); no raw TCP or UDP |
 | Custom domains | yes | yes | **Absent** |
@@ -55,6 +55,15 @@ container. The comparison is about what surrounds the VM.
 
 ## Changelog of this page
 
+- **2026-09-29, idle pause.** A sandbox pauses to disk after `idleTimeout` seconds unused, set per
+  sandbox or node-wide with `--idle-pause-after`. With `autoResume`, the next request through the
+  proxy wakes it and is answered.
+  - "Unused" means three things: no proxy request in flight or begun, no `/exec` running, and every
+    CPU sample the node took in the window under 5%. boxd suspends on idleness alone. A long
+    build, a training run or a crawler nobody is watching keeps running here.
+  - Checked on KVM guests (`tools/e2e-idle-pause.sh`: 11 checks).
+  - Two mutations were run: removing the CPU gate pauses the busy guest, and removing the exec
+    guard freezes a quiet 50-second command halfway. The checks catch both.
 - **2026-09-29, sandbox env vars.** `envVars` on create, as E2B's API has it.
   - They are written into the guest's template defaults, which the guest agent applies to every
     command. That puts them in guest memory, so pause, resume on another node, fork and
