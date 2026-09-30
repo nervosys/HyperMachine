@@ -51,9 +51,7 @@ jobs:
       # step the build fails before a single benchmark runs, and the
       # continue-on-error below was masking that.
       - name: Install protoc
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/ci-install-protoc.py
 
       - name: Cache cargo registry
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -204,9 +202,7 @@ jobs:
         uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       - name: Install protoc
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/ci-install-protoc.py
 
       - name: Run baseline benchmarks
         working-directory: baseline
@@ -255,4 +251,3 @@ jobs:
           } else {
             Write-Output "No benchmarks measured slower than baseline."
           }
-

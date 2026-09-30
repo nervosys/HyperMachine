@@ -86,9 +86,7 @@ jobs:
       # unnoticed, since the envd protos were added. ci.yml and bench.yml
       # already carry the same step.
       - name: Install protoc
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/ci-install-protoc.py
 
       - name: Run tests
         if: inputs.skip_tests != 'true'

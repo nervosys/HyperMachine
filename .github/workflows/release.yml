@@ -89,9 +89,7 @@ jobs:
       # against proto/vm.proto; that needs the protoc binary on PATH or the
       # build fails immediately, before any Rust code compiles.
       - name: Install protoc
-        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/ci-install-protoc.py
 
       # protoc runs on the host as part of build.rs, not on the target, so a
       # single build step works for both native and cross targets -- only the
