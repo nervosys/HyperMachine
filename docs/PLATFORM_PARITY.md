@@ -431,6 +431,14 @@ validation does not establish multi-tenant isolation or a performance win.
 The CI test matrix is configured to build the shipped control-plane binary
 and run `e2e-control-keys.py` on Linux, Windows and macOS. Local Windows
 execution is verified; remote matrix results remain subject to CI completion.
+The first remote matrix skipped these checks after a `setup-protoc` server
+error, so it is not cross-platform authentication evidence. CI now installs
+checksum-locked protoc 23.4 from fixed official release URLs, without release
+enumeration, and preserves independent platform jobs when one fails. The
+installer rejects altered archives and unsupported hosts; its platform and
+checksum tests pass, and the pinned Windows and Linux x86-64 compilers run
+locally. Remote compilation, macOS execution and authentication checks still
+need their own completed CI results.
 
 ## Changelog of this page
 

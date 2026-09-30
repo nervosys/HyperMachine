@@ -39,9 +39,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Run cargo check
               run: cargo check --workspace --all-targets
@@ -50,6 +48,7 @@ jobs:
         name: Test
         runs-on: ${{ matrix.os }}
         strategy:
+            fail-fast: false
             matrix:
                 os: [ubuntu-latest, windows-latest, macos-latest]
         steps:
@@ -70,9 +69,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             # hv1-core is the x86_64 Type-1 hypervisor and says so itself: its
             # lib.rs carries a compile_error! refusing any other architecture,
@@ -121,6 +118,8 @@ jobs:
             - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
             - name: Verify benchmark failure accounting and provenance gates
               run: python3 tools/test-bench-e2b-sdk.py
+            - name: Verify protoc checksum and platform selection gates
+              run: python3 tools/test-ci-install-protoc.py
             - name: Install pinned Helm
               uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
               with:
@@ -217,9 +216,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Run core tests
               run: cargo test -p hv2-core
@@ -327,9 +324,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Check MSRV compatibility
               run: cargo check --workspace --all-targets
@@ -372,9 +367,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Run clippy
               run: cargo clippy --workspace --all-targets -- -D warnings
@@ -389,9 +382,7 @@ jobs:
               uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Build documentation
               run: cargo doc --workspace --no-deps
@@ -481,9 +472,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Build CLIs
               run: |
