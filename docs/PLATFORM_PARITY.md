@@ -268,7 +268,10 @@ readiness. Before the timed request, the harness starts a long-lived process
 with a unique marker in its environment and writes a file and boot identity.
 The first command after the operation must verify all three plus the original
 live PID. Resume requires the API to report `paused` before connecting; fork
-requires a distinct child ID and also verifies the parent's state afterward.
+requires a distinct child ID, changes and verifies the child's private state
+file, then verifies that the parent retains its original process and file state.
+The child-write isolation check is outside readiness timing. It expects a
+private `/tmp` filesystem; explicitly shared volumes require separate semantics.
 These probes detect cold boots and lost process state; they do not exhaustively
 validate every application or open socket. Creation and preparation are outside
 resume/fork readiness timing. Lifecycle throughput includes them, state checks,
@@ -285,7 +288,7 @@ fails its overall exit status even when every sample succeeds. This detects
 ordinary edits, not malicious source replacement or guest-image equivalence.
 Historical reports without these fields retain their original evidence; no
 fingerprint is retroactively attributed to them. Failure accounting and
-provenance are checked by `tools/test-bench-e2b-sdk.py` (10 tests). The CI
+provenance are checked by `tools/test-bench-e2b-sdk.py` (12 tests). The CI
 `Sandbox Benchmark and Chart Gates` job runs these tests without
 SDK/cloud credentials, and also runs the chart render tests and Helm lint.
 The default workload verifies POSIX command readiness; `--workload python` requires a real
@@ -342,6 +345,19 @@ and `readiness-e2b-sdk-fork-state-c8.json`. Earlier exploratory cohorts without
 the explicit paused/running-state gate remain in `readiness-e2b-sdk-resume-c8.json`
 and `readiness-e2b-sdk-fork-c8.json`; do not combine their percentiles. Neither
 cohort is a matched competitor comparison or proof of a performance improvement.
+
+A stronger fork cohort completed 20/20 samples at concurrency 8, each with
+`fork_filesystem_isolation_verified: true`: child mutations did not change the
+parent's saved file, and both retained their live process state. All parent
+and child sandboxes were confirmed deleted. Raw evidence is
+`benchmarks/2026-09-30/readiness-e2b-sdk-fork-isolation-c8.json`, including harness
+fingerprint and unchanged-source confirmation. Readiness P50/P95/P99 was
+125.49/193.95/194.29 ms. This cohort used warning-level daemon logging on the
+shared nested-KVM host; do not infer a latency change from earlier cohorts
+with different logging and workloads. Extra isolation commands are included
+in lifecycle throughput, not readiness latency. Earlier reports without the
+isolation field do not establish this new check. This probes filesystem fork
+independence, not comprehensive security isolation or shared-volume behavior.
 
 ## Scoped, expiring control-plane keys
 
