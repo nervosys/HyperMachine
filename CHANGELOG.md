@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- `hm sandbox vm files` uploads and downloads binary files through authenticated
+  envd, with a separate sandbox access token, a 512 MiB limit, atomic downloads
+  and no overwrite of existing local files. Requires a reachable envd endpoint.
 - `hv2-sandboxd --require-template` refuses startup when any configured snapshot
   template cannot be prepared, before listening or joining the cluster. It
   conflicts with `--no-template`; the default cold-boot fallback is unchanged.

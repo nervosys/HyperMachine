@@ -48,8 +48,6 @@ tower-http = { version = "0.7", features = ["cors"] }
 
 # Shell completions
 clap_complete = "4.5"
-
-[dev-dependencies]
 tempfile = "3.10"
 
 [lints]

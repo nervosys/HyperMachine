@@ -2,9 +2,11 @@
 """Verify the shipped VM CLI against a running sandboxd with real KVM guests."""
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
+import tempfile
 
 
 def main():
@@ -37,6 +39,24 @@ def main():
         assert execute(sandbox, "/bin/busybox", "printf", "%s", literal) == literal
         assert execute(sandbox, "/bin/sh", "-c", "test ! -e /root/cli-injection") == ""
         assert execute(sandbox, "/bin/sh", "-c", "printf guest-failure; exit 7", expected=7) == "guest-failure"
+        # The real-node check runs locally; envd binds its listener on loopback.
+        envd = f"http://127.0.0.1:{created['processPort']}"
+        with tempfile.TemporaryDirectory(prefix="hm-cli-files-") as directory:
+            source = os.path.join(directory, "source.bin")
+            destination = os.path.join(directory, "destination.bin")
+            payload = bytes(range(256)) * 1024
+            with open(source, "wb") as file:
+                file.write(payload)
+            guest_path = "/root/cli-binary'&query=literal.bin"
+            run("files", sandbox, "--envd-endpoint", envd, "upload", source, guest_path)
+            checksum = execute(sandbox, "/bin/busybox", "sha256sum", guest_path).split()[0]
+            assert checksum == hashlib.sha256(payload).hexdigest()
+            run("files", sandbox, "--envd-endpoint", envd, "download", guest_path, destination)
+            with open(destination, "rb") as file:
+                assert file.read() == payload
+            run("files", sandbox, "--envd-endpoint", envd, "download", guest_path, destination, expected=1)
+            with open(destination, "rb") as file:
+                assert file.read() == payload
         execute(sandbox, "/bin/sh", "-c", "printf before > /root/cli-state")
         run("checkpoint", "save", sandbox, "before")
         assert any(c["name"] == "before" for c in json.loads(run("checkpoint", "list", sandbox)))
@@ -60,7 +80,7 @@ def main():
             assert execute(child["sandboxID"], "/bin/busybox", "cat", "/root/cli-state") == "before"
         listed = json.loads(run("list"))
         assert owned.issubset({s["sandboxID"] for s in listed})
-        print("PASS: guest argument quoting, exit status, checkpoints, pause/resume, fork and list")
+        print("PASS: guest argument quoting, exit status, binary files/checksum/no-overwrite, checkpoints, pause/resume, fork and list")
     finally:
         failures = []
         for sandbox in owned:

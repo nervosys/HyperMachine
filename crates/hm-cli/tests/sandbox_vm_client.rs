@@ -1,5 +1,170 @@
 //! Exercise the shipped binary against a protocol fixture, not a real guest.
 
+#[tokio::test]
+async fn failed_downloads_and_destination_races_do_not_publish_or_overwrite_files() {
+    use axum::{extract::Query, response::IntoResponse};
+    use std::collections::HashMap;
+    let directory = tempfile::tempdir().unwrap();
+    let destination = Arc::new(directory.path().join("destination.bin"));
+    let api = Router::new().route(
+        "/sandboxes/test-vm/connect",
+        post(|| async { Json(json!({"envdAccessToken": "sandbox-fixture-token"})) }),
+    );
+    let envd = Router::new()
+        .route(
+            "/files",
+            axum::routing::get(
+                |State(destination): State<Arc<std::path::PathBuf>>,
+                 Query(query): Query<HashMap<String, String>>| async move {
+                    if query["path"] == "/failed" {
+                        return (
+                            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                            "transfer unavailable",
+                        )
+                            .into_response();
+                    }
+                    std::fs::write(destination.as_ref(), b"created concurrently").unwrap();
+                    axum::body::Bytes::from_static(b"download bytes").into_response()
+                },
+            ),
+        )
+        .with_state(destination.clone());
+    let (api_endpoint, api_task) = server(api).await;
+    let (envd_endpoint, envd_task) = server(envd).await;
+    for path in ["/failed", "/race"] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args([
+                "sandbox",
+                "vm",
+                "--endpoint",
+                &api_endpoint,
+                "files",
+                "test-vm",
+                "--envd-endpoint",
+                &envd_endpoint,
+                "download",
+                path,
+                destination.to_str().unwrap(),
+            ])
+            .env_remove("HV2_API_KEY")
+            .output()
+            .await
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        if path == "/failed" {
+            assert!(!destination.exists());
+            assert!(String::from_utf8_lossy(&output.stderr).contains("503"));
+        } else {
+            assert_eq!(
+                std::fs::read(destination.as_ref()).unwrap(),
+                b"created concurrently"
+            );
+        }
+    }
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+    api_task.abort();
+    envd_task.abort();
+}
+
+#[tokio::test]
+async fn file_transfers_preserve_binary_bytes_and_separate_credentials() {
+    use axum::{extract::Query, http::HeaderMap};
+    use std::collections::HashMap;
+    let bytes = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+    let path = "/root/a'&query=literal.bin";
+    let api = Router::new().route(
+        "/sandboxes/test-vm/connect",
+        post(|headers: HeaderMap, Json(body): Json<Value>| async move {
+            assert_eq!(headers["x-api-key"], "platform-fixture-secret");
+            assert_eq!(body["timeout"], 300);
+            Json(json!({"envdAccessToken": "sandbox-fixture-token"}))
+        }),
+    );
+    let envd = Router::new()
+        .route(
+            "/files",
+            axum::routing::get(
+                |State(bytes): State<Arc<std::sync::Mutex<Vec<u8>>>>,
+                 headers: HeaderMap,
+                 Query(query): Query<HashMap<String, String>>| async move {
+                    assert_eq!(headers["x-access-token"], "sandbox-fixture-token");
+                    assert!(headers.get("x-api-key").is_none());
+                    assert_eq!(query["path"], "/root/a'&query=literal.bin");
+                    axum::body::Bytes::from(bytes.lock().unwrap().clone())
+                },
+            )
+            .post(
+                |State(bytes): State<Arc<std::sync::Mutex<Vec<u8>>>>,
+                 headers: HeaderMap,
+                 Query(query): Query<HashMap<String, String>>,
+                 body: axum::body::Bytes| async move {
+                    assert_eq!(headers["x-access-token"], "sandbox-fixture-token");
+                    assert!(headers.get("x-api-key").is_none());
+                    assert_eq!(headers["content-type"], "application/octet-stream");
+                    assert_eq!(query["path"], "/root/a'&query=literal.bin");
+                    *bytes.lock().unwrap() = body.to_vec();
+                    Json(json!([{"path": query["path"]}]))
+                },
+            ),
+        )
+        .with_state(bytes.clone());
+    let (api_endpoint, api_task) = server(api).await;
+    let (envd_endpoint, envd_task) = server(envd).await;
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("source.bin");
+    let destination = directory.path().join("destination.bin");
+    let original = vec![0, 255, 128, 13, 10, 39, 36, 0];
+    std::fs::write(&source, &original).unwrap();
+    let common = [
+        "sandbox",
+        "vm",
+        "--endpoint",
+        &api_endpoint,
+        "files",
+        "test-vm",
+        "--envd-endpoint",
+        &envd_endpoint,
+    ];
+    let upload = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(common)
+        .args(["upload", source.to_str().unwrap(), path])
+        .env("HV2_API_KEY", "platform-fixture-secret")
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        upload.status.success(),
+        "{}",
+        String::from_utf8_lossy(&upload.stderr)
+    );
+    assert_eq!(*bytes.lock().unwrap(), original);
+    let download = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(common)
+        .args(["download", path, destination.to_str().unwrap()])
+        .env("HV2_API_KEY", "platform-fixture-secret")
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        download.status.success(),
+        "{}",
+        String::from_utf8_lossy(&download.stderr)
+    );
+    assert_eq!(std::fs::read(&destination).unwrap(), original);
+    let repeated = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(common)
+        .args(["download", path, destination.to_str().unwrap()])
+        .env("HV2_API_KEY", "platform-fixture-secret")
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(repeated.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&repeated.stderr).contains("already exists"));
+    assert_eq!(std::fs::read(&destination).unwrap(), original);
+    api_task.abort();
+    envd_task.abort();
+}
+
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,

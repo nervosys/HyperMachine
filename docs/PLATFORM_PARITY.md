@@ -13,7 +13,7 @@ container. The comparison is about what surrounds the VM.
 | Capability | boxd | exe.dev | HyperMachine |
 |---|---|---|---|
 | Create, list, delete over an API | yes | yes | **Real**: E2B's API (`hv2-sandboxd`, `hv2-control-plane`), so the unmodified E2B SDKs work |
-| A CLI | yes | yes (over ssh) | **Partial**: `hm sandbox vm` manages sandboxd lifecycle, commands and checkpoints; verified on a real KVM node; file transfers and control-plane verification remain |
+| A CLI | yes | yes (over ssh) | **Partial**: `hm sandbox vm` manages lifecycle, commands, binary files and checkpoints; verified on a real KVM node; control-plane verification remains |
 | Fork a running VM, memory included | ~160 ms | `cp` | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
 | Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
 | Checkpoint and restore in place | yes, 10 per VM | no | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
@@ -90,7 +90,7 @@ pass the acceptance criteria below.
 | Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Existing measurements need a common protocol and competitor adapters |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
-| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node; file transfers and control-plane CLI verification remain |
+| CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI and binary transfers verified on a real KVM node; control-plane CLI verification remains |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | The sandbox platform remains single-team |
 | Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
@@ -112,6 +112,8 @@ export HV2_SANDBOX_URL=http://127.0.0.1:3980
 hm sandbox vm create --template base
 hm sandbox vm list
 hm sandbox vm exec SANDBOX_ID -- /bin/sh -c 'printf hello'
+hm sandbox vm files SANDBOX_ID --envd-endpoint ENVD_URL upload local.bin /root/file.bin
+hm sandbox vm files SANDBOX_ID --envd-endpoint ENVD_URL download /root/file.bin downloaded.bin
 hm sandbox vm checkpoint save SANDBOX_ID before-change
 hm sandbox vm checkpoint restore SANDBOX_ID before-change
 hm sandbox vm pause SANDBOX_ID
@@ -148,6 +150,19 @@ any guests unless the server confirms snapshot mode; omit it when intentionally
 measuring cold boots. Errors include their underlying cause.
 
 ### Fresh KVM readiness baseline
+
+File transfers require a reachable sandbox envd listener or proxy URL. The client
+calls the control API's `connect` operation to retrieve the sandbox token, resumes
+paused sandboxes and extends their lifetime to at least 300 seconds. A separate
+HTTP client sends that token to envd without forwarding `HV2_API_KEY`; redirects
+are disabled. Binary contents and URL-special path characters are preserved.
+Transfers are bounded to envd's 512 MiB limit. Downloads stream to a temporary
+file beside the destination and publish only after completion, refusing to
+overwrite even if another process creates the destination during the transfer.
+Use TLS for remote envd URLs. A node's direct envd listeners bind on loopback;
+remote clients need the proxy. The local KVM check verified a 256 KiB binary
+upload/download and guest SHA-256, plus refusal to overwrite the downloaded file.
+Protocol fixtures also checked HTTP failures and a concurrent destination creator.
 
 The shipped Windows debug client was checked against the release daemon on
 2026-09-30 using `tools/e2e-sandbox-vm-cli.py`. Quoted arguments remained
@@ -192,9 +207,21 @@ permits cold-boot fallback. `tools/e2e-template-policy.py` checks failure behavi
 and, with `--check-ready`, verifies successful snapshot-backed startup using
 the images supplied through `HV2_KERNEL` and `HV2_INITRD`.
 The conflicting-option, strict missing-image failure and default fallback checks
-passed against the shipped Windows daemon binary. Successful strict startup on
-KVM remains pending while the externally removed Linux build/image cache is
-recreated.
+passed against both Windows and Linux daemon binaries. Successful strict startup
+with a snapshot-backed template passed on a real KVM guest.
+
+A diagnostic repeat using strict startup and the client snapshot gate completed
+20 samples at concurrency 1 and 100 at concurrency 100 with no failures. P99
+readiness was 54.03 ms and 1327.48 ms respectively. Raw reports are
+`readiness-strict-stages-c1.json` and `readiness-strict-stages-c100.json`; the
+concurrency-100 internal timings are in `restore-stages-c100.log` in the same
+benchmark directory. The replacement image hashes match the original images.
+At concurrency 100, internal P50/P99 build time was 12.16/56.92 ms, launch was
+30.68/76.88 ms and guest-agent readiness was 699.67/1030.54 ms. These stage
+percentiles are independent and must not be added. Guest readiness dominates
+the measured create path and is the next profiling target. Host workloads and
+logging settings changed between cohorts, so this is diagnostic evidence,
+not proof of an optimization or competitor win.
 
 ## Changelog of this page
 
