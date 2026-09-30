@@ -2,9 +2,12 @@
 """Exercise failure accounting and cleanup in the shared SDK adapter."""
 
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 import shlex
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -109,6 +112,27 @@ class AdapterTests(unittest.TestCase):
         record = self.run_sample(operation="fork", cleanup_fails=True)
         self.assertFalse(record["success"])
         self.assertEqual(len(record["cleanup_errors"]), 2)
+
+    def test_changed_harness_invalidates_an_otherwise_successful_report(self):
+        arguments = ["benchmark", "--provider", "fixture", "--api-url", "http://fixture",
+                     "--template", "base", "--environment", "fixture", "--image-description", "fixture",
+                     "--expected-cpus", "1", "--expected-memory-mb", "128", "--samples", "1"]
+        row = {"success": True, "create_ms": 1, "exec_ms": 1, "ready_ms": 2}
+        for final_digest, changed in [("a" * 64, False), ("b" * 64, True), (OSError("removed"), True)]:
+            output = io.StringIO()
+            with patch.object(sys, "argv", arguments), patch.object(sys, "stdout", output), \
+                    patch.dict(os.environ, {"E2B_API_KEY": "fixture-key", "E2B_API_URL": "",
+                                            "E2B_SANDBOX_URL": "", "E2B_ENVD_POOL_SHARDS": ""}), \
+                    patch.dict(sys.modules, {"e2b": SimpleNamespace(Sandbox=object())}), \
+                    patch.object(benchmark.importlib.metadata, "version", return_value="2.51.0"), \
+                    patch.object(benchmark, "sample", return_value=row), \
+                    patch.object(benchmark, "harness_digest", side_effect=["a" * 64, final_digest]):
+                result = benchmark.main()
+            report = json.loads(output.getvalue())
+            self.assertEqual(result, 1 if changed else 0)
+            self.assertEqual(report["successful_samples"], 1)
+            self.assertEqual(report["harness_sha256"], "a" * 64)
+            self.assertEqual(report["harness_unchanged_during_run"], not changed)
 
 
 if __name__ == "__main__":

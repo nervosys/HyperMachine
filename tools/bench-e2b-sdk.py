@@ -10,11 +10,13 @@ performed automatically. See https://pypi.org/project/e2b/2.51.0/.
 import argparse
 import concurrent.futures
 import datetime
+import hashlib
 import importlib.metadata
 import json
 import math
 import os
 import platform
+from pathlib import Path
 import shlex
 import time
 import urllib.parse
@@ -43,6 +45,11 @@ def summary(values):
             "mean": sum(values) / len(values),
             **{name: values[math.ceil(fraction * len(values)) - 1]
                for name, fraction in (("p50", .50), ("p95", .95), ("p99", .99))}}
+
+
+def harness_digest():
+    """Fingerprint exact harness bytes, including checkout line endings."""
+    return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 
 def sample(factory, args, nonce, index):
@@ -178,6 +185,9 @@ def main():
     if version != "2.51.0":
         parser.error(f"expected e2b==2.51.0; installed {version}")
     from e2b import Sandbox
+    dependencies = {name: importlib.metadata.version(name)
+                    for name in ("e2b", "pyqwest", "connectrpc", "httpx", "httpcore")}
+    source_digest = harness_digest()
     nonce = uuid.uuid4().hex
     started = time.perf_counter()
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
@@ -186,10 +196,14 @@ def main():
     successful = [record for record in records if record["success"]]
     ready = summary([record["ready_ms"] for record in successful])
     passed = None if args.max_p99_ready_ms is None else bool(ready and ready["p99"] <= args.max_p99_ready_ms)
-    dependencies = {name: importlib.metadata.version(name)
-                    for name in ("e2b", "pyqwest", "connectrpc", "httpx", "httpcore")}
+    try:
+        harness_unchanged = harness_digest() == source_digest
+    except OSError:
+        # Preserve raw samples if an editor removes or replaces the source.
+        harness_unchanged = False
     print(json.dumps({"schema_version": 1, "transport": "e2b-python-sdk", "sdk_version": version,
                       "dependency_versions": dependencies,
+                      "harness_sha256": source_digest, "harness_unchanged_during_run": harness_unchanged,
                       "provider": args.provider, "api_url": args.api_url, "sandbox_url": args.sandbox_url,
                       "template": args.template, "environment": args.environment, "image_description": args.image_description,
                       "workload": args.workload, "expected_cpus": args.expected_cpus, "expected_memory_mb": args.expected_memory_mb,
@@ -206,7 +220,7 @@ def main():
                       "operation_ms": summary([record["operation_ms"] for record in successful if "operation_ms" in record]),
                       "pause_ms": summary([record["pause_ms"] for record in successful if "pause_ms" in record]),
                       "max_p99_ready_ms": args.max_p99_ready_ms, "threshold_passed": passed, "samples": records}, indent=2))
-    return 0 if len(successful) == args.samples and passed is not False else 1
+    return 0 if len(successful) == args.samples and passed is not False and harness_unchanged else 1
 
 
 if __name__ == "__main__":
