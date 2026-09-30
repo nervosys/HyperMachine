@@ -31,7 +31,7 @@ container. The comparison is about what surrounds the VM.
 | Egress policy per VM | isolated or not | no | **Real**: allow/deny lists, live updates, decision log, reserved ranges refused |
 | VM-to-VM networks by tag | yes | via proxy | **Absent** |
 | Teams, roles, sharing | yes | yes, with SSO | **Absent**: one team |
-| Scoped, expiring API keys | yes | yes | **Absent** |
+| Scoped, expiring API keys | yes | yes | **Real on the control plane**: hashed operator-provisioned keys, request-time expiry and capability scopes; single team, startup-loaded policies |
 | Persistent volumes shared between VMs | no | no | **Real**: E2B volumes over 9P, live and shared (Linux hosts) |
 | Build images from Dockerfiles or OCI | compose | Dockerfile | **Real**: E2B template builds, no Docker |
 | Backups to object storage | yes | no | **Absent** |
@@ -91,7 +91,7 @@ pass the acceptance criteria below.
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
-| Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | The sandbox platform remains single-team |
+| Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring control-plane keys verified; tenant boundaries, roles and access auditing remain incomplete |
 | Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
 | Operations | Object-storage backups and recovery, quota enforcement, scheduling/event triggers, load-tested multi-node failover | Shared-directory snapshots and host job queues do not cover all these capabilities |
@@ -333,6 +333,60 @@ and `readiness-e2b-sdk-fork-state-c8.json`. Earlier exploratory cohorts without
 the explicit paused/running-state gate remain in `readiness-e2b-sdk-resume-c8.json`
 and `readiness-e2b-sdk-fork-c8.json`; do not combine their percentiles. Neither
 cohort is a matched competitor comparison or proof of a performance improvement.
+
+## Scoped, expiring control-plane keys
+
+`hv2-control-plane --api-keys-file keys.json` loads an operator-provisioned
+policy array before opening listeners or the store. Each entry requires
+`sha256` (64 hex characters), `expires_at` (Unix UTC seconds) and a nonempty
+`scopes` array. Use a unique, randomly generated high-entropy key for each
+credential; the policy holds only its digest. For example, with a credential
+already configured in `HV2_SCOPED_API_KEY`, generate a one-hour inventory policy:
+
+```python
+import hashlib, json, os, time
+from pathlib import Path
+policy = [{"sha256": hashlib.sha256(os.environ["HV2_SCOPED_API_KEY"].encode()).hexdigest(),
+           "expires_at": int(time.time()) + 3600, "scopes": ["inventory"]}]
+Path("keys.json").write_text(json.dumps(policy))
+```
+
+Clients send the original credential as `X-API-Key`; the existing SDK and CLI
+authentication works unchanged. Expiration is checked on every protected API
+request, including existing client connections. Missing, wrong and expired
+credentials return 401; a valid key without the required scope returns 403.
+Malformed, empty and duplicate-key policies fail startup rather than disabling
+authentication. A maximum of 256 policies is accepted.
+
+| Scope | Capability |
+|---|---|
+| `inventory` | GET/HEAD sandbox listings, template listings, aggregate sandbox metrics and cluster nodes; no sandbox detail or access tokens |
+| `sandboxes` | Sandbox API operations, including create, detail/access token retrieval, execution, lifecycle, checkpoints and networking |
+| `templates` | Template and snapshot APIs, including builds, uploads and deletion |
+| `volumes` | Volume management and its credentials |
+| `events` | `/events` APIs, including webhook management and delivery inspection |
+| `admin` | All protected control-plane APIs |
+
+Scopes combine and apply to the entire configured team, with no tenant or
+per-sandbox restriction. Inventory deliberately excludes sandbox detail,
+volume APIs and webhook APIs: their credentials can grant mutation through
+other interfaces. Public health/metrics/OIDC endpoints and existing bearer-token
+upload/content routes retain their existing authentication model. Expiring an
+API key does not revoke previously issued envd, upload or volume bearer tokens,
+terminate running guest operations, or expire the legacy `HV2_API_KEY` admin
+credential. Keep that admin key distinct from scoped credentials. Nodes in a
+cluster must require their cluster token so direct node calls cannot bypass the
+control plane. Policies load at startup; rotation requires restarting every
+control-plane replica with the same updated policy. Dynamic key administration,
+immediate bearer revocation, tenant roles and access audit logs remain open.
+
+Validation: 26 cluster library tests, 12 real-HTTP integration tests and strict
+cluster Clippy passed. `tools/e2e-control-keys.py --control-plane BINARY` checks
+the shipped Windows binary's scope enforcement, live expiry, token-access
+denial and fail-closed empty-policy startup without modifying user credentials.
+Real-HTTP node fixtures additionally verify sandbox creation by a scoped key,
+token-free inventory, denied writes and legacy admin compatibility. This
+validation does not establish multi-tenant isolation or a performance win.
 
 ## Changelog of this page
 

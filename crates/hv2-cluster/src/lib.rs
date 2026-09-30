@@ -9,6 +9,7 @@
 
 pub mod control;
 pub mod events;
+pub mod keys;
 pub mod metrics;
 pub mod model;
 pub mod mtls;

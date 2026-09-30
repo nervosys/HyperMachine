@@ -325,12 +325,21 @@ async fn checkpoints_forward_collection_and_named_operations_to_the_owner() {
 }
 
 async fn control_plane(store: Arc<dyn ClusterStore>, api_key: Option<&str>) -> String {
+    control_plane_with_keys(store, api_key, Vec::new()).await
+}
+
+async fn control_plane_with_keys(
+    store: Arc<dyn ClusterStore>,
+    api_key: Option<&str>,
+    api_keys: Vec<hv2_cluster::keys::ApiKeyPolicy>,
+) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let control = ControlPlane::new(
         store,
         ControlConfig {
             api_key: api_key.map(str::to_string),
+            api_keys,
             cluster_token: Some(TOKEN.into()),
             proxy_port: 5981,
             create_timeout: Duration::from_secs(10),
@@ -347,6 +356,109 @@ async fn control_plane(store: Arc<dyn ClusterStore>, api_key: Option<&str>) -> S
 
 fn client() -> reqwest::Client {
     reqwest::Client::new()
+}
+
+#[tokio::test]
+async fn scoped_keys_expire_and_inventory_cannot_leak_guest_credentials() {
+    use sha2::{Digest, Sha256};
+    let now = chrono::Utc::now().timestamp();
+    let hash = |key: &[u8]| -> String {
+        Sha256::digest(key)
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    };
+    let policies = hv2_cluster::keys::ApiKeyPolicy::from_json(
+        &json!([
+            {"sha256": hash(b"inventory-fixture"), "expires_at": now + 60, "scopes": ["inventory"]},
+            {"sha256": hash(b"sandbox-fixture"), "expires_at": now + 60, "scopes": ["sandboxes"]},
+            {"sha256": hash(b"expired-fixture"), "expires_at": now - 60, "scopes": ["admin"]}
+        ])
+        .to_string(),
+    )
+    .unwrap();
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (node, _) = fake_node(store.clone(), "scope-node", 4, Duration::from_secs(30)).await;
+    let base = control_plane_with_keys(store, Some(KEY), policies).await;
+    let http = client();
+    let created = http
+        .post(format!("{base}/sandboxes"))
+        .header("x-api-key", "sandbox-fixture")
+        .json(&json!({"templateID": "base"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(created.status(), 201);
+    let descriptor: Value = created.json().await.unwrap();
+    let id = descriptor["sandboxID"].as_str().unwrap();
+    let listed: Value = http
+        .get(format!("{base}/sandboxes"))
+        .header("x-api-key", "inventory-fixture")
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert!(listed[0].get("envdAccessToken").is_none());
+    for path in [
+        format!("/sandboxes/{id}"),
+        "/volumes".into(),
+        "/events/webhooks".into(),
+    ] {
+        assert_eq!(
+            http.get(format!("{base}{path}"))
+                .header("x-api-key", "inventory-fixture")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            403,
+            "{path}"
+        );
+    }
+    assert_eq!(
+        http.post(format!("{base}/sandboxes"))
+            .header("x-api-key", "inventory-fixture")
+            .json(&json!({"templateID": "base"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(node.running.lock().len(), 1);
+    assert_eq!(
+        http.get(format!("{base}/volumes"))
+            .header("x-api-key", "sandbox-fixture")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    for key in ["expired-fixture", "wrong-fixture", ""] {
+        assert_eq!(
+            http.get(format!("{base}/sandboxes"))
+                .header("x-api-key", key)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+    }
+    assert_eq!(
+        http.get(format!("{base}/sandboxes/{id}"))
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200,
+        "legacy admin key remains usable"
+    );
 }
 
 async fn create(base: &str, body: Value) -> (reqwest::StatusCode, Value) {

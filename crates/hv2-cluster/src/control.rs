@@ -44,6 +44,8 @@ pub const CLUSTER_TOKEN_HEADER: &str = "x-hv2-cluster-token";
 pub struct ControlConfig {
     /// Required from clients as `X-API-Key`, when set.
     pub api_key: Option<String>,
+    /// Additional operator-provisioned expiring keys with capability scopes.
+    pub api_keys: Vec<crate::keys::ApiKeyPolicy>,
     /// Sent to nodes, when set.
     pub cluster_token: Option<String>,
     /// This instance's envd proxy port, written into descriptors so a client
@@ -188,15 +190,41 @@ async fn require_api_key(
     request: Request,
     next: Next,
 ) -> Response {
-    if let Some(key) = &control.config.api_key {
+    if control.config.api_key.is_some() || !control.config.api_keys.is_empty() {
         use subtle::ConstantTimeEq;
         let sent = request
             .headers()
             .get("x-api-key")
             .map(HeaderValue::as_bytes)
             .unwrap_or_default();
-        if !bool::from(sent.ct_eq(key.as_bytes())) {
-            return api_error(StatusCode::UNAUTHORIZED, "missing or wrong X-API-Key");
+        if let Some(key) = &control.config.api_key {
+            if !sent.is_empty() && bool::from(sent.ct_eq(key.as_bytes())) {
+                return next.run(request).await;
+            }
+        }
+        use sha2::{Digest, Sha256};
+        let digest: [u8; 32] = Sha256::digest(sent).into();
+        let now = chrono::Utc::now().timestamp();
+        let policy = control
+            .config
+            .api_keys
+            .iter()
+            .find(|policy| policy.matches(&digest, now));
+        match policy {
+            Some(policy) if !sent.is_empty() => {
+                if !policy.permits(request.method(), request.uri().path()) {
+                    return api_error(
+                        StatusCode::FORBIDDEN,
+                        "API key scope does not permit this operation",
+                    );
+                }
+            }
+            _ => {
+                return api_error(
+                    StatusCode::UNAUTHORIZED,
+                    "missing, expired or wrong X-API-Key",
+                )
+            }
         }
     }
     next.run(request).await
