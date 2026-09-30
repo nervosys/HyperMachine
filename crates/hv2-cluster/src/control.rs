@@ -32,7 +32,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::metrics::{self, Counter, Exposition, Histogram};
-use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, SandboxRecord};
+use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, NodeInfo, SandboxRecord};
 use crate::scheduler::candidates;
 use crate::store::ClusterStore;
 
@@ -127,6 +127,12 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/pause", post(forward))
         .route("/sandboxes/{id}/resume", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
+        .route("/sandboxes/{id}/checkpoints", get(forward).post(forward))
+        .route(
+            "/sandboxes/{id}/checkpoints/{name}",
+            axum::routing::delete(forward),
+        )
+        .route("/sandboxes/{id}/checkpoints/{name}/restore", post(forward))
         .route("/sandboxes/{id}/snapshots", post(forward))
         .route("/sandboxes/metrics", get(sandboxes_metrics))
         .route("/sandboxes/{id}/metrics", get(forward))
@@ -413,12 +419,15 @@ async fn detail(State(control): State<Arc<ControlPlane>>, Path(id): Path<String>
 
 async fn forward(
     State(control): State<Arc<ControlPlane>>,
-    Path(id): Path<String>,
+    Path(parameters): Path<BTreeMap<String, String>>,
     method: Method,
     uri: axum::http::Uri,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let Some(id) = parameters.get("id").cloned() else {
+        return api_error(StatusCode::BAD_REQUEST, "missing sandbox ID");
+    };
     let record = match control.store.sandbox(&id).await {
         Ok(Some(record)) => record,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {id}")),
@@ -675,7 +684,8 @@ async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
         Ok(nodes) => nodes,
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
-    let mut offered: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut offered: BTreeMap<String, Vec<(&NodeInfo, Option<&crate::model::TemplateInfo>)>> =
+        BTreeMap::new();
     for node in &nodes {
         let names = if node.templates.is_empty() {
             vec!["base".to_string()]
@@ -683,20 +693,54 @@ async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
             node.templates.clone()
         };
         for name in names {
-            offered.entry(name).or_default().push(node.id.clone());
+            let metadata = node.template_metadata.get(&name);
+            offered.entry(name).or_default().push((node, metadata));
         }
     }
     Json(
         offered
             .into_iter()
             .map(|(name, nodes)| {
+                let snapshot = if nodes
+                    .iter()
+                    .all(|(_, metadata)| metadata.is_some_and(|m| m.snapshot))
+                {
+                    Some(true)
+                } else if nodes
+                    .iter()
+                    .any(|(_, metadata)| metadata.is_some_and(|m| !m.snapshot))
+                {
+                    Some(false)
+                } else {
+                    None
+                };
+                let common_size =
+                    nodes
+                        .first()
+                        .and_then(|(_, metadata)| *metadata)
+                        .filter(|first| {
+                            nodes.iter().all(|(_, metadata)| {
+                                metadata.is_some_and(|m| {
+                                    m.cpu_count == first.cpu_count && m.memory_mb == first.memory_mb
+                                })
+                            })
+                        });
                 json!({
                     "templateID": name,
                     "buildID": name,
                     "aliases": [name],
                     "public": false,
                     "buildStatus": "ready",
-                    "nodeIDs": nodes,
+                    "nodeIDs": nodes.iter().map(|(node, _)| &node.id).collect::<Vec<_>>(),
+                    "snapshot": snapshot,
+                    "cpuCount": common_size.map(|m| m.cpu_count),
+                    "memoryMB": common_size.map(|m| m.memory_mb),
+                    "nodes": nodes.iter().map(|(node, metadata)| json!({
+                        "nodeID": node.id,
+                        "snapshot": metadata.map(|m| m.snapshot),
+                        "cpuCount": metadata.map(|m| m.cpu_count),
+                        "memoryMB": metadata.map(|m| m.memory_mb),
+                    })).collect::<Vec<_>>(),
                 })
             })
             .collect::<Vec<_>>(),

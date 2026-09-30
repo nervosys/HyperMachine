@@ -28,6 +28,14 @@ pub fn rfc3339(ms: u64) -> String {
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
 
+/// A template's actual preparation state and guest resources on one node.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TemplateInfo {
+    pub snapshot: bool,
+    pub cpu_count: u32,
+    pub memory_mb: u64,
+}
+
 /// A node, as it last reported itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NodeInfo {
@@ -51,6 +59,9 @@ pub struct NodeInfo {
     /// older than templates, which offered `base` alone.
     #[serde(default)]
     pub templates: Vec<String>,
+    /// Preparation state and resources, absent on older node heartbeats.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub template_metadata: BTreeMap<String, TemplateInfo>,
 }
 
 impl NodeInfo {

@@ -88,6 +88,7 @@ async fn file_transfers_preserve_binary_bytes_and_separate_credentials() {
                  headers: HeaderMap,
                  Query(query): Query<HashMap<String, String>>| async move {
                     assert_eq!(headers["x-access-token"], "sandbox-fixture-token");
+                    assert_eq!(headers["host"], "proxy-fixture.local");
                     assert!(headers.get("x-api-key").is_none());
                     assert_eq!(query["path"], "/root/a'&query=literal.bin");
                     axum::body::Bytes::from(bytes.lock().unwrap().clone())
@@ -99,6 +100,7 @@ async fn file_transfers_preserve_binary_bytes_and_separate_credentials() {
                  Query(query): Query<HashMap<String, String>>,
                  body: axum::body::Bytes| async move {
                     assert_eq!(headers["x-access-token"], "sandbox-fixture-token");
+                    assert_eq!(headers["host"], "proxy-fixture.local");
                     assert!(headers.get("x-api-key").is_none());
                     assert_eq!(headers["content-type"], "application/octet-stream");
                     assert_eq!(query["path"], "/root/a'&query=literal.bin");
@@ -124,6 +126,8 @@ async fn file_transfers_preserve_binary_bytes_and_separate_credentials() {
         "test-vm",
         "--envd-endpoint",
         &envd_endpoint,
+        "--envd-host",
+        "proxy-fixture.local",
     ];
     let upload = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
         .args(common)

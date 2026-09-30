@@ -27,6 +27,78 @@ use hv2_cluster::store::{ClusterStore, MemoryStore};
 const TOKEN: &str = "cluster-secret";
 const KEY: &str = "e2b_test_key";
 
+#[tokio::test]
+async fn template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_nodes() {
+    use hv2_cluster::model::TemplateInfo;
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (a, heart_a) = fake_node(store.clone(), "a", 4, Duration::from_secs(30)).await;
+    let (b, heart_b) = fake_node(store.clone(), "b", 4, Duration::from_secs(30)).await;
+    heart_a.abort();
+    heart_b.abort();
+    let _ = heart_a.await;
+    let _ = heart_b.await;
+    let metadata = |snapshot, cpu_count, memory_mb| {
+        [(
+            "base".to_string(),
+            TemplateInfo {
+                snapshot,
+                cpu_count,
+                memory_mb,
+            },
+        )]
+        .into_iter()
+        .collect()
+    };
+    a.agent.set_template_metadata(metadata(true, 1, 128));
+    b.agent.set_template_metadata(metadata(true, 1, 128));
+    a.agent.announce(0).await.unwrap();
+    b.agent.announce(0).await.unwrap();
+    let base = control_plane(store, None).await;
+    async fn listed(base: &str) -> Value {
+        let entries: Value = client()
+            .get(format!("{base}/templates"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        entries[0].clone()
+    }
+    let all_ready = listed(&base).await;
+    assert_eq!(all_ready["snapshot"], true);
+    assert_eq!(all_ready["cpuCount"], 1);
+    assert_eq!(all_ready["memoryMB"], 128);
+    assert_eq!(all_ready["nodeIDs"].as_array().unwrap().len(), 2);
+    b.agent.set_template_metadata(metadata(false, 1, 128));
+    b.agent.announce(0).await.unwrap();
+    assert_eq!(listed(&base).await["snapshot"], false);
+    b.agent.set_template_metadata(metadata(true, 2, 256));
+    b.agent.announce(0).await.unwrap();
+    let heterogeneous = listed(&base).await;
+    assert_eq!(heterogeneous["snapshot"], true);
+    assert!(heterogeneous["cpuCount"].is_null());
+    assert!(heterogeneous["memoryMB"].is_null());
+    let node_b = heterogeneous["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["nodeID"] == "b")
+        .unwrap();
+    assert_eq!(node_b["memoryMB"], 256);
+    b.agent.set_templates(vec!["base".into()]);
+    b.agent.announce(0).await.unwrap();
+    let legacy = listed(&base).await;
+    assert!(legacy["snapshot"].is_null());
+    let node_b = legacy["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["nodeID"] == "b")
+        .unwrap();
+    assert!(node_b["snapshot"].is_null());
+}
+
 struct FakeNode {
     agent: NodeAgent,
     capacity: usize,
@@ -175,6 +247,18 @@ async fn fake_node(
         .route("/sandboxes", post(node_create))
         .route("/sandboxes/{id}", delete(node_delete))
         .route("/v2/sandboxes/{id}/connect", post(node_connect))
+        .route(
+            "/sandboxes/{id}/checkpoints",
+            axum::routing::any(echo_checkpoint),
+        )
+        .route(
+            "/sandboxes/{id}/checkpoints/{name}",
+            axum::routing::any(echo_checkpoint),
+        )
+        .route(
+            "/sandboxes/{id}/checkpoints/{name}/restore",
+            axum::routing::any(echo_checkpoint),
+        )
         .with_state(Arc::clone(&node));
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -182,6 +266,62 @@ async fn fake_node(
     let beating = Arc::clone(&node);
     let heart = tokio::spawn(agent.heartbeat(move || beating.running.lock().len() as u32));
     (node, heart)
+}
+
+async fn echo_checkpoint(
+    headers: HeaderMap,
+    method: axum::http::Method,
+    uri: axum::http::Uri,
+    body: axum::body::Bytes,
+) -> Response {
+    if token_of(&headers).as_deref() != Some(TOKEN) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    Json(json!({"path": uri.path(), "method": method.as_str(), "body": String::from_utf8_lossy(&body)})).into_response()
+}
+
+#[tokio::test]
+async fn checkpoints_forward_collection_and_named_operations_to_the_owner() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_node, _heart) = fake_node(store.clone(), "a", 4, Duration::from_secs(30)).await;
+    let base = control_plane(store, Some(KEY)).await;
+    let (_, created) = create(&base, json!({"templateID": "base"})).await;
+    let id = created["sandboxID"].as_str().unwrap();
+    for (method, suffix) in [
+        ("POST", "/checkpoints"),
+        ("GET", "/checkpoints"),
+        ("POST", "/checkpoints/before/restore"),
+        ("DELETE", "/checkpoints/before"),
+    ] {
+        let path = format!("/sandboxes/{id}{suffix}");
+        let denied = client()
+            .request(
+                reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+                format!("{base}{path}"),
+            )
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(denied.status(), 401);
+        let response = client()
+            .request(
+                reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+                format!("{base}{path}"),
+            )
+            .header("x-api-key", KEY)
+            .json(&json!({"name": "before"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let echoed: Value = response.json().await.unwrap();
+        assert_eq!(echoed["path"], path);
+        assert_eq!(echoed["method"], method);
+        assert_eq!(
+            serde_json::from_str::<Value>(echoed["body"].as_str().unwrap()).unwrap(),
+            json!({"name": "before"})
+        );
+    }
 }
 
 async fn control_plane(store: Arc<dyn ClusterStore>, api_key: Option<&str>) -> String {

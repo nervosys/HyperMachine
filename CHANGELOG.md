@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- Cluster template listings report node-advertised snapshot availability and
+  guest resources, with unknown metadata for legacy nodes and per-node details
+  for heterogeneous fleets. Checkpoint operations now forward through the
+  authenticated control plane. VM CLI files can route through shared proxies
+  with `--envd-host`.
 - `hm sandbox vm files` uploads and downloads binary files through authenticated
   envd, with a separate sandbox access token, a 512 MiB limit, atomic downloads
   and no overwrite of existing local files. Requires a reachable envd endpoint.
