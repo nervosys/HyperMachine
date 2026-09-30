@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `store-password` key. `tools/e2e-egress.sh` checks all of it on real guests.
 
 ### Added
+- **`hm sandbox run`** (`hm-cli`): run a host program under the process
+  sandbox from the command line, with limits, network and filesystem policy,
+  an enforcement report, live output and the program's exit code. No VM.
+- **Streaming and cancellation in `hv2-sandbox`**: `Sandbox::run_with` takes
+  a `RunIo` with an output sink, called as each chunk arrives, and a cancel
+  flag that kills the whole workload. `run` is unchanged, and the trait's
+  default `run_with` keeps other backends working.
 - **Checkpoints** (`hv2-sandboxd`): save a running sandbox and roll it
   back in place -- memory and filesystem, under the same ID, token and URL
   (`/sandboxes/{id}/checkpoints`, `.../{name}/restore`, list, delete; ten

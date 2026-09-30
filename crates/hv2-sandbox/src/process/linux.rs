@@ -68,7 +68,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{
-    Control, Controls, FilesystemPolicy, NetworkPolicy, SandboxCommand, SandboxError,
+    Control, Controls, FilesystemPolicy, NetworkPolicy, RunIo, SandboxCommand, SandboxError,
     SandboxOutput, SandboxSpec,
 };
 
@@ -952,6 +952,7 @@ impl Drop for CgroupScope {
 pub(super) fn run(
     command: &SandboxCommand,
     spec: &SandboxSpec,
+    io: &RunIo,
 ) -> Result<SandboxOutput, SandboxError> {
     // Set up the cgroup in the parent, where errors can still be reported
     // before anything has been started.
@@ -1095,7 +1096,7 @@ pub(super) fn run(
     let pid = child.id() as libc::pid_t;
 
     let output =
-        driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, || {
+        driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, io, || {
             // SIGKILL the whole process group, not the one process: a workload
             // that spawned children would otherwise leave them running past its
             // own deadline. A PID namespace makes this exact anyway, since killing

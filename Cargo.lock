@@ -2459,6 +2459,7 @@ dependencies = [
  "dirs",
  "hv2-agent",
  "hv2-core",
+ "hv2-sandbox",
  "reqwest",
  "serde",
  "serde_json",
