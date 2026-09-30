@@ -463,6 +463,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disagree about a VM.
 
 ### Changed
+- Successful SDK stdin, EOF and signal requests wake the affected process's
+  output poller rather than waiting for its next 50 ms tick. Unsolicited output
+  retains periodic polling. The guest agent publishes process exit only after
+  its stdout/stderr readers finish, and polls observe completion before draining
+  final bytes, preventing a faster poll from losing final command output.
 - **ML-KEM and ML-DSA come from IronCrypto** (`hv2-core`). All six
   parameter sets now use `ic-mlkem` and `ic-mldsa` 0.2.3, checked against
   NIST's ACVP vectors and self-tested by `ic-fips`, so `FipsMode::Strict`

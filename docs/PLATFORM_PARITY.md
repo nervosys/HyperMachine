@@ -510,3 +510,56 @@ activity auditing and performance impact under load remain unverified.
   - Checked end to end on KVM guests (`tools/e2e-sandbox-env.sh`: 13 checks). The checks cover a
     command seeing the variables, pause and resume, a fork, a sandbox created from its snapshot,
     responses not echoing values, and invalid names being refused.
+
+## Interactive SDK output validation
+
+`tools/e2e-sdk-interactive.py` exercises the unmodified E2B Python SDK 2.51.0
+against a real snapshot guest. Each operation starts a fresh process, varies
+input arrival by 0–40 ms outside the timer, then measures the input/EOF/signal
+request through verified process exit. It checks the exact stdin marker and
+exit status, records failures separately, and deletes its sandbox. SIGKILL
+must produce exit status 137. Run with explicit API/proxy URLs, `--environment`,
+`--label`, and an `E2B_API_KEY` environment variable; `--samples` is per operation.
+
+Successful input, EOF and signal requests now notify that process's output
+poller; idle output retains the 50 ms tick. The first faster-poll cohort exposed
+an existing guest race: exit could be published before pipe readers collected
+final output. The corrected agent waits for reader completion and observes
+completion before draining buffers. A Linux regression checks final stdout and
+stderr across 100 rapidly polled child processes. Processes whose descendants
+retain output pipes keep their streams open until those pipes close.
+
+| Cohort | Successful checks | Stdin P50/P99 | EOF P50/P99 | Signal P50/P99 |
+|---|---:|---:|---:|---:|
+| Fixed polling, original guest | 60/60 | 43.20/94.78 ms | 33.21/77.16 ms | 41.61/87.18 ms |
+| Input wake, original guest | 59/60 | 9.64/63.41 ms | 6.74/61.08 ms | 8.39/63.31 ms |
+| Input wake, corrected output drain | 300/300 | 56.14/99.64 ms | 50.18/100.99 ms | 56.31/101.29 ms |
+
+The failed wake-only stdin sample had an output/exit mismatch; its result is
+retained and that cohort is invalid as a passing benchmark. Percentiles include
+successful samples only, so its lower timings cannot establish an improvement.
+The corrected cohort validates compatibility and cleanup, but is slower than
+the baseline in these diagnostics. No latency gain is established. Cohorts ran
+sequentially on the shared Windows/WSL nested-KVM host with warning logs, one
+sandbox, 1 vCPU/1024 MiB, and 20 versus 100 samples per operation. Host contention,
+reader scheduling and different guest binaries prevent causal attribution or a
+competitor comparison. Notifications remove an intentional wait when queued;
+RPC, process execution and scheduling delay remain.
+
+Raw reports under `benchmarks/2026-09-30/` are
+`interactive-fixed-poll-c1.json`, `interactive-input-wake-c1.json`, and
+`interactive-wake-output-drain-c1.json`. The corrected image SHA-256 is
+`1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c`;
+the earlier cohorts use the original image documented above. Reports capture
+the interactive script digest at completion; unlike the shared readiness
+harness, this diagnostic does not check for source edits during execution.
+All known sandboxes were confirmed deleted after each cohort.
+
+The full GitHub CI run [36772587222](https://github.com/nervosys/HyperMachine/actions/runs/36772587222)
+passed for commit `a422192`, including Linux/Windows/macOS workspace tests,
+shipped control-plane authorization checks, benchmark/chart gates and Clippy.
+This predates the interactive wake/output-drain change; its new-head CI must
+pass separately. Local checks for that change passed the three notification
+tests, strict API Clippy, 15 Linux guest-protocol tests, the 100-process regression,
+and 300 real SDK operations. Debian's local toolchain lacks Clippy, so Linux
+binary Clippy remains a CI check.
