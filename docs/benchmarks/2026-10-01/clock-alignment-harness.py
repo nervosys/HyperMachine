@@ -104,7 +104,6 @@ def main():
             # every guest remains held. Probes cannot extend measured boot.
             if collect_guest and pid == node.get("pid"):
                 with lock: chosen = sorted(active.items(), key=lambda item:item[1]["index"])
-                batch_observations = []
                 for sandbox, identity in chosen:
                     if identity["index"] % 10: continue
                     probe_started = time.perf_counter()
@@ -115,10 +114,9 @@ def main():
                         raise RuntimeError("guest boot diagnostic failed")
                     observations.append({"sandbox_id":sandbox, **identity, "response":response,
                         "host_start_perf_seconds":probe_started, "host_end_perf_seconds":probe_finished})
-                    batch_observations.append(observations[-1])
                 # A second bounded observation checks elapsed-clock consistency
                 # before interpreting uptime as a host/guest clock alignment.
-                for observation in batch_observations:
+                for observation in observations[-len(chosen[::10]):]:
                     probe_started = time.perf_counter()
                     response = original_request(node["url"], "POST",
                         f"/sandboxes/{observation['sandbox_id']}/exec",

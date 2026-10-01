@@ -950,6 +950,22 @@ Sources and reports use `listener-milestones-`, `listener-image-` and
 `guest-listener-trace-` names in the same evidence directory. This remains
 sampled diagnostic evidence, excluded from performance rankings.
 
+Paired host/guest clock observations then completed another 400/400 C100
+attempts with all 200 HyperMachine stage IDs matched. Each of 20 sampled
+guests supplied two uptime reads, each bounded by host monotonic request
+start/end timestamps. All 20 guest elapsed intervals fit the host bounds
+after allowing two centisecond quantization bins. This checks only those
+post-readiness intervals, not earlier boot-time clock stability.
+
+Conditionally assuming stable elapsed clocks back through boot, the mean
+inferred guest-clock epoch bounds were 4422.50–4449.58 ms after native
+creation began. The guest clock epoch is not VM entry: this does not prove
+dispatch delay or isolate transport behavior. It directs the next measurement
+toward host VM/vCPU dispatch and early guest clock initialization. Reports,
+exact executed wrapper, coordinator and analysis use `clock-alignment-`
+names in the evidence directory. Cleanup and artifact checks passed; memory
+readings follow the extra probes. The scored harnesses remain unchanged.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore
