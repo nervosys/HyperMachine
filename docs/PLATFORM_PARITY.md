@@ -45,6 +45,16 @@ container. The comparison is about what surrounds the VM.
 
 ## What is beyond both today
 
+Custom-domain implementation is underway. A validated binding model now
+canonicalizes ASCII DNS names (including DNS punycode), rejects malformed
+labels, IP addresses, authorities and existing sandbox-route names, and
+validates sandbox IDs/nonzero ports even when decoding stored JSON. Three
+Linux model tests and strict cluster-library Clippy pass. This is a foundation:
+atomic Memory/Redis claims, authenticated management endpoints, proxy resolution
+and CLI commands remain unwired. The matrix therefore still marks custom
+domains absent. Existing operator-provided TLS certificates and DNS remain
+part of the intended setup; ACME is a separate unfinished capability.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.

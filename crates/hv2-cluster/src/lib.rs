@@ -8,6 +8,7 @@
 //! route envd traffic there.
 
 pub mod control;
+pub mod domains;
 pub mod events;
 pub mod keys;
 pub mod metrics;

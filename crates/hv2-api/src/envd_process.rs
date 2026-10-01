@@ -73,6 +73,9 @@ pub mod process_proto {
     // It was invisible until 2026-09-22 because the sweep's clippy step read
     // a grep count and ignored cargo's exit status, so 55 of these reported
     // as "workspace: 0". See tools/sweep.sh.
+    // Generated-code lint names differ across supported Clippy toolchains.
+    // Keep the allowances effective where known without breaking other versions.
+    #![allow(unknown_lints)]
     #![allow(
         clippy::large_enum_variant,
         clippy::doc_overindented_list_items,
