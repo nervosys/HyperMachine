@@ -667,12 +667,13 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Repeat with memory diagnostics | Firecracker 1.17.0 | 20 / 20 | 816.65 | 2408.49 |
 | Normal-logging reliability repeat | HyperMachine | 98 / 100 | 1174.44 | 2212.68 |
 | Normal-logging reliability repeat | Firecracker 1.17.0 | 100 / 100 | 802.88 | 2485.07 |
+| Daemon owner-diagnostic build | HyperMachine | 200 / 200 | 692.47 | 763.00 |
+| Daemon owner-diagnostic build | Firecracker 1.17.0 | 200 / 200 | 403.88 | 454.65 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
-are retained in the reports and invalidate all three normal-logging comparisons. The lower
+are retained in the reports and invalidate the first three normal-logging comparisons. The later 200-pair cohort passed. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
-failed 5/140 normal-logging attempts while Firecracker passed 140/140, and HyperMachine's median
-was slower in all three cohorts. We have not achieved across-the-board superiority.
+failed 5/140 attempts in the first three normal-logging cohorts while Firecracker passed 140/140. HyperMachine's median was slower in every recorded normal-logging cohort. We have not achieved across-the-board superiority.
 
 Both memory-diagnostic repeat failures were 15-second guest-agent readiness timeouts with no
 console output and 2401 total vCPU exits, with no further exits during the
@@ -780,3 +781,27 @@ explicitly initializes and registers COM1 before launch, as well as a different
 CID range and no HTTP request lifecycle. No root cause or fix follows from
 this non-reproduction. The actual daemon must be rebuilt and its failure
 response sampled to investigate the previously captured UART-stage stall.
+
+
+The [rebuilt-daemon 200-pair cohort](benchmarks/2026-09-30/local-engines-daemon-owner-200.json)
+passed 200/200 workload/resource/cleanup checks for each engine, with unchanged
+artifacts and no setup or final-cleanup errors. It captured no readiness
+failure and therefore no stalled architecture. HyperMachine P50/P99 was
+692.47/763.00 ms versus Firecracker 403.88/454.65 ms, so it remained slower
+on this measured cold control path. The implementation added only failed-boot
+diagnostics, not a startup fix. Differences from older cohorts on this shared
+host do not prove a reliability or latency improvement. A direct
+`KVM_GET_SUPPORTED_CPUID` query returned 62 entries with MONITOR, MWAITX and
+WAITPKG absent, so the proposed advertised-CPU-delay-feature explanation is
+unsupported on this host; no CPU features were changed.
+
+
+The [two-worker CPU-load cohort](benchmarks/2026-09-30/local-engines-owner-load-100.json)
+passed 100/100 workload/resource/cleanup checks for each engine. Both controlled
+CPU workers stayed alive through the full cohort and were terminated and reaped
+afterward. The [coordinator fixture](benchmarks/2026-09-30/owner-load-coordinator.py)
+retains the exact workload and this host's paths; its checksum matches the raw
+report. Neither workers nor engines were pinned. HyperMachine P50/P99 was
+717.83/823.35 ms versus Firecracker 414.28/470.27 ms. No readiness warning or
+stalled-owner sample was produced. This supports only these measured attempts,
+not a fixed startup defect or superiority under general host contention.
