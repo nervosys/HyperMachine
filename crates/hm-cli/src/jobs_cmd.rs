@@ -97,6 +97,8 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Validate an operator connection profile; makes no network request
+    ProfileCheck { file: PathBuf, name: String },
     /// List schedule names in lexical order as a JSON page
     List {
         #[arg(long)]
@@ -147,6 +149,10 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::ProfileCheck { file, name } => {
+                    crate::jobs_profile::validate_connection_profile(&file, &name)?;
+                    serde_json::json!({"profile": name, "configuration_valid": true})
+                }
                 ScheduleCommand::List { after, limit } => {
                     serde_json::to_value(s.interval_schedule_ids(after.as_deref(), limit)?)?
                 }
