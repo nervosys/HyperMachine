@@ -177,7 +177,7 @@ impl JobSpec {
             }
         }
         if let Some(fs) = &self.sandbox.fs {
-            if fs != "host" && !fs.strip_prefix("isolated:").is_some_and(|r| !r.is_empty()) {
+            if fs != "host" && fs.strip_prefix("isolated:").is_none_or(|r| r.is_empty()) {
                 return bad(format!("sandbox.fs is host or isolated:ROOT, not {fs:?}"));
             }
         }

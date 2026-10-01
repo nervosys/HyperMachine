@@ -37,7 +37,7 @@ container. The comparison is about what surrounds the VM.
 | Backups to object storage | yes | no | **Absent** |
 | Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks only |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
-| MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 remote sandbox lifecycle/exec/checkpoint tools shipped over MCP stdio and checked with the official client on real KVM; the wider `hv2-agent` library surface is not served |
+| MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, checked with the official client on real KVM; streaming, cancellation and the wider `hv2-agent` surface remain absent |
 | Email in and out | no | yes | **Absent** |
 | Multi-node, self-hosted | contact sales | enterprise | **Real**: control plane, Redis store, cross-node resume, mTLS, Helm chart |
 | GPU | no | no | **Partial**: VFIO code, not wired to sandboxes |
@@ -51,7 +51,6 @@ container. The comparison is about what surrounds the VM.
 - Credential injection and workload identity at the gateway, so tokens never enter the VM.
 - Live shared volumes.
 - Paused sandboxes resume on any node.
-- About 30x oversubscription, with paused sandboxes at about 2.2 MiB each.
 
 ## Competitive verification work (2026-09-30)
 
@@ -78,7 +77,7 @@ for Python. Nested KVM measurements are not substitutes for bare-metal ones.
 | Daytona | Advertises sandbox startup below 90 ms; default sandbox is a container | Linux/Windows VMs and GPU workloads | No matched run; container startup differs from VM readiness |
 | Modal | Reports below 500 ms median API-to-user-code latency in its million-concurrent-sandbox benchmark | Managed fleet scale and GPU workloads | No matched run or equivalent fleet |
 | E2B | No precise current latency verified in this review | SDK compatibility and managed execution | No matched run |
-| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Same-host native cold cohorts recorded below; both engines passed an unpinned 200-pair cohort with HyperMachine slower. Pinned contention failures remain unresolved. Specification metrics differ from application readiness and incremental PSS |
+| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Latest fixed-IRQ comparison: 100/100 passes each, HyperMachine P50 859.85 ms versus Firecracker 773.83 ms. Earlier failures remain recorded; these bounded passes do not establish universal reliability. Specification metrics differ from application readiness and incremental PSS |
 
 These figures describe the linked providers' own claims or repository runs,
 not an independently reproduced ranking. A lower headline number does not
@@ -635,11 +634,23 @@ also report `isError` while retaining successful child IDs. Structured
 HTTP error bodies are not echoed. Guest command output is still returned as
 requested and may contain data the command itself prints.
 
+Add `--envd-endpoint https://sandbox-proxy.example.com` after `mcp` to expose
+`file_upload` and `file_download`; for a local proxy that routes by Host, also
+set `--envd-domain sandbox.local`. This endpoint is operator configuration,
+not a tool argument. Each file call connects through the control API, then
+uses only the sandbox token at envd; the platform key stays on the control
+API client. Tool results do not expose either credential. Uploads replace
+the specified guest file. Both tools use base64 and accept at most 256 KiB
+of decoded bytes, with a streaming download limit even without Content-Length.
+Guest paths are encoded as literal query values, and no host file is read
+or written. File results include matching text and structured JSON. The
+smaller file limit keeps both representations within the 1 MiB frame budget.
+
 Discovery and tool calls require initialization; notifications do not execute
 tool calls or receive responses. Invalid IDs/arguments are protocol errors,
 and input frames larger than 1 MiB terminate the session. Operations execute
 sequentially. Streaming output, in-flight cancellation, Streamable HTTP,
-resources/prompts/tasks, file tools and the wider `hv2-agent` tool surface
+resources/prompts/tasks and the wider `hv2-agent` tool surface
 remain unsupported. Created VMs persist until deleted or their lifetime
 expires; closing the client does not delete them. Interrupted creations can
 leave IDs unknown to the client, as with the other API clients.
@@ -655,6 +666,18 @@ HTTP failure reporting and deletion of both parent and child. The node's
 sandbox list was then confirmed empty. Raw functional evidence, with client,
 script and binary identities, is `benchmarks/2026-09-30/mcp-stdio-lifecycle.json`.
 This is compatibility evidence, not a latency benchmark or a competitor win.
+
+The file-tool extension passed all 15 sandbox CLI/MCP tests and strict
+all-targets CLI Clippy. The official client 1.23.3 then discovered all 14
+tools and completed 25 calls on an isolated 1 vCPU/1024 MiB real KVM node,
+including a 256 KiB roundtrip containing every byte value at a guest path
+with a quote and ampersand, plus rejection of a 262145-byte download.
+The existing checkpoint, pause/resume, fork isolation and failure checks
+also passed. The client deleted both guests, the node list was empty, all
+artifacts retained their recorded hashes, and the owned node was stopped.
+Raw evidence is `benchmarks/2026-09-30/mcp-stdio-files.json`; its exact
+coordinator is `mcp-stdio-files-coordinator.py`. This functional check does
+not measure performance or establish full agent-tool parity.
 
 
 ## Same-host Firecracker cold comparison (2026-09-30)
