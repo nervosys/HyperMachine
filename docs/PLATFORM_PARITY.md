@@ -98,7 +98,7 @@ pass the acceptance criteria below.
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Native Firecracker sweep verified at all four concurrencies; HyperMachine still trails. Managed competitor runs and bare-metal HyperMachine runs are missing |
 | Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Paired synchronized SDK sweep at concurrency 1/8/50/100: event-preserving KVM runtime passed 1008/1008, parent 1007/1008. Separate synchronized pause/resume bursts passed 503/504 with one resume timeout retained. Pending-event restoration is verified by a direct guest-handler control. A reliability SLA and matched competitor runs remain missing |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Fixed five-second idle PSS and per-batch empty-node baselines verified at concurrency 1/8/50/100, 477/477 attempts per engine; HyperMachine held PSS was higher in all 12 paired batches. Retained-memory allocation source, shared-template attribution and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
-| Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
+| Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | Matched short fixed-rate schedules at 5/25 arrivals per second passed 560/560, including client queue delay and full cleanup/drain. HyperMachine trails Firecracker in both profiles. Longer arrivals, overload failures, load-change recovery and equivalent fleet scale remain unverified |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys and protected API tracing verified; tenant boundaries, roles, durable audit retention and resource attribution remain incomplete |
 | Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | Custom-domain HTTP/HTTPS routing and egress are implemented; certificate automation, private URLs, SSH, raw TCP/UDP and isolated groups remain absent |
@@ -196,6 +196,15 @@ clipping and cleanup on timeout. These methodology changes do not establish a
 performance or reliability improvement.
 
 ### VM client and readiness benchmark
+
+The [fixed-rate native comparison](benchmarks/2026-10-01/fixed-arrivals.md)
+adds planned arrival times, submission lag, client worker queues and complete
+lifecycle cleanup/drain to the engine harness. Two alternating pairs at
+5 and 25 offered arrivals/second passed all 560 attempts. At the higher rate,
+scheduled command P99 was 2683.92 ms for HyperMachine versus 2034.47 ms for
+Firecracker; both accumulated queues with eight workers. Cleanup occupies
+workers, so these short runs do not measure server-only maximum capacity or
+prove sustained fleet throughput. Longer overload and recovery work remains.
 
 Build the client with `cargo build -p hm-cli --bin hm`. It talks to sandboxd
 or the control plane, selected by `--endpoint` or `HV2_SANDBOX_URL`.
