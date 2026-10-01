@@ -143,6 +143,15 @@ of 1455.22 ms and inconsistent memory changes. The runtime change was reverted;
 exact candidate sources, tests, raw reports and comparison tables are retained.
 This micro-level allocation reduction did not establish a product improvement.
 
+A [refused-agent connection backoff candidate](benchmarks/2026-10-01/refusal-retry.md)
+was evaluated against a current-source release baseline with synchronized
+command rounds at concurrency 1/8/50/100, two alternating pairs per profile.
+All 15600 commands and 636 guest preparations passed with clean teardown,
+but candidate mean latency was higher in seven of eight pairs. The change was
+reverted. Exact candidate source/tests, build hashes, raw cohorts and the
+initial permission-related setup failures are retained; no command attempts
+were made in those setup failures. Production keeps the prior retry cadence.
+
 The [synchronized stateful SDK sweep](benchmarks/2026-10-01/stateful-sweep.md)
 now prepares whole resume/fork batches before timing them, with observed client
 start spreads. Resume passed 504/504; fork passed 503/504 at concurrency
