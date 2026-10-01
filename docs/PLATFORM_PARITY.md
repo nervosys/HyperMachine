@@ -96,7 +96,7 @@ pass the acceptance criteria below.
 | Workstream | Acceptance criterion | Current gap |
 |---|---|---|
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Native Firecracker sweep verified at all four concurrencies; HyperMachine still trails. Managed competitor runs and bare-metal HyperMachine runs are missing |
-| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Synchronized SDK resume/fork sweep measured at concurrency 1/8/50/100: 1007/1008 attempts passed, with one retained fork readiness failure. Full pause bursts, reliability improvements and matched competitor runs remain missing |
+| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Paired synchronized SDK sweep at concurrency 1/8/50/100: event-preserving KVM runtime passed 1008/1008, parent 1007/1008. Pending-event restoration is verified by a direct guest-handler control. Full pause bursts, a reliability SLA and matched competitor runs remain missing |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Fixed five-second idle PSS and per-batch empty-node baselines verified at concurrency 1/8/50/100, 477/477 attempts per engine; HyperMachine held PSS was higher in all 12 paired batches. Retained-memory allocation source, shared-template attribution and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
@@ -154,6 +154,17 @@ resume and 1064.27 ms for fork. One concurrency-1 fork missed the unchanged
 diagnostics remain recorded. Teardown and artifact checks passed throughout.
 The initial 636/636 passing sweep is retained too. This expands verification;
 it establishes neither universal reliability nor a matched competitor win.
+
+New KVM snapshots now [preserve vCPU event handoffs](benchmarks/2026-10-01/kvm-events.md)
+alongside LAPIC state. A direct real-KVM control verifies the restored interrupt
+enters a guest handler, while the legacy omission takes the main path; NMI,
+shadow and exception state also round-trip. Real checkpoint/resume/fork checks
+passed. The paired SDK sweep retained all 2016 attempts: updated runtime
+1008/1008, parent 1007/1008, with the parent's resume timeout kept intact.
+Timings are mixed, including a higher updated resume P99 at concurrency 100.
+This fixes the demonstrated event-state omission, without establishing the
+cause of earlier timeouts, a speed win or universal reliability. Old snapshots
+remain readable but require recapture to include event state never stored.
 
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
