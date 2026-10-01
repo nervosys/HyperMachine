@@ -48,7 +48,7 @@ use crate::boot::BootSetup;
 use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
     HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm, VCpuDiagnostic,
-    VCpuInterruptState,
+    VCpuInterruptState, VCpuRunRetries,
 };
 use crate::snapshot::vcpu::{
     DescriptorTable, FpuState, GeneralRegisters, Msr, RunState, Segment, SystemRegisters,
@@ -59,7 +59,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::os::unix::io::RawFd;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Once, RwLock};
 
 // ── Boot-time architectural constants ───────────────────────────────────────
@@ -127,6 +127,7 @@ fn interrupt_state(events: kvm_vcpu_events) -> VCpuInterruptState {
     // asm/kvm.h: fields marked optional must not be interpreted without flags.
     const VALID_NMI_PENDING: u32 = 1;
     const VALID_SHADOW: u32 = 4;
+    const VALID_PAYLOAD: u32 = 0x10;
     VCpuInterruptState {
         flags: events.flags,
         injected: events.interrupt.injected,
@@ -135,7 +136,7 @@ fn interrupt_state(events: kvm_vcpu_events) -> VCpuInterruptState {
         shadow: (events.flags & VALID_SHADOW != 0).then_some(events.interrupt.shadow),
         exception_injected: events.exception.injected,
         exception_vector: events.exception.nr,
-        exception_pending: events.exception.pending,
+        exception_pending: (events.flags & VALID_PAYLOAD != 0).then_some(events.exception.pending),
         nmi_injected: events.nmi.injected,
         nmi_pending: (events.flags & VALID_NMI_PENDING != 0).then_some(events.nmi.pending),
         nmi_masked: events.nmi.masked,
@@ -537,6 +538,10 @@ impl HypervisorBackend for KvmBackend {
         Ok(VCpuDiagnostic {
             architecture,
             interrupts,
+            run_retries: Some(VCpuRunRetries {
+                eintr: self.kvm_vcpu(vcpu)?.retry_eintr.load(Ordering::Relaxed),
+                eagain: self.kvm_vcpu(vcpu)?.retry_eagain.load(Ordering::Relaxed),
+            }),
         })
     }
 
@@ -1823,6 +1828,8 @@ pub struct KvmVcpu {
     /// since exited — tids are reused, and the one that inherits it would be
     /// some unrelated thread of this process.
     tid: AtomicI32,
+    retry_eintr: AtomicU64,
+    retry_eagain: AtomicU64,
 }
 
 /// Clears the published tid however `run()` returns, including on an error
@@ -1901,6 +1908,8 @@ impl KvmVcpu {
                 irqchip_in_kernel,
                 kick: AtomicBool::new(false),
                 tid: AtomicI32::new(0),
+                retry_eintr: AtomicU64::new(0),
+                retry_eagain: AtomicU64::new(0),
             })
         }
     }
@@ -2008,7 +2017,10 @@ impl KvmVcpu {
                 }
                 match kvm_run(self.vcpu_fd) {
                     Ok(()) => return self.convert_exit(),
-                    Err(e) if e.raw_os_error() == Some(libc::EINTR) => continue,
+                    Err(e) if e.raw_os_error() == Some(libc::EINTR) => {
+                        self.retry_eintr.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
                     // An application processor that has not been started
                     // blocks in KVM_RUN until an INIT or startup IPI reaches
                     // it, then returns EAGAIN for the VMM to run it again --
@@ -2016,7 +2028,10 @@ impl KvmVcpu {
                     // an error, it ended that vCPU's thread at the moment the
                     // guest woke it, and Linux gave up waiting ("CPU1 failed
                     // to report alive state") ten seconds later.
-                    Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => continue,
+                    Err(e) if e.raw_os_error() == Some(libc::EAGAIN) => {
+                        self.retry_eagain.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
                     Err(e) => {
                         return Err(Error::Hypervisor(format!(
                             "KVM_RUN failed for vCPU {}: {}",
@@ -3031,14 +3046,19 @@ mod tests {
         events.interrupt.injected = 1;
         events.interrupt.nr = 0x30;
         events.nmi.pending = 1;
+        events.exception.pending = 1;
         let invalid = interrupt_state(events);
         assert_eq!(invalid.shadow, None);
         assert_eq!(invalid.nmi_pending, None);
+        assert_eq!(invalid.exception_pending, None);
         assert_eq!((invalid.injected, invalid.vector), (1, 0x30));
         events.flags = 5;
         let valid = interrupt_state(events);
         assert_eq!(valid.shadow, Some(3));
         assert_eq!(valid.nmi_pending, Some(1));
+        assert_eq!(valid.exception_pending, None);
+        events.flags |= 0x10;
+        assert_eq!(interrupt_state(events).exception_pending, Some(1));
     }
     #[test]
     fn singleton_topology_preserves_cache_geometry_and_level_terminators() {

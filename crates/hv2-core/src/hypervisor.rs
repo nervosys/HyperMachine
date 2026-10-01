@@ -12,6 +12,14 @@ pub struct VCpuDiagnostic {
     pub architecture: VCpuSnapshot,
     /// None means unsupported; an error means capture failed, not no events.
     pub interrupts: Result<Option<VCpuInterruptState>>,
+    pub run_retries: Option<VCpuRunRetries>,
+}
+
+/// Cumulative backend run-call retries, distinct from guest exits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VCpuRunRetries {
+    pub eintr: u64,
+    pub eagain: u64,
 }
 
 /// Backend-exported event state. Optional fields require validity flags.
@@ -24,7 +32,7 @@ pub struct VCpuInterruptState {
     pub shadow: Option<u8>,
     pub exception_injected: u8,
     pub exception_vector: u8,
-    pub exception_pending: u8,
+    pub exception_pending: Option<u8>,
     pub nmi_injected: u8,
     pub nmi_pending: Option<u8>,
     pub nmi_masked: u8,
@@ -306,6 +314,7 @@ pub trait HypervisorBackend: Send + Sync {
         Ok(VCpuDiagnostic {
             architecture: self.save_vcpu(vcpu).await?,
             interrupts: Ok(None),
+            run_retries: None,
         })
     }
 
