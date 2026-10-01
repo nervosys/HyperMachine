@@ -6,6 +6,30 @@ use async_trait::async_trait;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
+/// Independent owner-thread observations, never a persisted restore snapshot.
+#[derive(Debug)]
+pub struct VCpuDiagnostic {
+    pub architecture: VCpuSnapshot,
+    /// None means unsupported; an error means capture failed, not no events.
+    pub interrupts: Result<Option<VCpuInterruptState>>,
+}
+
+/// Backend-exported event state. Optional fields require validity flags.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VCpuInterruptState {
+    pub flags: u32,
+    pub injected: u8,
+    pub vector: u8,
+    pub soft: u8,
+    pub shadow: Option<u8>,
+    pub exception_injected: u8,
+    pub exception_vector: u8,
+    pub exception_pending: u8,
+    pub nmi_injected: u8,
+    pub nmi_pending: Option<u8>,
+    pub nmi_masked: u8,
+}
+
 /// Hypervisor platform
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HypervisorPlatform {
@@ -274,6 +298,15 @@ pub trait HypervisorBackend: Send + Sync {
             "{} backend cannot read a vCPU's state",
             self.platform()
         )))
+    }
+
+    /// Capture diagnostics only on the execution owner between run calls.
+    /// Independent reads can reflect execution caused by the wakeup kick.
+    async fn inspect_vcpu(&self, vcpu: &VCpu) -> Result<VCpuDiagnostic> {
+        Ok(VCpuDiagnostic {
+            architecture: self.save_vcpu(vcpu).await?,
+            interrupts: Ok(None),
+        })
     }
 
     /// Put a vCPU back in the state a snapshot describes.

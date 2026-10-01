@@ -1,7 +1,23 @@
 //! Failure-only formatting of owner and machine-level interrupt samples.
 
+use hv2_core::hypervisor::VCpuDiagnostic;
 use hv2_core::snapshot::machine::MachineState;
 use hv2_core::snapshot::vcpu::VCpuSnapshot;
+
+pub(crate) fn owner_diagnostic(sample: &VCpuDiagnostic) -> String {
+    let architecture = owner_sample(&sample.architecture);
+    let events = match &sample.interrupts {
+        Ok(Some(state)) => format!(
+            "EVENTS FLAGS={:#x} IRQ_INJECTED={} VECTOR={:#x} SOFT={} SHADOW={:?} EXCEPTION_INJECTED={} EXCEPTION_VECTOR={} EXCEPTION_PENDING={} NMI_INJECTED={} NMI_PENDING={:?} NMI_MASKED={}",
+            state.flags, state.injected, state.vector, state.soft, state.shadow,
+            state.exception_injected, state.exception_vector, state.exception_pending,
+            state.nmi_injected, state.nmi_pending, state.nmi_masked,
+        ),
+        Ok(None) => "EVENTS unavailable (unsupported backend)".into(),
+        Err(error) => format!("EVENTS unavailable: {error}"),
+    };
+    format!("{architecture}; {events}")
+}
 
 pub(crate) fn machine_sample(state: &MachineState) -> String {
     if state.backend != "kvm" {
@@ -87,6 +103,24 @@ pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unavailable_events_preserve_architecture_without_inventing_zero_state() {
+        for interrupts in [
+            Ok(None),
+            Err(hv2_core::Error::NotSupported("event read failed".into())),
+        ] {
+            let mut architecture = VCpuSnapshot::default();
+            architecture.general.rip = 0x1234;
+            let report = owner_diagnostic(&VCpuDiagnostic {
+                architecture,
+                interrupts,
+            });
+            assert!(report.contains("RIP=0x1234"));
+            assert!(report.contains("EVENTS unavailable"));
+            assert!(!report.contains("IRQ_INJECTED="));
+        }
+    }
 
     #[test]
     fn machine_sample_refuses_foreign_and_truncated_layouts() {

@@ -47,7 +47,8 @@ use crate::boot::multiboot::{MultibootLayout, MultibootProtocol};
 use crate::boot::BootSetup;
 use crate::descriptors::GdtBuilder;
 use crate::hypervisor::{
-    HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm,
+    HypervisorBackend, HypervisorCapabilities, HypervisorPlatform, HypervisorVm, VCpuDiagnostic,
+    VCpuInterruptState,
 };
 use crate::snapshot::vcpu::{
     DescriptorTable, FpuState, GeneralRegisters, Msr, RunState, Segment, SystemRegisters,
@@ -119,6 +120,25 @@ fn patch_topology(entries: &mut [kvm_cpuid_entry2], vcpu_id: u32, vcpu_count: u3
             }
             _ => {}
         }
+    }
+}
+
+fn interrupt_state(events: kvm_vcpu_events) -> VCpuInterruptState {
+    // asm/kvm.h: fields marked optional must not be interpreted without flags.
+    const VALID_NMI_PENDING: u32 = 1;
+    const VALID_SHADOW: u32 = 4;
+    VCpuInterruptState {
+        flags: events.flags,
+        injected: events.interrupt.injected,
+        vector: events.interrupt.nr,
+        soft: events.interrupt.soft,
+        shadow: (events.flags & VALID_SHADOW != 0).then_some(events.interrupt.shadow),
+        exception_injected: events.exception.injected,
+        exception_vector: events.exception.nr,
+        exception_pending: events.exception.pending,
+        nmi_injected: events.nmi.injected,
+        nmi_pending: (events.flags & VALID_NMI_PENDING != 0).then_some(events.nmi.pending),
+        nmi_masked: events.nmi.masked,
     }
 }
 
@@ -505,6 +525,18 @@ impl HypervisorBackend for KvmBackend {
                 KVM_MP_STATE_HALTED => RunState::Halted,
                 other => RunState::Other(other),
             },
+        })
+    }
+
+    async fn inspect_vcpu(&self, vcpu: &VCpu) -> Result<VCpuDiagnostic> {
+        let architecture = self.save_vcpu(vcpu).await?;
+        let interrupts = self
+            .kvm_vcpu(vcpu)?
+            .get_vcpu_events()
+            .map(|events| Some(interrupt_state(events)));
+        Ok(VCpuDiagnostic {
+            architecture,
+            interrupts,
         })
     }
 
@@ -2992,6 +3024,22 @@ fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn interrupt_events_require_validity_flags_for_optional_fields() {
+        let mut events = kvm_vcpu_events::default();
+        events.interrupt.shadow = 3;
+        events.interrupt.injected = 1;
+        events.interrupt.nr = 0x30;
+        events.nmi.pending = 1;
+        let invalid = interrupt_state(events);
+        assert_eq!(invalid.shadow, None);
+        assert_eq!(invalid.nmi_pending, None);
+        assert_eq!((invalid.injected, invalid.vector), (1, 0x30));
+        events.flags = 5;
+        let valid = interrupt_state(events);
+        assert_eq!(valid.shadow, Some(3));
+        assert_eq!(valid.nmi_pending, Some(1));
+    }
     #[test]
     fn singleton_topology_preserves_cache_geometry_and_level_terminators() {
         let mut entries = vec![
