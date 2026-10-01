@@ -175,6 +175,12 @@ despite event preservation; its raw diagnostics and nonzero cohort are retained.
 This closes the pause-burst measurement gap without proving a reliability fix
 or a comparative performance win.
 
+A [timer-only hardware control](benchmarks/2026-10-01/deadline-timer.md) restores
+a halted real-mode guest with a captured TSC deadline and verifies entry into
+its interrupt handler. Omitting the deadline leaves the control halted until
+the bounded test kicks and joins its runner. Both controls passed, narrowing
+the resume investigation without proving the cause of the retained timeout.
+
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
 startup deadline (30 seconds by default). Older cohorts used HyperMachine's

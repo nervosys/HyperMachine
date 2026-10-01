@@ -1,0 +1,57 @@
+{
+  "source_sha256": {
+    "backend": "d61e178017aa037386a15f26e48c87e5d22a4f9e6112d4e199a3812ac2f882e1",
+    "snapshot_types": "bcc7ac3084f97e447fda271dbaa94cf3e3a9ad8a6ec20971a4731ba494f5db37",
+    "lock": "483b5c6c12d6964be69035547b60bc2ea773fb1daaa735db2d09526852516211"
+  },
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "kernel": "6.18.33.2-microsoft-standard-WSL2",
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hv2-core",
+        "--lib",
+        "restored_deadline_timer_wakes_halted_guest",
+        "--",
+        "--ignored",
+        "--nocapture"
+      ],
+      "exit_code": 0,
+      "output": "   Compiling hv2-core v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-core)\n    Finished `test` profile [optimized + debuginfo] target(s) in 49.06s\n     Running unittests src/lib.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_core-daf8c736c2a2c291)\n\nrunning 1 test\nKVM_DEADLINE_EVIDENCE omit_deadline=false result=Ok(Ok(Io { port: 233, direction: Out, size: 1, data: 34 }))\nKVM_DEADLINE_EVIDENCE omit_deadline=true result=Err(Timeout)\ntest backends::kvm::tests::restored_deadline_timer_wakes_halted_guest ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2294 filtered out; finished in 2.30s\n\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hv2-core",
+        "--lib",
+        "snapshot::types"
+      ],
+      "exit_code": 0,
+      "output": "    Finished `test` profile [optimized + debuginfo] target(s) in 1.18s\n     Running unittests src/lib.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_core-daf8c736c2a2c291)\n\nrunning 20 tests\ntest snapshot::types::tests::test_compression_type_display ... ok\ntest snapshot::types::tests::test_cpu_snapshot_creation ... ok\ntest snapshot::types::tests::test_crc32_checksum ... ok\ntest snapshot::types::tests::test_cpu_snapshot_size ... ok\ntest snapshot::types::tests::test_descriptor_table_snapshot ... ok\ntest snapshot::types::tests::test_device_snapshot ... ok\ntest snapshot::types::tests::test_memory_region_snapshot ... ok\ntest snapshot::types::tests::test_segment_snapshot ... ok\ntest snapshot::types::tests::test_snapshot_id_creation ... ok\ntest snapshot::types::tests::test_snapshot_id_display ... ok\ntest snapshot::types::tests::test_snapshot_id_generate ... ok\ntest snapshot::types::tests::test_snapshot_info_creation ... ok\ntest snapshot::types::tests::test_snapshot_info_incremental ... ok\ntest snapshot::types::tests::test_snapshot_stats ... ok\ntest snapshot::types::tests::test_snapshot_state_display ... ok\ntest snapshot::types::tests::test_vm_snapshot ... ok\ntest snapshot::types::tests::snapshot_ids_are_unique_under_concurrent_generation ... ok\ntest snapshot::types::tests::test_snapshot_type_display ... ok\ntest snapshot::types::tests::test_snapshot_info_age ... ok\ntest snapshot::types::tests::test_vm_snapshot_complete ... ok\n\ntest result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 2275 filtered out; finished in 0.00s\n\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "hv2-core",
+        "--lib",
+        "--tests",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "output": "    Checking hv2-core v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-core)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 20.34s\n"
+    }
+  ],
+  "sources_unchanged": true
+}

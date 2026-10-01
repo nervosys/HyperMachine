@@ -3141,6 +3141,102 @@ fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
 
 #[cfg(test)]
 mod tests {
+    /// Isolate deadline-timer wakeup from Linux, vsock and daemon retries.
+    #[tokio::test]
+    #[ignore = "requires /dev/kvm; run explicitly with --ignored --nocapture"]
+    async fn restored_deadline_timer_wakes_halted_guest() {
+        let source = KvmBackend::new().expect("KVM is required for this explicit test");
+        source.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+        let vcpu = VCpu::new(0);
+        let owned = source.kvm_vcpu(&vcpu).unwrap();
+        let mut sregs = owned.get_sregs().unwrap();
+        sregs.cs.base = 0;
+        sregs.cs.selector = 0;
+        sregs.idt.base = 0;
+        sregs.idt.limit = 0x3ff;
+        owned.set_sregs(&sregs).unwrap();
+        let mut regs = owned.get_regs().unwrap();
+        regs.rip = 0x400;
+        regs.rsp = 0x1000;
+        regs.rflags = 0x202;
+        owned.set_regs(&regs).unwrap();
+        let mut lapic = kvm_lapic_state::default();
+        // SAFETY: owned idle vCPU descriptor and initialized ABI structures.
+        unsafe {
+            kvm_get_lapic(owned.fd(), &mut lapic).unwrap();
+            lapic.regs[0xf0..0xf4].copy_from_slice(&0x1ffu32.to_le_bytes());
+            lapic.regs[0x320..0x324].copy_from_slice(&0x40022u32.to_le_bytes());
+            kvm_set_lapic(owned.fd(), &lapic).unwrap();
+            kvm_set_msr(owned.fd(), 0x10, 1 << 40).unwrap();
+            kvm_set_msr(owned.fd(), 0x6e0, (1 << 40) + 1_000_000_000).unwrap();
+            kvm_set_mp_state(
+                owned.fd(),
+                &kvm_mp_state {
+                    mp_state: KVM_MP_STATE_HALTED,
+                },
+            )
+            .unwrap();
+        }
+        let captured = source.save_vcpu(&vcpu).await.unwrap();
+        assert_eq!(captured.run_state, RunState::Halted);
+        assert_eq!(
+            captured
+                .msrs
+                .iter()
+                .find(|m| m.index == 0x6e0)
+                .unwrap()
+                .value,
+            (1 << 40) + 1_000_000_000
+        );
+        for omit_deadline in [false, true] {
+            let destination = KvmBackend::new().unwrap();
+            destination.create_vm(1, 2 * 1024 * 1024).await.unwrap();
+            let vm = destination.vm.read().unwrap().clone().unwrap();
+            vm.write_guest_memory(0x22 * 4, &[0, 5, 0, 0]).unwrap();
+            vm.write_guest_memory(0x400, &[0xb0, 0x11, 0xe6, 0xe9, 0xf4])
+                .unwrap();
+            vm.write_guest_memory(0x500, &[0xb0, 0x22, 0xe6, 0xe9, 0xcf])
+                .unwrap();
+            let mut state = captured.clone();
+            if omit_deadline {
+                state.msrs.retain(|m| m.index != 0x6e0);
+            }
+            destination.restore_vcpu(&vcpu, &state).await.unwrap();
+            let target = destination.kvm_vcpu(&vcpu).unwrap();
+            let runner = target.clone();
+            let (send, receive) = std::sync::mpsc::channel();
+            let thread = std::thread::spawn(move || send.send(runner.run()).unwrap());
+            let result = receive.recv_timeout(std::time::Duration::from_secs(2));
+            if result.is_err() {
+                target.kick();
+            }
+            thread.join().unwrap();
+            println!("KVM_DEADLINE_EVIDENCE omit_deadline={omit_deadline} result={result:?}");
+            if omit_deadline {
+                assert!(
+                    result.is_err(),
+                    "control must remain halted without a timer"
+                );
+            } else {
+                match result
+                    .expect("restored timer must wake within two seconds")
+                    .unwrap()
+                {
+                    VmExit::Io {
+                        port,
+                        direction,
+                        size,
+                        data,
+                    } => assert_eq!(
+                        (port, direction, size, data),
+                        (0xe9, IoDirection::Out, 1, 0x22)
+                    ),
+                    other => panic!("expected timer interrupt handler, got {other:?}"),
+                }
+            }
+        }
+    }
+
     #[test]
     fn event_payload_matches_the_x86_abi_and_rejects_truncation() {
         assert_eq!(std::mem::size_of::<kvm_vcpu_events>(), 64);
