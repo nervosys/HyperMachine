@@ -1149,7 +1149,19 @@ calls `probe_irq_on()` twice; the [IRQ probing implementation](https://github.co
 waits 20 and 100 ms on each call. This supports a fixed-IRQ configuration
 experiment for the known virtual board. The guest defconfig now disables IRQ
 autodetection while retaining UART and console support; a checksum-verified
-Linux 6.6.52 rebuild is running. The original benchmark kernel is preserved.
-Real-guest boot, snapshot restoration and matched runs using the same new
-kernel for both engines remain pending. No performance improvement is yet
-established for this configuration change.
+Linux 6.6.52 rebuild passed. The original benchmark kernel is preserved.
+The effective build configuration was observed with UART and console support
+enabled and IRQ autodetection disabled. The real-KVM Linux boot regression
+passed with the new image. The [new-kernel snapshot report](benchmarks/2026-09-30/known-uart-irq-state.json)
+and [exact probe](benchmarks/2026-09-30/known-uart-irq-state-probe.py)
+also passed checkpoint rollback, pause/resume and two forked guests, retaining
+I/O APIC UART IRQ 4 and command readiness. Artifact checks and cleanup passed.
+The rebuilt kernel SHA-256 is
+`afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd`.
+A 50-block comparison is running: each block tests both kernels in alternating
+order, with two alternating engine pairs per kernel and a fresh isolated
+HyperMachine daemon per two-pair run. Both engines use the same kernel within
+each run. One pinned CPU worker remains active across all blocks. This design
+retains every attempt and reduces time/order bias; it differs from the longer
+single-node cohorts above. Comparative results remain pending. No performance
+improvement is yet established for this configuration change.
