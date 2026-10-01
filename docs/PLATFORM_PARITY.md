@@ -1004,3 +1004,17 @@ event state. The Linux validity regression and five daemon formatting tests
 passed. All three real-KVM owner tests and strict all-targets Linux core Clippy
 passed; live failed-boot integration remains unverified. These independent post-kick reads
 cannot prove the exact pre-kick state or the startup failure's cause.
+
+During the owner-event diagnostic cohort, a separate one-Hz, 60-second
+[read-only thread probe](benchmarks/2026-09-30/owner-thread-state-probe.py)
+recorded [owner CPU observations](benchmarks/2026-09-30/owner-thread-observations.json)
+for benchmark daemon PID 39474. Thread 45765 remained observable from
+03:38:19.386971 to 03:38:34.404970 UTC on October 1, gaining 575 user and 82 system
+ticks; all 16 observations were runnable with wait channel zero. Its last sample
+preceded the [failed-boot report](benchmarks/2026-09-30/owner-events-thread-failure-excerpts.txt)
+at 03:38:34.426989 UTC by 22 ms. The sequential one-VM cohort and timestamps
+support correlation, not a direct thread-to-sandbox identity mapping. CPU
+accounting alone cannot separate guest execution from host retry-loop work;
+KVM_RUN EINTR/EAGAIN counters are the next check. A preceding 15-second probe
+also ran during this cohort. These observer workloads and the shared host limit
+performance interpretation; the samples are diagnostic evidence, not a win.
