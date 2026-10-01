@@ -59,6 +59,27 @@ def cold_stages(log):
     return result
 
 
+def dispatch_stages(log):
+    result = {}
+    for line in re.sub(r"\x1b\[[0-9;]*m", "", log).splitlines():
+        if "VM background dispatch" in line:
+            fields = ["dispatch_queue_ms"]
+        elif "vCPU owner thread entry" in line:
+            fields = ["wrapper_queue_ms", "thread_start_ms"]
+            if not re.search(r'\bvcpu_id=0\b', line):
+                raise RuntimeError("dispatch diagnostic requires exactly one vCPU")
+        else: continue
+        identity = re.search(r'\bvm="?(sbx-[A-Za-z0-9]+)"?', line)
+        if not identity: raise RuntimeError("incomplete dispatch identity")
+        row = result.setdefault(identity[1], {})
+        for field in fields:
+            value = re.search(r"\b" + field + r"=([0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\b", line)
+            if not value: raise RuntimeError("incomplete dispatch duration")
+            if field in row: raise RuntimeError("duplicate dispatch stage")
+            row[field] = float(value[1])
+    return result
+
+
 def main():
     original_popen = burst.subprocess.Popen
     original_request = burst.engines.request
@@ -68,7 +89,12 @@ def main():
     if collect_guest: sys.argv.remove("--collect-guest-boot")
     collect_cold = "--collect-cold-readiness" in sys.argv
     if collect_cold: sys.argv.remove("--collect-cold-readiness")
+    collect_dispatch = "--collect-dispatch" in sys.argv
+    if collect_dispatch:
+        sys.argv.remove("--collect-dispatch")
+        collect_cold = True
     log_filter = "hv2_sandboxd=debug" + (",hv2_agent::cold_readiness=debug" if collect_cold else "")
+    if collect_dispatch: log_filter += ",hv2_core::cold_dispatch=debug"
     local = threading.local()
     active = {}
     lock = threading.Lock()
@@ -154,6 +180,7 @@ def main():
         if collect_cold:
             report["cold_readiness_log"] = log
             report["cold_readiness_stages_ms"] = cold_stages(log)
+        if collect_dispatch: report["dispatch_stages_ms"] = dispatch_stages(log)
         rows = [row for batch in report["batches"] if batch["engine"] == "hypermachine" for row in batch["samples"]]
         report["stage_ids_match_passed_requests"] = set(report["startup_stages_ms"]) == {
             row["sandbox_id"] for row in rows if row["success"]}
@@ -163,6 +190,12 @@ def main():
                 name for name, row in report["cold_readiness_stages_ms"].items() if row["succeeded"]
             } == {row["sandbox_id"] for row in rows if row["success"]}
             report["success"] = report["success"] and report["cold_ids_match_passed_requests"]
+        if collect_dispatch:
+            report["dispatch_ids_match_passed_requests"] = set(report["dispatch_stages_ms"]) == {
+                row["sandbox_id"] for row in rows if row["success"]} and all(
+                    set(stage) == {"dispatch_queue_ms", "wrapper_queue_ms", "thread_start_ms"}
+                    for stage in report["dispatch_stages_ms"].values())
+            report["success"] = report["success"] and report["dispatch_ids_match_passed_requests"]
         print(json.dumps(report, indent=2))
         return code if report["success"] else 1
 
