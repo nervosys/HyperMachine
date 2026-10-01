@@ -120,6 +120,8 @@ pub struct Occurrence {
 #[serde(deny_unknown_fields)]
 struct ProgressStep {
     through_ms: u64,
+    #[serde(default)]
+    cancelled: bool,
 }
 
 fn progress_key(id: &str, after_ms: Option<u64>) -> String {
@@ -140,6 +142,37 @@ fn check_schedule_id(id: &str) -> Result<()> {
 }
 
 impl Store {
+    /// Stop future publication without erasing committed occurrence history.
+    /// Cancellation competes for the same exclusive edge as publication.
+    /// If a publication wins first, reload and cancel its successor edge.
+    pub fn cancel_interval_schedule(&self, id: &str) -> Result<()> {
+        for _ in 0..32 {
+            let (after, cancelled) = self.interval_progress_state(id)?;
+            if cancelled {
+                return Ok(());
+            }
+            match self.publish_schedule_record(
+                "schedule-progress",
+                &progress_key(id, after),
+                &ProgressStep {
+                    through_ms: after.unwrap_or(0),
+                    cancelled: true,
+                },
+            ) {
+                Ok(()) => return Ok(()),
+                Err(JobError::Conflict(_)) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+        Err(JobError::Conflict(
+            "schedule progress kept changing; retry cancellation".into(),
+        ))
+    }
+
+    pub fn interval_schedule_cancelled(&self, id: &str) -> Result<bool> {
+        Ok(self.interval_progress_state(id)?.1)
+    }
+
     /// Recover a bounded page from the committed publication chain. The
     /// exclusive timestamp cursor is the last record consumed by the caller.
     /// Uncommitted records, including losing coalesced batches, are excluded.
@@ -166,6 +199,9 @@ impl Store {
                     Err(JobError::NotFound(_)) => return Ok(records),
                     Err(error) => return Err(error),
                 };
+            if step.cancelled {
+                return Ok(records);
+            }
             let selected = schedule.due_occurrences(after, step.through_ms, 1024)?;
             if selected.last().copied() != Some(step.through_ms) {
                 return Err(JobError::Corrupt(format!("invalid progress step {key}")));
@@ -210,7 +246,10 @@ impl Store {
         limit: usize,
     ) -> Result<Vec<Occurrence>> {
         let schedule = self.interval_schedule(id)?;
-        let expected = self.interval_progress(id)?;
+        let (expected, cancelled) = self.interval_progress_state(id)?;
+        if cancelled {
+            return Err(JobError::Conflict("schedule is cancelled".into()));
+        }
         let selected = schedule.due_occurrences(expected, now_ms, limit)?;
         let mut records = Vec::with_capacity(selected.len());
         for scheduled_ms in selected {
@@ -226,6 +265,10 @@ impl Store {
     /// not a guest execution or dispatch acknowledgement. Immutable steps
     /// form a chain; a racing publisher cannot replace an existing edge.
     pub fn interval_progress(&self, id: &str) -> Result<Option<u64>> {
+        Ok(self.interval_progress_state(id)?.0)
+    }
+
+    fn interval_progress_state(&self, id: &str) -> Result<(Option<u64>, bool)> {
         let schedule = self.interval_schedule(id)?;
         let mut after = None;
         loop {
@@ -233,9 +276,12 @@ impl Store {
             let step: ProgressStep =
                 match crate::read_json(&self.root().join("schedule-progress").join(&key), &key) {
                     Ok(step) => step,
-                    Err(JobError::NotFound(_)) => return Ok(after),
+                    Err(JobError::NotFound(_)) => return Ok((after, false)),
                     Err(error) => return Err(error),
                 };
+            if step.cancelled {
+                return Ok((after, true));
+            }
             if after.is_some_and(|previous| step.through_ms <= previous)
                 || schedule.at_or_after(step.through_ms)? != Some(step.through_ms)
             {
@@ -256,7 +302,8 @@ impl Store {
         through_ms: u64,
     ) -> Result<()> {
         let schedule = self.interval_schedule(id)?;
-        if self.interval_progress(id)? != expected {
+        let (current, cancelled) = self.interval_progress_state(id)?;
+        if cancelled || current != expected {
             return Err(JobError::Conflict(
                 "schedule progress changed; reload before advancing".into(),
             ));
@@ -288,7 +335,10 @@ impl Store {
         self.publish_schedule_record(
             "schedule-progress",
             &progress_key(id, expected),
-            &ProgressStep { through_ms },
+            &ProgressStep {
+                through_ms,
+                cancelled: false,
+            },
         )
     }
 
@@ -382,6 +432,72 @@ mod tests {
             missed_policy: MissedOccurrencePolicy::CatchUp,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn cancellation_preserves_history_and_blocks_future_publication() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .create_interval_schedule("cancel", &schedule())
+            .unwrap();
+        store.materialize_interval("cancel", 120, 3).unwrap();
+        store.cancel_interval_schedule("cancel").unwrap();
+        let reopened = Store::open(dir.path()).unwrap();
+        assert!(reopened.interval_schedule_cancelled("cancel").unwrap());
+        reopened.cancel_interval_schedule("cancel").unwrap();
+        assert_eq!(reopened.interval_progress("cancel").unwrap(), Some(120));
+        assert!(reopened.materialize_interval("cancel", 150, 3).is_err());
+        assert!(reopened
+            .advance_interval_progress("cancel", Some(120), 130)
+            .is_err());
+        assert_eq!(
+            reopened
+                .committed_interval_occurrences("cancel", None, 10)
+                .unwrap()
+                .len(),
+            3
+        );
+        reopened
+            .create_interval_schedule("empty", &schedule())
+            .unwrap();
+        reopened.cancel_interval_schedule("empty").unwrap();
+        assert_eq!(reopened.interval_progress("empty").unwrap(), None);
+        assert!(reopened
+            .committed_interval_occurrences("empty", None, 10)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn cancellation_racing_publication_always_closes_the_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .create_interval_schedule("racecancel", &schedule())
+            .unwrap();
+        store.record_interval_occurrence("racecancel", 100).unwrap();
+        let barrier = std::sync::Barrier::new(2);
+        std::thread::scope(|scope| {
+            let publish = scope.spawn(|| {
+                barrier.wait();
+                store.advance_interval_progress("racecancel", None, 100)
+            });
+            let cancel = scope.spawn(|| {
+                barrier.wait();
+                store.cancel_interval_schedule("racecancel")
+            });
+            cancel.join().unwrap().unwrap();
+            let result = publish.join().unwrap();
+            assert!(result.is_ok() || matches!(result, Err(JobError::Conflict(_))));
+        });
+        assert!(store.interval_schedule_cancelled("racecancel").unwrap());
+        let count = store
+            .committed_interval_occurrences("racecancel", None, 10)
+            .unwrap()
+            .len();
+        assert!(count <= 1);
+        assert!(store.materialize_interval("racecancel", 110, 2).is_err());
     }
 
     #[test]

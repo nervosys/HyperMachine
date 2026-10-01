@@ -72,6 +72,20 @@ fn schedule_cli_persists_and_pages_without_executing_jobs() {
     assert!(!invoke(&store, &["status", "../escape"]).status.success());
     assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
     assert_eq!(std::fs::read_dir(store.join("jobs")).unwrap().count(), 0);
+    assert_eq!(
+        success(invoke(&store, &["cancel", "test"]))["cancelled"],
+        true
+    );
+    assert_eq!(
+        success(invoke(&store, &["status", "test"]))["cancelled"],
+        true
+    );
+    assert!(!invoke(&store, &["publish", "test", "--now-ms", "140"])
+        .status
+        .success());
+    assert!(invoke(&store, &["watch", "test", "--ticks", "1"])
+        .status
+        .success());
 }
 
 #[test]
