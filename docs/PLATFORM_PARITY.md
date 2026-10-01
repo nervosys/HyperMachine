@@ -610,6 +610,50 @@ Benchmarks job passed at `518fe70` (run 36781437624); its separate baseline
 comparison was cancelled by the newer MCP commit; the new-head comparison remains unverified. These Criterion means and standard errors are component
 microbenchmarks, not VM lifecycle P50/P95/P99 or matched competitor measurements.
 
+## Guest boot debug-scan experiment (2026-09-30)
+
+The fixed-UART guest still performs Linux's `CONFIG_DEBUG_WX` boot-time
+page-table check. We tested disabling only that defconfig option, retaining
+strict kernel/module W^X protections, MP-table/I/O APIC support, serial
+console, virtio networking/vsock and 9P. The experimental Linux 6.6.52
+kernel built from the checksum-pinned source, then passed real-KVM
+checkpoint rollback, pause/resume and two state-preserving forks.
+
+Twenty counterbalanced blocks alternated kernel order; each kernel run
+alternated two engine pairs on a fresh isolated node. Both engines received
+identical kernel/initrd bytes, 1 vCPU/1024 MiB and a 15-second guest readiness
+budget. One pinned CPU worker remained alive throughout. All 160 attempts
+passed, artifact identities remained unchanged and owned processes were
+cleaned up. This was another shared nested-KVM run, with substantial host
+noise; its timings cannot be substituted into earlier cohorts.
+
+| Kernel debug scan | Engine | Passing attempts | Readiness P50 | Readiness P99 |
+|---|---|---:|---:|---:|
+| Enabled, current default | HyperMachine | 40/40 | 1527.00 ms | 4648.16 ms |
+| Disabled, experiment | HyperMachine | 40/40 | 1446.36 ms | 8929.95 ms |
+| Enabled, current default | Firecracker 1.17.0 | 40/40 | 1343.26 ms | 6906.98 ms |
+| Disabled, experiment | Firecracker 1.17.0 | 40/40 | 1412.88 ms | 12351.56 ms |
+
+Disabling the scan was faster for HyperMachine in only 8/20 blocks and
+increased its overall mean by 452.59 ms; the median paired block mean
+increased by 61.07 ms. The descriptive paired bootstrap interval for the
+enabled-minus-disabled mean was [-953.66, -16.87] ms (10000 resamples,
+seed 0); shared-host drift limits causal interpretation. Forty samples per
+group also make P99 the maximum observation, a weak estimate of a tail.
+**No repeatable improvement was established; the default retains the scan.**
+This experiment also does not establish a new engine ranking or regression.
+
+`tools/guest-image/build-kernel.sh` now accepts `--config DEFINITION` and
+`--config-output RESOLVED_CONFIG`, while preserving its default defconfig.
+It resolves input paths before changing directories, rejects identical
+kernel/config output paths, and saves the resolved configuration after a
+successful build. The exported experimental config and defconfig are
+`benchmarks/2026-09-30/debug-wx-off-resolved.config` and
+`debug-wx-off.defconfig`; raw/summary reports, exact benchmark/analysis
+sources and the state probe share the `debug-wx-` prefix. Reports record
+the kernel, configuration, builder, daemon and harness hashes. Reproduction
+requires supplying local artifact paths in the recorded coordinators.
+
 ## Shipped MCP sandbox interface
 
 `hm sandbox vm --endpoint https://sandbox-api.example.com mcp` serves MCP
