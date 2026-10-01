@@ -929,6 +929,27 @@ and establish neither a runtime improvement nor a competitor win.
 The `boot-milestones-` reports, build/coordinator/analysis sources and separate
 archive verifier are retained in `benchmarks/2026-10-01` with exact hashes.
 
+A subsequent diagnostic guest-agent build adds best-effort, opt-in
+`agent_listening` and `agent_first_accept` kernel markers. Two C100 batch
+pairs passed all 400 attempts with 200 matched HyperMachine stage IDs and
+20 complete guest observations. Mean guest launch-to-listen was 16.72 ms
+(median 1.99 ms, maximum 67.85 ms); listen-to-first-accept was 23.93 ms
+(median 20.11 ms, maximum 135.55 ms). Host queue/connect/ping means were
+9.06/6052.85/12.71 ms. These samples do not show seconds of delay after
+listening. Aligning host VM dispatch and guest boot clocks remains necessary
+before attributing the larger host connection wait.
+
+The first marker implementation wrote formatted fragments as separate kmsg
+records. This cohort's analysis uses the individually timestamped label
+records; its exact executed agent source is archived. Current source submits
+each marker as one buffer. All 16 Linux guest-agent tests and formatting pass
+after that correction; corrected-marker runtime collection remains pending.
+Archive verification confirms only init and agent content changed, equal modes
+and entry sets, and identical BusyBox. Cleanup and artifact checks passed.
+Sources and reports use `listener-milestones-`, `listener-image-` and
+`guest-listener-trace-` names in the same evidence directory. This remains
+sampled diagnostic evidence, excluded from performance rankings.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore
