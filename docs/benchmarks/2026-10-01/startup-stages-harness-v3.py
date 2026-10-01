@@ -16,7 +16,6 @@ import re
 import sys
 import tempfile
 import threading
-import time
 
 spec = importlib.util.spec_from_file_location("burst", Path(__file__).with_name("bench-local-engines-concurrent.py"))
 burst = importlib.util.module_from_spec(spec)
@@ -93,7 +92,6 @@ def main():
         def attempt(args, row, start, ready):
             local.sandbox = None
             def identified(value, pid):
-                value["batch_start_perf_seconds"] = start
                 if local.sandbox is not None:
                     value["sandbox_id"] = local.sandbox
                     with lock: active[local.sandbox] = {"pair":value["pair"], "index":value["index"]}
@@ -104,30 +102,13 @@ def main():
             # every guest remains held. Probes cannot extend measured boot.
             if collect_guest and pid == node.get("pid"):
                 with lock: chosen = sorted(active.items(), key=lambda item:item[1]["index"])
-                batch_observations = []
                 for sandbox, identity in chosen:
                     if identity["index"] % 10: continue
-                    probe_started = time.perf_counter()
                     response = original_request(node["url"], "POST", f"/sandboxes/{sandbox}/exec",
                         {"cmd":"printf 'UPTIME\\n'; cat /proc/uptime; printf 'DMESG\\n'; dmesg", "timeout_secs":10})
-                    probe_finished = time.perf_counter()
                     if response.get("exit_code") != 0 or response.get("timed_out") or response.get("truncated"):
                         raise RuntimeError("guest boot diagnostic failed")
-                    observations.append({"sandbox_id":sandbox, **identity, "response":response,
-                        "host_start_perf_seconds":probe_started, "host_end_perf_seconds":probe_finished})
-                    batch_observations.append(observations[-1])
-                # A second bounded observation checks elapsed-clock consistency
-                # before interpreting uptime as a host/guest clock alignment.
-                for observation in batch_observations:
-                    probe_started = time.perf_counter()
-                    response = original_request(node["url"], "POST",
-                        f"/sandboxes/{observation['sandbox_id']}/exec",
-                        {"cmd":"printf 'UPTIME\\n'; cat /proc/uptime", "timeout_secs":10})
-                    probe_finished = time.perf_counter()
-                    if response.get("exit_code") != 0 or response.get("timed_out") or response.get("truncated"):
-                        raise RuntimeError("guest clock diagnostic failed")
-                    observation["repeat_clock_probe"] = {"response":response,
-                        "host_start_perf_seconds":probe_started, "host_end_perf_seconds":probe_finished}
+                    observations.append({"sandbox_id":sandbox, **identity, "response":response})
             return original_memory(pid)
         burst.subprocess.Popen = launch
         burst.engines.request = request
