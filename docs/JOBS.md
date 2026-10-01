@@ -134,6 +134,22 @@ is host memory and removes processes after exit. A scheduler must therefore
 add durable reconciliation and completion records rather than treating this
 registry as persistent job state.
 
+The `hv2-jobs::schedule` module now provides immutable interval schedules and
+stable occurrence records keyed by schedule ID and scheduled Unix milliseconds.
+`Store::create_interval_schedule`, `interval_schedule` and
+`record_interval_occurrence` are library APIs; no CLI/API scheduler or worker
+dispatch consumes them yet. Interval arithmetic stays anchored to the first
+timestamp and checks overflow. An occurrence stores the job configuration with
+its earliest start set to that occurrence's time.
+
+Publication writes and syncs a temporary file before creating an exclusive hard
+link to its final name. Competing publishers cannot replace the winner or expose
+partial JSON. A crash before publication can leave an unreferenced temporary
+file. Filesystems without hard-link support return an error; there is no weaker
+fallback. Directory durability across power loss is not established. Schedule
+updates, cancellation, cron/timezones, missed-run policy, dispatch reconciliation
+and guest execution remain to be implemented.
+
 The implementation must cover these requirements together:
 
 | Area | Required behavior and verification |
@@ -162,7 +178,9 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 22 unit tests, including:
+**`hv2-jobs`** has 26 unit tests, passing on Windows and Linux, including:
+- interval boundary/overflow checks and competing schedule/occurrence publishers,
+  with immutable records preserved after reopening the store;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;

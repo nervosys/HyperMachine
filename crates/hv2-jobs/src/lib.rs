@@ -48,6 +48,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "http")]
 pub mod http;
 pub mod worker;
+pub mod schedule;
 
 /// Why a store operation failed.
 #[derive(Debug, thiserror::Error)]
