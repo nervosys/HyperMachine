@@ -975,6 +975,20 @@ the first backend run; it is not a guest-entry timestamp. Linux all-targets
 core compilation and formatting pass. Runtime collection is pending and
 these events establish no scheduling improvement.
 
+The traced daemon (`08e8aa52…`) then completed two alternating C100 batch
+pairs, passing all 400 attempts and matching all 200 HyperMachine IDs to
+complete dispatch/readiness records. Mean/maximum VM dispatch queue times
+were 5.00/31.49 ms; vCPU wrapper queue times 0.0043/0.0289 ms; wrapper-to-owner
+thread entry times 7.91/125.45 ms. All 20 paired guest uptime intervals fit
+their host bounds. These dispatch intervals do not account for the seconds
+between native creation and the conditional guest clock epoch. Affinity and
+runtime setup, first backend run, and early guest work before clock initialization
+remain unmeasured boundaries; no scheduling root cause is established.
+Artifact, worker and cleanup checks passed. Exact sources, raw log and analysis
+use `dispatch-diagnostic-` names in the same directory. Seven parser tests pass
+on Windows and Linux. Tracing and post-readiness probes exclude this cohort
+from scored comparisons; the original scored binary hash is restored.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

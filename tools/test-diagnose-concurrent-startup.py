@@ -46,4 +46,20 @@ class ColdLogs(unittest.TestCase):
             diagnostic.cold_stages(line.replace('ping_ms=3', ''))
 
 
+class DispatchLogs(unittest.TestCase):
+    def test_matched_stages_and_units(self):
+        rows = diagnostic.dispatch_stages('VM background dispatch vm=sbx-one dispatch_queue_ms=1e-3\n'
+            'vCPU owner thread entry vm=sbx-one vcpu_id=0 wrapper_queue_ms=2 thread_start_ms=3.5')
+        self.assertEqual(rows['sbx-one'], {'dispatch_queue_ms':.001,'wrapper_queue_ms':2,'thread_start_ms':3.5})
+
+    def test_duplicate_missing_duration_and_extra_vcpu_fail(self):
+        line = 'VM background dispatch vm=sbx-one dispatch_queue_ms=1'
+        with self.assertRaisesRegex(RuntimeError,'duplicate'):
+            diagnostic.dispatch_stages(line+'\n'+line)
+        with self.assertRaisesRegex(RuntimeError,'incomplete'):
+            diagnostic.dispatch_stages('VM background dispatch vm=sbx-one')
+        with self.assertRaisesRegex(RuntimeError,'one vCPU'):
+            diagnostic.dispatch_stages('vCPU owner thread entry vm=sbx-one vcpu_id=1 wrapper_queue_ms=2 thread_start_ms=3')
+
+
 if __name__ == "__main__": unittest.main()
