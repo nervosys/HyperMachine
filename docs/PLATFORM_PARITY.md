@@ -970,3 +970,14 @@ leaving this supported table unchanged for a one-vCPU guest. This system ioctl
 does not sample a running guest and does not establish the startup failure's
 cause. It identifies a separate guest-topology consistency gap to address and
 verify, including the AMD extended topology leaves.
+
+Single-vCPU cold provisioning now normalizes leaf 1's processor count/APIC ID
+and clears HTT; supported extended topology levels describe one processor with
+zero shift, while terminators remain terminators. AMD size/core/node leaves and
+cache-sharing fields agree with that topology; cache geometry remains intact.
+The Linux singleton regression passed, and a real KVM guest executing CPUID
+confirmed count 1, APIC ID 0 and HTT clear. Existing halted/spinning owner and
+pre-kick machine-state regressions also passed (three KVM tests total).
+A rebuilt daemon
+contention cohort is still needed; no startup or latency improvement is claimed.
+Topology field interpretation follows the [Linux x86 topology documentation](https://docs.kernel.org/arch/x86/topology.html).

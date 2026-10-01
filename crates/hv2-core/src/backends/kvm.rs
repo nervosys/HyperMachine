@@ -90,9 +90,33 @@ fn patch_topology(entries: &mut [kvm_cpuid_entry2], vcpu_id: u32, vcpu_count: u3
                 entry.ebx = (entry.ebx & 0x0000_FFFF)
                     | ((vcpu_id & 0xFF) << 24)
                     | ((vcpu_count.min(0xFF)) << 16);
-                entry.edx |= 1 << 28;
+                if vcpu_count == 1 {
+                    entry.edx &= !(1 << 28);
+                } else {
+                    entry.edx |= 1 << 28;
+                }
             }
-            0xB | 0x1F => entry.edx = vcpu_id,
+            0xB | 0x1F | 0x8000_0026 => {
+                entry.edx = vcpu_id;
+                if vcpu_count == 1 && entry.ebx & 0xffff != 0 {
+                    // Preserve supported level types and terminating subleaves.
+                    entry.eax &= !0x1f;
+                    entry.ebx = (entry.ebx & !0xffff) | 1;
+                }
+            }
+            4 | 0x8000_001D if vcpu_count == 1 && entry.eax & 0x1f != 0 => {
+                // Retain cache geometry; only topology/sharing changes.
+                entry.eax &= !(0xfff << 14);
+                if entry.function == 4 {
+                    entry.eax &= !(0x3f << 26);
+                }
+            }
+            0x8000_0008 if vcpu_count == 1 => entry.ecx &= !0xf0ff,
+            0x8000_001E if vcpu_count == 1 => {
+                entry.eax = vcpu_id;
+                entry.ebx = 0; // core 0, one thread per core
+                entry.ecx = 0; // node 0, one node per package
+            }
             _ => {}
         }
     }
@@ -2656,7 +2680,8 @@ impl KvmVcpu {
     /// many share the package (leaf 1, and the x2APIC ID of leaves 0xB and
     /// 0x1F): the supported set describes whichever host CPU answered, the
     /// same for every vCPU, and a guest reading one APIC ID from all of them
-    /// cannot tell them apart. A one-vCPU VM's CPUID is left as it was.
+    /// cannot tell them apart. A one-vCPU VM also receives consistent singleton
+    /// topology, including AMD extended leaves and cache-sharing identifiers.
     pub fn apply_supported_cpuid(&self, kvm_fd: RawFd, vcpu_count: u32) -> Result<()> {
         // KVM_GET_SUPPORTED_CPUID and KVM_SET_CPUID2 take the same layout: a
         // header whose `nent` counts the entries that follow it. Filling one
@@ -2678,11 +2703,9 @@ impl KvmVcpu {
                 .map_err(|e| Error::Hypervisor(format!("Failed to get supported CPUID: {e}")))?;
 
             let entries = header.nent;
-            if vcpu_count > 1 {
-                let first = buf.as_mut_ptr().add(header_size) as *mut kvm_cpuid_entry2;
-                let table = std::slice::from_raw_parts_mut(first, entries as usize);
-                patch_topology(table, self.vcpu_id, vcpu_count);
-            }
+            let first = buf.as_mut_ptr().add(header_size) as *mut kvm_cpuid_entry2;
+            let table = std::slice::from_raw_parts_mut(first, entries as usize);
+            patch_topology(table, self.vcpu_id, vcpu_count);
             let header = &mut *(buf.as_mut_ptr() as *mut kvm_cpuid2);
             kvm_set_cpuid2(self.vcpu_fd, header).map_err(|e| {
                 Error::Hypervisor(format!(
@@ -2969,6 +2992,93 @@ fn fpu_into(state: &FpuState) -> Result<kvm_fpu> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn singleton_topology_preserves_cache_geometry_and_level_terminators() {
+        let mut entries = vec![
+            kvm_cpuid_entry2 {
+                function: 1,
+                ebx: 0x1f200800,
+                edx: 1 << 28,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0xb,
+                eax: 5,
+                ebx: 32,
+                ecx: 0x201,
+                edx: 31,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0xb,
+                index: 2,
+                ecx: 2,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 4,
+                eax: 0xffffc121,
+                ebx: 0x12345678,
+                ecx: 4095,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x80000008,
+                ecx: 0x1234501f,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x8000001e,
+                eax: 31,
+                ebx: 0x107,
+                ecx: 0x102,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x8000001d,
+                eax: 0x03ffc121,
+                ebx: 0x87654321,
+                ..Default::default()
+            },
+            kvm_cpuid_entry2 {
+                function: 0x80000026,
+                eax: 5,
+                ebx: 32,
+                ecx: 0x401,
+                edx: 31,
+                ..Default::default()
+            },
+        ];
+        patch_topology(&mut entries, 0, 1);
+        assert_eq!(entries[0].ebx, 0x00010800);
+        assert_eq!(entries[0].edx & (1 << 28), 0);
+        assert_eq!(
+            (
+                entries[1].eax,
+                entries[1].ebx,
+                entries[1].ecx,
+                entries[1].edx
+            ),
+            (0, 1, 0x201, 0)
+        );
+        assert_eq!((entries[2].eax, entries[2].ebx, entries[2].ecx), (0, 0, 2));
+        assert_eq!(
+            (entries[3].eax, entries[3].ebx, entries[3].ecx),
+            (0x121, 0x12345678, 4095)
+        );
+        assert_eq!(entries[4].ecx, 0x12340000);
+        assert_eq!((entries[5].eax, entries[5].ebx, entries[5].ecx), (0, 0, 0));
+        assert_eq!((entries[6].eax, entries[6].ebx), (0x121, 0x87654321));
+        assert_eq!(
+            (
+                entries[7].eax,
+                entries[7].ebx,
+                entries[7].ecx,
+                entries[7].edx
+            ),
+            (0, 1, 0x401, 0)
+        );
+    }
     use super::*;
     use crate::hypervisor::HypervisorBackend;
 
