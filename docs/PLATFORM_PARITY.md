@@ -78,7 +78,7 @@ for Python. Nested KVM measurements are not substitutes for bare-metal ones.
 | Daytona | Advertises sandbox startup below 90 ms; default sandbox is a container | Linux/Windows VMs and GPU workloads | No matched run; container startup differs from VM readiness |
 | Modal | Reports below 500 ms median API-to-user-code latency in its million-concurrent-sandbox benchmark | Managed fleet scale and GPU workloads | No matched run or equivalent fleet |
 | E2B | No precise current latency verified in this review | SDK compatibility and managed execution | No matched run |
-| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Same-host cold native-control cohorts recorded below; HyperMachine startup failures prevent a passing comparison. Specification metrics differ from application readiness and incremental PSS |
+| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Same-host native cold cohorts recorded below; both engines passed an unpinned 200-pair cohort with HyperMachine slower. Pinned contention failures remain unresolved. Specification metrics differ from application readiness and incremental PSS |
 
 These figures describe the linked providers' own claims or repository runs,
 not an independently reproduced ranking. A lower headline number does not
@@ -676,10 +676,12 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | One contending worker, all pinned to CPU 0 | Firecracker 1.17.0 | 100 / 100 | 820.63 | 874.96 |
 | Pinned APIC diagnostic repeat | HyperMachine | 92 / 100 | 2771.78 | 5910.02 |
 | Pinned APIC diagnostic repeat | Firecracker 1.17.0 | 94 / 100 | 2266.94 | 4000.67 |
+| PIT stub and API-readiness correction, pinned repeat | HyperMachine | 93 / 100 | 1748.13 | 3366.14 |
+| PIT stub and API-readiness correction, pinned repeat | Firecracker 1.17.0 | 100 / 100 | 1245.19 | 3125.96 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
-and both pinned contention comparisons. The 200-pair and unpinned two-worker cohorts
+and all three pinned contention comparisons. The 200-pair and unpinned two-worker cohorts
 passed. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
 failed 5/140 attempts in the first three normal-logging cohorts while Firecracker passed 140/140. HyperMachine's median was slower in every recorded normal-logging cohort. We have not achieved across-the-board superiority.
@@ -879,5 +881,38 @@ the channel-2 speaker-port stub used during timer calibration. The same real
 guest regression then passed. Firecracker's
 [versioned PIT setup](https://raw.githubusercontent.com/firecracker-microvm/firecracker/v1.17.0/src/vmm/src/arch/x86_64/vm.rs)
 also enables this stub. This establishes corrected port emulation, not that
-the eight cold-boot failures or latency gap are fixed. A rebuilt daemon and
-matched workload repeat are still required to assess that effect.
+the cold-boot failures or latency gap are fixed. The matched repeat below
+confirms that this port correction leaves the startup stall unresolved.
+
+
+The [PIT-corrected daemon repeat](benchmarks/2026-09-30/local-engines-pit-speaker-pinned-load-100.json)
+passed 93/100 HyperMachine attempts versus 100/100 Firecracker attempts. The
+[coordinator](benchmarks/2026-09-30/pit-speaker-pinned-load-coordinator.py)
+retained the CPU-0 contention profile; source/artifact checksums stayed
+unchanged, the worker stayed alive and was reaped, and node cleanup succeeded.
+All seven HyperMachine failures retained the 2401-exit, no-console,
+`default_idle` stall and masked/unarmed LAPIC timer evidence. The PIT port
+correction therefore does not resolve this startup defect. Differences between
+seven, eight and nine failures across shared-host cohorts do not establish
+a reliability improvement. Successful-sample P50/P99 was 1748.13/3366.14 ms
+for HyperMachine versus 1245.19/3125.96 ms for Firecracker; the failed cohort
+cannot support a performance win.
+
+The corrected Firecracker readiness harness produced no connection-refused
+samples in this repeat. Its additional read-only readiness probe changes the
+control path and is included in measured time; raw reports retain the changed
+harness checksum. This result supports these 100 attempts, not general
+competitor reliability or a managed-platform comparison.
+
+
+Failure reporting now prepares a machine-level PIC/PIT sample before kicking
+the vCPU owner. These are independent KVM VM-level GET operations, not concurrent
+vCPU register reads and not an atomic restore snapshot. It reports PIC request,
+mask and in-service registers, and all three PIT channel counts/modes/gates and
+load timestamps. Non-KVM, absent or malformed layouts are explicitly unavailable.
+Four decoder tests pass, including missing-state handling, PIC bits and PIT's
+valid 65536-count boundary. A real-KVM regression read the controller state while
+a raw guest remained halted with interrupts disabled, then stopped it; both
+that test and the existing halted/spinning owner regression passed. Strict
+all-targets core/daemon Clippy passed on Windows. Live Linux-failure integration
+remains pending for this new diagnostic step. Successful readiness does not request these samples.
