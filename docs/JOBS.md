@@ -121,6 +121,23 @@ but loopback without a token.
 
 ## VM scheduling implementation requirements
 
+Interval publication is available through the CLI:
+
+```text
+hm jobs --store DIR schedule create NAME interval.json
+hm jobs --store DIR schedule status NAME
+hm jobs --store DIR schedule publish NAME --limit 100
+hm jobs --store DIR schedule occurrences NAME --after-ms 1234567890000 --limit 100
+```
+
+An interval spec contains `first_ms`, `every_ms`, optional `missed_policy`
+(`catch_up` or `coalesce`), and `job` containing a job spec. `create` also accepts
+`-` for stdin. These commands print JSON. `publish` defaults to the current wall
+clock; `--now-ms` supplies an explicit Unix millisecond horizon for replay or
+testing. Limits must be 1-1024. Names are immutable: duplicate creation fails.
+Publication stores occurrence records and does not enqueue or execute jobs.
+The existing `hm jobs worker` does not consume these records.
+
 VM scheduling remains unimplemented. Inspection on 2026-10-01 found that
 `hv2-jobs/src/worker.rs::run_job` launches a local `ProcessSandbox`; its
 cancellation and lease-loss watcher controls that local process. Launching
@@ -137,8 +154,9 @@ registry as persistent job state.
 The `hv2-jobs::schedule` module now provides immutable interval schedules and
 stable occurrence records keyed by schedule ID and scheduled Unix milliseconds.
 `Store::create_interval_schedule`, `interval_schedule` and
-`record_interval_occurrence` are library APIs; no CLI/API scheduler or worker
-dispatch consumes them yet. Interval arithmetic stays anchored to the first
+`record_interval_occurrence` are library APIs; the CLI supports explicit bounded
+publication, but no automatic scheduler or worker dispatch consumes them yet.
+Interval arithmetic stays anchored to the first
 timestamp and checks overflow. An occurrence stores the job configuration with
 its earliest start set to that occurrence's time.
 
@@ -202,6 +220,11 @@ behavior is implemented and checked. Existing delayed host jobs do not satisfy
 these acceptance criteria.
 
 ## Existing host-job verification
+
+`cargo test -p hm-cli --test jobs_schedule` passes on Windows and Linux.
+It invokes the shipped binary in separate processes to verify schedule creation,
+duplicate rejection, bounded publication, persisted status, occurrence pages,
+invalid-limit/path rejection, and an empty runnable job queue.
 
 **`tools/e2e-jobs.sh`** passes 18 of 18 checks on Windows (Git Bash) and on Linux as an
 unprivileged user:

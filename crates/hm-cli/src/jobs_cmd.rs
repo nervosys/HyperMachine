@@ -34,6 +34,11 @@ impl StoreArgs {
 /// `hm jobs` commands.
 #[derive(Debug, Subcommand)]
 pub enum JobsCommand {
+    /// Persist interval schedules and occurrences; does not execute jobs
+    Schedule {
+        #[command(subcommand)]
+        command: ScheduleCommand,
+    },
     /// Queue a job from a spec file (JSON); prints its ID
     Submit {
         /// The spec, or `-` for standard input
@@ -90,10 +95,68 @@ pub enum JobsCommand {
     },
 }
 
+#[derive(Debug, Subcommand)]
+pub enum ScheduleCommand {
+    /// Create an immutable interval schedule from JSON (use - for stdin)
+    Create { id: String, spec: PathBuf },
+    /// Print the schedule and occurrence-publication progress as JSON
+    Status { id: String },
+    /// Publish one bounded due batch; does not enqueue or execute jobs
+    Publish {
+        id: String,
+        /// Unix milliseconds to plan through [default: current wall clock]
+        #[arg(long)]
+        now_ms: Option<u64>,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
+    /// Read a JSON page of committed occurrences; does not claim jobs
+    Occurrences {
+        id: String,
+        /// Exclusive scheduled-time cursor in Unix milliseconds
+        #[arg(long)]
+        after_ms: Option<u64>,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
+}
+
 /// Run a `hm jobs` command.
 pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     let s = store.open()?;
     match command {
+        JobsCommand::Schedule { command } => {
+            let value = match command {
+                ScheduleCommand::Create { id, spec } => {
+                    let text = if spec.as_os_str() == "-" {
+                        let mut text = String::new();
+                        std::io::stdin().read_to_string(&mut text)?;
+                        text
+                    } else {
+                        std::fs::read_to_string(&spec)
+                            .with_context(|| format!("reading {}", spec.display()))?
+                    };
+                    let schedule =
+                        serde_json::from_str(&text).context("the interval schedule spec")?;
+                    s.create_interval_schedule(&id, &schedule)?;
+                    serde_json::json!({"id": id})
+                }
+                ScheduleCommand::Status { id } => serde_json::json!({
+                    "id": id, "schedule": s.interval_schedule(&id)?,
+                    "publication_through_ms": s.interval_progress(&id)?
+                }),
+                ScheduleCommand::Publish { id, now_ms, limit } => serde_json::to_value(
+                    s.materialize_interval(&id, now_ms.unwrap_or_else(hv2_jobs::now_ms), limit)?,
+                )?,
+                ScheduleCommand::Occurrences {
+                    id,
+                    after_ms,
+                    limit,
+                } => serde_json::to_value(s.committed_interval_occurrences(&id, after_ms, limit)?)?,
+            };
+            println!("{}", serde_json::to_string_pretty(&value)?);
+            Ok(0)
+        }
         JobsCommand::Submit { spec } => {
             let text = if spec.as_os_str() == "-" {
                 let mut t = String::new();
