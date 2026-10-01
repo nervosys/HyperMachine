@@ -1108,8 +1108,25 @@ not an atomic interrupt snapshot. No additional ioctls, snapshot schema or
 interrupt behavior change. All eight Linux boot-diagnostic tests and formatting
 pass, including full-width routes, boundary pins, poisoned padding and malformed
 lengths. The existing workspace CI test job includes these daemon tests.
-Failed-boot runtime I/O APIC route capture remains pending; no wakeup fix follows
-from this formatter change.
+Unforced failed-boot runtime I/O APIC route capture remains pending; no wakeup
+fix follows from this formatter change.
+
+A negative-control image omits the agent launch line while retaining all other
+archive content and modes, including identical agent/BusyBox binaries. Against
+the diagnostic daemon (`5e6916bf…`), its create request returned the expected
+503 readiness failure after 15.56 seconds. The API error contained captured
+TSC/deadline values and all 24 I/O APIC routes in order. The node was empty,
+daemon cleanup passed and artifact hashes were unchanged. This verifies live
+failure formatting; the deliberate missing agent does not reproduce the ten
+earlier timeouts. Image build/verification and API evidence use the `no-agent-`
+names in the evidence directory.
+
+The same daemon then passed all 400 normal-guest attempts in two alternating
+C100 pairs with the original gzip image and controlled host profile. Artifact,
+worker and node/daemon cleanup checks passed, but no intermittent failure or
+its route state was observed. Reports and sources use `ioapic-diagnostic-`
+names. Both controls are diagnostic evidence, excluded from scored comparisons;
+the original scored binary hash is restored. No reliability fix is claimed.
 
 ## Same-host Firecracker cold comparison (2026-09-30)
 
