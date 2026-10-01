@@ -43,5 +43,6 @@ Names remain metadata labels, not an atomic uniqueness registry. Duplicate
 creation and fork inheritance are allowed and then rejected on lookup.
 Paused VMs are included but must be resumed before connecting. Guest SSH
 servers and credentials are operator-provisioned. Multi-tenant ownership,
-name reservations/renames, interactive PTY and SFTP verification remain
-open. See [client configuration](../../TCP_STDIO.md).
+name reservations/renames, terminal resizing/job control and SFTP verification
+remain open. [PTY allocation and canonical input](ssh-pty.md) are verified
+separately. See [client configuration](../../TCP_STDIO.md).

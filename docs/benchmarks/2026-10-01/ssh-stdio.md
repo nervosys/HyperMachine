@@ -68,6 +68,8 @@ checks Git-index bytes.
 
 Users still provision their guest SSH server and credentials and maintain
 local OpenSSH aliases, as described in [the CLI guide](../../TCP_STDIO.md).
-Server-side names, automatic SSH provisioning, interactive PTY and SFTP
-verification remain open. The tested noninteractive session supplies no
+Atomic name reservations, automatic SSH provisioning, terminal resizing/job
+control and SFTP verification remain open. [Named lookup](ssh-name.md) and
+[PTY allocation/canonical input](ssh-pty.md) have subsequent verification.
+The tested noninteractive session supplies no
 performance win.

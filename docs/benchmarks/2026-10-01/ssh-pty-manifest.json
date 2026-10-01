@@ -1,0 +1,30 @@
+{
+  "purpose": "functional PTY evidence, no performance claim",
+  "files_sha256": {
+    "ssh-pty-e2e-cli-10.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-11.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-12.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-13.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-14.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-15.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-16.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-17.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-18.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-19.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-20.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-21.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-3.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-4.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-5.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-6.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-7.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-8.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-cli-9.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "ssh-pty-e2e-control.log": "2fb531b567dfe24342e30214e3b0e1000f14a6c221650e1a21b22eeff9a82df9",
+    "ssh-pty-e2e-node.log": "6c7d6dd7429746fa25615cb83529b1e8140ae239b71d3b3e556d284cd262b800",
+    "ssh-pty-e2e-redis.log": "09fec2a376a4125f38f901f524a1111386c1f7ecc4c07b0b2568a7838c82fa1d",
+    "ssh-pty-e2e.json": "31d00312ab86b2236c0b404c7fd70668ca854dba163d5add3c66a1a0fb0e555e",
+    "ssh-pty-measured-e2e.py": "9582b2c81d0753d2ad3918eacc435ec1b8a83dbf1b0b393e3389b556eb443d02",
+    "verify-ssh-pty.py": "5f9b01933aecef5336faf31b4a94f2df9fd9aa837eebe0f73839b182e976976d"
+  }
+}
