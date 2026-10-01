@@ -1017,6 +1017,25 @@ Firecracker batches; this asymmetric tracing cohort remains excluded from
 performance rankings. The original scored binary hash is restored. First-exit
 identity and early kernel execution are the next measurement boundaries.
 
+An experimental Linux 6.6.52 LZ4-compressed kernel build is underway to test
+the compressed early-boot path. The retained `lz4-guest.defconfig` differs
+from the default only by disabling kernel gzip compression and selecting
+LZ4. The owned build's resolved configuration enables LZ4, strict kernel and
+module RWX protection, and DEBUG_WX. It uses the existing source-checksummed
+builder with eight-CPU affinity and separate output paths; defaults remain
+unchanged. Reproduce with LZ4 installed:
+
+```sh
+taskset -c 0-7 bash tools/guest-image/build-kernel.sh \
+  --config docs/benchmarks/2026-10-01/lz4-guest.defconfig \
+  --config-output /var/tmp/hm-kernel-lz4/resolved.config \
+  -o /var/tmp/hm-kernel-lz4/bzImage
+```
+
+Build completion, guest validation and counterbalanced gzip/LZ4 comparisons
+remain pending. Larger image-loading costs must be included. Existing
+measurements do not establish decompression as a cause or LZ4 as an improvement.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore
