@@ -1,0 +1,261 @@
+{
+  "success": true,
+  "coordinator_sha256": "6b9c6ed0870abb9c846960b89665d97cf810ddb079f40f07623e76f485087fbe",
+  "results": [
+    {
+      "name": "run-1-backlog4",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--output",
+        "/var/tmp/hm-tcp-backlog/run-1-backlog4.json",
+        "--pairs",
+        "10",
+        "--rounds",
+        "3",
+        "--concurrency",
+        "8",
+        "--environment",
+        "shared-nested-KVM matched guest-agent backlog control"
+      ],
+      "exit_code": 1,
+      "load_before": [
+        6.31884765625,
+        3.75244140625,
+        2.6298828125
+      ],
+      "load_after": [
+        7.29052734375,
+        4.287109375,
+        2.84814453125
+      ],
+      "output_utf8": "{\"success\": false, \"rows\": 960, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.464149998559151, \"max\": 51.54019600013271, \"mean\": 15.859432274737628, \"p50\": 14.376885003002826, \"p95\": 31.21406599530019, \"p99\": 48.28002800059039}, \"transfer_ms\": {\"n\": 240, \"min\": 0.5076329980511218, \"max\": 14.388328003406059, \"mean\": 2.699600120983329, \"p50\": 1.930892001837492, \"p95\": 8.605805000115652, \"p99\": 11.915255003259517}, \"transaction_ms\": {\"n\": 240, \"min\": 4.680943995481357, \"max\": 60.475294005300384, \"mean\": 18.55903239572096, \"p50\": 16.99260599707486, \"p95\": 35.387599004025105, \"p99\": 53.719777999504004}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 0.5429748333614994, \"max\": 15.390055473133826, \"mean\": 4.2614404596123325, \"p50\": 4.020082662589368, \"p95\": 7.863486808282521, \"p99\": 10.593823622085031}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.264669004944153, \"max\": 158.6539990021265, \"mean\": 41.55940769566465, \"p50\": 35.52316499553854, \"p95\": 100.80844699405134, \"p99\": 133.60770200233674}, \"transfer_ms\": {\"n\": 240, \"min\": 12.592343002324924, \"max\": 140.59053100208985, \"mean\": 38.27740524593537, \"p50\": 34.3223570016562, \"p95\": 69.71168699965347, \"p99\": 108.24944400519598}, \"transaction_ms\": {\"n\": 240, \"min\": 19.31881800555857, \"max\": 201.74576000135858, \"mean\": 79.83681294160003, \"p50\": 75.43547199747991, \"p95\": 153.0036959957215, \"p99\": 187.4496349992114}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 14.225709126671344, \"max\": 158.82667742061506, \"mean\": 61.81941592774846, \"p50\": 58.11976234408869, \"p95\": 106.45502274560283, \"p99\": 130.74002644339905}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 237, \"min\": 1.2581019982462749, \"max\": 96.49753799749305, \"mean\": 15.297188189638119, \"p50\": 15.694968002208043, \"p95\": 21.892436998314224, \"p99\": 38.59102499700384}, \"transfer_ms\": {\"n\": 237, \"min\": 0.6133839997346513, \"max\": 81.23573099874193, \"mean\": 6.557620590952282, \"p50\": 3.5176999954273924, \"p95\": 16.866762001882307, \"p99\": 76.30448599957163}, \"transaction_ms\": {\"n\": 237, \"min\": 4.062290005094837, \"max\": 99.32315899641253, \"mean\": 21.8548087805904, \"p50\": 19.284464993688744, \"p95\": 44.29256000003079, \"p99\": 98.47683700354537}, \"aggregate_payload_mib_s\": {\"n\": 237, \"min\": 0.09617073551195089, \"max\": 12.736719580849309, \"mean\": 2.5859234576328642, \"p50\": 2.2209113938526186, \"p95\": 6.448079833979551, \"p99\": 10.156379007982421}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 225, \"min\": 3.171948999806773, \"max\": 71.15965599950869, \"mean\": 18.90506440857684, \"p50\": 16.37461900099879, \"p95\": 37.60707799665397, \"p99\": 67.17470599687658}, \"transfer_ms\": {\"n\": 225, \"min\": 17.134025001723785, \"max\": 317.0973320011399, \"mean\": 89.9657355912172, \"p50\": 83.33056499395752, \"p95\": 208.33550699899206, \"p99\": 288.0824680032674}, \"transaction_ms\": {\"n\": 225, \"min\": 22.07658399856882, \"max\": 337.9361269981018, \"mean\": 108.87079999979404, \"p50\": 103.76066999742761, \"p95\": 247.05123500461923, \"p99\": 335.830761003308}, \"aggregate_payload_mib_s\": {\"n\": 225, \"min\": 6.3072116923166375, \"max\": 116.72680527773177, \"mean\": 29.655017408980278, \"p50\": 24.000797308226872, \"p95\": 63.71825927090265, \"p99\": 77.42401028083765}}}}\n",
+      "output_sha256": "ab4c4e0294cad145cc6e345bf891c0ac20dd535f54a8f7964d03e0e28cda38e5"
+    },
+    {
+      "name": "run-2-backlog128",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp-backlog/guest-tcp.cpio.gz",
+        "--output",
+        "/var/tmp/hm-tcp-backlog/run-2-backlog128.json",
+        "--pairs",
+        "10",
+        "--rounds",
+        "3",
+        "--concurrency",
+        "8",
+        "--environment",
+        "shared-nested-KVM matched guest-agent backlog control"
+      ],
+      "exit_code": 0,
+      "load_before": [
+        7.29052734375,
+        4.287109375,
+        2.84814453125
+      ],
+      "load_after": [
+        5.93896484375,
+        4.2138671875,
+        2.86328125
+      ],
+      "output_utf8": "{\"success\": true, \"rows\": 960, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 240, \"min\": 3.157719998853281, \"max\": 68.6550959944725, \"mean\": 15.357188129595064, \"p50\": 13.512116005585995, \"p95\": 33.253845998842735, \"p99\": 58.57188400113955}, \"transfer_ms\": {\"n\": 240, \"min\": 0.6494890039903112, \"max\": 17.935780000698287, \"mean\": 2.6407883788730637, \"p50\": 1.9688410029630177, \"p95\": 7.096831999660935, \"p99\": 16.246671999397222}, \"transaction_ms\": {\"n\": 240, \"min\": 4.573200996674132, \"max\": 72.5474619976012, \"mean\": 17.997976508468128, \"p50\": 16.081638998002745, \"p95\": 38.27364199969452, \"p99\": 62.51156899816124}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 0.43558183695918656, \"max\": 12.028687094010515, \"mean\": 4.103733536400759, \"p50\": 3.9593267571835207, \"p95\": 7.153517922038953, \"p99\": 9.769239605092803}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.9923680049250834, \"max\": 218.17112699500285, \"mean\": 40.33970267052306, \"p50\": 33.70471599919256, \"p95\": 100.45880899997428, \"p99\": 176.9733110049856}, \"transfer_ms\": {\"n\": 240, \"min\": 11.115344001154881, \"max\": 147.80332599912072, \"mean\": 36.477141875214635, \"p50\": 29.337955005757976, \"p95\": 78.24967800115701, \"p99\": 139.13571699958993}, \"transaction_ms\": {\"n\": 240, \"min\": 20.350693994259927, \"max\": 278.4577310012537, \"mean\": 76.8168445457377, \"p50\": 68.79688699700637, \"p95\": 171.49479399813572, \"p99\": 261.92330900084926}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 13.531495225025573, \"max\": 179.93145329485085, \"mean\": 68.3569904832632, \"p50\": 67.9602584706344, \"p95\": 121.97793566707952, \"p99\": 154.5487443631349}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 240, \"min\": 3.762603002542164, \"max\": 37.79209400090622, \"mean\": 17.556813062462123, \"p50\": 17.081594000046607, \"p95\": 28.28354699886404, \"p99\": 36.75631299847737}, \"transfer_ms\": {\"n\": 240, \"min\": 0.8513209977536462, \"max\": 22.170231000927743, \"mean\": 4.56510133763004, \"p50\": 3.5413689984125085, \"p95\": 12.099885003408417, \"p99\": 19.367503002285957}, \"transaction_ms\": {\"n\": 240, \"min\": 8.350534000783227, \"max\": 54.34705199877499, \"mean\": 22.121914400092162, \"p50\": 21.289847005391493, \"p95\": 34.09152800304582, \"p99\": 52.515612995193806}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 0.35238694624666184, \"max\": 9.176914490086109, \"mean\": 2.5164903386751036, \"p50\": 2.2028586867178452, \"p95\": 5.752339762929367, \"p99\": 7.700435592306095}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 240, \"min\": 4.222771000058856, \"max\": 51.42284999601543, \"mean\": 18.4202472166362, \"p50\": 17.75820400507655, \"p95\": 31.08580499974778, \"p99\": 48.321619993657805}, \"transfer_ms\": {\"n\": 240, \"min\": 30.15968900581356, \"max\": 186.51432800106704, \"mean\": 81.86674599595183, \"p50\": 65.18798199977027, \"p95\": 158.15381599531975, \"p99\": 176.00203599431552}, \"transaction_ms\": {\"n\": 240, \"min\": 37.21355899324408, \"max\": 204.22592899558367, \"mean\": 100.28699321258803, \"p50\": 82.58955700148363, \"p95\": 176.14162800600752, \"p99\": 202.98187600565143}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 10.723036784544284, \"max\": 66.31368113956617, \"mean\": 30.58031094224158, \"p50\": 30.557870443110332, \"p95\": 55.54517323366871, \"p99\": 64.02597098006359}}}}\n",
+      "output_sha256": "a8d26c69896b38e361984d2d1c49a1eb3d3bfb53da7d0708e3028a89eb2e5af5"
+    },
+    {
+      "name": "run-3-backlog128",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp-backlog/guest-tcp.cpio.gz",
+        "--output",
+        "/var/tmp/hm-tcp-backlog/run-3-backlog128.json",
+        "--pairs",
+        "10",
+        "--rounds",
+        "3",
+        "--concurrency",
+        "8",
+        "--environment",
+        "shared-nested-KVM matched guest-agent backlog control"
+      ],
+      "exit_code": 0,
+      "load_before": [
+        5.93896484375,
+        4.2138671875,
+        2.86328125
+      ],
+      "load_after": [
+        5.294921875,
+        4.25048828125,
+        2.927734375
+      ],
+      "output_utf8": "{\"success\": true, \"rows\": 960, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.6370449995738454, \"max\": 40.60469300020486, \"mean\": 13.633162495716533, \"p50\": 12.457093005650677, \"p95\": 27.665624002111144, \"p99\": 36.34939000039594}, \"transfer_ms\": {\"n\": 240, \"min\": 0.6347660018946044, \"max\": 23.463977995561436, \"mean\": 2.2470869126664184, \"p50\": 1.525464998849202, \"p95\": 6.09541200537933, \"p99\": 15.285492998373229}, \"transaction_ms\": {\"n\": 240, \"min\": 3.635419998317957, \"max\": 53.855205995205324, \"mean\": 15.880249408382952, \"p50\": 14.150040995446034, \"p95\": 29.499304000637494, \"p99\": 39.4882540058461}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 0.33295718234469246, \"max\": 12.307684999955583, \"mean\": 5.101914383802766, \"p50\": 5.085948441755369, \"p95\": 9.189716904496354, \"p99\": 10.935933984608342}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.9151090056984685, \"max\": 169.36673300369876, \"mean\": 41.12910679189857, \"p50\": 34.708360995864496, \"p95\": 104.371228000673, \"p99\": 128.42500700207893}, \"transfer_ms\": {\"n\": 240, \"min\": 10.598437002045102, \"max\": 140.5939420001232, \"mean\": 40.94930597108638, \"p50\": 33.76272499735933, \"p95\": 81.9029699996463, \"p99\": 101.30512699834071}, \"transaction_ms\": {\"n\": 240, \"min\": 17.17988900054479, \"max\": 200.56619400565978, \"mean\": 82.07841276298495, \"p50\": 71.26173800497781, \"p95\": 155.73999099433422, \"p99\": 191.59656400006497}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 14.22536399184431, \"max\": 188.70707063825304, \"mean\": 65.69913595895328, \"p50\": 58.684591914974845, \"p95\": 130.97437994733812, \"p99\": 179.83830916241624}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 240, \"min\": 3.5445239991531707, \"max\": 51.794834005704615, \"mean\": 18.070440383507957, \"p50\": 16.62994000071194, \"p95\": 34.3908580034622, \"p99\": 38.886237001861446}, \"transfer_ms\": {\"n\": 240, \"min\": 0.5334210000000894, \"max\": 103.27327100094408, \"mean\": 6.822152320637542, \"p50\": 3.0380589960259385, \"p95\": 15.951503999531269, \"p99\": 100.17530999903101}, \"transaction_ms\": {\"n\": 240, \"min\": 5.5168710023281164, \"max\": 120.35605200071586, \"mean\": 24.8925927041455, \"p50\": 20.168988005025312, \"p95\": 40.47267200076021, \"p99\": 119.00069499824895}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 0.07564880945746921, \"max\": 14.646030058806629, \"mean\": 2.93977239467565, \"p50\": 2.571455186470382, \"p95\": 6.394903430118315, \"p99\": 11.0517284010709}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 240, \"min\": 3.433135003433563, \"max\": 65.31430099857971, \"mean\": 19.47193288751805, \"p50\": 16.77565999852959, \"p95\": 43.620076998195145, \"p99\": 63.05458299902966}, \"transfer_ms\": {\"n\": 240, \"min\": 18.696637998800725, \"max\": 283.1601690049865, \"mean\": 84.19687537522502, \"p50\": 71.12737900024513, \"p95\": 204.60406100028194, \"p99\": 227.23879100522026}, \"transaction_ms\": {\"n\": 240, \"min\": 26.01076899736654, \"max\": 287.634826003341, \"mean\": 103.66880826274307, \"p50\": 88.50030499888817, \"p95\": 218.6034680053126, \"p99\": 287.0439800026361}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 7.063140296277968, \"max\": 106.97110358173956, \"mean\": 34.17214739101454, \"p50\": 27.82423303982582, \"p95\": 70.97253739124157, \"p99\": 83.69275186309932}}}}\n",
+      "output_sha256": "d7e77bab6eb5d68b87958a0fdefdacfb57656f62f81bcd425f54c041c0a8ad46"
+    },
+    {
+      "name": "run-4-backlog4",
+      "command": [
+        "python3",
+        "tools/bench-tcp-local.py",
+        "--hypermachine",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--firecracker",
+        "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp/guest-tcp.cpio.gz",
+        "--output",
+        "/var/tmp/hm-tcp-backlog/run-4-backlog4.json",
+        "--pairs",
+        "10",
+        "--rounds",
+        "3",
+        "--concurrency",
+        "8",
+        "--environment",
+        "shared-nested-KVM matched guest-agent backlog control"
+      ],
+      "exit_code": 1,
+      "load_before": [
+        5.294921875,
+        4.25048828125,
+        2.927734375
+      ],
+      "load_after": [
+        4.3525390625,
+        4.1376953125,
+        2.95263671875
+      ],
+      "output_utf8": "{\"success\": false, \"rows\": 960, \"summaries\": {\"hypermachine-4096\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.70124899543589, \"max\": 91.13266599888448, \"mean\": 19.19033145386493, \"p50\": 16.37026699609123, \"p95\": 43.400611997640226, \"p99\": 51.16761600220343}, \"transfer_ms\": {\"n\": 240, \"min\": 0.8004920018720441, \"max\": 63.62739000178408, \"mean\": 3.578048766758002, \"p50\": 1.9671679983730428, \"p95\": 11.819705003290437, \"p99\": 14.978077997511718}, \"transaction_ms\": {\"n\": 240, \"min\": 4.060639999806881, \"max\": 103.83975500008091, \"mean\": 22.76838022062293, \"p50\": 19.304117995488923, \"p95\": 48.98164999758592, \"p99\": 84.97102500405163}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 0.12278517160268465, \"max\": 9.759622809134328, \"mean\": 3.9655594294312744, \"p50\": 3.9701959603075143, \"p95\": 7.661882732620027, \"p99\": 8.413247971353602}}, \"hypermachine-1048576\": {\"handshake_ms\": {\"n\": 240, \"min\": 2.818451997882221, \"max\": 179.031808002037, \"mean\": 54.735872825009814, \"p50\": 45.866158994613215, \"p95\": 135.5446670058882, \"p99\": 171.31282299669692}, \"transfer_ms\": {\"n\": 240, \"min\": 14.662704998045228, \"max\": 141.45453999663005, \"mean\": 53.17120781640673, \"p50\": 47.276917000999674, \"p95\": 105.44168399792397, \"p99\": 134.50426499912282}, \"transaction_ms\": {\"n\": 240, \"min\": 18.42458999453811, \"max\": 228.86695499619236, \"mean\": 107.90708064141654, \"p50\": 107.85951599973487, \"p95\": 185.97552799474215, \"p99\": 218.84599800250726}, \"aggregate_payload_mib_s\": {\"n\": 240, \"min\": 14.13881802625527, \"max\": 136.40048001147343, \"mean\": 46.265721815790236, \"p50\": 41.73631413761233, \"p95\": 87.75385712249386, \"p99\": 118.1320534284558}}, \"firecracker-4096\": {\"handshake_ms\": {\"n\": 234, \"min\": 4.0606530019431375, \"max\": 44.96544300491223, \"mean\": 19.313650200880755, \"p50\": 17.748013000527862, \"p95\": 33.24972600239562, \"p99\": 43.13550900405971}, \"transfer_ms\": {\"n\": 234, \"min\": 0.48899100511334836, \"max\": 26.246754998282995, \"mean\": 6.415342021146222, \"p50\": 4.1963550029322505, \"p95\": 16.973716999928, \"p99\": 24.352574000658933}, \"transaction_ms\": {\"n\": 234, \"min\": 5.685124000592623, \"max\": 56.15648299863096, \"mean\": 25.728992222026974, \"p50\": 23.778393006068654, \"p95\": 46.60532200068701, \"p99\": 52.71820099733304}, \"aggregate_payload_mib_s\": {\"n\": 234, \"min\": 0.29765584357041763, \"max\": 15.976776501623089, \"mean\": 2.416050838593164, \"p50\": 1.8597789727788951, \"p95\": 6.553632400160182, \"p99\": 11.394546644652147}}, \"firecracker-1048576\": {\"handshake_ms\": {\"n\": 227, \"min\": 3.5110679964418523, \"max\": 177.37003799993545, \"mean\": 26.00671059023389, \"p50\": 17.82838500366779, \"p95\": 60.04069400660228, \"p99\": 122.092026998871}, \"transfer_ms\": {\"n\": 227, \"min\": 17.31590399867855, \"max\": 281.8380230019102, \"mean\": 114.08495397374546, \"p50\": 99.14499000296928, \"p95\": 263.2305970037123, \"p99\": 280.4429239986348}, \"transaction_ms\": {\"n\": 227, \"min\": 23.216956004034728, \"max\": 309.65352700150106, \"mean\": 140.09166456397935, \"p50\": 119.93067099683685, \"p95\": 300.5464439993375, \"p99\": 308.49420899903635}, \"aggregate_payload_mib_s\": {\"n\": 227, \"min\": 7.096274586010862, \"max\": 115.50075584576055, \"mean\": 23.648012185513522, \"p50\": 20.17247669236844, \"p95\": 47.579487545114986, \"p99\": 56.35225116241984}}}}\n",
+      "output_sha256": "6db59c16eb7c5d13f341ee9ea3142ea171b7a3561831143a83c6d55f2ea4115c"
+    },
+    {
+      "name": "e2e",
+      "command": [
+        "python3",
+        "tools/e2e-tcp-tunnel.py",
+        "--daemon",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-sandboxd-release",
+        "--control-plane",
+        "/var/tmp/hm-tcp-api-nodelay/final/hv2-control-plane-release",
+        "--cli",
+        "/var/tmp/hm-tcp/hm",
+        "--kernel",
+        "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+        "--initrd",
+        "/var/tmp/hm-tcp-backlog/guest-tcp.cpio.gz",
+        "--output",
+        "/var/tmp/hm-tcp-backlog/e2e.json"
+      ],
+      "exit_code": 0,
+      "load_before": [
+        4.3525390625,
+        4.1376953125,
+        2.95263671875
+      ],
+      "load_after": [
+        2.97216796875,
+        3.82958984375,
+        2.9072265625
+      ],
+      "output_utf8": "{\"success\": true, \"purpose\": \"functional verification, no performance comparison\", \"artifact_sha256\": {\"daemon\": \"03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d\", \"control-plane\": \"67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029\", \"cli\": \"2e3cc622ff8715db401796a5719175b1dfb014f1b30c1d34d0bbb75657e6f2bf\", \"kernel\": \"afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd\", \"initrd\": \"7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224\", \"coordinator\": \"274fdf87885d59eb83cd05d1b6b8c7d32b56970e2f81eca018f43c1ca60fa587\"}, \"cases\": [{\"name\": \"bad-api-key\", \"success\": true, \"result\": {\"status\": 401}}, {\"name\": \"inventory-key-cannot-tunnel\", \"success\": true, \"result\": {\"status\": 403}}, {\"name\": \"invalid-port-zero\", \"success\": true, \"result\": {\"status\": 400}}, {\"name\": \"unavailable-guest-port\", \"success\": true, \"result\": {\"status\": 502}}, {\"name\": \"node-cluster-token-required\", \"success\": true, \"result\": {\"status\": 401}}, {\"name\": \"node-client-certificate-required\", \"success\": true, \"result\": {\"rejected_before_HTTP\": true}}, {\"name\": \"direct-node-mTLS-binary\", \"success\": true, \"result\": {\"bytes\": 65536, \"sha256\": \"7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2\"}}, {\"name\": \"CLI-TLS-binary-client-EOF-multiple-connections\", \"success\": true, \"result\": {\"connections\": 2, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"CLI-graceful-interrupt-after-transfer-repeated\", \"success\": true, \"result\": [{\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}, {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}]}, {\"name\": \"CLI-TLS-server-EOF-preserves-client-write\", \"success\": true, \"result\": {\"received_request_bytes\": 262144, \"guest_sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"CLI-rejects-untrusted-API-certificate\", \"success\": true, \"result\": {\"exit_code\": 1, \"TLS_trust_enforced\": true}}, {\"name\": \"open-tunnel-prevents-automatic-idle-pause\", \"success\": true, \"result\": {\"idle_window_seconds\": 30, \"held_seconds\": 35, \"state\": \"running\"}}, {\"name\": \"pause-closes-active-tunnel-resume-reopens-guest-port\", \"success\": true, \"result\": {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"fork-preserves-guest-listener\", \"success\": true, \"result\": {\"connections\": 1, \"bytes_per_connection\": 262144, \"sha256\": \"2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9\"}}, {\"name\": \"delete-closes-active-tunnel-and-refuses-reopen\", \"success\": true, \"result\": {\"active_connection_closed\": true, \"subsequent_handshake_status\": 404}}], \"cleanup_errors\": [], \"environment\": \"local WSL nested KVM; 1 vCPU / 1024 MiB guests\", \"transport\": \"CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP\", \"idle_probe\": {\"idle_window_seconds\": 30, \"held_seconds\": 35, \"observed_state\": \"running\"}, \"remaining_sandboxes\": 0, \"owned_processes_stopped\": [{\"name\": \"cli-21\", \"exit_code\": 0}, {\"name\": \"cli-20\", \"exit_code\": 0}, {\"name\": \"cli-19\", \"exit_code\": 0}, {\"name\": \"cli-18\", \"exit_code\": 0}, {\"name\": \"cli-17\", \"exit_code\": 0}, {\"name\": \"cli-16\", \"exit_code\": 0}, {\"name\": \"cli-15\", \"exit_code\": 0}, {\"name\": \"cli-14\", \"exit_code\": 0}, {\"name\": \"cli-13\", \"exit_code\": 0}, {\"name\": \"cli-12\", \"exit_code\": 0}, {\"name\": \"cli-11\", \"exit_code\": 0}, {\"name\": \"cli-10\", \"exit_code\": 0}, {\"name\": \"cli-9\", \"exit_code\": 0}, {\"name\": \"cli-8\", \"exit_code\": 0}, {\"name\": \"cli-7\", \"exit_code\": 0}, {\"name\": \"cli-6\", \"exit_code\": 0}, {\"name\": \"cli-5\", \"exit_code\": 0}, {\"name\": \"cli-4\", \"exit_code\": 0}, {\"name\": \"cli-3\", \"exit_code\": 0}, {\"name\": \"control\", \"exit_code\": -15}, {\"name\": \"node\", \"exit_code\": 0}, {\"name\": \"redis\", \"exit_code\": 0}]}\n",
+      "output_sha256": "690b688c0de7e361db4ae0cba2059f9d6c0edfb8e81378ee7f4bc2ba0a047d4a"
+    },
+    {
+      "name": "guest-tests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "-p",
+        "hv2-guest-agent"
+      ],
+      "exit_code": 0,
+      "load_before": [
+        2.97216796875,
+        3.82958984375,
+        2.9072265625
+      ],
+      "load_after": [
+        2.81396484375,
+        3.7822265625,
+        2.89697265625
+      ],
+      "output_utf8": "   Compiling hv2-guest-agent v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-guest-agent)\n    Finished `test` profile [optimized + debuginfo] target(s) in 4.33s\n     Running unittests src/lib.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_guest_agent-a9d38557c3e51036)\n\nrunning 15 tests\ntest b64_tests::base64_round_trips_and_matches_the_rfc ... ok\ntest tests::a_frame_survives_a_round_trip ... ok\ntest tests::a_partial_frame_is_not_an_error ... ok\ntest tests::a_poll_says_running_and_finished_apart ... ok\ntest tests::a_body_that_is_not_this_protocol_is_reported_as_such ... ok\ntest tests::a_length_beyond_the_limit_is_refused_before_anything_is_allocated ... ok\ntest tests::a_start_without_a_terminal_still_decodes ... ok\ntest tests::an_unspecified_terminal_is_80x24_not_nothing ... ok\ntest tests::an_exit_code_and_a_signal_stay_distinguishable ... ok\ntest tests::a_terminal_is_asked_for_and_resized_across_the_wire ... ok\ntest tests::the_protocol_version_moved_with_the_new_operations ... ok\ntest tests::the_optional_start_fields_may_simply_be_absent ... ok\ntest tests::truncation_cuts_on_a_character_boundary ... ok\ntest tests::every_live_process_operation_survives_a_round_trip ... ok\ntest tests::two_frames_in_one_buffer_are_read_one_at_a_time ... ok\n\ntest result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n     Running unittests src/bin/agentd.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_guest_agentd-4280b6082919cc0e)\n\nrunning 2 tests\ntest linux::forwarded_server_eof_still_allows_the_client_request ... ok\ntest linux::process_output_tests::rapid_polls_preserve_final_stdout_and_stderr ... ok\n\ntest result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s\n\n   Doc-tests hv2_guest_agent\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "output_sha256": "84f78d3292fc0d607b3c5f05e38a9130bbe697a2ed30e7261ecba46bd007c569"
+    },
+    {
+      "name": "guest-clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "hv2-guest-agent",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "load_before": [
+        2.81396484375,
+        3.7822265625,
+        2.89697265625
+      ],
+      "load_after": [
+        2.81396484375,
+        3.7822265625,
+        2.89697265625
+      ],
+      "output_utf8": "    Checking hv2-guest-agent v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-guest-agent)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.17s\n",
+      "output_sha256": "9ecef7b333fba26f3d5489d124f185d0419312e5ab268945df885753309e00cf"
+    },
+    {
+      "name": "python-scorer",
+      "command": [
+        "python3",
+        "tools/test-bench-tcp-local.py"
+      ],
+      "exit_code": 0,
+      "load_before": [
+        2.81396484375,
+        3.7822265625,
+        2.89697265625
+      ],
+      "load_after": [
+        2.81396484375,
+        3.7822265625,
+        2.89697265625
+      ],
+      "output_utf8": "......\n----------------------------------------------------------------------\nRan 6 tests in 0.040s\n\nOK\n",
+      "output_sha256": "64687c347beaf01c2465e40d77de0c8df26f410e2630f8bc9300ce4244039804"
+    }
+  ],
+  "all_benchmarks_passed": false
+}

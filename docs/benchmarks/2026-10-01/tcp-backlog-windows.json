@@ -1,0 +1,31 @@
+{
+  "success": true,
+  "coordinator_sha256": "3bf3311f17ece77b6ad11ed7488e90b0768c0c701bb32aff358ae858239be911",
+  "results": [
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "-p",
+        "hv2-guest-agent",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit_code": 0,
+      "output_utf8": "   Compiling serde_core v1.0.229\n    Checking serde_json v1.0.151\n    Checking serde v1.0.229\n    Checking hv2-guest-agent v1.1.0 (C:\\Users\\user\\dev\\nervosys\\os\\HyperMachine\\crates\\hv2-guest-agent)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.55s\n",
+      "output_sha256": "36625d6a78e420b439f0e09d8b3c858cb71c97f01f5e442d781d02925e7f3bbc"
+    },
+    {
+      "command": [
+        "python",
+        "tools/test-bench-tcp-local.py"
+      ],
+      "exit_code": 0,
+      "output_utf8": "......\r\n----------------------------------------------------------------------\r\nRan 6 tests in 0.057s\r\n\r\nOK\r\n",
+      "output_sha256": "0449c08e09fa689b49d3700b5daad376c6704b67b19ed4faec918c6c9d3ee6a5"
+    }
+  ]
+}

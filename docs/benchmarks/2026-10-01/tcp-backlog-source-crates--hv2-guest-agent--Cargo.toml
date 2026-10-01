@@ -1,0 +1,29 @@
+[package]
+name = "hv2-guest-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Protocol and in-guest binary for running commands inside a HyperMachine VM over vsock"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Only the in-guest binary needs raw AF_VSOCK sockets, and only on Linux. The
+# library half is the wire protocol and is buildable everywhere, which is what
+# lets the host link it without pulling in a Linux dependency.
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[[bin]]
+name = "hv2-guest-agentd"
+path = "src/bin/agentd.rs"
+
+[lints]
+workspace = true
