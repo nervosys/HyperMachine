@@ -49,6 +49,35 @@ pub struct DispatchState {
 }
 
 impl Store {
+    /// Select the oldest unclaimed VM occurrence. An unresolved predecessor
+    /// blocks later work; completed receipts allow progress even after restart.
+    /// Ordering is per schedule, not across schedules targeting the same VM.
+    pub fn next_vm_occurrence(&self, id: &str) -> Result<Option<Occurrence>> {
+        if self.interval_schedule(id)?.vm.is_none() {
+            return Err(JobError::InvalidSpec("schedule has no VM target".into()));
+        }
+        let mut cursor = None;
+        loop {
+            let records = self.committed_interval_occurrences(id, cursor, 1024)?;
+            if records.is_empty() {
+                return Ok(None);
+            }
+            for record in records {
+                match self.vm_dispatch_state(id, record.scheduled_ms) {
+                    Ok(state) if state.completion.is_some() => cursor = Some(record.scheduled_ms),
+                    Ok(_) => {
+                        return Err(JobError::Conflict(
+                            "earlier occurrence is unresolved; guest reconciliation is required"
+                                .into(),
+                        ))
+                    }
+                    Err(JobError::NotFound(_)) => return Ok(Some(record)),
+                    Err(error) => return Err(error),
+                }
+            }
+        }
+    }
+
     /// Exclusively claim a committed VM occurrence. Claims are never replaced
     /// or automatically retried. A competing worker receives Conflict.
     pub fn claim_vm_occurrence(
@@ -68,10 +97,8 @@ impl Store {
                     .into(),
             ));
         }
-        let records = self.committed_interval_occurrences(id, scheduled_ms.checked_sub(1), 1)?;
-        let occurrence = records
-            .into_iter()
-            .next()
+        let occurrence = self
+            .next_vm_occurrence(id)?
             .filter(|record| record.scheduled_ms == scheduled_ms)
             .ok_or_else(|| {
                 JobError::NotFound(format!("committed occurrence {id}/{scheduled_ms}"))
@@ -203,6 +230,10 @@ mod tests {
         let reopened = Store::open(dir.path()).unwrap();
         let state = reopened.vm_dispatch_state("dispatch", 100).unwrap();
         assert!(state.completion.is_none());
+        reopened.materialize_interval("dispatch", 110, 1).unwrap();
+        assert!(reopened
+            .claim_vm_occurrence("dispatch", 110, "later")
+            .is_err());
         assert!(reopened
             .claim_vm_occurrence("dispatch", 100, "replacement")
             .is_err());
@@ -222,6 +253,14 @@ mod tests {
         reopened
             .complete_vm_occurrence("dispatch", 100, &result)
             .unwrap();
+        assert_eq!(
+            reopened
+                .next_vm_occurrence("dispatch")
+                .unwrap()
+                .unwrap()
+                .scheduled_ms,
+            110
+        );
         reopened
             .complete_vm_occurrence("dispatch", 100, &result)
             .unwrap();
