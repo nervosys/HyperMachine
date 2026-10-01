@@ -253,6 +253,8 @@ pub enum VsockConnectionState {
 #[derive(Debug)]
 struct Connection {
     state: VsockConnectionState,
+    host_shutdown: u32,
+    peer_shutdown: u32,
     /// Bytes received from the guest and not yet read by the host.
     rx: VecDeque<u8>,
     /// Bytes the host has read — what the guest sees as our `fwd_cnt`.
@@ -269,6 +271,8 @@ impl Connection {
     fn new(state: VsockConnectionState) -> Self {
         Self {
             state,
+            host_shutdown: 0,
+            peer_shutdown: 0,
             rx: VecDeque::new(),
             fwd_cnt: 0,
             tx_cnt: 0,
@@ -497,7 +501,10 @@ impl VsockDevice {
                 (id.host_port, id.guest_port)
             ))
         })?;
-        if conn.state != VsockConnectionState::Established {
+        if conn.state != VsockConnectionState::Established
+            || conn.host_shutdown & shutdown_flags::SEND != 0
+            || conn.peer_shutdown & shutdown_flags::RECEIVE != 0
+        {
             return Err(Error::Device(format!(
                 "vsock connection {}->{} is {:?}, not established",
                 id.host_port, id.guest_port, conn.state
@@ -534,11 +541,19 @@ impl VsockDevice {
         }
         conn.fwd_cnt = conn.fwd_cnt.wrapping_add(data.len() as u32);
         let established = conn.state == VsockConnectionState::Established;
+        let finished = conn.state == VsockConnectionState::Closed
+            && conn.peer_shutdown == (shutdown_flags::SEND | shutdown_flags::RECEIVE);
+        if finished {
+            conn.peer_shutdown = 0;
+        }
 
         // Tell the guest the window moved. Without this a guest that filled
         // our buffer never learns it may continue.
         if established {
             self.enqueue(id, op::CREDIT_UPDATE, 0, Vec::new());
+        }
+        if finished {
+            self.enqueue(id, op::RST, 0, Vec::new());
         }
         Ok(data)
     }
@@ -577,6 +592,31 @@ impl VsockDevice {
     /// Forget a closed connection and whatever it still held.
     pub fn forget(&mut self, id: VsockConnectionId) {
         self.connections.remove(&id);
+    }
+
+    /// Stop sending while allowing the guest to finish its reply.
+    pub fn shutdown_write(&mut self, id: VsockConnectionId) -> Result<()> {
+        let conn = self
+            .connections
+            .get_mut(&id)
+            .ok_or_else(|| Error::Device("no vsock connection to shut down".into()))?;
+        if conn.state != VsockConnectionState::Established {
+            return Err(Error::Device("vsock connection is not established".into()));
+        }
+        if conn.host_shutdown & shutdown_flags::SEND == 0 {
+            conn.host_shutdown |= shutdown_flags::SEND;
+            self.enqueue(id, op::SHUTDOWN, shutdown_flags::SEND, Vec::new());
+        }
+        Ok(())
+    }
+
+    /// Whether another byte can arrive after buffered data has been consumed.
+    pub fn receive_open(&self, id: VsockConnectionId) -> bool {
+        self.connections.get(&id).is_some_and(|conn| {
+            conn.state == VsockConnectionState::Established
+                && conn.peer_shutdown & shutdown_flags::SEND == 0
+                && conn.host_shutdown & shutdown_flags::RECEIVE == 0
+        })
     }
 
     /// Packets dropped because the guest was not draining the rx queue.
@@ -789,7 +829,7 @@ impl VsockDevice {
             op::REQUEST => self.handle_request(id),
             op::RESPONSE => self.handle_response(id),
             op::RW => self.handle_payload(id, data),
-            op::SHUTDOWN => self.handle_shutdown(id),
+            op::SHUTDOWN => self.handle_shutdown(id, header.flags),
             op::RST => {
                 if let Some(conn) = self.connections.get_mut(&id) {
                     conn.state = VsockConnectionState::Closed;
@@ -833,7 +873,10 @@ impl VsockDevice {
             self.enqueue(id, op::RST, 0, Vec::new());
             return;
         };
-        if conn.state != VsockConnectionState::Established {
+        if conn.state != VsockConnectionState::Established
+            || conn.peer_shutdown & shutdown_flags::SEND != 0
+            || conn.host_shutdown & shutdown_flags::RECEIVE != 0
+        {
             return;
         }
 
@@ -850,11 +893,19 @@ impl VsockDevice {
         conn.rx.extend(data.into_iter().take(room));
     }
 
-    fn handle_shutdown(&mut self, id: VsockConnectionId) {
+    fn handle_shutdown(&mut self, id: VsockConnectionId, flags: u32) {
         let Some(conn) = self.connections.get_mut(&id) else {
             return;
         };
+        conn.peer_shutdown |= flags & (shutdown_flags::SEND | shutdown_flags::RECEIVE);
+        if conn.peer_shutdown != (shutdown_flags::SEND | shutdown_flags::RECEIVE) {
+            return;
+        }
         conn.state = VsockConnectionState::Closed;
+        if !conn.rx.is_empty() {
+            return;
+        }
+        conn.peer_shutdown = 0;
         // The spec has the peer answer a shutdown with a reset once it is
         // done, which is what frees the guest's socket.
         self.enqueue(id, op::RST, 0, Vec::new());
@@ -1351,13 +1402,41 @@ mod tests {
         let (mut device, mut driver, id) = established();
 
         driver.submit_tx(guest_header(op::RW, 6, 8192, 0), b"answer");
-        driver.submit_tx(guest_header(op::SHUTDOWN, 0, 8192, 0), &[]);
+        let mut shutdown = guest_header(op::SHUTDOWN, 0, 8192, 0);
+        shutdown.flags = shutdown_flags::SEND | shutdown_flags::RECEIVE;
+        driver.submit_tx(shutdown, &[]);
         device.notify(1, &driver.mem).expect("notify");
 
         assert_eq!(device.state(id), Some(VsockConnectionState::Closed));
         // A guest that answers and then hangs up has still answered. Dropping
         // the payload on close would lose exactly the reply the host asked for.
         assert_eq!(device.recv(id).expect("recv"), b"answer");
+    }
+
+    #[test]
+    fn client_eof_allows_a_reply_and_guest_eof_preserves_host_writes() {
+        let (mut device, mut driver, id) = established();
+        device.shutdown_write(id).expect("send EOF");
+        assert!(device.send(id, b"too late").is_err());
+        assert!(device.receive_open(id));
+        driver.submit_tx(guest_header(op::RW, 6, 8192, 0), b"answer");
+        let mut shutdown = guest_header(op::SHUTDOWN, 0, 8192, 0);
+        shutdown.flags = shutdown_flags::SEND;
+        driver.submit_tx(shutdown, &[]);
+        device.notify(1, &driver.mem).expect("notify");
+        assert!(!device.receive_open(id));
+        assert_eq!(device.recv(id).expect("buffered reply"), b"answer");
+        assert!(device.recv(id).expect("EOF").is_empty());
+
+        let (mut device, mut driver, id) = established();
+        driver.submit_tx(shutdown, &[]);
+        device.notify(1, &driver.mem).expect("notify");
+        assert!(!device.receive_open(id));
+        assert_eq!(device.send(id, b"still sending").expect("write"), 13);
+        shutdown.flags = shutdown_flags::RECEIVE;
+        driver.submit_tx(shutdown, &[]);
+        device.notify(1, &driver.mem).expect("notify");
+        assert!(device.send(id, b"closed").is_err());
     }
 
     #[test]

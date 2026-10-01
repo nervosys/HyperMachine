@@ -341,14 +341,52 @@ mod linux {
             return;
         }
         let upstream = std::thread::spawn(move || {
-            let _ = std::io::copy(&mut from_host, &mut tcp_writer);
-            let _ = tcp_writer.shutdown(std::net::Shutdown::Write);
+            if std::io::copy(&mut from_host, &mut tcp_writer).is_err() {
+                let _ = tcp_writer.shutdown(std::net::Shutdown::Both);
+                unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+            } else {
+                let _ = tcp_writer.shutdown(std::net::Shutdown::Write);
+            }
         });
-        let _ = std::io::copy(&mut tcp_reader, &mut to_host);
-        // The program closed its side: so does the host's, and the copy
-        // upstream ends when the host sees it.
-        unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+        if std::io::copy(&mut tcp_reader, &mut to_host).is_err() {
+            let _ = tcp_reader.shutdown(std::net::Shutdown::Both);
+            unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+        } else {
+            // EOF only closes this direction; the program may still read.
+            unsafe { libc::shutdown(fd, libc::SHUT_WR) };
+        }
         let _ = upstream.join();
+        unsafe { libc::shutdown(fd, libc::SHUT_RDWR) };
+    }
+
+    #[cfg(test)]
+    #[test]
+    fn forwarded_server_eof_still_allows_the_client_request() {
+        use std::io::{Read, Write};
+        use std::os::fd::AsRawFd;
+        use std::os::unix::net::UnixStream;
+        let (mut client, relay) = UnixStream::pair().unwrap();
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let tcp = std::net::TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+        let (mut server, _) = listener.accept().unwrap();
+        server
+            .set_read_timeout(Some(std::time::Duration::from_secs(2)))
+            .unwrap();
+        let worker = std::thread::spawn(move || splice(relay.as_raw_fd(), tcp, &[]));
+        server.write_all(b"ready").unwrap();
+        server.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut response = Vec::new();
+        client.read_to_end(&mut response).unwrap();
+        assert_eq!(response, b"ready");
+        client.write_all(b"request after EOF").unwrap();
+        client.shutdown(std::net::Shutdown::Write).unwrap();
+        let mut request = Vec::new();
+        server.read_to_end(&mut request).unwrap();
+        assert_eq!(request, b"request after EOF");
+        worker.join().unwrap();
     }
 
     /// `path`, a directory with nothing mounted on it: made if missing, and

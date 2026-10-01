@@ -119,7 +119,11 @@ fn splice(stream: &VsockStream, tcp: std::net::TcpStream, early: &[u8]) {
             let mut buf = vec![0u8; 64 * 1024];
             loop {
                 match from_proxy.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
+                    Ok(0) => {
+                        let _ = stream.shutdown_write();
+                        return;
+                    }
+                    Err(_) => break,
                     Ok(n) => {
                         if stream.write_all(&buf[..n]).is_err() {
                             break;
@@ -127,23 +131,30 @@ fn splice(stream: &VsockStream, tcp: std::net::TcpStream, early: &[u8]) {
                     }
                 }
             }
-            // The proxy is done with this connection: so is the guest's.
+            // An error aborts the relay; orderly EOF only ends its direction.
             stream.close();
         })
     };
-    loop {
+    let clean_eof = loop {
         match stream.read() {
             Ok(data) if !data.is_empty() => {
                 if to_proxy.write_all(&data).is_err() {
-                    break;
+                    break false;
                 }
             }
-            _ => break,
+            Ok(_) => break true,
+            Err(_) => break false,
         }
+    };
+    if clean_eof && stream.is_open() {
+        let _ = to_proxy.shutdown(std::net::Shutdown::Write);
+    } else {
+        let _ = to_proxy.shutdown(std::net::Shutdown::Both);
+        stream.close();
     }
+    let _ = upstream.join();
     let _ = to_proxy.shutdown(std::net::Shutdown::Both);
     stream.close();
-    let _ = upstream.join();
 }
 
 /// A sandbox stopped or paused: its listeners and every connection close.

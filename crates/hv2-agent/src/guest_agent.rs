@@ -270,10 +270,7 @@ impl VsockStream {
             let (data, open) = {
                 let mut device = self.inner.device.lock();
                 let data = device.recv(self.inner.id)?;
-                let open = matches!(
-                    device.state(self.inner.id),
-                    Some(VsockConnectionState::Established)
-                );
+                let open = device.receive_open(self.inner.id);
                 (data, open)
             };
             if !data.is_empty() || !open {
@@ -323,6 +320,12 @@ impl VsockStream {
     /// Close both directions now, whoever else holds a clone.
     pub fn close(&self) {
         let _ = self.inner.device.lock().close(self.inner.id);
+    }
+
+    /// Send EOF without discarding the guest's remaining response.
+    pub fn shutdown_write(&self) -> Result<()> {
+        self.inner.device.lock().shutdown_write(self.inner.id)?;
+        Ok(())
     }
 }
 
