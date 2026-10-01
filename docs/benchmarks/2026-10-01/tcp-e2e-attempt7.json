@@ -1,0 +1,244 @@
+{
+  "success": false,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "8a9b0213c268e34f74033c4ec1a16365d7fe09f6acbc0612450af70ba7f9653b",
+    "control-plane": "a386eb3d2ed2c9eb374482858519180584e67dbcd5ea85ea741bf1267f731672",
+    "cli": "2e3cc622ff8715db401796a5719175b1dfb014f1b30c1d34d0bbb75657e6f2bf",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b",
+    "coordinator": "274fdf87885d59eb83cd05d1b6b8c7d32b56970e2f81eca018f43c1ca60fa587"
+  },
+  "cases": [
+    {
+      "name": "bad-api-key",
+      "success": true,
+      "result": {
+        "status": 401
+      }
+    },
+    {
+      "name": "inventory-key-cannot-tunnel",
+      "success": true,
+      "result": {
+        "status": 403
+      }
+    },
+    {
+      "name": "invalid-port-zero",
+      "success": true,
+      "result": {
+        "status": 400
+      }
+    },
+    {
+      "name": "unavailable-guest-port",
+      "success": true,
+      "result": {
+        "status": 502
+      }
+    },
+    {
+      "name": "node-cluster-token-required",
+      "success": true,
+      "result": {
+        "status": 401
+      }
+    },
+    {
+      "name": "node-client-certificate-required",
+      "success": true,
+      "result": {
+        "rejected_before_HTTP": true
+      }
+    },
+    {
+      "name": "direct-node-mTLS-binary",
+      "success": true,
+      "result": {
+        "bytes": 65536,
+        "sha256": "7daca2095d0438260fa849183dfc67faa459fdf4936e1bc91eec6b281b27e4c2"
+      }
+    },
+    {
+      "name": "CLI-TLS-binary-client-EOF-multiple-connections",
+      "success": true,
+      "result": {
+        "connections": 2,
+        "bytes_per_connection": 262144,
+        "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "CLI-graceful-interrupt-after-transfer-repeated",
+      "success": true,
+      "result": [
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        },
+        {
+          "connections": 1,
+          "bytes_per_connection": 262144,
+          "sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+        }
+      ]
+    },
+    {
+      "name": "CLI-TLS-server-EOF-preserves-client-write",
+      "success": true,
+      "result": {
+        "received_request_bytes": 262144,
+        "guest_sha256": "2312394bd99545d9de131c24efb781e765ac1aec243f2ed9347597a793a415e9"
+      }
+    },
+    {
+      "name": "CLI-rejects-untrusted-API-certificate",
+      "success": true,
+      "result": {
+        "exit_code": 1,
+        "TLS_trust_enforced": true
+      }
+    },
+    {
+      "name": "open-tunnel-prevents-automatic-idle-pause",
+      "success": false,
+      "error": "open TCP tunnel was idle-paused: paused"
+    }
+  ],
+  "cleanup_errors": [],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "transport": "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP",
+  "idle_probe": {
+    "idle_window_seconds": 30,
+    "held_seconds": 35,
+    "observed_state": "paused"
+  },
+  "error": "open TCP tunnel was idle-paused: paused",
+  "remaining_sandboxes": 0,
+  "owned_processes_stopped": [
+    {
+      "name": "cli-17",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-16",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-15",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-14",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-13",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-12",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-11",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-10",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-9",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-8",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-7",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-6",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-5",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-4",
+      "exit_code": 0
+    },
+    {
+      "name": "cli-3",
+      "exit_code": 0
+    },
+    {
+      "name": "control",
+      "exit_code": -15
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

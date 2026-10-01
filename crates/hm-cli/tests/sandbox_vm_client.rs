@@ -1,6 +1,112 @@
 //! Exercise the shipped binary against a protocol fixture, not a real guest.
 
 #[tokio::test]
+async fn tcp_command_authenticates_and_preserves_binary_replies_after_client_eof() {
+    use axum::{extract::Request, http::StatusCode, response::IntoResponse};
+    use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+    let app = Router::new().route(
+        "/sandboxes/test-vm/ports/41000/tcp",
+        axum::routing::get(|mut request: Request| async move {
+            if request
+                .headers()
+                .get("x-api-key")
+                .and_then(|v| v.to_str().ok())
+                != Some("tcp-cli-fixture-key")
+            {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+            assert_eq!(request.headers()["upgrade"], "hv2-tcp/1");
+            assert_eq!(request.version(), axum::http::Version::HTTP_11);
+            let upgraded = hyper::upgrade::on(&mut request);
+            tokio::spawn(async move {
+                let mut stream = hyper_util::rt::TokioIo::new(upgraded.await.unwrap());
+                let mut bytes = Vec::new();
+                stream.read_to_end(&mut bytes).await.unwrap();
+                stream.write_all(&bytes).await.unwrap();
+                stream.shutdown().await.unwrap();
+            });
+            (
+                StatusCode::SWITCHING_PROTOCOLS,
+                [("connection", "upgrade"), ("upgrade", "hv2-tcp/1")],
+            )
+                .into_response()
+        }),
+    );
+    let (endpoint, server) = server(app).await;
+    let mut process = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "--endpoint",
+            &endpoint,
+            "--request-timeout",
+            "1",
+            "tcp",
+            "test-vm",
+            "--port",
+            "41000",
+        ])
+        .env("HV2_API_KEY", "tcp-cli-fixture-key")
+        .kill_on_drop(true)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut output = tokio::io::BufReader::new(process.stdout.take().unwrap());
+    let mut line = String::new();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        output.read_line(&mut line),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let bound: Value = serde_json::from_str(&line).unwrap();
+    let address = bound["listen"].as_str().unwrap();
+    assert!(address.starts_with("127.0.0.1:"));
+    let bytes: Vec<u8> = (0..65536).map(|n| (n % 251) as u8).collect();
+    for iteration in 0..2 {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+            if iteration == 0 {
+                // The handshake deadline must not become the tunnel lifetime.
+                tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+            }
+            client.write_all(&bytes).await.unwrap();
+            client.shutdown().await.unwrap();
+            let mut reply = Vec::new();
+            client.read_to_end(&mut reply).await.unwrap();
+            assert_eq!(reply, bytes);
+        })
+        .await
+        .unwrap();
+    }
+    process.kill().await.unwrap();
+    let _ = process.wait().await;
+    for (extra, key, code) in [
+        (vec!["--port", "0"], "tcp-cli-fixture-key", 2),
+        (
+            vec!["--port", "41000", "--listen", "0.0.0.0:0"],
+            "tcp-cli-fixture-key",
+            1,
+        ),
+        (vec!["--port", "41000"], "wrong", 1),
+    ] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args(["sandbox", "vm", "--endpoint", &endpoint, "tcp", "test-vm"])
+            .args(extra)
+            .env("HV2_API_KEY", key)
+            .output()
+            .await
+            .unwrap();
+        assert_eq!(output.status.code(), Some(code));
+        assert!(output.stdout.is_empty());
+    }
+    server.abort();
+    let _ = server.await;
+}
+
+#[tokio::test]
 async fn domain_commands_send_authenticated_claim_list_and_release_requests() {
     use axum::extract::Path;
     use axum::http::{HeaderMap, StatusCode};

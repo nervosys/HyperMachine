@@ -1,0 +1,32 @@
+{
+  "success": false,
+  "purpose": "functional verification, no performance comparison",
+  "artifact_sha256": {
+    "daemon": "d4764c260e4c0090b30fbb40ae112dd8e3fe3f64c61fe6cb4c27420bedee7ca7",
+    "control-plane": "a05aa3e9151abb4579489c9ae03e9a928bfc9faba8c2869dcf19aaaabd09ae09",
+    "cli": "db823839156335dbb88f9700f18fd500feaf952e3f8536efe65935df8eb9c92c",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "557bd4614c6b73822bf911f99dcab2f9cd38ac263a0b8f8395b85f28d8382dfa",
+    "coordinator": "70cd769f39c5db0bf8bfbb6ce61762a1abfa1d582f7a3c6a7a09df2dd7fea10d"
+  },
+  "cases": [],
+  "cleanup_errors": [
+    "<urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: CA cert does not include key usage extension (_ssl.c:1029)>"
+  ],
+  "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests",
+  "error": "prepared template was not advertised",
+  "owned_processes_stopped": [
+    {
+      "name": "control",
+      "exit_code": -15
+    },
+    {
+      "name": "node",
+      "exit_code": 0
+    },
+    {
+      "name": "redis",
+      "exit_code": 0
+    }
+  ]
+}

@@ -40,3 +40,4 @@ docs/benchmarks/2026-10-01/* -text whitespace=cr-at-eol
 # Raw Cargo transcripts intentionally end with a blank line.
 docs/benchmarks/2026-10-01/kvm-events-abi-test.txt -text whitespace=cr-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-01/kvm-events-direct-test.txt -text whitespace=cr-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-01/tcp-build*-output.txt -text whitespace=cr-at-eol,-blank-at-eof

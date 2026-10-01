@@ -28,6 +28,169 @@ const TOKEN: &str = "cluster-secret";
 const KEY: &str = "e2b_test_key";
 
 #[tokio::test]
+async fn tcp_tunnels_route_authenticated_binary_streams_and_both_half_closes() {
+    use axum::extract::Request;
+    use sha2::{Digest, Sha256};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_, heartbeat) = fake_node(store.clone(), "tcp-node", 4, Duration::from_secs(30)).await;
+    let hash: String = Sha256::digest(b"tcp-inventory-key")
+        .iter()
+        .map(|v| format!("{v:02x}"))
+        .collect();
+    let policies = hv2_cluster::keys::ApiKeyPolicy::from_json(
+        &json!([
+            {"sha256":hash,"expires_at":chrono::Utc::now().timestamp()+600,"scopes":["inventory"]}
+        ])
+        .to_string(),
+    )
+    .unwrap();
+    let base = control_plane_with_keys(store.clone(), Some(KEY), policies).await;
+    let (_, created) = create(&base, json!({"templateID":"base"})).await;
+    let id = created["sandboxID"].as_str().unwrap().to_owned();
+    heartbeat.abort();
+    let _ = heartbeat.await;
+    let received = Arc::new(Mutex::new(Vec::new()));
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let app = Router::new().route(
+        "/sandboxes/{id}/ports/{port}/tcp",
+        axum::routing::get({
+            let received = received.clone();
+            let calls = calls.clone();
+            let expected_id = id.clone();
+            move |Path((id, port)): Path<(String, u16)>, request: Request| {
+                let received = received.clone();
+                let calls = calls.clone();
+                let expected_id = expected_id.clone();
+                async move {
+                    calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    assert_eq!(id, expected_id);
+                    assert_eq!(request.headers()[CLUSTER_TOKEN_HEADER], TOKEN);
+                    assert!(!request.headers().contains_key("x-api-key"));
+                    hv2_api::tcp_tunnel::validate(&request).unwrap();
+                    if port == 8082 {
+                        return StatusCode::BAD_GATEWAY.into_response();
+                    }
+                    let (relay, mut service) = tokio::io::duplex(4096);
+                    tokio::spawn(async move {
+                        if port == 8081 {
+                            service.write_all(b"ready\0\xff").await.unwrap();
+                            service.shutdown().await.unwrap();
+                        }
+                        let mut bytes = Vec::new();
+                        service.read_to_end(&mut bytes).await.unwrap();
+                        if port == 8080 {
+                            service.write_all(&bytes).await.unwrap();
+                            service.shutdown().await.unwrap();
+                        } else {
+                            *received.lock() = bytes;
+                        }
+                    });
+                    hv2_api::tcp_tunnel::accept(request, relay)
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let node_url = format!("http://{}", listener.local_addr().unwrap());
+    let node_task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let mut node = store.node("tcp-node").await.unwrap().unwrap();
+    node.api = node_url;
+    store
+        .put_node(&node, Duration::from_secs(60))
+        .await
+        .unwrap();
+    let http = reqwest::Client::builder().http1_only().build().unwrap();
+    let upgrade = |path: String, key: &str| {
+        http.get(path)
+            .header("x-api-key", key)
+            .header("connection", "upgrade")
+            .header("upgrade", hv2_api::tcp_tunnel::PROTOCOL)
+    };
+    let url = format!("{base}/sandboxes/{id}/ports/8080/tcp");
+    for (key, status) in [("wrong", 401), ("tcp-inventory-key", 403)] {
+        assert_eq!(
+            upgrade(url.clone(), key).send().await.unwrap().status(),
+            status
+        );
+    }
+    assert_eq!(
+        http.get(&url)
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        upgrade(format!("{base}/sandboxes/{id}/ports/0/tcp"), KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 0);
+    let bytes: Vec<u8> = (0..131072).map(|n| (n % 251) as u8).collect();
+    for port in [8080, 8081] {
+        let response = upgrade(format!("{base}/sandboxes/{id}/ports/{port}/tcp"), KEY)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 101);
+        let mut stream = response.upgrade().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut reply = Vec::new();
+            if port == 8081 {
+                stream.read_to_end(&mut reply).await.unwrap();
+                assert_eq!(reply, b"ready\0\xff");
+            }
+            stream.write_all(&bytes).await.unwrap();
+            stream.shutdown().await.unwrap();
+            if port == 8080 {
+                stream.read_to_end(&mut reply).await.unwrap();
+                assert_eq!(reply, bytes);
+            } else {
+                while received.lock().len() != bytes.len() {
+                    tokio::task::yield_now().await;
+                }
+                assert_eq!(*received.lock(), bytes);
+            }
+        })
+        .await
+        .unwrap();
+    }
+    assert_eq!(
+        upgrade(format!("{base}/sandboxes/{id}/ports/8082/tcp"), KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        502
+    );
+    let mut record = store.sandbox(&id).await.unwrap().unwrap();
+    record.paused = true;
+    store.put_sandbox(&record).await.unwrap();
+    assert_eq!(
+        upgrade(url.clone(), KEY).send().await.unwrap().status(),
+        409
+    );
+    record.paused = false;
+    store.put_sandbox(&record).await.unwrap();
+    store.remove_node("tcp-node").await.unwrap();
+    assert_eq!(
+        upgrade(url.clone(), KEY).send().await.unwrap().status(),
+        503
+    );
+    store.delete_sandbox(&id).await.unwrap();
+    assert_eq!(upgrade(url, KEY).send().await.unwrap().status(), 404);
+    assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+    node_task.abort();
+    let _ = node_task.await;
+}
+
+#[tokio::test]
 async fn custom_domain_https_reaches_the_node_with_guest_routing_and_host_intact() {
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
     let (_, heartbeat) = fake_node(store.clone(), "domain-tls", 4, Duration::from_secs(30)).await;

@@ -1,0 +1,14 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling libc v0.2.189
+   Compiling serde_json v1.0.151
+   Compiling serde v1.0.229
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+   Compiling syn v3.0.3
+   Compiling serde_derive v1.0.229
+   Compiling hv2-guest-agent v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-guest-agent)
+    Finished `release` profile [optimized] target(s) in 20.97s
