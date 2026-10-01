@@ -141,6 +141,26 @@ testing. Limits must be 1-1024. Names are immutable: duplicate creation fails.
 Publication stores occurrence records and does not enqueue or execute jobs.
 The existing `hm jobs worker` does not consume these records.
 
+An optional `vm` target is preserved in the schedule and each occurrence:
+
+```json
+{
+  "first_ms": 1790812800000,
+  "every_ms": 60000,
+  "vm": {"sandbox_id": "guest-1", "connection_profile": "local", "timeout_secs": 30},
+  "job": {"command": ["python", "/workspace/task.py"], "workdir": "/workspace"}
+}
+```
+
+The profile is an operator-managed name, not an endpoint URL or credential.
+Profile resolution and VM dispatch are not implemented yet; accepting the spec
+does not establish that the profile or sandbox exists. Sandbox IDs permit
+1-128 ASCII letters, digits, hyphens or underscores; profiles use the schedule
+name format. Timeouts must be 1-86400 seconds. Guest working directories must be
+absolute UTF-8 paths beginning with `/`, interpreted independently of the host
+OS. VM targets reject host sandbox settings and host graceful-stop files rather
+than ignoring them. Existing schedules without `vm` retain their schema behavior.
+
 `schedule watch` publishes due occurrences repeatedly using the host wall clock,
 with one bounded batch per tick and compact JSON output per successful tick.
 It reloads progress on each tick, retries competing-writer conflicts, and
@@ -287,7 +307,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 36 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 37 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -304,6 +324,8 @@ unprivileged user:
   races, and authenticated rejection of publication after cancellation;
 - schedule discovery pagination, temporary-file exclusion and cancelled-name
   retention, plus authenticated API and CLI list operations;
+- VM target persistence across publication/reopening and rejection of host-only
+  controls, invalid profiles, relative guest paths and invalid timeouts;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
