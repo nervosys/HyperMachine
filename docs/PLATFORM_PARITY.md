@@ -824,6 +824,45 @@ are included in the existing benchmark CI gate. Earlier harnesses remain
 unchanged so their recorded source hashes are preserved. Reproduction
 requires updating local artifact/output paths in the recorded coordinator.
 
+## Concurrent startup diagnostics (2026-10-01)
+
+Two diagnostic cohorts each ran two alternating engine batch pairs at
+concurrency 100, with the same fixed-UART guest, eight-CPU affinity and one
+controlled CPU-0 worker. All 800 attempts passed; each cohort matched all
+200 HyperMachine request IDs to daemon stage logs. Artifact identities,
+worker liveness, sandbox deletion and process cleanup passed. These traced
+cohorts are investigative evidence, excluded from the scored comparison.
+
+| Mean daemon stage | Stage-only cohort | Guest-probe cohort |
+| --- | ---: | ---: |
+| Build | 6.63 ms | 6.06 ms |
+| Launch | 108.36 ms | 99.01 ms |
+| Agent readiness | 7254.91 ms | 5471.78 ms |
+| Network and envd | 0.11 ms | 0.08 ms |
+| Total bring-up | 7370.00 ms | 5576.93 ms |
+
+The second cohort collected guest logs from every tenth request after all
+100 guests in each batch validated readiness. Those extra commands affect
+memory readings and cleanup duration, but occur after recorded startup.
+The 20 sampled guests handed off to `/init` at a mean guest timestamp of
+1531.49 ms; their paired host agent-wait duration was about 3985.26 ms longer.
+Host durations and guest timestamps cannot isolate dispatch, guest userspace
+or handshake delay. All 20 sampled logs show CRNG initialization before the
+handoff; this does not establish entropy behavior for unsampled guests.
+
+Agent readiness dominates both cohorts. Image build/launch timing does not
+support prioritizing image-loading optimization on this workload. Existing
+code already offloads cold guest connection/ping to a blocking task and
+runs each vCPU on a dedicated thread; finer queue, dispatch and handshake
+tracing is needed before selecting a runtime change. Only two batch pairs,
+shared nested hardware and asymmetric tracing limit causal conclusions.
+
+Exact reports, coordinators, the original stage-only wrapper and analysis
+are retained in `benchmarks/2026-10-01`. The optional wrapper
+`tools/diagnose-concurrent-startup.py` leaves scored harnesses unchanged;
+three duration/identity parser tests pass on Windows and Linux and run in CI.
+No production performance change or competitor win follows from this step.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

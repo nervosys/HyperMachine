@@ -122,6 +122,8 @@ jobs:
               run: python3 tools/test-local-engines.py
             - name: Verify concurrent engine barriers and retained failures
               run: python3 tools/test-bench-local-engines-concurrent.py
+            - name: Verify startup diagnostic duration and identity decoding
+              run: python3 tools/test-diagnose-concurrent-startup.py
             - name: Verify Firecracker benchmark artifact integrity
               run: python3 tools/test-install-firecracker-benchmark.py
             - name: Verify protoc checksum and platform selection gates
