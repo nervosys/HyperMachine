@@ -123,8 +123,15 @@ after each eight-guest batch, while smaller anonymous mappings remained
 resident. A separate arena-limited diagnostic reduced median post-cleanup
 process PSS from 193.52 to 110.02 MiB across three batches. All 48 guest attempts
 passed, but the runs were sequential and had no matched latency/tail comparison.
-The allocator setting is a candidate for further controlled evaluation;
-production defaults remain unchanged.
+This suggested an allocator candidate; the controlled evaluation below did not
+support adoption. Production defaults remain unchanged.
+
+That candidate was then [counterbalanced at concurrency 100](benchmarks/2026-10-01/allocator-experiment.md)
+across four blocks and 3200 attempts. HyperMachine's arena-limited process PSS
+was higher in all three complete paired blocks, and its mean readiness was
+lower in only one. Both engines had readiness failures (3029/3200 attempts
+passed overall), with clean teardown and unchanged artifacts. The arena limit
+was not adopted; neither a memory win nor a reliability fix is established.
 
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total

@@ -14,6 +14,23 @@ burst = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(burst)
 
 
+class AllocatorEnvironment(unittest.TestCase):
+    def test_default_child_ignores_inherited_allocator_and_guest_overrides(self):
+        args = SimpleNamespace(kernel=Path("kernel"), initrd=Path("initrd"))
+        with patch.dict(burst.os.environ, {"MALLOC_ARENA_MAX":"1", "HV2_KERNEL":"wrong", "LD_PRELOAD":"wrong"}):
+            child = burst.daemon_environment(args)
+        self.assertEqual(child["HV2_KERNEL"], "kernel")
+        self.assertEqual(child["HV2_INITRD"], "initrd")
+        self.assertNotIn("MALLOC_ARENA_MAX", child)
+        self.assertNotIn("LD_PRELOAD", child)
+
+    def test_explicit_setting_is_scoped_to_child_environment(self):
+        args = SimpleNamespace(kernel=Path("kernel"), initrd=Path("initrd"), daemon_allocator_arena_max=2)
+        before = dict(burst.os.environ)
+        self.assertEqual(burst.daemon_environment(args)["MALLOC_ARENA_MAX"], "2")
+        self.assertEqual(dict(burst.os.environ), before)
+
+
 class Bursts(unittest.TestCase):
     def run_batch(self, failure=None, memory_failure=False):
         alive, measured = set(), []
