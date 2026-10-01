@@ -119,7 +119,38 @@ With `--token` (or `HM_JOBS_TOKEN`), every request must carry
 `Authorization: Bearer <token>`, compared in constant time. `serve` refuses to listen anywhere
 but loopback without a token.
 
-## What is verified
+## VM scheduling implementation requirements
+
+VM scheduling remains unimplemented. Inspection on 2026-10-01 found that
+`hv2-jobs/src/worker.rs::run_job` launches a local `ProcessSandbox`; its
+cancellation and lease-loss watcher controls that local process. Launching
+`hm sandbox vm exec` from this worker would not transfer those guarantees to
+the guest. The daemon's `/exec` response contains output, exit status and a
+timeout flag, but no process handle for later reconciliation.
+
+The existing `hv2-api/src/envd_process.rs` service offers guest process start,
+connection, PID/tag selection and SIGTERM/SIGKILL. Its running-process registry
+is host memory and removes processes after exit. A scheduler must therefore
+add durable reconciliation and completion records rather than treating this
+registry as persistent job state.
+
+The implementation must cover these requirements together:
+
+| Area | Required behavior and verification |
+|---|---|
+| VM execution | Bind each job to a sandbox ID and authenticated operator-configured connection profile; resume a paused VM and verify guest execution. Keep connection secrets outside submitted specs and job logs. Reject host-only limits on VM jobs rather than silently ignoring them. |
+| Recurrence | Persist interval and cron schedules, timezone and next occurrence. Define missed-occurrence and overlap policy explicitly. Test clock boundaries, daylight-saving transitions, restart and competing scheduler processes. |
+| Occurrence identity | Give each scheduled occurrence a stable ID derived from schedule ID and scheduled time. Publish it atomically so racing schedulers and restart recovery cannot enqueue duplicates. Cancellation prevents future occurrences without erasing past results. |
+| Guest reconciliation | Persist the occurrence/attempt identity before dispatch. Recover an interrupted start without blindly launching a second guest command. Retain terminal result and bounded logs across guest completion and daemon restart. A PID alone cannot prove identity after PID reuse. |
+| Leases and cancellation | Fence obsolete attempts before permitting a replacement. Confirm termination of the guest process tree on cancellation or timeout. A dropped HTTP connection or killed local client does not establish guest termination. Test worker loss during dispatch, execution and result recording. |
+| Retry semantics | Expose at-least-once behavior and stable occurrence identity to jobs. Retry an uncertain execution only under the declared policy; do not promise exactly-once external side effects. Preserve attempt history and distinguish dispatch failure, guest failure and unknown outcome. |
+| Interfaces and evidence | Ship submit/list/status/logs/cancel and schedule create/list/update/delete through CLI and authenticated API. Verify recurring jobs on real KVM through the control plane, paused-VM wake, restart recovery, competing workers, no overlap under the selected policy, and complete cleanup. |
+
+The scheduling feature remains **Partial** in `PLATFORM_PARITY.md` until this
+behavior is implemented and checked. Existing delayed host jobs do not satisfy
+these acceptance criteria.
+
+## Existing host-job verification
 
 **`tools/e2e-jobs.sh`** passes 18 of 18 checks on Windows (Git Bash) and on Linux as an
 unprivileged user:
