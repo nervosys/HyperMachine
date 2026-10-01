@@ -58,7 +58,7 @@ python3 tools/e2e-tcp-tunnel.py \
   --ssh-fixture /path/to/new-ssh-fixture \
   --output /path/to/ssh-e2e.json
 
-python3 docs/benchmarks/2026-10-01/verify-ssh.py --current
+python3 docs/benchmarks/2026-10-01/verify-ssh.py
 ```
 
 Omitting `--ssh-fixture` retains the original 15-case TCP suite. The verifier
