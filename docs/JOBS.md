@@ -238,6 +238,13 @@ claim and optional result; `complete_vm_occurrence` checks its claim token and
 records one result, allowing identical receipt replay. The explicit CLI dispatcher
 uses these APIs; an automatic VM worker is not implemented yet.
 
+`next_vm_occurrence` selects the oldest unclaimed committed occurrence. Claims
+must follow that order: an unclaimed or unresolved predecessor prevents claiming
+later work, while a durable completion permits the next occurrence after restart.
+Competing claims still have one winner. This ordering is per schedule; separate
+schedules targeting one VM are not mutually excluded. It does not establish that
+background descendants or external side effects have stopped after a command exits.
+
 ```text
 hm jobs --store DIR schedule dispatch NAME SCHEDULED_MS --profiles profiles.json --worker operator
 ```

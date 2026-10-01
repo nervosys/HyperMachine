@@ -317,16 +317,16 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
     store.materialize_interval("run", 110, 2).unwrap();
     let profiles = dir.path().join("profiles.json");
     std::fs::write(&profiles, json!({"profiles":{"local":{"endpoint":format!("http://{address}"),"api_key_env":"HM_DISPATCH_FIXTURE_KEY"}}}).to_string()).unwrap();
-    let dispatch = |time: &str| {
+    let dispatch = |name: &str, time: &str| {
         let mut cmd = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"));
         cmd.args(["jobs", "--store"])
             .arg(store.root())
-            .args(["schedule", "dispatch", "run", time, "--profiles"])
+            .args(["schedule", "dispatch", name, time, "--profiles"])
             .arg(&profiles)
             .env("HM_DISPATCH_FIXTURE_KEY", "dispatch-fixture-key");
         cmd
     };
-    let result = success(dispatch("100").output().await.unwrap());
+    let result = success(dispatch("run", "100").output().await.unwrap());
     assert_eq!(result["exit_code"], 7);
     assert_eq!(result["stdout"], "guest output");
     let receipt = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
@@ -346,9 +346,14 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
             .exit_code,
         Some(7)
     );
-    assert!(!dispatch("100").output().await.unwrap().status.success());
+    assert!(!dispatch("run", "100")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
-    let failed = dispatch("110").output().await.unwrap();
+    let failed = dispatch("run", "110").output().await.unwrap();
     assert!(!failed.status.success());
     assert!(!String::from_utf8_lossy(&failed.stderr).contains("dispatch-fixture-key"));
     assert!(store
@@ -356,16 +361,40 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
         .unwrap()
         .completion
         .is_none());
-    assert!(!dispatch("110").output().await.unwrap().status.success());
+    assert!(!dispatch("run", "110")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     store.materialize_interval("run", 120, 1).unwrap();
-    assert!(!dispatch("120").output().await.unwrap().status.success());
+    assert!(!dispatch("run", "120")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    store.create_interval_schedule("large", &schedule).unwrap();
+    store.materialize_interval("large", 100, 1).unwrap();
+    assert!(!dispatch("large", "100")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
     assert!(store
-        .vm_dispatch_state("run", 120)
+        .vm_dispatch_state("large", 100)
         .unwrap()
         .completion
         .is_none());
-    assert!(!dispatch("120").output().await.unwrap().status.success());
+    assert!(!dispatch("large", "100")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
     assert_eq!(calls.load(Ordering::SeqCst), 3);
     server.abort();
 }
