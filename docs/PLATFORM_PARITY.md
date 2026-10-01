@@ -895,6 +895,16 @@ stages, exact coordinator and verifying analysis are retained under the
 on Windows and Linux. Historical wrapper versions remain archived so their
 recorded hashes survive the optional finer-stage collection mode.
 
+The guest init script now offers two opt-in kernel-timestamped milestones
+with `HV2_BOOT_TRACE=1` on its kernel command line: `HV2_BOOT
+core_mounts_ready` after proc/sys/dev mounts, and `HV2_BOOT agent_launch`
+after the remaining mounts, network and environment setup, just before
+starting the agent. These use `/dev/kmsg` and appear in guest `dmesg`.
+Together with the existing kernel init-handoff timestamp, they can bound
+pre-launch userspace work. They do not mark socket bind or acceptance.
+Normal boots emit neither milestone. Linux shell syntax validation passes;
+runtime milestone collection and its timing impact remain unmeasured.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

@@ -5,6 +5,14 @@
 mount -t proc proc /proc
 mount -t sysfs sysfs /sys
 mount -t devtmpfs devtmpfs /dev
+# Opt-in kernel-timestamped milestones for cold-readiness investigations.
+# The kernel passes unknown KEY=value command-line words to init's environment.
+# Keep normal boots silent: each console byte adds an emulated UART exit.
+boot_trace() {
+    [ -n "$HV2_BOOT_TRACE" ] || return 0
+    printf '<6>HV2_BOOT %s\n' "$1" >/dev/kmsg
+}
+boot_trace core_mounts_ready
 mkdir -p /dev/pts /etc /tmp /root
 mount -t devpts devpts /dev/pts
 mount -t tmpfs tmpfs /tmp
@@ -18,6 +26,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/r
 # An image built from an OCI image carries that image's ENV here, so what the
 # agent runs sees the environment the image was made for (its PATH first).
 [ -f /etc/hv2-env ] && . /etc/hv2-env
+boot_trace agent_launch
 /bin/hv2-guest-agentd &
 echo "=== HV2 READY ==="
 exec setsid sh -c "exec sh </dev/console >/dev/console 2>&1"
