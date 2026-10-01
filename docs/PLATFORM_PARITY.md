@@ -1098,6 +1098,19 @@ reliability fix; only failure-message formatting changed, not timer behavior.
 The exact coordinator, raw report and analysis use `timer-diagnostic-` names
 in the same evidence directory. The original scored binary hash is restored.
 
+Failure reports now also decode the already captured KVM I/O APIC irqchip
+payload. They include controller base/select/id/IRR and all 24 GSI routes,
+with full-width raw values, vector, mask, level-trigger, remote-IRR and
+destination fields. Decoding requires the complete 512-byte union and ignores
+its trailing padding; missing or malformed captures print `unavailable`.
+These machine reads remain sequential, taken before the owner kick, and are
+not an atomic interrupt snapshot. No additional ioctls, snapshot schema or
+interrupt behavior change. All eight Linux boot-diagnostic tests and formatting
+pass, including full-width routes, boundary pins, poisoned padding and malformed
+lengths. The existing workspace CI test job includes these daemon tests.
+Failed-boot runtime I/O APIC route capture remains pending; no wakeup fix follows
+from this formatter change.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

@@ -25,7 +25,7 @@ pub(crate) fn owner_diagnostic(sample: &VCpuDiagnostic) -> String {
 
 pub(crate) fn machine_sample(state: &MachineState) -> String {
     if state.backend != "kvm" {
-        return "pre-kick PIC/PIT sample unavailable (non-KVM backend)".into();
+        return "pre-kick PIC/IOAPIC/PIT sample unavailable (non-KVM backend)".into();
     }
     // KVM's 512-byte irqchip union starts with the 16-byte kvm_pic_state.
     // Capture each controller separately; this is not an atomic snapshot.
@@ -37,6 +37,31 @@ pub(crate) fn machine_sample(state: &MachineState) -> String {
             "{name} LAST_IRR={:#x} IRR={:#x} IMR={:#x} ISR={:#x} PRIORITY={:#x} BASE={:#x} INIT={} AUTO_EOI={} ELCR={:#x}",
             bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[9], bytes[10], bytes[14],
         )
+    };
+    let ioapic = if state.ioapic.len() == 512 {
+        // kvm_ioapic_state: u64 base, four u32 fields, then 24 u64 RTEs.
+        // The containing irqchip union is 512 bytes; tail padding is not RTEs.
+        let register = |offset: usize| {
+            u32::from_le_bytes(state.ioapic[offset..offset + 4].try_into().unwrap())
+        };
+        let base = u64::from_le_bytes(state.ioapic[..8].try_into().unwrap());
+        let routes = (0..24)
+            .map(|pin| {
+                let offset = 24 + pin * 8;
+                let raw = u64::from_le_bytes(state.ioapic[offset..offset + 8].try_into().unwrap());
+                format!("GSI{pin} RAW={raw:#x} VECTOR={:#x} MASKED={} LEVEL={} REMOTE_IRR={} DEST={:#x}",
+                    raw & 0xff, (raw >> 16) & 1, (raw >> 15) & 1, (raw >> 14) & 1, raw >> 56)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "IOAPIC BASE={base:#x} SELECT={:#x} ID={:#x} IRR={:#x} {routes}",
+            register(8),
+            register(12),
+            register(16)
+        )
+    } else {
+        format!("IOAPIC unavailable ({} bytes)", state.ioapic.len())
     };
     let pit = if state.pit.len() == 112 {
         // Three 24-byte channel structs, then u32 flags and nine reserved u32s.
@@ -59,7 +84,7 @@ pub(crate) fn machine_sample(state: &MachineState) -> String {
         format!("PIT unavailable ({} bytes)", state.pit.len())
     };
     format!(
-        "pre-kick machine sample: {}; {}; {pit}",
+        "pre-kick machine sample: {}; {}; {ioapic}; {pit}",
         pic("PIC_MASTER", &state.pic_master),
         pic("PIC_SLAVE", &state.pic_slave),
     )
@@ -115,6 +140,42 @@ pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ioapic_routes_preserve_full_width_and_ignore_union_padding() {
+        let mut state = MachineState {
+            backend: "kvm".into(),
+            ioapic: vec![0; 512],
+            ..Default::default()
+        };
+        state.ioapic[..8].copy_from_slice(&0xfec00000u64.to_le_bytes());
+        state.ioapic[16..20].copy_from_slice(&0x20u32.to_le_bytes());
+        let route = 0x080000000001c031u64;
+        state.ioapic[64..72].copy_from_slice(&route.to_le_bytes()); // GSI5
+        state.ioapic[208..216].copy_from_slice(&0xfee00000000000ffu64.to_le_bytes()); // GSI23
+        state.ioapic[216..].fill(0xff);
+        let report = machine_sample(&state);
+        assert!(report.contains("IOAPIC BASE=0xfec00000 SELECT=0x0 ID=0x0 IRR=0x20"));
+        assert!(report.contains(
+            "GSI5 RAW=0x80000000001c031 VECTOR=0x31 MASKED=1 LEVEL=1 REMOTE_IRR=1 DEST=0x8"
+        ));
+        assert!(report.contains("GSI23 RAW=0xfee00000000000ff"));
+        assert!(!report.contains("GSI24"));
+    }
+
+    #[test]
+    fn missing_ioapic_does_not_invent_empty_routes() {
+        for len in [0, 216, 511, 513] {
+            let state = MachineState {
+                backend: "kvm".into(),
+                ioapic: vec![0; len],
+                ..Default::default()
+            };
+            let report = machine_sample(&state);
+            assert!(report.contains("IOAPIC unavailable"));
+            assert!(!report.contains("GSI0"));
+        }
+    }
 
     #[test]
     fn clock_samples_distinguish_missing_zero_and_large_values() {
