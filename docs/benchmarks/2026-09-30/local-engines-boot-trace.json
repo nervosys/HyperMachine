@@ -1,0 +1,677 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command",
+  "concurrency": 1,
+  "hypermachine_log_filter": "warn,hv2_core::backends::kvm::boot=trace",
+  "diagnostic_tracing": true,
+  "pairs": 20,
+  "order": "alternating AB/BA",
+  "environment": "shared-WSL-nested-KVM-boot-trace-diagnostic",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hyperMachine": "ed31980ddeac86078cd47ca65f76b7cd44a27f93fe746e2b6a867b0d4d46d18e",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "95ac59d475e46d434d299624dc4271aa1e026021ec0e88b4ac6241000722ebe9",
+    "firecracker_harness": "6bdeb9c0d34f41984e69a91ed7180a3a297213b6681d5b65250969e6a71656f1"
+  },
+  "artifacts_unchanged": true,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "hypermachine_template_preflight": [
+    {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "envdVersion": "0.6.3",
+      "memoryMB": 1024,
+      "public": false,
+      "snapshot": false,
+      "templateID": "base"
+    }
+  ],
+  "setup_error": null,
+  "cleanup_error": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 751.952670999799,
+      "node_memory_ready": {
+        "Rss_kib": 110988,
+        "Pss_kib": 109079,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 108792,
+        "Anonymous_kib": 101260
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 26092,
+        "Pss_kib": 24066,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 23768,
+        "Anonymous_kib": 16180
+      },
+      "engine": "hypermachine",
+      "pair": 0
+    },
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 410.1681449997159,
+      "engine": "firecracker",
+      "pair": 0
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 416.7359260000012,
+      "engine": "firecracker",
+      "pair": 1
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 753.3269810001002,
+      "node_memory_ready": {
+        "Rss_kib": 140584,
+        "Pss_kib": 138558,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 138260,
+        "Anonymous_kib": 130664
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 55416,
+        "Pss_kib": 53390,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 53092,
+        "Anonymous_kib": 45504
+      },
+      "engine": "hypermachine",
+      "pair": 1
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 713.860573999682,
+      "node_memory_ready": {
+        "Rss_kib": 169752,
+        "Pss_kib": 167726,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 167428,
+        "Anonymous_kib": 159832
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 84664,
+        "Pss_kib": 82638,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 82340,
+        "Anonymous_kib": 74752
+      },
+      "engine": "hypermachine",
+      "pair": 2
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 418.16587699986485,
+      "engine": "firecracker",
+      "pair": 2
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 391.38842600004864,
+      "engine": "firecracker",
+      "pair": 3
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 717.7642130000095,
+      "node_memory_ready": {
+        "Rss_kib": 171580,
+        "Pss_kib": 169554,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 169256,
+        "Anonymous_kib": 161660
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 86480,
+        "Pss_kib": 84454,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 84156,
+        "Anonymous_kib": 76568
+      },
+      "engine": "hypermachine",
+      "pair": 3
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 726.8407770002341,
+      "node_memory_ready": {
+        "Rss_kib": 171572,
+        "Pss_kib": 169546,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 169248,
+        "Anonymous_kib": 161652
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 86480,
+        "Pss_kib": 84454,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 84156,
+        "Anonymous_kib": 76568
+      },
+      "engine": "hypermachine",
+      "pair": 4
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 406.808510999781,
+      "engine": "firecracker",
+      "pair": 4
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 418.9413369999784,
+      "engine": "firecracker",
+      "pair": 5
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 722.6087919998463,
+      "node_memory_ready": {
+        "Rss_kib": 157292,
+        "Pss_kib": 155266,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 154968,
+        "Anonymous_kib": 147372
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 72208,
+        "Pss_kib": 70182,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 69884,
+        "Anonymous_kib": 62296
+      },
+      "engine": "hypermachine",
+      "pair": 5
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 710.8649629999491,
+      "node_memory_ready": {
+        "Rss_kib": 157268,
+        "Pss_kib": 155242,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 154944,
+        "Anonymous_kib": 147348
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 72212,
+        "Pss_kib": 70186,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 69888,
+        "Anonymous_kib": 62300
+      },
+      "engine": "hypermachine",
+      "pair": 6
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 410.6071119999797,
+      "engine": "firecracker",
+      "pair": 6
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 408.7179980001565,
+      "engine": "firecracker",
+      "pair": 7
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 731.0947599999054,
+      "node_memory_ready": {
+        "Rss_kib": 157352,
+        "Pss_kib": 155326,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 155028,
+        "Anonymous_kib": 147432
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 72216,
+        "Pss_kib": 70190,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 69892,
+        "Anonymous_kib": 62304
+      },
+      "engine": "hypermachine",
+      "pair": 7
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 733.515129999887,
+      "node_memory_ready": {
+        "Rss_kib": 159084,
+        "Pss_kib": 157058,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 156760,
+        "Anonymous_kib": 149164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 74032,
+        "Pss_kib": 72006,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 71708,
+        "Anonymous_kib": 64120
+      },
+      "engine": "hypermachine",
+      "pair": 8
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 433.6338909997721,
+      "engine": "firecracker",
+      "pair": 8
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 408.9085000000523,
+      "engine": "firecracker",
+      "pair": 9
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 715.9673460000704,
+      "node_memory_ready": {
+        "Rss_kib": 159188,
+        "Pss_kib": 157162,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 156864,
+        "Anonymous_kib": 149268
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 74056,
+        "Pss_kib": 72030,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 71732,
+        "Anonymous_kib": 64144
+      },
+      "engine": "hypermachine",
+      "pair": 9
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 696.8573330000254,
+      "node_memory_ready": {
+        "Rss_kib": 159172,
+        "Pss_kib": 157146,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 156848,
+        "Anonymous_kib": 149252
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 74056,
+        "Pss_kib": 72030,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 71732,
+        "Anonymous_kib": 64144
+      },
+      "engine": "hypermachine",
+      "pair": 10
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 441.9603090000237,
+      "engine": "firecracker",
+      "pair": 10
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 393.22127400009776,
+      "engine": "firecracker",
+      "pair": 11
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 723.6394080000537,
+      "node_memory_ready": {
+        "Rss_kib": 159104,
+        "Pss_kib": 157078,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 156780,
+        "Anonymous_kib": 149184
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 74060,
+        "Pss_kib": 72034,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 71736,
+        "Anonymous_kib": 64148
+      },
+      "engine": "hypermachine",
+      "pair": 11
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 716.3173200001438,
+      "node_memory_ready": {
+        "Rss_kib": 159132,
+        "Pss_kib": 157106,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 156808,
+        "Anonymous_kib": 149212
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 74060,
+        "Pss_kib": 72034,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 71736,
+        "Anonymous_kib": 64148
+      },
+      "engine": "hypermachine",
+      "pair": 12
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 413.4113739996792,
+      "engine": "firecracker",
+      "pair": 12
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 417.00321799999074,
+      "engine": "firecracker",
+      "pair": 13
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 749.6117979999326,
+      "node_memory_ready": {
+        "Rss_kib": 159132,
+        "Pss_kib": 157106,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 156808,
+        "Anonymous_kib": 149212
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 74060,
+        "Pss_kib": 72034,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 71736,
+        "Anonymous_kib": 64148
+      },
+      "engine": "hypermachine",
+      "pair": 13
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 720.5100999999559,
+      "node_memory_ready": {
+        "Rss_kib": 187872,
+        "Pss_kib": 185846,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 185548,
+        "Anonymous_kib": 177952
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 102848,
+        "Pss_kib": 100822,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 100524,
+        "Anonymous_kib": 92936
+      },
+      "engine": "hypermachine",
+      "pair": 14
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 411.2961020000512,
+      "engine": "firecracker",
+      "pair": 14
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 414.443651000056,
+      "engine": "firecracker",
+      "pair": 15
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 733.657882999978,
+      "node_memory_ready": {
+        "Rss_kib": 189744,
+        "Pss_kib": 187718,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 187420,
+        "Anonymous_kib": 179824
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104660,
+        "Pss_kib": 102634,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 102336,
+        "Anonymous_kib": 94748
+      },
+      "engine": "hypermachine",
+      "pair": 15
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 718.3137499996519,
+      "node_memory_ready": {
+        "Rss_kib": 189756,
+        "Pss_kib": 187730,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 187432,
+        "Anonymous_kib": 179836
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104660,
+        "Pss_kib": 102634,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 102336,
+        "Anonymous_kib": 94748
+      },
+      "engine": "hypermachine",
+      "pair": 16
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 411.36085800008004,
+      "engine": "firecracker",
+      "pair": 16
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 391.64792200017473,
+      "engine": "firecracker",
+      "pair": 17
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 725.4164179998952,
+      "node_memory_ready": {
+        "Rss_kib": 189672,
+        "Pss_kib": 187646,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 187348,
+        "Anonymous_kib": 179752
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104660,
+        "Pss_kib": 102634,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 102336,
+        "Anonymous_kib": 94748
+      },
+      "engine": "hypermachine",
+      "pair": 17
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 710.9801500000685,
+      "node_memory_ready": {
+        "Rss_kib": 189744,
+        "Pss_kib": 187718,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 187420,
+        "Anonymous_kib": 179824
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104660,
+        "Pss_kib": 102634,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 102336,
+        "Anonymous_kib": 94748
+      },
+      "engine": "hypermachine",
+      "pair": 18
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 387.330877000295,
+      "engine": "firecracker",
+      "pair": 18
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 410.8492620002835,
+      "engine": "firecracker",
+      "pair": 19
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 727.2284870000476,
+      "node_memory_ready": {
+        "Rss_kib": 189732,
+        "Pss_kib": 187706,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 187408,
+        "Anonymous_kib": 179812
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 104660,
+        "Pss_kib": 102634,
+        "Private_Clean_kib": 128,
+        "Private_Dirty_kib": 102336,
+        "Anonymous_kib": 94748
+      },
+      "engine": "hypermachine",
+      "pair": 19
+    }
+  ],
+  "node_memory_baseline": {
+    "Rss_kib": 9012,
+    "Pss_kib": 7107,
+    "Private_Clean_kib": 128,
+    "Private_Dirty_kib": 6816,
+    "Anonymous_kib": 1228
+  },
+  "node_log_tail": "23:47:45.397781Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1018 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.397792Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1021 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397802Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1022 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397813Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397824Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397834Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397845Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397855Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1017 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.397865Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1018 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.397897Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1018 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.397915Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1017 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.397943Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1018 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.397954Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1021 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397969Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1022 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397979Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.397990Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.398000Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.398011Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1016 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x2\n\u001b[2m2026-09-30T23:47:45.398023Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1017 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81648115 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.398032Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1018 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.398127Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m2 \u001b[3mio_port\u001b[0m\u001b[2m=\u001b[0m1018 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816480e3 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x6\n\u001b[2m2026-09-30T23:47:45.400076Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff8161891b \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.400099Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81618928 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.400195Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816183d5 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x246\n\u001b[2m2026-09-30T23:47:45.400328Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff8161891b \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.400354Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81618928 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.401169Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816183d5 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x246\n\u001b[2m2026-09-30T23:47:45.401260Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff8161891b \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.401277Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81618928 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.401324Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff816183d5 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x246\n\u001b[2m2026-09-30T23:47:45.401401Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff8161891b \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n\u001b[2m2026-09-30T23:47:45.401418Z\u001b[0m \u001b[35mTRACE\u001b[0m \u001b[2mhv2_core::backends::kvm::boot\u001b[0m\u001b[2m:\u001b[0m KVM boot exit \u001b[3mvcpu\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mexit_reason\u001b[0m\u001b[2m=\u001b[0m6 \u001b[3mrip\u001b[0m\u001b[2m=\u001b[0m0xffffffff81618928 \u001b[3mrflags\u001b[0m\u001b[2m=\u001b[0m0x46\n",
+  "ready_ms": {
+    "hypermachine": {
+      "n": 20,
+      "min": 696.8573330000254,
+      "max": 753.3269810001002,
+      "mean": 725.0164426999618,
+      "p50": 722.6087919998463,
+      "p95": 751.952670999799,
+      "p99": 753.3269810001002
+    },
+    "firecracker": {
+      "n": 20,
+      "min": 387.330877000295,
+      "max": 441.9603090000237,
+      "mean": 410.8300285000041,
+      "p50": 410.8492620002835,
+      "p95": 433.6338909997721,
+      "p99": 441.9603090000237
+    }
+  },
+  "limitations": [
+    "Shared nested-KVM host; no CPU pinning or dedicated hardware",
+    "Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API",
+    "Cold lifecycle only; no snapshot/SDK/platform comparison",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "success": true
+}
