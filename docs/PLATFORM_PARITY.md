@@ -35,7 +35,7 @@ container. The comparison is about what surrounds the VM.
 | Persistent volumes shared between VMs | no | no | **Real**: E2B volumes over 9P, live and shared (Linux hosts) |
 | Build images from Dockerfiles or OCI | compose | Dockerfile | **Real**: E2B template builds, no Docker |
 | Backups to object storage | yes | no | **Absent** |
-| Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks only |
+| Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks and [durable delayed host-process jobs](JOBS.md); VM jobs and recurring schedules absent |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
 | MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, with cancellable client waits checked on real KVM; accepted remote work can continue, and streaming plus the wider `hv2-agent` surface remain absent |
 | Email in and out | no | yes | **Absent** |
