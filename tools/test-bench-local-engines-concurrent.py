@@ -14,6 +14,36 @@ burst = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(burst)
 
 
+class Arrivals(unittest.TestCase):
+    def test_queueing_is_included_and_cleanup_failure_invalidates_success(self):
+        def attempt(args, row, started, ready):
+            row["start_offset_ms"] = (time.perf_counter()-started)*1000
+            time.sleep(.02)
+            row.update(success=True, ready_ms=20)
+            ready(row, None)
+            row["cleanup_success"] = row["index"] != 2
+        args = SimpleNamespace(concurrency=1, arrival_rate=1000, arrival_samples=4)
+        report = burst.arrival_run(args, "firecracker", 0, attempt)
+        self.assertFalse(report["success"])
+        self.assertEqual(report["attempts"], 4)
+        self.assertEqual(report["passing_attempts"], 3)
+        self.assertGreater(report["samples"][-1]["client_queue_ms"], 20)
+        self.assertGreater(report["samples"][-1]["scheduled_to_validation_ms"], 40)
+        for row in report["samples"]:
+            self.assertGreaterEqual(row["cleanup_completed_offset_ms"], row["validated_offset_ms"])
+
+    def test_worker_exception_retains_attempt_and_failure_timing(self):
+        def attempt(*args):
+            raise RuntimeError("fixture failure")
+        report = burst.arrival_run(SimpleNamespace(concurrency=2, arrival_rate=1000,
+                                  arrival_samples=3), "firecracker", 0, attempt)
+        self.assertFalse(report["success"])
+        self.assertEqual(report["passing_attempts"], 0)
+        self.assertEqual(len(report["samples"]), 3)
+        self.assertTrue(all(row["error"] == "fixture failure" and
+                            row["scheduled_to_validation_ms"] >= 0 for row in report["samples"]))
+
+
 class AllocatorEnvironment(unittest.TestCase):
     def test_default_child_ignores_inherited_allocator_and_guest_overrides(self):
         args = SimpleNamespace(kernel=Path("kernel"), initrd=Path("initrd"))
