@@ -1,7 +1,7 @@
 # HyperMachine against boxd and exe.dev
 
 The goal: every capability [boxd](https://boxd.sh/) and [exe.dev](https://exe.dev/) offer, and more.
-This page tracks it. Their feature lists were read from their public docs on 2026-09-29
+This page tracks it. Their feature lists were reviewed against their public docs on 2026-10-01
 (`docs.boxd.sh/llms-full.txt`, `exe.dev/docs/all`). HyperMachine's statuses come from its code,
 not its docs. **Real** means wired to a shipped binary and checked. **Partial** says what is missing.
 
@@ -14,21 +14,22 @@ container. The comparison is about what surrounds the VM.
 |---|---|---|---|
 | Create, list, delete over an API | yes | yes | **Real**: E2B's API (`hv2-sandboxd`, `hv2-control-plane`), so the unmodified E2B SDKs work |
 | A CLI | yes | yes (over ssh) | **Yes**: `hm sandbox vm` manages lifecycle, commands, binary files and checkpoints; verified on a real KVM node and authenticated control plane/proxy |
-| Fork a running VM, memory included | ~160 ms | `cp` | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
-| Named snapshots, and new VMs from them | yes | no | **Real**: snapshots become templates |
-| Checkpoint and restore in place | yes, 10 per VM | no | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
-| Pause and resume | yes | no | **Real**: to disk; any node resumes |
-| Suspend when idle, wake on traffic | yes | no | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
+| Fork a running VM, memory included | yes; ~160 ms provider example | `cp` exists; live-memory copying not established | **Real**: `POST /sandboxes/{id}/fork`, 1-100 copies |
+| Named snapshots, and new VMs from them | yes | not documented | **Real**: snapshots become templates |
+| Checkpoint and restore in place | yes, 10 per VM | not documented | **Real**: 10 per sandbox; memory and disk; same ID, token and URL; a failed restore changes nothing |
+| Pause and resume | yes | not documented | **Real**: to disk; any node resumes |
+| Suspend when idle, wake on traffic | yes | not documented | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
 | HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; you bring the wildcard certificate (no ACME) |
 | Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); authenticated raw TCP through the node/control-plane API and loopback CLI, [verified with KVM/TLS and lifecycle operations](benchmarks/2026-10-01/tcp-tunnel.md); UDP absent |
 | Custom domains | yes | yes | **Real**: authenticated cluster bindings to guest HTTP ports, Memory/Redis ownership, HTTPS forwarding; [operator DNS and certificates](CUSTOM_DOMAINS.md) |
-| Private URLs with login, identity headers | team-shared | yes (`X-ExeDev-Email`) | **Absent** |
+| DNS validation and automatic domain TLS | yes | not checked | **Absent**: operators provide DNS and certificates |
+| Private URLs with login, identity headers | public web URL; team shell sharing | yes (`X-ExeDev-Email`) | **Absent** |
 | SSH to a VM by name | yes | yes | **Partial**: [persisted metadata names](benchmarks/2026-10-01/ssh-name.md) and authenticated stdio transport verified with real KVM/TLS, binary transfer and duplicate/key rejection; no atomic name reservations or guest SSH provisioning |
 | exec, and file copy in and out | yes | ssh/scp | **Real**: `/exec`, envd processes with PTY and stdin, files |
-| **Env vars for every command in a VM** | org-wide | no | **Real**: E2B's `envVars`, kept in the guest so pause, fork and snapshots carry them |
-| Secrets held off the VM, injected at the edge | no | yes | **Real**: header injection at the egress gateway, which the guest never sees |
+| **Env vars for every command in a VM** | org-wide | creation env supported; command inheritance not checked | **Real**: E2B's `envVars`, kept in the guest so pause, fork and snapshots carry them |
+| Secrets held off the VM, injected at the edge | platform-held integration credentials; header-injection parity not established | yes | **Real**: header injection at the egress gateway, which the guest never sees |
 | Workload identity (AWS/GCP federation) | no | yes | **Real**: JWT-SVIDs minted at the gateway, JWKS and OIDC discovery |
-| Egress policy per VM | isolated or not | no | **Real**: allow/deny lists, live updates, decision log, reserved ranges refused |
+| Egress policy per VM | egress allowlist documented; enforcement details not checked | no | **Real**: allow/deny lists, live updates, decision log, reserved ranges refused |
 | VM-to-VM networks by tag | yes | via proxy | **Absent** |
 | Teams, roles, sharing | yes | yes, with SSO | **Absent**: one team |
 | Scoped, expiring API keys | yes | yes | **Real on the control plane**: hashed operator-provisioned keys, request-time expiry and capability scopes; single team, startup-loaded policies |
@@ -37,7 +38,7 @@ container. The comparison is about what surrounds the VM.
 | Backups to object storage | yes | no | **Absent** |
 | Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks and [durable delayed host-process jobs](JOBS.md); VM jobs and recurring schedules absent |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
-| MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, with cancellable client waits checked on real KVM; accepted remote work can continue, and streaming plus the wider `hv2-agent` surface remain absent |
+| MCP for agents | skill + MCP | remote MCP with browser login; Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, with cancellable client waits checked on real KVM; accepted remote work can continue, and remote authenticated MCP, streaming plus the wider `hv2-agent` surface remain absent |
 | Email in and out | no | yes | **Absent** |
 | Multi-node, self-hosted | contact sales | enterprise | **Real**: control plane, Redis store, cross-node resume, mTLS, Helm chart |
 | GPU | no | no | **Partial**: VFIO code, not wired to sandboxes |
@@ -53,7 +54,14 @@ the public host, path, query and body. See [setup and evidence](CUSTOM_DOMAINS.m
 Operators still provide DNS and certificates; ACME and DNS ownership verification
 are not implemented. These functional passes establish no performance win.
 
-## What is beyond both today
+The [Boxd documentation](https://docs.boxd.sh/llms-full.txt) distinguishes public
+web access from team shell sharing, describes platform-held integration credentials,
+automatic domain TLS, and forked egress allowlists. The [exe.dev documentation](https://exe.dev/docs/all)
+describes remote MCP and VM copying, but does not establish live-memory copying.
+These are documentation findings, not independent runtime tests. “Not documented”
+and “not checked” do not establish that a competitor lacks a capability.
+
+## HyperMachine capabilities to compare
 
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
