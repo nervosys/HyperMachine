@@ -133,6 +133,16 @@ lower in only one. Both engines had readiness failures (3029/3200 attempts
 passed overall), with clean teardown and unchanged artifacts. The arena limit
 was not adopted; neither a memory win nor a reliability fix is established.
 
+A separate [boot-sizing allocation candidate](benchmarks/2026-10-01/boot-sizing.md)
+removed temporary kernel/initrd copies during Linux memory sizing. Allocation
+and guest-state checks passed, followed by 3328/3328 passing, cleaned-up native
+attempts against a matched current-parent build. At concurrency 8 both paired
+blocks improved readiness and memory. At concurrency 100 the candidate was
+slower in three of four blocks, with a median paired mean-readiness increase
+of 1455.22 ms and inconsistent memory changes. The runtime change was reverted;
+exact candidate sources, tests, raw reports and comparison tables are retained.
+This micro-level allocation reduction did not establish a product improvement.
+
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
 startup deadline (30 seconds by default). Older cohorts used HyperMachine's
