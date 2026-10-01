@@ -73,3 +73,57 @@ fn schedule_cli_persists_and_pages_without_executing_jobs() {
     assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
     assert_eq!(std::fs::read_dir(store.join("jobs")).unwrap().count(), 0);
 }
+
+#[test]
+fn automatic_publication_is_bounded_and_recovers_on_a_second_invocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let spec = dir.path().join("interval.json");
+    std::fs::write(
+        &spec,
+        json!({"first_ms":0,"every_ms":1,"job":{"command":["must-not-run"]}}).to_string(),
+    )
+    .unwrap();
+    success(invoke(&store, &["create", "watch", spec.to_str().unwrap()]));
+    for expected in [3, 7] {
+        let output = invoke(
+            &store,
+            &[
+                "watch",
+                "watch",
+                "--limit",
+                "2",
+                "--poll-ms",
+                "1",
+                "--ticks",
+                "2",
+            ],
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let lines: Vec<Value> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines.iter().all(|line| line.as_array().unwrap().len() == 2));
+        assert_eq!(
+            success(invoke(&store, &["status", "watch"]))["publication_through_ms"],
+            expected
+        );
+    }
+    assert!(!invoke(&store, &["watch", "watch", "--ticks", "0"])
+        .status
+        .success());
+    assert!(!invoke(
+        &store,
+        &["watch", "watch", "--poll-ms", "0", "--ticks", "1"]
+    )
+    .status
+    .success());
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+}

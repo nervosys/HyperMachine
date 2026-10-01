@@ -97,6 +97,17 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Publish due occurrences repeatedly; does not execute jobs
+    Watch {
+        id: String,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+        #[arg(long, default_value = "1000")]
+        poll_ms: u64,
+        /// Stop after this many polling ticks (otherwise until Ctrl+C)
+        #[arg(long)]
+        ticks: Option<u64>,
+    },
     /// Create an immutable interval schedule from JSON (use - for stdin)
     Create { id: String, spec: PathBuf },
     /// Print the schedule and occurrence-publication progress as JSON
@@ -127,6 +138,59 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::Watch {
+                    id,
+                    limit,
+                    poll_ms,
+                    ticks,
+                } => {
+                    if !(1..=1024).contains(&limit)
+                        || !(1..=60_000).contains(&poll_ms)
+                        || ticks == Some(0)
+                    {
+                        bail!("watch requires limit 1-1024, poll-ms 1-60000 and positive ticks");
+                    }
+                    s.interval_schedule(&id)?;
+                    let shutdown = tokio::signal::ctrl_c();
+                    tokio::pin!(shutdown);
+                    let mut count = 0_u64;
+                    loop {
+                        let (store, name) = (s.clone(), id.clone());
+                        let mut task = tokio::task::spawn_blocking(move || {
+                            store.materialize_interval(&name, hv2_jobs::now_ms(), limit)
+                        });
+                        let result = tokio::select! {
+                            result = &mut task => result?,
+                            signal = &mut shutdown => {
+                                signal?;
+                                // Finish an accepted filesystem operation before exit.
+                                // Its records remain recoverable even without stdout.
+                                task.await??;
+                                return Ok(0);
+                            }
+                        };
+                        match result {
+                            Ok(records) => {
+                                println!("{}", serde_json::to_string(&records)?);
+                                std::io::stdout().flush()?;
+                            }
+                            Err(hv2_jobs::JobError::Conflict(_)) => {
+                                eprintln!("schedule progress changed; retrying on next tick");
+                            }
+                            Err(error) => return Err(error.into()),
+                        }
+                        count = count
+                            .checked_add(1)
+                            .context("schedule tick count overflow")?;
+                        if ticks.is_some_and(|ticks| count >= ticks) {
+                            return Ok(0);
+                        }
+                        tokio::select! {
+                            () = tokio::time::sleep(Duration::from_millis(poll_ms)) => {},
+                            signal = &mut shutdown => { signal?; return Ok(0); }
+                        }
+                    }
+                }
                 ScheduleCommand::Create { id, spec } => {
                     let text = if spec.as_os_str() == "-" {
                         let mut text = String::new();
