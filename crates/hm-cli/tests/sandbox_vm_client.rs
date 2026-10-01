@@ -1,6 +1,94 @@
 //! Exercise the shipped binary against a protocol fixture, not a real guest.
 
 #[tokio::test]
+async fn tcp_stdio_is_binary_clean_and_exits_when_guest_closes_with_stdin_open() {
+    use axum::{extract::Request, http::StatusCode, response::IntoResponse};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let app = Router::new().route(
+        "/sandboxes/{id}/ports/22/tcp",
+        axum::routing::get(|mut request: Request| async move {
+            if request
+                .headers()
+                .get("x-api-key")
+                .and_then(|v| v.to_str().ok())
+                != Some("stdio-fixture-key")
+            {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+            assert_eq!(request.headers()["upgrade"], "hv2-tcp/1");
+            let close = request.uri().path().contains("/close/");
+            let upgraded = hyper::upgrade::on(&mut request);
+            tokio::spawn(async move {
+                let mut stream = hyper_util::rt::TokioIo::new(upgraded.await.unwrap());
+                if close {
+                    stream.write_all(b"SSH-2.0-fixture\r\n").await.unwrap();
+                } else {
+                    let mut bytes = Vec::new();
+                    stream.read_to_end(&mut bytes).await.unwrap();
+                    stream.write_all(&bytes).await.unwrap();
+                }
+                stream.shutdown().await.unwrap();
+            });
+            (
+                StatusCode::SWITCHING_PROTOCOLS,
+                [("connection", "upgrade"), ("upgrade", "hv2-tcp/1")],
+            )
+                .into_response()
+        }),
+    );
+    let (endpoint, server) = server(app).await;
+    let bytes: Vec<u8> = (0..65536).map(|n| (n % 251) as u8).collect();
+    for id in ["echo", "close"] {
+        let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args(["sandbox", "vm", "--endpoint", &endpoint, "tcp-stdio", id])
+            .env("HV2_API_KEY", "stdio-fixture-key")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()
+            .unwrap();
+        let mut stdin = child.stdin.take();
+        if id == "echo" {
+            stdin.as_mut().unwrap().write_all(&bytes).await.unwrap();
+            drop(stdin.take());
+        }
+        // Keep the parent's stdin pipe open for the guest-close case.
+        let output =
+            tokio::time::timeout(std::time::Duration::from_secs(10), child.wait_with_output())
+                .await
+                .unwrap()
+                .unwrap();
+        assert!(output.status.success(), "{:?}", output);
+        assert_eq!(
+            output.stdout,
+            if id == "echo" {
+                bytes.as_slice()
+            } else {
+                b"SSH-2.0-fixture\r\n"
+            }
+        );
+        drop(stdin);
+    }
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "--endpoint",
+            &endpoint,
+            "tcp-stdio",
+            "echo",
+        ])
+        .env("HV2_API_KEY", "wrong")
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stdout.is_empty());
+    server.abort();
+}
+
+#[tokio::test]
 async fn tcp_command_authenticates_and_preserves_binary_replies_after_client_eof() {
     use axum::{extract::Request, http::StatusCode, response::IntoResponse};
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
