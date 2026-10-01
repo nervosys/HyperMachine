@@ -77,7 +77,7 @@ for Python. Nested KVM measurements are not substitutes for bare-metal ones.
 | Daytona | Advertises sandbox startup below 90 ms; default sandbox is a container | Linux/Windows VMs and GPU workloads | No matched run; container startup differs from VM readiness |
 | Modal | Reports below 500 ms median API-to-user-code latency in its million-concurrent-sandbox benchmark | Managed fleet scale and GPU workloads | No matched run or equivalent fleet |
 | E2B | No precise current latency verified in this review | SDK compatibility and managed execution | No matched run |
-| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Latest fixed-IRQ comparison: 100/100 passes each, HyperMachine P50 859.85 ms versus Firecracker 773.83 ms. Earlier failures remain recorded; these bounded passes do not establish universal reliability. Specification metrics differ from application readiness and incremental PSS |
+| Firecracker | Specification targets at most 125 ms from InstanceStart to init and at most 5 MiB VMM overhead for its specified minimal guest | Engine isolation and efficiency | Matched native cold bursts at concurrency 1/8/50/100 passed 1800/1800 attempts per engine; Firecracker was faster in every profile. At concurrency 100, HyperMachine P99 was 10.71 s versus Firecracker 7.18 s. Earlier failures remain recorded; bounded passes do not establish universal reliability. Specification metrics differ from application readiness and PSS |
 
 These figures describe the linked providers' own claims or repository runs,
 not an independently reproduced ranking. A lower headline number does not
@@ -85,9 +85,9 @@ pass the acceptance criteria below.
 
 | Workstream | Acceptance criterion | Current gap |
 |---|---|---|
-| Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Comparable competitor runs and bare-metal HyperMachine runs are missing |
+| Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Native Firecracker sweep verified at all four concurrencies; HyperMachine still trails. Managed competitor runs and bare-metal HyperMachine runs are missing |
 | Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Shared SDK harness and real concurrency-8 cohorts verified; full concurrency sweep and matched competitor runs remain missing |
-| Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Vendor VMM overhead and our PSS are different quantities |
+| Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Held-batch aggregate PSS measured for both native engines; daemon-retained allocations, fixed idle-period increments and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys and protected API tracing verified; tenant boundaries, roles, durable audit retention and resource attribution remain incomplete |
@@ -758,6 +758,71 @@ client APIs and observes the outgoing protocol ID through a transparent
 write-stream wrapper. This is a functional responsiveness check, not a
 latency benchmark or full remote-operation cancellation.
 
+
+## Concurrent native cold-start comparison (2026-09-30)
+
+`tools/bench-local-engines-concurrent.py` compares barrier-released batches
+on the same shared WSL nested-KVM host. The driver and both engines inherit
+CPU affinity 0–7; one controlled worker runs on CPU 0. Each guest has 1 vCPU
+and 1024 MiB, boots the same fixed-UART Linux kernel and guest-agent initrd,
+and must return an exact unique shell marker. Resource declarations are
+checked afterward. Engine batch order alternates AB/BA, and every guest
+remains held until all attempts finish validation and aggregate process
+PSS is read. Cleanup is then released; known guests/processes are deleted
+or stopped, the node list is checked empty, and the owned daemon and worker
+are reaped. Both guest-readiness budgets remain 15 seconds.
+
+| Concurrent guests | Engine | Passing attempts | Readiness P50 | P95 | P99 | Median burst ready rate |
+|---:|---|---:|---:|---:|---:|---:|
+| 1 | HyperMachine | 100/100 | 398.10 ms | 440.86 ms | 457.89 ms | 2.48/s |
+| 1 | Firecracker 1.17.0 | 100/100 | 371.15 ms | 400.68 ms | 415.58 ms | 2.67/s |
+| 8 | HyperMachine | 200/200 | 514.61 ms | 663.18 ms | 690.03 ms | 12.22/s |
+| 8 | Firecracker 1.17.0 | 200/200 | 427.53 ms | 573.48 ms | 606.44 ms | 13.96/s |
+| 50 | HyperMachine | 500/500 | 3219.51 ms | 4591.53 ms | 4892.71 ms | 14.86/s |
+| 50 | Firecracker 1.17.0 | 500/500 | 2560.56 ms | 2746.57 ms | 2778.06 ms | 18.23/s |
+| 100 | HyperMachine | 1000/1000 | 6466.88 ms | 10046.07 ms | 10709.99 ms | 14.67/s |
+| 100 | Firecracker 1.17.0 | 1000/1000 | 5450.96 ms | 7019.59 ms | 7175.85 ms | 17.55/s |
+
+All 3600 attempts passed. The 100/25/10/10 paired batches per concurrency
+are the independent workload repetitions; guests within a batch share load
+and are not independent repetitions. Burst ready rate divides validated,
+cleanup-checked passing attempts by the interval from barrier release to
+the last guest/resource validation, excluding cleanup. It is not sustained
+arrival throughput. Per-attempt latency starts at its native creation path,
+while measured launch spread captures scheduling and driver preparation.
+Median launch spreads for HyperMachine/Firecracker were 0/0 ms at concurrency
+1, 1.26/5.75 ms at 8, 39.59/51.27 ms at 50 and 102.83/107.81 ms at 100.
+The host is shared, and HyperMachine uses a persistent HTTP node while
+Firecracker starts a process and configures its Unix API for each guest.
+These eight-CPU profiles cannot be substituted into earlier one-CPU cohorts.
+
+| Held guests | HyperMachine node PSS, median | Sum of held Firecracker process PSS, median |
+|---:|---:|---:|
+| 1 | 183.03 MiB | 85.90 MiB |
+| 8 | 918.55 MiB | 670.98 MiB |
+| 50 | 4315.47 MiB | 4180.95 MiB |
+| 100 | 8568.50 MiB | 8360.36 MiB |
+
+These are aggregate process footprints immediately after each batch's last
+validation. HyperMachine includes its daemon and allocations retained from
+prior batches; Firecracker sums fresh processes. The initial empty-node PSS
+was approximately 7 MiB, but no per-batch empty-node baseline or fixed idle
+period was measured. Kernel allocations are excluded, earlier-ready guests
+have longer idle time, and the readings are neither per-VM incremental
+memory nor evidence of a stateful density win.
+
+The sweep establishes measured native-engine concurrency coverage and an
+observed performance gap: HyperMachine remains slower, with a larger tail
+gap at 50 and 100 guests. It does not isolate a cause or establish managed
+platform, SDK, snapshot, bare-metal or fleet superiority. Raw cohorts and
+the matrix summary use the `benchmarks/2026-09-30/local-engines-bursts-`
+prefix; exact coordinator and analysis sources are retained alongside them.
+The analysis checks ordering, attempts, deadlines, resource/CPU profiles,
+artifact identities, timing consistency, worker liveness and cleanup.
+Ten synchronization/workload/failure tests pass on Windows and Linux and
+are included in the existing benchmark CI gate. Earlier harnesses remain
+unchanged so their recorded source hashes are preserved. Reproduction
+requires updating local artifact/output paths in the recorded coordinator.
 
 ## Same-host Firecracker cold comparison (2026-09-30)
 
