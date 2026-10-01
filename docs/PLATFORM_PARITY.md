@@ -1034,3 +1034,14 @@ exception-state conclusions. The [KVM API documentation](https://docs.kernel.org
 specifies that validity requirement. The failed shared-host cohort, including
 the separately recorded thread probes, supports no performance or causal
 reliability win. Startup reliability remains unresolved.
+
+The current diagnostic code corrects EXCEPTION_PENDING to an optional field
+guarded by KVM_VCPUEVENT_VALID_PAYLOAD. The Linux validity regression passed.
+KVM_RUN now counts EINTR and EAGAIN retries separately from guest exits; counters
+advance only on those retry paths and are sampled on the owner. Totals include
+the diagnostic kick itself, so a small EINTR count is expected and does not
+establish a retry storm. The real-KVM halted/spinning regression verifies
+cumulative counts and interruption while both guests remain stoppable; all
+three owner tests passed. Strict Windows core/daemon and Linux core Clippy
+passed, as did all five final daemon formatter tests. Failed-boot retry
+capture remains unverified. No startup or performance fix is established.

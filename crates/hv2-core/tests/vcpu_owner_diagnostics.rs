@@ -118,7 +118,12 @@ async fn halted_and_spinning_guests_reply_on_the_owner_and_remain_stoppable() {
             .expect("diagnostic guest must remain stoppable")
             .unwrap();
         assert_eq!(state_after_samples, VMState::Running);
+        let mut previous_retries = (0, 0);
         for observations in sampled.expect("owner must reply for halted and spinning guests") {
+            let retries = observations[0].run_retries.expect("KVM run retry counters");
+            assert!(retries.eintr >= previous_retries.0);
+            assert!(retries.eagain >= previous_retries.1);
+            previous_retries = (retries.eintr, retries.eagain);
             assert!(
                 observations[0].interrupts.as_ref().unwrap().is_some(),
                 "KVM events captured on owner"
@@ -136,5 +141,9 @@ async fn halted_and_spinning_guests_reply_on_the_owner_and_remain_stoppable() {
                 "interrupts remain disabled"
             );
         }
+        assert!(
+            previous_retries.0 > 0,
+            "kicking an active halted/spinning run must record EINTR"
+        );
     }
 }

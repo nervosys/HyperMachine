@@ -8,7 +8,7 @@ pub(crate) fn owner_diagnostic(sample: &VCpuDiagnostic) -> String {
     let architecture = owner_sample(&sample.architecture);
     let events = match &sample.interrupts {
         Ok(Some(state)) => format!(
-            "EVENTS FLAGS={:#x} IRQ_INJECTED={} VECTOR={:#x} SOFT={} SHADOW={:?} EXCEPTION_INJECTED={} EXCEPTION_VECTOR={} EXCEPTION_PENDING={} NMI_INJECTED={} NMI_PENDING={:?} NMI_MASKED={}",
+            "EVENTS FLAGS={:#x} IRQ_INJECTED={} VECTOR={:#x} SOFT={} SHADOW={:?} EXCEPTION_INJECTED={} EXCEPTION_VECTOR={} EXCEPTION_PENDING={:?} NMI_INJECTED={} NMI_PENDING={:?} NMI_MASKED={}",
             state.flags, state.injected, state.vector, state.soft, state.shadow,
             state.exception_injected, state.exception_vector, state.exception_pending,
             state.nmi_injected, state.nmi_pending, state.nmi_masked,
@@ -16,7 +16,11 @@ pub(crate) fn owner_diagnostic(sample: &VCpuDiagnostic) -> String {
         Ok(None) => "EVENTS unavailable (unsupported backend)".into(),
         Err(error) => format!("EVENTS unavailable: {error}"),
     };
-    format!("{architecture}; {events}")
+    let retries = match sample.run_retries {
+        Some(state) => format!("RUN_RETRIES EINTR={} EAGAIN={}", state.eintr, state.eagain),
+        None => "RUN_RETRIES unavailable".into(),
+    };
+    format!("{architecture}; {events}; {retries}")
 }
 
 pub(crate) fn machine_sample(state: &MachineState) -> String {
@@ -115,6 +119,7 @@ mod tests {
             let report = owner_diagnostic(&VCpuDiagnostic {
                 architecture,
                 interrupts,
+                run_retries: None,
             });
             assert!(report.contains("RIP=0x1234"));
             assert!(report.contains("EVENTS unavailable"));
