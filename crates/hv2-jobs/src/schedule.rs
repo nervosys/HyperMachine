@@ -16,7 +16,19 @@ pub struct IntervalSchedule {
     pub every_ms: u64,
     #[serde(default)]
     pub missed_policy: MissedOccurrencePolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vm: Option<VmScheduleTarget>,
     pub job: JobSpec,
+}
+
+/// Guest destination. Connection profiles are resolved by the operator's
+/// dispatcher; credentials and arbitrary endpoint URLs are not stored here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VmScheduleTarget {
+    pub sandbox_id: String,
+    pub connection_profile: String,
+    pub timeout_secs: u64,
 }
 
 /// How a scheduler selects overdue occurrences after downtime.
@@ -85,6 +97,40 @@ impl IntervalSchedule {
                 "schedule interval must be positive".into(),
             ));
         }
+        if let Some(vm) = &self.vm {
+            check_schedule_id(&vm.connection_profile)?;
+            if vm.sandbox_id.is_empty()
+                || vm.sandbox_id.len() > 128
+                || !vm
+                    .sandbox_id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_'))
+                || !(1..=86_400).contains(&vm.timeout_secs)
+            {
+                return Err(JobError::InvalidSpec("VM target requires a sandbox ID of 1-128 ASCII letters, digits, hyphens or underscores and timeout 1-86400 seconds".into()));
+            }
+            if self.job.sandbox != crate::SandboxSettings::default()
+                || self.job.graceful_stop.is_some()
+            {
+                return Err(JobError::InvalidSpec(
+                    "VM schedules cannot use host sandbox limits or host graceful-stop files"
+                        .into(),
+                ));
+            }
+            if self.job.command.iter().any(|arg| arg.contains('\0')) {
+                return Err(JobError::InvalidSpec(
+                    "VM command arguments must not contain NUL".into(),
+                ));
+            }
+            if self.job.workdir.as_ref().is_some_and(|path| {
+                path.to_str()
+                    .is_none_or(|path| !path.starts_with('/') || path.contains('\0'))
+            }) {
+                return Err(JobError::InvalidSpec(
+                    "VM workdir must be an absolute UTF-8 guest path".into(),
+                ));
+            }
+        }
         self.job.validate()
     }
 
@@ -113,6 +159,8 @@ impl IntervalSchedule {
 pub struct Occurrence {
     pub schedule_id: String,
     pub scheduled_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vm: Option<VmScheduleTarget>,
     pub job: JobSpec,
 }
 
@@ -264,6 +312,7 @@ impl Store {
                     != (Occurrence {
                         schedule_id: id.into(),
                         scheduled_ms,
+                        vm: schedule.vm.clone(),
                         job,
                     })
                 {
@@ -369,6 +418,7 @@ impl Store {
                 != (Occurrence {
                     schedule_id: id.into(),
                     scheduled_ms,
+                    vm: schedule.vm.clone(),
                     job,
                 })
             {
@@ -416,6 +466,7 @@ impl Store {
         let occurrence = Occurrence {
             schedule_id: id.into(),
             scheduled_ms,
+            vm: schedule.vm,
             job,
         };
         let key = format!("{id}--{scheduled_ms}");
@@ -475,8 +526,42 @@ mod tests {
             first_ms: 100,
             every_ms: 10,
             missed_policy: MissedOccurrencePolicy::CatchUp,
+            vm: None,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn vm_target_survives_publication_and_refuses_host_only_controls() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let mut s = schedule();
+        s.vm = Some(VmScheduleTarget {
+            sandbox_id: "sandbox_1".into(),
+            connection_profile: "production".into(),
+            timeout_secs: 30,
+        });
+        s.job.workdir = Some("/workspace".into());
+        store.create_interval_schedule("guest", &s).unwrap();
+        store.materialize_interval("guest", 100, 1).unwrap();
+        let reopened = Store::open(dir.path()).unwrap();
+        assert_eq!(reopened.interval_schedule("guest").unwrap(), s);
+        let records = reopened
+            .committed_interval_occurrences("guest", None, 1)
+            .unwrap();
+        assert_eq!(records[0].vm, s.vm);
+        assert_eq!(records[0].job.workdir, s.job.workdir);
+        s.job.sandbox.memory = Some("1G".into());
+        assert!(s.validate().is_err());
+        s.job.sandbox = crate::SandboxSettings::default();
+        s.job.workdir = Some("relative".into());
+        assert!(s.validate().is_err());
+        s.job.workdir = None;
+        s.vm.as_mut().unwrap().connection_profile = "https://endpoint/?secret=key".into();
+        assert!(s.validate().is_err());
+        s.vm.as_mut().unwrap().connection_profile = "production".into();
+        s.vm.as_mut().unwrap().timeout_secs = 0;
+        assert!(s.validate().is_err());
     }
 
     #[test]

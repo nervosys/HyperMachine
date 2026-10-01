@@ -104,7 +104,7 @@ fn automatic_publication_is_bounded_and_recovers_on_a_second_invocation() {
     let spec = dir.path().join("interval.json");
     std::fs::write(
         &spec,
-        json!({"first_ms":0,"every_ms":1,"job":{"command":["must-not-run"]}}).to_string(),
+        json!({"first_ms":0,"every_ms":1,"vm":{"sandbox_id":"guest-1","connection_profile":"local","timeout_secs":30},"job":{"command":["must-not-run"]}}).to_string(),
     )
     .unwrap();
     success(invoke(&store, &["create", "watch", spec.to_str().unwrap()]));
@@ -134,6 +134,9 @@ fn automatic_publication_is_bounded_and_recovers_on_a_second_invocation() {
             .collect();
         assert_eq!(lines.len(), 2);
         assert!(lines.iter().all(|line| line.as_array().unwrap().len() == 2));
+        assert!(lines
+            .iter()
+            .all(|line| line[0]["vm"]["connection_profile"] == "local"));
         assert_eq!(
             success(invoke(&store, &["status", "watch"]))["publication_through_ms"],
             expected
