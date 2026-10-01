@@ -1084,7 +1084,11 @@ impl VM {
         }
 
         let vm = Arc::clone(self);
+        let queued_at = std::time::Instant::now();
         let handle = tokio::spawn(async move {
+            tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm.config.name,
+                dispatch_queue_ms = queued_at.elapsed().as_secs_f64() * 1000.0,
+                "VM background dispatch");
             match vm.run().await {
                 // A `stop()` that lands before the spawned loop is scheduled
                 // leaves it starting against a VM that is already stopped.
@@ -3087,13 +3091,19 @@ impl VM {
         // A thread per vCPU is what a blocking ioctl wants anyway: the kernel
         // is the scheduler here, the thread is descheduled inside the ioctl
         // rather than spinning, and an idle guest costs a parked thread.
+        let queued_at = std::time::Instant::now();
         tokio::spawn(async move {
+            let dispatched_at = std::time::Instant::now();
             let (done_tx, done_rx) = tokio::sync::oneshot::channel();
             let name = match core {
                 Some(core) => format!("vcpu-{vcpu_id}-core{core}"),
                 None => format!("vcpu-{vcpu_id}"),
             };
             let spawned = std::thread::Builder::new().name(name).spawn(move || {
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name, vcpu_id,
+                    wrapper_queue_ms = (dispatched_at - queued_at).as_secs_f64() * 1000.0,
+                    thread_start_ms = dispatched_at.elapsed().as_secs_f64() * 1000.0,
+                    "vCPU owner thread entry");
                 if let Some(core) = core {
                     match crate::cpu_affinity::pin_current_thread(core) {
                         Ok(()) => {

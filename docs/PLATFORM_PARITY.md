@@ -966,6 +966,15 @@ exact executed wrapper, coordinator and analysis use `clock-alignment-`
 names in the evidence directory. Cleanup and artifact checks passed; memory
 readings follow the extra probes. The scored harnesses remain unchanged.
 
+Host dispatch tracing is available under the dedicated
+`hv2_core::cold_dispatch=debug` filter. `VM background dispatch` records
+time queued before the background run task starts. `vCPU owner thread entry`
+records wrapper-task queueing and time from wrapper entry to OS-thread
+entry, with VM name and vCPU ID. It precedes affinity/runtime setup and
+the first backend run; it is not a guest-entry timestamp. Linux all-targets
+core compilation and formatting pass. Runtime collection is pending and
+these events establish no scheduling improvement.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore
