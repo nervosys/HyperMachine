@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "source_sha256": "f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b",
+  "output_sha256": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+  "changed_contents": [
+    "bin/hv2-guest-agentd"
+  ],
+  "changed_metadata": [],
+  "entry_sets_equal": true,
+  "entries": 15,
+  "verifier_sha256": "70fe74b751ed8f4a9a0085b041d26d7377627b478c59d1dcdc498d859610672e"
+}
