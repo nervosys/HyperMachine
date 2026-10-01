@@ -1,0 +1,39 @@
+{
+  "command": [
+    "python3",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/bench-local-engines-concurrent.py",
+    "--hypermachine",
+    "/var/tmp/hm-kvm-events/hv2-sandboxd-events",
+    "--firecracker",
+    "/var/tmp/hm-competitive/firecracker/firecracker-v1.17.0-x86_64",
+    "--kernel",
+    "/var/tmp/hm-competitive/bzImage-known-uart-irq",
+    "--initrd",
+    "/var/tmp/hm-competitive/guest-output-drain.cpio.gz",
+    "--environment",
+    "shared-WSL-nested-KVM-eight-host-CPU-affinity-no-extra-load-fixed-rate-arrivals",
+    "--pairs",
+    "1",
+    "--concurrency",
+    "8",
+    "--arrival-rate",
+    "5",
+    "--arrival-samples",
+    "16",
+    "--daemon-log-filter",
+    "warn,hv2_sandboxd=debug,hv2_agent::cold_readiness=debug"
+  ],
+  "exit_code": 0,
+  "stderr": "",
+  "coordinator_sha256": "3f29f8d935ba46fae0256fbbc53d9cb9d652b7a07e5500f7ecb1dabc1eb133b0",
+  "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ]
+}
