@@ -117,6 +117,15 @@ versus 8360.42 MiB. The difference reflects a daemon baseline that grew after
 earlier batches. Three alternating pairs and shared nested hardware do not
 establish a repeatable memory or density win.
 
+Follow-up [mapping diagnostics](benchmarks/2026-10-01/memory-retention.md)
+verified that KVM VM/vCPU handles and mappings of at least 1 GiB disappeared
+after each eight-guest batch, while smaller anonymous mappings remained
+resident. A separate arena-limited diagnostic reduced median post-cleanup
+process PSS from 193.52 to 110.02 MiB across three batches. All 48 guest attempts
+passed, but the runs were sequential and had no matched latency/tail comparison.
+The allocator setting is a candidate for further controlled evaluation;
+production defaults remain unchanged.
+
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
 startup deadline (30 seconds by default). Older cohorts used HyperMachine's

@@ -1,0 +1,63 @@
+{
+  "diagnostic_only": true,
+  "profiles": [
+    {
+      "allocator_arena_max": null,
+      "raw_file": "memory-retention-default-c8.json",
+      "raw_sha256": "96158626fcb90be3f4a1cf5f6b8735ae4208251ce7adc88526d7b446bbf31d1d",
+      "source_file": "diagnose-memory-retention-default.py",
+      "source_sha256": "480f1cf0f0e7b76b8e73b4314ddcd9a6f3c4b813135b3cbf3a069c69d2f4d07d",
+      "attempts": 24,
+      "passed": 24,
+      "post_cleanup_pss_mib": [
+        182.0224609375,
+        217.7646484375,
+        193.5224609375
+      ],
+      "median_post_cleanup_pss_mib": 193.5224609375,
+      "post_cleanup_anonymous_pss_mib": [
+        173.20703125,
+        208.94921875,
+        184.70703125
+      ],
+      "post_cleanup_thread_count": [
+        17,
+        17,
+        17
+      ]
+    },
+    {
+      "allocator_arena_max": 2,
+      "raw_file": "memory-retention-arena2-c8.json",
+      "raw_sha256": "a2475bf37ab5c58dd601bcf7ac2562d03c66aade40a467ae44524a1cc16c4f60",
+      "source_file": "diagnose-memory-retention-arena.py",
+      "source_sha256": "a2035ed5075f323da74ddb134e9c9bf69fe8d2c3e8854676bdc0321a1bbbe8fe",
+      "attempts": 24,
+      "passed": 24,
+      "post_cleanup_pss_mib": [
+        110.0166015625,
+        97.7041015625,
+        110.0634765625
+      ],
+      "median_post_cleanup_pss_mib": 110.0166015625,
+      "post_cleanup_anonymous_pss_mib": [
+        59.98828125,
+        60.0390625,
+        60.046875
+      ],
+      "post_cleanup_thread_count": [
+        17,
+        17,
+        17
+      ]
+    }
+  ],
+  "production_defaults_changed": false,
+  "latency_or_competitor_win_established": false,
+  "limitations": [
+    "Two sequential diagnostic runs, not counterbalanced",
+    "No pinned CPU load worker; eight-CPU affinity and shared nested KVM",
+    "Arena ownership inferred from mapping sensitivity, not proven allocation stacks",
+    "No matched latency, tail, snapshot, fork or density validation"
+  ]
+}
