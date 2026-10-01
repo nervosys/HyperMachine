@@ -96,7 +96,7 @@ pass the acceptance criteria below.
 | Workstream | Acceptance criterion | Current gap |
 |---|---|---|
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Native Firecracker sweep verified at all four concurrencies; HyperMachine still trails. Managed competitor runs and bare-metal HyperMachine runs are missing |
-| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Shared SDK harness and real concurrency-8 cohorts verified; full concurrency sweep and matched competitor runs remain missing |
+| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Synchronized SDK resume/fork sweep measured at concurrency 1/8/50/100: 1007/1008 attempts passed, with one retained fork readiness failure. Full pause bursts, reliability improvements and matched competitor runs remain missing |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Fixed five-second idle PSS and per-batch empty-node baselines verified at concurrency 1/8/50/100, 477/477 attempts per engine; HyperMachine held PSS was higher in all 12 paired batches. Retained-memory allocation source, shared-template attribution and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
@@ -142,6 +142,18 @@ slower in three of four blocks, with a median paired mean-readiness increase
 of 1455.22 ms and inconsistent memory changes. The runtime change was reverted;
 exact candidate sources, tests, raw reports and comparison tables are retained.
 This micro-level allocation reduction did not establish a product improvement.
+
+The [synchronized stateful SDK sweep](benchmarks/2026-10-01/stateful-sweep.md)
+now prepares whole resume/fork batches before timing them, with observed client
+start spreads. Resume passed 504/504; fork passed 503/504 at concurrency
+1/8/50/100. Every successful sample checks retained live-process memory and
+filesystem state; forks also check an independent child write and unchanged
+parent state. At concurrency 100, conditional P99 readiness was 1089.49 ms for
+resume and 1064.27 ms for fork. One concurrency-1 fork missed the unchanged
+15-second child-agent readiness deadline; its nonzero cohort and interrupt
+diagnostics remain recorded. Teardown and artifact checks passed throughout.
+The initial 636/636 passing sweep is retained too. This expands verification;
+it establishes neither universal reliability nor a matched competitor win.
 
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
@@ -342,7 +354,7 @@ fails its overall exit status even when every sample succeeds. This detects
 ordinary edits, not malicious source replacement or guest-image equivalence.
 Historical reports without these fields retain their original evidence; no
 fingerprint is retroactively attributed to them. Failure accounting and
-provenance are checked by `tools/test-bench-e2b-sdk.py` (12 tests). The CI
+provenance are checked by `tools/test-bench-e2b-sdk.py` (19 tests). The CI
 `Sandbox Benchmark and Chart Gates` job runs these tests without
 SDK/cloud credentials, and also runs the chart render tests and Helm lint.
 The default workload verifies POSIX command readiness; `--workload python` requires a real

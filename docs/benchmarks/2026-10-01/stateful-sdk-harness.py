@@ -58,7 +58,6 @@ def sample(factory, args, nonce, index, operation_barrier=None, cohort_started=N
     cleanup = []
     record = {"index": index, "success": False}
     started = time.perf_counter()
-    operation_started = False
     phase = "create"
     try:
         sandbox = factory.create(template=args.template, timeout=300,
@@ -106,7 +105,6 @@ def sample(factory, args, nonce, index, operation_barrier=None, cohort_started=N
                 synchronize_operation(operation_barrier, args.request_timeout)
                 phase = "resume"
                 started = time.perf_counter()
-                operation_started = True
                 record["operation_start_offset_ms"] = (started - cohort_started) * 1000 if cohort_started is not None else None
                 sandbox.connect(timeout=300, on_resume="restore", request_timeout=args.request_timeout)
             else:
@@ -114,13 +112,10 @@ def sample(factory, args, nonce, index, operation_barrier=None, cohort_started=N
                 synchronize_operation(operation_barrier, args.request_timeout)
                 phase = "fork"
                 started = time.perf_counter()
-                operation_started = True
                 record["operation_start_offset_ms"] = (started - cohort_started) * 1000 if cohort_started is not None else None
                 forks = sandbox.fork(count=1, timeout=300, request_timeout=args.request_timeout)
                 cleanup.extend(fork for fork in forks if not isinstance(fork, Exception))
                 if len(forks) != 1 or isinstance(forks[0], Exception):
-                    record["fork_errors"] = [str(error).replace(os.environ["E2B_API_KEY"], "[redacted]")[:4096]
-                                             for error in forks if isinstance(error, Exception)]
                     raise RuntimeError("fork did not return exactly one successful sandbox")
                 record["parent_sandbox_id"] = sandbox.sandbox_id
                 sandbox = forks[0]
@@ -161,9 +156,7 @@ def sample(factory, args, nonce, index, operation_barrier=None, cohort_started=N
     except Exception as error:
         if operation_barrier is not None:
             operation_barrier.abort()
-        record.update(phase=phase, error=str(error).replace(os.environ["E2B_API_KEY"], "[redacted]"),
-                      failure_elapsed_ms=(time.perf_counter() - started) * 1000,
-                      failure_timing_origin="operation" if operation_started else "create")
+        record.update(phase=phase, error=str(error).replace(os.environ["E2B_API_KEY"], "[redacted]"))
     finally:
         for known_sandbox in reversed(cleanup):
             try:
