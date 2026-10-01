@@ -70,6 +70,55 @@ class Bursts(unittest.TestCase):
         self.assertTrue(all(row["error"] == "unexpected worker failure" for row in result["samples"]))
 
 
+class IdleMemory(unittest.TestCase):
+    def run_idle(self, engine="hypermachine", baseline=None, fail_idle_read=False):
+        alive, calls, waits = set(), [], []
+        lock = threading.Lock()
+        def attempt(args, row, started, ready):
+            row.update(start_offset_ms=0, ready_ms=1, success=True)
+            with lock: alive.add(row["index"])
+            ready(row, row["index"]+100)
+            with lock: alive.remove(row["index"])
+            row["cleanup_success"] = True
+        def memory(pid):
+            with lock:
+                self.assertEqual(len(alive), 2)
+            calls.append(pid)
+            if fail_idle_read and len(calls) > 2:
+                raise OSError("idle smaps unavailable")
+            return {"Pss_kib":100, "Rss_kib":200}
+        def idle(seconds):
+            with lock: self.assertEqual(len(alive), 2)
+            waits.append(seconds)
+        result = burst.batch(SimpleNamespace(concurrency=2, memory_idle_seconds=5), engine, 0,
+            attempt, memory, memory_baseline=baseline, idle_wait=idle)
+        self.assertEqual(waits, [5])
+        self.assertEqual(alive, set())
+        self.assertTrue(all(row["cleanup_success"] for row in result["samples"]))
+        return result, calls
+
+    def test_same_batch_baseline_is_subtracted_without_clamping(self):
+        result, calls = self.run_idle(baseline={"Pss_kib":250,"Rss_kib":300})
+        self.assertTrue(result["success"], result)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(result["incremental_idle_process_memory_kib"], {"Pss_kib":-50,"Rss_kib":100})
+        self.assertEqual(result["memory_idle_requested_seconds"], 5)
+        self.assertIn("guest_idle_at_measurement_start_ms", result)
+
+    def test_fresh_firecracker_processes_use_zero_process_baseline(self):
+        result, _ = self.run_idle(engine="firecracker")
+        self.assertTrue(result["success"], result)
+        self.assertEqual(result["empty_process_memory_baseline_kib"], {"Pss_kib":0,"Rss_kib":0})
+        self.assertEqual(result["incremental_idle_process_memory_kib"]["Pss_kib"], 200)
+
+    def test_missing_baseline_or_failed_idle_read_retains_failure_and_cleans_up(self):
+        for options in [{}, {"baseline":{"Pss_kib":1}}, {"fail_idle_read":True}]:
+            with self.subTest(options=options):
+                result, _ = self.run_idle(**options)
+                self.assertFalse(result["success"])
+                self.assertIsNotNone(result["error"])
+
+
 class NativeAttempts(unittest.TestCase):
     def run_hm(self, result=None, resources=None):
         events = []
