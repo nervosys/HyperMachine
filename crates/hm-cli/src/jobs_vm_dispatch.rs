@@ -18,7 +18,14 @@ fn guest_command(record: &Occurrence) -> Result<String> {
         "HM_JOB_ID={}--{}",
         record.schedule_id, record.scheduled_ms
     ));
-    args.extend(record.job.command.clone());
+    // `env` treats any leading NAME=VALUE argument as an assignment, including
+    // a literal executable containing '='. An explicit shell executable ends
+    // assignment parsing, then preserves the user's argv through shell_exec.
+    args.extend([
+        "/bin/sh".into(),
+        "-c".into(),
+        crate::sandbox_vm::shell_exec(&record.job.command)?,
+    ]);
     let command = crate::sandbox_vm::shell_exec(&args)?;
     Ok(match &record.job.workdir {
         Some(path) => format!(
@@ -29,6 +36,49 @@ fn guest_command(record: &Occurrence) -> Result<String> {
         ),
         None => command,
     })
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn real_shell_preserves_environment_arguments_and_equals_in_executable() {
+        let dir = tempfile::Builder::new()
+            .prefix("guest work ")
+            .tempdir()
+            .unwrap();
+        let executable = dir.path().join("tool=literal");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s\\n' \"$TEST\" \"$1\" \"$HM_JOB_ID\"\nexit 7\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let record: Occurrence = serde_json::from_value(json!({
+            "schedule_id":"literal", "scheduled_ms":100,
+            "job":{"command":["./tool=literal", "a'$(printf expanded)"],
+                "env":{"TEST":"v'$(printf changed)"}, "workdir":dir.path()}
+        }))
+        .unwrap();
+        let output = std::process::Command::new("/bin/sh")
+            .args(["-c", &guest_command(&record).unwrap()])
+            .env_clear()
+            .env("PATH", "/usr/bin:/bin")
+            .output()
+            .unwrap();
+        assert_eq!(
+            output.status.code(),
+            Some(7),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            output.stdout,
+            b"v'$(printf changed)\na'$(printf expanded)\nliteral--100\n"
+        );
+    }
 }
 
 /// Dispatch a committed occurrence once. Failures after claim creation require

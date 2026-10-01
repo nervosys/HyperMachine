@@ -294,7 +294,7 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
                 let cmd = body["cmd"].as_str().unwrap();
                 assert!(cmd.starts_with("cd '/work space' && exec 'env' '--'"));
                 assert!(cmd.contains("'TEST=v'\\''alue'"));
-                assert!(cmd.contains("'a'\\''$(id)'"));
+                assert!(cmd.contains("'/bin/sh' '-c'"));
                 if count.fetch_add(1, Ordering::SeqCst) == 0 {
                     Json(json!({"exit_code":7,"timed_out":false,"stdout":"guest output","stderr":"guest error"})).into_response()
                 } else {
