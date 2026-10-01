@@ -1,0 +1,79 @@
+{
+  "success": true,
+  "groups": [
+    {
+      "kernel": "original_kernel",
+      "engine": "hypermachine",
+      "n": 40,
+      "min": 827.5491809999949,
+      "max": 4648.157421999713,
+      "mean": 1780.1541278999593,
+      "p50": 1526.9964739982242,
+      "p95": 3575.181505000728,
+      "p99": 4648.157421999713
+    },
+    {
+      "kernel": "original_kernel",
+      "engine": "firecracker",
+      "n": 40,
+      "min": 784.5200239989936,
+      "max": 6906.975568001144,
+      "mean": 1701.0851040749912,
+      "p50": 1343.264002000069,
+      "p95": 3988.268077999237,
+      "p99": 6906.975568001144
+    },
+    {
+      "kernel": "debug_wx_off_kernel",
+      "engine": "hypermachine",
+      "n": 40,
+      "min": 843.4471990003658,
+      "max": 8929.948068000158,
+      "mean": 2232.7398420750797,
+      "p50": 1446.3572159984324,
+      "p95": 5414.564403999975,
+      "p99": 8929.948068000158
+    },
+    {
+      "kernel": "debug_wx_off_kernel",
+      "engine": "firecracker",
+      "n": 40,
+      "min": 771.583367999483,
+      "max": 12351.564751999831,
+      "mean": 2008.6159690250497,
+      "p50": 1412.884794999627,
+      "p95": 3989.1740269995353,
+      "p99": 12351.564751999831
+    }
+  ],
+  "paired_blocks": [
+    {
+      "engine": "hypermachine",
+      "debug_wx_on_minus_off_mean_ms": -452.5857141751203,
+      "debug_wx_on_minus_off_median_ms": -61.07485024995185,
+      "debug_wx_off_faster_blocks": 8,
+      "blocks": 20,
+      "paired_mean_bootstrap_95_interval_ms": [
+        -953.6561873751907,
+        -16.868584975236445
+      ],
+      "bootstrap_repetitions": 10000,
+      "bootstrap_seed": 0
+    },
+    {
+      "engine": "firecracker",
+      "debug_wx_on_minus_off_mean_ms": -307.53086495005846,
+      "debug_wx_on_minus_off_median_ms": -61.137893500017526,
+      "debug_wx_off_faster_blocks": 9,
+      "blocks": 20,
+      "paired_mean_bootstrap_95_interval_ms": [
+        -846.9678275753722,
+        140.03135794973787
+      ],
+      "bootstrap_repetitions": 10000,
+      "bootstrap_seed": 0
+    }
+  ],
+  "raw_sha256": "e6bbffa516f2a6e22fa22bb27cd0587c6a849d7c5ec1ef0a0c019ab898afa512",
+  "analysis_sha256": "9e44612bff593cdad31192b365b53add791bc193406afca763fa8bad1b91ab8d"
+}
