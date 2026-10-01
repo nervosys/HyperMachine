@@ -1,0 +1,366 @@
+//! Mutual TLS between control planes and nodes.
+//!
+//! Without it, a node trusts a control plane by a shared token sent over
+//! plain HTTP: anyone on the path reads the token, and the envd traffic the
+//! control plane relays -- commands, their output, files -- with it. With
+//! it, both ends present certificates from one CA the operator provides:
+//! a node serves its API and its envd proxy only to a peer whose
+//! certificate that CA signed, and a control plane talks only to a node
+//! whose certificate it signed too.
+//!
+//! Nodes are verified by a name, not by address. A node's address is
+//! whatever its pod got; a certificate naming every one would have to be
+//! issued per pod. So every node's certificate carries one DNS name
+//! (`hv2-node` unless `--mtls-server-name` says otherwise), and a control
+//! plane checks that name whichever address it dialled.
+//!
+//! The token still goes with every request: TLS says a peer holds a key the
+//! CA vouched for, the token says it is this cluster's.
+
+use std::io::{Error, ErrorKind};
+use std::path::Path;
+use std::sync::Arc;
+
+use rustls::pki_types::pem::PemObject;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+use rustls::RootCertStore;
+
+/// The name every node's certificate carries, by default.
+pub const DEFAULT_NODE_NAME: &str = "hv2-node";
+
+/// A CA to trust, and this end's certificate and key.
+pub struct Mtls {
+    roots: Arc<RootCertStore>,
+    certs: Vec<CertificateDer<'static>>,
+    key: PrivateKeyDer<'static>,
+    node_name: ServerName<'static>,
+}
+
+impl std::fmt::Debug for Mtls {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Mtls")
+            .field("node_name", &self.node_name)
+            .finish_non_exhaustive()
+    }
+}
+
+fn provider() -> Arc<rustls::crypto::CryptoProvider> {
+    Arc::new(rustls::crypto::ring::default_provider())
+}
+
+fn invalid(what: &Path, e: impl std::fmt::Display) -> Error {
+    Error::new(ErrorKind::InvalidData, format!("{}: {e}", what.display()))
+}
+
+impl Mtls {
+    /// Load PEM files: the CA to trust, this end's certificate chain, and
+    /// its private key. `node_name` is the name a node's certificate must
+    /// carry.
+    ///
+    /// # Errors
+    ///
+    /// A file that cannot be read or holds nothing usable.
+    pub fn load(ca: &Path, cert: &Path, key: &Path, node_name: &str) -> std::io::Result<Self> {
+        let mut roots = RootCertStore::empty();
+        for ca_cert in CertificateDer::pem_file_iter(ca).map_err(|e| invalid(ca, e))? {
+            roots
+                .add(ca_cert.map_err(|e| invalid(ca, e))?)
+                .map_err(|e| invalid(ca, e))?;
+        }
+        if roots.is_empty() {
+            return Err(invalid(ca, "no CA certificate in it"));
+        }
+        let certs = CertificateDer::pem_file_iter(cert)
+            .map_err(|e| invalid(cert, e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| invalid(cert, e))?;
+        if certs.is_empty() {
+            return Err(invalid(cert, "no certificate in it"));
+        }
+        let key_der = PrivateKeyDer::from_pem_file(key).map_err(|e| invalid(key, e))?;
+        let node_name = ServerName::try_from(node_name.to_string())
+            .map_err(|e| Error::new(ErrorKind::InvalidInput, format!("{node_name}: {e}")))?;
+        Ok(Self {
+            roots: Arc::new(roots),
+            certs,
+            key: key_der,
+            node_name,
+        })
+    }
+
+    /// A node's side: serve only peers presenting a certificate the CA
+    /// signed. HTTP/2 and HTTP/1.1 offered, for the proxy and the API.
+    ///
+    /// # Errors
+    ///
+    /// The certificate and key do not go together, or the CA is unusable.
+    pub fn server_config(&self) -> std::io::Result<rustls::ServerConfig> {
+        let verifier = rustls::server::WebPkiClientVerifier::builder_with_provider(
+            Arc::clone(&self.roots),
+            provider(),
+        )
+        .build()
+        .map_err(Error::other)?;
+        let mut config = rustls::ServerConfig::builder_with_provider(provider())
+            .with_safe_default_protocol_versions()
+            .map_err(Error::other)?
+            .with_client_cert_verifier(verifier)
+            .with_single_cert(self.certs.clone(), self.key.clone_key())
+            .map_err(Error::other)?;
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        Ok(config)
+    }
+
+    /// A control plane's side: trust only the CA, and present this
+    /// certificate. `h2` first, since the envd relay speaks nothing else.
+    ///
+    /// # Errors
+    ///
+    /// The certificate and key do not go together.
+    pub fn client_config(&self) -> std::io::Result<rustls::ClientConfig> {
+        let mut config = rustls::ClientConfig::builder_with_provider(provider())
+            .with_safe_default_protocol_versions()
+            .map_err(Error::other)?
+            .with_root_certificates(Arc::clone(&self.roots))
+            .with_client_auth_cert(self.certs.clone(), self.key.clone_key())
+            .map_err(Error::other)?;
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+        Ok(config)
+    }
+
+    /// The name a node's certificate is checked against.
+    #[must_use]
+    pub fn node_name(&self) -> &ServerName<'static> {
+        &self.node_name
+    }
+
+    /// An HTTP client for a node's API, verifying the node by
+    /// [`Self::node_name`] whatever address it is dialled at.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::client_config`].
+    pub fn http_client(&self) -> std::io::Result<reqwest::Client> {
+        self.http_builder()?.build().map_err(Error::other)
+    }
+
+    /// The same authenticated node identity, restricted to HTTP/1 upgrades.
+    pub fn tcp_http_client(&self) -> std::io::Result<reqwest::Client> {
+        self.http_builder()?
+            .http1_only()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(Error::other)
+    }
+
+    fn http_builder(&self) -> std::io::Result<reqwest::ClientBuilder> {
+        let mut config = self.client_config()?;
+        // reqwest checks the certificate against the URL's host, an
+        // address; this checks it against the nodes' shared name instead.
+        let inner = rustls::client::WebPkiServerVerifier::builder_with_provider(
+            Arc::clone(&self.roots),
+            provider(),
+        )
+        .build()
+        .map_err(Error::other)?;
+        config
+            .dangerous()
+            .set_certificate_verifier(Arc::new(NamedNode {
+                inner,
+                name: self.node_name.clone(),
+            }));
+        Ok(reqwest::Client::builder()
+            .use_preconfigured_tls(config)
+            .connect_timeout(std::time::Duration::from_secs(5)))
+    }
+}
+
+/// Verifies a node's certificate as the CA's verifier would, but for the
+/// nodes' shared name rather than the address that was dialled. The chain,
+/// the signatures and the validity period are all still checked.
+#[derive(Debug)]
+struct NamedNode {
+    inner: Arc<rustls::client::WebPkiServerVerifier>,
+    name: ServerName<'static>,
+}
+
+impl rustls::client::danger::ServerCertVerifier for NamedNode {
+    fn verify_server_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        _dialled: &ServerName<'_>,
+        ocsp: &[u8],
+        now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        self.inner
+            .verify_server_cert(end_entity, intermediates, &self.name, ocsp, now)
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.inner.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        self.inner.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        self.inner.supported_verify_schemes()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// A CA, and a certificate from it for `name` with `usages`, as PEM.
+    struct Issued {
+        cert: String,
+        key: String,
+    }
+
+    fn ca() -> (rcgen::Issuer<'static, rcgen::KeyPair>, String) {
+        let key = rcgen::KeyPair::generate().expect("a key");
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).expect("params");
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Constrained(0));
+        params.key_usages = vec![rcgen::KeyUsagePurpose::KeyCertSign];
+        let pem = params.self_signed(&key).expect("self-signed").pem();
+        (rcgen::Issuer::new(params, key), pem)
+    }
+
+    fn issue(
+        ca: &rcgen::Issuer<'static, rcgen::KeyPair>,
+        name: &str,
+        usages: Vec<rcgen::ExtendedKeyUsagePurpose>,
+    ) -> Issued {
+        let key = rcgen::KeyPair::generate().expect("a key");
+        let mut params = rcgen::CertificateParams::new(vec![name.to_string()]).expect("params");
+        params.extended_key_usages = usages;
+        let cert = params.signed_by(&key, ca).expect("signed");
+        Issued {
+            cert: cert.pem(),
+            key: key.serialize_pem(),
+        }
+    }
+
+    fn files(dir: &Path, name: &str, ca_pem: &str, issued: &Issued) -> Mtls {
+        let ca = dir.join(format!("{name}-ca.pem"));
+        let cert = dir.join(format!("{name}.pem"));
+        let key = dir.join(format!("{name}.key"));
+        std::fs::write(&ca, ca_pem).expect("write");
+        std::fs::write(&cert, &issued.cert).expect("write");
+        std::fs::write(&key, &issued.key).expect("write");
+        Mtls::load(&ca, &cert, &key, DEFAULT_NODE_NAME).expect("loads")
+    }
+
+    /// Whether a client configured with `client` completes a TLS exchange
+    /// with a node configured with `node`, addressed by its shared name.
+    async fn handshake(node: &Mtls, client: rustls::ClientConfig) -> bool {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let acceptor =
+            tokio_rustls::TlsAcceptor::from(Arc::new(node.server_config().expect("server")));
+        let server = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.ok()?;
+            let mut tls = acceptor.accept(tcp).await.ok()?;
+            let mut byte = [0u8; 1];
+            tls.read_exact(&mut byte).await.ok()?;
+            tls.write_all(&byte).await.ok()?;
+            Some(())
+        });
+        let connector = tokio_rustls::TlsConnector::from(Arc::new(client));
+        let tcp = tokio::net::TcpStream::connect(addr).await.expect("connect");
+        let exchanged = async {
+            let mut tls = connector
+                .connect(ServerName::try_from(DEFAULT_NODE_NAME).ok()?, tcp)
+                .await
+                .ok()?;
+            tls.write_all(b"x").await.ok()?;
+            let mut byte = [0u8; 1];
+            tls.read_exact(&mut byte).await.ok()?;
+            Some(())
+        }
+        .await;
+        server.await.ok().flatten().is_some() && exchanged.is_some()
+    }
+
+    fn dir() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("hv2-mtls-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        dir
+    }
+
+    #[tokio::test]
+    async fn a_node_serves_only_peers_its_ca_signed() {
+        use rcgen::ExtendedKeyUsagePurpose::{ClientAuth, ServerAuth};
+        let dir = dir();
+        let (cluster, cluster_pem) = ca();
+        let (rogue, _) = ca();
+        let node = files(
+            &dir,
+            "node",
+            &cluster_pem,
+            &issue(&cluster, DEFAULT_NODE_NAME, vec![ServerAuth, ClientAuth]),
+        );
+        let control = files(
+            &dir,
+            "control",
+            &cluster_pem,
+            &issue(&cluster, "hv2-control-plane", vec![ClientAuth]),
+        );
+        assert!(
+            handshake(&node, control.client_config().expect("client")).await,
+            "the cluster's control plane gets through"
+        );
+
+        // Trusting the cluster's CA, but presenting nothing.
+        let anonymous = rustls::ClientConfig::builder_with_provider(provider())
+            .with_safe_default_protocol_versions()
+            .expect("versions")
+            .with_root_certificates(Arc::clone(&control.roots))
+            .with_no_client_auth();
+        assert!(
+            !handshake(&node, anonymous).await,
+            "no certificate, no node"
+        );
+
+        // Presenting a certificate another CA signed.
+        let impostor = files(
+            &dir,
+            "impostor",
+            &cluster_pem,
+            &issue(&rogue, "hv2-control-plane", vec![ClientAuth]),
+        );
+        assert!(
+            !handshake(&node, impostor.client_config().expect("client")).await,
+            "another CA's certificate, no node"
+        );
+
+        // A node whose certificate another CA signed is not trusted either.
+        let fake_node = files(
+            &dir,
+            "fake-node",
+            &cluster_pem,
+            &issue(&rogue, DEFAULT_NODE_NAME, vec![ServerAuth, ClientAuth]),
+        );
+        assert!(
+            !handshake(&fake_node, control.client_config().expect("client")).await,
+            "a control plane does not talk to a node its CA did not sign"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

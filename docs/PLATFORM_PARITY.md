@@ -20,7 +20,7 @@ container. The comparison is about what surrounds the VM.
 | Pause and resume | yes | no | **Real**: to disk; any node resumes |
 | Suspend when idle, wake on traffic | yes | no | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
 | HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; you bring the wildcard certificate (no ACME) |
-| Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); no raw TCP or UDP |
+| Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); authenticated raw TCP through the node/control-plane API and loopback CLI, [verified with KVM/TLS and lifecycle operations](benchmarks/2026-10-01/tcp-tunnel.md); UDP absent |
 | Custom domains | yes | yes | **Real**: authenticated cluster bindings to guest HTTP ports, Memory/Redis ownership, HTTPS forwarding; [operator DNS and certificates](CUSTOM_DOMAINS.md) |
 | Private URLs with login, identity headers | team-shared | yes (`X-ExeDev-Email`) | **Absent** |
 | SSH to a VM by name | yes | yes | **Absent** |
@@ -101,7 +101,7 @@ pass the acceptance criteria below.
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | Matched short fixed-rate schedules at 5/25 arrivals per second passed 560/560, including client queue delay and full cleanup/drain. HyperMachine trails Firecracker in both profiles. Longer arrivals, overload failures, load-change recovery and equivalent fleet scale remain unverified |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys and protected API tracing verified; tenant boundaries, roles, durable audit retention and resource attribution remain incomplete |
-| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | Custom-domain HTTP/HTTPS routing and egress are implemented; certificate automation, private URLs, SSH, raw TCP/UDP and isolated groups remain absent |
+| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | Custom-domain HTTP/HTTPS routing, authenticated raw TCP and egress are implemented; certificate automation, private browser URLs, SSH by name, UDP and isolated groups remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
 | Operations | Object-storage backups and recovery, quota enforcement, scheduling/event triggers, load-tested multi-node failover | Shared-directory snapshots and host job queues do not cover all these capabilities |
 
@@ -225,6 +225,7 @@ export HV2_SANDBOX_URL=http://127.0.0.1:3980
 hm sandbox vm create --template base
 hm sandbox vm list
 hm sandbox vm exec SANDBOX_ID -- /bin/sh -c 'printf hello'
+hm sandbox vm --endpoint https://sandbox-api.example.com tcp SANDBOX_ID --port 5432 --listen 127.0.0.1:15432
 hm sandbox vm files SANDBOX_ID --envd-endpoint ENVD_URL upload local.bin /root/file.bin
 hm sandbox vm files SANDBOX_ID --envd-endpoint ENVD_URL download /root/file.bin downloaded.bin
 hm sandbox vm checkpoint save SANDBOX_ID before-change

@@ -51,5 +51,9 @@ clap_complete = "4.5"
 tempfile = "3.10"
 base64 = "0.22"
 
+[dev-dependencies]
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+
 [lints]
 workspace = true

@@ -187,6 +187,7 @@ mod tests {
             "/events/webhooks",
             "/templates/id/files/hash",
             "/sandboxes/box/exec",
+            "/sandboxes/box/ports/8080/tcp",
         ] {
             assert!(!policy.permits(&Method::GET, path), "{path}");
         }
@@ -198,6 +199,7 @@ mod tests {
         let policy = policy("sandboxes");
         assert!(policy.permits(&Method::POST, "/v2/sandboxes"));
         assert!(policy.permits(&Method::POST, "/sandboxes/box/exec"));
+        assert!(policy.permits(&Method::GET, "/sandboxes/box/ports/8080/tcp"));
         assert!(!policy.permits(&Method::POST, "/v3/templates"));
         assert!(!policy.permits(&Method::GET, "/sandboxes-other"));
         assert!(!policy.permits(&Method::GET, "/events/sandboxes"));

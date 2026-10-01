@@ -1,0 +1,68 @@
+{
+  "source_sha256": {
+    "Cargo.lock": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
+    "Cargo.toml": "eac295c2848417c20a49c14bce5f15c24bd129ca4b2c178a3b2cce744ab37b8d",
+    "crates/hv2-core/src/devices/virtio_vsock.rs": "f41a40065a43d644b9e7ba19fc8d82a9cea297647ab5d46109a652a431137903",
+    "crates/hv2-agent/src/guest_agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "crates/hv2-guest-agent/src/bin/agentd.rs": "967327736c10c0a28b05dc98b63aac286c9abe8460a665f0776ad8952500da58",
+    "crates/hv2-api/src/tcp_tunnel.rs": "cc30dd62d9c66c3bbb43dfb09a3e05c6abcc89ef28fdaadaa15516235103cf23",
+    "crates/hv2-sandboxd/src/forwards.rs": "10d094370bdac6dbd14121d6a1ce3866fde66ad992636187468ea05c09843b08",
+    "crates/hv2-sandboxd/src/main.rs": "dd601bccd7c9655b698dd72cbf862a3681f7a583a7354cb59b549ce37eeaa7f2",
+    "crates/hv2-cluster/src/control.rs": "5cfa44f8213168a791b114eb33542c4c88ba3fd0da50adb98cfb6ee259d9fab6",
+    "crates/hv2-cluster/src/mtls.rs": "ba5d9fcb0a443903ca143015b7b9fc982d36260026d4bf86b597c4728f30ea65",
+    "crates/hv2-cluster/src/bin/hv2-control-plane.rs": "f2958a2733226ba36eff75978ec4f54a5bc6bda0b1dcab29e8599381c1acc04e",
+    "crates/hm-cli/src/sandbox_vm.rs": "0d891d059924bd008c3ee63a11d15b275b523bcc05f62c2280013dfb76853f24"
+  },
+  "source_commit": "2b6d0be1b67274ecc41628793adbfdc44e68b6e7",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "profile": "debug for functional verification; no performance scores",
+  "commands": [
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "-p",
+        "hv2-sandboxd",
+        "-p",
+        "hv2-cluster",
+        "--bin",
+        "hv2-sandboxd",
+        "--bin",
+        "hv2-control-plane",
+        "-p",
+        "hm-cli",
+        "--bin",
+        "hm"
+      ],
+      "target_dir": "/var/tmp/hm-competitive-target",
+      "rustflags": null,
+      "exit_code": 0,
+      "output_sha256": "922277a28fd40b73a8f61e299cf25048324c2181a04d5ab8bd01a915ece70d8f"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "-p",
+        "hv2-guest-agent",
+        "--target",
+        "x86_64-unknown-linux-gnu"
+      ],
+      "target_dir": "/var/tmp/hm-tcp-static-target",
+      "rustflags": "-C target-feature=+crt-static",
+      "exit_code": 0,
+      "output_sha256": "df3698411bec8fdadbcc93d0c8e1945b7352fff564b5f1564c722d846adfecc6"
+    }
+  ],
+  "success": true,
+  "binary_sha256": {
+    "hv2-sandboxd": "8a9b0213c268e34f74033c4ec1a16365d7fe09f6acbc0612450af70ba7f9653b",
+    "hv2-control-plane": "a386eb3d2ed2c9eb374482858519180584e67dbcd5ea85ea741bf1267f731672",
+    "hm": "72018dd6ba51c03f2aede745853becdd02ff73d4ef2d3ffe44c6219a31f516fd",
+    "hv2-guest-agentd": "1e2eb51ddab6e76fe771c28b34969ce32aa6bbbbdc4d0a7396662de85b35eeb3"
+  },
+  "canonical_scored_binary_unchanged": true
+}
