@@ -49,9 +49,13 @@ Custom-domain implementation is underway. A validated binding model now
 canonicalizes ASCII DNS names (including DNS punycode), rejects malformed
 labels, IP addresses, authorities and existing sandbox-route names, and
 validates sandbox IDs/nonzero ports even when decoding stored JSON. Three
-Linux model tests and strict cluster-library Clippy pass. This is a foundation:
-atomic Memory/Redis claims, authenticated management endpoints, proxy resolution
-and CLI commands remain unwired. The matrix therefore still marks custom
+Linux model tests and strict cluster-library Clippy pass. Memory and Redis now
+atomically claim hostnames for existing sandboxes, reject competing owners,
+allow owner port updates, and remove bindings when their sandbox is deleted.
+The shared ownership/cleanup contract passed against Memory and an isolated
+Redis 8.0.2 server; the 30-test cluster library suite also passed (its optional
+Redis test was run separately with a real server). Authenticated management
+endpoints, proxy resolution and CLI commands remain unwired. The matrix still marks custom
 domains absent. Existing operator-provided TLS certificates and DNS remain
 part of the intended setup; ACME is a separate unfinished capability.
 

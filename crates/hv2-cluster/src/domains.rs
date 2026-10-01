@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Canonical ASCII DNS hostname. IDNs use their DNS punycode representation.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct DomainName(String);
 

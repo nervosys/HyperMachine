@@ -16,6 +16,8 @@ use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
+use crate::domains::{DomainBinding, DomainName};
+
 use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 
 /// A store error. Opaque on purpose: a caller's only decision is whether to
@@ -25,6 +27,14 @@ use crate::model::{ClusterEvent, Delivery, NodeInfo, SandboxRecord, Webhook};
 pub struct StoreError(pub String);
 
 pub type Result<T> = std::result::Result<T, StoreError>;
+
+/// Outcome of an atomic domain ownership claim.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DomainClaim {
+    Claimed,
+    Conflict,
+    SandboxMissing,
+}
 
 /// The shared state of a cluster.
 #[async_trait::async_trait]
@@ -45,6 +55,13 @@ pub trait ClusterStore: Send + Sync {
     /// reports it.
     async fn delete_sandbox(&self, id: &str) -> Result<bool>;
     async fn sandboxes(&self) -> Result<Vec<SandboxRecord>>;
+
+    /// Claim a hostname, or update its port for the same sandbox. No ownership transfer.
+    async fn claim_domain(&self, binding: &DomainBinding) -> Result<DomainClaim>;
+    async fn domain(&self, name: &DomainName) -> Result<Option<DomainBinding>>;
+    async fn domains(&self, sandbox: &str) -> Result<Vec<DomainBinding>>;
+    /// Remove only if the hostname still belongs to this sandbox.
+    async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> Result<bool>;
 
     /// Append to the event stream, which keeps a bounded tail.
     async fn publish(&self, event: &ClusterEvent) -> Result<()>;
@@ -75,10 +92,16 @@ pub const EVENT_TAIL: usize = 10_000;
 #[derive(Default)]
 pub struct MemoryStore {
     nodes: Mutex<HashMap<String, (NodeInfo, Instant)>>,
-    sandboxes: Mutex<HashMap<String, SandboxRecord>>,
+    sandboxes: Mutex<SandboxState>,
     events: Mutex<std::collections::VecDeque<ClusterEvent>>,
     webhooks: Mutex<Vec<Webhook>>,
     deliveries: Mutex<HashMap<String, std::collections::VecDeque<Delivery>>>,
+}
+
+#[derive(Default)]
+struct SandboxState {
+    records: HashMap<String, SandboxRecord>,
+    domains: HashMap<DomainName, DomainBinding>,
 }
 
 impl MemoryStore {
@@ -124,22 +147,76 @@ impl ClusterStore for MemoryStore {
     async fn put_sandbox(&self, record: &SandboxRecord) -> Result<()> {
         self.sandboxes
             .lock()
+            .records
             .insert(record.sandbox_id.clone(), record.clone());
         Ok(())
     }
 
     async fn sandbox(&self, id: &str) -> Result<Option<SandboxRecord>> {
-        Ok(self.sandboxes.lock().get(id).cloned())
+        Ok(self.sandboxes.lock().records.get(id).cloned())
     }
 
     async fn delete_sandbox(&self, id: &str) -> Result<bool> {
-        Ok(self.sandboxes.lock().remove(id).is_some())
+        let mut state = self.sandboxes.lock();
+        state
+            .domains
+            .retain(|_, binding| binding.sandbox_id() != id);
+        Ok(state.records.remove(id).is_some())
     }
 
     async fn sandboxes(&self) -> Result<Vec<SandboxRecord>> {
-        let mut all: Vec<_> = self.sandboxes.lock().values().cloned().collect();
+        let mut all: Vec<_> = self.sandboxes.lock().records.values().cloned().collect();
         all.sort_by(|a, b| (a.started_at_ms, &a.sandbox_id).cmp(&(b.started_at_ms, &b.sandbox_id)));
         Ok(all)
+    }
+
+    async fn claim_domain(&self, binding: &DomainBinding) -> Result<DomainClaim> {
+        let mut state = self.sandboxes.lock();
+        if !state.records.contains_key(binding.sandbox_id()) {
+            return Ok(DomainClaim::SandboxMissing);
+        }
+        if state
+            .domains
+            .get(binding.domain())
+            .is_some_and(|old| old.sandbox_id() != binding.sandbox_id())
+        {
+            return Ok(DomainClaim::Conflict);
+        }
+        state
+            .domains
+            .insert(binding.domain().clone(), binding.clone());
+        Ok(DomainClaim::Claimed)
+    }
+
+    async fn domain(&self, name: &DomainName) -> Result<Option<DomainBinding>> {
+        Ok(self.sandboxes.lock().domains.get(name).cloned())
+    }
+
+    async fn domains(&self, sandbox: &str) -> Result<Vec<DomainBinding>> {
+        let mut bindings: Vec<_> = self
+            .sandboxes
+            .lock()
+            .domains
+            .values()
+            .filter(|binding| binding.sandbox_id() == sandbox)
+            .cloned()
+            .collect();
+        bindings.sort_by(|a, b| a.domain().cmp(b.domain()));
+        Ok(bindings)
+    }
+
+    async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> Result<bool> {
+        let mut state = self.sandboxes.lock();
+        if state
+            .domains
+            .get(name)
+            .is_some_and(|binding| binding.sandbox_id() == sandbox)
+        {
+            state.domains.remove(name);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     async fn publish(&self, event: &ClusterEvent) -> Result<()> {
@@ -400,14 +477,131 @@ impl ClusterStore for RedisStore {
 
     async fn delete_sandbox(&self, id: &str) -> Result<bool> {
         let mut c = self.connection.clone();
-        let (deleted, _): (u32, u32) = redis::pipe()
-            .atomic()
-            .del(self.key(&format!("sandbox:{id}")))
-            .srem(self.key("sandboxes"), id)
+        let deleted: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local names = redis.call('SMEMBERS', KEYS[3])
+for _, name in ipairs(names) do
+    local value = redis.call('HGET', KEYS[4], name)
+    if value and cjson.decode(value).sandbox_id == ARGV[1] then
+        redis.call('HDEL', KEYS[4], name)
+    end
+end
+redis.call('DEL', KEYS[3])
+local deleted = redis.call('DEL', KEYS[1])
+redis.call('SREM', KEYS[2], ARGV[1])
+return deleted
+"#,
+            )
+            .arg(4)
+            .arg(self.key(&format!("sandbox:{id}")))
+            .arg(self.key("sandboxes"))
+            .arg(self.key(&format!("domains:{id}")))
+            .arg(self.key("domains"))
+            .arg(id)
             .query_async(&mut c)
             .await
             .map_err(redis_error)?;
         Ok(deleted > 0)
+    }
+
+    async fn claim_domain(&self, binding: &DomainBinding) -> Result<DomainClaim> {
+        let mut c = self.connection.clone();
+        let result: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+if redis.call('EXISTS', KEYS[1]) == 0 then return 0 end
+local value = redis.call('HGET', KEYS[2], ARGV[2])
+if value and cjson.decode(value).sandbox_id ~= ARGV[1] then return 2 end
+redis.call('HSET', KEYS[2], ARGV[2], ARGV[3])
+redis.call('SADD', KEYS[3], ARGV[2])
+return 1
+"#,
+            )
+            .arg(3)
+            .arg(self.key(&format!("sandbox:{}", binding.sandbox_id())))
+            .arg(self.key("domains"))
+            .arg(self.key(&format!("domains:{}", binding.sandbox_id())))
+            .arg(binding.sandbox_id())
+            .arg(binding.domain().as_str())
+            .arg(serde_json::to_string(binding).map_err(json_error)?)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        match result {
+            0 => Ok(DomainClaim::SandboxMissing),
+            1 => Ok(DomainClaim::Claimed),
+            2 => Ok(DomainClaim::Conflict),
+            _ => Err(StoreError(format!(
+                "unexpected domain claim result: {result}"
+            ))),
+        }
+    }
+
+    async fn domain(&self, name: &DomainName) -> Result<Option<DomainBinding>> {
+        let mut c = self.connection.clone();
+        let value: Option<String> = redis::cmd("HGET")
+            .arg(self.key("domains"))
+            .arg(name.as_str())
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        value
+            .map(|json| serde_json::from_str(&json).map_err(json_error))
+            .transpose()
+    }
+
+    async fn domains(&self, sandbox: &str) -> Result<Vec<DomainBinding>> {
+        let mut c = self.connection.clone();
+        let values: Vec<String> = redis::cmd("EVAL")
+            .arg(
+                r#"
+local result = {}
+for _, name in ipairs(redis.call('SMEMBERS', KEYS[2])) do
+    local value = redis.call('HGET', KEYS[1], name)
+    if value and cjson.decode(value).sandbox_id == ARGV[1] then
+        table.insert(result, value)
+    end
+end
+return result
+"#,
+            )
+            .arg(2)
+            .arg(self.key("domains"))
+            .arg(self.key(&format!("domains:{sandbox}")))
+            .arg(sandbox)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        let mut bindings: Vec<DomainBinding> = values
+            .iter()
+            .map(|json| serde_json::from_str(json).map_err(json_error))
+            .collect::<Result<_>>()?;
+        bindings.sort_by(|a, b| a.domain().cmp(b.domain()));
+        Ok(bindings)
+    }
+
+    async fn delete_domain(&self, name: &DomainName, sandbox: &str) -> Result<bool> {
+        let mut c = self.connection.clone();
+        let removed: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local value = redis.call('HGET', KEYS[1], ARGV[1])
+if not value or cjson.decode(value).sandbox_id ~= ARGV[2] then return 0 end
+redis.call('HDEL', KEYS[1], ARGV[1])
+redis.call('SREM', KEYS[2], ARGV[1])
+return 1
+"#,
+            )
+            .arg(2)
+            .arg(self.key("domains"))
+            .arg(self.key(&format!("domains:{sandbox}")))
+            .arg(name.as_str())
+            .arg(sandbox)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(removed > 0)
     }
 
     async fn sandboxes(&self) -> Result<Vec<SandboxRecord>> {
@@ -644,6 +838,70 @@ pub(crate) mod tests {
 
     /// The contract, run against any store.
     pub(crate) async fn contract(store: &dyn ClusterStore) {
+        let first = DomainBinding::new("App.Example.com.", "domain-a", 8080).unwrap();
+        let second = DomainBinding::new("app.example.com", "domain-b", 9090).unwrap();
+        assert_eq!(
+            store.claim_domain(&first).await.unwrap(),
+            DomainClaim::SandboxMissing
+        );
+        store.put_sandbox(&sandbox("domain-a", "a")).await.unwrap();
+        store.put_sandbox(&sandbox("domain-b", "a")).await.unwrap();
+        let (a, b) = tokio::join!(store.claim_domain(&first), store.claim_domain(&second));
+        let outcomes = [a.unwrap(), b.unwrap()];
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|x| **x == DomainClaim::Claimed)
+                .count(),
+            1
+        );
+        assert_eq!(
+            outcomes
+                .iter()
+                .filter(|x| **x == DomainClaim::Conflict)
+                .count(),
+            1
+        );
+        let winner = store.domain(first.domain()).await.unwrap().unwrap();
+        let loser = if winner.sandbox_id() == "domain-a" {
+            "domain-b"
+        } else {
+            "domain-a"
+        };
+        assert!(!store.delete_domain(first.domain(), loser).await.unwrap());
+        let updated = DomainBinding::new("app.example.com", winner.sandbox_id(), 3000).unwrap();
+        assert_eq!(
+            store.claim_domain(&updated).await.unwrap(),
+            DomainClaim::Claimed
+        );
+        assert_eq!(
+            store.domain(first.domain()).await.unwrap(),
+            Some(updated.clone())
+        );
+        assert_eq!(
+            store.domains(winner.sandbox_id()).await.unwrap(),
+            vec![updated]
+        );
+        assert!(store.domains(loser).await.unwrap().is_empty());
+        assert!(store.delete_sandbox(winner.sandbox_id()).await.unwrap());
+        assert!(store.domain(first.domain()).await.unwrap().is_none());
+        let replacement = DomainBinding::new("app.example.com", loser, 4000).unwrap();
+        assert_eq!(
+            store.claim_domain(&replacement).await.unwrap(),
+            DomainClaim::Claimed
+        );
+        assert!(!store
+            .delete_domain(first.domain(), winner.sandbox_id())
+            .await
+            .unwrap());
+        assert!(!store.delete_sandbox(winner.sandbox_id()).await.unwrap());
+        assert_eq!(
+            store.domain(first.domain()).await.unwrap(),
+            Some(replacement)
+        );
+        assert!(store.delete_domain(first.domain(), loser).await.unwrap());
+        assert!(!store.delete_domain(first.domain(), loser).await.unwrap());
+        store.delete_sandbox(loser).await.unwrap();
         // Nodes expire unless renewed.
         store
             .put_node(&node("a", 0, 4), Duration::from_secs(60))
