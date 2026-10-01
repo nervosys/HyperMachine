@@ -140,6 +140,65 @@ fn check_schedule_id(id: &str) -> Result<()> {
 }
 
 impl Store {
+    /// Recover a bounded page from the committed publication chain. The
+    /// exclusive timestamp cursor is the last record consumed by the caller.
+    /// Uncommitted records, including losing coalesced batches, are excluded.
+    /// Consumption/dispatch acknowledgements are not persisted by this read.
+    pub fn committed_interval_occurrences(
+        &self,
+        id: &str,
+        cursor: Option<u64>,
+        limit: usize,
+    ) -> Result<Vec<Occurrence>> {
+        if !(1..=1024).contains(&limit) {
+            return Err(JobError::InvalidSpec(
+                "occurrence page limit must be 1-1024".into(),
+            ));
+        }
+        let schedule = self.interval_schedule(id)?;
+        let mut after = None;
+        let mut records = Vec::with_capacity(limit);
+        loop {
+            let key = progress_key(id, after);
+            let step: ProgressStep =
+                match crate::read_json(&self.root().join("schedule-progress").join(&key), &key) {
+                    Ok(step) => step,
+                    Err(JobError::NotFound(_)) => return Ok(records),
+                    Err(error) => return Err(error),
+                };
+            let selected = schedule.due_occurrences(after, step.through_ms, 1024)?;
+            if selected.last().copied() != Some(step.through_ms) {
+                return Err(JobError::Corrupt(format!("invalid progress step {key}")));
+            }
+            for scheduled_ms in selected {
+                if cursor.is_some_and(|cursor| scheduled_ms <= cursor) {
+                    continue;
+                }
+                let key = format!("{id}--{scheduled_ms}");
+                let record: Occurrence =
+                    crate::read_json(&self.root().join("occurrences").join(&key), &key)?;
+                let mut job = schedule.job.clone();
+                job.not_before_ms = Some(scheduled_ms);
+                if record
+                    != (Occurrence {
+                        schedule_id: id.into(),
+                        scheduled_ms,
+                        job,
+                    })
+                {
+                    return Err(JobError::Corrupt(format!(
+                        "occurrence {key} disagrees with schedule"
+                    )));
+                }
+                records.push(record);
+                if records.len() == limit {
+                    return Ok(records);
+                }
+            }
+            after = Some(step.through_ms);
+        }
+    }
+
     /// Publish one bounded batch of due occurrences and commit its progress.
     /// Existing records from an interrupted publication are reconciled.
     /// Concurrent progress changes return Conflict: reload and retry rather
@@ -323,6 +382,57 @@ mod tests {
             missed_policy: MissedOccurrencePolicy::CatchUp,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn committed_pages_recover_after_restart_and_exclude_orphan_records() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store.create_interval_schedule("page", &schedule()).unwrap();
+        store.materialize_interval("page", 155, 3).unwrap();
+        store.materialize_interval("page", 155, 3).unwrap();
+        store.record_interval_occurrence("page", 160).unwrap();
+        let reopened = Store::open(dir.path()).unwrap();
+        let first = reopened
+            .committed_interval_occurrences("page", None, 2)
+            .unwrap();
+        assert_eq!(
+            first.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![100, 110]
+        );
+        let second = reopened
+            .committed_interval_occurrences("page", Some(110), 3)
+            .unwrap();
+        assert_eq!(
+            second.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![120, 130, 140]
+        );
+        let third = reopened
+            .committed_interval_occurrences("page", Some(140), 3)
+            .unwrap();
+        assert_eq!(
+            third.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![150]
+        );
+        assert!(reopened
+            .committed_interval_occurrences("page", Some(150), 3)
+            .unwrap()
+            .is_empty());
+        assert!(reopened
+            .committed_interval_occurrences("page", None, 0)
+            .is_err());
+        let mut s = schedule();
+        s.missed_policy = MissedOccurrencePolicy::Coalesce;
+        reopened.create_interval_schedule("coal", &s).unwrap();
+        reopened.record_interval_occurrence("coal", 110).unwrap();
+        reopened.materialize_interval("coal", 155, 3).unwrap();
+        let committed = reopened
+            .committed_interval_occurrences("coal", None, 3)
+            .unwrap();
+        assert_eq!(
+            committed.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![150]
+        );
     }
 
     #[test]
