@@ -1,0 +1,17 @@
+{
+  "source_commit": "ac98739cc0b177d01086cdbf7b47ba9979be8bf3",
+  "source_patch_sha256": "03fc2bc29ccc3fb229a001cb2a8babe4fa5c9b3300ded73625eb464f0701adc7",
+  "report_sha256": "629765283d14b35165b111fd7034864855f50bc9e341cc318ba7640af2f833bd",
+  "artifact_sha256": {
+    "daemon": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+    "control-plane": "67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029",
+    "cli": "9eabf3e3959c6370aff5a8c8c99afc7d0ec8d50fb1d47c08181edc38feec5058",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+    "coordinator": "cf5ccf0aed3df741747bd170d79817ae33bd31e5fbe8b543091c7cfe4da66152"
+  },
+  "verified_cases": 16,
+  "registered_processes_stopped": 22,
+  "frozen_cli_path": "/var/tmp/hm-scheduled-dispatch/hm-verified",
+  "note": "CLI build includes provisional core edits; daemon is frozen accepted artifact. No borrowed-boot benchmark or performance comparison."
+}

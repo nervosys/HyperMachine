@@ -43,3 +43,4 @@ docs/benchmarks/2026-10-01/kvm-events-direct-test.txt -text whitespace=cr-at-eol
 docs/benchmarks/2026-10-01/tcp-build*-output.txt -text whitespace=cr-at-eol,-blank-at-eof
 # Exact compiled source contains pre-existing Markdown line-break spaces.
 docs/benchmarks/2026-10-01/ssh-cli-source-crates--hm-cli--src--agentic--adapters.rs.txt -text whitespace=cr-at-eol,-blank-at-eol
+docs/benchmarks/2026-10-01/scheduled-dispatch-source.patch -text whitespace=cr-at-eol,-blank-at-eol

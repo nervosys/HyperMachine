@@ -121,6 +121,7 @@ def main():
     parser.add_argument("--ssh-by-name", action="store_true", help="resolve the SSH guest by its metadata label")
     parser.add_argument("--ssh-pty", action="store_true", help="verify guest PTY allocation and terminal input")
     parser.add_argument("--ssh-terminal", action="store_true", help="verify local/guest terminal resize and interrupt")
+    parser.add_argument("--scheduled-dispatch", action="store_true", help="verify explicit scheduled VM dispatch and durable receipts")
     args = parser.parse_args()
     if args.ssh_by_name and not args.ssh_fixture:
         parser.error("--ssh-by-name requires --ssh-fixture")
@@ -334,6 +335,49 @@ def main():
                 if time.monotonic() > deadline:
                     raise TimeoutError("guest fixture did not start")
                 time.sleep(.01)
+            if args.scheduled_dispatch:
+                def scheduled_dispatch():
+                    job_store = directory / "scheduled-jobs"
+                    profiles = directory / "job-profiles.json"
+                    profiles.write_text(json.dumps({"profiles": {"local": {
+                        "endpoint": api_url, "api_key_env": "HV2_API_KEY",
+                        "ca": "ca.pem", "request_timeout_secs": 60}}}))
+                    spec = directory / "vm-schedule.json"
+                    marker = "literal'$(printf must-not-expand)"
+                    script = "printf '%s\\n' \"$SCHEDULE_MARKER\" \"$HM_JOB_ID\"; printf x >> /tmp/scheduled-dispatch-count; exit 7"
+                    spec.write_text(json.dumps({"first_ms": 100, "every_ms": 10,
+                        "vm": {"sandbox_id": id, "connection_profile": "local", "timeout_secs": 30},
+                        "job": {"command": ["/bin/sh", "-c", script],
+                                "env": {"SCHEDULE_MARKER": marker}, "workdir": "/tmp"}}))
+
+                    def jobs(*arguments, succeeds=True):
+                        result = subprocess.run([str(args.cli), "jobs", "--store", str(job_store), "schedule", *arguments],
+                            env=dict(env, HV2_API_KEY=key), stdin=subprocess.DEVNULL,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
+                        if (result.returncode == 0) != succeeds:
+                            raise RuntimeError(f"schedule CLI status {result.returncode}: {result.stderr[:1000]!r}")
+                        return json.loads(result.stdout) if succeeds else None
+
+                    jobs("create", "guest-job", str(spec))
+                    jobs("publish", "guest-job", "--now-ms", "100", "--limit", "1")
+                    api("POST", f"/sandboxes/{id}/pause", {}, expected=204)
+                    result = jobs("dispatch", "guest-job", "100", "--profiles", str(profiles))
+                    assert result["exit_code"] == 7 and result["timed_out"] is False
+                    assert result["stdout"] == marker + "\nguest-job--100\n"
+                    assert command(id, "cat /tmp/scheduled-dispatch-count") == "x"
+                    receipt = jobs("receipt", "guest-job", "100")["completion"]
+                    assert receipt["stdout"] == result["stdout"] and receipt["exit_code"] == 7
+                    assert receipt["stdout_truncated"] is False
+                    jobs("dispatch", "guest-job", "100", "--profiles", str(profiles), succeeds=False)
+                    assert command(id, "cat /tmp/scheduled-dispatch-count") == "x"
+                    jobs("cancel", "guest-job")
+                    jobs("publish", "guest-job", "--now-ms", "110", succeeds=False)
+                    assert jobs("receipt", "guest-job", "100")["completion"] == receipt
+                    return {"paused_guest_resumed": True, "guest_exit_code": 7,
+                            "literal_environment_preserved": True, "durable_output_recovered": True,
+                            "duplicate_guest_execution_refused": True, "history_survives_cancellation": True}
+                case("scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
+
             if args.ssh_fixture:
                 fixture = args.ssh_fixture
                 build = json.loads((fixture / "build.json").read_text())

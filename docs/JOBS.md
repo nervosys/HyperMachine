@@ -264,7 +264,9 @@ be automatically retried. These limits are not a total process-memory bound or
 a server-side output limit; large-output execution needs a streaming executor.
 No automatic retry, guest process reconciliation, guest cancellation or streaming
 logs are implemented. The protocol fixture checks request fidelity and
-uncertain-result behavior; real KVM dispatch verification remains pending.
+uncertain-result behavior. [A real KVM/TLS run](benchmarks/2026-10-01/scheduled-dispatch.md)
+also verified paused-guest resume, literal environment values, exit code 7,
+durable stdout recovery, duplicate refusal and preserved history after cancellation.
 The Linux shell regression runs a literal executable containing `=` from a
 directory containing spaces, with quotes and command-substitution text in its
 environment and argument. It verifies unchanged literal values, `HM_JOB_ID` and
