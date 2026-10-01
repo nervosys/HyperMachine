@@ -21,7 +21,7 @@ container. The comparison is about what surrounds the VM.
 | Suspend when idle, wake on traffic | yes | no | **Real**: `idleTimeout` or `--idle-pause-after`, plus `autoResume`. Idle means no traffic *and* a quiet guest CPU, so unwatched work is never frozen |
 | HTTPS URL per VM | yes | yes | **Partial**: `{port}-{id}.{domain}` over TLS; you bring the wildcard certificate (no ACME) |
 | Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); no raw TCP or UDP |
-| Custom domains | yes | yes | **Absent** |
+| Custom domains | yes | yes | **Real**: authenticated cluster bindings to guest HTTP ports, Memory/Redis ownership, HTTPS forwarding; [operator DNS and certificates](CUSTOM_DOMAINS.md) |
 | Private URLs with login, identity headers | team-shared | yes (`X-ExeDev-Email`) | **Absent** |
 | SSH to a VM by name | yes | yes | **Absent** |
 | exec, and file copy in and out | yes | ssh/scp | **Real**: `/exec`, envd processes with PTY and stdin, files |
@@ -43,21 +43,17 @@ container. The comparison is about what surrounds the VM.
 | GPU | no | no | **Partial**: VFIO code, not wired to sandboxes |
 | Hypervisor you can read | no | no | **Real**: our own VMM; KVM, WHPX, HVF; a Type-1 path |
 
-## What is beyond both today
+Custom domains now have authenticated management endpoints, proxy routing and
+CLI bind/list/unbind commands. Memory/Redis claims enforce sandbox ownership
+and deletion cleanup. A real KVM guest served HTTPS content through both
+proxies, followed a guest-port update, retained its Redis binding across a
+control-plane restart, resumed on alias access with `autoResume` enabled, and
+released its hostname after deletion. HTTP/1.1 and HTTP/2 fixture tests preserve
+the public host, path, query and body. See [setup and evidence](CUSTOM_DOMAINS.md).
+Operators still provide DNS and certificates; ACME and DNS ownership verification
+are not implemented. These functional passes establish no performance win.
 
-Custom-domain implementation is underway. A validated binding model now
-canonicalizes ASCII DNS names (including DNS punycode), rejects malformed
-labels, IP addresses, authorities and existing sandbox-route names, and
-validates sandbox IDs/nonzero ports even when decoding stored JSON. Three
-Linux model tests and strict cluster-library Clippy pass. Memory and Redis now
-atomically claim hostnames for existing sandboxes, reject competing owners,
-allow owner port updates, and remove bindings when their sandbox is deleted.
-The shared ownership/cleanup contract passed against Memory and an isolated
-Redis 8.0.2 server; the 30-test cluster library suite also passed (its optional
-Redis test was run separately with a real server). Authenticated management
-endpoints, proxy resolution and CLI commands remain unwired. The matrix still marks custom
-domains absent. Existing operator-provided TLS certificates and DNS remain
-part of the intended setup; ACME is a separate unfinished capability.
+## What is beyond both today
 
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
@@ -105,7 +101,7 @@ pass the acceptance criteria below.
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys and protected API tracing verified; tenant boundaries, roles, durable audit retention and resource attribution remain incomplete |
-| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | HTTP proxy and egress are implemented; the listed access features remain absent |
+| Networking and access | Custom domains, certificate automation, authenticated private URLs, SSH, raw TCP/UDP and isolated VM groups | Custom-domain HTTP/HTTPS routing and egress are implemented; certificate automation, private URLs, SSH, raw TCP/UDP and isolated groups remain absent |
 | Platforms and workloads | Verified ARM64 execution, GPU sandboxes, browser/desktop workloads, and persistent storage limits | ARM64 execution and GPU sandbox wiring remain unverified or absent |
 | Operations | Object-storage backups and recovery, quota enforcement, scheduling/event triggers, load-tested multi-node failover | Shared-directory snapshots and host job queues do not cover all these capabilities |
 

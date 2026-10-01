@@ -31,10 +31,11 @@ use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::domains::{DomainBinding, DomainName};
 use crate::metrics::{self, Counter, Exposition, Histogram};
 use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, NodeInfo, SandboxRecord};
 use crate::scheduler::candidates;
-use crate::store::ClusterStore;
+use crate::store::{ClusterStore, DomainClaim};
 
 /// The header a node reads the cluster token from.
 pub const CLUSTER_TOKEN_HEADER: &str = "x-hv2-cluster-token";
@@ -129,6 +130,11 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/pause", post(forward))
         .route("/sandboxes/{id}/resume", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
+        .route("/sandboxes/{id}/domains", get(list_domains))
+        .route(
+            "/sandboxes/{id}/domains/{domain}",
+            axum::routing::put(bind_domain).delete(unbind_domain),
+        )
         .route("/sandboxes/{id}/checkpoints", get(forward).post(forward))
         .route(
             "/sandboxes/{id}/checkpoints/{name}",
@@ -183,6 +189,67 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
             api_error(StatusCode::NOT_FOUND, format!("no route {uri}"))
         })
         .with_state(control)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DomainPort {
+    port: u16,
+}
+
+async fn list_domains(
+    State(control): State<Arc<ControlPlane>>,
+    Path(id): Path<String>,
+) -> Response {
+    match control.store.sandbox(&id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+    match control.store.domains(&id).await {
+        Ok(bindings) => Json(bindings).into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn bind_domain(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, domain)): Path<(String, String)>,
+    Json(body): Json<DomainPort>,
+) -> Response {
+    let binding = match DomainBinding::new(&domain, &id, body.port) {
+        Ok(binding) => binding,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    match control.store.claim_domain(&binding).await {
+        Ok(DomainClaim::Claimed) => Json(binding).into_response(),
+        Ok(DomainClaim::Conflict) => api_error(
+            StatusCode::CONFLICT,
+            "domain is already bound to another sandbox",
+        ),
+        Ok(DomainClaim::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn unbind_domain(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, domain)): Path<(String, String)>,
+) -> Response {
+    let domain = match DomainName::parse(&domain) {
+        Ok(domain) => domain,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    match control.store.delete_domain(&domain, &id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => api_error(
+            StatusCode::NOT_FOUND,
+            "domain binding does not exist for this sandbox",
+        ),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
 }
 
 async fn require_api_key(
@@ -1282,6 +1349,18 @@ impl ClusterRoutes {
 
 #[async_trait::async_trait]
 impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
+    async fn resolve_hostname(&self, authority: &str) -> Option<(u16, String)> {
+        if authority.contains('@') {
+            return None;
+        }
+        let authority = authority.parse::<axum::http::uri::Authority>().ok()?;
+        let name = DomainName::parse(authority.host()).ok()?;
+        let binding = self.store.domain(&name).await.ok()??;
+        // Do not let the node-address cache keep a deleted sandbox's alias alive.
+        self.store.sandbox(binding.sandbox_id()).await.ok()??;
+        Some((binding.port(), binding.sandbox_id().to_owned()))
+    }
+
     async fn resolve(&self, sandbox: &str, _port: u16) -> Option<SocketAddr> {
         if let Some((addr, at)) = self.cache.lock().get(sandbox) {
             if at.elapsed() < self.ttl {

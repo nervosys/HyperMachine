@@ -28,6 +28,271 @@ const TOKEN: &str = "cluster-secret";
 const KEY: &str = "e2b_test_key";
 
 #[tokio::test]
+async fn custom_domain_https_reaches_the_node_with_guest_routing_and_host_intact() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_, heartbeat) = fake_node(store.clone(), "domain-tls", 4, Duration::from_secs(30)).await;
+    let base = control_plane(store.clone(), Some(KEY)).await;
+    let (_, created) = create(&base, json!({"templateID":"base"})).await;
+    let id = created["sandboxID"].as_str().unwrap().to_owned();
+    heartbeat.abort();
+    let _ = heartbeat.await;
+    let backend = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut node = store.node("domain-tls").await.unwrap().unwrap();
+    node.proxy = backend.local_addr().unwrap();
+    store
+        .put_node(&node, Duration::from_secs(60))
+        .await
+        .unwrap();
+    let backend_task = tokio::spawn(async move {
+        axum::serve(
+            backend,
+            Router::new().fallback(
+                |headers: HeaderMap, uri: axum::http::Uri, body: String| async move {
+                    Json(json!({"host":headers["host"].to_str().unwrap(),
+                "sandbox":headers["e2b-sandbox-id"].to_str().unwrap(),
+                "port":headers["e2b-sandbox-port"].to_str().unwrap(),
+                "path":uri.path_and_query().unwrap().as_str(), "body":body}))
+                },
+            ),
+        )
+        .await
+        .unwrap();
+    });
+    let binding_url = format!("{base}/sandboxes/{id}/domains/app.example.com");
+    assert_eq!(
+        client()
+            .put(&binding_url)
+            .header("x-api-key", KEY)
+            .json(&json!({"port":8080}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    let cert = rcgen::generate_simple_self_signed(vec!["app.example.com".into()]).unwrap();
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let mut tls = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_single_cert(
+            vec![cert.cert.der().clone()],
+            rustls::pki_types::PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()).into(),
+        )
+        .unwrap();
+    tls.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    let probe = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = probe.local_addr().unwrap();
+    drop(probe);
+    let (shutdown, rx) = tokio::sync::oneshot::channel();
+    let routes = Arc::new(ClusterRoutes::new(store.clone(), Duration::from_secs(30)));
+    let proxy_task = tokio::spawn(hv2_api::sandbox_proxy::serve_tls(addr, routes, tls, rx));
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if tokio::net::TcpStream::connect(addr).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    let builder = || {
+        reqwest::Client::builder()
+            .no_proxy()
+            .resolve("app.example.com", addr)
+            .add_root_certificate(reqwest::Certificate::from_der(cert.cert.der()).unwrap())
+            .timeout(Duration::from_secs(5))
+    };
+    let clients = [
+        (
+            builder().http1_only().build().unwrap(),
+            reqwest::Version::HTTP_11,
+        ),
+        (
+            builder().http2_prior_knowledge().build().unwrap(),
+            reqwest::Version::HTTP_2,
+        ),
+    ];
+    let url = format!("https://app.example.com:{}/echo?literal=1", addr.port());
+    for port in [8080, 3000] {
+        assert_eq!(
+            client()
+                .put(&binding_url)
+                .header("x-api-key", KEY)
+                .json(&json!({"port":port}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
+        );
+        for (http, version) in &clients {
+            let response = http
+                .post(&url)
+                .body("body survives alias routing")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 200);
+            assert_eq!(response.version(), *version);
+            let echoed: Value = response.json().await.unwrap();
+            assert_eq!(echoed["sandbox"], id);
+            assert_eq!(echoed["port"], port.to_string());
+            assert_eq!(echoed["host"], format!("app.example.com:{}", addr.port()));
+            assert_eq!(echoed["path"], "/echo?literal=1");
+            assert_eq!(echoed["body"], "body survives alias routing");
+        }
+    }
+    store.delete_sandbox(&id).await.unwrap();
+    for (http, _) in &clients {
+        assert_eq!(http.get(&url).send().await.unwrap().status(), 400);
+    }
+    shutdown.send(()).unwrap();
+    proxy_task.await.unwrap().unwrap();
+    backend_task.abort();
+    let _ = backend_task.await;
+}
+
+#[tokio::test]
+async fn custom_domains_are_authenticated_owned_and_follow_port_updates() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_node, _) = fake_node(store.clone(), "domain-node", 4, Duration::from_secs(30)).await;
+    let base = control_plane(store.clone(), Some(KEY)).await;
+    let (_, a) = create(&base, json!({"templateID": "base"})).await;
+    let (_, b) = create(&base, json!({"templateID": "base"})).await;
+    let a = a["sandboxID"].as_str().unwrap();
+    let b = b["sandboxID"].as_str().unwrap();
+    let path = format!("{base}/sandboxes/{a}/domains/App.Example.com.");
+    for method in [
+        reqwest::Method::GET,
+        reqwest::Method::PUT,
+        reqwest::Method::DELETE,
+    ] {
+        let url = if method == reqwest::Method::GET {
+            format!("{base}/sandboxes/{a}/domains")
+        } else {
+            path.clone()
+        };
+        assert_eq!(
+            client()
+                .request(method, url)
+                .json(&json!({"port":8080}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+    }
+    for port in [8080, 3000] {
+        let response = client()
+            .put(&path)
+            .header("x-api-key", KEY)
+            .json(&json!({"port":port}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let binding: Value = response.json().await.unwrap();
+        assert_eq!(binding["domain"], "app.example.com");
+        assert_eq!(binding["port"], port);
+    }
+    let other = format!("{base}/sandboxes/{b}/domains/app.example.com");
+    assert_eq!(
+        client()
+            .put(&other)
+            .header("x-api-key", KEY)
+            .json(&json!({"port":9000}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    assert_eq!(
+        client()
+            .delete(&other)
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    let listed: Value = client()
+        .get(format!("{base}/sandboxes/{a}/domains"))
+        .header("x-api-key", KEY)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    let routes = ClusterRoutes::new(store.clone(), Duration::from_secs(30));
+    assert_eq!(
+        routes.resolve_hostname("APP.EXAMPLE.COM.:443").await,
+        Some((3000, a.into()))
+    );
+    for bad in [
+        "127.0.0.1",
+        "9000-sandbox.example.com",
+        "user@app.example.com",
+        "unknown.example.com",
+    ] {
+        assert!(routes.resolve_hostname(bad).await.is_none());
+    }
+    assert_eq!(
+        client()
+            .put(&path)
+            .header("x-api-key", KEY)
+            .json(&json!({"port":0}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        400
+    );
+    assert_eq!(
+        client()
+            .put(format!(
+                "{base}/sandboxes/missing/domains/missing.example.com"
+            ))
+            .header("x-api-key", KEY)
+            .json(&json!({"port":80}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        404
+    );
+    assert_eq!(
+        client()
+            .delete(&path)
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+    assert!(routes.resolve_hostname("app.example.com").await.is_none());
+    assert_eq!(
+        client()
+            .put(&path)
+            .header("x-api-key", KEY)
+            .json(&json!({"port":8080}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        200
+    );
+    store.delete_sandbox(a).await.unwrap();
+    assert!(routes.resolve_hostname("app.example.com").await.is_none());
+}
+
+#[tokio::test]
 async fn template_metadata_distinguishes_snapshot_cold_legacy_and_heterogeneous_nodes() {
     use hv2_cluster::model::TemplateInfo;
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
@@ -447,6 +712,7 @@ async fn scoped_keys_expire_and_inventory_cannot_leak_guest_credentials() {
     assert!(listed[0].get("envdAccessToken").is_none());
     for path in [
         format!("/sandboxes/{id}"),
+        format!("/sandboxes/{id}/domains"),
         "/volumes".into(),
         "/events/webhooks".into(),
     ] {
@@ -472,6 +738,32 @@ async fn scoped_keys_expire_and_inventory_cannot_leak_guest_credentials() {
         403
     );
     assert_eq!(node.running.lock().len(), 1);
+    let domain_url = format!("{base}/sandboxes/{id}/domains/scoped.example.com");
+    for (key, status) in [
+        ("inventory-fixture", 403),
+        ("expired-fixture", 401),
+        ("sandbox-fixture", 200),
+    ] {
+        assert_eq!(
+            http.put(&domain_url)
+                .header("x-api-key", key)
+                .json(&json!({"port":8080}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            status
+        );
+    }
+    assert_eq!(
+        http.delete(&domain_url)
+            .header("x-api-key", "sandbox-fixture")
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
     assert_eq!(
         http.get(format!("{base}/volumes"))
             .header("x-api-key", "sandbox-fixture")

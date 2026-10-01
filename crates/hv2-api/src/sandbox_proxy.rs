@@ -166,6 +166,13 @@ pub trait SandboxRoutes: Send + Sync + 'static {
     /// The address serving `port` for `sandbox`, if that sandbox exists.
     async fn resolve(&self, sandbox: &str, port: u16) -> Option<SocketAddr>;
 
+    /// Resolve an operator-bound hostname to a sandbox and guest port.
+    /// The authority may include the public proxy's port.
+    async fn resolve_hostname(&self, authority: &str) -> Option<(u16, String)> {
+        let _ = authority;
+        None
+    }
+
     /// [`Self::resolve`] for a request about to be sent, with a guard the
     /// proxy holds until that request's exchange is over -- response body
     /// included, which for a streamed command is the whole of its run.
@@ -492,7 +499,7 @@ async fn proxy(
     // sandbox it wants, while a hostname has to be parsed and may just be
     // whatever name the proxy was reached by -- `localhost:49983` in the
     // SDK's own default mode, which names no sandbox at all.
-    let route = route_of_headers(req.headers())
+    let mut route = route_of_headers(req.headers())
         .map(|(port, sandbox)| (port, sandbox.to_owned()))
         .or_else(|| {
             authority
@@ -501,13 +508,19 @@ async fn proxy(
                 .map(|(port, sandbox)| (port, sandbox.to_owned()))
         });
 
+    if route.is_none() {
+        if let Some(authority) = authority.as_deref() {
+            route = routes.resolve_hostname(authority).await;
+        }
+    }
+
     let Some((port, sandbox)) = route else {
         return Ok(refuse(
             grpc,
             StatusCode::BAD_REQUEST,
             grpc_status::INVALID_ARGUMENT,
             "nothing to route on: no e2b-sandbox-id header, and the authority \
-             is not {port}-{sandboxID}.{domain}",
+             is neither {port}-{sandboxID}.{domain} nor a bound custom domain",
         ));
     };
     let sandbox = sandbox.as_str();
@@ -616,6 +629,17 @@ async fn proxy(
     // Rewrite the authority to the backend's own, and keep everything else --
     // path, method, and the headers gRPC carries its metadata in.
     let (mut parts, body) = req.into_parts();
+    // Retain the public hostname for virtual-host applications even when
+    // HTTP/2's authority is rewritten for the next proxy hop.
+    if !parts.headers.contains_key(hyper::header::HOST) {
+        if let Some(value) = parts
+            .uri
+            .authority()
+            .and_then(|authority| hyper::header::HeaderValue::from_str(authority.as_str()).ok())
+        {
+            parts.headers.insert(hyper::header::HOST, value);
+        }
+    }
     // The route goes with the request as headers, because rewriting the
     // authority erases a route that was read from it: a proxy in front of
     // another proxy -- a cluster's control plane in front of a node -- would
