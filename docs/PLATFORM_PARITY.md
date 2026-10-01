@@ -946,3 +946,8 @@ later owner sample do not establish an atomic state or root cause. Interrupt
 delivery remains under investigation. This failed cohort cannot support a
 performance win; the lower failure count versus earlier shared-host runs does
 not establish a reliability improvement.
+
+The next diagnostic build also prints the existing owner-captured APIC base
+MSR and CR8 alongside the LAPIC image. This exposes APIC enable/BSP bits and
+CPU interrupt priority without additional register reads. The formatting check
+preserves both values; live failed-boot capture of these added fields is pending.
