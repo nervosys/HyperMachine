@@ -46,6 +46,7 @@ pub fn router(store: Store, token: Option<String>) -> Router {
             post(schedule_create).get(schedule_detail),
         )
         .route("/api/v1/schedules/{id}/publish", post(schedule_publish))
+        .route("/api/v1/schedules/{id}/cancel", post(schedule_cancel))
         .route(
             "/api/v1/schedules/{id}/occurrences",
             get(schedule_occurrences),
@@ -117,8 +118,17 @@ async fn schedule_detail(State(api): State<Api>, Path(id): Path<String>) -> Resp
     schedule_operation(StatusCode::OK, move || {
         Ok(json!({
             "id": id, "schedule": api.store.interval_schedule(&id)?,
+            "cancelled": api.store.interval_schedule_cancelled(&id)?,
             "publication_through_ms": api.store.interval_progress(&id)?
         }))
+    })
+    .await
+}
+
+async fn schedule_cancel(State(api): State<Api>, Path(id): Path<String>) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        api.store.cancel_interval_schedule(&id)?;
+        Ok(json!({"id": id, "cancelled": true}))
     })
     .await
 }
@@ -384,6 +394,7 @@ mod tests {
             ("POST", "/api/v1/schedules/test"),
             ("GET", "/api/v1/schedules/test"),
             ("POST", "/api/v1/schedules/test/publish"),
+            ("POST", "/api/v1/schedules/test/cancel"),
             ("GET", "/api/v1/schedules/test/occurrences"),
         ] {
             for token in [None, Some("wrong")] {
@@ -468,6 +479,24 @@ mod tests {
         );
         assert!(store.list().unwrap().is_empty());
         assert!(store.claim("worker", &[]).unwrap().is_none());
+        assert_eq!(
+            call(&app, "POST", "/api/v1/schedules/test/cancel", None, token)
+                .await
+                .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/test/publish",
+                Some("{}"),
+                token
+            )
+            .await
+            .0,
+            StatusCode::CONFLICT
+        );
     }
 
     #[tokio::test]

@@ -97,6 +97,8 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Stop future occurrence publication; preserves committed history
+    Cancel { id: String },
     /// Publish due occurrences repeatedly; does not execute jobs
     Watch {
         id: String,
@@ -138,6 +140,10 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::Cancel { id } => {
+                    s.cancel_interval_schedule(&id)?;
+                    serde_json::json!({"id": id, "cancelled": true})
+                }
                 ScheduleCommand::Watch {
                     id,
                     limit,
@@ -155,6 +161,9 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
                     tokio::pin!(shutdown);
                     let mut count = 0_u64;
                     loop {
+                        if s.interval_schedule_cancelled(&id)? {
+                            return Ok(0);
+                        }
                         let (store, name) = (s.clone(), id.clone());
                         let mut task = tokio::task::spawn_blocking(move || {
                             store.materialize_interval(&name, hv2_jobs::now_ms(), limit)
@@ -207,6 +216,7 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
                 }
                 ScheduleCommand::Status { id } => serde_json::json!({
                     "id": id, "schedule": s.interval_schedule(&id)?,
+                    "cancelled": s.interval_schedule_cancelled(&id)?,
                     "publication_through_ms": s.interval_progress(&id)?
                 }),
                 ScheduleCommand::Publish { id, now_ms, limit } => serde_json::to_value(

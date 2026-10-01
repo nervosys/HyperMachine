@@ -128,6 +128,7 @@ hm jobs --store DIR schedule create NAME interval.json
 hm jobs --store DIR schedule status NAME
 hm jobs --store DIR schedule publish NAME --limit 100
 hm jobs --store DIR schedule watch NAME --limit 100 --poll-ms 1000
+hm jobs --store DIR schedule cancel NAME
 hm jobs --store DIR schedule occurrences NAME --after-ms 1234567890000 --limit 100
 ```
 
@@ -147,6 +148,15 @@ otherwise Ctrl+C stops the loop after any accepted publication operation finishe
 Polling must be 1-60000 milliseconds. Output is a publication receipt, not a job
 result. The loop still does not execute commands or schedule VM work.
 
+`schedule cancel` permanently stops future committed publication for that name.
+Cancellation competes atomically with a batch commit; a batch that wins first
+stays in history. Already committed records remain readable. Repeated
+cancellation succeeds, status includes `cancelled`, and `watch` exits on observing
+cancellation. This does not cancel guest work. Names cannot be reactivated or
+reused. Interrupted publishers may leave uncommitted records, which committed
+occurrence reads exclude. Under sustained competing commits, cancellation can
+return a conflict after 32 attempts and must be retried.
+
 The same publication operations are served by `hm jobs serve`, with its existing
 bearer-token requirement applied to every schedule route:
 
@@ -156,10 +166,11 @@ bearer-token requirement applied to every schedule route:
 | `GET /api/v1/schedules/{id}` | Schedule and `publication_through_ms` |
 | `POST /api/v1/schedules/{id}/publish` with `{"limit":100}` | One bounded batch of occurrence records; optional `now_ms` overrides the wall clock |
 | `GET /api/v1/schedules/{id}/occurrences?after_ms=...&limit=100` | A page of committed records after an exclusive cursor |
+| `POST /api/v1/schedules/{id}/cancel` | `200 {"id": ..., "cancelled": true}`; preserves history |
 
 Publication and page limits must be 1-1024. Unknown publish fields are refused.
 Schedule filesystem operations run in blocking tasks. These routes provide no
-job execution, schedule update or cancellation yet. Automatic publication
+job execution or schedule update yet. Automatic publication
 currently runs through `schedule watch`.
 
 VM scheduling remains unimplemented. Inspection on 2026-10-01 found that
@@ -224,7 +235,7 @@ link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
 file. Filesystems without hard-link support return an error; there is no weaker
 fallback. Directory durability across power loss is not established. Schedule
-updates, cancellation, cron/timezones, dispatch reconciliation
+updates, cron/timezones, dispatch reconciliation and guest-job cancellation
 and guest execution remain to be implemented.
 
 The implementation must cover these requirements together:
@@ -262,7 +273,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 33 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 35 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -275,6 +286,8 @@ unprivileged user:
   of uncommitted records and records skipped under coalescing;
 - schedule API authentication on every route, duplicate conflicts, bounded
   publication and pages, invalid input rejection and no runnable-job creation;
+- durable schedule cancellation, preserved history, cancellation/publication
+  races, and authenticated rejection of publication after cancellation;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
