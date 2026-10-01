@@ -1,0 +1,26 @@
+{
+  "source_sha256": {
+    "crates/hv2-agent/src/guest_agent.rs": "73f494e39677764102bccf7cae348fd81f4887a5ca806d26338c060bc499ebcd",
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/snapshot/types.rs": "bcc7ac3084f97e447fda271dbaa94cf3e3a9ad8a6ec20971a4731ba494f5db37",
+    "crates/hv2-sandboxd/src/main.rs": "ac04693e1e8bbc6f046332f2c7e73f7148cdb51315ab41dfcbe825142d63abdf",
+    "Cargo.lock": "483b5c6c12d6964be69035547b60bc2ea773fb1daaa735db2d09526852516211"
+  },
+  "source_commit": "4773283914a3da01fb9148139752dede782f41fa",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "original_binary_sha256": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "-p",
+    "hv2-sandboxd"
+  ],
+  "build_exit_code": 0,
+  "baseline_binary_sha256": "f337c25d7d1c8e9b9b08d83a798fca27182042d7c6bcfe5ca38b7fb61f61b6a6",
+  "canonical_scored_binary_restored": true,
+  "build_output": "   Compiling hv2-core v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-core)\n   Compiling hv2-agent v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-agent)\n   Compiling hv2-net v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-net)\n   Compiling hv2-runtime v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-runtime)\n   Compiling hv2-api v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-api)\n   Compiling hv2-cluster v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-cluster)\n   Compiling hv2-sandboxd v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-sandboxd)\n    Finished `release` profile [optimized] target(s) in 3m 32s\n",
+  "build_output_sha256": "edc3e302bcf48d2b635cd23a0c76d2bfc7e7b90d78b722a4624eb52197e121a5",
+  "note": "Baseline built before any refusal-backoff candidate. Rust sources remained unchanged during build; intervening commit 201efeb only changes benchmark tools/docs. Original canonical scored binary was restored and source timestamp invalidated so later Cargo builds relink."
+}
