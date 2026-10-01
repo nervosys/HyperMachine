@@ -34,3 +34,6 @@
 docs/benchmarks/2026-09-30/owner-load-coordinator.py -text whitespace=cr-at-eol
 
 docs/benchmarks/2026-09-30/owner-pinned-load-coordinator.py -text whitespace=cr-at-eol
+
+# Preserve exact startup diagnostic evidence and source hashes.
+docs/benchmarks/2026-10-01/* -text whitespace=cr-at-eol
