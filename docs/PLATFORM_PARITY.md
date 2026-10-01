@@ -97,7 +97,7 @@ pass the acceptance criteria below.
 |---|---|---|
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Native Firecracker sweep verified at all four concurrencies; HyperMachine still trails. Managed competitor runs and bare-metal HyperMachine runs are missing |
 | Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Shared SDK harness and real concurrency-8 cohorts verified; full concurrency sweep and matched competitor runs remain missing |
-| Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Held-batch aggregate PSS measured for both native engines; daemon-retained allocations, fixed idle-period increments and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
+| Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Fixed five-second idle PSS and per-batch empty-node baselines verified at concurrency 1/8/50/100, 477/477 attempts per engine; HyperMachine held PSS was higher in all 12 paired batches. Retained-memory allocation source, shared-template attribution and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
 | Isolation and governance | Enforced tenant boundaries, scoped expiring keys, roles, auditable access, and escape tests | Scoped expiring keys and protected API tracing verified; tenant boundaries, roles, durable audit retention and resource attribution remain incomplete |
@@ -108,6 +108,14 @@ pass the acceptance criteria below.
 Mark a capability complete only after checking its effect through a shipped
 interface. Mark a performance win only after equivalent runs establish it;
 do not infer it from a vendor headline or a component microbenchmark.
+
+The [fixed-idle memory comparison](benchmarks/2026-10-01/idle-memory.md) records
+held totals, same-batch increments, individual idle ages and post-cleanup
+baselines. At concurrency 100, median held PSS was 8503.60 MiB for HyperMachine
+versus 8360.42 MiB for Firecracker; median same-batch increments were 8320.55
+versus 8360.42 MiB. The difference reflects a daemon baseline that grew after
+earlier batches. Three alternating pairs and shared nested hardware do not
+establish a repeatable memory or density win.
 
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
