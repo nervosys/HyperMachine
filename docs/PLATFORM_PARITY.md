@@ -691,6 +691,8 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | PIT stub and API-readiness correction, pinned repeat | Firecracker 1.17.0 | 100 / 100 | 1245.19 | 3125.96 |
 | Pre-kick PIC/PIT diagnostics, matched readiness deadlines | HyperMachine | 97 / 100 | 1170.51 | 3865.63 |
 | Pre-kick PIC/PIT diagnostics, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 815.35 | 3719.40 |
+| APIC base diagnostic, matched readiness deadlines | HyperMachine | 97 / 100 | 1313.56 | 3346.01 |
+| APIC base diagnostic, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 913.93 | 2321.68 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
@@ -950,7 +952,15 @@ not establish a reliability improvement.
 The next diagnostic build also prints the existing owner-captured APIC base
 MSR and CR8 alongside the LAPIC image. This exposes APIC enable/BSP bits and
 CPU interrupt priority without additional register reads. The formatting check
-preserves both values; live failed-boot capture of these added fields is pending.
+preserves both values. The [APIC base cohort](benchmarks/2026-09-30/local-engines-apic-base-pinned-load-100.json)
+and [coordinator](benchmarks/2026-09-30/apic-base-pinned-load-coordinator.py)
+verify live capture in all three failed boots (pairs 20, 29 and 56), each with
+APIC_BASE=0xfee00900 and CR8=1. The bootstrap APIC is enabled in these post-kick
+samples; pre-kick PIC requests and the idle address match the previous failures.
+Both engines retain 15-second guest-readiness budgets and CPU 0 contention.
+All artifact hashes remained unchanged and owned-process cleanup succeeded.
+HyperMachine passed 97/100 versus Firecracker 100/100, with slower successful-sample
+P50 and P99. This cohort does not establish a startup fix or performance win.
 
 A separate [read-only supported-CPUID probe](benchmarks/2026-09-30/supported-topology-cpu0-probe.py)
 records the [CPU 0 KVM table](benchmarks/2026-09-30/supported-topology-cpu0.json).
