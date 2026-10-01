@@ -1,0 +1,72 @@
+{
+  "experiment": "counterbalanced-default-vs-arena2-c100",
+  "blocks": 4,
+  "pairs_per_profile": 2,
+  "profiles": [
+    {
+      "block": 0,
+      "profile": "default",
+      "exit_code": 0,
+      "duration_seconds": 76.51837230299861,
+      "file": "allocator-block-0-default.json",
+      "raw_sha256": "aa733aa1581e3fe3ea54a005e5e49ec7afdb9cbadac294f3e3b15a81a882c0c8"
+    },
+    {
+      "block": 0,
+      "profile": "arena2",
+      "exit_code": 0,
+      "duration_seconds": 82.45778697199785,
+      "file": "allocator-block-0-arena2.json",
+      "raw_sha256": "d78f566ac2f0c0af5fb904381b01895be59bc250fc4feaead0680654b0810655"
+    },
+    {
+      "block": 1,
+      "profile": "arena2",
+      "exit_code": 0,
+      "duration_seconds": 80.21068401299999,
+      "file": "allocator-block-1-arena2.json",
+      "raw_sha256": "6313b0341f2d01d3ebaf4d638c9e0d6ae1bd79c0a14388c693933140fb213554"
+    },
+    {
+      "block": 1,
+      "profile": "default",
+      "exit_code": 0,
+      "duration_seconds": 81.35178597200138,
+      "file": "allocator-block-1-default.json",
+      "raw_sha256": "643bf1e3be4a2ff101470d62aaf68eb1afe865a6611d2e27ff7ca5fbd1b93c3e"
+    },
+    {
+      "block": 2,
+      "profile": "default",
+      "exit_code": 1,
+      "duration_seconds": 97.86174501799906,
+      "file": "allocator-block-2-default.json",
+      "raw_sha256": "7353a7dd062e6f90f69c84b63c607cf4fc8781b157043397cdea4a63576b1c37"
+    },
+    {
+      "block": 2,
+      "profile": "arena2",
+      "exit_code": 1,
+      "duration_seconds": 100.00320402999932,
+      "file": "allocator-block-2-arena2.json",
+      "raw_sha256": "155e467ef7f9a2962dcf661ab6d5e4276d11349796f4849cd942fc5277de22c5"
+    },
+    {
+      "block": 3,
+      "profile": "arena2",
+      "exit_code": 0,
+      "duration_seconds": 88.85606522399758,
+      "file": "allocator-block-3-arena2.json",
+      "raw_sha256": "2421cac4048efa5a18802993fdb891fb7d0f8d3a666be146971a3e5bc6bd5df9"
+    },
+    {
+      "block": 3,
+      "profile": "default",
+      "exit_code": 1,
+      "duration_seconds": 86.42206576700119,
+      "file": "allocator-block-3-default.json",
+      "raw_sha256": "83ad1062be13911c481d6158bfdebd3907b417f5c2a815e86961cb65126ed1ad"
+    }
+  ],
+  "matrix_sha256": "671b020f65dad697bf2bf701c6195bbb4c71643cb303f6ac2504e75359e1c647"
+}

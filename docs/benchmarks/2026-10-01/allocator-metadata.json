@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-01",
+  "attempts": 3200,
+  "passed": 3029,
+  "failed": 171,
+  "all_cohorts_passed": false,
+  "cleanup_and_artifact_checks_passed": true,
+  "arena_limit_adopted": false,
+  "production_defaults_changed": false,
+  "sha256": {
+    "allocator-block-0-default.json": "aa733aa1581e3fe3ea54a005e5e49ec7afdb9cbadac294f3e3b15a81a882c0c8",
+    "allocator-block-0-arena2.json": "d78f566ac2f0c0af5fb904381b01895be59bc250fc4feaead0680654b0810655",
+    "allocator-block-1-arena2.json": "6313b0341f2d01d3ebaf4d638c9e0d6ae1bd79c0a14388c693933140fb213554",
+    "allocator-block-1-default.json": "643bf1e3be4a2ff101470d62aaf68eb1afe865a6611d2e27ff7ca5fbd1b93c3e",
+    "allocator-block-2-default.json": "7353a7dd062e6f90f69c84b63c607cf4fc8781b157043397cdea4a63576b1c37",
+    "allocator-block-2-arena2.json": "155e467ef7f9a2962dcf661ab6d5e4276d11349796f4849cd942fc5277de22c5",
+    "allocator-block-3-arena2.json": "2421cac4048efa5a18802993fdb891fb7d0f8d3a666be146971a3e5bc6bd5df9",
+    "allocator-block-3-default.json": "83ad1062be13911c481d6158bfdebd3907b417f5c2a815e86961cb65126ed1ad",
+    "allocator-blocks.json": "10355ffabb1ef0847d3d67e57fb84d3b2018a93b15e7d52a6f309e8e200b411b",
+    "allocator-summary.json": "59083a2efab6c4915c8dd6066492b23bf4bd3876169c8ebde1306eaf0e8f68d0",
+    "allocator-coordinator.py": "e09c8fd8f61cc68360ca2e03e84690eb9a8c6d30d732965a68c2eda539d25055",
+    "allocator-matrix.py": "671b020f65dad697bf2bf701c6195bbb4c71643cb303f6ac2504e75359e1c647",
+    "allocator-harness.py": "aa75da562719e49ea0955c31278327f4c32e2504f431006dc8cc2a9a56799efa",
+    "allocator-shared-harness.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "allocator-firecracker-harness.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "analyze-allocator.py": "c2c45fce7ccdf5f6a93cd46452c8d29be7c301b9f59b85a3dcf2042ff6180c3b"
+  }
+}
