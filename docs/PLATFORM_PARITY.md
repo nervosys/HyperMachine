@@ -695,6 +695,8 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | APIC base diagnostic, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 913.93 | 2321.68 |
 | Singleton topology correction, matched readiness deadlines | HyperMachine | 93 / 100 | 1796.93 | 11752.53 |
 | Singleton topology correction, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 1373.81 | 4418.93 |
+| Owner interrupt events, matched deadlines and thread probes | HyperMachine | 82 / 100 | 1897.66 | 6517.16 |
+| Owner interrupt events, matched deadlines and thread probes | Firecracker 1.17.0 | 100 / 100 | 1488.91 | 5003.76 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
@@ -1018,3 +1020,17 @@ accounting alone cannot separate guest execution from host retry-loop work;
 KVM_RUN EINTR/EAGAIN counters are the next check. A preceding 15-second probe
 also ran during this cohort. These observer workloads and the shared host limit
 performance interpretation; the samples are diagnostic evidence, not a win.
+
+The [completed owner-event cohort](benchmarks/2026-09-30/local-engines-owner-events-pinned-load-100.json)
+and [coordinator](benchmarks/2026-09-30/owner-events-pinned-load-coordinator.py)
+record 82/100 HyperMachine passes versus Firecracker 100/100. Artifacts remained
+unchanged and owned-process cleanup passed. All 18 post-kick failed-boot event
+samples report flags 0xd, IRQ_INJECTED=0, valid SHADOW=0 and valid NMI_PENDING=0.
+The vector field is not evidence of a pending IRQ when injection is zero.
+The raw EXCEPTION_PENDING=0 values are unavailable: flags lack
+KVM_VCPUEVENT_VALID_PAYLOAD (0x10), which the current formatter neglected to
+check. This reporting error requires correction; these values cannot support
+exception-state conclusions. The [KVM API documentation](https://docs.kernel.org/virt/kvm/api.html)
+specifies that validity requirement. The failed shared-host cohort, including
+the separately recorded thread probes, supports no performance or causal
+reliability win. Startup reliability remains unresolved.
