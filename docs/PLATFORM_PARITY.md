@@ -37,7 +37,7 @@ container. The comparison is about what surrounds the VM.
 | Backups to object storage | yes | no | **Absent** |
 | Scheduled jobs and event triggers | `*.run.ts` | no | **Partial**: lifecycle webhooks only |
 | Desktop in a browser, browser for agents | yes | web terminal | **Absent** |
-| MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, checked with the official client on real KVM; streaming, cancellation and the wider `hv2-agent` surface remain absent |
+| MCP for agents | skill + MCP | Shelley agent | **Partial**: 12 lifecycle/exec/checkpoint tools plus 2 opt-in binary file tools over MCP stdio, with cancellable client waits checked on real KVM; accepted remote work can continue, and streaming plus the wider `hv2-agent` surface remain absent |
 | Email in and out | no | yes | **Absent** |
 | Multi-node, self-hosted | contact sales | enterprise | **Real**: control plane, Redis store, cross-node resume, mTLS, Helm chart |
 | GPU | no | no | **Partial**: VFIO code, not wired to sandboxes |
@@ -692,8 +692,9 @@ smaller file limit keeps both representations within the 1 MiB frame budget.
 
 Discovery and tool calls require initialization; notifications do not execute
 tool calls or receive responses. Invalid IDs/arguments are protocol errors,
-and input frames larger than 1 MiB terminate the session. Operations execute
-sequentially. Streaming output, in-flight cancellation, Streamable HTTP,
+and input frames larger than 1 MiB terminate the session. Tool operations
+execute sequentially, while the transport continues reading bounded input.
+Streaming output, Streamable HTTP,
 resources/prompts/tasks and the wider `hv2-agent` tool surface
 remain unsupported. Created VMs persist until deleted or their lifetime
 expires; closing the client does not delete them. Interrupted creations can
@@ -722,6 +723,40 @@ artifacts retained their recorded hashes, and the owned node was stopped.
 Raw evidence is `benchmarks/2026-09-30/mcp-stdio-files.json`; its exact
 coordinator is `mcp-stdio-files-coordinator.py`. This functional check does
 not measure performance or establish full agent-tool parity.
+
+The transport handles MCP `notifications/cancelled` during an active API
+wait, matching the original request's string or integer ID. It drops the
+client's HTTP future and sends no response for that cancelled request.
+Queued requests can also be cancelled before reaching the API. Unknown,
+completed and malformed cancellation notifications are ignored, and
+`initialize` is not cancellable. Up to 8 queued messages and at most 1 MiB
+of aggregate queued input are accepted; exceeding either bound terminates
+the session. Partial frames survive a response/cancellation race and retain
+the cumulative 1 MiB frame limit. Input EOF drops the active client wait.
+This follows the [MCP cancellation protocol](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation).
+
+**Cancellation does not undo accepted remote work or kill a guest process.**
+The underlying lifecycle, file and exec APIs may continue their operations;
+an interrupted creation can still leave an ID unknown to the client.
+Stopping guest processes requires the existing process signal interface,
+and deleting sandboxes requires an explicit lifecycle call.
+
+All 22 sandbox CLI/MCP tests and strict all-targets CLI Clippy pass on
+Windows and Linux. The official client
+1.23.3 cancellation exercise confirmed that a real
+guest command had started before sending a cancellation notification. The
+same session then answered a ping within the two-second functional budget
+(1.73 ms observed), sent no cancelled-request response, and remained usable.
+The guest command finished afterward, explicitly verifying the limitation
+above. The 25 existing tool calls, one cancelled exec request and one ping
+also retained the binary-file, checkpoint, pause/resume, fork and failure
+checks. Both guests were deleted, the node list was empty, the owned node
+stopped and recorded artifact hashes were unchanged. Raw evidence and its
+exact coordinator are `benchmarks/2026-09-30/mcp-stdio-cancellation.json`
+and `mcp-stdio-cancellation-coordinator.py`; the fixture uses public official
+client APIs and observes the outgoing protocol ID through a transparent
+write-stream wrapper. This is a functional responsiveness check, not a
+latency benchmark or full remote-operation cancellation.
 
 
 ## Same-host Firecracker cold comparison (2026-09-30)
