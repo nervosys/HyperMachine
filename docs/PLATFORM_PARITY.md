@@ -1088,6 +1088,16 @@ values do not form an atomic timer comparison. All six Linux boot-diagnostic
 tests and formatting pass, including missing/zero/full-width clock values.
 Runtime capture of these fields during another failed boot remains pending.
 
+A separate failure-diagnostic daemon (`0341fe7e…`) then ran ten alternating
+C100 engine pairs with the original gzip guest, eight-CPU affinity and one
+CPU-0 worker. All 2000 attempts passed (1000 per engine), with stable artifacts,
+worker liveness, empty-node checks and daemon cleanup. Warning-level logging
+was retained. This cohort had no failures and therefore collected no failed-boot
+timer samples. It does not resolve the ten prior timeouts or establish a
+reliability fix; only failure-message formatting changed, not timer behavior.
+The exact coordinator, raw report and analysis use `timer-diagnostic-` names
+in the same evidence directory. The original scored binary hash is restored.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore
