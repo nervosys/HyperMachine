@@ -650,13 +650,14 @@ This is compatibility evidence, not a latency benchmark or a competitor win.
 
 The user has no competitor endpoints or dedicated matched host. We therefore
 ran Firecracker v1.17.0 locally against HyperMachine on the same shared WSL
-nested-KVM host. Each cohort contains 20 alternating AB/BA pairs, concurrency
+nested-KVM host. Cohorts contain 20, 100 or 200 alternating AB/BA pairs, concurrency
 one, 1 vCPU and 1024 MiB. Both engines boot the exact same Linux kernel and
 BusyBox guest-agent initrd and must return an exact unique shell marker.
 HyperMachine uses a prestarted HTTP daemon with `--no-template`; Firecracker
 starts a process and configures its UNIX API for each sample. Timings end at
 the verified first command response. These native control paths differ, and
-the host has other workloads and no CPU pinning. This is a cold sandbox
+the host has other workloads. Most cohorts are unpinned; the explicitly labeled
+pinned contention cohort places both engines and one CPU worker on CPU 0. This is a cold sandbox
 comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 
 | Cohort | Engine | Valid / attempted | Readiness P50 (ms) | Readiness P99 (ms) |
@@ -669,9 +670,15 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Normal-logging reliability repeat | Firecracker 1.17.0 | 100 / 100 | 802.88 | 2485.07 |
 | Daemon owner-diagnostic build | HyperMachine | 200 / 200 | 692.47 | 763.00 |
 | Daemon owner-diagnostic build | Firecracker 1.17.0 | 200 / 200 | 403.88 | 454.65 |
+| Two unpinned CPU workers | HyperMachine | 100 / 100 | 717.83 | 823.35 |
+| Two unpinned CPU workers | Firecracker 1.17.0 | 100 / 100 | 414.28 | 470.27 |
+| One contending worker, all pinned to CPU 0 | HyperMachine | 91 / 100 | 1159.99 | 1324.16 |
+| One contending worker, all pinned to CPU 0 | Firecracker 1.17.0 | 100 / 100 | 820.63 | 874.96 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
-are retained in the reports and invalidate the first three normal-logging comparisons. The later 200-pair cohort passed. The lower
+are retained in the reports and invalidate the first three normal-logging comparisons
+and the pinned contention comparison. The 200-pair and unpinned two-worker cohorts
+passed. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
 failed 5/140 attempts in the first three normal-logging cohorts while Firecracker passed 140/140. HyperMachine's median was slower in every recorded normal-logging cohort. We have not achieved across-the-board superiority.
 
@@ -769,8 +776,8 @@ completed 100/100 guest-readiness checks and cleanups with unchanged binary,
 source, kernel and initrd hashes. It did not reproduce a failure and therefore
 captured no stalled guest state. Its lower-level control path and optimization
 profile differ from the failing release daemon; it does not establish that the
-startup defect is fixed. Live daemon failure-report integration remains to be
-verified after rebuilding the daemon.
+startup defect is fixed. The later pinned contention cohort verified live daemon failure-report integration
+in nine failed readiness responses.
 
 
 The [release-profile lower-level probe](benchmarks/2026-09-30/cold-owner-diagnostics-release.json)
@@ -779,8 +786,8 @@ but captured no stalled state. Its control path still differs from the daemon:
 it uses the machine model's automatic COM1 attachment, whereas the daemon
 explicitly initializes and registers COM1 before launch, as well as a different
 CID range and no HTTP request lifecycle. No root cause or fix follows from
-this non-reproduction. The actual daemon must be rebuilt and its failure
-response sampled to investigate the previously captured UART-stage stall.
+this non-reproduction. The later pinned contention cohort reproduced the actual daemon failure and
+sampled its architectural state beyond the previously captured UART exit.
 
 
 The [rebuilt-daemon 200-pair cohort](benchmarks/2026-09-30/local-engines-daemon-owner-200.json)
@@ -805,3 +812,27 @@ report. Neither workers nor engines were pinned. HyperMachine P50/P99 was
 717.83/823.35 ms versus Firecracker 414.28/470.27 ms. No readiness warning or
 stalled-owner sample was produced. This supports only these measured attempts,
 not a fixed startup defect or superiority under general host contention.
+
+
+The [pinned contention cohort](benchmarks/2026-09-30/local-engines-owner-pinned-load-100.json)
+completed only 91/100 HyperMachine attempts versus 100/100 Firecracker attempts.
+Both engines, the driver and one contending CPU worker inherited CPU-0 affinity.
+The worker stayed alive throughout and was terminated and reaped afterward;
+artifact hashes were unchanged and node cleanup completed. Its
+[exact coordinator](benchmarks/2026-09-30/owner-pinned-load-coordinator.py) SHA256
+is `c98e6289443031d49dc5cde7dd49727c28bff4aa7e13ec2489c25decf91b60e7`,
+matching the raw report. Failed attempts invalidate this performance comparison;
+the successful-sample percentiles in the table are not a reliability-adjusted win.
+
+All nine failures had no console output, 2401 total exits and no further exits
+during the diagnostic window. Owner samples consistently returned
+`RIP=0xffffffff81eda95f`, `CR3=0x2a2e000` and flags with interrupts enabled.
+Disassembly of the exact benchmark kernel shows `sti` at `0xffffffff81eda95d`,
+`hlt` at `0xffffffff81eda95e`, then `cli` at the captured RIP. This is consistent
+with a guest halted awaiting an interrupt. The diagnostic kick can wake the
+vCPU before its owner samples state, so `run_state=Runnable` does not establish
+that the guest was spinning during the timeout. Linux's
+[native safe halt implementation](https://raw.githubusercontent.com/torvalds/linux/v6.6/arch/x86/include/asm/irqflags.h)
+uses `sti; hlt`; that source is v6.6, while the measured kernel is 6.6.52.
+The exact helper identity and missing wakeup cause remain unconfirmed. No startup
+fix or across-the-board feature/performance advantage has been established.
