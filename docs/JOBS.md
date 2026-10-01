@@ -169,6 +169,14 @@ dispatched jobs. A successful commit followed by process loss also requires a
 future dispatcher to recover from persistent records, rather than relying on
 the returned in-memory batch. This operation does not enqueue or execute jobs.
 
+`Store::committed_interval_occurrences(id, cursor, limit)` reads a bounded page
+from the committed chain, using an exclusive scheduled-time cursor. It excludes
+uncommitted records and older records skipped by a committed coalescing step,
+and validates returned records against the schedule. A dispatcher can recover
+these records after losing an in-memory batch. This read neither claims work
+nor acknowledges dispatch; a durable dispatcher and execution receipts are
+still required. Page reads also traverse the chain from its beginning.
+
 Publication writes and syncs a temporary file before creating an exclusive hard
 link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
@@ -205,7 +213,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 31 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 32 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -214,6 +222,8 @@ unprivileged user:
   one winning commit among eight concurrent writers;
 - interrupted batch publication reconciled after reopening, followed by
   bounded continuation without republishing prior occurrence times;
+- committed occurrence pages recovered after reopening, including exclusion
+  of uncommitted records and records skipped under coalescing;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
