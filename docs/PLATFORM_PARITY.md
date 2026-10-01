@@ -180,6 +180,9 @@ a halted real-mode guest with a captured TSC deadline and verifies entry into
 its interrupt handler. Omitting the deadline leaves the control halted until
 the bounded test kicks and joins its runner. Both controls passed, narrowing
 the resume investigation without proving the cause of the retained timeout.
+The extended control also measures that guest TSC has passed the captured
+deadline before first entry, then still reaches the handler. This verifies
+that specific delayed-start wakeup window without explaining the SDK failure.
 
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
