@@ -4,6 +4,41 @@ use hv2_core::{BootSource, HypervisorPlatform, VMConfig, VMState, VM};
 use std::{sync::Arc, time::Duration};
 
 #[tokio::test]
+async fn singleton_guest_cpuid_reports_its_provisioned_processor_count() {
+    if HypervisorPlatform::detect() != HypervisorPlatform::Kvm {
+        eprintln!("skipping singleton topology: no usable /dev/kvm");
+        return;
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let image = directory.path().join("cpuid.bin");
+    // Real mode: mov eax,1; cpuid; hlt. Preserve the CPUID result for capture.
+    std::fs::write(&image, [0x66, 0xb8, 1, 0, 0, 0, 0x0f, 0xa2, 0xf4]).unwrap();
+    let vm = Arc::new(
+        VM::new(VMConfig {
+            name: "singleton-cpuid".into(),
+            vcpu_count: 1,
+            memory_size: 16 * 1024 * 1024,
+            boot: Some(BootSource::raw(&image)),
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+    vm.provision().await.unwrap();
+    vm.launch().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let sampled = vm.diagnostic_vcpu_states().await;
+    tokio::time::timeout(Duration::from_secs(10), vm.stop())
+        .await
+        .expect("CPUID guest must remain stoppable")
+        .unwrap();
+    let states = sampled.unwrap();
+    assert_eq!(states[0].general.rip, 9);
+    assert_eq!((states[0].general.rbx >> 16) & 0xff, 1);
+    assert_eq!((states[0].general.rbx >> 24) & 0xff, 0);
+    assert_eq!(states[0].general.rdx & (1 << 28), 0);
+}
+
+#[tokio::test]
 async fn machine_interrupt_state_is_readable_before_kicking_a_halted_owner() {
     if HypervisorPlatform::detect() != HypervisorPlatform::Kvm {
         eprintln!("skipping machine diagnostics: no usable /dev/kvm");
