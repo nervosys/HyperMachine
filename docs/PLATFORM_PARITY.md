@@ -871,7 +871,29 @@ Connection failures record queue/connect timing and `phase=connect`;
 completed ping attempts include all three durations and their success state.
 This instrumentation preserves the existing blocking-task execution and
 timeout arguments. Formatting and Linux all-targets agent compilation pass;
-no cohort with these finer stages has yet been measured.
+a finer-stage cohort is recorded below.
+
+The dedicated traced daemon (`c3e96cab…`) then completed two alternating
+C100 batch pairs: all 400 attempts passed and all 200 HyperMachine IDs
+matched both daemon and cold-readiness stages. Guest probes were disabled;
+the scored daemon was restored to its original `8ea52a36…` hash.
+
+| Cold readiness component | Mean | Median | Maximum |
+| --- | ---: | ---: | ---: |
+| Blocking-task queue | 8.73 ms | 5.19 ms | 116.07 ms |
+| Vsock connection | 6239.36 ms | 6225.59 ms | 8902.98 ms |
+| Ping | 15.62 ms | 6.14 ms | 168.63 ms |
+
+Connection timing includes waiting for guest boot, vsock driver and listener
+readiness; it is not isolated transport overhead. This cohort directs the
+next investigation toward that path rather than blocking-pool queueing or
+ping handling. Two correlated batches per engine, shared nested hardware
+and tracing do not establish causal attribution or a performance win.
+Cleanup, worker liveness and artifact checks passed. The raw log, matched
+stages, exact coordinator and verifying analysis are retained under the
+`cold-readiness-` prefix in `benchmarks/2026-10-01`; five parser tests pass
+on Windows and Linux. Historical wrapper versions remain archived so their
+recorded hashes survive the optional finer-stage collection mode.
 
 ## Same-host Firecracker cold comparison (2026-09-30)
 

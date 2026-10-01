@@ -1,0 +1,31 @@
+{
+  "diagnostic_only": true,
+  "passing_attempts": 400,
+  "matched_ids": 200,
+  "raw_sha256": "6703f7d8361a3be07203e8f8cea60525a28b7a3dc0c21d74997196a14d97acdd",
+  "analysis_sha256": "d73aa98299e02358f9880963084e9f35fb6711d0ddce53ddf90c912a4f58ad66",
+  "stages_ms": {
+    "blocking_queue_ms": {
+      "n": 200,
+      "mean": 8.72636505,
+      "median": 5.193461,
+      "min": 0.43773100000000004,
+      "max": 116.068244
+    },
+    "connect_ms": {
+      "n": 200,
+      "mean": 6239.35740318,
+      "median": 6225.5945355,
+      "min": 4002.695233,
+      "max": 8902.979227
+    },
+    "ping_ms": {
+      "n": 200,
+      "mean": 15.623638835,
+      "median": 6.1426625,
+      "min": 0.08598700000000001,
+      "max": 168.627176
+    }
+  },
+  "limitation": "Connection timing includes waiting for guest boot, driver and listener readiness; it does not isolate transport overhead. Two correlated batches per engine on shared nested hardware do not establish a performance win."
+}

@@ -38,26 +38,6 @@ def stages(log):
     return result
 
 
-def cold_stages(log):
-    result = {}
-    for line in re.sub(r"\x1b\[[0-9;]*m", "", log).splitlines():
-        if "cold guest readiness stages" not in line: continue
-        identity = re.search(r'\bvm="?(sbx-[A-Za-z0-9]+)"?', line)
-        phase = re.search(r'\bphase="?(connect|ping)"?', line)
-        succeeded = re.search(r'\bsucceeded=(true|false)\b', line)
-        if not identity or not phase or not succeeded:
-            raise RuntimeError("incomplete cold readiness identity")
-        name = identity[1]
-        if name in result: raise RuntimeError("duplicate cold readiness log")
-        row = {"phase":phase[1], "succeeded":succeeded[1] == "true"}
-        for field in ["blocking_queue_ms", "connect_ms"] + (["ping_ms"] if phase[1] == "ping" else []):
-            value = re.search(r"\b" + field + r"=([0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\b", line)
-            if not value: raise RuntimeError("incomplete cold readiness duration")
-            row[field] = float(value[1])
-        result[name] = row
-    return result
-
-
 def main():
     original_popen = burst.subprocess.Popen
     original_request = burst.engines.request
@@ -65,9 +45,6 @@ def main():
     original_memory = burst.engines.memory
     collect_guest = "--collect-guest-boot" in sys.argv
     if collect_guest: sys.argv.remove("--collect-guest-boot")
-    collect_cold = "--collect-cold-readiness" in sys.argv
-    if collect_cold: sys.argv.remove("--collect-cold-readiness")
-    log_filter = "hv2_sandboxd=debug" + (",hv2_agent::cold_readiness=debug" if collect_cold else "")
     local = threading.local()
     active = {}
     lock = threading.Lock()
@@ -77,7 +54,7 @@ def main():
         retained = Path(directory)/"node.log"
         def launch(command, *args, **kwargs):
             if Path(command[0]).name == "hv2-sandboxd" and "--no-template" in command:
-                kwargs["env"] = {**kwargs["env"], "RUST_LOG":log_filter}
+                kwargs["env"] = {**kwargs["env"], "RUST_LOG":"hv2_sandboxd=debug"}
                 os.link(kwargs["stdout"].name, retained)
             process = original_popen(command, *args, **kwargs)
             if Path(command[0]).name == "hv2-sandboxd" and "--no-template" in command:
@@ -124,26 +101,17 @@ def main():
             burst.engines.memory = original_memory
         report = json.loads(output.getvalue())
         report["diagnostic_only"] = True
-        report["hypermachine_log_filter"] = log_filter
+        report["hypermachine_log_filter"] = "hv2_sandboxd=debug"
         report["diagnostic_sha256"] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
         report["guest_boot_collected"] = collect_guest
         report["guest_observations"] = observations
         report["guest_probe_scope"] = "Every tenth arrival index, after all guests validate while held; memory readings follow these extra commands"
         if retained.stat().st_size > 4*1024*1024: raise RuntimeError("diagnostic log exceeds 4 MiB limit")
-        log = retained.read_text(errors="replace")
-        report["startup_stages_ms"] = stages(log)
-        if collect_cold:
-            report["cold_readiness_log"] = log
-            report["cold_readiness_stages_ms"] = cold_stages(log)
+        report["startup_stages_ms"] = stages(retained.read_text(errors="replace"))
         rows = [row for batch in report["batches"] if batch["engine"] == "hypermachine" for row in batch["samples"]]
         report["stage_ids_match_passed_requests"] = set(report["startup_stages_ms"]) == {
             row["sandbox_id"] for row in rows if row["success"]}
         report["success"] = report["success"] and report["stage_ids_match_passed_requests"]
-        if collect_cold:
-            report["cold_ids_match_passed_requests"] = {
-                name for name, row in report["cold_readiness_stages_ms"].items() if row["succeeded"]
-            } == {row["sandbox_id"] for row in rows if row["success"]}
-            report["success"] = report["success"] and report["cold_ids_match_passed_requests"]
         print(json.dumps(report, indent=2))
         return code if report["success"] else 1
 
