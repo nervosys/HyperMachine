@@ -154,7 +154,8 @@ An optional `vm` target is preserved in the schedule and each occurrence:
 
 The profile is an operator-managed name, not an endpoint URL or credential.
 Accepting the schedule spec does not establish that the profile or sandbox exists.
-VM dispatch is not implemented yet. Sandbox IDs permit
+Explicit dispatch is available as described below; automatic guest execution and
+reconciliation remain incomplete. Sandbox IDs permit
 1-128 ASCII letters, digits, hyphens or underscores; profiles use the schedule
 name format. Timeouts must be 1-86400 seconds. Guest working directories must be
 absolute UTF-8 paths beginning with `/`, interpreted independently of the host
@@ -217,7 +218,7 @@ Schedule filesystem operations run in blocking tasks. These routes provide no
 job execution or schedule update yet. Automatic publication
 currently runs through `schedule watch`.
 
-VM scheduling remains unimplemented. Inspection on 2026-10-01 found that
+Full VM scheduling remains incomplete. Inspection on 2026-10-01 found that
 `hv2-jobs/src/worker.rs::run_job` launches a local `ProcessSandbox`; its
 cancellation and lease-loss watcher controls that local process. Launching
 `hm sandbox vm exec` from this worker would not transfer those guarantees to
@@ -234,8 +235,29 @@ The `hv2-jobs::dispatch` library now provides durable claims and immutable guest
 completion receipts. `claim_vm_occurrence` accepts only committed occurrences
 with VM targets and grants one exclusive claim. `vm_dispatch_state` recovers the
 claim and optional result; `complete_vm_occurrence` checks its claim token and
-records one result, allowing identical receipt replay. These are library APIs;
-no worker starts guest commands through them yet.
+records one result, allowing identical receipt replay. The explicit CLI dispatcher
+uses these APIs; an automatic VM worker is not implemented yet.
+
+```text
+hm jobs --store DIR schedule dispatch NAME SCHEDULED_MS --profiles profiles.json --worker operator
+```
+
+This explicitly dispatches one committed VM occurrence. It checks profile
+configuration and requires the HTTP deadline to exceed the guest timeout before
+claiming, then connects (resuming a paused VM through the existing API), extending
+the sandbox lifetime to guest timeout plus 60 seconds, and sends `/exec` once.
+Arguments, environment assignments and the working directory are shell-quoted;
+`HM_JOB_ID` is set to the schedule name and scheduled time. Results are JSON with
+guest stdout/stderr, exit code and timeout status. A completed API operation exits
+successfully even for a nonzero guest exit; inspect the recorded guest result.
+
+The claim is created before network dispatch. API failures or malformed responses
+leave it unresolved and a second dispatch is rejected. Server error bodies and
+connection descriptor tokens are not returned. Completion status is durable;
+stdout/stderr currently appear only in CLI output and are not stored durably.
+No automatic retry, guest process reconciliation, guest cancellation or logs
+recovery is implemented. The protocol fixture checks request fidelity and
+uncertain-result behavior; real KVM dispatch verification remains pending.
 
 A claim without a receipt is unresolved, including after worker loss. It may
 represent a running guest command, an unrecorded completion, or a dispatch that
@@ -250,7 +272,8 @@ The `hv2-jobs::schedule` module now provides immutable interval schedules and
 stable occurrence records keyed by schedule ID and scheduled Unix milliseconds.
 `Store::create_interval_schedule`, `interval_schedule` and
 `record_interval_occurrence` are library APIs; the CLI supports explicit bounded
-publication and an automatic publication loop, but no worker dispatch consumes them yet.
+publication and an automatic publication loop. Explicit VM dispatch consumes one
+committed record; no automatic VM worker consumes them yet.
 Interval arithmetic stays anchored to the first
 timestamp and checks overflow. An occurrence stores the job configuration with
 its earliest start set to that occurrence's time.
@@ -322,7 +345,7 @@ duplicate rejection, bounded publication, persisted status, occurrence pages,
 invalid-limit/path rejection, and an empty runnable job queue.
 The automatic-publication test verifies two bounded ticks and a second
 invocation continuing from persistent progress on both Windows and Linux.
-The suite has four passing CLI tests on Windows and five on Linux. A live
+The suite has five passing CLI tests on Windows and six on Linux. A live
 publisher test cancels the schedule from a second process, waits for a successful
 exit within five seconds, and checks committed records afterward. Linux also
 tests SIGINT delivered to the running publisher, a successful bounded exit and
@@ -332,6 +355,9 @@ Ctrl+C delivery remains untested.
 The profile test resolves a disposable key in the child process, verifies the
 key is absent from stdout/stderr, and rejects an unset required variable. A
 profile unit test checks shared endpoint rules and timeout/key validation.
+The dispatch fixture verifies authenticated connect/exec calls, quoted guest
+configuration, durable exit status, duplicate rejection, and unresolved ownership
+after an execution API failure. It is a protocol fixture, not a guest execution test.
 
 **`tools/e2e-jobs.sh`** passes 18 of 18 checks on Windows (Git Bash) and on Linux as an
 unprivileged user:

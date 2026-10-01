@@ -265,3 +265,87 @@ fn profile_check_resolves_child_environment_without_printing_credentials() {
     );
     assert!(!run(false).status.success());
 }
+
+#[tokio::test]
+async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execution() {
+    use axum::{
+        extract::Json,
+        http::{HeaderMap, StatusCode},
+        response::IntoResponse,
+        routing::post,
+        Router,
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&calls);
+    let app = Router::new()
+        .route("/sandboxes/guest/connect", post(|headers: HeaderMap| async move {
+            assert_eq!(headers["x-api-key"], "dispatch-fixture-key");
+            Json(json!({"envdAccessToken":"do-not-print"}))
+        }))
+        .route("/sandboxes/guest/exec", post(move |headers: HeaderMap, Json(body): Json<Value>| {
+            let count = Arc::clone(&count);
+            async move {
+                assert_eq!(headers["x-api-key"], "dispatch-fixture-key");
+                assert_eq!(body["timeout_secs"], 30);
+                let cmd = body["cmd"].as_str().unwrap();
+                assert!(cmd.starts_with("cd '/work space' && exec 'env' '--'"));
+                assert!(cmd.contains("'TEST=v'\\''alue'"));
+                assert!(cmd.contains("'a'\\''$(id)'"));
+                if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Json(json!({"exit_code":7,"timed_out":false,"stdout":"guest output","stderr":"guest error"})).into_response()
+                } else {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "dispatch-fixture-key").into_response()
+                }
+            }
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = hv2_jobs::Store::open(dir.path().join("store")).unwrap();
+    let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,"vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},"job":{"command":["printf","%s","a'$(id)"],"env":{"TEST":"v'alue"},"workdir":"/work space"}})).unwrap();
+    store.create_interval_schedule("run", &schedule).unwrap();
+    store.materialize_interval("run", 110, 2).unwrap();
+    let profiles = dir.path().join("profiles.json");
+    std::fs::write(&profiles, json!({"profiles":{"local":{"endpoint":format!("http://{address}"),"api_key_env":"HM_DISPATCH_FIXTURE_KEY"}}}).to_string()).unwrap();
+    let dispatch = |time: &str| {
+        let mut cmd = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"));
+        cmd.args(["jobs", "--store"])
+            .arg(store.root())
+            .args(["schedule", "dispatch", "run", time, "--profiles"])
+            .arg(&profiles)
+            .env("HM_DISPATCH_FIXTURE_KEY", "dispatch-fixture-key");
+        cmd
+    };
+    let result = success(dispatch("100").output().await.unwrap());
+    assert_eq!(result["exit_code"], 7);
+    assert_eq!(result["stdout"], "guest output");
+    assert_eq!(
+        store
+            .vm_dispatch_state("run", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .exit_code,
+        Some(7)
+    );
+    assert!(!dispatch("100").output().await.unwrap().status.success());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let failed = dispatch("110").output().await.unwrap();
+    assert!(!failed.status.success());
+    assert!(!String::from_utf8_lossy(&failed.stderr).contains("dispatch-fixture-key"));
+    assert!(store
+        .vm_dispatch_state("run", 110)
+        .unwrap()
+        .completion
+        .is_none());
+    assert!(!dispatch("110").output().await.unwrap().status.success());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    server.abort();
+}

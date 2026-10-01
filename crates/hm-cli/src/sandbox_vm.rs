@@ -325,7 +325,7 @@ impl Api {
         }
     }
 
-    async fn request(&self, method: Method, path: &[&str], body: Option<Value>) -> Result<Value> {
+    pub(crate) async fn request(&self, method: Method, path: &[&str], body: Option<Value>) -> Result<Value> {
         let mut request = self.client.request(method, self.url(path)?);
         if let Some(body) = body {
             request = request.json(&body);
@@ -829,7 +829,7 @@ fn exec_exit_code(value: &Value, timed_out: bool) -> Result<i32> {
 
 // sandboxd's /exec always invokes /bin/sh -c cmd. Quote argv here so callers
 // cannot accidentally turn a literal argument into shell syntax.
-fn shell_exec(command: &[String]) -> Result<String> {
+pub(crate) fn shell_exec(command: &[String]) -> Result<String> {
     if command.is_empty() {
         bail!("a guest command is required");
     }

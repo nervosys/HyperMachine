@@ -77,12 +77,17 @@ fn client(
 /// and construct the shared authenticated TLS client. No network request is
 /// sent, and successful validation does not establish endpoint reachability.
 pub fn validate_connection_profile(path: &Path, name: &str) -> Result<()> {
+    resolve_connection_profile(path, name)?;
+    Ok(())
+}
+
+pub(crate) fn resolve_connection_profile(path: &Path, name: &str) -> Result<(Api, u64)> {
     let profiles: Profiles = serde_json::from_slice(
         &std::fs::read(path).context("reading operator connection profiles")?,
     )
     .context("parsing operator connection profiles")?;
     let profile = selected_profile(&profiles, name)?;
-    client(
+    let api = client(
         profile,
         path.parent().unwrap_or_else(|| Path::new(".")),
         |variable| match std::env::var(variable) {
@@ -93,7 +98,7 @@ pub fn validate_connection_profile(path: &Path, name: &str) -> Result<()> {
             }
         },
     )?;
-    Ok(())
+    Ok((api, profile.request_timeout_secs))
 }
 
 #[cfg(test)]
