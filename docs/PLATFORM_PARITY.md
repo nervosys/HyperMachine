@@ -697,6 +697,8 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Singleton topology correction, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 1373.81 | 4418.93 |
 | Owner interrupt events, matched deadlines and thread probes | HyperMachine | 82 / 100 | 1897.66 | 6517.16 |
 | Owner interrupt events, matched deadlines and thread probes | Firecracker 1.17.0 | 100 / 100 | 1488.91 | 5003.76 |
+| KVM retry counters, matched readiness deadlines | HyperMachine | 91 / 100 | 1896.21 | 8296.29 |
+| KVM retry counters, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 1631.53 | 6573.30 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
@@ -1043,5 +1045,23 @@ the diagnostic kick itself, so a small EINTR count is expected and does not
 establish a retry storm. The real-KVM halted/spinning regression verifies
 cumulative counts and interruption while both guests remain stoppable; all
 three owner tests passed. Strict Windows core/daemon and Linux core Clippy
-passed, as did all five final daemon formatter tests. Failed-boot retry
-capture remains unverified. No startup or performance fix is established.
+passed, as did all five final daemon formatter tests. The release rebuild passed.
+
+The [completed retry-counter cohort](benchmarks/2026-09-30/local-engines-run-retries-pinned-load-100.json)
+and [exact coordinator](benchmarks/2026-09-30/run-retries-pinned-load-coordinator.py)
+record 91/100 HyperMachine passes versus Firecracker 100/100. Artifact hashes
+remained unchanged, the CPU 0 worker stayed alive throughout, and owned-process
+cleanup passed. Both engines retained 15-second readiness deadlines. Failed
+pairs 22, 50, 52, 53, 54, 58, 80, 89 and 93 all report EINTR=1 and EAGAIN=0,
+including the diagnostic kick. These observations provide no evidence of a
+host retry storm in the failed boots. All nine retain pending unmasked PIC
+requests, no console output and 2401 guest exits. Eight post-kick owner samples
+report RIP=0xffffffff81eda95f with IF set; pair 53 instead reports
+0xffffffff8105fb53 with IF clear. The independently sampled post-kick events
+again show no injected IRQ, valid zero shadow and valid zero NMI pending;
+exception pending is correctly unavailable. The next controlled experiment
+will test an MP table for singleton cold boots: the current loader omits it
+for one vCPU, whereas [Firecracker 1.17.0 installs it for all configured CPU counts](https://github.com/firecracker-microvm/firecracker/blob/v1.17.0/src/vmm/src/arch/x86_64/mod.rs).
+This is a hypothesis, not an established root cause. The failed shared-host
+cohort supports no performance or causal reliability win. No startup fix is
+established.
