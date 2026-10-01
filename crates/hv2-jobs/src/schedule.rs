@@ -140,6 +140,29 @@ fn check_schedule_id(id: &str) -> Result<()> {
 }
 
 impl Store {
+    /// Publish one bounded batch of due occurrences and commit its progress.
+    /// Existing records from an interrupted publication are reconciled.
+    /// Concurrent progress changes return Conflict: reload and retry rather
+    /// than dispatching records from a failed batch. This does not run jobs.
+    pub fn materialize_interval(
+        &self,
+        id: &str,
+        now_ms: u64,
+        limit: usize,
+    ) -> Result<Vec<Occurrence>> {
+        let schedule = self.interval_schedule(id)?;
+        let expected = self.interval_progress(id)?;
+        let selected = schedule.due_occurrences(expected, now_ms, limit)?;
+        let mut records = Vec::with_capacity(selected.len());
+        for scheduled_ms in selected {
+            records.push(self.record_interval_occurrence(id, scheduled_ms)?);
+        }
+        if let Some(last) = records.last() {
+            self.advance_interval_progress(id, expected, last.scheduled_ms)?;
+        }
+        Ok(records)
+    }
+
     /// Recover the last committed occurrence-publication watermark. This is
     /// not a guest execution or dispatch acknowledgement. Immutable steps
     /// form a chain; a racing publisher cannot replace an existing edge.
@@ -300,6 +323,44 @@ mod tests {
             missed_policy: MissedOccurrencePolicy::CatchUp,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn materialization_reconciles_interrupted_publication_and_continues_batches() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store.create_interval_schedule("tick", &schedule()).unwrap();
+        // Simulate a process that published part of a batch and exited before
+        // the progress commit. Recovery must reuse, rather than replace it.
+        let original = store.record_interval_occurrence("tick", 100).unwrap();
+        let path = dir.path().join("occurrences/tick--100");
+        let bytes = std::fs::read(&path).unwrap();
+        let reopened = Store::open(dir.path()).unwrap();
+        let batch = reopened.materialize_interval("tick", 155, 3).unwrap();
+        assert_eq!(batch[0], original);
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+        assert_eq!(
+            batch.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![100, 110, 120]
+        );
+        assert_eq!(reopened.interval_progress("tick").unwrap(), Some(120));
+        let next = reopened.materialize_interval("tick", 155, 3).unwrap();
+        assert_eq!(
+            next.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![130, 140, 150]
+        );
+        assert!(reopened
+            .materialize_interval("tick", 155, 3)
+            .unwrap()
+            .is_empty());
+        assert_eq!(reopened.interval_progress("tick").unwrap(), Some(150));
+        assert_eq!(
+            std::fs::read_dir(dir.path().join("occurrences"))
+                .unwrap()
+                .count(),
+            6
+        );
+        assert!(reopened.list().unwrap().is_empty());
     }
 
     #[test]

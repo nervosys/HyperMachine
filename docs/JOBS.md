@@ -161,6 +161,14 @@ conflict and must reload progress. Reads currently traverse the entire chain;
 compaction and long-running schedule scalability remain unverified. This
 watermark acknowledges record publication, not guest dispatch or completion.
 
+`Store::materialize_interval(id, now_ms, limit)` combines planning, immutable
+record publication and progress commit for one bounded batch. It reuses records
+left by an interrupted publication. A concurrent progress conflict requires
+reloading and retrying; records from a failed batch must not be treated as
+dispatched jobs. A successful commit followed by process loss also requires a
+future dispatcher to recover from persistent records, rather than relying on
+the returned in-memory batch. This operation does not enqueue or execute jobs.
+
 Publication writes and syncs a temporary file before creating an exclusive hard
 link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
@@ -197,13 +205,15 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 30 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 31 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
   exclusive watermark, backward clock movement and timestamp exhaustion;
 - progress commits gated on complete occurrence records, restart recovery and
   one winning commit among eight concurrent writers;
+- interrupted batch publication reconciled after reopening, followed by
+  bounded continuation without republishing prior occurrence times;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
