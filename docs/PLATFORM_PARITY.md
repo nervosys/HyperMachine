@@ -100,6 +100,17 @@ Mark a capability complete only after checking its effect through a shipped
 interface. Mark a performance win only after equivalent runs establish it;
 do not infer it from a vendor headline or a component microbenchmark.
 
+Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
+Firecracker's cap begins after `InstanceStart` and is also bounded by its total
+startup deadline (30 seconds by default). Older cohorts used HyperMachine's
+15-second guest limit but Firecracker's remaining total startup budget; retain
+that limitation when interpreting their failure rates. The next reports record
+these budgets and the driver's actual CPU affinity. The generic host limitation
+no longer says every run is unpinned: pinned coordinator profiles already record
+their affinity separately. Eleven harness tests pass, including guest-deadline
+clipping and cleanup on timeout. These methodology changes do not establish a
+performance or reliability improvement.
+
 ### VM client and readiness benchmark
 
 Build the client with `cargo build -p hm-cli --bin hm`. It talks to sandboxd

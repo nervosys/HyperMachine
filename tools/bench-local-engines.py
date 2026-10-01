@@ -187,11 +187,14 @@ def main():
         "hypermachine_log_filter":args.hypermachine_log_filter,"diagnostic_tracing":args.hypermachine_log_filter != "warn",
         "pairs":args.pairs,"order":"alternating AB/BA","environment":args.environment,"host":platform.platform(),
         "artifact_sha256":identities,"artifacts_unchanged":unchanged,"cpu_count":1,"memory_mb":1024,
+        "driver_cpu_affinity":sorted(os.sched_getaffinity(0)),
+        "guest_readiness_timeout_s":{"hypermachine":15,"firecracker":fc.GUEST_READY_TIMEOUT_SECONDS},
+        "firecracker_total_startup_timeout_s":args.timeout,
         "common_boot_args":fc.BOOT_ARGS,"hypermachine_template_preflight":preflight,
         "setup_error":setup_error,"cleanup_error":cleanup_error,"samples":records,
         "node_memory_baseline":baseline_memory,"node_log_tail":node_log_tail,
         "ready_ms":{engine:fc.summary([row["ready_ms"] for row in records if row["engine"]==engine and row["success"] and row["cleanup_success"]]) for engine in ("hypermachine","firecracker")},
-        "limitations":["Shared nested-KVM host; no CPU pinning or dedicated hardware","Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API","Cold lifecycle only; no snapshot/SDK/platform comparison","Engine-generated device kernel arguments differ"],"success":passed},indent=2))
+        "limitations":["Shared nested-KVM host; no dedicated hardware; inspect driver/coordinator affinity metadata","Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API","Cold lifecycle only; no snapshot/SDK/platform comparison","Engine-generated device kernel arguments differ"],"success":passed},indent=2))
     return 0 if passed else 1
 
 
