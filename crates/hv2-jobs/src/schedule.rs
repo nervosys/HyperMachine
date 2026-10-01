@@ -142,6 +142,51 @@ fn check_schedule_id(id: &str) -> Result<()> {
 }
 
 impl Store {
+    /// List a bounded page of immutable schedule names in lexical order.
+    /// Interrupted publication temporaries are excluded. The scan visits the
+    /// directory but retains at most `limit` names in memory.
+    pub fn interval_schedule_ids(&self, after: Option<&str>, limit: usize) -> Result<Vec<String>> {
+        if !(1..=1024).contains(&limit) {
+            return Err(JobError::InvalidSpec(
+                "schedule page limit must be 1-1024".into(),
+            ));
+        }
+        if let Some(after) = after {
+            check_schedule_id(after)?;
+        }
+        let entries = match std::fs::read_dir(self.root().join("schedules")) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error.into()),
+        };
+        let mut names = std::collections::BTreeSet::new();
+        for entry in entries {
+            let entry = entry?;
+            let name = entry
+                .file_name()
+                .into_string()
+                .map_err(|_| JobError::Corrupt("non-UTF8 schedule filename".into()))?;
+            if name
+                .strip_prefix('.')
+                .and_then(|n| n.strip_suffix(".tmp"))
+                .is_some_and(|n| uuid::Uuid::parse_str(n).is_ok())
+            {
+                continue;
+            }
+            if check_schedule_id(&name).is_err() || !entry.file_type()?.is_file() {
+                return Err(JobError::Corrupt(format!("invalid schedule entry {name}")));
+            }
+            if after.is_some_and(|after| name.as_str() <= after) {
+                continue;
+            }
+            names.insert(name);
+            if names.len() > limit {
+                names.pop_last();
+            }
+        }
+        Ok(names.into_iter().collect())
+    }
+
     /// Stop future publication without erasing committed occurrence history.
     /// Cancellation competes for the same exclusive edge as publication.
     /// If a publication wins first, reload and cancel its successor edge.
@@ -432,6 +477,33 @@ mod tests {
             missed_policy: MissedOccurrencePolicy::CatchUp,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn schedule_discovery_is_paged_and_excludes_interrupted_temporaries() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        assert!(store.interval_schedule_ids(None, 2).unwrap().is_empty());
+        for id in ["z", "a", "middle"] {
+            store.create_interval_schedule(id, &schedule()).unwrap();
+        }
+        let temp = dir
+            .path()
+            .join("schedules")
+            .join(format!(".{}.tmp", uuid::Uuid::new_v4()));
+        std::fs::write(temp, b"unfinished").unwrap();
+        assert_eq!(
+            store.interval_schedule_ids(None, 2).unwrap(),
+            vec!["a", "middle"]
+        );
+        assert_eq!(
+            store.interval_schedule_ids(Some("middle"), 2).unwrap(),
+            vec!["z"]
+        );
+        store.cancel_interval_schedule("a").unwrap();
+        assert_eq!(store.interval_schedule_ids(None, 1).unwrap(), vec!["a"]);
+        assert!(store.interval_schedule_ids(None, 0).is_err());
+        assert!(store.interval_schedule_ids(Some("../outside"), 1).is_err());
     }
 
     #[test]

@@ -41,6 +41,7 @@ pub fn router(store: Store, token: Option<String>) -> Router {
         .route("/api/v1/jobs/{id}", get(detail))
         .route("/api/v1/jobs/{id}/logs", get(logs))
         .route("/api/v1/jobs/{id}/cancel", post(cancel))
+        .route("/api/v1/schedules", get(schedule_list))
         .route(
             "/api/v1/schedules/{id}",
             post(schedule_create).get(schedule_detail),
@@ -135,6 +136,24 @@ async fn schedule_cancel(State(api): State<Api>, Path(id): Path<String>) -> Resp
 
 fn batch_limit() -> usize {
     100
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ScheduleListQuery {
+    after: Option<String>,
+    #[serde(default = "batch_limit")]
+    limit: usize,
+}
+
+async fn schedule_list(State(api): State<Api>, Query(query): Query<ScheduleListQuery>) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        Ok(json!(api.store.interval_schedule_ids(
+            query.after.as_deref(),
+            query.limit
+        )?))
+    })
+    .await
 }
 
 #[derive(Deserialize)]
@@ -391,6 +410,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let (store, app) = app(dir.path(), Some("schedule-token"));
         for (method, path) in [
+            ("GET", "/api/v1/schedules"),
             ("POST", "/api/v1/schedules/test"),
             ("GET", "/api/v1/schedules/test"),
             ("POST", "/api/v1/schedules/test/publish"),
@@ -405,6 +425,10 @@ mod tests {
             }
         }
         let token = Some("schedule-token");
+        assert_eq!(
+            call(&app, "GET", "/api/v1/schedules", None, token).await,
+            (StatusCode::OK, "[]".into())
+        );
         let spec = r#"{"first_ms":100,"every_ms":10,"job":{"command":["must-not-execute"]}}"#;
         assert_eq!(
             call(&app, "POST", "/api/v1/schedules/test", Some(spec), token)
@@ -479,6 +503,10 @@ mod tests {
         );
         assert!(store.list().unwrap().is_empty());
         assert!(store.claim("worker", &[]).unwrap().is_none());
+        assert_eq!(
+            call(&app, "GET", "/api/v1/schedules?limit=1", None, token).await,
+            (StatusCode::OK, "[\"test\"]".into())
+        );
         assert_eq!(
             call(&app, "POST", "/api/v1/schedules/test/cancel", None, token)
                 .await

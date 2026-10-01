@@ -97,6 +97,13 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// List schedule names in lexical order as a JSON page
+    List {
+        #[arg(long)]
+        after: Option<String>,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+    },
     /// Stop future occurrence publication; preserves committed history
     Cancel { id: String },
     /// Publish due occurrences repeatedly; does not execute jobs
@@ -140,6 +147,9 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::List { after, limit } => {
+                    serde_json::to_value(s.interval_schedule_ids(after.as_deref(), limit)?)?
+                }
                 ScheduleCommand::Cancel { id } => {
                     s.cancel_interval_schedule(&id)?;
                     serde_json::json!({"id": id, "cancelled": true})

@@ -125,6 +125,7 @@ Interval publication is available through the CLI:
 
 ```text
 hm jobs --store DIR schedule create NAME interval.json
+hm jobs --store DIR schedule list --limit 100
 hm jobs --store DIR schedule status NAME
 hm jobs --store DIR schedule publish NAME --limit 100
 hm jobs --store DIR schedule watch NAME --limit 100 --poll-ms 1000
@@ -163,12 +164,18 @@ bearer-token requirement applied to every schedule route:
 | Request | Result |
 |---|---|
 | `POST /api/v1/schedules/{id}` with an interval spec | `201 {"id": ...}`; duplicate IDs return `409` |
+| `GET /api/v1/schedules?after=NAME&limit=100` | Schedule names in lexical order after an exclusive name cursor |
 | `GET /api/v1/schedules/{id}` | Schedule and `publication_through_ms` |
 | `POST /api/v1/schedules/{id}/publish` with `{"limit":100}` | One bounded batch of occurrence records; optional `now_ms` overrides the wall clock |
 | `GET /api/v1/schedules/{id}/occurrences?after_ms=...&limit=100` | A page of committed records after an exclusive cursor |
 | `POST /api/v1/schedules/{id}/cancel` | `200 {"id": ..., "cancelled": true}`; preserves history |
 
 Publication and page limits must be 1-1024. Unknown publish fields are refused.
+Listing includes cancelled schedules, excludes interrupted publication temporary
+files, and scans the schedule directory while retaining at most one page of names
+in memory. The CLI takes the same exclusive cursor as `schedule list --after NAME`.
+Pages are not a frozen snapshot during concurrent creation; refresh from the
+beginning to discover names inserted before a previous cursor.
 Schedule filesystem operations run in blocking tasks. These routes provide no
 job execution or schedule update yet. Automatic publication
 currently runs through `schedule watch`.
@@ -280,7 +287,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 35 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 36 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -295,6 +302,8 @@ unprivileged user:
   publication and pages, invalid input rejection and no runnable-job creation;
 - durable schedule cancellation, preserved history, cancellation/publication
   races, and authenticated rejection of publication after cancellation;
+- schedule discovery pagination, temporary-file exclusion and cancelled-name
+  retention, plus authenticated API and CLI list operations;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
