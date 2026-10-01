@@ -1128,3 +1128,28 @@ ping; it is not a measurement of transport alone. Its dominant elapsed time
 narrows the next investigation to guest boot and readiness rather than the
 post-readiness control path. Extra logging and shared-host load make this a
 diagnostic, not a performance comparison or evidence of a win.
+
+The [three-pair guest boot diagnostic](benchmarks/2026-09-30/guest-boot-stages-diagnostic-3.json)
+and [exact coordinator](benchmarks/2026-09-30/guest-boot-stages-diagnostic-coordinator.py)
+collect kernel logs, uptime and interrupt tables after a successful command
+from each guest. All six guests, artifact checks, worker liveness and cleanup
+passed. The extra guest commands are included in the reported readiness
+duration, so those durations must not be used as benchmark results.
+HyperMachine's three UART-discovery intervals were 261.407, 268.393 and
+262.496 ms; Firecracker's were 0.266, 4.921 and 4.798 ms. HyperMachine reports
+a legacy UART on IRQ 4; Firecracker reports an ACPI UART on IRQ 27. The logs
+narrow the observed kernel-handoff gap to UART discovery, without establishing
+the complete host-side latency cause.
+
+The repository guest configuration enables `CONFIG_SERIAL_8250_DETECT_IRQ`.
+[Linux's x86 UART definitions](https://github.com/torvalds/linux/blob/v6.6/arch/x86/include/asm/serial.h)
+set `UPF_AUTO_IRQ` when that option is enabled and otherwise retain the standard
+COM1 IRQ 4. The [8250 IRQ probe](https://github.com/torvalds/linux/blob/v6.6/drivers/tty/serial/8250/8250_port.c)
+calls `probe_irq_on()` twice; the [IRQ probing implementation](https://github.com/torvalds/linux/blob/v6.6/kernel/irq/autoprobe.c)
+waits 20 and 100 ms on each call. This supports a fixed-IRQ configuration
+experiment for the known virtual board. The guest defconfig now disables IRQ
+autodetection while retaining UART and console support; a checksum-verified
+Linux 6.6.52 rebuild is running. The original benchmark kernel is preserved.
+Real-guest boot, snapshot restoration and matched runs using the same new
+kernel for both engines remain pending. No performance improvement is yet
+established for this configuration change.
