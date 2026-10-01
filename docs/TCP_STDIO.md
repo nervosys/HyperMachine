@@ -45,8 +45,9 @@ remains an operator responsibility.
 [Real KVM named-SSH verification](benchmarks/2026-10-01/ssh-name.md) checks
 duplicate rejection after a fork and successful lookup after its deletion.
 An additional [real guest PTY check](benchmarks/2026-10-01/ssh-pty.md) verifies
-terminal descriptors and canonical input. Terminal resizing, job control
-and SFTP remain unverified.
+terminal descriptors and canonical input. A [terminal control check](benchmarks/2026-10-01/ssh-terminal.md)
+verifies size propagation, guest SIGWINCH and Ctrl-C. Job control, additional
+terminal signals, full-screen programs and SFTP remain unverified.
 All ten current CLI integration tests passed on Windows and Linux, with
 strict all-target Clippy on Windows.
 

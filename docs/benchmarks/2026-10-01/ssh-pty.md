@@ -28,6 +28,7 @@ logs and verifies the earlier named/base SSH archives, including the CLI's
 compiled-source provenance. No private credentials or images are committed.
 
 This checks PTY allocation and canonical input through a noninteractive
-test driver. Terminal resizing, signals, job control, full-screen programs,
-and SFTP remain unverified. Guest SSH provisioning and atomic name
+test driver. Subsequent [terminal control verification](ssh-terminal.md)
+covers resizing, guest SIGWINCH and Ctrl-C. Additional signals, job control,
+full-screen programs and SFTP remain unverified. Guest SSH provisioning and atomic name
 reservations remain absent.
