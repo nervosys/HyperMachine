@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Measure cold Firecracker creation through a verified shared guest command."""
 import argparse
+import errno
 import hashlib
 import http.client
 import json
@@ -40,6 +41,21 @@ def api(path, method, route, value=None):
         return json.loads(body) if body else None
     finally:
         connection.close()
+
+
+def wait_api(path, deadline, process):
+    """Socket creation precedes listen readiness; probe without replaying PUTs."""
+    while time.perf_counter() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError("Firecracker exited before API readiness")
+        try:
+            api(path, "GET", "/machine-config")
+            return
+        except OSError as error:
+            if error.errno not in (errno.ENOENT, errno.ECONNREFUSED):
+                raise
+            time.sleep(.001)
+    raise TimeoutError("API readiness deadline exceeded")
 
 
 def exact(stream, size):
@@ -105,10 +121,7 @@ def sample(args, index):
                 deadline = started + args.timeout
                 process = subprocess.Popen([str(args.firecracker.resolve()),"--api-sock",str(socket_path)],
                     stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
-                while not socket_path.exists():
-                    if process.poll() is not None: raise RuntimeError("Firecracker exited before API readiness")
-                    if time.perf_counter() >= deadline: raise TimeoutError("API socket deadline exceeded")
-                    time.sleep(.001)
+                wait_api(socket_path, deadline, process)
                 api(socket_path,"PUT","/machine-config",{"vcpu_count":1,"mem_size_mib":1024})
                 api(socket_path,"PUT","/boot-source",{"kernel_image_path":str(args.kernel.resolve()),
                     "initrd_path":str(args.initrd.resolve()),"boot_args":BOOT_ARGS})

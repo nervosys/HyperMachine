@@ -1254,7 +1254,10 @@ impl KvmVm {
 
             // Create PIT (timer)
             let pit_config = kvm_pit_config {
-                flags: 0,
+                // Port 0x61 exposes channel 2's gate/output during Linux timer
+                // calibration. Without the KVM stub it reaches our unmapped
+                // I/O fallback (0xff), instead of the PIT's actual state.
+                flags: KVM_PIT_SPEAKER_DUMMY,
                 pad: [0; 15],
             };
             if let Err(e) = kvm_create_pit2(vm_fd, &pit_config) {

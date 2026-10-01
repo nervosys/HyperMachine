@@ -674,10 +674,12 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Two unpinned CPU workers | Firecracker 1.17.0 | 100 / 100 | 414.28 | 470.27 |
 | One contending worker, all pinned to CPU 0 | HyperMachine | 91 / 100 | 1159.99 | 1324.16 |
 | One contending worker, all pinned to CPU 0 | Firecracker 1.17.0 | 100 / 100 | 820.63 | 874.96 |
+| Pinned APIC diagnostic repeat | HyperMachine | 92 / 100 | 2771.78 | 5910.02 |
+| Pinned APIC diagnostic repeat | Firecracker 1.17.0 | 94 / 100 | 2266.94 | 4000.67 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
-and the pinned contention comparison. The 200-pair and unpinned two-worker cohorts
+and both pinned contention comparisons. The 200-pair and unpinned two-worker cohorts
 passed. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
 failed 5/140 attempts in the first three normal-logging cohorts while Firecracker passed 140/140. HyperMachine's median was slower in every recorded normal-logging cohort. We have not achieved across-the-board superiority.
@@ -843,3 +845,39 @@ and the response was complete with exit status zero and unchanged artifacts.
 This is diagnostic evidence, not an additional performance sample. The missing
 wakeup cause remains unconfirmed. No startup
 fix or across-the-board feature/performance advantage has been established.
+
+
+The [APIC diagnostic repeat](benchmarks/2026-09-30/local-engines-owner-apic-pinned-load-100.json)
+retained the pinned CPU-0 workload with unchanged artifacts and successful final
+cleanup. HyperMachine passed 92/100, with eight readiness failures at 2401 exits.
+Seven samples stopped at `default_idle`'s post-HLT `cli`; one captured the next
+instruction after `cli`, illustrating that diagnostic wakeup can advance state.
+All eight had `LVT_TIMER=0x10000`, zero initial/current timer counts,
+`LVT0=0x700`, `TPR=PPR=0x10` and empty ISR/IRR bitmaps. This points to the
+legacy interrupt path at that boot stage, not an established root cause.
+The [exact coordinator](benchmarks/2026-09-30/owner-apic-pinned-load-coordinator.py)
+checksum matches the recorded workload; the worker remained alive and was reaped.
+
+Firecracker passed 94/100 in this repeat. Its six connection-refused samples
+contain only the startup banner in the bounded console output, consistent with
+an initial API readiness race. These are failed harness attempts, not evidence
+that Firecracker's guest has the same boot defect. The harness previously waited
+only for socket-file existence; it now waits for a successful read-only
+`GET /machine-config` before issuing configuration PUTs, retries only missing
+socket/connection-refused errors within the original deadline and checks VMM
+exit. It never replays a mutation. Ten harness regressions pass, including
+readiness deadline/exit and non-retryable error cases. Both engines' failures
+invalidate this cohort for a performance claim. Subsequent runs must record the
+changed harness hash and extra readiness probe.
+
+
+A real-KVM raw guest regression verified a separate timer-model gap: reading
+port `0x61` returned unmapped-I/O `0xff` before the fix. The test stopped its VM
+before asserting and failed on the reserved high bits. KVM PIT creation now
+sets `KVM_PIT_SPEAKER_DUMMY` (value 1 in the installed Linux KVM UAPI), enabling
+the channel-2 speaker-port stub used during timer calibration. The same real
+guest regression then passed. Firecracker's
+[versioned PIT setup](https://raw.githubusercontent.com/firecracker-microvm/firecracker/v1.17.0/src/vmm/src/arch/x86_64/vm.rs)
+also enables this stub. This establishes corrected port emulation, not that
+the eight cold-boot failures or latency gap are fixed. A rebuilt daemon and
+matched workload repeat are still required to assess that effect.
