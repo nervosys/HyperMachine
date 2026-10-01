@@ -116,6 +116,7 @@ use hv2_net::gateway::socks::Socks5Proxy;
 use hv2_net::gateway::{mitm::Authority, Gateway, GatewayConfig, GatewayHandle};
 use hv2_net::network_policy::{Cidr, Headers, NetworkPolicy, Verdict};
 
+mod boot_diagnostics;
 mod builds;
 mod checkpoints;
 mod cloud_login;
@@ -3421,16 +3422,7 @@ async fn guest_report(vm: &AgentVM) -> String {
     let architecture = match machine.diagnostic_vcpu_states().await {
         Ok(states) => states
             .into_iter()
-            .map(|state| {
-                format!(
-                    "vCPU {} owner sample: RIP={:#x} RFLAGS={:#x} CR3={:#x} run_state={:?}",
-                    state.id,
-                    state.general.rip,
-                    state.general.rflags,
-                    state.system.cr3,
-                    state.run_state
-                )
-            })
+            .map(|state| boot_diagnostics::owner_sample(&state))
             .collect::<Vec<_>>()
             .join(", "),
         Err(error) => format!("owner diagnostic unavailable: {error}"),
