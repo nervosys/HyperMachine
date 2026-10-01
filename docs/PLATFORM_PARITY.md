@@ -755,8 +755,9 @@ Readiness-failure reporting now requests architectural samples through
 `VM::diagnostic_vcpu_states`: a bounded channel message plus vCPU kick asks the
 execution owner to read its state between backend run calls. The response wait
 is bounded to five seconds. Each CPU is sampled independently; these are
-investigative samples, not an atomic restore snapshot. Replies include only RIP,
-flags, CR3 and run state in the daemon failure report. Successful readiness
+investigative samples, not an atomic restore snapshot. Replies include RIP, flags, CR3, run state and RSP, plus the raw LAPIC
+timer, priority and ISR/IRR registers when a complete register image is available.
+Absent or malformed LAPIC state is explicitly marked unavailable. Successful readiness
 checks do not request these samples. A real-KVM regression obtained ten samples
 each from an interrupt-disabled halted guest and an interrupt-disabled spinning
 guest, checked their exact raw-code instruction positions, then stopped both.
@@ -834,5 +835,11 @@ vCPU before its owner samples state, so `run_state=Runnable` does not establish
 that the guest was spinning during the timeout. Linux's
 [native safe halt implementation](https://raw.githubusercontent.com/torvalds/linux/v6.6/arch/x86/include/asm/irqflags.h)
 uses `sti; hlt`; that source is v6.6, while the measured kernel is 6.6.52.
-The exact helper identity and missing wakeup cause remain unconfirmed. No startup
+A [symbol query from a successful boot of the same kernel](benchmarks/2026-09-30/boot-halt-symbol.json)
+confirms `ffffffff81eda950 T default_idle` and `ffffffff81648100 t io_serial_out`.
+The [query coordinator](benchmarks/2026-09-30/boot-halt-symbol-coordinator.py)
+retains the exact command and hashes; its owned Firecracker VM was stopped,
+and the response was complete with exit status zero and unchanged artifacts.
+This is diagnostic evidence, not an additional performance sample. The missing
+wakeup cause remains unconfirmed. No startup
 fix or across-the-board feature/performance advantage has been established.
