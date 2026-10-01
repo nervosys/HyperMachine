@@ -1000,6 +1000,23 @@ each passed guest. Linux all-targets compilation, formatting and parser tests
 pass; runtime first-backend measurements remain pending. The prior dispatch
 wrapper is archived as `dispatch-harness-v1.py` for its recorded source hash.
 
+The first-backend traced daemon (`6718bad3…`) completed another two C100
+batch pairs: all 400 attempts passed and all 200 HyperMachine IDs matched
+complete five-field dispatch records. Owner setup mean/median/maximum was
+1.37/0.087/46.40 ms. First backend call mean/median/maximum was
+3480.50/3328.36/4924.20 ms. Thus a substantial measured interval is inside
+the backend run operation, rather than affinity/runtime setup. That interval
+includes host scheduling and guest execution through the first return; the
+exit kind and guest instruction address were not collected. It does not
+isolate kernel decompression, CPU work or a hypervisor defect.
+
+All 20 paired uptime intervals fit host bounds, and artifact/worker/cleanup
+checks passed. Sources and reports use `first-backend-diagnostic-` names in
+the evidence directory. The shared host showed large variation in the two
+Firecracker batches; this asymmetric tracing cohort remains excluded from
+performance rankings. The original scored binary hash is restored. First-exit
+identity and early kernel execution are the next measurement boundaries.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore
