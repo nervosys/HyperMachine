@@ -693,6 +693,8 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Pre-kick PIC/PIT diagnostics, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 815.35 | 3719.40 |
 | APIC base diagnostic, matched readiness deadlines | HyperMachine | 97 / 100 | 1313.56 | 3346.01 |
 | APIC base diagnostic, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 913.93 | 2321.68 |
+| Singleton topology correction, matched readiness deadlines | HyperMachine | 93 / 100 | 1796.93 | 11752.53 |
+| Singleton topology correction, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 1373.81 | 4418.93 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
@@ -978,6 +980,16 @@ cache-sharing fields agree with that topology; cache geometry remains intact.
 The Linux singleton regression passed, and a real KVM guest executing CPUID
 confirmed count 1, APIC ID 0 and HTT clear. Existing halted/spinning owner and
 pre-kick machine-state regressions also passed (three KVM tests total).
-A rebuilt daemon
-contention cohort is still needed; no startup or latency improvement is claimed.
+The [rebuilt-daemon contention cohort](benchmarks/2026-09-30/local-engines-singleton-topology-pinned-load-100.json)
+and [exact coordinator](benchmarks/2026-09-30/singleton-topology-pinned-load-coordinator.py)
+record 93/100 HyperMachine passes versus 100/100 Firecracker passes. Artifact
+hashes remained unchanged, the CPU 0 worker stayed alive throughout, and cleanup
+passed. Both engines retain 15-second readiness budgets. HyperMachine failed
+pairs 31, 35, 48, 60, 61, 76 and 94 with no console output and 2401 exits,
+unchanged over the observation window. Five post-kick owner samples retained
+RIP=0xffffffff81eda95f with IF set; pairs 35 and 60 instead reported
+0xffffffff81ed9b1d and 0xffffffff81ed9c50 with IF clear. These later samples can
+reflect execution after the kick. Pending unmasked PIC requests remained present.
+This verifies the topology change does not eliminate the startup defect;
+the failed cohort supports no performance win or causal reliability comparison.
 Topology field interpretation follows the [Linux x86 topology documentation](https://docs.kernel.org/arch/x86/topology.html).
