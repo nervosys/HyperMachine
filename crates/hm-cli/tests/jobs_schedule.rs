@@ -34,11 +34,20 @@ fn schedule_cli_persists_and_pages_without_executing_jobs() {
     )
     .unwrap();
     let spec = spec.to_str().unwrap();
+    assert_eq!(success(invoke(&store, &["list"])), json!([]));
     assert_eq!(
         success(invoke(&store, &["create", "test", spec])),
         json!({"id":"test"})
     );
     assert!(!invoke(&store, &["create", "test", spec]).status.success());
+    assert_eq!(
+        success(invoke(&store, &["list", "--limit", "1"])),
+        json!(["test"])
+    );
+    assert_eq!(
+        success(invoke(&store, &["list", "--after", "test"])),
+        json!([])
+    );
     assert_eq!(
         success(invoke(&store, &["status", "test"]))["publication_through_ms"],
         Value::Null
