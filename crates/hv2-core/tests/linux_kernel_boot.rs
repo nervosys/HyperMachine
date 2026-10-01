@@ -24,7 +24,8 @@
 //!   * a host where `HypervisorPlatform::detect()` reports KVM (that is
 //!     `/dev/kvm` opened read+write, not merely present), and
 //!   * `HV2_TEST_KERNEL` pointing at a bzImage built with
-//!     `CONFIG_SERIAL_8250_CONSOLE=y`.
+//!     `CONFIG_SERIAL_8250_CONSOLE=y`, `CONFIG_X86_MPPARSE=y` and
+//!     `CONFIG_X86_IO_APIC=y`.
 //!
 //! On a Windows host with WSL2, this runs it:
 //!
@@ -232,9 +233,19 @@ async fn a_real_linux_kernel_boots_on_kvm_and_reports_the_machine_it_was_given()
     // never reports THR-empty produces a perfectly good early log and then
     // hangs the moment 8250_core takes over. This line is the handover.
     assert!(
-        console.contains("printk: legacy console [ttyS0] enabled"),
+        console.contains("printk: legacy console [ttyS0] enabled")
+            || console.contains("printk: console [ttyS0] enabled"),
         "the 8250 driver never took over from earlyprintk, so the emulated UART's status bits \
          are wrong.\nconsole:\n{console}"
+    );
+
+    // The singleton guest must discover the interrupt topology, not silently
+    // fall back to a PIC-only machine because no firmware table was written.
+    assert!(
+        console.contains("found SMP MP-table")
+            && console.contains("IOAPIC[0]:")
+            && console.contains("Processors: 1"),
+        "the singleton guest did not discover its MP table and I/O APIC.\nconsole:\n{console}"
     );
 
     // And the whole way to PID 1. Everything between the memory map and here --

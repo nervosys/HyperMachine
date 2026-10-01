@@ -1060,8 +1060,18 @@ report RIP=0xffffffff81eda95f with IF set; pair 53 instead reports
 0xffffffff8105fb53 with IF clear. The independently sampled post-kick events
 again show no injected IRQ, valid zero shadow and valid zero NMI pending;
 exception pending is correctly unavailable. The next controlled experiment
-will test an MP table for singleton cold boots: the current loader omits it
+tests an MP table for singleton cold boots: the loader in this cohort omitted it
 for one vCPU, whereas [Firecracker 1.17.0 installs it for all configured CPU counts](https://github.com/firecracker-microvm/firecracker/blob/v1.17.0/src/vmm/src/arch/x86_64/mod.rs).
 This is a hypothesis, not an established root cause. The failed shared-host
 cohort supports no performance or causal reliability win. No startup fix is
 established.
+
+The singleton cold-boot MP-table experiment is now implemented. The real-KVM
+Linux 6.6.52 regression passed: the guest discovers the table, reports one
+processor and an I/O APIC, activates its UART console and reaches userspace
+handoff. The regression now accepts the older `console [ttyS0] enabled` message
+as well as the newer `legacy console` wording. Strict all-targets Linux core
+Clippy passed. The release rebuild, live checkpoint/pause/fork validation and
+matched contention cohort remain pending. These results establish guest
+topology discovery on this kernel; they do not establish a startup-reliability
+or performance improvement.

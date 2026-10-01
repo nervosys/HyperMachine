@@ -952,24 +952,23 @@ impl HypervisorBackend for KvmBackend {
                     .build();
                 kvm_vm.write_guest_memory(gdt_base, &gdt)?;
 
-                // More than one vCPU: an MP table, or Linux never learns of
-                // the others. One vCPU gets none, as before -- the guest stays
-                // on the PIC's virtual wire, the path every template so far
-                // was booted and snapshotted on.
-                if kvm_vm.vcpu_count > 1 {
-                    use crate::boot::mptable;
-                    if kvm_vm.vcpu_count > mptable::MAX_CPUS {
-                        return Err(Error::Config(format!(
-                            "{} vCPUs: a Linux guest here has at most {}",
-                            kvm_vm.vcpu_count,
-                            mptable::MAX_CPUS
-                        )));
-                    }
-                    kvm_vm.write_guest_memory(
-                        mptable::MPTABLE_ADDR,
-                        &mptable::build(kvm_vm.vcpu_count),
-                    )?;
+                // Describe the I/O APIC even with a single processor. Omitting
+                // this table leaves singleton Linux guests on the PIC virtual
+                // wire instead of describing the interrupt controller we made.
+                // This is cold-boot setup; restored guests retain the tables
+                // and interrupt-controller state from their snapshot.
+                use crate::boot::mptable;
+                if kvm_vm.vcpu_count > mptable::MAX_CPUS {
+                    return Err(Error::Config(format!(
+                        "{} vCPUs: a Linux guest here has at most {}",
+                        kvm_vm.vcpu_count,
+                        mptable::MAX_CPUS
+                    )));
                 }
+                kvm_vm.write_guest_memory(
+                    mptable::MPTABLE_ADDR,
+                    &mptable::build(kvm_vm.vcpu_count),
+                )?;
 
                 let mut sregs = kvm_vcpu.get_sregs()?;
                 sregs.gdt.base = gdt_base;
