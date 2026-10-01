@@ -770,3 +770,13 @@ captured no stalled guest state. Its lower-level control path and optimization
 profile differ from the failing release daemon; it does not establish that the
 startup defect is fixed. Live daemon failure-report integration remains to be
 verified after rebuilding the daemon.
+
+
+The [release-profile lower-level probe](benchmarks/2026-09-30/cold-owner-diagnostics-release.json)
+completed 200/200 readiness checks and cleanups, with unchanged artifact hashes,
+but captured no stalled state. Its control path still differs from the daemon:
+it uses the machine model's automatic COM1 attachment, whereas the daemon
+explicitly initializes and registers COM1 before launch, as well as a different
+CID range and no HTTP request lifecycle. No root cause or fix follows from
+this non-reproduction. The actual daemon must be rebuilt and its failure
+response sampled to investigate the previously captured UART-stage stall.
