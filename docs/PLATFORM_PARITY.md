@@ -703,6 +703,10 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Singleton MP table, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 804.85 | 1740.15 |
 | Singleton MP table, 200-pair pinned repeat | HyperMachine | 200 / 200 | 1079.50 | 1867.38 |
 | Singleton MP table, 200-pair pinned repeat | Firecracker 1.17.0 | 200 / 200 | 769.48 | 1573.45 |
+| Counterbalanced kernel blocks, original kernel | HyperMachine | 100 / 100 | 1119.17 | 2645.60 |
+| Counterbalanced kernel blocks, original kernel | Firecracker 1.17.0 | 100 / 100 | 787.76 | 1956.21 |
+| Counterbalanced kernel blocks, fixed UART IRQ | HyperMachine | 100 / 100 | 859.85 | 1922.86 |
+| Counterbalanced kernel blocks, fixed UART IRQ | Firecracker 1.17.0 | 100 / 100 | 773.83 | 1375.09 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
@@ -1158,10 +1162,37 @@ also passed checkpoint rollback, pause/resume and two forked guests, retaining
 I/O APIC UART IRQ 4 and command readiness. Artifact checks and cleanup passed.
 The rebuilt kernel SHA-256 is
 `afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd`.
-A 50-block comparison is running: each block tests both kernels in alternating
+A 50-block comparison completed: each block tests both kernels in alternating
 order, with two alternating engine pairs per kernel and a fresh isolated
 HyperMachine daemon per two-pair run. Both engines use the same kernel within
 each run. One pinned CPU worker remains active across all blocks. This design
 retains every attempt and reduces time/order bias; it differs from the longer
-single-node cohorts above. Comparative results remain pending. No performance
-improvement is yet established for this configuration change.
+single-node cohorts above.
+
+The [complete counterbalanced comparison](benchmarks/2026-09-30/uart-irq-kernel-blocks-50.json),
+[summary](benchmarks/2026-09-30/uart-irq-kernel-blocks-50-summary.json),
+[exact coordinator](benchmarks/2026-09-30/uart-irq-kernel-blocks-coordinator.py)
+and [analysis](benchmarks/2026-09-30/uart-irq-kernel-blocks-analysis.py)
+record 400/400 successful, cleaned-up attempts: 100 for each engine/kernel
+combination. Validation checks all block orders, resources, readiness budgets,
+affinity, source/artifact hashes and per-run failure accounting. The worker
+stayed alive throughout and was reaped. HyperMachine's original-kernel P50/P99
+were 1119.17/2645.60 ms; with the fixed-IRQ kernel they were 859.85/1922.86 ms.
+The rebuilt kernel was faster for HyperMachine in 47/50 paired blocks;
+the median reduction in each block's mean readiness was 266.46 ms.
+Firecracker's corresponding P50/P99 were 787.76/1956.21 and 773.83/1375.09 ms;
+its paired-block median reduction was 4.11 ms (27/50 blocks faster).
+This records a HyperMachine cold-start improvement on this workload.
+HyperMachine still trails Firecracker on both percentiles with the same new
+kernel, and shared hardware limits extrapolation, especially for tails.
+
+The [fixed-IRQ guest-log diagnostic](benchmarks/2026-09-30/guest-boot-stages-fixed-irq-diagnostic-3.json)
+and [exact coordinator](benchmarks/2026-09-30/guest-boot-stages-fixed-irq-diagnostic-coordinator.py)
+also passed all six guest captures, provenance and cleanup checks. The three
+HyperMachine UART-discovery intervals were 3.004, 3.770 and 12.542 ms, versus
+261.407–268.393 ms with the original kernel. UART IRQ 4 and console support
+remain present. Firecracker's intervals were 2.384, 4.436 and 2.635 ms. Other
+guest boot stages varied substantially across diagnostic runs; their full
+handoff times do not isolate the configuration effect. These extra-command
+diagnostics are excluded from the benchmark table. Product feature gaps and
+broader performance validation remain open; no across-the-board win is claimed.
