@@ -1072,6 +1072,22 @@ state evidence is in `lz4-state.json` and `verify-lz4-state.py`.
 This experiment does not establish a repeatable HyperMachine performance
 improvement or decompression as the root cause. The default kernel is unchanged.
 
+All ten gzip timeouts share owner RIP `0xffffffff81eda95f`, halted run state
+and LAPIC timer value `0x400ec`. A separate matched-kernel Firecracker guest
+resolved `/proc/kallsyms`: `default_idle` starts at `0xffffffff81eda950`,
+15 bytes before the sampled RIP. That diagnostic guest passed readiness and
+cleanup; kernel and helper hashes were unchanged. The exact query and source
+are retained as `gzip-timeout-halt-symbol.json` and its resolver script.
+This confirms a shared idle-path address, not a root cause.
+
+Failure reports now include raw `TSC` and `TSC_DEADLINE` values already captured
+by the owner-safe vCPU snapshot. Missing values print `unavailable`, distinct
+from a captured zero. No extra register reads, snapshot schema changes or
+runtime timer behavior are introduced. MSR reads are sequential and these
+values do not form an atomic timer comparison. All six Linux boot-diagnostic
+tests and formatting pass, including missing/zero/full-width clock values.
+Runtime capture of these fields during another failed boot remains pending.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

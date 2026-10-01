@@ -66,8 +66,14 @@ pub(crate) fn machine_sample(state: &MachineState) -> String {
 }
 
 pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
+    // Already captured by the owner-safe snapshot. Reads of different MSRs
+    // are sequential, so these are evidence, not an atomic timer comparison.
+    let clock = |index: u32| match state.msrs.iter().find(|msr| msr.index == index) {
+        Some(msr) => format!("{:#x}", msr.value),
+        None => "unavailable".into(),
+    };
     let architecture = format!(
-        "vCPU {} owner sample: RIP={:#x} RFLAGS={:#x} CR3={:#x} run_state={:?} RSP={:#x} APIC_BASE={:#x} CR8={:#x}",
+        "vCPU {} owner sample: RIP={:#x} RFLAGS={:#x} CR3={:#x} run_state={:?} RSP={:#x} APIC_BASE={:#x} CR8={:#x} TSC={} TSC_DEADLINE={}",
         state.id,
         state.general.rip,
         state.general.rflags,
@@ -76,6 +82,8 @@ pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
         state.general.rsp,
         state.system.apic_base,
         state.system.cr8,
+        clock(0x10),
+        clock(0x6e0),
     );
     // KVM_GET_LAPIC exports a 1024-byte xAPIC register image. Registers are
     // little endian, with 16-byte spacing even in the ISR/IRR bitmaps.
@@ -107,6 +115,26 @@ pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clock_samples_distinguish_missing_zero_and_large_values() {
+        use hv2_core::snapshot::vcpu::Msr;
+        let mut state = VCpuSnapshot::default();
+        assert!(owner_sample(&state).contains("TSC=unavailable TSC_DEADLINE=unavailable"));
+        state.msrs = vec![
+            Msr {
+                index: 0x6e0,
+                value: 0,
+            },
+            Msr {
+                index: 0x10,
+                value: u64::MAX,
+            },
+        ];
+        assert!(owner_sample(&state).contains("TSC=0xffffffffffffffff TSC_DEADLINE=0x0"));
+        state.msrs[0].value = 0x1234;
+        assert!(owner_sample(&state).contains("TSC_DEADLINE=0x1234"));
+    }
 
     #[test]
     fn unavailable_events_preserve_architecture_without_inventing_zero_state() {
