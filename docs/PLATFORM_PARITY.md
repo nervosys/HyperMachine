@@ -23,7 +23,7 @@ container. The comparison is about what surrounds the VM.
 | Per-port URLs, raw TCP/UDP | yes | ports 3000-9999 | **Partial**: every port over HTTP(S); authenticated raw TCP through the node/control-plane API and loopback CLI, [verified with KVM/TLS and lifecycle operations](benchmarks/2026-10-01/tcp-tunnel.md); UDP absent |
 | Custom domains | yes | yes | **Real**: authenticated cluster bindings to guest HTTP ports, Memory/Redis ownership, HTTPS forwarding; [operator DNS and certificates](CUSTOM_DOMAINS.md) |
 | Private URLs with login, identity headers | team-shared | yes (`X-ExeDev-Email`) | **Absent** |
-| SSH to a VM by name | yes | yes | **Absent** |
+| SSH to a VM by name | yes | yes | **Partial**: [authenticated stdio transport](TCP_STDIO.md) for operator-managed OpenSSH aliases; no server-side names or guest SSH provisioning, real SSH session unverified |
 | exec, and file copy in and out | yes | ssh/scp | **Real**: `/exec`, envd processes with PTY and stdin, files |
 | **Env vars for every command in a VM** | org-wide | no | **Real**: E2B's `envVars`, kept in the guest so pause, fork and snapshots carry them |
 | Secrets held off the VM, injected at the edge | no | yes | **Real**: header injection at the egress gateway, which the guest never sees |

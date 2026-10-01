@@ -94,6 +94,12 @@ pub enum VmCommand {
     },
     /// Destroy a VM sandbox
     Delete { id: String },
+    /// Connect stdin/stdout to a guest TCP port (for OpenSSH ProxyCommand)
+    TcpStdio {
+        id: String,
+        #[arg(long, default_value_t = 22, value_parser = clap::value_parser!(u16).range(1..))]
+        port: u16,
+    },
     /// Forward a loopback TCP listener to a running VM's guest port
     Tcp {
         id: String,
@@ -305,6 +311,10 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         args.api_ca_cert.as_deref(),
     )?;
     let value = match args.command {
+        VmCommand::TcpStdio { id, port } => {
+            tcp_stdio(api.tcp(&id, port).await?).await?;
+            return Ok(0);
+        }
         VmCommand::Tcp {
             id,
             port,
@@ -482,6 +492,64 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         println!("{}", serde_json::to_string_pretty(&value)?);
     }
     Ok(0)
+}
+
+async fn tcp_stdio(tunnel: reqwest::Upgraded) -> Result<()> {
+    use std::io::Read;
+    use tokio::io::AsyncWriteExt;
+
+    // A plain thread avoids Tokio stdin's uncancellable blocking task, which
+    // would keep runtime shutdown waiting after the guest closes its stream.
+    // Bound queued input to eight 16 KiB chunks; no unbounded buffering.
+    let (sender, mut input) = tokio::sync::mpsc::channel(8);
+    std::thread::Builder::new()
+        .name("tcp-stdin".into())
+        .spawn(move || {
+            let mut stdin = std::io::stdin().lock();
+            loop {
+                let mut bytes = vec![0; 16 * 1024];
+                match stdin.read(&mut bytes) {
+                    Ok(0) => break,
+                    Ok(count) => {
+                        bytes.truncate(count);
+                        if sender.blocking_send(Ok(bytes)).is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+                    Err(error) => {
+                        let _ = sender.blocking_send(Err(error));
+                        break;
+                    }
+                }
+            }
+        })
+        .context("could not start stdin reader")?;
+    let (mut guest_read, mut guest_write) = tokio::io::split(tunnel);
+    let upload = async {
+        while let Some(bytes) = input.recv().await {
+            guest_write.write_all(&bytes?).await?;
+        }
+        // stdin EOF closes only the write direction, retaining the reply.
+        guest_write.shutdown().await
+    };
+    let download = async {
+        let mut stdout = tokio::io::stdout();
+        tokio::io::copy(&mut guest_read, &mut stdout).await?;
+        stdout.flush().await
+    };
+    tokio::pin!(upload, download);
+    tokio::select! {
+        result = &mut upload => {
+            result.context("TCP stdin forwarding failed")?;
+            download.await.context("TCP stdout forwarding failed")?;
+        }
+        result = &mut download => {
+            // Guest EOF ends a stdio session even if local stdin remains open.
+            result.context("TCP stdout forwarding failed")?;
+        }
+    }
+    Ok(())
 }
 
 async fn tcp_forward(
