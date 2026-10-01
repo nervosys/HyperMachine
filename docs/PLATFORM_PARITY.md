@@ -699,11 +699,13 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Owner interrupt events, matched deadlines and thread probes | Firecracker 1.17.0 | 100 / 100 | 1488.91 | 5003.76 |
 | KVM retry counters, matched readiness deadlines | HyperMachine | 91 / 100 | 1896.21 | 8296.29 |
 | KVM retry counters, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 1631.53 | 6573.30 |
+| Singleton MP table, matched readiness deadlines | HyperMachine | 100 / 100 | 1107.25 | 2263.95 |
+| Singleton MP table, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 804.85 | 1740.15 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
-and all pinned contention comparisons. The 200-pair and unpinned two-worker cohorts
-passed. The lower
+and all pinned contention comparisons before the singleton MP-table change.
+The 200-pair, unpinned two-worker and singleton MP-table cohorts passed. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
 failed 5/140 attempts in the first three normal-logging cohorts while Firecracker passed 140/140. HyperMachine's median was slower in every recorded normal-logging cohort. We have not achieved across-the-board superiority.
 
@@ -1072,7 +1074,7 @@ processor and an I/O APIC, activates its UART console and reaches userspace
 handoff. The regression now accepts the older `console [ttyS0] enabled` message
 as well as the newer `legacy console` wording. Strict all-targets Linux core
 Clippy and the release rebuild passed. Live checkpoint/pause/fork validation
-passed; the matched contention cohort is running. These results establish guest
+passed, as did the first matched contention cohort. These results establish guest
 topology discovery on this kernel; they do not establish a startup-reliability
 or performance improvement.
 
@@ -1090,3 +1092,18 @@ rejects checkpoints, and the second supplied an empty JSON pause body; those
 setup errors were corrected before this passing run. This validates snapshots
 created by this build, not persisted snapshots from an older build, density,
 fleet scale or performance superiority.
+
+The [singleton MP-table contention cohort](benchmarks/2026-09-30/local-engines-singleton-mptable-pinned-load-100.json)
+and [exact coordinator](benchmarks/2026-09-30/singleton-mptable-pinned-load-coordinator.py)
+record 100/100 passes for each engine, with identical kernel/initrd bytes,
+one vCPU, 1024 MiB and 15-second readiness budgets. This is the first fully
+passing pinned contention cohort in this investigation. Artifact hashes
+remained unchanged; the CPU 0 worker stayed alive and was reaped; engine and
+daemon cleanup passed. No startup failure was observed in these 100 attempts.
+The preceding retry-counter cohort recorded HyperMachine 91/100, but separate
+runs on shared hardware do not isolate a causal reliability or timing effect.
+HyperMachine remains slower than Firecracker in the passing cohort: successful
+readiness P50/P99 were 1107.25/2263.95 ms versus 804.85/1740.15 ms. A 200-pair
+repeat of the same pinned workload is running. Zero observed failures in one
+cohort does not establish that startup reliability is fully resolved, and no
+performance or across-the-board product win is established.
