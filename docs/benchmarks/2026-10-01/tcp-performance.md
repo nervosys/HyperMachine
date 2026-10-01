@@ -1,5 +1,9 @@
 # Matched native TCP forwarding transactions
 
+This is the historical baseline and rejected adapter candidate. The later
+[API socket fix and final comparison](tcp-api-buffering.md) record a verified
+median improvement while retaining the remaining gap to Firecracker.
+
 HyperMachine trails Firecracker at the median for both payload sizes in
 these local runs. A proposed loopback-buffering change did not establish
 an improvement and was reverted. No production performance change ships

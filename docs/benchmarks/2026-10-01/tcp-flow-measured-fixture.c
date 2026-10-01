@@ -72,8 +72,7 @@ int main(int argc, char **argv) {
         listeners[i] = (struct pollfd){.fd = fd, .events = POLLIN};
     }
     int ready = open("/tmp/tcp-fixture-ready", O_WRONLY | O_CREAT | O_TRUNC, 0600);
-    const char *mode = tcp_nodelay ? "ready-nodelay" : "ready";
-    if (ready < 0 || write_all(ready, mode, strlen(mode))) return 2;
+    if (ready < 0 || write_all(ready, "ready", 5)) return 2;
     close(ready);
     for (;;) {
         if (poll(listeners, 4, -1) < 0) { if (errno == EINTR) continue; return 3; }

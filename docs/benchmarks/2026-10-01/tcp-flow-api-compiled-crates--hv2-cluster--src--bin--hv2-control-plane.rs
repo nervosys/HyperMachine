@@ -292,8 +292,8 @@ async fn main() -> std::process::ExitCode {
             axum::serve::ListenerExt::tap_io(listener, hv2_api::tls::configure_api_socket),
             control::router(control),
         )
-        .await
-        .map_err(|e| e.to_string()),
+            .await
+            .map_err(|e| e.to_string()),
         Some(config) => hv2_api::tls::serve_tls(
             listener,
             control::router(control),

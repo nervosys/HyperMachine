@@ -8,8 +8,6 @@ import subprocess
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--staged", action="store_true", help="also verify Git index bytes")
-parser.add_argument("--check-original-source", action="store_true",
-                    help="also require the working tree to match the original TCP feature build")
 args = parser.parse_args()
 docs = Path(__file__).resolve().parent
 root = docs.parents[2]
@@ -43,7 +41,7 @@ for number in range(1, 5):
     for name, expected in build["source_sha256"].items():
         archived = docs / (f"tcp-build{number}-source-" + name.replace("/", "--") + ".txt")
         assert sha(archived.read_bytes()) == expected
-        if number == 4 and args.check_original_source:
+        if number == 4:
             assert sha((root / name).read_bytes()) == expected, name
             if args.staged:
                 staged = subprocess.check_output(["git", "show", ":" + name], cwd=root)
