@@ -47,13 +47,15 @@ pub(crate) fn machine_sample(state: &MachineState) -> String {
 
 pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
     let architecture = format!(
-        "vCPU {} owner sample: RIP={:#x} RFLAGS={:#x} CR3={:#x} run_state={:?} RSP={:#x}",
+        "vCPU {} owner sample: RIP={:#x} RFLAGS={:#x} CR3={:#x} run_state={:?} RSP={:#x} APIC_BASE={:#x} CR8={:#x}",
         state.id,
         state.general.rip,
         state.general.rflags,
         state.system.cr3,
         state.run_state,
         state.general.rsp,
+        state.system.apic_base,
+        state.system.cr8,
     );
     // KVM_GET_LAPIC exports a 1024-byte xAPIC register image. Registers are
     // little endian, with 16-byte spacing even in the ISR/IRR bitmaps.
@@ -146,6 +148,8 @@ mod tests {
             ..Default::default()
         };
         // Poison the padding: reading contiguous u32 words invents IRQs.
+        state.system.apic_base = 0xfee00900;
+        state.system.cr8 = 1;
         state.lapic[0x104..0x110].fill(0xff);
         state.lapic[0x100..0x104].copy_from_slice(&0x80000000u32.to_le_bytes());
         state.lapic[0x270..0x274].copy_from_slice(&1u32.to_le_bytes());
@@ -158,5 +162,6 @@ mod tests {
             "IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000001"
         ));
         assert!(report.contains("LVT_TIMER=0x10020"));
+        assert!(report.contains("APIC_BASE=0xfee00900 CR8=0x1"));
     }
 }
