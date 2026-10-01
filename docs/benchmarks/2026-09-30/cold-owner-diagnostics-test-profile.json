@@ -1,0 +1,828 @@
+{
+  "diagnostic_only": true,
+  "profile": "test (opt-level=1), not release API benchmark",
+  "artifact_sha256": {
+    "binary": "1c09e5317e2804e117209d5c11956486f726a9f83d263063f14e243106809124",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "vm_source": "39c7e174af087aaa344c13fc58307cf6ee72537ec5ed3e0274c6f9d29e128916",
+    "probe_source": "20601fcfe585133c5179b3ff2b2c983089f7f9f28f14a6a48cf9a6d5f36f73d8"
+  },
+  "artifacts_unchanged": true,
+  "process_exit_code": 0,
+  "error": null,
+  "diagnostic_completed": true,
+  "readiness_success": true,
+  "samples": [
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 0
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 1
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 2
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 3
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 4
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 5
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 6
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 7
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 8
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 9
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 10
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 11
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 12
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 13
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 14
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 15
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 16
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 17
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 18
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 19
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 20
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 21
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 22
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 23
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 24
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 25
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 26
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 27
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 28
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 29
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 30
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 31
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 32
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 33
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 34
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 35
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 36
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 37
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 38
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 39
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 40
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 41
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 42
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 43
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 44
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 45
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 46
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 47
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 48
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 49
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 50
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 51
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 52
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 53
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 54
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 55
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 56
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 57
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 58
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 59
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 60
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 61
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 62
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 63
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 64
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 65
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 66
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 67
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 68
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 69
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 70
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 71
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 72
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 73
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 74
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 75
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 76
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 77
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 78
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 79
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 80
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 81
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 82
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 83
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 84
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 85
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 86
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 87
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 88
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 89
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 90
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 91
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 92
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 93
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 94
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 95
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 96
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 97
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 98
+    },
+    {
+      "cleanup": true,
+      "cleanup_error": null,
+      "owner_diagnostic": null,
+      "readiness_error": null,
+      "ready": true,
+      "sample": 99
+    }
+  ],
+  "summary": {
+    "cmdline": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+    "cpu_count": 1,
+    "diagnostic_only": true,
+    "memory_mb": 1024,
+    "readiness_failures": 0,
+    "samples": 100,
+    "summary": true
+  },
+  "stderr": ""
+}

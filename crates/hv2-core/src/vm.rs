@@ -231,6 +231,10 @@ enum VCpuMessage {
     Resume,
     /// Inject an interrupt
     Interrupt { vector: u8 },
+    /// Read architectural state on the execution owner between KVM_RUN calls.
+    Inspect {
+        reply: tokio::sync::oneshot::Sender<Result<VCpuSnapshot>>,
+    },
 }
 
 /// vCPU execution statistics
@@ -1888,6 +1892,52 @@ impl VM {
         Ok(states)
     }
 
+    /// Read diagnostic state on each running vCPU's execution thread.
+    ///
+    /// A kick brings even a halted or spinning guest out of its backend run.
+    /// The owner reads registers before re-entering the guest, avoiding a
+    /// concurrent register ioctl. These are independent samples, not an atomic
+    /// multi-vCPU snapshot, and must not be used for restoring a VM.
+    /// The whole response wait is bounded to five seconds.
+    pub async fn diagnostic_vcpu_states(&self) -> Result<Vec<VCpuSnapshot>> {
+        if self.state() != VMState::Running {
+            return Err(Error::InvalidState(
+                "diagnostics require a running VM".into(),
+            ));
+        }
+        let senders: Vec<_> = {
+            let tasks = self.vcpu_tasks.read();
+            if tasks.is_empty() || tasks.len() != self.vcpus.len() {
+                return Err(Error::InvalidState(
+                    "diagnostics require launched vCPU owners".into(),
+                ));
+            }
+            tasks.iter().map(|task| task.tx.clone()).collect()
+        };
+        let mut replies = Vec::with_capacity(senders.len());
+        for (sender, vcpu) in senders.into_iter().zip(&self.vcpus) {
+            let (reply, receive) = tokio::sync::oneshot::channel();
+            sender
+                .try_send(VCpuMessage::Inspect { reply })
+                .map_err(|error| {
+                    Error::InvalidState(format!("cannot request vCPU diagnostics: {error}"))
+                })?;
+            self.backend.kick_vcpu(vcpu).await?;
+            replies.push(receive);
+        }
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let mut states = Vec::with_capacity(replies.len());
+            for reply in replies {
+                states.push(reply.await.map_err(|_| {
+                    Error::InvalidState("vCPU owner ended before diagnostic reply".into())
+                })??);
+            }
+            Ok(states)
+        })
+        .await
+        .map_err(|_| Error::InvalidState("vCPU diagnostic response exceeded five seconds".into()))?
+    }
+
     /// Put every vCPU back into the state these snapshots describe.
     ///
     /// The VM must be paused, for the mirror of the reason above: writing
@@ -3116,6 +3166,10 @@ impl VM {
                     tracing::debug!("vCPU {} resumed", vcpu.id());
                     paused = false;
                 }
+                Ok(VCpuMessage::Inspect { reply }) => {
+                    let _ = reply.send(backend.save_vcpu(&vcpu).await);
+                    continue;
+                }
                 Ok(VCpuMessage::Interrupt { vector }) => {
                     tracing::debug!("vCPU {} injecting interrupt {}", vcpu.id(), vector);
                     if let Err(e) = backend.inject_interrupt(&vcpu, vector).await {
@@ -3135,6 +3189,10 @@ impl VM {
                 match rx.recv().await {
                     Some(VCpuMessage::Resume) => paused = false,
                     Some(VCpuMessage::Stop) | None => break,
+                    Some(VCpuMessage::Inspect { reply }) => {
+                        let _ = reply.send(backend.save_vcpu(&vcpu).await);
+                        continue;
+                    }
                     _ => continue,
                 }
             }

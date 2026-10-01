@@ -741,3 +741,32 @@ the subsequent stalled guest instruction or root cause. Further architectural
 state inspection must run on the vCPU owner after it leaves `KVM_RUN`; reading
 registers concurrently with execution would not be sound evidence. This is a
 failed diagnostic cohort, not a performance comparison or reliability fix.
+
+
+Readiness-failure reporting now requests architectural samples through
+`VM::diagnostic_vcpu_states`: a bounded channel message plus vCPU kick asks the
+execution owner to read its state between backend run calls. The response wait
+is bounded to five seconds. Each CPU is sampled independently; these are
+investigative samples, not an atomic restore snapshot. Replies include only RIP,
+flags, CR3 and run state in the daemon failure report. Successful readiness
+checks do not request these samples. A real-KVM regression obtained ten samples
+each from an interrupt-disabled halted guest and an interrupt-disabled spinning
+guest, checked their exact raw-code instruction positions, then stopped both.
+Strict all-targets Clippy passed for the core, agent and daemon on Windows.
+
+`cargo build --locked --profile test -p hv2-agent --example cold_owner_diagnostics`
+builds a smaller probe of the same AgentVM cold-boot path. Run it as
+`cold_owner_diagnostics KERNEL INITRD 100`. It uses the daemon's 1-vCPU/1024-MiB
+configuration and shared kernel arguments, prints one JSON record per attempt,
+samples owners after failed 15-second guest readiness, and cleans up every
+launched VM before continuing. This is a diagnostic-only probe under the test
+profile, not a release API or competitor performance benchmark.
+
+
+The [test-profile owner probe](benchmarks/2026-09-30/cold-owner-diagnostics-test-profile.json)
+completed 100/100 guest-readiness checks and cleanups with unchanged binary,
+source, kernel and initrd hashes. It did not reproduce a failure and therefore
+captured no stalled guest state. Its lower-level control path and optimization
+profile differ from the failing release daemon; it does not establish that the
+startup defect is fixed. Live daemon failure-report integration remains to be
+verified after rebuilding the daemon.

@@ -3418,7 +3418,28 @@ async fn guest_report(vm: &AgentVM) -> String {
             )
         })
         .collect();
-    format!("{console}; VM {:?}; {}", vm.state(), vcpus.join(", "))
+    let architecture = match machine.diagnostic_vcpu_states().await {
+        Ok(states) => states
+            .into_iter()
+            .map(|state| {
+                format!(
+                    "vCPU {} owner sample: RIP={:#x} RFLAGS={:#x} CR3={:#x} run_state={:?}",
+                    state.id,
+                    state.general.rip,
+                    state.general.rflags,
+                    state.system.cr3,
+                    state.run_state
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        Err(error) => format!("owner diagnostic unavailable: {error}"),
+    };
+    format!(
+        "{console}; VM {:?}; {}; {architecture}",
+        vm.state(),
+        vcpus.join(", ")
+    )
 }
 
 /// Boot the template once, configure it as every sandbox needs, and write it

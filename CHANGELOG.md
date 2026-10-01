@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Benchmark evidence
+- Sample failed-boot architectural state on the vCPU execution owner after a
+  kick, with a bounded response wait. Add a real-KVM halted/spinning regression
+  and a smaller cold-boot diagnostic probe; this does not fix startup stalls.
 - Add a checksum-pinned Firecracker installer and alternating same-host cold
   sandbox comparison with exact guest workload verification, failure retention,
   cleanup checks and source provenance. Record two cohorts exposing HyperMachine
