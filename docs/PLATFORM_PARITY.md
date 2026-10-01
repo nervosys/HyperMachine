@@ -989,6 +989,17 @@ use `dispatch-diagnostic-` names in the same directory. Seven parser tests pass
 on Windows and Linux. Tracing and post-readiness probes exclude this cohort
 from scored comparisons; the original scored binary hash is restored.
 
+First-backend probes extend the dedicated dispatch target with
+`owner_setup_ms` (owner-thread entry through affinity/runtime setup and
+control checks to the first backend invocation) and `first_backend_ms`
+(that invocation through its first successful return). Each emits once per
+vCPU execution loop, not once per VM exit. The first invocation is not a
+guaranteed KVM guest-entry timestamp, and an error does not emit the successful
+return marker. The diagnostic wrapper requires all five dispatch fields for
+each passed guest. Linux all-targets compilation, formatting and parser tests
+pass; runtime first-backend measurements remain pending. The prior dispatch
+wrapper is archived as `dispatch-harness-v1.py` for its recorded source hash.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

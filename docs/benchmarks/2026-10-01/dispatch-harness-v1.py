@@ -66,13 +66,9 @@ def dispatch_stages(log):
             fields = ["dispatch_queue_ms"]
         elif "vCPU owner thread entry" in line:
             fields = ["wrapper_queue_ms", "thread_start_ms"]
-        elif "vCPU first backend call" in line:
-            fields = ["owner_setup_ms"]
-        elif "vCPU first backend return" in line:
-            fields = ["first_backend_ms"]
+            if not re.search(r'\bvcpu_id=0\b', line):
+                raise RuntimeError("dispatch diagnostic requires exactly one vCPU")
         else: continue
-        if fields != ["dispatch_queue_ms"] and not re.search(r'\bvcpu_id=0\b', line):
-            raise RuntimeError("dispatch diagnostic requires exactly one vCPU")
         identity = re.search(r'\bvm="?(sbx-[A-Za-z0-9]+)"?', line)
         if not identity: raise RuntimeError("incomplete dispatch identity")
         row = result.setdefault(identity[1], {})
@@ -197,7 +193,7 @@ def main():
         if collect_dispatch:
             report["dispatch_ids_match_passed_requests"] = set(report["dispatch_stages_ms"]) == {
                 row["sandbox_id"] for row in rows if row["success"]} and all(
-                    set(stage) == {"dispatch_queue_ms", "wrapper_queue_ms", "thread_start_ms", "owner_setup_ms", "first_backend_ms"}
+                    set(stage) == {"dispatch_queue_ms", "wrapper_queue_ms", "thread_start_ms"}
                     for stage in report["dispatch_stages_ms"].values())
             report["success"] = report["success"] and report["dispatch_ids_match_passed_requests"]
         print(json.dumps(report, indent=2))
