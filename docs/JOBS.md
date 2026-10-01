@@ -147,16 +147,26 @@ The persisted `missed_policy` is `catch_up` by default for existing records, or
 at most 1-1024 occurrences after an exclusive processed-through watermark.
 Catch-up selects the oldest due occurrences first; coalescing selects only the
 latest due occurrence and deliberately skips older ones. Future occurrences
-are excluded. The caller must durably dispatch each selected occurrence before
+are excluded. The caller must persist the work represented by its watermark before
 advancing its watermark. Planning alone does not persist progress or dispatch
 work, and repeated planning can return the same occurrences for reconciliation.
+
+`Store::interval_progress` recovers a separate occurrence-publication watermark.
+`advance_interval_progress(id, expected, through_ms)` commits progress only when
+all selected records exist and match the immutable schedule. Catch-up commits
+cannot skip required records and are limited to 1024 occurrences; coalescing
+requires its latest selected record. An immutable chain of exclusive commits
+prevents competing writers from replacing a winner. Stale writers receive a
+conflict and must reload progress. Reads currently traverse the entire chain;
+compaction and long-running schedule scalability remain unverified. This
+watermark acknowledges record publication, not guest dispatch or completion.
 
 Publication writes and syncs a temporary file before creating an exclusive hard
 link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
 file. Filesystems without hard-link support return an error; there is no weaker
 fallback. Directory durability across power loss is not established. Schedule
-updates, cancellation, cron/timezones, durable progress, dispatch reconciliation
+updates, cancellation, cron/timezones, dispatch reconciliation
 and guest execution remain to be implemented.
 
 The implementation must cover these requirements together:
@@ -187,11 +197,13 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 28 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 30 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
   exclusive watermark, backward clock movement and timestamp exhaustion;
+- progress commits gated on complete occurrence records, restart recovery and
+  one winning commit among eight concurrent writers;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;

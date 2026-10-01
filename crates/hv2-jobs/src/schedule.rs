@@ -32,8 +32,8 @@ pub enum MissedOccurrencePolicy {
 
 impl IntervalSchedule {
     /// Plan due occurrences after an exclusive processed-through watermark.
-    /// The caller must persist successful dispatch before advancing that
-    /// watermark. This method neither publishes records nor dispatches jobs.
+    /// The caller must persist the work represented by its watermark before
+    /// advancing it. This method neither publishes records nor dispatches jobs.
     /// Backward clock movement produces no occurrences already behind it.
     pub fn due_occurrences(
         &self,
@@ -116,6 +116,19 @@ pub struct Occurrence {
     pub job: JobSpec,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProgressStep {
+    through_ms: u64,
+}
+
+fn progress_key(id: &str, after_ms: Option<u64>) -> String {
+    format!(
+        "{id}--{}",
+        after_ms.map_or_else(|| "start".into(), |n| n.to_string())
+    )
+}
+
 fn check_schedule_id(id: &str) -> Result<()> {
     if id.is_empty() || id.len() > 64 || !id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
     {
@@ -127,6 +140,76 @@ fn check_schedule_id(id: &str) -> Result<()> {
 }
 
 impl Store {
+    /// Recover the last committed occurrence-publication watermark. This is
+    /// not a guest execution or dispatch acknowledgement. Immutable steps
+    /// form a chain; a racing publisher cannot replace an existing edge.
+    pub fn interval_progress(&self, id: &str) -> Result<Option<u64>> {
+        let schedule = self.interval_schedule(id)?;
+        let mut after = None;
+        loop {
+            let key = progress_key(id, after);
+            let step: ProgressStep =
+                match crate::read_json(&self.root().join("schedule-progress").join(&key), &key) {
+                    Ok(step) => step,
+                    Err(JobError::NotFound(_)) => return Ok(after),
+                    Err(error) => return Err(error),
+                };
+            if after.is_some_and(|previous| step.through_ms <= previous)
+                || schedule.at_or_after(step.through_ms)? != Some(step.through_ms)
+            {
+                return Err(JobError::Corrupt(format!("invalid progress step {key}")));
+            }
+            after = Some(step.through_ms);
+        }
+    }
+
+    /// Commit a bounded publication batch with compare-and-set semantics.
+    /// Every selected occurrence must already have its complete record. A
+    /// failed or interrupted commit can be retried after reading progress.
+    /// Coalescing intentionally omits older times; catch-up cannot skip them.
+    pub fn advance_interval_progress(
+        &self,
+        id: &str,
+        expected: Option<u64>,
+        through_ms: u64,
+    ) -> Result<()> {
+        let schedule = self.interval_schedule(id)?;
+        if self.interval_progress(id)? != expected {
+            return Err(JobError::Conflict(
+                "schedule progress changed; reload before advancing".into(),
+            ));
+        }
+        let selected = schedule.due_occurrences(expected, through_ms, 1024)?;
+        if selected.last().copied() != Some(through_ms) {
+            return Err(JobError::InvalidSpec(
+                "progress must end at a selected occurrence within one bounded batch".into(),
+            ));
+        }
+        for scheduled_ms in selected {
+            let key = format!("{id}--{scheduled_ms}");
+            let record: Occurrence =
+                crate::read_json(&self.root().join("occurrences").join(&key), &key)?;
+            let mut job = schedule.job.clone();
+            job.not_before_ms = Some(scheduled_ms);
+            if record
+                != (Occurrence {
+                    schedule_id: id.into(),
+                    scheduled_ms,
+                    job,
+                })
+            {
+                return Err(JobError::Corrupt(format!(
+                    "occurrence {key} disagrees with schedule"
+                )));
+            }
+        }
+        self.publish_schedule_record(
+            "schedule-progress",
+            &progress_key(id, expected),
+            &ProgressStep { through_ms },
+        )
+    }
+
     /// Create an immutable interval schedule. Existing names are conflicts.
     pub fn create_interval_schedule(&self, id: &str, schedule: &IntervalSchedule) -> Result<()> {
         check_schedule_id(id)?;
@@ -217,6 +300,71 @@ mod tests {
             missed_policy: MissedOccurrencePolicy::CatchUp,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn progress_requires_complete_records_and_recovers_after_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .create_interval_schedule("recover", &schedule())
+            .unwrap();
+        assert_eq!(store.interval_progress("recover").unwrap(), None);
+        store.record_interval_occurrence("recover", 110).unwrap();
+        assert!(store
+            .advance_interval_progress("recover", None, 110)
+            .is_err());
+        store.record_interval_occurrence("recover", 100).unwrap();
+        store
+            .advance_interval_progress("recover", None, 110)
+            .unwrap();
+        let reopened = Store::open(dir.path()).unwrap();
+        assert_eq!(reopened.interval_progress("recover").unwrap(), Some(110));
+        assert!(matches!(
+            reopened.advance_interval_progress("recover", None, 110),
+            Err(JobError::Conflict(_))
+        ));
+        assert!(reopened
+            .advance_interval_progress("recover", Some(110), 100)
+            .is_err());
+        reopened.record_interval_occurrence("recover", 120).unwrap();
+        reopened
+            .advance_interval_progress("recover", Some(110), 120)
+            .unwrap();
+        assert_eq!(reopened.interval_progress("recover").unwrap(), Some(120));
+    }
+
+    #[test]
+    fn racing_progress_commits_have_one_winner() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let mut s = schedule();
+        s.missed_policy = MissedOccurrencePolicy::Coalesce;
+        store.create_interval_schedule("race", &s).unwrap();
+        store.record_interval_occurrence("race", 150).unwrap();
+        let barrier = std::sync::Barrier::new(8);
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        store.advance_interval_progress("race", None, 150)
+                    })
+                })
+                .collect();
+            let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+            assert_eq!(results.iter().filter(|r| r.is_ok()).count(), 1);
+            assert!(results
+                .iter()
+                .all(|r| r.is_ok() || matches!(r, Err(JobError::Conflict(_)))));
+        });
+        assert_eq!(store.interval_progress("race").unwrap(), Some(150));
+        assert_eq!(
+            std::fs::read_dir(dir.path().join("schedule-progress"))
+                .unwrap()
+                .count(),
+            1
+        );
     }
 
     #[test]
