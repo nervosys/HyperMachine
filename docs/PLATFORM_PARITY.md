@@ -863,6 +863,16 @@ are retained in `benchmarks/2026-10-01`. The optional wrapper
 three duration/identity parser tests pass on Windows and Linux and run in CI.
 No production performance change or competitor win follows from this step.
 
+Cold readiness now also exposes opt-in debug events under the dedicated
+`hv2_agent::cold_readiness` target. Enable it with
+`RUST_LOG=hv2_sandboxd=debug,hv2_agent::cold_readiness=debug` to separate
+blocking-task queue time, vsock connection time and ping time by VM name.
+Connection failures record queue/connect timing and `phase=connect`;
+completed ping attempts include all three durations and their success state.
+This instrumentation preserves the existing blocking-task execution and
+timeout arguments. Formatting and Linux all-targets agent compilation pass;
+no cohort with these finer stages has yet been measured.
+
 ## Same-host Firecracker cold comparison (2026-09-30)
 
 The user has no competitor endpoints or dedicated matched host. We therefore

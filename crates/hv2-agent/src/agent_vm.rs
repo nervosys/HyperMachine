@@ -843,9 +843,30 @@ impl AgentVM {
             ));
         };
 
+        let vm_name = self.vm.config().name.clone();
+        let queued_at = std::time::Instant::now();
         tokio::task::spawn_blocking(move || {
-            let mut agent = GuestAgent::over_vsock(device, timeout)?;
-            agent.ping(timeout)
+            let started_at = std::time::Instant::now();
+            let mut agent = match GuestAgent::over_vsock(device, timeout) {
+                Ok(agent) => agent,
+                Err(error) => {
+                    tracing::debug!(target: "hv2_agent::cold_readiness", vm = %vm_name,
+                        blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                        connect_ms = started_at.elapsed().as_secs_f64() * 1000.0,
+                        succeeded = false, phase = "connect",
+                        "cold guest readiness stages");
+                    return Err(error);
+                }
+            };
+            let connected_at = std::time::Instant::now();
+            let result = agent.ping(timeout);
+            tracing::debug!(target: "hv2_agent::cold_readiness", vm = %vm_name,
+                blocking_queue_ms = (started_at - queued_at).as_secs_f64() * 1000.0,
+                connect_ms = (connected_at - started_at).as_secs_f64() * 1000.0,
+                ping_ms = connected_at.elapsed().as_secs_f64() * 1000.0,
+                succeeded = result.is_ok(), phase = "ping",
+                "cold guest readiness stages");
+            result
         })
         .await
         .map_err(|e| AgentError::Script(format!("guest ping task failed: {e}")))?
