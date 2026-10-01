@@ -1,0 +1,107 @@
+{
+  "success": false,
+  "environment": "fixture mode acknowledgement verification",
+  "artifact_sha256": {
+    "hypermachine": "1eacfe17e8a43e4273b9b7dea201d48444e931d7da1a7009a8a126d66ce39a86",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "f226c599d385609fc03af2223b6829a5249b28193c96179daeb7d47383005d1b",
+    "harness": "cc9df787719005ca7e1a3c8f149c923e1492c2dfa645e97b64d07aee3f446f8c",
+    "engine_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "fc_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "host_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "concurrency": 1,
+  "pairs": 2,
+  "rounds_per_size_per_guest": 2,
+  "preparation": [
+    {
+      "pair": 0,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": true,
+      "error": "guest TCP fixture unavailable or mode unsupported"
+    },
+    {
+      "pair": 0,
+      "engine": "firecracker",
+      "success": false,
+      "cleanup_success": true,
+      "error": "guest TCP fixture unavailable or mode unsupported",
+      "console_utf8": "2026-10-01T09:18:07.507646618 [anonymous-instance:main] Running Firecracker v1.17.0\n2026-10-01T09:18:07.507945282 [anonymous-instance:main] Listening on API socket (\"/var/tmp/hm-tcp-bench-p0emv500/fc-api.sock\").\n2026-10-01T09:18:07.508143770 [anonymous-instance:fc_api] API server started.\n2026-10-01T09:18:07.508875289 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:18:07.508958040 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:18:07.509301601 [anonymous-instance:fc_api] The API server received a Put request on \"/machine-config\" with body \"{\\\"vcpu_count\\\": 1, \\\"mem_size_mib\\\": 1024}\".\n2026-10-01T09:18:07.509382950 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:07.509651144 [anonymous-instance:fc_api] The API server received a Put request on \"/boot-source\" with body \"{\\\"kernel_image_path\\\": \\\"/var/tmp/hm-competitive/bzImage-known-uart-irq\\\", \\\"initrd_path\\\": \\\"/var/tmp/hm-tcp/guest-tcp.cpio.gz\\\", \\\"boot_args\\\": \\\"console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd\\\"}\".\n2026-10-01T09:18:07.509787350 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:07.510004975 [anonymous-instance:fc_api] The API server received a Put request on \"/vsock\" with body \"{\\\"guest_cid\\\": 3, \\\"uds_path\\\": \\\"/var/tmp/hm-tcp-bench-p0emv500/fc-vsock.sock\\\"}\".\n2026-10-01T09:18:07.510203423 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:07.510567314 [anonymous-instance:fc_api] The API server received a Put request on \"/actions\" with body \"{\\\"action_type\\\": \\\"InstanceStart\\\"}\".\n2026-10-01T09:18:07.529565619 [anonymous-instance:main] Artificially kick devices\n2026-10-01T09:18:07.529718193 [anonymous-instance:fc_vcpu 0] Received a VcpuEvent::Resume message with immediate_exit enabled. immediate_exit was disabled before proceeding\n2026-10-01T09:18:07.529832490 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:07.530529498 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:18:07.530622239 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:18:07.732424428 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0xcf8:0x4 failed: Failed to find address range.\n2026-10-01T09:18:07.732499615 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0xcfc:0x2 failed: Failed to find address range.\n2026-10-01T09:18:07.819102594 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819187830 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819207699 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819229632 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819243138 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819255673 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819268788 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819280010 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819291012 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819300701 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819309708 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819318455 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819345668 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819355167 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819374825 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819396528 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819413681 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.819426576 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:07.880113538 [anonymous-instance:fc_vcpu 0] [Vsock:vsock] notifying queues\n=== HV2 READY ===\r\n\r\nhv2-guest-agentd \r\nBusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash)\r\n1.1.0 listening on vsock port 1024\r\nEnter 'help' for a list of built-in commands.\r\n\r\nsh: can't access tty; job control turned off\r\n/ # \u001b[6n"
+    },
+    {
+      "pair": 1,
+      "engine": "firecracker",
+      "success": false,
+      "cleanup_success": true,
+      "error": "guest TCP fixture unavailable or mode unsupported",
+      "console_utf8": "2026-10-01T09:18:12.994173631 [anonymous-instance:main] Running Firecracker v1.17.0\n2026-10-01T09:18:12.994345096 [anonymous-instance:main] Listening on API socket (\"/var/tmp/hm-tcp-bench-p0emv500/fc-api.sock\").\n2026-10-01T09:18:12.994540463 [anonymous-instance:fc_api] API server started.\n2026-10-01T09:18:12.995387873 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:18:12.995458881 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:18:12.995784708 [anonymous-instance:fc_api] The API server received a Put request on \"/machine-config\" with body \"{\\\"vcpu_count\\\": 1, \\\"mem_size_mib\\\": 1024}\".\n2026-10-01T09:18:12.995867038 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:12.996150165 [anonymous-instance:fc_api] The API server received a Put request on \"/boot-source\" with body \"{\\\"kernel_image_path\\\": \\\"/var/tmp/hm-competitive/bzImage-known-uart-irq\\\", \\\"initrd_path\\\": \\\"/var/tmp/hm-tcp/guest-tcp.cpio.gz\\\", \\\"boot_args\\\": \\\"console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd\\\"}\".\n2026-10-01T09:18:12.996234720 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:12.996471723 [anonymous-instance:fc_api] The API server received a Put request on \"/vsock\" with body \"{\\\"guest_cid\\\": 3, \\\"uds_path\\\": \\\"/var/tmp/hm-tcp-bench-p0emv500/fc-vsock.sock\\\"}\".\n2026-10-01T09:18:12.996651685 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:12.996851295 [anonymous-instance:fc_api] The API server received a Put request on \"/actions\" with body \"{\\\"action_type\\\": \\\"InstanceStart\\\"}\".\n2026-10-01T09:18:13.008992041 [anonymous-instance:main] Artificially kick devices\n2026-10-01T09:18:13.009072343 [anonymous-instance:fc_vcpu 0] Received a VcpuEvent::Resume message with immediate_exit enabled. immediate_exit was disabled before proceeding\n2026-10-01T09:18:13.009153081 [anonymous-instance:fc_api] The request was executed successfully. Status code: 204 No Content.\n2026-10-01T09:18:13.009706933 [anonymous-instance:fc_api] The API server received a Get request on \"/machine-config\".\n2026-10-01T09:18:13.009800305 [anonymous-instance:fc_api] The request was executed successfully. Status code: 200 OK.\n2026-10-01T09:18:13.195242369 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0xcf8:0x4 failed: Failed to find address range.\n2026-10-01T09:18:13.195329449 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0xcfc:0x2 failed: Failed to find address range.\n2026-10-01T09:18:13.264383669 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264437374 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264448716 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264458045 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264467343 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264476230 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264485258 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264494245 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264503063 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264512180 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264521098 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264529965 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264557018 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264566316 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264575614 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264584562 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264593820 [anonymous-instance:fc_vcpu 0] vcpu: IO write @ 0x70:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.264602757 [anonymous-instance:fc_vcpu 0] vcpu: IO read @ 0x71:0x1 failed: Failed to find address range.\n2026-10-01T09:18:13.321686756 [anonymous-instance:fc_vcpu 0] [Vsock:vsock] notifying queues\n=== HV2 READY ===\r\nhv2-guest-agentd 1.1.0 listening on vsock port \r\n\r\nBusyBox v1.37.0 (Debian 1:1.37.0-6+b9) built-in shell (ash)\r\n1024\r\nEnter 'help' for a list of built-in commands.\r\n\r\nsh: can't access tty; job control turned off\r\n/ # \u001b[6n"
+    },
+    {
+      "pair": 1,
+      "engine": "hypermachine",
+      "success": false,
+      "cleanup_success": true,
+      "error": "guest TCP fixture unavailable or mode unsupported"
+    }
+  ],
+  "rows": [],
+  "cleanup_errors": [],
+  "transport": {
+    "hypermachine": "authenticated loopback HTTP/1.1 upgrade",
+    "firecracker": "native Unix vsock socket plus same guest Forward RPC"
+  },
+  "limitations": [
+    "No startup score: verified readiness and service preparation precede timing",
+    "Different native host transports; no CLI, TLS, cluster, managed service or fleet comparison",
+    "Repeated transactions share a guest; percentile rows are not independent guests",
+    "Fixed-length streaming echo on port 18082; no client half-close or server EOF requirement",
+    "MiB/s sums request and echo bytes; includes per-transaction writer-thread creation; not sustained line-rate capacity",
+    "Shared nested KVM host; no dedicated-host or concurrent load claim"
+  ],
+  "client_tcp_nodelay": true,
+  "fixture_tcp_nodelay": true,
+  "remaining_sandboxes": 0,
+  "node_stopped": true,
+  "node_log_utf8": "hv2-sandboxd: listening on 0.0.0.0:43229, capacity 2\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:39187 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:39187 process.Process/Start\n",
+  "artifacts_unchanged": true,
+  "summaries": {
+    "hypermachine-4096": {
+      "handshake_ms": null,
+      "transfer_ms": null,
+      "transaction_ms": null,
+      "aggregate_payload_mib_s": null
+    },
+    "hypermachine-1048576": {
+      "handshake_ms": null,
+      "transfer_ms": null,
+      "transaction_ms": null,
+      "aggregate_payload_mib_s": null
+    },
+    "firecracker-4096": {
+      "handshake_ms": null,
+      "transfer_ms": null,
+      "transaction_ms": null,
+      "aggregate_payload_mib_s": null
+    },
+    "firecracker-1048576": {
+      "handshake_ms": null,
+      "transfer_ms": null,
+      "transaction_ms": null,
+      "aggregate_payload_mib_s": null
+    }
+  }
+}

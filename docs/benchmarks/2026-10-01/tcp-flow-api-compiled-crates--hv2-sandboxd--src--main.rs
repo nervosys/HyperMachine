@@ -4364,9 +4364,9 @@ async fn main() -> std::process::ExitCode {
             axum::serve::ListenerExt::tap_io(listener, hv2_api::tls::configure_api_socket),
             app,
         )
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|e| e.to_string()),
+            .with_graceful_shutdown(shutdown_signal())
+            .await
+            .map_err(|e| e.to_string()),
         Some(config) => hv2_api::tls::serve_tls(
             listener,
             app,

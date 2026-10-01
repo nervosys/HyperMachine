@@ -245,10 +245,9 @@ def main():
                             option = " --nodelay" if args.fixture_nodelay else ""
                             execute(f"/bin/tcp-fixture{option} </dev/null >/tmp/tcp-fixture.log 2>&1 &")
                             deadline = time.monotonic() + 5
-                            ready = "ready-nodelay" if args.fixture_nodelay else "ready"
-                            while execute("test -f /tmp/tcp-fixture-ready && cat /tmp/tcp-fixture-ready || true") != ready:
+                            while execute("test -f /tmp/tcp-fixture-ready && printf ready || true") != "ready":
                                 if time.monotonic() > deadline:
-                                    raise TimeoutError("guest TCP fixture unavailable or mode unsupported")
+                                    raise TimeoutError("guest TCP fixture unavailable")
                                 time.sleep(.01)
                             preparation["success"] = True
                             for round_index in range(args.rounds):

@@ -1,0 +1,22 @@
+{
+  "source_initrd_sha256": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+  "source_initrd_unchanged": true,
+  "init_sha256": "25879880540c60aeabff8f2d708b1acfaf8441fe617b228e644953b635ba5098",
+  "agent_sha256": "1e2eb51ddab6e76fe771c28b34969ce32aa6bbbbdc4d0a7396662de85b35eeb3",
+  "fixture_sha256": "c3897ec1cb2a90b21713de3c29300bfa70bf8e1a349ecc65d169039f0f47bfd7",
+  "fixture_source_sha256": "54b5b1ce3148979237e63da433f29d1ea31079703473d7df7047ee0ade918e97",
+  "output_sha256": "51b32b5940985289dd431964971c1746a7494e4fb8961a369bf93756bd355555",
+  "command": [
+    "gcc",
+    "-static",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "/mnt/c/Users/user/dev/nervosys/os/HyperMachine/tools/guest-image/tcp-fixture.c",
+    "-o",
+    "/var/tmp/hm-tcp-fixture-diagnostic/tcp-fixture"
+  ],
+  "compiler": "gcc (Debian 14.2.0-19) 14.2.0",
+  "builder_sha256": "0d949370943511b9ee395f17fb1557dd9b8c566251636edcc85ac69153c29db7"
+}

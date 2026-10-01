@@ -1,0 +1,35 @@
+{
+  "source_commit": "a9c5c935d7964b9bbdba481b5694645667c33233",
+  "source_sha256": {
+    "Cargo.lock": "4c9d2ed68cf63118d05119ed1f237d34124a24f94af32bc120cfd50bec1a78e4",
+    "crates/hv2-core/src/devices/virtio_vsock.rs": "f41a40065a43d644b9e7ba19fc8d82a9cea297647ab5d46109a652a431137903",
+    "crates/hv2-agent/src/guest_agent.rs": "ff88341827b762759fe4c71cd06fb41e77bf7e3aae2862ad14991997eb0392b8",
+    "crates/hv2-sandboxd/src/main.rs": "bc5e4a1a67e2d5c15e9419b493adf4d508b136ac42578036ede76b9cb6bbf9e0",
+    "crates/hv2-sandboxd/src/forwards.rs": "95107a99971ad29c8e151c7ca2c56af6b1a20cf1039bd2943f4d9d5f7eba4c62",
+    "crates/hv2-api/src/tcp_tunnel.rs": "cc30dd62d9c66c3bbb43dfb09a3e05c6abcc89ef28fdaadaa15516235103cf23",
+    "crates/hv2-api/src/tls.rs": "1103cd22bf540603d84ba17c1b3bcea5cb131862d184a1db50aaff0b7c06382c",
+    "crates/hv2-cluster/src/bin/hv2-control-plane.rs": "126832d819722c83eb74e7d05e1fc582d73c1a65cfb292dba578b6f3f84ce38f"
+  },
+  "command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--release",
+    "-p",
+    "hv2-sandboxd",
+    "-p",
+    "hv2-cluster",
+    "--bin",
+    "hv2-sandboxd",
+    "--bin",
+    "hv2-control-plane"
+  ],
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "success": true,
+  "exit_code": 0,
+  "output_utf8": "   Compiling hv2-api v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-api)\n   Compiling hv2-cluster v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-cluster)\n   Compiling hv2-sandboxd v1.1.0 (/mnt/c/Users/user/dev/nervosys/os/HyperMachine/crates/hv2-sandboxd)\n    Finished `release` profile [optimized] target(s) in 5m 03s\n",
+  "output_sha256": "c4114f536e977c65a17bcf060a3a4aa2308806e609fa0a448286e4ff34a571c1",
+  "binary_sha256": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+  "control_plane_sha256": "67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029",
+  "canonical_scored_binary_restored": true
+}

@@ -1,0 +1,1066 @@
+hv2-sandboxd: listening on 0.0.0.0:36805, capacity 2
+  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)
+  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)
+  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls
+  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener
+  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules
+  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy
+  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies
+  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log
+sandboxes get no network interface (--network to change that)
+sandboxes boot from the kernel (no template snapshot)
+
+sandbox proxy on 0.0.0.0:54669 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>
+  grpcurl -plaintext -authority 49983-$SBX.local -H "X-Access-Token: $TOKEN" -import-path crates/hv2-api/proto -proto process.proto \
+      -d '{"process":{"cmd":"/bin/sh","args":["-c","echo hi"]}}' \
+      localhost:54669 process.Process/Start
+2026-10-01T16:11:35.649011Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49153 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.649195Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49153
+2026-10-01T16:11:35.654411Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49154 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.654693Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49154
+2026-10-01T16:11:35.659884Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49155 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.679237Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49155
+2026-10-01T16:11:35.684499Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49156 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.685045Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49156
+2026-10-01T16:11:35.690277Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49157 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.690448Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:35.690527Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=45 src=2:49157 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+2026-10-01T16:11:35.690668Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:35.690799Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=73 src_port=1024 dst_port=49157
+2026-10-01T16:11:35.690883Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49157 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.690975Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49157 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.691153Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:35.691160Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:35.703562Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49158 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.703981Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:35.704075Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=180 src=2:49158 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=224 into 4140 writable bytes
+2026-10-01T16:11:35.705001Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:35.705013Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=181 src_port=1024 dst_port=49158
+2026-10-01T16:11:35.705088Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49158 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=181                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.705168Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49158 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=181                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.705280Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:35.705286Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:35.709292Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49159 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.709504Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49159
+2026-10-01T16:11:35.709586Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=190 src=2:49159 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=234 into 4140 writable bytes
+2026-10-01T16:11:35.710283Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49159
+2026-10-01T16:11:35.710552Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=139 src_port=1024 dst_port=49159
+2026-10-01T16:11:35.710619Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49159 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.710625Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49159 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.710748Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49159
+2026-10-01T16:11:35.714746Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49160 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.714970Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:35.715041Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=178 src=2:49160 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=222 into 4140 writable bytes
+2026-10-01T16:11:35.715660Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:35.715666Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=144 src_port=1024 dst_port=49160
+2026-10-01T16:11:35.715766Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49160 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=144                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.715787Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49160 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=144                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.715907Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:35.715914Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:35.716831Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.717004Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.717078Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=61 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=105 into 4140 writable bytes
+2026-10-01T16:11:35.718065Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.718309Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.718391Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.719430Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.719679Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.719837Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.719930Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.720264Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.720631Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.720638Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.720685Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=3 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.720783Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.720791Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.720795Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.720845Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.721044Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.721050Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.721051Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:35.721053Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.721126Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=61 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=105 into 4140 writable bytes
+2026-10-01T16:11:35.721469Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.721475Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.721548Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.722271Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722283Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722287Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722290Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722488Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722515Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722531Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722534Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722536Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722539Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722541Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722544Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722547Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722549Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722552Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722555Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722557Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722559Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722562Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722564Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722569Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722572Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722575Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722580Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722583Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722586Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722589Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722592Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722595Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722597Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722600Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722602Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722605Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722607Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722610Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722612Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722689Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.722699Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.722702Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.722704Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.722712Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.722758Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722770Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722773Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722776Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722779Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722782Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722898Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722910Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722914Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722917Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722920Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722922Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722925Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722927Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722930Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722932Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722934Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722943Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722945Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722947Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722950Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722952Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722954Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.722993Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.722999Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723002Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723004Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723006Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723009Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723011Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723013Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723015Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723625Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723632Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723640Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723642Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723646Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723649Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723654Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723658Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723663Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723667Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=5696 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723683Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723687Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723692Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723696Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=2496 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.723967Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.723987Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=8249                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:35.723990Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.723996Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724000Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724004Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724006Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724009Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724011Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724019Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724022Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724024Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724026Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724029Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724031Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724033Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724036Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724038Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724040Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724156Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724167Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724170Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724172Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724175Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724177Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724189Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724192Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724194Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724197Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724199Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:35.724278Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724286Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724290Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724293Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724295Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724298Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724300Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724303Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724306Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.724348Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724368Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724371Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724374Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724376Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724379Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724386Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724388Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724390Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724393Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.724395Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=2048 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=102457                  encoded=2092 into 4140 writable bytes
+2026-10-01T16:11:35.724504Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=172089                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.726865Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726871Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726873Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726877Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726880Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726883Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726886Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726888Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726891Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726894Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726896Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726899Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726902Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726904Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726907Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726912Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726925Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726929Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726933Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726937Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726949Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726952Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726954Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726956Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726959Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726961Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726963Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726965Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726967Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726972Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726976Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726983Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726988Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726992Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.726996Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727344Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.727371Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727378Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727381Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727392Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727395Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727398Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=2048 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=2092 into 4140 writable bytes
+2026-10-01T16:11:35.727534Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727556Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727560Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727564Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727568Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727570Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727573Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727576Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727578Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727581Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727583Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:35.727591Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727596Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727601Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727610Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727613Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727617Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727619Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727622Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727625Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727627Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727630Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727633Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727636Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727639Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727641Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727644Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727690Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727696Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727699Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727707Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727709Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727712Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727714Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727717Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727719Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727721Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727723Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:35.727771Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727777Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727781Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727794Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727797Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727800Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727802Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727805Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727808Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727815Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727818Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727820Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727822Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727825Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727827Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727829Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727833Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727835Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727837Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727839Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727842Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.727846Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727853Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727856Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727857Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727859Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727861Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727868Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727870Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727872Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727874Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727876Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727877Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=2048 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727879Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727881Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727882Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727884Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727886Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727888Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727889Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727891Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727893Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727894Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727896Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727898Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727899Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.727994Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728002Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728005Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728008Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728010Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728018Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728021Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728023Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728026Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728028Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728031Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728191Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728216Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.728222Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=2048 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=434233                  encoded=2092 into 4140 writable bytes
+2026-10-01T16:11:35.728225Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=481337                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.728316Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=485433                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.728746Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728752Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728754Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728755Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728757Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728759Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728761Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728763Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728772Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728774Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728777Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8139 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728780Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728783Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728785Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728788Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728790Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728793Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728795Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728798Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8139 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728801Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728803Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728806Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728808Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728812Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728814Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728817Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728820Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8139 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728822Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728825Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728827Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728830Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728832Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728835Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728838Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.728843Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=159 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.729122Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.729152Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729162Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729166Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729169Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729171Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729174Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729178Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729180Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729183Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729186Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729188Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729190Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729193Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729195Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729197Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=2048 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=2092 into 4140 writable bytes
+2026-10-01T16:11:35.729295Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729306Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729309Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729328Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729333Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729337Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729340Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729343Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729345Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729348Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729350Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729353Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729355Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729357Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729359Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729362Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729372Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729375Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729378Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729381Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729383Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729386Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729388Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729390Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729393Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729395Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729397Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729399Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729402Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729404Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729406Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729409Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729492Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.729587Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729619Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729623Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729626Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729629Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729632Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729634Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729637Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729639Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729641Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729644Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729646Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729648Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729651Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729653Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729655Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729662Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729664Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=2048 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=747577                  encoded=2092 into 4140 writable bytes
+2026-10-01T16:11:35.729877Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=755769                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.729886Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=755769                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.729889Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=755769                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.730554Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730561Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730566Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730568Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730571Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730574Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730577Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730580Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730582Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730585Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730588Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730591Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730594Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730596Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730599Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730602Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730605Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730607Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730616Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730619Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730621Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730624Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730628Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730631Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730635Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730637Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730640Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730643Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730645Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730648Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730651Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730654Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730657Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.730659Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.731243Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.731287Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731295Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731299Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731302Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731305Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731315Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731318Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:35.731322Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=2048 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1017913                  encoded=2092 into 4140 writable bytes
+2026-10-01T16:11:35.731564Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.731678Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1026105                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.731838Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.731927Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1034297                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.732024Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.732099Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1042489                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.732136Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.732346Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=6144 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.732427Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.776948Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.777733Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.777927Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.778031Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=100:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:35.778493Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.778500Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:35.778502Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.085714Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49153 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.090882Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49153
+2026-10-01T16:11:37.096147Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49154 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.096619Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49154
+2026-10-01T16:11:37.101818Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49155 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.120639Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49155
+2026-10-01T16:11:37.125893Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49156 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.126361Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49156
+2026-10-01T16:11:37.131591Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49157 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.131917Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:37.132026Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=45 src=2:49157 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=89 into 4140 writable bytes
+2026-10-01T16:11:37.132381Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:37.132396Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=73 src_port=1024 dst_port=49157
+2026-10-01T16:11:37.132496Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49157 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.132515Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49157 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=73                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.132664Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:37.132838Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49157
+2026-10-01T16:11:37.141640Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49158 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.142038Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:37.142179Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=180 src=2:49158 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=224 into 4140 writable bytes
+2026-10-01T16:11:37.143185Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:37.143199Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=181 src_port=1024 dst_port=49158
+2026-10-01T16:11:37.143300Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49158 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=181                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.143361Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49158 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=181                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.143590Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:37.143599Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49158
+2026-10-01T16:11:37.147919Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49159 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.148276Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49159
+2026-10-01T16:11:37.148376Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=190 src=2:49159 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=234 into 4140 writable bytes
+2026-10-01T16:11:37.149168Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49159
+2026-10-01T16:11:37.149467Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=139 src_port=1024 dst_port=49159
+2026-10-01T16:11:37.149544Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49159 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.149553Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49159 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=139                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.149710Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49159
+2026-10-01T16:11:37.153621Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49160 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.153863Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:37.153951Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=178 src=2:49160 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=222 into 4140 writable bytes
+2026-10-01T16:11:37.154635Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:37.154642Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=144 src_port=1024 dst_port=49160
+2026-10-01T16:11:37.154721Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49160 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=144                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.154727Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49160 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=144                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.154857Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:37.154864Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49160
+2026-10-01T16:11:37.155509Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.155735Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.155810Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=61 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=105 into 4140 writable bytes
+2026-10-01T16:11:37.156791Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.156989Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.157066Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.158022Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.158205Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.158470Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.158550Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.158913Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.159422Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.159429Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.159468Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=3 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.159589Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.159598Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.159696Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49161 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=4153                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.159781Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=1 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.160028Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.160047Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.160064Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49161
+2026-10-01T16:11:37.160066Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=2 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.160154Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=61 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=0                  encoded=105 into 4140 writable bytes
+2026-10-01T16:11:37.160597Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.160604Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=57 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.160686Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.161587Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161599Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161603Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161606Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161618Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161632Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161636Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161639Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161642Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161644Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161647Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161649Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161717Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161723Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161726Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161729Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161789Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161830Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161839Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161843Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161847Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161850Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161854Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161858Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161861Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161865Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161868Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161871Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161874Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161885Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161888Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161892Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161900Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161904Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161907Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161911Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161915Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161918Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161921Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161924Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161928Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161931Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161935Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161939Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161942Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161945Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161952Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.161955Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1024 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=1068 into 4140 writable bytes
+2026-10-01T16:11:37.162010Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162018Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162081Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162096Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162100Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162104Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162107Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162109Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162112Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162114Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162116Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162119Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162122Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162124Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162126Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162137Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162141Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:37.162210Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162220Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162223Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162226Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162228Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162230Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162233Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162234Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162236Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162384Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162394Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1024 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=57                  encoded=1068 into 4140 writable bytes
+2026-10-01T16:11:37.162397Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.162429Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162436Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162440Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.162443Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:37.162970Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=4096 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162976Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162984Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162987Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162990Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162995Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.162998Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.163001Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.163004Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.163006Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=2624 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.163179Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163188Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163192Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163195Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163197Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163200Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163202Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163204Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163207Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163209Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163211Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163223Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163225Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1024 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=16441                  encoded=1068 into 4140 writable bytes
+2026-10-01T16:11:37.163228Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.163267Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163276Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163279Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163282Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163285Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163288Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163292Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163295Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163297Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163300Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163302Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163305Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163307Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163309Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163318Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163322Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163361Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163368Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163371Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163374Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163376Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163379Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163382Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163385Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163387Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163390Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163392Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163394Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163396Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163399Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163401Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163408Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163527Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163539Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163543Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163545Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163548Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163551Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163554Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163556Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163559Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163561Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163563Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163565Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163568Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163570Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.163572Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=72313                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:37.164302Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164318Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164322Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164324Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164327Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164330Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164333Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164336Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164338Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164341Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164344Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164348Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164350Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164353Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164355Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164358Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164361Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164364Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164366Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164368Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164371Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164374Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164376Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164379Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=1472 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.164625Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=262201                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.165840Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.165846Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.165920Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.166005Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.166095Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166102Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1024 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=1068 into 4140 writable bytes
+2026-10-01T16:11:37.166147Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166156Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166159Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166162Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166165Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166167Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166170Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166172Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166175Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166177Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166179Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166182Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166190Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166192Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166195Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166197Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166200Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166203Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166205Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166208Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166210Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166213Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166215Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166218Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166220Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166222Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166225Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166227Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166231Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166233Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166236Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166238Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166303Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.166309Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.166335Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166352Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166355Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166358Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166360Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166362Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166365Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166369Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166371Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166373Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166375Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166383Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166390Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166392Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166394Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166397Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166400Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166403Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166405Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166408Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166410Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166413Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166415Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166418Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166420Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166422Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166425Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166427Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166431Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166434Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166436Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:37.166593Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.166601Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=1024 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=1068 into 4140 writable bytes
+2026-10-01T16:11:37.167061Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167067Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167070Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167073Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167076Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167079Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167081Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167085Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167088Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167090Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167093Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167096Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167099Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167102Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167104Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167107Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167109Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167117Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167120Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167123Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167126Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167128Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167131Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167134Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167136Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167139Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167142Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167145Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167147Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167149Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167151Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167154Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167157Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167159Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.167520Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167530Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167534Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167536Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167539Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167542Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167551Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167554Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167556Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167559Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167562Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167564Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167566Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167568Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167571Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167573Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=270393                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167576Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.167621Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167627Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167630Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167633Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167635Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167642Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167649Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167652Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167654Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167657Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167659Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167663Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167665Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167667Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167670Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167673Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167731Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167737Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167740Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167743Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167746Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167783Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167802Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167806Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167810Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167816Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167820Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167823Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167826Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167828Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167830Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167832Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167835Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167837Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167840Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167843Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167845Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167848Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167856Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167858Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167860Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167862Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167864Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167867Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167869Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167871Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=4096 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=4140 into 4140 writable bytes
+2026-10-01T16:11:37.167873Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=5 len=3072 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=532537                  encoded=3116 into 4140 writable bytes
+2026-10-01T16:11:37.168567Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168575Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168576Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168578Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168579Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168581Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168582Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168584Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168585Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168587Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168588Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168595Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168597Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168598Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168599Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168601Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168605Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168608Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168610Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168612Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168614Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168617Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168619Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168622Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168624Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168626Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168629Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168631Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168634Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168636Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168639Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168641Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168644Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168646Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168648Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168651Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168653Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168658Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168660Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168662Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168665Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168667Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168669Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168671Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168673Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168675Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168677Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168680Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168681Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168683Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168684Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168686Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168687Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168688Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168690Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168691Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168693Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168694Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168695Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168697Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168698Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168700Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168701Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168704Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168706Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168707Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168708Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168710Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168711Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168713Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168714Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168715Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168717Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168718Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168720Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168721Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168989Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=6 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.168995Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=794681                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.169198Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169205Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169209Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169211Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169214Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169217Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169222Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169226Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169229Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169232Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169241Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169243Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169246Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169249Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169252Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169255Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169257Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169260Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169262Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169265Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169268Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169271Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169274Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169276Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169279Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169281Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169284Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169287Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169289Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169292Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169294Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=5 len=8192 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.169521Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=6 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.170451Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.170754Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.170766Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=4 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.170810Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=3 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.170973Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.170981Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.171049Z DEBUG hv2_core::devices::virtio_vsock: vsock: to guest op=4 len=0 src=2:49162 dst=101:1024 type=1 buf_alloc=262144 fwd_cnt=1048633                  encoded=44 into 4140 writable bytes
+2026-10-01T16:11:37.171084Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.171091Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49162
+2026-10-01T16:11:37.171183Z DEBUG hv2_core::devices::virtio_vsock: vsock: from guest op=3 len=0 src_port=1024 dst_port=49162

@@ -68,7 +68,7 @@ pub async fn serve_tls(
     tokio::pin!(shutdown);
 
     loop {
-        let (tcp_stream, remote_addr) = tokio::select! {
+        let (mut tcp_stream, remote_addr) = tokio::select! {
             result = listener.accept() => match result {
                 Ok(conn) => conn,
                 Err(e) => {
@@ -81,6 +81,8 @@ pub async fn serve_tls(
                 break;
             }
         };
+
+        configure_api_socket(&mut tcp_stream);
 
         let acceptor = acceptor.clone();
         let app = app.clone();
@@ -114,6 +116,15 @@ pub async fn serve_tls(
     }
 
     Ok(())
+}
+
+/// API connections may become raw tunnels with small writes. Disable Nagle
+/// buffering before either HTTP or TLS owns the socket, so delayed peer
+/// acknowledgements do not hold an already-produced tunnel response.
+pub fn configure_api_socket(stream: &mut tokio::net::TcpStream) {
+    if let Err(error) = stream.set_nodelay(true) {
+        tracing::warn!(%error, "could not disable API TCP buffering");
+    }
 }
 
 #[cfg(test)]
