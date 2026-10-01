@@ -41,6 +41,15 @@ pub fn router(store: Store, token: Option<String>) -> Router {
         .route("/api/v1/jobs/{id}", get(detail))
         .route("/api/v1/jobs/{id}/logs", get(logs))
         .route("/api/v1/jobs/{id}/cancel", post(cancel))
+        .route(
+            "/api/v1/schedules/{id}",
+            post(schedule_create).get(schedule_detail),
+        )
+        .route("/api/v1/schedules/{id}/publish", post(schedule_publish))
+        .route(
+            "/api/v1/schedules/{id}/occurrences",
+            get(schedule_occurrences),
+        )
         .route_layer(middleware::from_fn_with_state(api.clone(), authorize))
         .with_state(api)
 }
@@ -74,6 +83,95 @@ fn from_job_error(e: JobError) -> Response {
         JobError::Io(_) | JobError::Corrupt(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
     error(status, e)
+}
+
+// Schedule publication performs sync filesystem operations. Keep them off the
+// async request executor; authentication is shared with every existing route.
+async fn schedule_operation(
+    status: StatusCode,
+    operation: impl FnOnce() -> crate::Result<serde_json::Value> + Send + 'static,
+) -> Response {
+    match tokio::task::spawn_blocking(operation).await {
+        Ok(Ok(value)) => (status, Json(value)).into_response(),
+        Ok(Err(error)) => from_job_error(error),
+        Err(_) => error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "schedule operation failed",
+        ),
+    }
+}
+
+async fn schedule_create(
+    State(api): State<Api>,
+    Path(id): Path<String>,
+    Json(spec): Json<crate::schedule::IntervalSchedule>,
+) -> Response {
+    schedule_operation(StatusCode::CREATED, move || {
+        api.store.create_interval_schedule(&id, &spec)?;
+        Ok(json!({"id": id}))
+    })
+    .await
+}
+
+async fn schedule_detail(State(api): State<Api>, Path(id): Path<String>) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        Ok(json!({
+            "id": id, "schedule": api.store.interval_schedule(&id)?,
+            "publication_through_ms": api.store.interval_progress(&id)?
+        }))
+    })
+    .await
+}
+
+fn batch_limit() -> usize {
+    100
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublishRequest {
+    now_ms: Option<u64>,
+    #[serde(default = "batch_limit")]
+    limit: usize,
+}
+
+async fn schedule_publish(
+    State(api): State<Api>,
+    Path(id): Path<String>,
+    Json(request): Json<PublishRequest>,
+) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        let records = api.store.materialize_interval(
+            &id,
+            request.now_ms.unwrap_or_else(crate::now_ms),
+            request.limit,
+        )?;
+        Ok(json!(records))
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct OccurrenceQuery {
+    after_ms: Option<u64>,
+    #[serde(default = "batch_limit")]
+    limit: usize,
+}
+
+async fn schedule_occurrences(
+    State(api): State<Api>,
+    Path(id): Path<String>,
+    Query(query): Query<OccurrenceQuery>,
+) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        Ok(json!(api.store.committed_interval_occurrences(
+            &id,
+            query.after_ms,
+            query.limit
+        )?))
+    })
+    .await
 }
 
 async fn submit(State(api): State<Api>, Json(spec): Json<JobSpec>) -> Response {
@@ -276,6 +374,100 @@ mod tests {
 
         let (s, body) = call(&app, "GET", &format!("/api/v1/jobs/{id}/logs"), None, None).await;
         assert_eq!((s, body.as_str()), (StatusCode::OK, ""));
+    }
+
+    #[tokio::test]
+    async fn schedule_routes_authenticate_publish_and_recover_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, app) = app(dir.path(), Some("schedule-token"));
+        for (method, path) in [
+            ("POST", "/api/v1/schedules/test"),
+            ("GET", "/api/v1/schedules/test"),
+            ("POST", "/api/v1/schedules/test/publish"),
+            ("GET", "/api/v1/schedules/test/occurrences"),
+        ] {
+            for token in [None, Some("wrong")] {
+                assert_eq!(
+                    call(&app, method, path, Some("{}"), token).await.0,
+                    StatusCode::UNAUTHORIZED
+                );
+            }
+        }
+        let token = Some("schedule-token");
+        let spec = r#"{"first_ms":100,"every_ms":10,"job":{"command":["must-not-execute"]}}"#;
+        assert_eq!(
+            call(&app, "POST", "/api/v1/schedules/test", Some(spec), token)
+                .await
+                .0,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            call(&app, "POST", "/api/v1/schedules/test", Some(spec), token)
+                .await
+                .0,
+            StatusCode::CONFLICT
+        );
+        let (status, body) = call(
+            &app,
+            "POST",
+            "/api/v1/schedules/test/publish",
+            Some(r#"{"now_ms":135,"limit":2}"#),
+            token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let records: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(records.as_array().unwrap().len(), 2);
+        assert_eq!(records[1]["scheduled_ms"], 110);
+        let (status, body) = call(&app, "GET", "/api/v1/schedules/test", None, token).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&body).unwrap()["publication_through_ms"],
+            110
+        );
+        let (status, body) = call(
+            &app,
+            "GET",
+            "/api/v1/schedules/test/occurrences?after_ms=100&limit=1",
+            None,
+            token,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&body).unwrap()[0]["scheduled_ms"],
+            110
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/test/publish",
+                Some(r#"{"limit":0}"#),
+                token
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+        assert!(call(
+            &app,
+            "POST",
+            "/api/v1/schedules/test/publish",
+            Some(r#"{"typo":1}"#),
+            token
+        )
+        .await
+        .0
+        .is_client_error());
+        assert_eq!(
+            call(&app, "GET", "/api/v1/schedules/missing", None, token)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+        assert!(store.list().unwrap().is_empty());
+        assert!(store.claim("worker", &[]).unwrap().is_none());
     }
 
     #[tokio::test]

@@ -138,6 +138,20 @@ testing. Limits must be 1-1024. Names are immutable: duplicate creation fails.
 Publication stores occurrence records and does not enqueue or execute jobs.
 The existing `hm jobs worker` does not consume these records.
 
+The same publication operations are served by `hm jobs serve`, with its existing
+bearer-token requirement applied to every schedule route:
+
+| Request | Result |
+|---|---|
+| `POST /api/v1/schedules/{id}` with an interval spec | `201 {"id": ...}`; duplicate IDs return `409` |
+| `GET /api/v1/schedules/{id}` | Schedule and `publication_through_ms` |
+| `POST /api/v1/schedules/{id}/publish` with `{"limit":100}` | One bounded batch of occurrence records; optional `now_ms` overrides the wall clock |
+| `GET /api/v1/schedules/{id}/occurrences?after_ms=...&limit=100` | A page of committed records after an exclusive cursor |
+
+Publication and page limits must be 1-1024. Unknown publish fields are refused.
+Schedule filesystem operations run in blocking tasks. These routes provide no
+automatic clock loop, job execution, schedule update or cancellation yet.
+
 VM scheduling remains unimplemented. Inspection on 2026-10-01 found that
 `hv2-jobs/src/worker.rs::run_job` launches a local `ProcessSandbox`; its
 cancellation and lease-loss watcher controls that local process. Launching
@@ -236,7 +250,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 32 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 33 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -247,6 +261,8 @@ unprivileged user:
   bounded continuation without republishing prior occurrence times;
 - committed occurrence pages recovered after reopening, including exclusion
   of uncommitted records and records skipped under coalescing;
+- schedule API authentication on every route, duplicate conflicts, bounded
+  publication and pages, invalid input rejection and no runnable-job creation;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;
