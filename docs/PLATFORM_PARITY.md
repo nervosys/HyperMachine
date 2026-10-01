@@ -689,10 +689,12 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Pinned APIC diagnostic repeat | Firecracker 1.17.0 | 94 / 100 | 2266.94 | 4000.67 |
 | PIT stub and API-readiness correction, pinned repeat | HyperMachine | 93 / 100 | 1748.13 | 3366.14 |
 | PIT stub and API-readiness correction, pinned repeat | Firecracker 1.17.0 | 100 / 100 | 1245.19 | 3125.96 |
+| Pre-kick PIC/PIT diagnostics, matched readiness deadlines | HyperMachine | 97 / 100 | 1170.51 | 3865.63 |
+| Pre-kick PIC/PIT diagnostics, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 815.35 | 3719.40 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
-and all three pinned contention comparisons. The 200-pair and unpinned two-worker cohorts
+and all pinned contention comparisons. The 200-pair and unpinned two-worker cohorts
 passed. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
 failed 5/140 attempts in the first three normal-logging cohorts while Firecracker passed 140/140. HyperMachine's median was slower in every recorded normal-logging cohort. We have not achieved across-the-board superiority.
@@ -926,4 +928,21 @@ valid 65536-count boundary. A real-KVM regression read the controller state whil
 a raw guest remained halted with interrupts disabled, then stopped it; both
 that test and the existing halted/spinning owner regression passed. Strict
 all-targets core/daemon Clippy passed on Windows. Live Linux-failure integration
-remains pending for this new diagnostic step. Successful readiness does not request these samples.
+captured controller and owner state in all three failures of the latest cohort.
+Successful readiness does not request these samples.
+
+The [pre-kick PIC/PIT cohort](benchmarks/2026-09-30/local-engines-pre-kick-pic-pit-pinned-load-100.json)
+and [exact coordinator](benchmarks/2026-09-30/pre-kick-pic-pit-pinned-load-coordinator.py)
+record 97/100 HyperMachine passes versus 100/100 Firecracker passes. Both engines
+have a 15-second guest-readiness budget; driver, engines and one contending worker
+inherit CPU 0 affinity. Artifact hashes remained unchanged and all owned processes
+were cleaned up. HyperMachine failed pairs 1, 5 and 97 with no console output and
+2401 exits, unchanged over the 0.5-second observation window. Before the diagnostic
+kick, each master PIC reported IRR=0x11, IMR=0 and ISR=0: timer and UART requests
+were pending and unmasked. PIT channel 0 reported count 1193, mode 2 and gate 1.
+After the kick, owner samples showed the same default_idle address with IF set,
+LVT0=0x700 and empty LAPIC ISR/IRR arrays. Independent controller reads and the
+later owner sample do not establish an atomic state or root cause. Interrupt
+delivery remains under investigation. This failed cohort cannot support a
+performance win; the lower failure count versus earlier shared-host runs does
+not establish a reliability improvement.
