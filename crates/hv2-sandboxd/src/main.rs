@@ -3427,10 +3427,10 @@ async fn guest_report(vm: &AgentVM) -> String {
         Ok(None) => "pre-kick machine sample unavailable".into(),
         Err(error) => format!("pre-kick machine diagnostic unavailable: {error}"),
     };
-    let architecture = match machine.diagnostic_vcpu_states().await {
+    let architecture = match machine.diagnostic_vcpu_samples().await {
         Ok(states) => states
             .into_iter()
-            .map(|state| boot_diagnostics::owner_sample(&state))
+            .map(|state| boot_diagnostics::owner_diagnostic(&state))
             .collect::<Vec<_>>()
             .join(", "),
         Err(error) => format!("owner diagnostic unavailable: {error}"),

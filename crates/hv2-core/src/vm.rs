@@ -3,6 +3,7 @@
 //! This module provides the core VM abstraction including multi-vCPU
 //! parallel execution support using tokio tasks.
 
+use crate::hypervisor::VCpuDiagnostic;
 use crate::snapshot::device as snapshot_device;
 use crate::snapshot::file as snapshot_file;
 use crate::snapshot::vcpu::VCpuSnapshot;
@@ -233,7 +234,7 @@ enum VCpuMessage {
     Interrupt { vector: u8 },
     /// Read architectural state on the execution owner between KVM_RUN calls.
     Inspect {
-        reply: tokio::sync::oneshot::Sender<Result<VCpuSnapshot>>,
+        reply: tokio::sync::oneshot::Sender<Result<VCpuDiagnostic>>,
     },
 }
 
@@ -1900,6 +1901,16 @@ impl VM {
     /// multi-vCPU snapshot, and must not be used for restoring a VM.
     /// The whole response wait is bounded to five seconds.
     pub async fn diagnostic_vcpu_states(&self) -> Result<Vec<VCpuSnapshot>> {
+        Ok(self
+            .diagnostic_vcpu_samples()
+            .await?
+            .into_iter()
+            .map(|sample| sample.architecture)
+            .collect())
+    }
+
+    /// Owner-thread architecture and interrupt-event observations.
+    pub async fn diagnostic_vcpu_samples(&self) -> Result<Vec<VCpuDiagnostic>> {
         if self.state() != VMState::Running {
             return Err(Error::InvalidState(
                 "diagnostics require a running VM".into(),
@@ -3167,7 +3178,7 @@ impl VM {
                     paused = false;
                 }
                 Ok(VCpuMessage::Inspect { reply }) => {
-                    let _ = reply.send(backend.save_vcpu(&vcpu).await);
+                    let _ = reply.send(backend.inspect_vcpu(&vcpu).await);
                     continue;
                 }
                 Ok(VCpuMessage::Interrupt { vector }) => {
@@ -3190,7 +3201,7 @@ impl VM {
                     Some(VCpuMessage::Resume) => paused = false,
                     Some(VCpuMessage::Stop) | None => break,
                     Some(VCpuMessage::Inspect { reply }) => {
-                        let _ = reply.send(backend.save_vcpu(&vcpu).await);
+                        let _ = reply.send(backend.inspect_vcpu(&vcpu).await);
                         continue;
                     }
                     _ => continue,

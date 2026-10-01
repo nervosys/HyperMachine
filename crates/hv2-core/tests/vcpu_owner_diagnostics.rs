@@ -107,7 +107,7 @@ async fn halted_and_spinning_guests_reply_on_the_owner_and_remain_stoppable() {
         let sampled = async {
             let mut samples = Vec::new();
             for _ in 0..10 {
-                samples.push(vm.diagnostic_vcpu_states().await?);
+                samples.push(vm.diagnostic_vcpu_samples().await?);
             }
             Ok::<_, hv2_core::Error>(samples)
         }
@@ -118,7 +118,15 @@ async fn halted_and_spinning_guests_reply_on_the_owner_and_remain_stoppable() {
             .expect("diagnostic guest must remain stoppable")
             .unwrap();
         assert_eq!(state_after_samples, VMState::Running);
-        for states in sampled.expect("owner must reply for halted and spinning guests") {
+        for observations in sampled.expect("owner must reply for halted and spinning guests") {
+            assert!(
+                observations[0].interrupts.as_ref().unwrap().is_some(),
+                "KVM events captured on owner"
+            );
+            let states: Vec<_> = observations
+                .into_iter()
+                .map(|sample| sample.architecture)
+                .collect();
             assert_eq!(states.len(), 1);
             assert_eq!(states[0].id, 0);
             assert_eq!(states[0].general.rip, expected_rip, "{name} architecture");

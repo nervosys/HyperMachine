@@ -993,3 +993,14 @@ reflect execution after the kick. Pending unmasked PIC requests remained present
 This verifies the topology change does not eliminate the startup defect;
 the failed cohort supports no performance win or causal reliability comparison.
 Topology field interpretation follows the [Linux x86 topology documentation](https://docs.kernel.org/arch/x86/topology.html).
+
+Owner diagnostics now have a separate event observation alongside architecture,
+without adding fields to persisted vCPU snapshots. KVM_GET_VCPU_EVENTS executes
+on the vCPU owner between run calls and reports injected IRQ/vector, exception
+state, NMI state and interrupt shadow. Shadow and NMI-pending fields require
+their KVM validity flags; absent flags produce unavailable values. Unsupported
+backends and read failures preserve architectural output without inventing zero
+event state. The Linux validity regression and five daemon formatting tests
+passed. All three real-KVM owner tests and strict all-targets Linux core Clippy
+passed; live failed-boot integration remains unverified. These independent post-kick reads
+cannot prove the exact pre-kick state or the startup failure's cause.
