@@ -27,7 +27,14 @@ pub struct VmArgs {
 #[derive(Debug, Subcommand)]
 pub enum VmCommand {
     /// Serve remote sandbox lifecycle tools using the MCP stdio protocol
-    Mcp,
+    Mcp {
+        /// Operator-selected envd endpoint for binary file tools
+        #[arg(long)]
+        envd_endpoint: Option<String>,
+        /// Proxy domain appended to the sandbox's envd host label
+        #[arg(long, requires = "envd_endpoint")]
+        envd_domain: Option<String>,
+    },
     /// Measure creation through a verified guest command, with bounded concurrency
     Benchmark {
         #[arg(long, default_value = "base")]
@@ -204,8 +211,11 @@ pub async fn run(args: VmArgs) -> Result<i32> {
         std::env::var("HV2_API_KEY").ok(),
     )?;
     let value = match args.command {
-        VmCommand::Mcp => {
-            mcp::serve(api, args.request_timeout).await?;
+        VmCommand::Mcp {
+            envd_endpoint,
+            envd_domain,
+        } => {
+            mcp::serve(api, args.request_timeout, envd_endpoint, envd_domain).await?;
             return Ok(0);
         }
         VmCommand::Benchmark {

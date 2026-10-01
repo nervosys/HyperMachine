@@ -2,6 +2,7 @@
 """Check the shipped MCP stdio command with the official client and real guests."""
 import argparse
 import asyncio
+import base64
 from datetime import timedelta
 import hashlib
 import importlib.metadata
@@ -18,8 +19,11 @@ async def check(args):
     events = []
     errors = []
     key = os.environ.get("HV2_API_KEY", "")
+    command = ["sandbox", "vm", "--endpoint", args.api_url, "mcp"]
+    if args.envd_proxy:
+        command.extend(["--envd-endpoint", args.envd_proxy, "--envd-domain", "sandbox.local"])
     params = StdioServerParameters(command=str(args.binary.resolve()),
-        args=["sandbox", "vm", "--endpoint", args.api_url, "mcp"],
+        args=command,
         env={"HV2_API_KEY": key})
     async with stdio_client(params) as streams:
         async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=150)) as session:
@@ -52,8 +56,9 @@ async def check(args):
                 return value
             try:
                 tools = await session.list_tools()
-                if len(tools.tools) != 12:
-                    raise RuntimeError("expected 12 shipped tools")
+                expected_tools = 14 if args.envd_proxy else 12
+                if len(tools.tools) != expected_tools:
+                    raise RuntimeError(f"expected {expected_tools} shipped tools")
                 parent = (await call("sandbox_create"))["sandboxID"]
                 marker = "hm-mcp-" + uuid.uuid4().hex
                 path = "/tmp/" + marker
@@ -63,6 +68,18 @@ async def check(args):
                         raise RuntimeError("guest output mismatch")
                     return value
                 await command(parent, f"printf '%s' '{marker}' > '{path}'; cat '{path}'", marker)
+                if args.envd_proxy:
+                    payload = bytes(range(256)) * 1024
+                    guest_path = "/root/mcp-binary'&query=literal.bin"
+                    uploaded = await call("file_upload", {"id":parent,"path":guest_path,
+                        "data_base64":base64.b64encode(payload).decode()})
+                    if uploaded.get("bytes") != len(payload):
+                        raise RuntimeError("file upload size mismatch")
+                    downloaded = await call("file_download", {"id":parent,"path":guest_path})
+                    if base64.b64decode(downloaded.get("data_base64", ""), validate=True) != payload:
+                        raise RuntimeError("binary file roundtrip mismatch")
+                    await command(parent, "head -c 262145 /dev/zero > /root/mcp-too-large.bin")
+                    await call("file_download", {"id":parent,"path":"/root/mcp-too-large.bin"}, failed=True)
                 info = await call("sandbox_inspect", {"id":parent})
                 if info.get("cpuCount") != 1 or info.get("memoryMB") != 1024:
                     raise RuntimeError("expected 1 vCPU/1024 MiB fixture")
@@ -115,4 +132,5 @@ if __name__ == "__main__":
     parser.add_argument("--binary", required=True, type=Path)
     parser.add_argument("--api-url", required=True)
     parser.add_argument("--environment", required=True)
+    parser.add_argument("--envd-proxy", help="Enable binary file tools through this operator-selected proxy")
     raise SystemExit(asyncio.run(check(parser.parse_args())))

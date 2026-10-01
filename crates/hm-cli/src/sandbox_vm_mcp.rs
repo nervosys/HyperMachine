@@ -1,5 +1,7 @@
 //! Newline-framed MCP 2025-11-25 over stdio, backed only by the remote API.
 use super::{shell_exec, Api};
+#[path = "sandbox_vm_mcp_files.rs"]
+mod files;
 use anyhow::{bail, Result};
 use reqwest::Method;
 use serde::Deserialize;
@@ -312,6 +314,7 @@ fn tool_failed(value: &Value, exec: bool) -> bool {
 struct Session {
     negotiated: bool,
     ready: bool,
+    files: Option<files::FileRoute>,
 }
 
 impl Session {
@@ -358,13 +361,51 @@ impl Session {
                 json!({"protocolVersion":VERSION,"capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"hypermachine-sandbox","version":env!("CARGO_PKG_VERSION")}})
             }
             "ping" => json!({}),
-            "tools/list" if self.ready => tools(),
+            "tools/list" if self.ready => {
+                let mut value = tools();
+                if self.files.is_some() {
+                    value["tools"]
+                        .as_array_mut()
+                        .unwrap()
+                        .extend(files::tools());
+                }
+                value
+            }
             "tools/call" if self.ready => {
                 let mut call_params = params;
                 // MCP request metadata is not part of the tool's argument schema.
                 call_params.as_object_mut().unwrap().remove("_meta");
                 if call_params.get("arguments").is_none() {
                     call_params["arguments"] = json!({});
+                }
+                if matches!(
+                    call_params["name"].as_str(),
+                    Some("file_upload" | "file_download")
+                ) {
+                    let Some(route) = &self.files else {
+                        return Some(error(id, -32602, "File tools are not configured"));
+                    };
+                    let operation = serde_json::from_value::<files::FileCall>(call_params)
+                        .map_err(anyhow::Error::from)
+                        .and_then(files::FileCall::prepare);
+                    let operation = match operation {
+                        Ok(value) => value,
+                        Err(_) => return Some(error(id, -32602, "Invalid file tool arguments")),
+                    };
+                    let result = match tokio::time::timeout(
+                        std::time::Duration::from_secs(deadline),
+                        route.execute(api, operation),
+                    )
+                    .await
+                    {
+                        Ok(Ok(value)) => {
+                            json!({"content":[{"type":"text","text":value.to_string()}],"structuredContent":value,"isError":false})
+                        }
+                        _ => {
+                            json!({"content":[{"type":"text","text":"Sandbox file operation failed"}],"isError":true})
+                        }
+                    };
+                    return Some(json!({"jsonrpc":"2.0","id":id,"result":result}));
                 }
                 let call: Call = match serde_json::from_value(call_params) {
                     Ok(call) => call,
@@ -399,10 +440,14 @@ impl Session {
 async fn transport<R: AsyncBufRead + Unpin, W: AsyncWrite + Unpin>(
     api: &Api,
     deadline: u64,
+    files: Option<files::FileRoute>,
     input: &mut R,
     output: &mut W,
 ) -> Result<()> {
-    let mut session = Session::default();
+    let mut session = Session {
+        files,
+        ..Default::default()
+    };
     loop {
         let mut line = Vec::new();
         let read = input
@@ -425,10 +470,19 @@ async fn transport<R: AsyncBufRead + Unpin, W: AsyncWrite + Unpin>(
     }
 }
 
-pub(super) async fn serve(api: Api, deadline: u64) -> Result<()> {
+pub(super) async fn serve(
+    api: Api,
+    deadline: u64,
+    endpoint: Option<String>,
+    domain: Option<String>,
+) -> Result<()> {
+    let files = endpoint
+        .map(|endpoint| files::FileRoute::new(&endpoint, domain, deadline))
+        .transpose()?;
     transport(
         &api,
         deadline,
+        files,
         &mut BufReader::new(tokio::io::stdin()),
         &mut tokio::io::stdout(),
     )
@@ -502,6 +556,7 @@ mod tests {
         let mut session = Session {
             negotiated: true,
             ready: true,
+            files: None,
         };
         for (name, arguments) in [
             ("sandbox_create", json!({"lifetime":0})),
@@ -550,10 +605,46 @@ mod tests {
         let bytes = vec![b'x'; (MAX_MESSAGE + 1) as usize];
         let mut input = BufReader::new(bytes.as_slice());
         let mut output = Vec::new();
-        assert!(transport(&api(), 120, &mut input, &mut output)
+        assert!(transport(&api(), 120, None, &mut input, &mut output)
             .await
             .is_err());
         assert!(output.is_empty());
+    }
+
+    #[tokio::test]
+    async fn file_tools_require_operator_configuration_and_validate_before_connect() {
+        let mut session = Session {
+            negotiated: true,
+            ready: true,
+            files: None,
+        };
+        let list = json!({"jsonrpc":"2.0","id":2,"method":"tools/list"});
+        assert_eq!(
+            message(&mut session, list.clone()).await["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .len(),
+            12
+        );
+        let call = json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"file_download","arguments":{"id":"vm","path":"/file"}}});
+        assert_eq!(
+            message(&mut session, call.clone()).await["error"]["code"],
+            -32602
+        );
+        session.files = Some(files::FileRoute::new("http://127.0.0.1:1", None, 1).unwrap());
+        assert_eq!(
+            message(&mut session, list).await["result"]["tools"]
+                .as_array()
+                .unwrap()
+                .len(),
+            14
+        );
+        let mut invalid = call;
+        invalid["params"]["arguments"]["endpoint"] = json!("http://attacker");
+        assert_eq!(
+            message(&mut session, invalid).await["error"]["code"],
+            -32602
+        );
     }
 
     #[test]
