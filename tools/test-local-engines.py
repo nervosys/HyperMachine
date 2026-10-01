@@ -4,6 +4,7 @@ import importlib.util
 import errno
 from pathlib import Path
 import types
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -13,6 +14,27 @@ spec.loader.exec_module(engines)
 
 
 class FirecrackerReadiness(unittest.TestCase):
+    def test_guest_budget_matches_daemon_and_never_extends_total_deadline(self):
+        for total_timeout, expected_deadline in [(30, 25), (8, 18)]:
+            with self.subTest(total_timeout=total_timeout), tempfile.TemporaryDirectory() as directory:
+                context = Mock()
+                context.__enter__ = Mock(return_value=directory)
+                context.__exit__ = Mock(return_value=False)
+                process = Mock()
+                process.poll.return_value = 0
+                args = types.SimpleNamespace(firecracker=Path("fc"), kernel=Path("kernel"),
+                    initrd=Path("initrd"), timeout=total_timeout)
+                with patch.object(engines.fc.tempfile, "TemporaryDirectory", return_value=context), \
+                        patch.object(engines.fc.subprocess, "Popen", return_value=process), \
+                        patch.object(engines.fc, "wait_api"), patch.object(engines.fc, "api"), \
+                        patch.object(engines.fc.time, "perf_counter", return_value=10), \
+                        patch.object(engines.fc, "guest", side_effect=TimeoutError("guest deadline")) as guest:
+                    row = engines.fc.sample(args, 0)
+                self.assertEqual(guest.call_args.args[1], expected_deadline)
+                self.assertFalse(row["success"])
+                self.assertTrue(row["cleanup_success"])
+                self.assertEqual(row["error"], "guest deadline")
+
     def test_socket_created_before_listen_retries_only_read_only_probe(self):
         process = Mock()
         process.poll.return_value = None

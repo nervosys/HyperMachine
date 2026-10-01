@@ -17,6 +17,7 @@ import uuid
 
 BOOT_ARGS = "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd"
 MAX_FRAME = 8 * 1024 * 1024
+GUEST_READY_TIMEOUT_SECONDS = 15
 
 
 class UnixHTTP(http.client.HTTPConnection):
@@ -127,7 +128,8 @@ def sample(args, index):
                     "initrd_path":str(args.initrd.resolve()),"boot_args":BOOT_ARGS})
                 api(socket_path,"PUT","/vsock",{"guest_cid":3,"uds_path":str(vsock_path)})
                 api(socket_path,"PUT","/actions",{"action_type":"InstanceStart"})
-                with guest(vsock_path,deadline,process) as stream:
+                guest_deadline = min(deadline, time.perf_counter() + GUEST_READY_TIMEOUT_SECONDS)
+                with guest(vsock_path,guest_deadline,process) as stream:
                     result = rpc(stream,2,{"kind":"exec","program":"/bin/sh",
                         "args":["-c",f"printf '%s' '{marker}'"],"timeout_ms":10000})
                 row["ready_ms"] = (time.perf_counter() - started) * 1000
@@ -187,7 +189,8 @@ def main():
     passed = unchanged and all(row["success"] and row["cleanup_success"] for row in records)
     print(json.dumps({"schema_version":1,"engine":"firecracker","lifecycle":"cold-create",
         "concurrency":1,"environment":args.environment,"host":platform.platform(),"cpu_count":1,"memory_mb":1024,
-        "boot_args":BOOT_ARGS,"artifact_sha256":identities,"harness_sha256":source_digest,"artifacts_unchanged":unchanged,
+        "boot_args":BOOT_ARGS,"guest_readiness_timeout_s":GUEST_READY_TIMEOUT_SECONDS,
+        "total_startup_timeout_s":args.timeout,"artifact_sha256":identities,"harness_sha256":source_digest,"artifacts_unchanged":unchanged,
         "samples":records,"ready_ms":summary([row["ready_ms"] for row in records if row["success"] and row["cleanup_success"]]),
         "success":passed},indent=2))
     return 0 if passed else 1
