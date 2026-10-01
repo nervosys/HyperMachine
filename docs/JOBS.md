@@ -254,9 +254,12 @@ successfully even for a nonzero guest exit; inspect the recorded guest result.
 The claim is created before network dispatch. API failures or malformed responses
 leave it unresolved and a second dispatch is rejected. Server error bodies and
 connection descriptor tokens are not returned. Completion status is durable;
-stdout/stderr currently appear only in CLI output and are not stored durably.
-No automatic retry, guest process reconciliation, guest cancellation or logs
-recovery is implemented. The protocol fixture checks request fidelity and
+Receipts retain up to 65536 bytes of UTF-8 stdout and stderr per stream, with
+explicit truncation flags and character-safe boundaries. Read them using
+`hm jobs --store DIR schedule receipt NAME SCHEDULED_MS`. Legacy receipts report
+missing output as null. This bounds stored output, not the HTTP response buffer.
+No automatic retry, guest process reconciliation, guest cancellation or streaming
+logs are implemented. The protocol fixture checks request fidelity and
 uncertain-result behavior; real KVM dispatch verification remains pending.
 The Linux shell regression runs a literal executable containing `=` from a
 directory containing spaces, with quotes and command-substitution text in its
@@ -269,7 +272,7 @@ A claim without a receipt is unresolved, including after worker loss. It may
 represent a running guest command, an unrecorded completion, or a dispatch that
 never reached the guest. Claims do not expire or automatically permit a second
 start. A future dispatcher must reconcile guest state before deciding what to do;
-lease-based retries, guest process handles, logs and manual recovery interfaces
+lease-based retries, guest process handles, streaming logs and manual recovery interfaces
 remain unimplemented. Claim ownership alone does not enforce exactly-once guest
 execution or external side effects. Schedule cancellation preserves previously
 committed occurrences and does not revoke their dispatch claims.
@@ -375,7 +378,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 38 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 39 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -396,6 +399,8 @@ unprivileged user:
   controls, invalid profiles, relative guest paths and invalid timeouts;
 - one dispatch claim among eight competing workers, committed-record gating,
   unresolved ownership after reopening, and immutable claim-bound completion;
+- UTF-8 output limits and legacy receipt compatibility; the CLI fixture also
+  recovers persisted stdout through a separate receipt command;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;

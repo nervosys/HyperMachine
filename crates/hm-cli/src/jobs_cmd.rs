@@ -97,6 +97,8 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Read durable dispatch ownership and completion output
+    Receipt { id: String, scheduled_ms: u64 },
     /// Dispatch one committed VM occurrence; uncertain outcomes are not retried
     Dispatch {
         id: String,
@@ -158,6 +160,9 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::Receipt { id, scheduled_ms } => {
+                    serde_json::to_value(s.vm_dispatch_state(&id, scheduled_ms)?)?
+                }
                 ScheduleCommand::Dispatch {
                     id,
                     scheduled_ms,

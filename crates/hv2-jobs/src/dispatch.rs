@@ -19,6 +19,25 @@ pub struct DispatchCompletion {
     pub claim_token: String,
     pub exit_code: Option<i32>,
     pub timed_out: bool,
+    #[serde(default)]
+    pub stdout: Option<String>,
+    #[serde(default)]
+    pub stderr: Option<String>,
+    #[serde(default)]
+    pub stdout_truncated: bool,
+    #[serde(default)]
+    pub stderr_truncated: bool,
+}
+
+pub const MAX_RECEIPT_OUTPUT_BYTES: usize = 65_536;
+
+/// Bound a UTF-8 stream without splitting a character.
+pub fn bounded_output(text: &str) -> (String, bool) {
+    let mut end = text.len().min(MAX_RECEIPT_OUTPUT_BYTES);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    (text[..end].to_string(), end < text.len())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,6 +124,15 @@ impl Store {
         scheduled_ms: u64,
         result: &DispatchCompletion,
     ) -> Result<()> {
+        if [&result.stdout, &result.stderr]
+            .into_iter()
+            .flatten()
+            .any(|text| text.len() > MAX_RECEIPT_OUTPUT_BYTES)
+        {
+            return Err(JobError::InvalidSpec(
+                "dispatch output exceeds the per-stream receipt limit".into(),
+            ));
+        }
         if result
             .exit_code
             .is_some_and(|code| !(0..=255).contains(&code))
@@ -182,6 +210,10 @@ mod tests {
             claim_token: "wrong".into(),
             exit_code: Some(0),
             timed_out: false,
+            stdout: Some("output".into()),
+            stderr: Some(String::new()),
+            stdout_truncated: false,
+            stderr_truncated: false,
         };
         assert!(reopened
             .complete_vm_occurrence("dispatch", 100, &result)
@@ -206,5 +238,20 @@ mod tests {
                 .exit_code,
             Some(0)
         );
+    }
+
+    #[test]
+    fn receipt_output_is_bounded_at_utf8_boundaries_and_old_receipts_are_readable() {
+        let text = format!("{}é", "x".repeat(MAX_RECEIPT_OUTPUT_BYTES - 1));
+        let (bounded, truncated) = bounded_output(&text);
+        assert!(truncated);
+        assert_eq!(bounded.len(), MAX_RECEIPT_OUTPUT_BYTES - 1);
+        assert_eq!(bounded_output("small"), ("small".into(), false));
+        let legacy: DispatchCompletion = serde_json::from_value(
+            serde_json::json!({"claim_token":"old","exit_code":0,"timed_out":false}),
+        )
+        .unwrap();
+        assert!(legacy.stdout.is_none());
+        assert!(legacy.stderr.is_none());
     }
 }

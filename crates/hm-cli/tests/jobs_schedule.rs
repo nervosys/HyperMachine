@@ -326,6 +326,14 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
     let result = success(dispatch("100").output().await.unwrap());
     assert_eq!(result["exit_code"], 7);
     assert_eq!(result["stdout"], "guest output");
+    let receipt = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["jobs", "--store"])
+        .arg(store.root())
+        .args(["schedule", "receipt", "run", "100"])
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(success(receipt)["completion"]["stdout"], "guest output");
     assert_eq!(
         store
             .vm_dispatch_state("run", 100)

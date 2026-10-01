@@ -142,6 +142,8 @@ pub async fn dispatch_once(
     let stderr = response["stderr"]
         .as_str()
         .context("invalid guest stderr; dispatch remains unresolved")?;
+    let (stdout, stdout_truncated) = hv2_jobs::dispatch::bounded_output(stdout);
+    let (stderr, stderr_truncated) = hv2_jobs::dispatch::bounded_output(stderr);
     store.complete_vm_occurrence(
         id,
         scheduled_ms,
@@ -149,11 +151,13 @@ pub async fn dispatch_once(
             claim_token: claim.token,
             exit_code,
             timed_out,
+            stdout: Some(stdout.clone()),
+            stderr: Some(stderr.clone()),
+            stdout_truncated,
+            stderr_truncated,
         },
     )?;
-    // Output is not durable yet. Completion is recoverable even if this stdout
-    // is lost; persistent bounded guest logs require the process-based executor.
     Ok(
-        json!({"schedule_id": id, "scheduled_ms": scheduled_ms, "exit_code": exit_code, "timed_out": timed_out, "stdout": stdout, "stderr": stderr}),
+        json!({"schedule_id": id, "scheduled_ms": scheduled_ms, "exit_code": exit_code, "timed_out": timed_out, "stdout": stdout, "stderr": stderr, "stdout_truncated": stdout_truncated, "stderr_truncated": stderr_truncated}),
     )
 }
