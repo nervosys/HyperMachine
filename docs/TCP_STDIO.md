@@ -39,9 +39,11 @@ open, and rejection without stdout contamination. Run:
 cargo test -p hm-cli --test sandbox_vm_client
 ```
 
-These are protocol fixture checks. A complete SSH session against a real
-guest, guest SSH provisioning, and server-side name resolution remain
-unverified; this addition establishes no performance comparison.
+The protocol fixtures are complemented by [real KVM SSH verification](benchmarks/2026-10-01/ssh-stdio.md)
+through API TLS and node mTLS: exact 1 MiB binary roundtrip, remote exit code,
+rejected client key and rejected guest host key. Guest SSH provisioning and
+server-side name resolution remain operator responsibilities; this addition
+establishes no performance comparison.
 
 On 2026-10-01, all nine CLI executable integration tests passed on Windows
 and Linux; `cargo clippy -p hm-cli --all-targets -- -D warnings` passed on
