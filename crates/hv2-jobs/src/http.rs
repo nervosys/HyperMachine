@@ -226,12 +226,12 @@ mod tests {
     #[tokio::test]
     async fn submit_list_detail_cancel() {
         let dir = tempfile::tempdir().unwrap();
-        let (_store, app) = app(dir.path(), None);
+        let (store, app) = app(dir.path(), None);
         let (s, body) = call(
             &app,
             "POST",
             "/api/v1/jobs",
-            Some(r#"{"command":["x"],"labels":["gpu"]}"#),
+            Some(r#"{"command":["x"],"labels":["gpu"],"not_before_ms":18446744073709551615}"#),
             None,
         )
         .await;
@@ -250,6 +250,9 @@ mod tests {
         let (s, body) = call(&app, "GET", &format!("/api/v1/jobs/{id}"), None, None).await;
         assert_eq!(s, StatusCode::OK);
         assert!(body.contains("\"gpu\""), "{body}");
+        let detail: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(detail["spec"]["not_before_ms"].as_u64(), Some(u64::MAX));
+        assert!(store.claim("worker", &["gpu".into()]).unwrap().is_none());
 
         let (s, body) = call(
             &app,

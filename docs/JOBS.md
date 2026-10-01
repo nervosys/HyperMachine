@@ -37,6 +37,15 @@ The store is `--store DIR`, then `$HM_JOBS_DIR`, then `~/.hypermachine/jobs`.
 
 **Fields:**
 - **`command`** runs directly, not through a shell.
+- **`not_before_ms`** optionally sets the earliest start as an unsigned Unix epoch
+  timestamp in milliseconds, through both `hm jobs submit` and the REST API.
+  Omit it for immediate eligibility. The timestamp is stored with the job and
+  survives worker/client restarts; future jobs remain queued without using an
+  attempt or blocking eligible jobs. Workers use their host wall clock and poll
+  once per second by default, so this is an earliest start, not a deadline.
+  Cancellation works before the start time. Synchronize clocks across worker
+  hosts. This schedules a single host process; recurring schedules and VM jobs
+  are not implemented.
 - **`env`** is added over a minimal base (`PATH`, `HOME`, `TEMP` and, on Windows,
   `SystemRoot`). Nothing else crosses from the worker's own environment.
 - **`HM_JOB_ID`** is always set, so a program can record which job produced its output.

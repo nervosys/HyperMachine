@@ -340,6 +340,7 @@ mod tests {
         env.insert(HELPER.to_string(), mode.to_string());
         env.insert("HV2_JOBS_ARG".to_string(), arg.to_string());
         JobSpec {
+            not_before_ms: None,
             name: Some(mode.into()),
             command: vec![
                 exe.to_string_lossy().into_owned(),
