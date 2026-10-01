@@ -1,0 +1,3055 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command",
+  "concurrency": 1,
+  "hypermachine_log_filter": "warn",
+  "diagnostic_tracing": false,
+  "pairs": 100,
+  "order": "alternating AB/BA",
+  "environment": "shared-WSL-nested-KVM-one-pinned-CPU-worker-pre-kick-PIC-PIT-state-diagnostic",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hyperMachine": "408d68acb2e258e0242ba1ed4128bf54bf438d1e37cd2be0ebb5f66e335626be",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "artifacts_unchanged": true,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "driver_cpu_affinity": [
+    0
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "hypermachine_template_preflight": [
+    {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "envdVersion": "0.6.3",
+      "memoryMB": 1024,
+      "public": false,
+      "snapshot": false,
+      "templateID": "base"
+    }
+  ],
+  "setup_error": null,
+  "cleanup_error": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1257.068576,
+      "node_memory_ready": {
+        "Rss_kib": 110328,
+        "Pss_kib": 108306,
+        "Private_Clean_kib": 7488,
+        "Private_Dirty_kib": 100688,
+        "Anonymous_kib": 100680
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 25680,
+        "Pss_kib": 23541,
+        "Private_Clean_kib": 7680,
+        "Private_Dirty_kib": 15720,
+        "Anonymous_kib": 15720
+      },
+      "engine": "hypermachine",
+      "pair": 0
+    },
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 718.746822,
+      "engine": "firecracker",
+      "pair": 0
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 732.5949170000001,
+      "engine": "firecracker",
+      "pair": 1
+    },
+    {
+      "index": 1,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6544261190, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6544261250; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\"}",
+      "engine": "hypermachine",
+      "pair": 1,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:53133, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:52867 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:52867 process.Process/Start\n\u001b[2m2026-10-01T02:16:46.715773Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-4172ad539c47498faadc: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6544261190, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6544261250; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n"
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1112.4135790000018,
+      "node_memory_ready": {
+        "Rss_kib": 96464,
+        "Pss_kib": 94375,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 86440,
+        "Anonymous_kib": 86432
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11492,
+        "Pss_kib": 9403,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 1468,
+        "Anonymous_kib": 1468
+      },
+      "engine": "hypermachine",
+      "pair": 2
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 922.9500020000003,
+      "engine": "firecracker",
+      "pair": 2
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1068.9728109999983,
+      "engine": "firecracker",
+      "pair": 3
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1205.0007130000004,
+      "node_memory_ready": {
+        "Rss_kib": 96588,
+        "Pss_kib": 94499,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 86564,
+        "Anonymous_kib": 86556
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11492,
+        "Pss_kib": 9403,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 1468,
+        "Anonymous_kib": 1468
+      },
+      "engine": "hypermachine",
+      "pair": 3
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1342.837836000001,
+      "node_memory_ready": {
+        "Rss_kib": 96668,
+        "Pss_kib": 94579,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 86644,
+        "Anonymous_kib": 86636
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11492,
+        "Pss_kib": 9403,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 1468,
+        "Anonymous_kib": 1468
+      },
+      "engine": "hypermachine",
+      "pair": 4
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1102.1986149999989,
+      "engine": "firecracker",
+      "pair": 4
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1159.1099840000006,
+      "engine": "firecracker",
+      "pair": 5
+    },
+    {
+      "index": 5,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=30712363956, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=30712364016; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\"}",
+      "engine": "hypermachine",
+      "pair": 5,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:53133, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:52867 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:52867 process.Process/Start\n\u001b[2m2026-10-01T02:16:46.715773Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-4172ad539c47498faadc: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6544261190, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6544261250; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n\u001b[2m2026-10-01T02:17:10.895537Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-8810cb067c83485d9e46: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=30712363956, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=30712364016; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n"
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1100.9275139999986,
+      "node_memory_ready": {
+        "Rss_kib": 96604,
+        "Pss_kib": 94515,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 86580,
+        "Anonymous_kib": 86572
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11524,
+        "Pss_kib": 9435,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 1500,
+        "Anonymous_kib": 1500
+      },
+      "engine": "hypermachine",
+      "pair": 6
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 671.8741120000047,
+      "engine": "firecracker",
+      "pair": 6
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 719.757297000001,
+      "engine": "firecracker",
+      "pair": 7
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1058.193052,
+      "node_memory_ready": {
+        "Rss_kib": 96604,
+        "Pss_kib": 94515,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 86580,
+        "Anonymous_kib": 86572
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11524,
+        "Pss_kib": 9435,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 1500,
+        "Anonymous_kib": 1500
+      },
+      "engine": "hypermachine",
+      "pair": 7
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 993.5097049999939,
+      "node_memory_ready": {
+        "Rss_kib": 96524,
+        "Pss_kib": 94435,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 86500,
+        "Anonymous_kib": 86492
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11524,
+        "Pss_kib": 9435,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 1500,
+        "Anonymous_kib": 1500
+      },
+      "engine": "hypermachine",
+      "pair": 8
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 736.8998530000042,
+      "engine": "firecracker",
+      "pair": 8
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.1356709999976,
+      "engine": "firecracker",
+      "pair": 9
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1072.5090720000026,
+      "node_memory_ready": {
+        "Rss_kib": 125392,
+        "Pss_kib": 123303,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 115368,
+        "Anonymous_kib": 115360
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 40308,
+        "Pss_kib": 38219,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 30284,
+        "Anonymous_kib": 30284
+      },
+      "engine": "hypermachine",
+      "pair": 9
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1097.0492289999995,
+      "node_memory_ready": {
+        "Rss_kib": 127236,
+        "Pss_kib": 125147,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117212,
+        "Anonymous_kib": 117204
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42124,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 10
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 689.1991860000032,
+      "engine": "firecracker",
+      "pair": 10
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 735.9343239999987,
+      "engine": "firecracker",
+      "pair": 11
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1081.4569689999942,
+      "node_memory_ready": {
+        "Rss_kib": 127236,
+        "Pss_kib": 125147,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117212,
+        "Anonymous_kib": 117204
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42124,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 11
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1130.4842669999998,
+      "node_memory_ready": {
+        "Rss_kib": 127224,
+        "Pss_kib": 125135,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117200,
+        "Anonymous_kib": 117192
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42124,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 12
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 809.4940599999986,
+      "engine": "firecracker",
+      "pair": 12
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 772.1147190000011,
+      "engine": "firecracker",
+      "pair": 13
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1292.7670599999956,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 125043,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42124,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 13
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1385.047177000004,
+      "node_memory_ready": {
+        "Rss_kib": 127136,
+        "Pss_kib": 125047,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117112,
+        "Anonymous_kib": 117104
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42124,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 14
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 998.493983000003,
+      "engine": "firecracker",
+      "pair": 14
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 840.2122140000046,
+      "engine": "firecracker",
+      "pair": 15
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1099.7883759999922,
+      "node_memory_ready": {
+        "Rss_kib": 127164,
+        "Pss_kib": 125075,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117140,
+        "Anonymous_kib": 117132
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42124,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 15
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1042.0411499999886,
+      "node_memory_ready": {
+        "Rss_kib": 127268,
+        "Pss_kib": 125179,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117244,
+        "Anonymous_kib": 117236
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 16
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 742.7639510000006,
+      "engine": "firecracker",
+      "pair": 16
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 716.8665309999938,
+      "engine": "firecracker",
+      "pair": 17
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1068.1866310000032,
+      "node_memory_ready": {
+        "Rss_kib": 127120,
+        "Pss_kib": 125031,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117096,
+        "Anonymous_kib": 117088
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 17
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1056.9607050000086,
+      "node_memory_ready": {
+        "Rss_kib": 127252,
+        "Pss_kib": 125163,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117228,
+        "Anonymous_kib": 117220
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 18
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 770.0625709999969,
+      "engine": "firecracker",
+      "pair": 18
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 737.9723680000012,
+      "engine": "firecracker",
+      "pair": 19
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1057.5231189999954,
+      "node_memory_ready": {
+        "Rss_kib": 127168,
+        "Pss_kib": 125079,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117144,
+        "Anonymous_kib": 117136
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 19
+    },
+    {
+      "index": 20,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1043.9822330000084,
+      "node_memory_ready": {
+        "Rss_kib": 127180,
+        "Pss_kib": 125091,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117156,
+        "Anonymous_kib": 117148
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 20
+    },
+    {
+      "index": 20,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 739.5559729999945,
+      "engine": "firecracker",
+      "pair": 20
+    },
+    {
+      "index": 21,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 736.1244509999949,
+      "engine": "firecracker",
+      "pair": 21
+    },
+    {
+      "index": 21,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1057.7317780000044,
+      "node_memory_ready": {
+        "Rss_kib": 127224,
+        "Pss_kib": 125135,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117200,
+        "Anonymous_kib": 117192
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 21
+    },
+    {
+      "index": 22,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1085.3062009999944,
+      "node_memory_ready": {
+        "Rss_kib": 127212,
+        "Pss_kib": 125123,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117188,
+        "Anonymous_kib": 117180
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 22
+    },
+    {
+      "index": 22,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 722.5848090000113,
+      "engine": "firecracker",
+      "pair": 22
+    },
+    {
+      "index": 23,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 790.5795100000006,
+      "engine": "firecracker",
+      "pair": 23
+    },
+    {
+      "index": 23,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1065.445503999996,
+      "node_memory_ready": {
+        "Rss_kib": 127216,
+        "Pss_kib": 125127,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117192,
+        "Anonymous_kib": 117184
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 23
+    },
+    {
+      "index": 24,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1104.7358210000057,
+      "node_memory_ready": {
+        "Rss_kib": 127168,
+        "Pss_kib": 125079,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117144,
+        "Anonymous_kib": 117136
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 24
+    },
+    {
+      "index": 24,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 720.2079009999949,
+      "engine": "firecracker",
+      "pair": 24
+    },
+    {
+      "index": 25,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 730.0248829999987,
+      "engine": "firecracker",
+      "pair": 25
+    },
+    {
+      "index": 25,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1044.4586079999995,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 125115,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 25
+    },
+    {
+      "index": 26,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1032.4503020000009,
+      "node_memory_ready": {
+        "Rss_kib": 127232,
+        "Pss_kib": 125143,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117208,
+        "Anonymous_kib": 117200
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40039,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 26
+    },
+    {
+      "index": 26,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 725.2467429999996,
+      "engine": "firecracker",
+      "pair": 26
+    },
+    {
+      "index": 27,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 697.562388999998,
+      "engine": "firecracker",
+      "pair": 27
+    },
+    {
+      "index": 27,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1099.6327959999944,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 125099,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42128,
+        "Pss_kib": 40031,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 27
+    },
+    {
+      "index": 28,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1034.487850000005,
+      "node_memory_ready": {
+        "Rss_kib": 127228,
+        "Pss_kib": 125131,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117204,
+        "Anonymous_kib": 117196
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42132,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32108,
+        "Anonymous_kib": 32108
+      },
+      "engine": "hypermachine",
+      "pair": 28
+    },
+    {
+      "index": 28,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 696.4960859999962,
+      "engine": "firecracker",
+      "pair": 28
+    },
+    {
+      "index": 29,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 733.5863189999969,
+      "engine": "firecracker",
+      "pair": 29
+    },
+    {
+      "index": 29,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1279.6620080000025,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 125107,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42132,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32108,
+        "Anonymous_kib": 32108
+      },
+      "engine": "hypermachine",
+      "pair": 29
+    },
+    {
+      "index": 30,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1092.503667999992,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 125095,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117168,
+        "Anonymous_kib": 117160
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42132,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32108,
+        "Anonymous_kib": 32108
+      },
+      "engine": "hypermachine",
+      "pair": 30
+    },
+    {
+      "index": 30,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 915.7776880000057,
+      "engine": "firecracker",
+      "pair": 30
+    },
+    {
+      "index": 31,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1133.1210790000057,
+      "engine": "firecracker",
+      "pair": 31
+    },
+    {
+      "index": 31,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1508.5709989999998,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 125035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42132,
+        "Pss_kib": 40035,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32108,
+        "Anonymous_kib": 32108
+      },
+      "engine": "hypermachine",
+      "pair": 31
+    },
+    {
+      "index": 32,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1179.7887950000074,
+      "node_memory_ready": {
+        "Rss_kib": 127164,
+        "Pss_kib": 125067,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117140,
+        "Anonymous_kib": 117132
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 32
+    },
+    {
+      "index": 32,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 724.5227400000118,
+      "engine": "firecracker",
+      "pair": 32
+    },
+    {
+      "index": 33,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 693.5775030000002,
+      "engine": "firecracker",
+      "pair": 33
+    },
+    {
+      "index": 33,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 997.1827309999952,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 125095,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117168,
+        "Anonymous_kib": 117160
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 33
+    },
+    {
+      "index": 34,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1032.024100000001,
+      "node_memory_ready": {
+        "Rss_kib": 127308,
+        "Pss_kib": 125211,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117284,
+        "Anonymous_kib": 117276
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 34
+    },
+    {
+      "index": 34,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 757.4755600000032,
+      "engine": "firecracker",
+      "pair": 34
+    },
+    {
+      "index": 35,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 739.5298940000004,
+      "engine": "firecracker",
+      "pair": 35
+    },
+    {
+      "index": 35,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1052.5015949999954,
+      "node_memory_ready": {
+        "Rss_kib": 127176,
+        "Pss_kib": 125079,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117152,
+        "Anonymous_kib": 117144
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 35
+    },
+    {
+      "index": 36,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1048.202382999989,
+      "node_memory_ready": {
+        "Rss_kib": 127292,
+        "Pss_kib": 125195,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117268,
+        "Anonymous_kib": 117260
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 36
+    },
+    {
+      "index": 36,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 754.7919409999935,
+      "engine": "firecracker",
+      "pair": 36
+    },
+    {
+      "index": 37,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 708.301304999992,
+      "engine": "firecracker",
+      "pair": 37
+    },
+    {
+      "index": 37,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1048.6296229999966,
+      "node_memory_ready": {
+        "Rss_kib": 127264,
+        "Pss_kib": 125167,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117240,
+        "Anonymous_kib": 117232
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 37
+    },
+    {
+      "index": 38,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1016.0511509999992,
+      "node_memory_ready": {
+        "Rss_kib": 127156,
+        "Pss_kib": 125059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117132,
+        "Anonymous_kib": 117124
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 38
+    },
+    {
+      "index": 38,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.5008209999916,
+      "engine": "firecracker",
+      "pair": 38
+    },
+    {
+      "index": 39,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.5328290000105,
+      "engine": "firecracker",
+      "pair": 39
+    },
+    {
+      "index": 39,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1018.6281679999922,
+      "node_memory_ready": {
+        "Rss_kib": 127152,
+        "Pss_kib": 125055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117128,
+        "Anonymous_kib": 117120
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 39
+    },
+    {
+      "index": 40,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 995.650058999999,
+      "node_memory_ready": {
+        "Rss_kib": 127260,
+        "Pss_kib": 125163,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117236,
+        "Anonymous_kib": 117228
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 40
+    },
+    {
+      "index": 40,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 703.8553309999998,
+      "engine": "firecracker",
+      "pair": 40
+    },
+    {
+      "index": 41,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 705.7182559999973,
+      "engine": "firecracker",
+      "pair": 41
+    },
+    {
+      "index": 41,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1010.8120140000096,
+      "node_memory_ready": {
+        "Rss_kib": 127272,
+        "Pss_kib": 125175,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117248,
+        "Anonymous_kib": 117240
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 41
+    },
+    {
+      "index": 42,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1002.6076440000082,
+      "node_memory_ready": {
+        "Rss_kib": 127284,
+        "Pss_kib": 125187,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117260,
+        "Anonymous_kib": 117252
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 42
+    },
+    {
+      "index": 42,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 685.9865839999912,
+      "engine": "firecracker",
+      "pair": 42
+    },
+    {
+      "index": 43,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 727.2854850000101,
+      "engine": "firecracker",
+      "pair": 43
+    },
+    {
+      "index": 43,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1050.1930719999991,
+      "node_memory_ready": {
+        "Rss_kib": 127208,
+        "Pss_kib": 125111,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117184,
+        "Anonymous_kib": 117176
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 43
+    },
+    {
+      "index": 44,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1057.113884000003,
+      "node_memory_ready": {
+        "Rss_kib": 127164,
+        "Pss_kib": 125067,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117140,
+        "Anonymous_kib": 117132
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 44
+    },
+    {
+      "index": 44,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 762.1268479999941,
+      "engine": "firecracker",
+      "pair": 44
+    },
+    {
+      "index": 45,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 841.674342999994,
+      "engine": "firecracker",
+      "pair": 45
+    },
+    {
+      "index": 45,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1103.3109649999915,
+      "node_memory_ready": {
+        "Rss_kib": 127208,
+        "Pss_kib": 125111,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117184,
+        "Anonymous_kib": 117176
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 45
+    },
+    {
+      "index": 46,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1225.3262709999858,
+      "node_memory_ready": {
+        "Rss_kib": 127180,
+        "Pss_kib": 125083,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117156,
+        "Anonymous_kib": 117148
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 46
+    },
+    {
+      "index": 46,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 979.0619439999944,
+      "engine": "firecracker",
+      "pair": 46
+    },
+    {
+      "index": 47,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 923.0873529999997,
+      "engine": "firecracker",
+      "pair": 47
+    },
+    {
+      "index": 47,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1162.0231599999897,
+      "node_memory_ready": {
+        "Rss_kib": 127280,
+        "Pss_kib": 125183,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117256,
+        "Anonymous_kib": 117248
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 47
+    },
+    {
+      "index": 48,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1012.6763279999977,
+      "node_memory_ready": {
+        "Rss_kib": 127284,
+        "Pss_kib": 125187,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117260,
+        "Anonymous_kib": 117252
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 48
+    },
+    {
+      "index": 48,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 691.0972909999771,
+      "engine": "firecracker",
+      "pair": 48
+    },
+    {
+      "index": 49,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 690.9949169999834,
+      "engine": "firecracker",
+      "pair": 49
+    },
+    {
+      "index": 49,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 990.9868529999812,
+      "node_memory_ready": {
+        "Rss_kib": 127156,
+        "Pss_kib": 125059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117132,
+        "Anonymous_kib": 117124
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 49
+    },
+    {
+      "index": 50,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1046.6689210000197,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 125099,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 50
+    },
+    {
+      "index": 50,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 745.7441900000106,
+      "engine": "firecracker",
+      "pair": 50
+    },
+    {
+      "index": 51,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 752.4189670000112,
+      "engine": "firecracker",
+      "pair": 51
+    },
+    {
+      "index": 51,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1063.791253000005,
+      "node_memory_ready": {
+        "Rss_kib": 127268,
+        "Pss_kib": 125171,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117244,
+        "Anonymous_kib": 117236
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 40055,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 51
+    },
+    {
+      "index": 52,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1034.8306729999877,
+      "node_memory_ready": {
+        "Rss_kib": 127268,
+        "Pss_kib": 125171,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117244,
+        "Anonymous_kib": 117236
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 52
+    },
+    {
+      "index": 52,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 700.3781249999861,
+      "engine": "firecracker",
+      "pair": 52
+    },
+    {
+      "index": 53,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 695.1806309999995,
+      "engine": "firecracker",
+      "pair": 53
+    },
+    {
+      "index": 53,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1169.2518979999988,
+      "node_memory_ready": {
+        "Rss_kib": 127292,
+        "Pss_kib": 125195,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117268,
+        "Anonymous_kib": 117260
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 53
+    },
+    {
+      "index": 54,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1069.7162489999812,
+      "node_memory_ready": {
+        "Rss_kib": 127248,
+        "Pss_kib": 125151,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117224,
+        "Anonymous_kib": 117216
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 54
+    },
+    {
+      "index": 54,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 731.32470500002,
+      "engine": "firecracker",
+      "pair": 54
+    },
+    {
+      "index": 55,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 701.3993249999828,
+      "engine": "firecracker",
+      "pair": 55
+    },
+    {
+      "index": 55,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1007.5721299999998,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 125099,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 55
+    },
+    {
+      "index": 56,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1040.505139000004,
+      "node_memory_ready": {
+        "Rss_kib": 127232,
+        "Pss_kib": 125135,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117208,
+        "Anonymous_kib": 117200
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 56
+    },
+    {
+      "index": 56,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 836.2122340000155,
+      "engine": "firecracker",
+      "pair": 56
+    },
+    {
+      "index": 57,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 796.3131629999793,
+      "engine": "firecracker",
+      "pair": 57
+    },
+    {
+      "index": 57,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1288.8483749999864,
+      "node_memory_ready": {
+        "Rss_kib": 127096,
+        "Pss_kib": 124942,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117072,
+        "Anonymous_kib": 117064
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40002,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 57
+    },
+    {
+      "index": 58,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1496.0770929999967,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 125050,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40002,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 58
+    },
+    {
+      "index": 58,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1194.9142200000153,
+      "engine": "firecracker",
+      "pair": 58
+    },
+    {
+      "index": 59,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1124.2635189999817,
+      "engine": "firecracker",
+      "pair": 59
+    },
+    {
+      "index": 59,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1360.1332839999998,
+      "node_memory_ready": {
+        "Rss_kib": 127188,
+        "Pss_kib": 125034,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40002,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 59
+    },
+    {
+      "index": 60,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1243.8522799999987,
+      "node_memory_ready": {
+        "Rss_kib": 127104,
+        "Pss_kib": 124937,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117080,
+        "Anonymous_kib": 117072
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39989,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 60
+    },
+    {
+      "index": 60,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1642.9306510000004,
+      "engine": "firecracker",
+      "pair": 60
+    },
+    {
+      "index": 61,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1656.634792999995,
+      "engine": "firecracker",
+      "pair": 61
+    },
+    {
+      "index": 61,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1623.632974000003,
+      "node_memory_ready": {
+        "Rss_kib": 127108,
+        "Pss_kib": 124888,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117084,
+        "Anonymous_kib": 117076
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39935,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 61
+    },
+    {
+      "index": 62,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1666.0345660000075,
+      "node_memory_ready": {
+        "Rss_kib": 127152,
+        "Pss_kib": 124931,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117128,
+        "Anonymous_kib": 117120
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39941,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 62
+    },
+    {
+      "index": 62,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1854.3139299999893,
+      "engine": "firecracker",
+      "pair": 62
+    },
+    {
+      "index": 63,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1654.3807900000047,
+      "engine": "firecracker",
+      "pair": 63
+    },
+    {
+      "index": 63,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1835.9479860000079,
+      "node_memory_ready": {
+        "Rss_kib": 127084,
+        "Pss_kib": 124863,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117060,
+        "Anonymous_kib": 117052
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39942,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 63
+    },
+    {
+      "index": 64,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1389.6966390000216,
+      "node_memory_ready": {
+        "Rss_kib": 127228,
+        "Pss_kib": 125012,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117204,
+        "Anonymous_kib": 117196
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 64
+    },
+    {
+      "index": 64,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 966.8953609999846,
+      "engine": "firecracker",
+      "pair": 64
+    },
+    {
+      "index": 65,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 811.5794619999974,
+      "engine": "firecracker",
+      "pair": 65
+    },
+    {
+      "index": 65,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1435.4917769999815,
+      "node_memory_ready": {
+        "Rss_kib": 127104,
+        "Pss_kib": 124883,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117080,
+        "Anonymous_kib": 117072
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39935,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 65
+    },
+    {
+      "index": 66,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1499.5225110000092,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 124916,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 66
+    },
+    {
+      "index": 66,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 916.9934829999988,
+      "engine": "firecracker",
+      "pair": 66
+    },
+    {
+      "index": 67,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 814.7656410000081,
+      "engine": "firecracker",
+      "pair": 67
+    },
+    {
+      "index": 67,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1174.2232889999968,
+      "node_memory_ready": {
+        "Rss_kib": 127168,
+        "Pss_kib": 124952,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117144,
+        "Anonymous_kib": 117136
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39941,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 67
+    },
+    {
+      "index": 68,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1143.6505890000035,
+      "node_memory_ready": {
+        "Rss_kib": 127188,
+        "Pss_kib": 124972,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 68
+    },
+    {
+      "index": 68,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 777.8318880000086,
+      "engine": "firecracker",
+      "pair": 68
+    },
+    {
+      "index": 69,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 815.3467690000014,
+      "engine": "firecracker",
+      "pair": 69
+    },
+    {
+      "index": 69,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1146.3758930000267,
+      "node_memory_ready": {
+        "Rss_kib": 127224,
+        "Pss_kib": 125010,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117200,
+        "Anonymous_kib": 117192
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39942,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 69
+    },
+    {
+      "index": 70,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1176.2258189999955,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 124917,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39941,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 70
+    },
+    {
+      "index": 70,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1030.5581480000114,
+      "engine": "firecracker",
+      "pair": 70
+    },
+    {
+      "index": 71,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1016.9810530000234,
+      "engine": "firecracker",
+      "pair": 71
+    },
+    {
+      "index": 71,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1170.508964000021,
+      "node_memory_ready": {
+        "Rss_kib": 127240,
+        "Pss_kib": 125025,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117216,
+        "Anonymous_kib": 117208
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39941,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 71
+    },
+    {
+      "index": 72,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1195.9167699999966,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 124983,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39935,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 72
+    },
+    {
+      "index": 72,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 847.6574150000147,
+      "engine": "firecracker",
+      "pair": 72
+    },
+    {
+      "index": 73,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 818.0156820000093,
+      "engine": "firecracker",
+      "pair": 73
+    },
+    {
+      "index": 73,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1409.7713319999912,
+      "node_memory_ready": {
+        "Rss_kib": 127124,
+        "Pss_kib": 124906,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117100,
+        "Anonymous_kib": 117092
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39930,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 73
+    },
+    {
+      "index": 74,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1781.715969000004,
+      "node_memory_ready": {
+        "Rss_kib": 127212,
+        "Pss_kib": 124989,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117188,
+        "Anonymous_kib": 117180
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39933,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 74
+    },
+    {
+      "index": 74,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1065.9273119999852,
+      "engine": "firecracker",
+      "pair": 74
+    },
+    {
+      "index": 75,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 939.4682390000071,
+      "engine": "firecracker",
+      "pair": 75
+    },
+    {
+      "index": 75,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1421.8832330000168,
+      "node_memory_ready": {
+        "Rss_kib": 127152,
+        "Pss_kib": 124926,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117128,
+        "Anonymous_kib": 117120
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39930,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 75
+    },
+    {
+      "index": 76,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1289.3250179999995,
+      "node_memory_ready": {
+        "Rss_kib": 127156,
+        "Pss_kib": 124929,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117132,
+        "Anonymous_kib": 117124
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39929,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 76
+    },
+    {
+      "index": 76,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 890.0204609999776,
+      "engine": "firecracker",
+      "pair": 76
+    },
+    {
+      "index": 77,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1004.8444779999954,
+      "engine": "firecracker",
+      "pair": 77
+    },
+    {
+      "index": 77,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1413.568583,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 124989,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39941,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 77
+    },
+    {
+      "index": 78,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1432.6585830000056,
+      "node_memory_ready": {
+        "Rss_kib": 127180,
+        "Pss_kib": 124964,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117156,
+        "Anonymous_kib": 117148
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 78
+    },
+    {
+      "index": 78,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 909.7031379999976,
+      "engine": "firecracker",
+      "pair": 78
+    },
+    {
+      "index": 79,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 911.6704609999999,
+      "engine": "firecracker",
+      "pair": 79
+    },
+    {
+      "index": 79,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1369.6199379999996,
+      "node_memory_ready": {
+        "Rss_kib": 127212,
+        "Pss_kib": 124995,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117188,
+        "Anonymous_kib": 117180
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39939,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 79
+    },
+    {
+      "index": 80,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1434.0032129999827,
+      "node_memory_ready": {
+        "Rss_kib": 127116,
+        "Pss_kib": 124900,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117092,
+        "Anonymous_kib": 117084
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 80
+    },
+    {
+      "index": 80,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1902.4844799999983,
+      "engine": "firecracker",
+      "pair": 80
+    },
+    {
+      "index": 81,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3798.389063000002,
+      "engine": "firecracker",
+      "pair": 81
+    },
+    {
+      "index": 81,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3291.4619259999827,
+      "node_memory_ready": {
+        "Rss_kib": 127116,
+        "Pss_kib": 124904,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117092,
+        "Anonymous_kib": 117084
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39945,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 81
+    },
+    {
+      "index": 82,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2644.6675710000136,
+      "node_memory_ready": {
+        "Rss_kib": 127100,
+        "Pss_kib": 124887,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117076,
+        "Anonymous_kib": 117068
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39943,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 82
+    },
+    {
+      "index": 82,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3719.3997680000166,
+      "engine": "firecracker",
+      "pair": 82
+    },
+    {
+      "index": 83,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2175.8876990000144,
+      "engine": "firecracker",
+      "pair": 83
+    },
+    {
+      "index": 83,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1644.3687889999978,
+      "node_memory_ready": {
+        "Rss_kib": 127264,
+        "Pss_kib": 125046,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117240,
+        "Anonymous_kib": 117232
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39938,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 83
+    },
+    {
+      "index": 84,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1923.3214589999932,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 124978,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39938,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 84
+    },
+    {
+      "index": 84,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2291.3054100000068,
+      "engine": "firecracker",
+      "pair": 84
+    },
+    {
+      "index": 85,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1859.7521650000033,
+      "engine": "firecracker",
+      "pair": 85
+    },
+    {
+      "index": 85,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1970.1007689999983,
+      "node_memory_ready": {
+        "Rss_kib": 127240,
+        "Pss_kib": 125022,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117216,
+        "Anonymous_kib": 117208
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39938,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 85
+    },
+    {
+      "index": 86,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1499.7098999999992,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 124914,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39938,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 86
+    },
+    {
+      "index": 86,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1152.856681000003,
+      "engine": "firecracker",
+      "pair": 86
+    },
+    {
+      "index": 87,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 892.4311730000056,
+      "engine": "firecracker",
+      "pair": 87
+    },
+    {
+      "index": 87,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1239.1384189999997,
+      "node_memory_ready": {
+        "Rss_kib": 127160,
+        "Pss_kib": 124942,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117136,
+        "Anonymous_kib": 117128
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39938,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 87
+    },
+    {
+      "index": 88,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1277.5559370000167,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 124974,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117168,
+        "Anonymous_kib": 117160
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39938,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 88
+    },
+    {
+      "index": 88,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 990.557482999975,
+      "engine": "firecracker",
+      "pair": 88
+    },
+    {
+      "index": 89,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 839.1738539999949,
+      "engine": "firecracker",
+      "pair": 89
+    },
+    {
+      "index": 89,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1307.6813859999845,
+      "node_memory_ready": {
+        "Rss_kib": 127088,
+        "Pss_kib": 124873,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117064,
+        "Anonymous_kib": 117056
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39931,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 89
+    },
+    {
+      "index": 90,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1436.52404300002,
+      "node_memory_ready": {
+        "Rss_kib": 127120,
+        "Pss_kib": 124901,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117096,
+        "Anonymous_kib": 117088
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39937,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 90
+    },
+    {
+      "index": 90,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1353.3800140000096,
+      "engine": "firecracker",
+      "pair": 90
+    },
+    {
+      "index": 91,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2780.288135000035,
+      "engine": "firecracker",
+      "pair": 91
+    },
+    {
+      "index": 91,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3865.634532999991,
+      "node_memory_ready": {
+        "Rss_kib": 127168,
+        "Pss_kib": 124954,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117144,
+        "Anonymous_kib": 117136
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 91
+    },
+    {
+      "index": 92,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2883.61510499999,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124912,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117104,
+        "Anonymous_kib": 117096
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39940,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 92
+    },
+    {
+      "index": 92,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2273.937440999987,
+      "engine": "firecracker",
+      "pair": 92
+    },
+    {
+      "index": 93,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2177.048844999945,
+      "engine": "firecracker",
+      "pair": 93
+    },
+    {
+      "index": 93,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2843.6689579999666,
+      "node_memory_ready": {
+        "Rss_kib": 127120,
+        "Pss_kib": 124897,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117096,
+        "Anonymous_kib": 117088
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39933,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 93
+    },
+    {
+      "index": 94,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2355.7742099999928,
+      "node_memory_ready": {
+        "Rss_kib": 127360,
+        "Pss_kib": 125139,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117336,
+        "Anonymous_kib": 117328
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39935,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 94
+    },
+    {
+      "index": 94,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2414.39103700003,
+      "engine": "firecracker",
+      "pair": 94
+    },
+    {
+      "index": 95,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2918.9130010000213,
+      "engine": "firecracker",
+      "pair": 95
+    },
+    {
+      "index": 95,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3131.0222769999996,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124912,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39920,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 95
+    },
+    {
+      "index": 96,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2134.968430000015,
+      "node_memory_ready": {
+        "Rss_kib": 127136,
+        "Pss_kib": 124909,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117112,
+        "Anonymous_kib": 117104
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39929,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 96
+    },
+    {
+      "index": 96,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1131.0282649999976,
+      "engine": "firecracker",
+      "pair": 96
+    },
+    {
+      "index": 97,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1002.0874860000504,
+      "engine": "firecracker",
+      "pair": 97
+    },
+    {
+      "index": 97,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=289478188486, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=289478188556; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\"}",
+      "engine": "hypermachine",
+      "pair": 97,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:53133, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:52867 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:52867 process.Process/Start\n\u001b[2m2026-10-01T02:16:46.715773Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-4172ad539c47498faadc: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6544261190, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6544261250; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n\u001b[2m2026-10-01T02:17:10.895537Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-8810cb067c83485d9e46: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=30712363956, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=30712364016; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n\u001b[2m2026-10-01T02:21:29.694170Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3fba91122b6d4998874b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=289478188486, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=289478188556; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n"
+    },
+    {
+      "index": 98,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1567.5844470000015,
+      "node_memory_ready": {
+        "Rss_kib": 127152,
+        "Pss_kib": 124957,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 117128,
+        "Anonymous_kib": 117120
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 39961,
+        "Private_Clean_kib": 7648,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 98
+    },
+    {
+      "index": 98,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1073.9312600000517,
+      "engine": "firecracker",
+      "pair": 98
+    },
+    {
+      "index": 99,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1114.8135189999948,
+      "engine": "firecracker",
+      "pair": 99
+    },
+    {
+      "index": 99,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1274.2576420000091,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 125107,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42156,
+        "Pss_kib": 40059,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 32132,
+        "Anonymous_kib": 32132
+      },
+      "engine": "hypermachine",
+      "pair": 99
+    }
+  ],
+  "node_memory_baseline": {
+    "Rss_kib": 8720,
+    "Pss_kib": 6698,
+    "Private_Clean_kib": 5728,
+    "Private_Dirty_kib": 840,
+    "Anonymous_kib": 840
+  },
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:53133, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:52867 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:52867 process.Process/Start\n\u001b[2m2026-10-01T02:16:46.715773Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-4172ad539c47498faadc: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=6544261190, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=6544261250; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n\u001b[2m2026-10-01T02:17:10.895537Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-8810cb067c83485d9e46: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=30712363956, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=30712364016; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n\u001b[2m2026-10-01T02:21:29.694170Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3fba91122b6d4998874b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=289478188486, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=289478188556; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000\n",
+  "ready_ms": {
+    "hypermachine": {
+      "n": 97,
+      "min": 990.9868529999812,
+      "max": 3865.634532999991,
+      "mean": 1361.1187426391746,
+      "p50": 1170.508964000021,
+      "p95": 2843.6689579999666,
+      "p99": 3865.634532999991
+    },
+    "firecracker": {
+      "n": 100,
+      "min": 671.8741120000047,
+      "max": 3798.389063000002,
+      "mean": 1066.430677800001,
+      "p50": 815.3467690000014,
+      "p95": 2291.3054100000068,
+      "p99": 3719.3997680000166
+    }
+  },
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware; inspect driver/coordinator affinity metadata",
+    "Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API",
+    "Cold lifecycle only; no snapshot/SDK/platform comparison",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "success": false,
+  "controlled_cpu_load": {
+    "workers": 1,
+    "worker_code": "import time\nend=time.monotonic()+7200\nx=1\nwhile time.monotonic()<end:\n for _ in range(10000): x=(x*1664525+1013904223)&0xffffffff\n",
+    "all_alive_through_cohort": true,
+    "pinning": true,
+    "cpu": 0,
+    "workers_cleaned_up": true,
+    "coordinator_sha256": "c8923876f0bd4ec31a8e34a88682ef83ed68f1c87f77a6a0b525a952abb9e793"
+  }
+}
