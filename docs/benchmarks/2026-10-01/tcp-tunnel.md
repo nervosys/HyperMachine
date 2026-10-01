@@ -114,8 +114,10 @@ deadline. Windows and Linux cluster fixtures (16), cluster unit tests (31),
 protocol tests (2), and CLI fixtures (8) pass. Daemon tests pass on Windows
 (32) and Linux (36), and strict all-target Clippy passes on both platforms.
 
-UDP, SSH by name, managed public TCP addresses and measured tunnel load or
-throughput comparisons remain unverified or absent. This change closes a
+UDP, SSH by name and managed public TCP addresses remain absent. A
+[matched native transfer comparison](tcp-performance.md) is now recorded;
+concurrent tunnel load and TLS/control-plane performance remain unverified.
+This change closes a
 raw TCP access gap; it does not establish networking parity across every
 compared product or an across-the-board performance win.
 

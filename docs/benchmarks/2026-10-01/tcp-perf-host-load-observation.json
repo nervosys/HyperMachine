@@ -1,0 +1,11 @@
+{
+  "observed_at_unix": 1790870157.8222065,
+  "load_average": [
+    12.38818359375,
+    7.42236328125,
+    4.71240234375
+  ],
+  "host_cpu_count": 24,
+  "other_builds_observed": true,
+  "limitation": "shared host with unrelated build activity; no isolated host performance claim"
+}
