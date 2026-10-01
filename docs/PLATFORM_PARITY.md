@@ -665,14 +665,16 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | Initial | Firecracker 1.17.0 | 20 / 20 | 1137.38 | 2468.34 |
 | Repeat with memory diagnostics | HyperMachine | 18 / 20 | 1230.74 | 1819.96 |
 | Repeat with memory diagnostics | Firecracker 1.17.0 | 20 / 20 | 816.65 | 2408.49 |
+| Normal-logging reliability repeat | HyperMachine | 98 / 100 | 1174.44 | 2212.68 |
+| Normal-logging reliability repeat | Firecracker 1.17.0 | 100 / 100 | 802.88 | 2485.07 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
-are retained in the reports and invalidate both overall comparisons. The lower
+are retained in the reports and invalidate all three normal-logging comparisons. The lower
 HyperMachine repeat P99 is not evidence of a performance win. HyperMachine
-failed 3/40 attempts while Firecracker passed 40/40, and HyperMachine's median
-was slower in both cohorts. We have not achieved across-the-board superiority.
+failed 5/140 normal-logging attempts while Firecracker passed 140/140, and HyperMachine's median
+was slower in all three cohorts. We have not achieved across-the-board superiority.
 
-Both repeat failures were 15-second guest-agent readiness timeouts with no
+Both memory-diagnostic repeat failures were 15-second guest-agent readiness timeouts with no
 console output and 2401 total vCPU exits, with no further exits during the
 0.5-second diagnostic window. The startup stall's root cause is not yet known.
 Node PSS fell after deletion and plateaued around 72 MiB in the latter half of
@@ -704,3 +706,38 @@ linked/duplicate binary rejection, preservation of an existing different
 binary, extraction of only the selected binary, official version parsing with
 its extra exit log, and refusal of a mismatched executable version. They run
 in the benchmark CI gate without downloading or executing fixture binaries.
+
+
+The first [boot-tracing diagnostic](benchmarks/2026-09-30/local-engines-boot-trace.json)
+passed 20/20 HyperMachine and 20/20 Firecracker workload/resource/cleanup checks.
+Before/after artifact hashes matched, and the retained log confirms actual KVM
+exit tracing. It did not reproduce a failed startup, so it yields no failure
+address or root cause. No startup behavior was changed, and tracing perturbs
+timing; this cohort does not establish a reliability fix or performance gain.
+The earlier 3/40 HyperMachine startup failures remain relevant evidence.
+
+
+The [100-pair normal-logging repeat](benchmarks/2026-09-30/local-engines-cold-normal-100.json)
+reproduced two HyperMachine readiness failures (pairs 25 and 60), each with no
+console output and 2401 total exits. HyperMachine passed 98/100 checks;
+Firecracker passed 100/100. Artifact hashes were unchanged, setup and final
+node cleanup had no errors, and the overall report correctly failed. Successful
+samples had HyperMachine/Firecracker P50 of 1174.44/802.88 ms and P99 of
+2212.68/2485.07 ms. The smaller HyperMachine P99 excludes failed startups and
+is not evidence of a win. No startup behavior was changed, and the earlier
+failure is confirmed to persist with diagnostic tracing disabled.
+
+
+The [100-pair tracing diagnostic](benchmarks/2026-09-30/local-engines-boot-trace-100.json)
+passed 99/100 HyperMachine and 100/100 Firecracker checks. HyperMachine pair 58
+failed with the same no-console, 2401-exit signature. The preserved trace ends
+at I/O port 1017 (`0x3f9`, COM1 interrupt-enable register), RIP
+`0xffffffff81648115`, flags `0x6`, followed by about 15 seconds without another
+recorded exit. Disassembly of the exact guest kernel ELF confirms an `out`
+instruction at that address. The extracted ELF SHA256 is
+`e97635a1ec12e5611b68906eb900baeef2f77ee23a89015810e0efe65255e425`.
+This locates the last observed exit during UART initialization, not necessarily
+the subsequent stalled guest instruction or root cause. Further architectural
+state inspection must run on the vCPU owner after it leaves `KVM_RUN`; reading
+registers concurrently with execution would not be sound evidence. This is a
+failed diagnostic cohort, not a performance comparison or reliability fix.
