@@ -28,4 +28,22 @@ class StageLogs(unittest.TestCase):
             diagnostic.stages(self.line() + "\n" + self.line())
 
 
+class ColdLogs(unittest.TestCase):
+    def test_success_and_connection_failure(self):
+        log = 'cold guest readiness stages vm=sbx-one blocking_queue_ms=1e-3 connect_ms=4.5 ping_ms=2 succeeded=true phase="ping"\n'
+        log += 'cold guest readiness stages vm=sbx-two blocking_queue_ms=3 connect_ms=15 succeeded=false phase="connect"'
+        rows = diagnostic.cold_stages(log)
+        self.assertEqual(rows['sbx-one'], {'phase':'ping','succeeded':True,
+            'blocking_queue_ms':.001,'connect_ms':4.5,'ping_ms':2})
+        self.assertFalse(rows['sbx-two']['succeeded'])
+        self.assertNotIn('ping_ms', rows['sbx-two'])
+
+    def test_duplicates_and_incomplete_events_fail(self):
+        line = 'cold guest readiness stages vm=sbx-one blocking_queue_ms=1 connect_ms=2 ping_ms=3 succeeded=true phase="ping"'
+        with self.assertRaisesRegex(RuntimeError, 'duplicate'):
+            diagnostic.cold_stages(line + '\n' + line)
+        with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+            diagnostic.cold_stages(line.replace('ping_ms=3', ''))
+
+
 if __name__ == "__main__": unittest.main()
