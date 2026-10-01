@@ -257,7 +257,11 @@ connection descriptor tokens are not returned. Completion status is durable;
 Receipts retain up to 65536 bytes of UTF-8 stdout and stderr per stream, with
 explicit truncation flags and character-safe boundaries. Read them using
 `hm jobs --store DIR schedule receipt NAME SCHEDULED_MS`. Legacy receipts report
-missing output as null. This bounds stored output, not the HTTP response buffer.
+missing output as null. Explicit dispatch also limits accumulated connect response
+bytes to 65536 and execution response bytes to 1048576, checking declared length
+and received chunks. Oversized responses leave ownership unresolved and cannot
+be automatically retried. These limits are not a total process-memory bound or
+a server-side output limit; large-output execution needs a streaming executor.
 No automatic retry, guest process reconciliation, guest cancellation or streaming
 logs are implemented. The protocol fixture checks request fidelity and
 uncertain-result behavior; real KVM dispatch verification remains pending.
