@@ -92,10 +92,7 @@ mod linux {
             return;
         }
         if let Ok(mut log) = std::fs::OpenOptions::new().write(true).open("/dev/kmsg") {
-            // kmsg treats each write as a separate record; formatting directly
-            // into the file can split the prefix and stage across records.
-            let record = format!("<6>HV2_BOOT {stage}\n");
-            let _ = log.write_all(record.as_bytes());
+            let _ = writeln!(log, "<6>HV2_BOOT {stage}");
         }
     }
 

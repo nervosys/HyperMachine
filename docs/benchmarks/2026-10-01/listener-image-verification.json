@@ -1,0 +1,12 @@
+{
+  "source_sha256": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+  "output_sha256": "7f7344bcc003045ef39139d955c8b08c2a0e08915cd2f2a0d72c6614ce0bc778",
+  "changed_contents": [
+    "bin/hv2-guest-agentd",
+    "init"
+  ],
+  "changed_modes": [],
+  "busybox_exact": true,
+  "entry_sets_equal": true,
+  "verifier_sha256": "0da9346cd67bdfa34412d6a28d51fca516374f04aeb2c8bbeec33dd735f7b7a8"
+}
