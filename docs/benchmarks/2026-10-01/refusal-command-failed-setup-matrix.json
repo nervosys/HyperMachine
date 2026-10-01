@@ -1,0 +1,290 @@
+[
+  {
+    "name": "commands-baseline-c1-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "1",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-baseline-c1-block0",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-candidate-c1-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "1",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-candidate-c1-block0",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-candidate-c1-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "1",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-candidate-c1-block1",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-baseline-c1-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "1",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-baseline-c1-block1",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-baseline-c8-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "8",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-baseline-c8-block0",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-candidate-c8-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "8",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-candidate-c8-block0",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-candidate-c8-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "8",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-candidate-c8-block1",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-baseline-c8-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "8",
+      "--rounds",
+      "100",
+      "--name",
+      "commands-baseline-c8-block1",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-baseline-c50-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "50",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-baseline-c50-block0",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-candidate-c50-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "50",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-candidate-c50-block0",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-candidate-c50-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "50",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-candidate-c50-block1",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-baseline-c50-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "50",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-baseline-c50-block1",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-baseline-c100-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "100",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-baseline-c100-block0",
+      "--profile",
+      "baseline"
+    ]
+  },
+  {
+    "name": "commands-candidate-c100-block0",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "100",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-candidate-c100-block0",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-candidate-c100-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-candidate",
+      "--concurrency",
+      "100",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-candidate-c100-block1",
+      "--profile",
+      "candidate"
+    ]
+  },
+  {
+    "name": "commands-baseline-c100-block1",
+    "exit_code": 1,
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/target/refusal-command-coordinator.py",
+      "--daemon",
+      "/var/tmp/hm-refusal-retry/hv2-sandboxd-baseline",
+      "--concurrency",
+      "100",
+      "--rounds",
+      "20",
+      "--name",
+      "commands-baseline-c100-block1",
+      "--profile",
+      "baseline"
+    ]
+  }
+]
