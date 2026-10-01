@@ -141,3 +141,84 @@ fn automatic_publication_is_bounded_and_recovers_on_a_second_invocation() {
     .success());
     assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
 }
+
+async fn running_publisher_shutdown(signal: bool) {
+    use std::time::Duration;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let spec = dir.path().join("live.json");
+    std::fs::write(
+        &spec,
+        json!({"first_ms":0,"every_ms":1,"job":{"command":["must-not-run"]}}).to_string(),
+    )
+    .unwrap();
+    success(invoke(&store, &["create", "live", spec.to_str().unwrap()]));
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["jobs", "--store"])
+        .arg(&store)
+        .args([
+            "schedule",
+            "watch",
+            "live",
+            "--limit",
+            "2",
+            "--poll-ms",
+            "10",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    tokio::time::timeout(Duration::from_secs(10), output.read_line(&mut line))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&line)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    // Keep draining so a healthy publisher cannot block on a full stdout pipe.
+    let drain =
+        tokio::spawn(async move { tokio::io::copy(&mut output, &mut tokio::io::sink()).await });
+    if signal {
+        let status = Command::new("/bin/kill")
+            .args(["-INT", &child.id().unwrap().to_string()])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    } else {
+        success(invoke(&store, &["cancel", "live"]));
+    }
+    let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(status.success(), "publisher did not exit cleanly: {status}");
+    drain.await.unwrap().unwrap();
+    let persisted = success(invoke(&store, &["status", "live"]));
+    assert_eq!(persisted["cancelled"], !signal);
+    let records = success(invoke(&store, &["occurrences", "live", "--limit", "1024"]));
+    assert_eq!(
+        records.as_array().unwrap().last().unwrap()["scheduled_ms"],
+        persisted["publication_through_ms"]
+    );
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn running_publisher_observes_external_schedule_cancellation() {
+    running_publisher_shutdown(false).await;
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn running_publisher_handles_sigint_and_preserves_committed_records() {
+    running_publisher_shutdown(true).await;
+}

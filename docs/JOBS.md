@@ -262,6 +262,13 @@ duplicate rejection, bounded publication, persisted status, occurrence pages,
 invalid-limit/path rejection, and an empty runnable job queue.
 The automatic-publication test verifies two bounded ticks and a second
 invocation continuing from persistent progress on both Windows and Linux.
+The suite has three passing CLI tests on Windows and four on Linux. A live
+publisher test cancels the schedule from a second process, waits for a successful
+exit within five seconds, and checks committed records afterward. Linux also
+tests SIGINT delivered to the running publisher, a successful bounded exit and
+preserved records. These tests wait for a published batch before shutdown; they
+do not force interruption at every filesystem instruction. Windows console
+Ctrl+C delivery remains untested.
 
 **`tools/e2e-jobs.sh`** passes 18 of 18 checks on Windows (Git Bash) and on Linux as an
 unprivileged user:
