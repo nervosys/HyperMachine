@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 import shlex
 import sys
+import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -20,8 +22,9 @@ spec.loader.exec_module(benchmark)
 class AdapterTests(unittest.TestCase):
     def run_sample(self, *, wrong_marker=False, wrong_resources=False, cleanup_fails=False,
                    operation="create", lost_state=False, partial_fork=False, ignored_pause=False,
-                   shared_filesystem=False):
+                   shared_filesystem=False, barrier=None, failed_fork=False):
         killed = []
+        spawned = []
         isolation = {"mutated": False}
         class FakeSandbox:
             sandbox_id = "fixture"
@@ -47,10 +50,13 @@ class AdapterTests(unittest.TestCase):
                 self.paused = False
                 return self
             def fork(self, **kwargs):
+                if failed_fork:
+                    return [RuntimeError("guest readiness timeout containing fixture-key")]
+                spawned.append("child")
                 child = FakeSandbox()
                 child.sandbox_id = "child"
                 child.changed = True
-                return [child, RuntimeError("partial fork")] if partial_fork else [child]
+                return [child, RuntimeError("partial fork containing fixture-key")] if partial_fork else [child]
             def get_info(self, **kwargs):
                 return SimpleNamespace(cpu_count=2 if wrong_resources else 1, memory_mb=128,
                                        state="paused" if self.paused else "running")
@@ -68,8 +74,8 @@ class AdapterTests(unittest.TestCase):
                                request_timeout=120, command_timeout=30, workload="posix",
                                expected_cpus=1, expected_memory_mb=128, operation=operation)
         with patch.dict(os.environ, {"E2B_API_KEY": "fixture-key"}):
-            record = benchmark.sample(Factory, args, "nonce", 0)
-        self.assertEqual(killed, ["child", "fixture"] if operation == "fork" else ["fixture"])
+            record = benchmark.sample(Factory, args, "nonce", 0, barrier, time.perf_counter())
+        self.assertEqual(killed, ["child", "fixture"] if spawned else ["fixture"])
         return record
 
     def test_wrong_guest_output_cannot_be_a_fast_success(self):
@@ -113,6 +119,16 @@ class AdapterTests(unittest.TestCase):
         record = self.run_sample(operation="fork", partial_fork=True)
         self.assertFalse(record["success"])
         self.assertEqual(record["phase"], "fork")
+        self.assertIn("partial fork", record["fork_errors"][0])
+        self.assertNotIn("fixture-key", str(record["fork_errors"]))
+
+    def test_failed_fork_preserves_the_underlying_error_and_deletes_parent(self):
+        record = self.run_sample(operation="fork", failed_fork=True)
+        self.assertFalse(record["success"])
+        self.assertIn("guest readiness timeout", record["fork_errors"][0])
+        self.assertNotIn("fixture-key", str(record))
+        self.assertEqual(record["failure_timing_origin"], "operation")
+        self.assertGreaterEqual(record["failure_elapsed_ms"], 0)
 
     def test_fork_cleanup_continues_after_child_deletion_fails(self):
         record = self.run_sample(operation="fork", cleanup_fails=True)
@@ -128,6 +144,66 @@ class AdapterTests(unittest.TestCase):
         record = self.run_sample(operation="fork")
         self.assertTrue(record["success"])
         self.assertTrue(record["fork_filesystem_isolation_verified"])
+
+    def test_failed_pause_aborts_batch_before_measured_resume(self):
+        barrier = threading.Barrier(2)
+        record = self.run_sample(operation="resume", ignored_pause=True, barrier=barrier)
+        self.assertTrue(barrier.broken)
+        self.assertFalse(record["success"])
+        self.assertNotIn("operation_start_offset_ms", record)
+
+    def test_broken_batch_still_deletes_the_prepared_guest(self):
+        barrier = threading.Barrier(2)
+        barrier.abort()
+        record = self.run_sample(operation="fork", barrier=barrier)
+        self.assertFalse(record["success"])
+        self.assertEqual(record["phase"], "operation-barrier")
+        self.assertIn("could not synchronize", record["error"])
+        self.assertEqual(record["failure_timing_origin"], "create")
+
+    def test_single_member_batch_records_measured_operation_start(self):
+        record = self.run_sample(operation="resume", barrier=threading.Barrier(1))
+        self.assertTrue(record["success"])
+        self.assertGreaterEqual(record["operation_start_offset_ms"], 0)
+
+    def test_preparation_failure_releases_waiting_peer(self):
+        barrier = threading.Barrier(2)
+        waiting = threading.Event()
+        result = []
+        def peer():
+            waiting.set()
+            try:
+                benchmark.synchronize_operation(barrier, 5)
+            except RuntimeError as error:
+                result.append(str(error))
+        thread = threading.Thread(target=peer)
+        thread.start()
+        self.assertTrue(waiting.wait(1))
+        self.run_sample(operation="resume", ignored_pause=True, barrier=barrier)
+        thread.join(1)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(len(result), 1)
+
+    def test_partial_final_batch_uses_its_actual_participant_count(self):
+        observed = []
+        def fake_sample(factory, args, nonce, index, barrier, started):
+            benchmark.synchronize_operation(barrier, 1)
+            observed.append((index, barrier.parties))
+            return {"index": index, "success": True}
+        args = SimpleNamespace(concurrency=3, samples=5, synchronized_operation_batches=True)
+        with patch.object(benchmark, "sample", side_effect=fake_sample):
+            records = benchmark.run_samples(None, args, "nonce", time.perf_counter())
+        self.assertEqual(sorted(observed), [(0, 3), (1, 3), (2, 3), (3, 2), (4, 2)])
+        self.assertEqual([record["batch_index"] for record in records], [0, 0, 0, 1, 1])
+
+    def test_create_cannot_be_labeled_as_synchronized_stateful_operations(self):
+        arguments = ["benchmark", "--provider", "fixture", "--api-url", "http://fixture",
+                     "--template", "base", "--environment", "fixture", "--image-description", "fixture",
+                     "--expected-cpus", "1", "--expected-memory-mb", "128", "--synchronized-operation-batches"]
+        with patch.object(sys, "argv", arguments), patch.object(sys, "stderr", io.StringIO()), \
+                self.assertRaises(SystemExit) as error:
+            benchmark.main()
+        self.assertEqual(error.exception.code, 2)
 
     def test_changed_harness_invalidates_an_otherwise_successful_report(self):
         arguments = ["benchmark", "--provider", "fixture", "--api-url", "http://fixture",
