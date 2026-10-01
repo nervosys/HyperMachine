@@ -234,3 +234,34 @@ async fn running_publisher_observes_external_schedule_cancellation() {
 async fn running_publisher_handles_sigint_and_preserves_committed_records() {
     running_publisher_shutdown(true).await;
 }
+
+#[test]
+fn profile_check_resolves_child_environment_without_printing_credentials() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let profiles = dir.path().join("profiles.json");
+    std::fs::write(&profiles, json!({"profiles":{"local":{"endpoint":"https://127.0.0.1:9","api_key_env":"HM_PROFILE_TEST_KEY"}}}).to_string()).unwrap();
+    let run = |with_key: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hm"));
+        command
+            .args(["jobs", "--store"])
+            .arg(&store)
+            .args(["schedule", "profile-check"])
+            .arg(&profiles)
+            .arg("local");
+        if with_key {
+            command.env("HM_PROFILE_TEST_KEY", "disposable-profile-secret");
+        } else {
+            command.env_remove("HM_PROFILE_TEST_KEY");
+        }
+        command.output().unwrap()
+    };
+    let output = run(true);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("disposable-profile-secret"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("disposable-profile-secret"));
+    assert_eq!(
+        success(output),
+        json!({"profile":"local","configuration_valid":true})
+    );
+    assert!(!run(false).status.success());
+}

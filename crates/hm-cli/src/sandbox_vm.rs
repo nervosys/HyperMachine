@@ -181,7 +181,7 @@ pub enum CheckpointCommand {
 }
 
 #[derive(Clone)]
-struct Api {
+pub(crate) struct Api {
     client: Client,
     tcp_client: Client,
     base: Url,
@@ -192,7 +192,7 @@ impl Api {
         Self::with_ca(endpoint, timeout, key, None)
     }
 
-    fn with_ca(
+    pub(crate) fn with_ca(
         endpoint: &str,
         timeout: u64,
         key: Option<String>,

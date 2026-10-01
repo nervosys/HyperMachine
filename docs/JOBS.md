@@ -153,13 +153,30 @@ An optional `vm` target is preserved in the schedule and each occurrence:
 ```
 
 The profile is an operator-managed name, not an endpoint URL or credential.
-Profile resolution and VM dispatch are not implemented yet; accepting the spec
-does not establish that the profile or sandbox exists. Sandbox IDs permit
+Accepting the schedule spec does not establish that the profile or sandbox exists.
+VM dispatch is not implemented yet. Sandbox IDs permit
 1-128 ASCII letters, digits, hyphens or underscores; profiles use the schedule
 name format. Timeouts must be 1-86400 seconds. Guest working directories must be
 absolute UTF-8 paths beginning with `/`, interpreted independently of the host
 OS. VM targets reject host sandbox settings and host graceful-stop files rather
 than ignoring them. Existing schedules without `vm` retain their schema behavior.
+
+Operator profiles can be checked with
+`hm jobs schedule profile-check profiles.json local`. A profile file contains:
+
+```json
+{"profiles":{"local":{"endpoint":"https://node.example","api_key_env":"HV2_API_KEY","ca":"node-ca.pem","request_timeout_secs":120}}}
+```
+
+`api_key_env` and `ca` are optional; configured key variables must be set and
+nonempty. The key value stays in the process environment and authenticated client,
+outside schedule records. CA paths resolve relative to the profile file.
+The timeout defaults to 120 seconds and must be 1-86401. Unknown fields are
+rejected. Validation uses the existing VM client's TLS, certificate, endpoint
+and header rules; success prints only the profile name and configuration status.
+It constructs a client without making a network request, so it verifies neither
+connectivity nor guest execution. A dispatcher must still ensure its request
+deadline exceeds the selected guest timeout.
 
 `schedule watch` publishes due occurrences repeatedly using the host wall clock,
 with one bounded batch per tick and compact JSON output per successful tick.
@@ -305,13 +322,16 @@ duplicate rejection, bounded publication, persisted status, occurrence pages,
 invalid-limit/path rejection, and an empty runnable job queue.
 The automatic-publication test verifies two bounded ticks and a second
 invocation continuing from persistent progress on both Windows and Linux.
-The suite has three passing CLI tests on Windows and four on Linux. A live
+The suite has four passing CLI tests on Windows and five on Linux. A live
 publisher test cancels the schedule from a second process, waits for a successful
 exit within five seconds, and checks committed records afterward. Linux also
 tests SIGINT delivered to the running publisher, a successful bounded exit and
 preserved records. These tests wait for a published batch before shutdown; they
 do not force interruption at every filesystem instruction. Windows console
 Ctrl+C delivery remains untested.
+The profile test resolves a disposable key in the child process, verifies the
+key is absent from stdout/stderr, and rejects an unset required variable. A
+profile unit test checks shared endpoint rules and timeout/key validation.
 
 **`tools/e2e-jobs.sh`** passes 18 of 18 checks on Windows (Git Bash) and on Linux as an
 unprivileged user:
