@@ -22,7 +22,7 @@ spec.loader.exec_module(benchmark)
 class AdapterTests(unittest.TestCase):
     def run_sample(self, *, wrong_marker=False, wrong_resources=False, cleanup_fails=False,
                    operation="create", lost_state=False, partial_fork=False, ignored_pause=False,
-                   shared_filesystem=False, barrier=None, failed_fork=False):
+                   shared_filesystem=False, barrier=None, failed_fork=False, pause_barrier=None):
         killed = []
         spawned = []
         isolation = {"mutated": False}
@@ -74,7 +74,7 @@ class AdapterTests(unittest.TestCase):
                                request_timeout=120, command_timeout=30, workload="posix",
                                expected_cpus=1, expected_memory_mb=128, operation=operation)
         with patch.dict(os.environ, {"E2B_API_KEY": "fixture-key"}):
-            record = benchmark.sample(Factory, args, "nonce", 0, barrier, time.perf_counter())
+            record = benchmark.sample(Factory, args, "nonce", 0, barrier, time.perf_counter(), pause_barrier)
         self.assertEqual(killed, ["child", "fixture"] if spawned else ["fixture"])
         return record
 
@@ -166,6 +166,34 @@ class AdapterTests(unittest.TestCase):
         self.assertTrue(record["success"])
         self.assertGreaterEqual(record["operation_start_offset_ms"], 0)
 
+    def test_broken_pause_batch_prevents_pause_and_resume(self):
+        pause_barrier = threading.Barrier(2)
+        pause_barrier.abort()
+        resume_barrier = threading.Barrier(2)
+        record = self.run_sample(operation="resume", barrier=resume_barrier, pause_barrier=pause_barrier)
+        self.assertFalse(record["success"])
+        self.assertEqual(record["phase"], "pause-barrier")
+        self.assertNotIn("pause_ms", record)
+        self.assertNotIn("operation_start_offset_ms", record)
+        self.assertTrue(resume_barrier.broken)
+
+    def test_pause_failure_aborts_both_batch_barriers(self):
+        pause_barrier = threading.Barrier(1)
+        resume_barrier = threading.Barrier(2)
+        record = self.run_sample(operation="resume", ignored_pause=True,
+                                 barrier=resume_barrier, pause_barrier=pause_barrier)
+        self.assertFalse(record["success"])
+        self.assertTrue(pause_barrier.broken)
+        self.assertTrue(resume_barrier.broken)
+        self.assertGreaterEqual(record["pause_start_offset_ms"], 0)
+
+    def test_pause_and_resume_use_distinct_barriers_and_keep_state_checks(self):
+        record = self.run_sample(operation="resume", barrier=threading.Barrier(1),
+                                 pause_barrier=threading.Barrier(1), lost_state=True)
+        self.assertFalse(record["success"])
+        self.assertEqual(record["phase"], "ready")
+        self.assertLessEqual(record["pause_start_offset_ms"], record["operation_start_offset_ms"])
+
     def test_preparation_failure_releases_waiting_peer(self):
         barrier = threading.Barrier(2)
         waiting = threading.Event()
@@ -204,6 +232,32 @@ class AdapterTests(unittest.TestCase):
                 self.assertRaises(SystemExit) as error:
             benchmark.main()
         self.assertEqual(error.exception.code, 2)
+
+    def test_partial_pause_batch_synchronizes_each_stage_separately(self):
+        observed = []
+        def fake_sample(factory, args, nonce, index, resume_barrier, started, pause_barrier):
+            self.assertIsNot(pause_barrier, resume_barrier)
+            benchmark.synchronize_operation(pause_barrier, 1)
+            benchmark.synchronize_operation(resume_barrier, 1)
+            observed.append((index, pause_barrier.parties, resume_barrier.parties))
+            return {"index": index, "success": True}
+        args = SimpleNamespace(concurrency=3, samples=5, synchronized_operation_batches=True,
+                               synchronized_pause_batches=True)
+        with patch.object(benchmark, "sample", side_effect=fake_sample):
+            records = benchmark.run_samples(None, args, "nonce", time.perf_counter())
+        self.assertEqual(sorted(observed), [(0, 3, 3), (1, 3, 3), (2, 3, 3), (3, 2, 2), (4, 2, 2)])
+        self.assertEqual(len(records), 5)
+
+    def test_pause_batch_rejects_fork_and_unsynchronized_resume(self):
+        base = ["benchmark", "--provider", "fixture", "--api-url", "http://fixture",
+                "--template", "base", "--environment", "fixture", "--image-description", "fixture",
+                "--expected-cpus", "1", "--expected-memory-mb", "128", "--synchronized-pause-batches"]
+        for extra in (["--operation", "fork", "--synchronized-operation-batches"],
+                      ["--operation", "resume"]):
+            with patch.object(sys, "argv", base + extra), patch.object(sys, "stderr", io.StringIO()), \
+                    self.assertRaises(SystemExit) as error:
+                benchmark.main()
+            self.assertEqual(error.exception.code, 2)
 
     def test_changed_harness_invalidates_an_otherwise_successful_report(self):
         arguments = ["benchmark", "--provider", "fixture", "--api-url", "http://fixture",

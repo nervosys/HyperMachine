@@ -96,7 +96,7 @@ pass the acceptance criteria below.
 | Workstream | Acceptance criterion | Current gap |
 |---|---|---|
 | Creation and execution latency | Same guest workload and readiness command; raw samples, failure rate, P50/P95/P99 at concurrency 1, 8, 50 and 100; lower latency than each tested competitor with repeatable results | Native Firecracker sweep verified at all four concurrencies; HyperMachine still trails. Managed competitor runs and bare-metal HyperMachine runs are missing |
-| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Paired synchronized SDK sweep at concurrency 1/8/50/100: event-preserving KVM runtime passed 1008/1008, parent 1007/1008. Pending-event restoration is verified by a direct guest-handler control. Full pause bursts, a reliability SLA and matched competitor runs remain missing |
+| Stateful resume, pause and fork | Verify live process memory and filesystem state, then measure API-to-first-successful-command latency under the same concurrency | Paired synchronized SDK sweep at concurrency 1/8/50/100: event-preserving KVM runtime passed 1008/1008, parent 1007/1008. Separate synchronized pause/resume bursts passed 503/504 with one resume timeout retained. Pending-event restoration is verified by a direct guest-handler control. A reliability SLA and matched competitor runs remain missing |
 | Memory and density | Incremental PSS after the same command and idle period; same guest resources; document shared-template memory; preserve state through oversubscription | Fixed five-second idle PSS and per-batch empty-node baselines verified at concurrency 1/8/50/100, 477/477 attempts per engine; HyperMachine held PSS was higher in all 12 paired batches. Retained-memory allocation source, shared-template attribution and stateful density remain unverified. Vendor VMM overhead and PSS are different quantities |
 | Throughput and tails | Sustained arrivals on identical host resources; include failures, queueing, and recovery rather than counting accepted requests | One-node rates cannot establish a win against a million-sandbox managed fleet |
 | CLI and SDK usability | Shipped client for lifecycle, execution, files and checkpoints, tested against a real node and control plane | VM CLI verified on a real KVM node and authenticated control plane, including binary files through the control-plane proxy |
@@ -165,6 +165,15 @@ Timings are mixed, including a higher updated resume P99 at concurrency 100.
 This fixes the demonstrated event-state omission, without establishing the
 cause of earlier timeouts, a speed win or universal reliability. Old snapshots
 remain readable but require recapture to include event state never stored.
+
+The separate [synchronized pause/resume sweep](benchmarks/2026-10-01/pause-bursts.md)
+prepares all live-state probes before concurrently pausing each batch, verifies
+paused state, then synchronizes resume independently. It passed 503/504 across
+concurrency 1/8/50/100. At concurrency 100, conditional pause P99 was 961.88 ms
+and resume-to-command P99 was 1095.98 ms. One concurrency-1 resume timed out
+despite event preservation; its raw diagnostics and nonzero cohort are retained.
+This closes the pause-burst measurement gap without proving a reliability fix
+or a comparative performance win.
 
 Native-engine runs now explicitly cap both guests' readiness phase at 15 seconds.
 Firecracker's cap begins after `InstanceStart` and is also bounded by its total
