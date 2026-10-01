@@ -701,6 +701,8 @@ comparison, not SDK, managed-platform, snapshot, density or bare-init timing.
 | KVM retry counters, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 1631.53 | 6573.30 |
 | Singleton MP table, matched readiness deadlines | HyperMachine | 100 / 100 | 1107.25 | 2263.95 |
 | Singleton MP table, matched readiness deadlines | Firecracker 1.17.0 | 100 / 100 | 804.85 | 1740.15 |
+| Singleton MP table, 200-pair pinned repeat | HyperMachine | 200 / 200 | 1079.50 | 1867.38 |
+| Singleton MP table, 200-pair pinned repeat | Firecracker 1.17.0 | 200 / 200 | 769.48 | 1573.45 |
 
 Percentiles use nearest rank over successful, cleaned-up samples only; failures
 are retained in the reports and invalidate the first three normal-logging comparisons
@@ -1103,7 +1105,26 @@ daemon cleanup passed. No startup failure was observed in these 100 attempts.
 The preceding retry-counter cohort recorded HyperMachine 91/100, but separate
 runs on shared hardware do not isolate a causal reliability or timing effect.
 HyperMachine remains slower than Firecracker in the passing cohort: successful
-readiness P50/P99 were 1107.25/2263.95 ms versus 804.85/1740.15 ms. A 200-pair
-repeat of the same pinned workload is running. Zero observed failures in one
-cohort does not establish that startup reliability is fully resolved, and no
+readiness P50/P99 were 1107.25/2263.95 ms versus 804.85/1740.15 ms. Zero observed
+failures in these cohorts does not establish that startup reliability is fully resolved, and no
 performance or across-the-board product win is established.
+
+The [200-pair pinned repeat](benchmarks/2026-09-30/local-engines-singleton-mptable-pinned-load-200.json)
+and [exact coordinator](benchmarks/2026-09-30/singleton-mptable-pinned-load-repeat-coordinator.py)
+also passed every attempt for both engines. Both MP-table cohorts used the same
+daemon binary, kernel, initrd and harness hashes. Artifact stability, worker
+liveness and cleanup passed. HyperMachine now records 300/300 passing attempts
+across these two pinned cohorts; Firecracker also records 300/300. The repeat
+still shows a latency gap: P50/P99 1079.50/1867.38 ms versus 769.48/1573.45 ms.
+
+A separate [five-pair stage diagnostic](benchmarks/2026-09-30/local-engines-stage-timing-pinned-diagnostic-5.json)
+and [coordinator](benchmarks/2026-09-30/stage-timing-pinned-diagnostic-coordinator.py)
+enable `hv2_sandboxd=debug` to capture existing create-stage fields. All ten
+engine attempts, artifact checks, worker liveness and cleanup passed. The five
+HyperMachine log entries report construction of 0.38–1.49 ms, launch of
+47.47–229.38 ms, launch-to-agent-answer of 1195.70–1769.67 ms, and final setup
+of 0.066–0.079 ms. Launch-to-answer includes guest boot, connection setup and
+ping; it is not a measurement of transport alone. Its dominant elapsed time
+narrows the next investigation to guest boot and readiness rather than the
+post-readiness control path. Extra logging and shared-host load make this a
+diagnostic, not a performance comparison or evidence of a win.
