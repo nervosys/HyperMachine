@@ -258,6 +258,12 @@ stdout/stderr currently appear only in CLI output and are not stored durably.
 No automatic retry, guest process reconciliation, guest cancellation or logs
 recovery is implemented. The protocol fixture checks request fidelity and
 uncertain-result behavior; real KVM dispatch verification remains pending.
+The Linux shell regression runs a literal executable containing `=` from a
+directory containing spaces, with quotes and command-substitution text in its
+environment and argument. It verifies unchanged literal values, `HM_JOB_ID` and
+exit code 7. The command uses an explicit `/bin/sh` under `env` so an executable
+containing `=` cannot be consumed as another environment assignment. This is a
+host shell test; it does not establish real guest or KVM behavior.
 
 A claim without a receipt is unresolved, including after worker loss. It may
 represent a running guest command, an unrecorded completion, or a dispatch that
