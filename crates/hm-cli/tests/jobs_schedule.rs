@@ -295,10 +295,13 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
                 assert!(cmd.starts_with("cd '/work space' && exec 'env' '--'"));
                 assert!(cmd.contains("'TEST=v'\\''alue'"));
                 assert!(cmd.contains("'/bin/sh' '-c'"));
-                if count.fetch_add(1, Ordering::SeqCst) == 0 {
+                let attempt = count.fetch_add(1, Ordering::SeqCst);
+                if attempt == 0 {
                     Json(json!({"exit_code":7,"timed_out":false,"stdout":"guest output","stderr":"guest error"})).into_response()
-                } else {
+                } else if attempt == 1 {
                     (StatusCode::INTERNAL_SERVER_ERROR, "dispatch-fixture-key").into_response()
+                } else {
+                    Json(json!({"exit_code":0,"timed_out":false,"stdout":"x".repeat(1_048_577),"stderr":""})).into_response()
                 }
             }
         }));
@@ -355,5 +358,14 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
         .is_none());
     assert!(!dispatch("110").output().await.unwrap().status.success());
     assert_eq!(calls.load(Ordering::SeqCst), 2);
+    store.materialize_interval("run", 120, 1).unwrap();
+    assert!(!dispatch("120").output().await.unwrap().status.success());
+    assert!(store
+        .vm_dispatch_state("run", 120)
+        .unwrap()
+        .completion
+        .is_none());
+    assert!(!dispatch("120").output().await.unwrap().status.success());
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
     server.abort();
 }

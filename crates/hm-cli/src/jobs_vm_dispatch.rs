@@ -105,18 +105,20 @@ pub async fn dispatch_once(
     let claim = store.claim_vm_occurrence(id, scheduled_ms, worker)?;
     // Connect resumes paused sandboxes; extend the lifetime for the bounded
     // command. Do not return descriptor tokens or server error bodies to logs.
-    api.request(
+    api.request_bounded(
         Method::POST,
         &["sandboxes", &target.sandbox_id, "connect"],
         Some(json!({"timeout": target.timeout_secs + 60})),
+        65_536,
     )
     .await
     .map_err(|_| anyhow::anyhow!("VM connection failed; dispatch remains unresolved"))?;
     let response = api
-        .request(
+        .request_bounded(
             Method::POST,
             &["sandboxes", &target.sandbox_id, "exec"],
             Some(json!({"cmd": command, "timeout_secs": target.timeout_secs})),
+            1_048_576,
         )
         .await
         .map_err(|_| {

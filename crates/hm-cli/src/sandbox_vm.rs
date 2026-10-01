@@ -325,7 +325,47 @@ impl Api {
         }
     }
 
-    pub(crate) async fn request(&self, method: Method, path: &[&str], body: Option<Value>) -> Result<Value> {
+    pub(crate) async fn request_bounded(
+        &self,
+        method: Method,
+        path: &[&str],
+        body: Option<Value>,
+        limit: usize,
+    ) -> Result<Value> {
+        let mut request = self.client.request(method, self.url(path)?);
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        let mut response = request.send().await.context("sandbox API request failed")?;
+        if !response.status().is_success() {
+            bail!("sandbox API returned {}", response.status());
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length > limit as u64)
+        {
+            bail!("sandbox response exceeds byte limit");
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            if chunk.len() > limit.saturating_sub(bytes.len()) {
+                bail!("sandbox response exceeds byte limit");
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        if bytes.iter().all(|byte| byte.is_ascii_whitespace()) {
+            Ok(Value::Null)
+        } else {
+            serde_json::from_slice(&bytes).context("sandbox API returned invalid JSON")
+        }
+    }
+
+    pub(crate) async fn request(
+        &self,
+        method: Method,
+        path: &[&str],
+        body: Option<Value>,
+    ) -> Result<Value> {
         let mut request = self.client.request(method, self.url(path)?);
         if let Some(body) = body {
             request = request.json(&body);
