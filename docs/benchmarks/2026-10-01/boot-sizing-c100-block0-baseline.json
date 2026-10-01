@@ -1,0 +1,4324 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command-bursts",
+  "concurrency": 100,
+  "pairs": 2,
+  "order": "alternating engine-batch AB/BA",
+  "environment": "shared-WSL-nested-KVM-eight-host-CPU-affinity-one-pinned-worker-fixed-idle-memory",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hypermachine": "d420dabe8ad568ed7d90b0806ad4fe186e42be0dfbf3a46f8997174871400159",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "aa75da562719e49ea0955c31278327f4c32e2504f431006dc8cc2a9a56799efa",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "daemon_allocator_arena_max": null,
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "batches": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.6138659993885085,
+          "ready_ms": 8448.624895998364,
+          "validated_offset_ms": 8523.336520000157
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 37.24431799855665,
+          "ready_ms": 8185.369468999852,
+          "validated_offset_ms": 8295.420626000123
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.8347609984630253,
+          "ready_ms": 7591.666836000513,
+          "validated_offset_ms": 7672.805488000449
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.001470998948207,
+          "ready_ms": 8069.252923000022,
+          "validated_offset_ms": 8181.332758998906
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.775900001230184,
+          "ready_ms": 7429.476381999848,
+          "validated_offset_ms": 7533.030079001037
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.89254599864944,
+          "ready_ms": 7991.7142470003455,
+          "validated_offset_ms": 8256.866502000776
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.15250299879699,
+          "ready_ms": 8584.990371000458,
+          "validated_offset_ms": 8599.282622999453
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.040250000951346,
+          "ready_ms": 8556.478562997654,
+          "validated_offset_ms": 8600.046891999227
+        },
+        {
+          "index": 8,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.2924719996808562,
+          "ready_ms": 8030.272579999291,
+          "validated_offset_ms": 8231.569282997953
+        },
+        {
+          "index": 9,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.328972001123475,
+          "ready_ms": 7985.944418000145,
+          "validated_offset_ms": 8123.948972999642
+        },
+        {
+          "index": 10,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.260032998601673,
+          "ready_ms": 7549.856276000355,
+          "validated_offset_ms": 7661.75144600129
+        },
+        {
+          "index": 11,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.4869959997886326,
+          "ready_ms": 8514.780827001232,
+          "validated_offset_ms": 8563.576403998013
+        },
+        {
+          "index": 12,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.60127899775398,
+          "ready_ms": 8024.338062001334,
+          "validated_offset_ms": 8232.00932599866
+        },
+        {
+          "index": 13,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.619590999529464,
+          "ready_ms": 7343.509686001198,
+          "validated_offset_ms": 7390.080263998243
+        },
+        {
+          "index": 14,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.743698999547632,
+          "ready_ms": 8219.96663399841,
+          "validated_offset_ms": 8419.131946000562
+        },
+        {
+          "index": 15,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.7567049983190373,
+          "ready_ms": 8494.232343000476,
+          "validated_offset_ms": 8563.78270300047
+        },
+        {
+          "index": 16,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.983032000192907,
+          "ready_ms": 8570.920900998317,
+          "validated_offset_ms": 8590.794961997744
+        },
+        {
+          "index": 17,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.8767959993274417,
+          "ready_ms": 7288.1417050011805,
+          "validated_offset_ms": 7346.847005999734
+        },
+        {
+          "index": 18,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.641215000505326,
+          "ready_ms": 8524.40102699984,
+          "validated_offset_ms": 8597.740884000814
+        },
+        {
+          "index": 19,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.008409999893047,
+          "ready_ms": 8587.845695998112,
+          "validated_offset_ms": 8598.595151001064
+        },
+        {
+          "index": 20,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.22743200039258,
+          "ready_ms": 7983.607710000797,
+          "validated_offset_ms": 8186.574409999594
+        },
+        {
+          "index": 21,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.143158999591833,
+          "ready_ms": 7810.704360999807,
+          "validated_offset_ms": 7990.900770000735
+        },
+        {
+          "index": 22,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.003151001001243,
+          "ready_ms": 8246.969576997799,
+          "validated_offset_ms": 8418.672546999005
+        },
+        {
+          "index": 23,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.266626998083666,
+          "ready_ms": 8467.211122002482,
+          "validated_offset_ms": 8572.382055001071
+        },
+        {
+          "index": 24,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 18.17302400013432,
+          "ready_ms": 8487.35939099788,
+          "validated_offset_ms": 8569.636494998122
+        },
+        {
+          "index": 25,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.393741000763839,
+          "ready_ms": 6771.363584997744,
+          "validated_offset_ms": 6882.750238000881
+        },
+        {
+          "index": 26,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.635807001264766,
+          "ready_ms": 8567.91026099745,
+          "validated_offset_ms": 8598.424175997934
+        },
+        {
+          "index": 27,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.5177299978386145,
+          "ready_ms": 8592.456532001961,
+          "validated_offset_ms": 8601.396387999557
+        },
+        {
+          "index": 28,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.90268599789124,
+          "ready_ms": 8285.445555000479,
+          "validated_offset_ms": 8376.930659000209
+        },
+        {
+          "index": 29,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.652949999377597,
+          "ready_ms": 8224.972184998478,
+          "validated_offset_ms": 8302.887703001034
+        },
+        {
+          "index": 30,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.23231700010365,
+          "ready_ms": 8551.666433999344,
+          "validated_offset_ms": 8594.831487000192
+        },
+        {
+          "index": 31,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.7883709992456716,
+          "ready_ms": 8446.01852499909,
+          "validated_offset_ms": 8518.574948000605
+        },
+        {
+          "index": 32,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 79.994126001111,
+          "ready_ms": 7587.703063996742,
+          "validated_offset_ms": 7819.293456999731
+        },
+        {
+          "index": 33,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.928830999939237,
+          "ready_ms": 8250.619725000433,
+          "validated_offset_ms": 8408.1164119998
+        },
+        {
+          "index": 34,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.470063000568189,
+          "ready_ms": 8470.57580999899,
+          "validated_offset_ms": 8567.443454998283
+        },
+        {
+          "index": 35,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.068079000717262,
+          "ready_ms": 8459.10759599792,
+          "validated_offset_ms": 8524.42905999851
+        },
+        {
+          "index": 36,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.0788379991136,
+          "ready_ms": 7831.71448000212,
+          "validated_offset_ms": 8066.638919997786
+        },
+        {
+          "index": 37,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.199721999611938,
+          "ready_ms": 8493.261650000932,
+          "validated_offset_ms": 8562.073344000964
+        },
+        {
+          "index": 38,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.39918899798067,
+          "ready_ms": 8186.230021001393,
+          "validated_offset_ms": 8305.911691000802
+        },
+        {
+          "index": 39,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.329773000790738,
+          "ready_ms": 8586.821889999555,
+          "validated_offset_ms": 8598.775245998695
+        },
+        {
+          "index": 40,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.36400800026604,
+          "ready_ms": 7458.3458739980415,
+          "validated_offset_ms": 7578.749655000138
+        },
+        {
+          "index": 41,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.170565997745143,
+          "ready_ms": 8546.797724000498,
+          "validated_offset_ms": 8595.045419999224
+        },
+        {
+          "index": 42,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.512675001024036,
+          "ready_ms": 8302.117279999948,
+          "validated_offset_ms": 8466.42058499856
+        },
+        {
+          "index": 43,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.21022000029916,
+          "ready_ms": 8264.84544199775,
+          "validated_offset_ms": 8409.36196400071
+        },
+        {
+          "index": 44,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.709934000857174,
+          "ready_ms": 8025.511039999401,
+          "validated_offset_ms": 8226.53052899841
+        },
+        {
+          "index": 45,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.11479799816152,
+          "ready_ms": 8566.163677001896,
+          "validated_offset_ms": 8599.69860899946
+        },
+        {
+          "index": 46,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.654762001271592,
+          "ready_ms": 7974.830016999476,
+          "validated_offset_ms": 8231.760482998652
+        },
+        {
+          "index": 47,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.844674000196392,
+          "ready_ms": 8216.938466001011,
+          "validated_offset_ms": 8306.302451997908
+        },
+        {
+          "index": 48,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.9886609995155595,
+          "ready_ms": 8580.51489799982,
+          "validated_offset_ms": 8595.334540001204
+        },
+        {
+          "index": 49,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.227126000856515,
+          "ready_ms": 8550.891085997137,
+          "validated_offset_ms": 8594.234068998048
+        },
+        {
+          "index": 50,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.121916998177767,
+          "ready_ms": 7670.783122001012,
+          "validated_offset_ms": 7821.1698589984735
+        },
+        {
+          "index": 51,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.115816000063205,
+          "ready_ms": 8376.799105000828,
+          "validated_offset_ms": 8466.635451000911
+        },
+        {
+          "index": 52,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.260965001070872,
+          "ready_ms": 7869.266404999507,
+          "validated_offset_ms": 8075.265227998898
+        },
+        {
+          "index": 53,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.640020999038825,
+          "ready_ms": 8240.350528001727,
+          "validated_offset_ms": 8436.291993999475
+        },
+        {
+          "index": 54,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.51914999890141,
+          "ready_ms": 8363.849789002415,
+          "validated_offset_ms": 8464.765631000773
+        },
+        {
+          "index": 55,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.400973997893743,
+          "ready_ms": 8245.296412002062,
+          "validated_offset_ms": 8306.397285999992
+        },
+        {
+          "index": 56,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.533849998755613,
+          "ready_ms": 8244.756954001787,
+          "validated_offset_ms": 8306.025961999694
+        },
+        {
+          "index": 57,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.313456999574555,
+          "ready_ms": 8537.289119998604,
+          "validated_offset_ms": 8591.546657000436
+        },
+        {
+          "index": 58,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.748642997787101,
+          "ready_ms": 8197.11661600013,
+          "validated_offset_ms": 8302.693996000016
+        },
+        {
+          "index": 59,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.936577999033034,
+          "ready_ms": 8164.765563000401,
+          "validated_offset_ms": 8262.45708499846
+        },
+        {
+          "index": 60,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.891107997740619,
+          "ready_ms": 8182.856007002556,
+          "validated_offset_ms": 8303.535274000751
+        },
+        {
+          "index": 61,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.475604000646854,
+          "ready_ms": 8176.78794299718,
+          "validated_offset_ms": 8252.499763999367
+        },
+        {
+          "index": 62,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.0386010009096935,
+          "ready_ms": 8559.149513999728,
+          "validated_offset_ms": 8594.687216998864
+        },
+        {
+          "index": 63,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.2011540007079,
+          "ready_ms": 8169.449485998484,
+          "validated_offset_ms": 8311.433034999936
+        },
+        {
+          "index": 64,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.296918998938054,
+          "ready_ms": 8159.423003002303,
+          "validated_offset_ms": 8301.054534000286
+        },
+        {
+          "index": 65,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.75927500060061,
+          "ready_ms": 8418.907193998166,
+          "validated_offset_ms": 8520.722159999423
+        },
+        {
+          "index": 66,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.42991600080859,
+          "ready_ms": 8146.191136998823,
+          "validated_offset_ms": 8294.931701999303
+        },
+        {
+          "index": 67,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.56145399832167,
+          "ready_ms": 7834.4660960028705,
+          "validated_offset_ms": 8022.791291998146
+        },
+        {
+          "index": 68,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.05269099998986,
+          "ready_ms": 8198.409820000961,
+          "validated_offset_ms": 8302.753192998352
+        },
+        {
+          "index": 69,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.183609999425244,
+          "ready_ms": 8243.146904998866,
+          "validated_offset_ms": 8304.25503999868
+        },
+        {
+          "index": 70,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.138113998342305,
+          "ready_ms": 8448.347445002582,
+          "validated_offset_ms": 8526.424378000229
+        },
+        {
+          "index": 71,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.182071997842286,
+          "ready_ms": 8437.373194999964,
+          "validated_offset_ms": 8523.285862000193
+        },
+        {
+          "index": 72,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.79824699819437,
+          "ready_ms": 8495.031356000254,
+          "validated_offset_ms": 8584.044107999944
+        },
+        {
+          "index": 73,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.108971998823108,
+          "ready_ms": 8566.654772999755,
+          "validated_offset_ms": 8594.278386000951
+        },
+        {
+          "index": 74,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.422700000111945,
+          "ready_ms": 8146.774516000733,
+          "validated_offset_ms": 8294.746043000487
+        },
+        {
+          "index": 75,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.491347998875426,
+          "ready_ms": 8226.938558000256,
+          "validated_offset_ms": 8408.34505499879
+        },
+        {
+          "index": 76,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.3844859978416935,
+          "ready_ms": 8578.101359002176,
+          "validated_offset_ms": 8598.84141799921
+        },
+        {
+          "index": 77,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.013570998737123,
+          "ready_ms": 8291.898280000169,
+          "validated_offset_ms": 8375.590890998865
+        },
+        {
+          "index": 78,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.76998399896547,
+          "ready_ms": 7816.551301999425,
+          "validated_offset_ms": 8202.561320998939
+        },
+        {
+          "index": 79,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.4621630012698,
+          "ready_ms": 8238.797530997545,
+          "validated_offset_ms": 8374.339492998843
+        },
+        {
+          "index": 80,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.321640998707153,
+          "ready_ms": 8443.402585002332,
+          "validated_offset_ms": 8524.972592000267
+        },
+        {
+          "index": 81,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.522971999947913,
+          "ready_ms": 7805.9121519982,
+          "validated_offset_ms": 8066.825481000706
+        },
+        {
+          "index": 82,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.40909400081728,
+          "ready_ms": 8388.731628998357,
+          "validated_offset_ms": 8522.678105000523
+        },
+        {
+          "index": 83,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 64.33203800042975,
+          "ready_ms": 8453.628511000716,
+          "validated_offset_ms": 8586.826172999281
+        },
+        {
+          "index": 84,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.55466000031447,
+          "ready_ms": 7952.769494000677,
+          "validated_offset_ms": 8074.90224600042
+        },
+        {
+          "index": 85,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 18.070758000249043,
+          "ready_ms": 8549.02154699812,
+          "validated_offset_ms": 8597.681559000193
+        },
+        {
+          "index": 86,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.47657900041668,
+          "ready_ms": 8420.630519998667,
+          "validated_offset_ms": 8517.837821000285
+        },
+        {
+          "index": 87,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.133938000479247,
+          "ready_ms": 8234.394374998374,
+          "validated_offset_ms": 8419.069955998566
+        },
+        {
+          "index": 88,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.638962001015898,
+          "ready_ms": 8458.59566299987,
+          "validated_offset_ms": 8572.349712998403
+        },
+        {
+          "index": 89,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.50088299906929,
+          "ready_ms": 8517.930268000782,
+          "validated_offset_ms": 8584.25354299834
+        },
+        {
+          "index": 90,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 79.93680499930633,
+          "ready_ms": 8386.817656999483,
+          "validated_offset_ms": 8526.307943000575
+        },
+        {
+          "index": 91,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.37415399908787,
+          "ready_ms": 8244.207438001467,
+          "validated_offset_ms": 8376.848870000686
+        },
+        {
+          "index": 92,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.003666001168313,
+          "ready_ms": 8238.6934999995,
+          "validated_offset_ms": 8423.187506999966
+        },
+        {
+          "index": 93,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.83514699776424,
+          "ready_ms": 8421.88055600127,
+          "validated_offset_ms": 8504.891090000456
+        },
+        {
+          "index": 94,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.748957999108825,
+          "ready_ms": 8429.57187600041,
+          "validated_offset_ms": 8563.502821998554
+        },
+        {
+          "index": 95,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.351128000882454,
+          "ready_ms": 7837.205162999453,
+          "validated_offset_ms": 8030.716278000909
+        },
+        {
+          "index": 96,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.64037900060066,
+          "ready_ms": 8309.031349999714,
+          "validated_offset_ms": 8409.296887999517
+        },
+        {
+          "index": 97,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.513899000856327,
+          "ready_ms": 8419.455207000283,
+          "validated_offset_ms": 8520.237094999175
+        },
+        {
+          "index": 98,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.580802999291336,
+          "ready_ms": 8553.205353000521,
+          "validated_offset_ms": 8595.136226998875
+        },
+        {
+          "index": 99,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.468557999061886,
+          "ready_ms": 8235.780684000929,
+          "validated_offset_ms": 8419.143117000203
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 8601.396387999557,
+      "launch_spread_ms": 78.38026000172249,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 11.62601925188768,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 8673760,
+        "Pss_kib": 8671754,
+        "Private_Clean_kib": 8972,
+        "Private_Dirty_kib": 8662588,
+        "Anonymous_kib": 8661788
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 8673944,
+        "Pss_kib": 8671938,
+        "Private_Clean_kib": 8972,
+        "Private_Dirty_kib": 8662772,
+        "Anonymous_kib": 8661972
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 10908,
+        "Pss_kib": 8902,
+        "Private_Clean_kib": 7744,
+        "Private_Dirty_kib": 964,
+        "Anonymous_kib": 964
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 8663036,
+        "Pss_kib": 8663036,
+        "Private_Clean_kib": 1228,
+        "Private_Dirty_kib": 8661808,
+        "Anonymous_kib": 8661008
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000130019001517,
+      "idle_memory_read_duration_ms": 92.16180400107987,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5097.244694999972,
+        "max": 6815.890844998648
+      },
+      "total_wall_ms_including_cleanup": 15048.156492997805,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 160928,
+        "Pss_kib": 158805,
+        "Private_Clean_kib": 9036,
+        "Private_Dirty_kib": 149564,
+        "Anonymous_kib": 149564
+      }
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.6275409982190467,
+          "ready_ms": 5481.964045000495,
+          "validated_offset_ms": 5485.017068996967
+        },
+        {
+          "index": 1,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.879346997389803,
+          "ready_ms": 5301.255337002658,
+          "validated_offset_ms": 5322.536661999038
+        },
+        {
+          "index": 2,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.2085079990502,
+          "ready_ms": 5974.075725000148,
+          "validated_offset_ms": 6034.659482997085
+        },
+        {
+          "index": 3,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.4949999972013757,
+          "ready_ms": 5554.0159230004065,
+          "validated_offset_ms": 5557.981432997622
+        },
+        {
+          "index": 4,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.68448799927137,
+          "ready_ms": 5386.499805998028,
+          "validated_offset_ms": 5432.67055799879
+        },
+        {
+          "index": 5,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 46.54611799924169,
+          "ready_ms": 5867.7784639985475,
+          "validated_offset_ms": 5914.557672997034
+        },
+        {
+          "index": 6,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.868038997519761,
+          "ready_ms": 5463.327744000708,
+          "validated_offset_ms": 5478.568564998568
+        },
+        {
+          "index": 7,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.22523899943917,
+          "ready_ms": 5342.660554997565,
+          "validated_offset_ms": 5356.1973059986485
+        },
+        {
+          "index": 8,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.283421998348786,
+          "ready_ms": 5349.5718730009685,
+          "validated_offset_ms": 5398.138001997722
+        },
+        {
+          "index": 9,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 59.24276899895631,
+          "ready_ms": 5908.382392997737,
+          "validated_offset_ms": 5967.9022780001105
+        },
+        {
+          "index": 10,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.68883699984872,
+          "ready_ms": 5513.8979149996885,
+          "validated_offset_ms": 5563.863466999464
+        },
+        {
+          "index": 11,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.647913000080734,
+          "ready_ms": 5916.790097999183,
+          "validated_offset_ms": 5941.756366999471
+        },
+        {
+          "index": 12,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.906128000002354,
+          "ready_ms": 6002.47360999856,
+          "validated_offset_ms": 6022.7337179967435
+        },
+        {
+          "index": 13,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.17900100006955,
+          "ready_ms": 5944.733112999529,
+          "validated_offset_ms": 5985.143821999372
+        },
+        {
+          "index": 14,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.536752999410965,
+          "ready_ms": 5400.420333997317,
+          "validated_offset_ms": 5455.565012998704
+        },
+        {
+          "index": 15,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.69600599870319,
+          "ready_ms": 5886.168026001542,
+          "validated_offset_ms": 5961.091721997946
+        },
+        {
+          "index": 16,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.473770997923566,
+          "ready_ms": 6014.834215002338,
+          "validated_offset_ms": 6020.6360800002585
+        },
+        {
+          "index": 17,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.612115998432273,
+          "ready_ms": 6006.993393999437,
+          "validated_offset_ms": 6033.9334739983315
+        },
+        {
+          "index": 18,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.97065699819359,
+          "ready_ms": 5880.542762999539,
+          "validated_offset_ms": 5935.829801997897
+        },
+        {
+          "index": 19,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.82671699853381,
+          "ready_ms": 5776.376537000033,
+          "validated_offset_ms": 5834.572297997511
+        },
+        {
+          "index": 20,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.825093999505043,
+          "ready_ms": 5738.073202999658,
+          "validated_offset_ms": 5750.317427999107
+        },
+        {
+          "index": 21,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.18278400026611,
+          "ready_ms": 5154.213438996521,
+          "validated_offset_ms": 5215.89829399818
+        },
+        {
+          "index": 22,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.108211997605395,
+          "ready_ms": 5948.079412999505,
+          "validated_offset_ms": 5991.461583998898
+        },
+        {
+          "index": 23,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.77916299743811,
+          "ready_ms": 5972.057490002044,
+          "validated_offset_ms": 6007.064734996675
+        },
+        {
+          "index": 24,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.21164799941471,
+          "ready_ms": 5318.77201899988,
+          "validated_offset_ms": 5392.351858998154
+        },
+        {
+          "index": 25,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 114.89949099996011,
+          "ready_ms": 5915.46421199746,
+          "validated_offset_ms": 6030.85516399733
+        },
+        {
+          "index": 26,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.47321199669386,
+          "ready_ms": 5405.094308000116,
+          "validated_offset_ms": 5462.840307998704
+        },
+        {
+          "index": 27,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.003082000097493,
+          "ready_ms": 5936.323301997618,
+          "validated_offset_ms": 5967.925242999627
+        },
+        {
+          "index": 28,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.11592499757535,
+          "ready_ms": 5633.15507399966,
+          "validated_offset_ms": 5699.712833997182
+        },
+        {
+          "index": 29,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.741465997038176,
+          "ready_ms": 5230.690827000217,
+          "validated_offset_ms": 5261.714702999598
+        },
+        {
+          "index": 30,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 63.49026699899696,
+          "ready_ms": 5409.160939998401,
+          "validated_offset_ms": 5472.906270999374
+        },
+        {
+          "index": 31,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 62.19840599806048,
+          "ready_ms": 5368.974167999113,
+          "validated_offset_ms": 5431.439820997184
+        },
+        {
+          "index": 32,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.581710997939808,
+          "ready_ms": 5897.494873999676,
+          "validated_offset_ms": 5908.361105997756
+        },
+        {
+          "index": 33,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.8780419966497,
+          "ready_ms": 5814.512873002968,
+          "validated_offset_ms": 5873.824764999881
+        },
+        {
+          "index": 34,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.09485799865797,
+          "ready_ms": 5924.313801999233,
+          "validated_offset_ms": 5968.524080999487
+        },
+        {
+          "index": 35,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.8598749996454,
+          "ready_ms": 5888.323153998499,
+          "validated_offset_ms": 5945.474242998898
+        },
+        {
+          "index": 36,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.89110200022697,
+          "ready_ms": 5925.052705999406,
+          "validated_offset_ms": 5992.168511998898
+        },
+        {
+          "index": 37,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.86396099833655,
+          "ready_ms": 5979.156009998405,
+          "validated_offset_ms": 6014.38190099725
+        },
+        {
+          "index": 38,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.80867199829663,
+          "ready_ms": 5303.952169000695,
+          "validated_offset_ms": 5346.055630998308
+        },
+        {
+          "index": 39,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 18.616876997839427,
+          "ready_ms": 5361.089001999062,
+          "validated_offset_ms": 5379.985870997189
+        },
+        {
+          "index": 40,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.92198099778034,
+          "ready_ms": 5174.703966000379,
+          "validated_offset_ms": 5229.793835998862
+        },
+        {
+          "index": 41,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.13464899902465,
+          "ready_ms": 5330.274177998945,
+          "validated_offset_ms": 5384.819090999372
+        },
+        {
+          "index": 42,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.526443997368915,
+          "ready_ms": 6016.548227002204,
+          "validated_offset_ms": 6037.517422999372
+        },
+        {
+          "index": 43,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 18.132197998056654,
+          "ready_ms": 5600.790134001727,
+          "validated_offset_ms": 5619.571256997006
+        },
+        {
+          "index": 44,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 70.24150199868018,
+          "ready_ms": 5258.333631998539,
+          "validated_offset_ms": 5328.914289999375
+        },
+        {
+          "index": 45,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.11866699712118,
+          "ready_ms": 5251.167397000245,
+          "validated_offset_ms": 5283.607456000027
+        },
+        {
+          "index": 46,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.370620997739024,
+          "ready_ms": 5970.012544999918,
+          "validated_offset_ms": 6008.683375999681
+        },
+        {
+          "index": 47,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.251858998875832,
+          "ready_ms": 5374.616855999193,
+          "validated_offset_ms": 5401.092948999576
+        },
+        {
+          "index": 48,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.76536600006511,
+          "ready_ms": 5315.868934998434,
+          "validated_offset_ms": 5390.866629997618
+        },
+        {
+          "index": 49,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.724471996654756,
+          "ready_ms": 5867.9876220012375,
+          "validated_offset_ms": 5923.957398998027
+        },
+        {
+          "index": 50,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 70.11136499932036,
+          "ready_ms": 5417.034472997329,
+          "validated_offset_ms": 5487.494031000097
+        },
+        {
+          "index": 51,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.73259099884308,
+          "ready_ms": 5414.150075001089,
+          "validated_offset_ms": 5458.180762998381
+        },
+        {
+          "index": 52,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 35.913618998165475,
+          "ready_ms": 5815.048406999267,
+          "validated_offset_ms": 5851.288627996837
+        },
+        {
+          "index": 53,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 64.71424199844478,
+          "ready_ms": 5229.405586000212,
+          "validated_offset_ms": 5294.438123997679
+        },
+        {
+          "index": 54,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.66020599825424,
+          "ready_ms": 5922.366394999699,
+          "validated_offset_ms": 5940.243510998698
+        },
+        {
+          "index": 55,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.330653998680646,
+          "ready_ms": 5381.663577998552,
+          "validated_offset_ms": 5437.352925997402
+        },
+        {
+          "index": 56,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.06977899838239,
+          "ready_ms": 5719.637883001269,
+          "validated_offset_ms": 5774.15549899888
+        },
+        {
+          "index": 57,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.48427399725188,
+          "ready_ms": 5291.226719000406,
+          "validated_offset_ms": 5359.387802996935
+        },
+        {
+          "index": 58,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.122893998690415,
+          "ready_ms": 5315.888608998648,
+          "validated_offset_ms": 5372.260234998976
+        },
+        {
+          "index": 59,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.075388999364804,
+          "ready_ms": 5316.341224999633,
+          "validated_offset_ms": 5359.501011997054
+        },
+        {
+          "index": 60,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 79.26086399675114,
+          "ready_ms": 5327.560071000335,
+          "validated_offset_ms": 5407.166627999686
+        },
+        {
+          "index": 61,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 23.67582999795559,
+          "ready_ms": 5377.833328999259,
+          "validated_offset_ms": 5405.583615996875
+        },
+        {
+          "index": 62,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 63.69529899893678,
+          "ready_ms": 5332.601997000893,
+          "validated_offset_ms": 5405.687456997839
+        },
+        {
+          "index": 63,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 78.47363999826484,
+          "ready_ms": 5357.7619819989195,
+          "validated_offset_ms": 5436.808429996745
+        },
+        {
+          "index": 64,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.61703599861357,
+          "ready_ms": 5742.387439000595,
+          "validated_offset_ms": 5811.436460997356
+        },
+        {
+          "index": 65,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.30525499751093,
+          "ready_ms": 5856.976393999503,
+          "validated_offset_ms": 5907.74489499745
+        },
+        {
+          "index": 66,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.85704900010023,
+          "ready_ms": 5449.692136997328,
+          "validated_offset_ms": 5491.849206999177
+        },
+        {
+          "index": 67,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.62797799898544,
+          "ready_ms": 5924.115598998469,
+          "validated_offset_ms": 5978.046562999225
+        },
+        {
+          "index": 68,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.47330399870407,
+          "ready_ms": 5814.35684600001,
+          "validated_offset_ms": 5842.133185997227
+        },
+        {
+          "index": 69,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.35226699712803,
+          "ready_ms": 5784.789699002431,
+          "validated_offset_ms": 5836.624138999468
+        },
+        {
+          "index": 70,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.27279400001862,
+          "ready_ms": 5942.421968997223,
+          "validated_offset_ms": 6009.917272996972
+        },
+        {
+          "index": 71,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 37.36864699749276,
+          "ready_ms": 5644.505323001795,
+          "validated_offset_ms": 5682.318739996845
+        },
+        {
+          "index": 72,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 19.03241099716979,
+          "ready_ms": 5320.156606001547,
+          "validated_offset_ms": 5341.097868997167
+        },
+        {
+          "index": 73,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.34417699868209,
+          "ready_ms": 5522.440364999056,
+          "validated_offset_ms": 5559.150059998501
+        },
+        {
+          "index": 74,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.019391999958316,
+          "ready_ms": 5366.912827998021,
+          "validated_offset_ms": 5427.343465999002
+        },
+        {
+          "index": 75,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 59.592650999547914,
+          "ready_ms": 5396.863005000341,
+          "validated_offset_ms": 5456.774171998404
+        },
+        {
+          "index": 76,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.51682299806271,
+          "ready_ms": 5908.215863000805,
+          "validated_offset_ms": 5961.994902998413
+        },
+        {
+          "index": 77,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.63562200017623,
+          "ready_ms": 5961.448869999003,
+          "validated_offset_ms": 5998.396184997546
+        },
+        {
+          "index": 78,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.275341999455122,
+          "ready_ms": 6002.092066999467,
+          "validated_offset_ms": 6011.814082998171
+        },
+        {
+          "index": 79,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.688677999569336,
+          "ready_ms": 5418.363609998778,
+          "validated_offset_ms": 5474.402104999172
+        },
+        {
+          "index": 80,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.67732199901366,
+          "ready_ms": 5823.16581899795,
+          "validated_offset_ms": 5885.316956999304
+        },
+        {
+          "index": 81,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.51332999978331,
+          "ready_ms": 5873.982779998187,
+          "validated_offset_ms": 5926.806501000101
+        },
+        {
+          "index": 82,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 64.35949499791604,
+          "ready_ms": 5949.317422000604,
+          "validated_offset_ms": 6014.183185998263
+        },
+        {
+          "index": 83,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.526906998915365,
+          "ready_ms": 5362.935327000741,
+          "validated_offset_ms": 5399.72179599863
+        },
+        {
+          "index": 84,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.631134999159258,
+          "ready_ms": 5339.943629998743,
+          "validated_offset_ms": 5368.973606997315
+        },
+        {
+          "index": 85,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.19302299784613,
+          "ready_ms": 5937.963735999801,
+          "validated_offset_ms": 6003.441609998845
+        },
+        {
+          "index": 86,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.10707599774469,
+          "ready_ms": 5402.981325001747,
+          "validated_offset_ms": 5477.604298997903
+        },
+        {
+          "index": 87,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.17046599864261,
+          "ready_ms": 5299.858189999213,
+          "validated_offset_ms": 5353.589671998634
+        },
+        {
+          "index": 88,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 109.05790600008913,
+          "ready_ms": 5923.212390996923,
+          "validated_offset_ms": 6032.717466998292
+        },
+        {
+          "index": 89,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.45964399789227,
+          "ready_ms": 5572.106980998797,
+          "validated_offset_ms": 5628.007306997461
+        },
+        {
+          "index": 90,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.91048099836917,
+          "ready_ms": 5912.181239000347,
+          "validated_offset_ms": 5987.697321997985
+        },
+        {
+          "index": 91,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.45424899921636,
+          "ready_ms": 5900.390096998308,
+          "validated_offset_ms": 5957.214371999726
+        },
+        {
+          "index": 92,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.71312099831994,
+          "ready_ms": 5206.356972001231,
+          "validated_offset_ms": 5268.444997996994
+        },
+        {
+          "index": 93,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 46.8906199967023,
+          "ready_ms": 5883.320968001499,
+          "validated_offset_ms": 5930.503101997601
+        },
+        {
+          "index": 94,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.00952199686435,
+          "ready_ms": 5302.414779001992,
+          "validated_offset_ms": 5330.6972889986355
+        },
+        {
+          "index": 95,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.61146999997436,
+          "ready_ms": 5951.106980999612,
+          "validated_offset_ms": 6019.186276000255
+        },
+        {
+          "index": 96,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 130.30152799910866,
+          "ready_ms": 5894.771135001065,
+          "validated_offset_ms": 6026.069565999933
+        },
+        {
+          "index": 97,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.30627499744878,
+          "ready_ms": 5305.383470000379,
+          "validated_offset_ms": 5364.0161769981205
+        },
+        {
+          "index": 98,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.24248600017745,
+          "ready_ms": 5348.517310998432,
+          "validated_offset_ms": 5406.090606997168
+        },
+        {
+          "index": 99,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 104.51858299711603,
+          "ready_ms": 5886.01589800237,
+          "validated_offset_ms": 5990.878417000204
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 6037.517422999372,
+      "launch_spread_ms": 127.67398700088961,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 16.56309920018767,
+      "held_process_count": 100,
+      "held_process_memory_kib": {
+        "Rss_kib": 8796232,
+        "Pss_kib": 8560592,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8557892,
+        "Anonymous_kib": 8557092
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 8796232,
+        "Pss_kib": 8560592,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8557892,
+        "Anonymous_kib": 8557092
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 8796232,
+        "Pss_kib": 8560592,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8557892,
+        "Anonymous_kib": 8557092
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000102622998384,
+      "idle_memory_read_duration_ms": 93.55614599917317,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5105.35098499895,
+        "max": 5926.970114000142
+      },
+      "total_wall_ms_including_cleanup": 11603.698606999387,
+      "success": true
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.271553999889875,
+          "ready_ms": 8068.495884002914,
+          "validated_offset_ms": 8071.031349001714
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.67374600036419,
+          "ready_ms": 7943.626968000899,
+          "validated_offset_ms": 7966.597859001922
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.958325002662605,
+          "ready_ms": 7956.111087998579,
+          "validated_offset_ms": 7993.517317001533
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.3609010024520103,
+          "ready_ms": 8136.905343999388,
+          "validated_offset_ms": 8140.671852001105
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.807607001654105,
+          "ready_ms": 7350.819514998875,
+          "validated_offset_ms": 7410.048558002018
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.355731001851382,
+          "ready_ms": 7925.536033999379,
+          "validated_offset_ms": 7930.450143001508
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.704488003015285,
+          "ready_ms": 7998.284497996792,
+          "validated_offset_ms": 8033.262411001488
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 103.69420600181911,
+          "ready_ms": 7439.233447999868,
+          "validated_offset_ms": 7543.173791000299
+        },
+        {
+          "index": 8,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.85183200065512,
+          "ready_ms": 7844.610200001625,
+          "validated_offset_ms": 7888.8934690003225
+        },
+        {
+          "index": 9,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.86841700214427,
+          "ready_ms": 7948.014786998101,
+          "validated_offset_ms": 7985.279884000192
+        },
+        {
+          "index": 10,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 89.45858100196347,
+          "ready_ms": 7443.166036999173,
+          "validated_offset_ms": 7533.189542002219
+        },
+        {
+          "index": 11,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.582060002780054,
+          "ready_ms": 7916.787422000198,
+          "validated_offset_ms": 7922.658452000178
+        },
+        {
+          "index": 12,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 72.1641060008551,
+          "ready_ms": 7658.0068379989825,
+          "validated_offset_ms": 7730.634051000379
+        },
+        {
+          "index": 13,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 30.366627001058077,
+          "ready_ms": 8113.449749002029,
+          "validated_offset_ms": 8144.254776001617
+        },
+        {
+          "index": 14,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 66.69861100090202,
+          "ready_ms": 8005.594779002422,
+          "validated_offset_ms": 8072.701501001575
+        },
+        {
+          "index": 15,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 14.065764000406489,
+          "ready_ms": 8020.88739300234,
+          "validated_offset_ms": 8035.168684000382
+        },
+        {
+          "index": 16,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 23.93418200153974,
+          "ready_ms": 8058.755530000781,
+          "validated_offset_ms": 8082.955402001971
+        },
+        {
+          "index": 17,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 34.17700800127932,
+          "ready_ms": 7979.5173310012615,
+          "validated_offset_ms": 8015.920243000437
+        },
+        {
+          "index": 18,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.20311299993773,
+          "ready_ms": 7429.8079580003105,
+          "validated_offset_ms": 7471.639809002227
+        },
+        {
+          "index": 19,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.49762500129873,
+          "ready_ms": 8033.646800999122,
+          "validated_offset_ms": 8084.521687000233
+        },
+        {
+          "index": 20,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 84.09366100022453,
+          "ready_ms": 7992.959307001001,
+          "validated_offset_ms": 8077.290819001064
+        },
+        {
+          "index": 21,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.325107999989996,
+          "ready_ms": 8098.67443800249,
+          "validated_offset_ms": 8127.289077001478
+        },
+        {
+          "index": 22,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 89.17456000199309,
+          "ready_ms": 8030.334500999743,
+          "validated_offset_ms": 8119.955866000964
+        },
+        {
+          "index": 23,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 46.4293170007295,
+          "ready_ms": 8072.896428002423,
+          "validated_offset_ms": 8119.892283000809
+        },
+        {
+          "index": 24,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.91246700109332,
+          "ready_ms": 8002.761220999673,
+          "validated_offset_ms": 8065.057873001933
+        },
+        {
+          "index": 25,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 43.215585003054,
+          "ready_ms": 8072.138212999562,
+          "validated_offset_ms": 8115.749775002769
+        },
+        {
+          "index": 26,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.87800000043353,
+          "ready_ms": 7436.205755002447,
+          "validated_offset_ms": 7498.471557002631
+        },
+        {
+          "index": 27,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 69.44259500232874,
+          "ready_ms": 7468.882298999233,
+          "validated_offset_ms": 7538.547785999981
+        },
+        {
+          "index": 28,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 90.68864400251186,
+          "ready_ms": 7863.404051000543,
+          "validated_offset_ms": 7954.468934000033
+        },
+        {
+          "index": 29,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.090381002111826,
+          "ready_ms": 7987.97906999971,
+          "validated_offset_ms": 8036.43035999994
+        },
+        {
+          "index": 30,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.967434002552181,
+          "ready_ms": 7665.213919997768,
+          "validated_offset_ms": 7689.326409999921
+        },
+        {
+          "index": 31,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.442083002039,
+          "ready_ms": 8075.093625000591,
+          "validated_offset_ms": 8117.052630001126
+        },
+        {
+          "index": 32,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 45.90275000009569,
+          "ready_ms": 7336.935567000182,
+          "validated_offset_ms": 7389.020927999809
+        },
+        {
+          "index": 33,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 47.848223002802115,
+          "ready_ms": 7982.050659000379,
+          "validated_offset_ms": 8033.16796800209
+        },
+        {
+          "index": 34,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 121.9093130021065,
+          "ready_ms": 7815.5809029995,
+          "validated_offset_ms": 7937.794606001262
+        },
+        {
+          "index": 35,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.247727000765735,
+          "ready_ms": 7749.5504840007925,
+          "validated_offset_ms": 7798.181755002588
+        },
+        {
+          "index": 36,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.94809500084375,
+          "ready_ms": 7836.903981999058,
+          "validated_offset_ms": 7899.166146002244
+        },
+        {
+          "index": 37,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.21773700215272,
+          "ready_ms": 7981.968295000115,
+          "validated_offset_ms": 8045.656338999834
+        },
+        {
+          "index": 38,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.14262900236645,
+          "ready_ms": 8057.870461998391,
+          "validated_offset_ms": 8123.665922001237
+        },
+        {
+          "index": 39,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.65135800134158,
+          "ready_ms": 8037.21563200088,
+          "validated_offset_ms": 8093.349345002935
+        },
+        {
+          "index": 40,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.11337000160711,
+          "ready_ms": 7898.807006000425,
+          "validated_offset_ms": 7966.748781000206
+        },
+        {
+          "index": 41,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.6041480008862,
+          "ready_ms": 7702.068967999367,
+          "validated_offset_ms": 7756.081537001592
+        },
+        {
+          "index": 42,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 36.23382500154548,
+          "ready_ms": 8049.184740000783,
+          "validated_offset_ms": 8086.072037000122
+        },
+        {
+          "index": 43,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.91386000107741,
+          "ready_ms": 7478.502351001225,
+          "validated_offset_ms": 7485.733446002996
+        },
+        {
+          "index": 44,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 17.230053003004286,
+          "ready_ms": 8034.21768899716,
+          "validated_offset_ms": 8051.804763999826
+        },
+        {
+          "index": 45,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.97404000296956,
+          "ready_ms": 7357.5531789974775,
+          "validated_offset_ms": 7399.874462000298
+        },
+        {
+          "index": 46,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.04802700225264,
+          "ready_ms": 7245.979253999394,
+          "validated_offset_ms": 7297.53188900213
+        },
+        {
+          "index": 47,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.8230360004527,
+          "ready_ms": 7894.403597001656,
+          "validated_offset_ms": 7969.526824999775
+        },
+        {
+          "index": 48,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.64155200100504,
+          "ready_ms": 8013.26640499974,
+          "validated_offset_ms": 8036.600039002224
+        },
+        {
+          "index": 49,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.158392003329936,
+          "ready_ms": 8025.850409998384,
+          "validated_offset_ms": 8068.222156001866
+        },
+        {
+          "index": 50,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.48906500288285,
+          "ready_ms": 8018.05947899993,
+          "validated_offset_ms": 8060.803308002505
+        },
+        {
+          "index": 51,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.04941800204688,
+          "ready_ms": 7933.5811130004,
+          "validated_offset_ms": 7986.854054001014
+        },
+        {
+          "index": 52,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.85629900309141,
+          "ready_ms": 7921.575624997786,
+          "validated_offset_ms": 7970.667801000673
+        },
+        {
+          "index": 53,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 28.07155900154612,
+          "ready_ms": 6899.104569998599,
+          "validated_offset_ms": 6949.378125002113
+        },
+        {
+          "index": 54,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 81.45966900337953,
+          "ready_ms": 7424.340149998898,
+          "validated_offset_ms": 7506.303525002295
+        },
+        {
+          "index": 55,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 32.97663800185546,
+          "ready_ms": 8101.922578000085,
+          "validated_offset_ms": 8135.528425002121
+        },
+        {
+          "index": 56,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.34810299993842,
+          "ready_ms": 7463.0322880002495,
+          "validated_offset_ms": 7517.86935400014
+        },
+        {
+          "index": 57,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.62914600217482,
+          "ready_ms": 8096.074065000721,
+          "validated_offset_ms": 8137.3086710009375
+        },
+        {
+          "index": 58,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.16346600014367,
+          "ready_ms": 7466.3578610015975,
+          "validated_offset_ms": 7537.782233001053
+        },
+        {
+          "index": 59,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.10260100185405,
+          "ready_ms": 8029.385891000857,
+          "validated_offset_ms": 8094.876925002609
+        },
+        {
+          "index": 60,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 70.75278800039086,
+          "ready_ms": 7983.166239002458,
+          "validated_offset_ms": 8054.227495002124
+        },
+        {
+          "index": 61,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 116.90194600305404,
+          "ready_ms": 7750.162913998793,
+          "validated_offset_ms": 7867.407614001422
+        },
+        {
+          "index": 62,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 85.40870700016967,
+          "ready_ms": 8013.666853999894,
+          "validated_offset_ms": 8099.6475700012525
+        },
+        {
+          "index": 63,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.692924002418295,
+          "ready_ms": 7778.514150999399,
+          "validated_offset_ms": 7805.483290001575
+        },
+        {
+          "index": 64,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 75.90664100280264,
+          "ready_ms": 7841.77443599765,
+          "validated_offset_ms": 7918.088215999887
+        },
+        {
+          "index": 65,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.664275002171053,
+          "ready_ms": 8054.658646000462,
+          "validated_offset_ms": 8077.601371001947
+        },
+        {
+          "index": 66,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.916007002379047,
+          "ready_ms": 7958.681049000006,
+          "validated_offset_ms": 7969.841500002076
+        },
+        {
+          "index": 67,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.67778000072576,
+          "ready_ms": 8077.745173999574,
+          "validated_offset_ms": 8131.729789001838
+        },
+        {
+          "index": 68,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 87.56013899983373,
+          "ready_ms": 7652.375553003367,
+          "validated_offset_ms": 7740.292995000345
+        },
+        {
+          "index": 69,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.98768800316611,
+          "ready_ms": 7746.045396997943,
+          "validated_offset_ms": 7801.624241001264
+        },
+        {
+          "index": 70,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.3376180001942,
+          "ready_ms": 7413.126303003082,
+          "validated_offset_ms": 7454.18266300112
+        },
+        {
+          "index": 71,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 59.98296400139225,
+          "ready_ms": 7733.053799998743,
+          "validated_offset_ms": 7793.601018001937
+        },
+        {
+          "index": 72,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.614904000860406,
+          "ready_ms": 7979.130837000412,
+          "validated_offset_ms": 8006.978954002989
+        },
+        {
+          "index": 73,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.40274500043597,
+          "ready_ms": 7971.678382000391,
+          "validated_offset_ms": 8042.861212001299
+        },
+        {
+          "index": 74,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 63.4034890026669,
+          "ready_ms": 8071.805622999818,
+          "validated_offset_ms": 8135.833071002708
+        },
+        {
+          "index": 75,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 76.78801600195584,
+          "ready_ms": 7350.521303000278,
+          "validated_offset_ms": 7427.7831870022055
+        },
+        {
+          "index": 76,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 64.70136700227158,
+          "ready_ms": 7793.728955999541,
+          "validated_offset_ms": 7858.806722000736
+        },
+        {
+          "index": 77,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.13878899993142,
+          "ready_ms": 7996.406054000545,
+          "validated_offset_ms": 8064.814972000022
+        },
+        {
+          "index": 78,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.61431700235698,
+          "ready_ms": 8068.2136270006595,
+          "validated_offset_ms": 8137.551686002553
+        },
+        {
+          "index": 79,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 83.95519400073681,
+          "ready_ms": 8031.241208002029,
+          "validated_offset_ms": 8115.526443001727
+        },
+        {
+          "index": 80,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 78.06577200244647,
+          "ready_ms": 7400.576281997928,
+          "validated_offset_ms": 7478.970580003079
+        },
+        {
+          "index": 81,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.14780700104893,
+          "ready_ms": 7973.220007999771,
+          "validated_offset_ms": 8028.757660002157
+        },
+        {
+          "index": 82,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 114.19088200273109,
+          "ready_ms": 7995.898072997079,
+          "validated_offset_ms": 8110.362305000308
+        },
+        {
+          "index": 83,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 60.363368000253104,
+          "ready_ms": 8043.658729002345,
+          "validated_offset_ms": 8104.230862001714
+        },
+        {
+          "index": 84,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 102.16267700161552,
+          "ready_ms": 8005.28610100082,
+          "validated_offset_ms": 8107.715625999845
+        },
+        {
+          "index": 85,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 55.922772000485566,
+          "ready_ms": 7853.724445001717,
+          "validated_offset_ms": 7909.957930001838
+        },
+        {
+          "index": 86,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 31.466334003198426,
+          "ready_ms": 8062.533956999687,
+          "validated_offset_ms": 8094.618184000865
+        },
+        {
+          "index": 87,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.2112160003453,
+          "ready_ms": 7729.885844000819,
+          "validated_offset_ms": 7803.420026000822
+        },
+        {
+          "index": 88,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 96.52748900043662,
+          "ready_ms": 7995.525432001159,
+          "validated_offset_ms": 8092.280583001411
+        },
+        {
+          "index": 89,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 33.12927600200055,
+          "ready_ms": 7328.42147699921,
+          "validated_offset_ms": 7362.04259599981
+        },
+        {
+          "index": 90,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.664782001666026,
+          "ready_ms": 7924.71896799907,
+          "validated_offset_ms": 7982.634637002775
+        },
+        {
+          "index": 91,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 64.1630290010653,
+          "ready_ms": 7390.695106001658,
+          "validated_offset_ms": 7455.317816002207
+        },
+        {
+          "index": 92,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 21.747728002083022,
+          "ready_ms": 8048.385431000497,
+          "validated_offset_ms": 8070.733843000198
+        },
+        {
+          "index": 93,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.23867800025619,
+          "ready_ms": 7428.155000001425,
+          "validated_offset_ms": 7502.780137001537
+        },
+        {
+          "index": 94,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.34713500272483,
+          "ready_ms": 7463.914211999509,
+          "validated_offset_ms": 7535.592649001046
+        },
+        {
+          "index": 95,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 56.692396003199974,
+          "ready_ms": 8046.540120998543,
+          "validated_offset_ms": 8103.5044840027695
+        },
+        {
+          "index": 96,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.9096920027805,
+          "ready_ms": 7981.98768599832,
+          "validated_offset_ms": 8031.26628300015
+        },
+        {
+          "index": 97,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 51.961089000542415,
+          "ready_ms": 7421.3925110016135,
+          "validated_offset_ms": 7473.735280000255
+        },
+        {
+          "index": 98,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 90.92015100031858,
+          "ready_ms": 7763.605956002721,
+          "validated_offset_ms": 7854.982210999879
+        },
+        {
+          "index": 99,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 57.62873800267698,
+          "ready_ms": 7422.450976999244,
+          "validated_offset_ms": 7480.416658003378
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 8144.254776001617,
+      "launch_spread_ms": 119.63775900221663,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 12.278594266803442,
+      "held_process_count": 100,
+      "held_process_memory_kib": {
+        "Rss_kib": 8797084,
+        "Pss_kib": 8561460,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8558760,
+        "Anonymous_kib": 8557960
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 8797084,
+        "Pss_kib": 8561460,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8558760,
+        "Anonymous_kib": 8557960
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 8797084,
+        "Pss_kib": 8561460,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8558760,
+        "Anonymous_kib": 8557960
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000143343997479,
+      "idle_memory_read_duration_ms": 96.05636999913258,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5101.403168999241,
+        "max": 6296.279819998745
+      },
+      "total_wall_ms_including_cleanup": 13727.570699000353,
+      "success": true
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "concurrency": 100,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.6553220011701342,
+          "ready_ms": 6733.574959998805,
+          "validated_offset_ms": 6753.14201600122
+        },
+        {
+          "index": 1,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.41454800067004,
+          "ready_ms": 6750.820732999273,
+          "validated_offset_ms": 6919.062111999665
+        },
+        {
+          "index": 2,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 1.959111999894958,
+          "ready_ms": 7235.537920998468,
+          "validated_offset_ms": 7243.172349000815
+        },
+        {
+          "index": 3,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 7.078915998135926,
+          "ready_ms": 7228.704901001038,
+          "validated_offset_ms": 7240.202032000525
+        },
+        {
+          "index": 4,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.147667000826914,
+          "ready_ms": 6144.339220998518,
+          "validated_offset_ms": 6205.101880001166
+        },
+        {
+          "index": 5,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 80.84879699890735,
+          "ready_ms": 6976.116648002062,
+          "validated_offset_ms": 7068.972995999502
+        },
+        {
+          "index": 6,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.4841109989210963,
+          "ready_ms": 7192.740557999059,
+          "validated_offset_ms": 7212.394862999645
+        },
+        {
+          "index": 7,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.76416300042183,
+          "ready_ms": 6788.892215998203,
+          "validated_offset_ms": 6841.395277999254
+        },
+        {
+          "index": 8,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.6383799995528534,
+          "ready_ms": 6151.486296999792,
+          "validated_offset_ms": 6247.747828998399
+        },
+        {
+          "index": 9,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 48.164863997953944,
+          "ready_ms": 7003.0802649998805,
+          "validated_offset_ms": 7065.046482999605
+        },
+        {
+          "index": 10,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 41.37842999989516,
+          "ready_ms": 6273.117828000977,
+          "validated_offset_ms": 6342.021107000619
+        },
+        {
+          "index": 11,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 2.8725650008709636,
+          "ready_ms": 6715.868757997669,
+          "validated_offset_ms": 6723.028724998585
+        },
+        {
+          "index": 12,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.003076000022702,
+          "ready_ms": 6987.073298998439,
+          "validated_offset_ms": 7023.570469998958
+        },
+        {
+          "index": 13,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.01419899915345,
+          "ready_ms": 6205.2862090022245,
+          "validated_offset_ms": 6256.238735000807
+        },
+        {
+          "index": 14,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 107.04330099906656,
+          "ready_ms": 6452.507742000307,
+          "validated_offset_ms": 6586.193809998804
+        },
+        {
+          "index": 15,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.197499998350395,
+          "ready_ms": 6454.177527000866,
+          "validated_offset_ms": 6475.707521000004
+        },
+        {
+          "index": 16,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 39.86230200098362,
+          "ready_ms": 6730.710742998781,
+          "validated_offset_ms": 6789.00178999902
+        },
+        {
+          "index": 17,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.649814000847982,
+          "ready_ms": 6388.204847000452,
+          "validated_offset_ms": 6436.779334999301
+        },
+        {
+          "index": 18,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.465785997832427,
+          "ready_ms": 6996.627452001121,
+          "validated_offset_ms": 7006.722671998432
+        },
+        {
+          "index": 19,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 42.82558300110395,
+          "ready_ms": 7182.751034997636,
+          "validated_offset_ms": 7231.41929600024
+        },
+        {
+          "index": 20,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.6308259986981284,
+          "ready_ms": 6576.019764001103,
+          "validated_offset_ms": 6605.4389599994465
+        },
+        {
+          "index": 21,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.742435999010922,
+          "ready_ms": 6806.952831000672,
+          "validated_offset_ms": 6927.588221999031
+        },
+        {
+          "index": 22,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 3.7881520001974422,
+          "ready_ms": 7191.805811999075,
+          "validated_offset_ms": 7210.638065000239
+        },
+        {
+          "index": 23,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 8.921822998672724,
+          "ready_ms": 6042.378322999866,
+          "validated_offset_ms": 6127.861748998839
+        },
+        {
+          "index": 24,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.052303000207758,
+          "ready_ms": 7193.539678999514,
+          "validated_offset_ms": 7209.555692999857
+        },
+        {
+          "index": 25,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.526786998321768,
+          "ready_ms": 6648.209831000713,
+          "validated_offset_ms": 6677.24292999992
+        },
+        {
+          "index": 26,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.316186001233291,
+          "ready_ms": 6975.87886600013,
+          "validated_offset_ms": 7012.846870999056
+        },
+        {
+          "index": 27,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 15.625682000973029,
+          "ready_ms": 7155.171094000252,
+          "validated_offset_ms": 7194.908728000883
+        },
+        {
+          "index": 28,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.505804001382785,
+          "ready_ms": 7158.350326997606,
+          "validated_offset_ms": 7192.932549998659
+        },
+        {
+          "index": 29,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.370884000934893,
+          "ready_ms": 7007.309638996958,
+          "validated_offset_ms": 7033.9521579990105
+        },
+        {
+          "index": 30,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 4.862966998189222,
+          "ready_ms": 6974.982032999833,
+          "validated_offset_ms": 6998.384800001077
+        },
+        {
+          "index": 31,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.79877199992188,
+          "ready_ms": 7136.86633999896,
+          "validated_offset_ms": 7193.635113999335
+        },
+        {
+          "index": 32,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.043817000114359,
+          "ready_ms": 6653.872225000669,
+          "validated_offset_ms": 6678.089575998456
+        },
+        {
+          "index": 33,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 100.25961399878724,
+          "ready_ms": 7110.620703999302,
+          "validated_offset_ms": 7217.216017997998
+        },
+        {
+          "index": 34,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.624294998531695,
+          "ready_ms": 7217.56153699971,
+          "validated_offset_ms": 7250.718786999641
+        },
+        {
+          "index": 35,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.233411000517663,
+          "ready_ms": 6315.643031997752,
+          "validated_offset_ms": 6354.091320998123
+        },
+        {
+          "index": 36,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.80598199891392,
+          "ready_ms": 7192.138941001758,
+          "validated_offset_ms": 7217.036960999394
+        },
+        {
+          "index": 37,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.417398999270517,
+          "ready_ms": 5779.722252002102,
+          "validated_offset_ms": 5857.239272998413
+        },
+        {
+          "index": 38,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 49.140236998937326,
+          "ready_ms": 7120.432140000048,
+          "validated_offset_ms": 7193.856257999869
+        },
+        {
+          "index": 39,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.612861998088192,
+          "ready_ms": 7003.1816610026,
+          "validated_offset_ms": 7025.234120999812
+        },
+        {
+          "index": 40,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.767197997978656,
+          "ready_ms": 7178.682686000684,
+          "validated_offset_ms": 7210.72560399989
+        },
+        {
+          "index": 41,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.503105999552645,
+          "ready_ms": 6952.229102000274,
+          "validated_offset_ms": 7005.059281000285
+        },
+        {
+          "index": 42,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.777588001365075,
+          "ready_ms": 6603.261773998383,
+          "validated_offset_ms": 6626.662898001086
+        },
+        {
+          "index": 43,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 53.96548499993514,
+          "ready_ms": 6592.6856139994925,
+          "validated_offset_ms": 6677.160710998578
+        },
+        {
+          "index": 44,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 50.33670899865683,
+          "ready_ms": 6646.7069490026915,
+          "validated_offset_ms": 6705.9376500001235
+        },
+        {
+          "index": 45,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.226327998156194,
+          "ready_ms": 7100.5357909998565,
+          "validated_offset_ms": 7193.4414860006655
+        },
+        {
+          "index": 46,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 5.844971998158144,
+          "ready_ms": 6420.7074100013415,
+          "validated_offset_ms": 6441.501860001154
+        },
+        {
+          "index": 47,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 33.62026499962667,
+          "ready_ms": 6729.322618000879,
+          "validated_offset_ms": 6777.157780001289
+        },
+        {
+          "index": 48,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 104.78177500044694,
+          "ready_ms": 6481.77427599876,
+          "validated_offset_ms": 6613.144269998884
+        },
+        {
+          "index": 49,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 77.14919700083556,
+          "ready_ms": 6201.037582999561,
+          "validated_offset_ms": 6309.222670999588
+        },
+        {
+          "index": 50,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 69.0020279980672,
+          "ready_ms": 6927.450857001531,
+          "validated_offset_ms": 7032.660470998962
+        },
+        {
+          "index": 51,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.863041000149678,
+          "ready_ms": 7070.838327999809,
+          "validated_offset_ms": 7149.666582001373
+        },
+        {
+          "index": 52,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 9.89934999961406,
+          "ready_ms": 6997.389817999647,
+          "validated_offset_ms": 7019.531744997948
+        },
+        {
+          "index": 53,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 65.11305100138998,
+          "ready_ms": 6616.788539999106,
+          "validated_offset_ms": 6691.421250998246
+        },
+        {
+          "index": 54,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 75.88518099873909,
+          "ready_ms": 7098.127363002277,
+          "validated_offset_ms": 7196.402890000172
+        },
+        {
+          "index": 55,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 61.403873998642666,
+          "ready_ms": 6030.43889699984,
+          "validated_offset_ms": 6140.809814998647
+        },
+        {
+          "index": 56,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.238339000963606,
+          "ready_ms": 6985.564751998027,
+          "validated_offset_ms": 7023.884348000138
+        },
+        {
+          "index": 57,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.191227000381332,
+          "ready_ms": 6928.7543520003965,
+          "validated_offset_ms": 6967.055714998423
+        },
+        {
+          "index": 58,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 54.23151699869777,
+          "ready_ms": 6884.336511000583,
+          "validated_offset_ms": 6975.911935998738
+        },
+        {
+          "index": 59,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.092923998949118,
+          "ready_ms": 6580.273940999177,
+          "validated_offset_ms": 6612.9179620002105
+        },
+        {
+          "index": 60,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.082161999074742,
+          "ready_ms": 7149.229440001363,
+          "validated_offset_ms": 7183.933995998814
+        },
+        {
+          "index": 61,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 76.418388998718,
+          "ready_ms": 6310.541827999259,
+          "validated_offset_ms": 6406.829249997827
+        },
+        {
+          "index": 62,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 24.835176998749375,
+          "ready_ms": 6363.965795000695,
+          "validated_offset_ms": 6402.819296999951
+        },
+        {
+          "index": 63,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.68586599896662,
+          "ready_ms": 6903.625314000237,
+          "validated_offset_ms": 6956.799176001368
+        },
+        {
+          "index": 64,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.280786998569965,
+          "ready_ms": 6178.4341180027695,
+          "validated_offset_ms": 6277.403523999965
+        },
+        {
+          "index": 65,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.228401998669142,
+          "ready_ms": 6565.653158002533,
+          "validated_offset_ms": 6613.063002998388
+        },
+        {
+          "index": 66,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 58.35062899859622,
+          "ready_ms": 6883.731017001992,
+          "validated_offset_ms": 6966.981712001143
+        },
+        {
+          "index": 67,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.43397000085679,
+          "ready_ms": 7030.416539997532,
+          "validated_offset_ms": 7072.95140199858
+        },
+        {
+          "index": 68,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 107.90414700022666,
+          "ready_ms": 6924.975058998825,
+          "validated_offset_ms": 7043.181631001062
+        },
+        {
+          "index": 69,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 67.4285349996353,
+          "ready_ms": 6895.82835499823,
+          "validated_offset_ms": 6980.500900001061
+        },
+        {
+          "index": 70,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 13.887729000998661,
+          "ready_ms": 6472.763623998617,
+          "validated_offset_ms": 6541.764337998757
+        },
+        {
+          "index": 71,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 44.774935999157606,
+          "ready_ms": 6922.686648998933,
+          "validated_offset_ms": 6996.3624800002435
+        },
+        {
+          "index": 72,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 33.589740000024904,
+          "ready_ms": 7000.517518998095,
+          "validated_offset_ms": 7039.701581998088
+        },
+        {
+          "index": 73,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 16.75271899875952,
+          "ready_ms": 7180.682229001832,
+          "validated_offset_ms": 7209.488583001075
+        },
+        {
+          "index": 74,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 12.760392000927823,
+          "ready_ms": 6681.632733998413,
+          "validated_offset_ms": 6705.011756999738
+        },
+        {
+          "index": 75,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 11.566802000743337,
+          "ready_ms": 7172.880877998978,
+          "validated_offset_ms": 7195.088874999783
+        },
+        {
+          "index": 76,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 71.99313299861387,
+          "ready_ms": 6461.062852002215,
+          "validated_offset_ms": 6562.27937299991
+        },
+        {
+          "index": 77,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 52.90881899782107,
+          "ready_ms": 6777.506939000887,
+          "validated_offset_ms": 6919.025900999259
+        },
+        {
+          "index": 78,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.382411000231514,
+          "ready_ms": 6815.418669000792,
+          "validated_offset_ms": 6913.73392999958
+        },
+        {
+          "index": 79,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.02084299974376,
+          "ready_ms": 6507.180944001448,
+          "validated_offset_ms": 6605.59030299919
+        },
+        {
+          "index": 80,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.829419998335652,
+          "ready_ms": 7153.648976000113,
+          "validated_offset_ms": 7193.932145000872
+        },
+        {
+          "index": 81,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 22.072918000048958,
+          "ready_ms": 7037.1971809981915,
+          "validated_offset_ms": 7072.872018001362
+        },
+        {
+          "index": 82,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 25.029739997989964,
+          "ready_ms": 7138.656047001859,
+          "validated_offset_ms": 7193.564508001145
+        },
+        {
+          "index": 83,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 26.138467001146637,
+          "ready_ms": 6899.388562997046,
+          "validated_offset_ms": 6973.10289500092
+        },
+        {
+          "index": 84,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 73.53495999996085,
+          "ready_ms": 7141.454814998724,
+          "validated_offset_ms": 7219.268820997968
+        },
+        {
+          "index": 85,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 27.641207998385653,
+          "ready_ms": 6940.372673001548,
+          "validated_offset_ms": 6980.406627000775
+        },
+        {
+          "index": 86,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.82309699835605,
+          "ready_ms": 6325.534360999882,
+          "validated_offset_ms": 6392.650606998359
+        },
+        {
+          "index": 87,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.815732998016756,
+          "ready_ms": 7175.621619000594,
+          "validated_offset_ms": 7212.576483998419
+        },
+        {
+          "index": 88,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.809900997846853,
+          "ready_ms": 6171.403706001001,
+          "validated_offset_ms": 6247.8352979997
+        },
+        {
+          "index": 89,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 6.592212997929892,
+          "ready_ms": 7008.072171000094,
+          "validated_offset_ms": 7024.816819000989
+        },
+        {
+          "index": 90,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 10.076039001432946,
+          "ready_ms": 6698.8893739980995,
+          "validated_offset_ms": 6717.082450999442
+        },
+        {
+          "index": 91,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 83.0311919999076,
+          "ready_ms": 6379.14225699933,
+          "validated_offset_ms": 6479.132403997937
+        },
+        {
+          "index": 92,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 20.799301000806736,
+          "ready_ms": 7004.500737999479,
+          "validated_offset_ms": 7049.492244001158
+        },
+        {
+          "index": 93,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 77.09725300082937,
+          "ready_ms": 7148.967413999344,
+          "validated_offset_ms": 7229.942420999578
+        },
+        {
+          "index": 94,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 74.32125999912387,
+          "ready_ms": 5890.17417300056,
+          "validated_offset_ms": 6025.39524399981
+        },
+        {
+          "index": 95,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.240755999140674,
+          "ready_ms": 6766.880658000446,
+          "validated_offset_ms": 6821.671859997878
+        },
+        {
+          "index": 96,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 68.56018100006622,
+          "ready_ms": 6291.920851999748,
+          "validated_offset_ms": 6375.027109999792
+        },
+        {
+          "index": 97,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 76.72942299905117,
+          "ready_ms": 6926.846860002115,
+          "validated_offset_ms": 7032.838216000528
+        },
+        {
+          "index": 98,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 38.8009329981287,
+          "ready_ms": 7128.066576002311,
+          "validated_offset_ms": 7193.300226001156
+        },
+        {
+          "index": 99,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 40.17708399987896,
+          "ready_ms": 6587.599620001129,
+          "validated_offset_ms": 6639.532724999299
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 7250.718786999641,
+      "launch_spread_ms": 106.24882499905652,
+      "passing_attempts": 100,
+      "passing_attempts_per_second": 13.791736093709428,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 8684596,
+        "Pss_kib": 8682473,
+        "Private_Clean_kib": 9036,
+        "Private_Dirty_kib": 8673232,
+        "Anonymous_kib": 8672432
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 8684744,
+        "Pss_kib": 8682621,
+        "Private_Clean_kib": 9036,
+        "Private_Dirty_kib": 8673380,
+        "Anonymous_kib": 8672580
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 160928,
+        "Pss_kib": 158797,
+        "Private_Clean_kib": 9036,
+        "Private_Dirty_kib": 149564,
+        "Anonymous_kib": 149564
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 8523816,
+        "Pss_kib": 8523824,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 8523816,
+        "Anonymous_kib": 8523016
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000121720997413,
+      "idle_memory_read_duration_ms": 88.45899600055418,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5096.025366998219,
+        "max": 6489.504880999448
+      },
+      "total_wall_ms_including_cleanup": 13710.083178000787,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 172492,
+        "Pss_kib": 170369,
+        "Private_Clean_kib": 9036,
+        "Private_Dirty_kib": 161128,
+        "Anonymous_kib": 161128
+      }
+    }
+  ],
+  "setup_error": null,
+  "cleanup_errors": [],
+  "success": true,
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker processes and Unix APIs",
+    "Barrier-released arrivals have measured scheduling spread; not sustained arrivals",
+    "All guests held until last validation; earlier guests have longer idle time",
+    "Aggregate process PSS includes guest/VMM memory but excludes kernel allocations; no long idle/density test",
+    "Cold native engines only; no managed SDK, snapshot or fleet comparison",
+    "Fixed idle hold starts after all readiness checks; individual guest idle ages and sequential read duration are recorded; PSS excludes kernel memory and does not prove density"
+  ],
+  "memory_idle_seconds": 5.0,
+  "memory_method": "HM held daemon minus same-batch empty daemon PSS; FC summed fresh VMM PSS minus zero-process baseline",
+  "hypermachine_template_preflight": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": false,
+    "templateID": "base"
+  },
+  "node_memory_baseline_kib": {
+    "Rss_kib": 10908,
+    "Pss_kib": 8902,
+    "Private_Clean_kib": 7744,
+    "Private_Dirty_kib": 964,
+    "Anonymous_kib": 964
+  },
+  "remaining_sandbox_count": 0,
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:36753, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:32937 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:32937 process.Process/Start\n",
+  "artifacts_unchanged": true,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 200,
+      "min": 5779.722252002102,
+      "max": 8592.456532001961,
+      "mean": 7501.095445149967,
+      "p50": 7228.704901001038,
+      "p95": 8559.149513999728,
+      "p99": 8586.821889999555
+    },
+    "firecracker": {
+      "n": 200,
+      "min": 5154.213438996521,
+      "max": 8136.905343999388,
+      "mean": 6725.213101019908,
+      "p50": 6016.548227002204,
+      "p95": 8068.495884002914,
+      "p99": 8101.922578000085
+    }
+  },
+  "cohort_exit_code": 0,
+  "cohort_stderr": "",
+  "controlled_cpu_load": {
+    "workers": 1,
+    "cpu": 0,
+    "worker_code": "import time\nend=time.monotonic()+7200\nx=1\nwhile time.monotonic()<end:\n for _ in range(10000): x=(x*1664525+1013904223)&0xffffffff\n",
+    "all_alive_through_cohort": true,
+    "workers_cleaned_up": true
+  },
+  "coordinator_sha256": "27fe43616597688f6b81026fa5bd40685a2e5d0d26db1eea29b360b4454a90d1"
+}
