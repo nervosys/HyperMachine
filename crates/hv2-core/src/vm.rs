@@ -3100,6 +3100,7 @@ impl VM {
                 None => format!("vcpu-{vcpu_id}"),
             };
             let spawned = std::thread::Builder::new().name(name).spawn(move || {
+                let owner_entered_at = std::time::Instant::now();
                 tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name, vcpu_id,
                     wrapper_queue_ms = (dispatched_at - queued_at).as_secs_f64() * 1000.0,
                     thread_start_ms = dispatched_at.elapsed().as_secs_f64() * 1000.0,
@@ -3139,6 +3140,7 @@ impl VM {
                     memory,
                     event_bus,
                     vm_name,
+                    owner_entered_at,
                 ));
                 let _ = done_tx.send(res);
             });
@@ -3167,9 +3169,11 @@ impl VM {
         memory: Arc<GuestMemory>,
         event_bus: EventBus,
         vm_name: String,
+        owner_entered_at: std::time::Instant,
     ) -> Result<()> {
         tracing::info!("vCPU {} task started", vcpu.id());
         let mut paused = false;
+        let mut first_run = true;
 
         loop {
             // Check for control messages (non-blocking)
@@ -3225,6 +3229,12 @@ impl VM {
 
             // Run vCPU until exit
             let start = std::time::Instant::now();
+            if first_run {
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name,
+                    vcpu_id = vcpu.id(),
+                    owner_setup_ms = (start - owner_entered_at).as_secs_f64() * 1000.0,
+                    "vCPU first backend call");
+            }
             let exit = match backend.run_vcpu(&vcpu).await {
                 Ok(exit) => exit,
                 Err(e) => {
@@ -3234,6 +3244,12 @@ impl VM {
                     return Err(e);
                 }
             };
+            if first_run {
+                tracing::debug!(target: "hv2_core::cold_dispatch", vm = %vm_name,
+                    vcpu_id = vcpu.id(), first_backend_ms = start.elapsed().as_secs_f64() * 1000.0,
+                    "vCPU first backend return");
+                first_run = false;
+            }
             stats
                 .run_time_ns
                 .fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
