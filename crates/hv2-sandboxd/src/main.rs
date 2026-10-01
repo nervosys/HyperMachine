@@ -3419,6 +3419,14 @@ async fn guest_report(vm: &AgentVM) -> String {
             )
         })
         .collect();
+    // VM-level GET_IRQCHIP/GET_PIT2 sample the kernel controllers before a
+    // diagnostic kick can wake the guest. No vCPU register ioctl is issued
+    // here, and these independent reads are not a restoration snapshot.
+    let interrupts = match machine.backend().save_machine().await {
+        Ok(Some(state)) => boot_diagnostics::machine_sample(&state),
+        Ok(None) => "pre-kick machine sample unavailable".into(),
+        Err(error) => format!("pre-kick machine diagnostic unavailable: {error}"),
+    };
     let architecture = match machine.diagnostic_vcpu_states().await {
         Ok(states) => states
             .into_iter()
@@ -3428,7 +3436,7 @@ async fn guest_report(vm: &AgentVM) -> String {
         Err(error) => format!("owner diagnostic unavailable: {error}"),
     };
     format!(
-        "{console}; VM {:?}; {}; {architecture}",
+        "{console}; VM {:?}; {}; {interrupts}; {architecture}",
         vm.state(),
         vcpus.join(", ")
     )

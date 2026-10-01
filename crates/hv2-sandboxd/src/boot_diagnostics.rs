@@ -1,6 +1,49 @@
-//! Failure-only formatting of state read by the vCPU execution owner.
+//! Failure-only formatting of owner and machine-level interrupt samples.
 
+use hv2_core::snapshot::machine::MachineState;
 use hv2_core::snapshot::vcpu::VCpuSnapshot;
+
+pub(crate) fn machine_sample(state: &MachineState) -> String {
+    if state.backend != "kvm" {
+        return "pre-kick PIC/PIT sample unavailable (non-KVM backend)".into();
+    }
+    // KVM's 512-byte irqchip union starts with the 16-byte kvm_pic_state.
+    // Capture each controller separately; this is not an atomic snapshot.
+    let pic = |name: &str, bytes: &[u8]| {
+        if bytes.len() != 512 {
+            return format!("{name} unavailable ({} bytes)", bytes.len());
+        }
+        format!(
+            "{name} LAST_IRR={:#x} IRR={:#x} IMR={:#x} ISR={:#x} PRIORITY={:#x} BASE={:#x} INIT={} AUTO_EOI={} ELCR={:#x}",
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[9], bytes[10], bytes[14],
+        )
+    };
+    let pit = if state.pit.len() == 112 {
+        // Three 24-byte channel structs, then u32 flags and nine reserved u32s.
+        // count is u32 (65536 is valid), not the guest's 16-bit port value.
+        let channels = (0..3)
+            .map(|index| {
+                let bytes = &state.pit[index * 24..(index + 1) * 24];
+                let count = u32::from_le_bytes(bytes[..4].try_into().unwrap());
+                let loaded = i64::from_le_bytes(bytes[16..24].try_into().unwrap());
+                format!(
+                    "CH{index} COUNT={count} MODE={} GATE={} RW={} READ={} WRITE={} LOADED_NS={loaded}",
+                    bytes[13], bytes[15], bytes[12], bytes[9], bytes[10],
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        let flags = u32::from_le_bytes(state.pit[72..76].try_into().unwrap());
+        format!("PIT FLAGS={flags:#x} {channels}")
+    } else {
+        format!("PIT unavailable ({} bytes)", state.pit.len())
+    };
+    format!(
+        "pre-kick machine sample: {}; {}; {pit}",
+        pic("PIC_MASTER", &state.pic_master),
+        pic("PIC_SLAVE", &state.pic_slave),
+    )
+}
 
 pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
     let architecture = format!(
@@ -42,6 +85,46 @@ pub(crate) fn owner_sample(state: &VCpuSnapshot) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn machine_sample_refuses_foreign_and_truncated_layouts() {
+        let mut state = MachineState::default();
+        assert!(machine_sample(&state).contains("non-KVM backend"));
+        state.backend = "kvm".into();
+        for len in [0, 111, 113] {
+            state.pit = vec![0; len];
+            state.pic_master = vec![0; 16];
+            let report = machine_sample(&state);
+            assert!(report.contains("PIT unavailable"));
+            assert!(report.contains("PIC_MASTER unavailable"));
+            assert!(!report.contains("COUNT="));
+            assert!(!report.contains("IRR="));
+        }
+    }
+
+    #[test]
+    fn machine_sample_preserves_pic_irq_bits_and_full_pit_count() {
+        let mut state = MachineState {
+            backend: "kvm".into(),
+            pic_master: vec![0; 512],
+            pic_slave: vec![0; 512],
+            pit: vec![0; 112],
+            ..Default::default()
+        };
+        state.pic_master[1..4].copy_from_slice(&[1, 0xfe, 0x10]);
+        state.pit[..4].copy_from_slice(&65536u32.to_le_bytes());
+        state.pit[13] = 2;
+        state.pit[15] = 1;
+        state.pit[24..28].copy_from_slice(&123u32.to_le_bytes());
+        state.pit[48..52].copy_from_slice(&456u32.to_le_bytes());
+        state.pit[72..76].copy_from_slice(&2u32.to_le_bytes());
+        let report = machine_sample(&state);
+        assert!(report.contains("IRR=0x1 IMR=0xfe ISR=0x10"));
+        assert!(report.contains("CH0 COUNT=65536 MODE=2 GATE=1"));
+        assert!(report.contains("CH1 COUNT=123"));
+        assert!(report.contains("CH2 COUNT=456"));
+        assert!(report.contains("PIT FLAGS=0x2"));
+    }
 
     #[test]
     fn missing_apic_is_not_reported_as_no_pending_interrupts() {
