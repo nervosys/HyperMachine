@@ -903,7 +903,31 @@ starting the agent. These use `/dev/kmsg` and appear in guest `dmesg`.
 Together with the existing kernel init-handoff timestamp, they can bound
 pre-launch userspace work. They do not mark socket bind or acceptance.
 Normal boots emit neither milestone. Linux shell syntax validation passes;
-runtime milestone collection and its timing impact remain unmeasured.
+runtime collection follows below; its timing impact has not been isolated.
+
+The diagnostic image (`781c3944…`) enables these milestones identically for
+both engines. Archive verification confirms equal entry sets and modes,
+with only `init` content changed; BusyBox and the guest agent are byte-identical
+to the prior image. Another two alternating C100 batch pairs passed all 400
+attempts, matched all 200 HyperMachine stage IDs and recorded both milestones
+in all 20 sampled guests. Artifact, worker and cleanup checks passed.
+
+| Guest-clock interval, 20 samples | Mean | Median | Maximum |
+| --- | ---: | ---: | ---: |
+| Init handoff to core mounts | 18.45 ms | 11.81 ms | 63.92 ms |
+| Core mounts to agent launch | 11.79 ms | 1.20 ms | 61.69 ms |
+| Init handoff to agent launch | 30.24 ms | 26.45 ms | 103.58 ms |
+
+Mean guest agent-launch timestamp was 1810.64 ms. Host queue/connect/ping
+means were 8.11/5585.95/9.28 ms for all 200 HyperMachine requests. The small
+init interval does not support prioritizing shell setup optimization for
+these samples. Guest scheduling and socket/packet readiness remain candidate
+paths; clock origins differ and no socket bind/accept milestone was collected.
+Probes occur after batch readiness and affect memory/cleanup readings.
+These traced, sampled, shared-host cohorts are excluded from scored comparisons
+and establish neither a runtime improvement nor a competitor win.
+The `boot-milestones-` reports, build/coordinator/analysis sources and separate
+archive verifier are retained in `benchmarks/2026-10-01` with exact hashes.
 
 ## Same-host Firecracker cold comparison (2026-09-30)
 
