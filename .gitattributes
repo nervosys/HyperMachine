@@ -29,3 +29,6 @@
 *.jpg binary
 *.ico binary
 *.wasm binary
+
+# Preserve exact recorded diagnostic coordinator bytes for its SHA256.
+docs/benchmarks/2026-09-30/owner-load-coordinator.py -text
