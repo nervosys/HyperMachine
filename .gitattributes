@@ -37,3 +37,6 @@ docs/benchmarks/2026-09-30/owner-pinned-load-coordinator.py -text whitespace=cr-
 
 # Preserve exact startup diagnostic evidence and source hashes.
 docs/benchmarks/2026-10-01/* -text whitespace=cr-at-eol
+# Raw Cargo transcripts intentionally end with a blank line.
+docs/benchmarks/2026-10-01/kvm-events-abi-test.txt -text whitespace=cr-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-01/kvm-events-direct-test.txt -text whitespace=cr-at-eol,-blank-at-eof

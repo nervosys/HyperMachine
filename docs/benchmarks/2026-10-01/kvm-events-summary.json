@@ -1,0 +1,524 @@
+{
+  "profiles": {
+    "baseline": [
+      {
+        "operation": "resume",
+        "concurrency": 1,
+        "attempts": 100,
+        "passed": 99,
+        "failed": 1,
+        "ready_ms": {
+          "n": 99,
+          "min": 70.03846600127872,
+          "max": 145.34166199882748,
+          "mean": 104.73700475760246,
+          "p50": 114.56555499898968,
+          "p95": 118.88308500056155,
+          "p99": 145.34166199882748
+        },
+        "operation_ms": {
+          "n": 99,
+          "min": 10.310363002645317,
+          "max": 16.196487995330244,
+          "mean": 12.859606485172396,
+          "p50": 12.619945002370514,
+          "p95": 15.535200000158511,
+          "p99": 16.196487995330244
+        },
+        "max_start_spread_ms": 0.0,
+        "raw_file": "events-baseline-resume-c1.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 1,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 73.25248899724102,
+          "max": 128.6553960017045,
+          "mean": 104.64121760953276,
+          "p50": 116.81265899824211,
+          "p95": 121.9415730010951,
+          "p99": 127.60916799743427
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 13.651494002260733,
+          "max": 26.754723003250547,
+          "mean": 15.824106669460889,
+          "p50": 14.796902003581636,
+          "p95": 24.873089001630433,
+          "p99": 26.05478499754099
+        },
+        "max_start_spread_ms": 0.0,
+        "raw_file": "events-baseline-fork-c1.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 8,
+        "attempts": 104,
+        "passed": 104,
+        "failed": 0,
+        "ready_ms": {
+          "n": 104,
+          "min": 87.69192799809389,
+          "max": 167.75925899855793,
+          "mean": 138.74002745181386,
+          "p50": 140.08492999710143,
+          "p95": 155.124083001283,
+          "p99": 165.7557920043473
+        },
+        "operation_ms": {
+          "n": 104,
+          "min": 25.486909995379392,
+          "max": 61.65421699552098,
+          "mean": 35.19846444235624,
+          "p50": 32.99725800025044,
+          "p95": 59.575122002570424,
+          "p99": 61.264824005775154
+        },
+        "max_start_spread_ms": 3.4927860033349134,
+        "raw_file": "events-baseline-fork-c8.json"
+      },
+      {
+        "operation": "resume",
+        "concurrency": 8,
+        "attempts": 104,
+        "passed": 104,
+        "failed": 0,
+        "ready_ms": {
+          "n": 104,
+          "min": 79.7762980000698,
+          "max": 151.38966200174764,
+          "mean": 132.43740542356346,
+          "p50": 135.94433300022501,
+          "p95": 147.88838099775603,
+          "p99": 150.77660800307058
+        },
+        "operation_ms": {
+          "n": 104,
+          "min": 19.167878999724053,
+          "max": 40.69638199871406,
+          "mean": 29.665935971024737,
+          "p50": 28.55587500380352,
+          "p95": 37.496401004318614,
+          "p99": 40.69062900089193
+        },
+        "max_start_spread_ms": 4.356211997219361,
+        "raw_file": "events-baseline-resume-c8.json"
+      },
+      {
+        "operation": "resume",
+        "concurrency": 50,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 218.194205997861,
+          "max": 640.4155510026612,
+          "mean": 378.2523139799014,
+          "p50": 342.6562430031481,
+          "p95": 607.0327979978174,
+          "p99": 621.1562169992249
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 133.44242300081532,
+          "max": 196.11089599493425,
+          "mean": 169.3425401897548,
+          "p50": 170.13350700290175,
+          "p95": 190.88177899539005,
+          "p99": 195.79882099787937
+        },
+        "max_start_spread_ms": 23.324935005803127,
+        "raw_file": "events-baseline-resume-c50.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 50,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 380.8563749989844,
+          "max": 552.1869360018172,
+          "mean": 469.3557901301392,
+          "p50": 475.63902600086294,
+          "p95": 516.2287940038368,
+          "p99": 537.1026590000838
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 162.84905199427158,
+          "max": 440.6394280013046,
+          "mean": 302.14120600030583,
+          "p50": 325.47884300583974,
+          "p95": 390.7975379988784,
+          "p99": 395.47308100009104
+        },
+        "max_start_spread_ms": 25.1951120008016,
+        "raw_file": "events-baseline-fork-c50.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 100,
+        "attempts": 200,
+        "passed": 200,
+        "failed": 0,
+        "ready_ms": {
+          "n": 200,
+          "min": 636.7271710041678,
+          "max": 1401.7611739982385,
+          "mean": 1054.3968832301834,
+          "p50": 1053.3543970013852,
+          "p95": 1218.4029549971456,
+          "p99": 1400.5978609930025
+        },
+        "operation_ms": {
+          "n": 200,
+          "min": 123.56168500264175,
+          "max": 1133.2412709962227,
+          "mean": 581.9088289451247,
+          "p50": 522.6418380043469,
+          "p95": 974.1815609959303,
+          "p99": 1042.7918229979696
+        },
+        "max_start_spread_ms": 43.90243500529323,
+        "raw_file": "events-baseline-fork-c100.json"
+      },
+      {
+        "operation": "resume",
+        "concurrency": 100,
+        "attempts": 200,
+        "passed": 200,
+        "failed": 0,
+        "ready_ms": {
+          "n": 200,
+          "min": 401.6130069940118,
+          "max": 1408.8162830012152,
+          "mean": 724.2638437049391,
+          "p50": 636.9351299945265,
+          "p95": 1195.1869269978488,
+          "p99": 1256.4998620000551
+        },
+        "operation_ms": {
+          "n": 200,
+          "min": 30.851240000629332,
+          "max": 630.1499649998732,
+          "mean": 355.3861440099354,
+          "p50": 363.2408170014969,
+          "p95": 444.8126319985022,
+          "p99": 474.8475380038144
+        },
+        "max_start_spread_ms": 39.554069997393526,
+        "raw_file": "events-baseline-resume-c100.json"
+      }
+    ],
+    "events": [
+      {
+        "operation": "resume",
+        "concurrency": 1,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 68.82671800121898,
+          "max": 121.66047100618016,
+          "mean": 100.44881752939546,
+          "p50": 113.84558399731759,
+          "p95": 118.37711800035322,
+          "p99": 119.85233699670061
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 10.187669002334587,
+          "max": 15.218763001030311,
+          "mean": 12.628516479453538,
+          "p50": 12.41395599936368,
+          "p95": 14.918745997420046,
+          "p99": 15.206185998977162
+        },
+        "max_start_spread_ms": 0.0,
+        "raw_file": "events-events-resume-c1.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 1,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 72.81884099938907,
+          "max": 129.10485399333993,
+          "mean": 108.23803885992675,
+          "p50": 117.15848799940431,
+          "p95": 125.10983799438691,
+          "p99": 128.63102400297066
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 13.919135999458376,
+          "max": 25.52876799745718,
+          "mean": 16.169843390453025,
+          "p50": 15.086157000041567,
+          "p95": 23.20443099597469,
+          "p99": 25.2008330062381
+        },
+        "max_start_spread_ms": 0.0,
+        "raw_file": "events-events-fork-c1.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 8,
+        "attempts": 104,
+        "passed": 104,
+        "failed": 0,
+        "ready_ms": {
+          "n": 104,
+          "min": 86.93894599855412,
+          "max": 186.26784999651136,
+          "mean": 137.452322788494,
+          "p50": 138.7061450004694,
+          "p95": 161.7426470038481,
+          "p99": 174.8606330002076
+        },
+        "operation_ms": {
+          "n": 104,
+          "min": 25.12947800278198,
+          "max": 64.92847699701088,
+          "mean": 35.065827702055685,
+          "p50": 33.78603000601288,
+          "p95": 53.21417999948608,
+          "p99": 62.5605910026934
+        },
+        "max_start_spread_ms": 3.0799070009379648,
+        "raw_file": "events-events-fork-c8.json"
+      },
+      {
+        "operation": "resume",
+        "concurrency": 8,
+        "attempts": 104,
+        "passed": 104,
+        "failed": 0,
+        "ready_ms": {
+          "n": 104,
+          "min": 76.01323299604701,
+          "max": 147.2694439944462,
+          "mean": 119.34201809568688,
+          "p50": 127.26801600365434,
+          "p95": 142.68148799601477,
+          "p99": 146.48867499636253
+        },
+        "operation_ms": {
+          "n": 104,
+          "min": 14.096593004069291,
+          "max": 39.23322699847631,
+          "mean": 24.52053336541072,
+          "p50": 23.240228001668584,
+          "p95": 36.04426800302463,
+          "p99": 38.08875899994746
+        },
+        "max_start_spread_ms": 3.2039169964264147,
+        "raw_file": "events-events-resume-c8.json"
+      },
+      {
+        "operation": "resume",
+        "concurrency": 50,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 212.84684399870457,
+          "max": 641.5669810012332,
+          "mean": 377.98783069061756,
+          "p50": 314.39276600576704,
+          "p95": 538.2508859984227,
+          "p99": 546.5796249991399
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 127.2579680007766,
+          "max": 205.65946600254392,
+          "mean": 170.32559149061854,
+          "p50": 171.9868620057241,
+          "p95": 194.7099960016203,
+          "p99": 200.32245299807983
+        },
+        "max_start_spread_ms": 22.171857999637723,
+        "raw_file": "events-events-resume-c50.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 50,
+        "attempts": 100,
+        "passed": 100,
+        "failed": 0,
+        "ready_ms": {
+          "n": 100,
+          "min": 328.2078319971333,
+          "max": 501.12626899499446,
+          "mean": 419.46088509008405,
+          "p50": 421.57354899973143,
+          "p95": 474.67973500170046,
+          "p99": 479.3952710024314
+        },
+        "operation_ms": {
+          "n": 100,
+          "min": 53.58217699540546,
+          "max": 386.26406499679433,
+          "mean": 253.78911153005902,
+          "p50": 257.28688500385033,
+          "p95": 351.0918230022071,
+          "p99": 370.423282001866
+        },
+        "max_start_spread_ms": 20.713040001282934,
+        "raw_file": "events-events-fork-c50.json"
+      },
+      {
+        "operation": "fork",
+        "concurrency": 100,
+        "attempts": 200,
+        "passed": 200,
+        "failed": 0,
+        "ready_ms": {
+          "n": 200,
+          "min": 545.525441004429,
+          "max": 2126.9291150019853,
+          "mean": 929.9994451501334,
+          "p50": 910.4672329995083,
+          "p95": 1101.2284479947994,
+          "p99": 1166.428870994423
+        },
+        "operation_ms": {
+          "n": 200,
+          "min": 234.68895399855683,
+          "max": 1093.7454260056256,
+          "mean": 542.974973350174,
+          "p50": 502.89097700442653,
+          "p95": 775.4637539983378,
+          "p99": 1026.931351996609
+        },
+        "max_start_spread_ms": 42.10017000150401,
+        "raw_file": "events-events-fork-c100.json"
+      },
+      {
+        "operation": "resume",
+        "concurrency": 100,
+        "attempts": 200,
+        "passed": 200,
+        "failed": 0,
+        "ready_ms": {
+          "n": 200,
+          "min": 437.1634890048881,
+          "max": 1361.1735419981414,
+          "mean": 742.9765869299808,
+          "p50": 634.2305619982653,
+          "p95": 1333.5897709985147,
+          "p99": 1359.800941994763
+        },
+        "operation_ms": {
+          "n": 200,
+          "min": 300.1559980039019,
+          "max": 410.96284199738875,
+          "mean": 368.66064350528177,
+          "p50": 370.40069900103845,
+          "p95": 402.10340100020403,
+          "p99": 409.3004079986713
+        },
+        "max_start_spread_ms": 39.75781200279016,
+        "raw_file": "events-events-resume-c100.json"
+      }
+    ]
+  },
+  "paired_deltas": [
+    {
+      "concurrency": 1,
+      "operation": "resume",
+      "complete_pair": false,
+      "events_minus_baseline_mean_ready_ms": null
+    },
+    {
+      "concurrency": 1,
+      "operation": "fork",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": 3.5968212503939867
+    },
+    {
+      "concurrency": 8,
+      "operation": "resume",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": -13.09538732787658
+    },
+    {
+      "concurrency": 8,
+      "operation": "fork",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": -1.2877046633198574
+    },
+    {
+      "concurrency": 50,
+      "operation": "resume",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": -0.2644832892838167
+    },
+    {
+      "concurrency": 50,
+      "operation": "fork",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": -49.894905040055164
+    },
+    {
+      "concurrency": 100,
+      "operation": "resume",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": 18.712743225041777
+    },
+    {
+      "concurrency": 100,
+      "operation": "fork",
+      "complete_pair": true,
+      "events_minus_baseline_mean_ready_ms": -124.39743808005005
+    }
+  ],
+  "failed_rows": [
+    {
+      "index": 43,
+      "success": false,
+      "sandbox_id": "sbx-a1179cbfeff64bdf8b51",
+      "create_ms": 27.680323000822682,
+      "pause_ms": 55.77480800275225,
+      "operation_start_offset_ms": 16929.165555004147,
+      "phase": "resume",
+      "error": "503: Service temporarily unavailable, please retry. - guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (0 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 0 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x20 IRR=0x32 IMR=0xfb ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0xff ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; IOAPIC BASE=0xfec00000 SELECT=0x18 ID=0x0 IRR=0x20 GSI0 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI1 RAW=0x100000000000820 VECTOR=0x20 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI2 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI3 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI4 RAW=0x100000000000823 VECTOR=0x23 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI5 RAW=0x100000000000822 VECTOR=0x22 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI6 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI7 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI8 RAW=0x100000000000821 VECTOR=0x21 MASKED=0 LEVEL=0 REMOTE_IRR=0 DEST=0x1, GSI9 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI10 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI11 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI12 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI13 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI14 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI15 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI16 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI17 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI18 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI19 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI20 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI21 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI22 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0, GSI23 RAW=0x10000 VECTOR=0x0 MASKED=1 LEVEL=0 REMOTE_IRR=0 DEST=0x0; PIT FLAGS=0x0 CH0 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=34462458737919, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=34462458737969; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x497c000 run_state=Halted RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1 TSC=0x1fc15691a7 TSC_DEADLINE=0x0; LAPIC TPR=0x10 PPR=0xe0 SVR=0x1ff LVT_TIMER=0x400ec LVT0=0x10700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00001000 IRR=00000000/00000004/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0",
+      "failure_elapsed_ms": 30543.12522199325,
+      "failure_timing_origin": "operation",
+      "batch_index": 43,
+      "profile": "baseline",
+      "operation": "resume",
+      "concurrency": 1
+    }
+  ],
+  "total_attempts": 2016,
+  "total_passed": 2015,
+  "limitations": [
+    "One fresh cohort per profile/operation/concurrency; two dependent batches at concurrency 50/100",
+    "Shared nested WSL/KVM; same-host official SDK client; no bare-metal or competitor run",
+    "Successful percentiles exclude failures; paired means exclude incomplete profile pairs",
+    "Observed pass counts do not prove the cause of an earlier timeout or a reliability SLA",
+    "The deterministic direct KVM guest-handler control proves the specific event-preservation repair"
+  ],
+  "artifact_sha256": {
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "sdk_harness": "c278b80003ec743b71c4f56a26a55eecb3fa3051f0d9bffd4860fd50c6520cae",
+    "request_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "coordinator": "6709e12e60507c57cb8137ba922287d4005b37a8fb330e07318a72732cc05b66"
+  }
+}
