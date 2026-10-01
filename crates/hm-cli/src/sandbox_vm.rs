@@ -108,6 +108,26 @@ pub enum VmCommand {
         #[command(subcommand)]
         command: CheckpointCommand,
     },
+    /// Bind operator-managed DNS hostnames to a VM's guest port (cluster API)
+    Domain {
+        #[command(subcommand)]
+        command: DomainCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DomainCommand {
+    /// Claim a hostname or change its port; configure DNS and TLS separately
+    Bind {
+        id: String,
+        domain: String,
+        #[arg(long, value_parser = clap::value_parser!(u16).range(1..))]
+        port: u16,
+    },
+    /// List a VM's hostname bindings
+    List { id: String },
+    /// Release a hostname owned by this VM
+    Unbind { id: String, domain: String },
 }
 
 /// File bytes travel through envd, without shell interpretation.
@@ -322,6 +342,28 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             std::io::stderr().write_all(stderr.as_bytes())?;
             return Ok(code);
         }
+        VmCommand::Domain { command } => match command {
+            DomainCommand::Bind { id, domain, port } => {
+                api.request(
+                    Method::PUT,
+                    &["sandboxes", &id, "domains", &domain],
+                    Some(json!({"port": port})),
+                )
+                .await?
+            }
+            DomainCommand::List { id } => {
+                api.request(Method::GET, &["sandboxes", &id, "domains"], None)
+                    .await?
+            }
+            DomainCommand::Unbind { id, domain } => {
+                api.request(
+                    Method::DELETE,
+                    &["sandboxes", &id, "domains", &domain],
+                    None,
+                )
+                .await?
+            }
+        },
         VmCommand::Checkpoint { command } => match command {
             CheckpointCommand::Save { id, name } => {
                 api.request(

@@ -1,6 +1,85 @@
 //! Exercise the shipped binary against a protocol fixture, not a real guest.
 
 #[tokio::test]
+async fn domain_commands_send_authenticated_claim_list_and_release_requests() {
+    use axum::extract::Path;
+    use axum::http::{HeaderMap, StatusCode};
+    let app = Router::new()
+        .route(
+            "/sandboxes/{id}/domains",
+            axum::routing::get(|Path(id): Path<String>, headers: HeaderMap| async move {
+                assert_eq!(headers["x-api-key"], "domain-fixture-key");
+                assert_eq!(id, "test-vm");
+                Json(json!([{"domain":"app.example.com","sandbox_id":id,"port":8080}]))
+            }),
+        )
+        .route(
+            "/sandboxes/{id}/domains/{domain}",
+            axum::routing::put(
+                |Path((id, domain)): Path<(String, String)>,
+                 headers: HeaderMap,
+                 Json(body): Json<Value>| async move {
+                    assert_eq!(headers["x-api-key"], "domain-fixture-key");
+                    assert_eq!(id, "test-vm");
+                    assert_eq!(domain, "app.example.com");
+                    assert_eq!(body, json!({"port":8080}));
+                    Json(json!({"domain":domain,"sandbox_id":id,"port":8080}))
+                },
+            )
+            .delete(
+                |Path((id, domain)): Path<(String, String)>, headers: HeaderMap| async move {
+                    assert_eq!(headers["x-api-key"], "domain-fixture-key");
+                    assert_eq!(
+                        (id.as_str(), domain.as_str()),
+                        ("test-vm", "app.example.com")
+                    );
+                    StatusCode::NO_CONTENT
+                },
+            ),
+        );
+    let (endpoint, task) = server(app).await;
+    for arguments in [
+        vec!["bind", "test-vm", "app.example.com", "--port", "8080"],
+        vec!["list", "test-vm"],
+        vec!["unbind", "test-vm", "app.example.com"],
+    ] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args(["sandbox", "vm", "--endpoint", &endpoint, "domain"])
+            .args(&arguments)
+            .env("HV2_API_KEY", "domain-fixture-key")
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        if arguments[0] != "unbind" {
+            let value: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert!(value.is_object() || value.is_array());
+        }
+    }
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "domain",
+            "bind",
+            "test-vm",
+            "app.example.com",
+            "--port",
+            "0",
+        ])
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    task.abort();
+    let _ = task.await;
+}
+
+#[tokio::test]
 async fn failed_downloads_and_destination_races_do_not_publish_or_overwrite_files() {
     use axum::{extract::Query, response::IntoResponse};
     use std::collections::HashMap;
