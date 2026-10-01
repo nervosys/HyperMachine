@@ -3188,7 +3188,7 @@ mod tests {
                 .value,
             (1 << 40) + 1_000_000_000
         );
-        for omit_deadline in [false, true] {
+        for (omit_deadline, delayed_entry) in [(false, false), (false, true), (true, false)] {
             let destination = KvmBackend::new().unwrap();
             destination.create_vm(1, 2 * 1024 * 1024).await.unwrap();
             let vm = destination.vm.read().unwrap().clone().unwrap();
@@ -3203,6 +3203,19 @@ mod tests {
             }
             destination.restore_vcpu(&vcpu, &state).await.unwrap();
             let target = destination.kvm_vcpu(&vcpu).unwrap();
+            if delayed_entry {
+                // Let the restored timer expire before the first KVM_RUN.
+                // Read the guest counters to verify this is an expired-deadline
+                // case on this host, rather than infer it from a wall delay.
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                // SAFETY: an owned idle vCPU descriptor, before runner entry.
+                let tsc = unsafe { kvm_get_msr(target.fd(), 0x10) }.unwrap();
+                let captured_deadline = (1 << 40) + 1_000_000_000;
+                assert!(tsc >= captured_deadline, "guest deadline must have elapsed");
+                println!(
+                    "KVM_DEADLINE_DELAY_EVIDENCE tsc={tsc} captured_deadline={captured_deadline}"
+                );
+            }
             let runner = target.clone();
             let (send, receive) = std::sync::mpsc::channel();
             let thread = std::thread::spawn(move || send.send(runner.run()).unwrap());
@@ -3211,7 +3224,7 @@ mod tests {
                 target.kick();
             }
             thread.join().unwrap();
-            println!("KVM_DEADLINE_EVIDENCE omit_deadline={omit_deadline} result={result:?}");
+            println!("KVM_DEADLINE_EVIDENCE omit_deadline={omit_deadline} delayed_entry={delayed_entry} result={result:?}");
             if omit_deadline {
                 assert!(
                     result.is_err(),

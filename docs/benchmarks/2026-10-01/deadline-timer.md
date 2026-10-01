@@ -14,7 +14,13 @@ within a two-second bound. An otherwise identical restore omitting only the
 deadline MSR stays halted through the bound, then an owned vCPU kick releases
 and joins its runner thread. No unavailable-KVM fallback counts as a pass.
 
-Both controls passed on the local nested-KVM host. This demonstrates that a
+The extended control also waits one second before the first `KVM_RUN` and
+reads the guest TSC to prove it has passed the captured deadline. The measured
+TSC was 1,103,904,532,688 against a captured deadline of 1,100,511,627,776; the
+guest still enters its timer handler. All three controls passed on this host:
+immediate entry, entry after measured deadline expiry, and the no-timer control.
+
+These controls passed on the local nested-KVM host. This demonstrates that a
 captured deadline can wake a halted guest through the current backend; it does
 not establish all timing windows, oversubscription behavior, multi-vCPU clocks
 or the cause of the SDK timeout. No runtime timer behavior was changed.
