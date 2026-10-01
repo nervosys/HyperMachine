@@ -1037,11 +1037,40 @@ The kernel hash is `d0b6b580…`; its 17,327,104 bytes exceed the gzip kernel's
 retained alongside the experimental defconfig. A concurrency-1 smoke cohort
 passed all four native attempts (two per engine), including readiness, resource
 validation, artifact stability and cleanup. This is functional evidence only.
-Six counterbalanced C100 blocks are now running, with two alternating engine
-pairs per kernel per block. Full comparison analysis and state-preservation
-validation remain pending. Native timing includes larger image-loading costs.
-Existing evidence does not establish decompression as a cause or LZ4 as an
-improvement. The default kernel is unchanged.
+Six counterbalanced C100 blocks completed, with two alternating engine pairs
+per kernel per block. Native timing includes larger image-loading costs.
+
+| Kernel / engine | Passed / attempts | Successful P50 | Successful P99 |
+| --- | ---: | ---: | ---: |
+| Gzip / HyperMachine | 1190 / 1200 | 6801.47 ms | 15626.92 ms |
+| LZ4 / HyperMachine | 1200 / 1200 | 6523.37 ms | 11610.63 ms |
+| Gzip / Firecracker | 1200 / 1200 | 5594.62 ms | 11149.61 ms |
+| LZ4 / Firecracker | 1200 / 1200 | 4746.36 ms | 5063.31 ms |
+
+All ten failures occurred in HyperMachine's first gzip batch of the final
+block. They timed out waiting for guest readiness; retained diagnostics show
+halted vCPU samples and continued I/O exits. Artifact stability, controlled
+worker liveness, node-empty checks and daemon cleanup passed for every cohort.
+Failed create rows have no returned sandbox ID and no client delete success;
+the isolated node cleanup checks still passed. The cohort remains failed and
+its raw errors are retained. Successful latency quantiles exclude these ten
+timeouts and cannot represent unconditional completion latency.
+
+For the five HyperMachine blocks with complete success on both kernels, LZ4
+reduced the block mean in only 2/5, with a median delta of **+31.05 ms**
+(LZ4 minus gzip). Firecracker improved in all six complete blocks, with a
+median delta of -950.88 ms. Shared-host variation, within-batch correlation
+and excluding the failed HyperMachine block from paired latency analysis
+limit causal conclusions. Zero LZ4 failures here does not establish a
+reliability fix. HyperMachine still trails Firecracker on the LZ4 profile.
+
+LZ4 checkpoint restore, pause/resume and two stateful forks pass against a
+snapshot-backed template, with guest state, command readiness, I/O APIC
+discovery, artifact stability and cleanup verified. Exact cohort sources,
+manifest, raw reports and analysis use the `kernel-compression-` prefix;
+state evidence is in `lz4-state.json` and `verify-lz4-state.py`.
+This experiment does not establish a repeatable HyperMachine performance
+improvement or decompression as the root cause. The default kernel is unchanged.
 
 ## Same-host Firecracker cold comparison (2026-09-30)
 
