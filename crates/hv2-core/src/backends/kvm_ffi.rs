@@ -58,6 +58,7 @@ pub const KVM_SET_IRQCHIP: u64 = 0x8208ae63; // _IOR(KVMIO, 0x63, struct kvm_irq
 pub const KVM_SET_GSI_ROUTING: u64 = 0x4008ae6a; // _IOW(KVMIO, 0x6a, struct kvm_irq_routing)
 pub const KVM_IRQFD: u64 = 0x4020ae76; // _IOW(KVMIO, 0x76, struct kvm_irqfd)
 pub const KVM_CREATE_PIT2: u64 = 0x4040ae77; // _IOW(KVMIO, 0x77, struct kvm_pit_config)
+pub const KVM_PIT_SPEAKER_DUMMY: u32 = 1;
 pub const KVM_IOEVENTFD: u64 = 0x4040ae79; // _IOW(KVMIO, 0x79, struct kvm_ioeventfd)
 pub const KVM_SIGNAL_MSI: u64 = 0x4020aea5; // _IOW(KVMIO, 0xa5, struct kvm_msi)
 pub const KVM_SET_CLOCK: u64 = 0x4030ae7b; // _IOW(KVMIO, 0x7b, struct kvm_clock_data)

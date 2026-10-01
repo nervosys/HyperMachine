@@ -1,14 +1,55 @@
 #!/usr/bin/env python3
 """Verify matched-workload failures cannot become successful benchmark samples."""
 import importlib.util
+import errno
 from pathlib import Path
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec = importlib.util.spec_from_file_location("engines", Path(__file__).with_name("bench-local-engines.py"))
 engines = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(engines)
+
+
+class FirecrackerReadiness(unittest.TestCase):
+    def test_socket_created_before_listen_retries_only_read_only_probe(self):
+        process = Mock()
+        process.poll.return_value = None
+        with patch.object(engines.fc, "api", side_effect=[
+            FileNotFoundError(errno.ENOENT, "not bound"),
+            ConnectionRefusedError(errno.ECONNREFUSED, "not listening"), {}]) as api, \
+                patch.object(engines.fc.time, "perf_counter", return_value=0), \
+                patch.object(engines.fc.time, "sleep"):
+            engines.fc.wait_api(Path("api.sock"), 1, process)
+        self.assertEqual(api.call_count, 3)
+        for call in api.call_args_list:
+            self.assertEqual(call.args[1:], ("GET", "/machine-config"))
+
+    def test_probe_stops_on_deadline_or_process_exit(self):
+        process = Mock()
+        process.poll.return_value = None
+        with patch.object(engines.fc.time, "perf_counter", return_value=1), \
+                patch.object(engines.fc, "api") as api:
+            with self.assertRaises(TimeoutError):
+                engines.fc.wait_api(Path("api.sock"), 1, process)
+            api.assert_not_called()
+        process.poll.return_value = 1
+        with patch.object(engines.fc.time, "perf_counter", return_value=0), \
+                patch.object(engines.fc, "api") as api:
+            with self.assertRaises(RuntimeError):
+                engines.fc.wait_api(Path("api.sock"), 1, process)
+            api.assert_not_called()
+
+    def test_probe_does_not_hide_other_transport_or_api_errors(self):
+        process = Mock()
+        process.poll.return_value = None
+        for error in [PermissionError(errno.EACCES, "denied"), RuntimeError("API 500")]:
+            with patch.object(engines.fc.time, "perf_counter", return_value=0), \
+                    patch.object(engines.fc, "api", side_effect=error) as api:
+                with self.assertRaises(type(error)):
+                    engines.fc.wait_api(Path("api.sock"), 1, process)
+                self.assertEqual(api.call_count, 1)
 
 
 class Samples(unittest.TestCase):
