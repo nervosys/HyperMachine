@@ -97,6 +97,15 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Dispatch one committed VM occurrence; uncertain outcomes are not retried
+    Dispatch {
+        id: String,
+        scheduled_ms: u64,
+        #[arg(long)]
+        profiles: PathBuf,
+        #[arg(long, default_value = "cli")]
+        worker: String,
+    },
     /// Validate an operator connection profile; makes no network request
     ProfileCheck { file: PathBuf, name: String },
     /// List schedule names in lexical order as a JSON page
@@ -149,6 +158,21 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::Dispatch {
+                    id,
+                    scheduled_ms,
+                    profiles,
+                    worker,
+                } => {
+                    crate::jobs_vm_dispatch::dispatch_once(
+                        &s,
+                        &id,
+                        scheduled_ms,
+                        &worker,
+                        &profiles,
+                    )
+                    .await?
+                }
                 ScheduleCommand::ProfileCheck { file, name } => {
                     crate::jobs_profile::validate_connection_profile(&file, &name)?;
                     serde_json::json!({"profile": name, "configuration_valid": true})
