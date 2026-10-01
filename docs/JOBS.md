@@ -213,6 +213,22 @@ is host memory and removes processes after exit. A scheduler must therefore
 add durable reconciliation and completion records rather than treating this
 registry as persistent job state.
 
+The `hv2-jobs::dispatch` library now provides durable claims and immutable guest
+completion receipts. `claim_vm_occurrence` accepts only committed occurrences
+with VM targets and grants one exclusive claim. `vm_dispatch_state` recovers the
+claim and optional result; `complete_vm_occurrence` checks its claim token and
+records one result, allowing identical receipt replay. These are library APIs;
+no worker starts guest commands through them yet.
+
+A claim without a receipt is unresolved, including after worker loss. It may
+represent a running guest command, an unrecorded completion, or a dispatch that
+never reached the guest. Claims do not expire or automatically permit a second
+start. A future dispatcher must reconcile guest state before deciding what to do;
+lease-based retries, guest process handles, logs and manual recovery interfaces
+remain unimplemented. Claim ownership alone does not enforce exactly-once guest
+execution or external side effects. Schedule cancellation preserves previously
+committed occurrences and does not revoke their dispatch claims.
+
 The `hv2-jobs::schedule` module now provides immutable interval schedules and
 stable occurrence records keyed by schedule ID and scheduled Unix milliseconds.
 `Store::create_interval_schedule`, `interval_schedule` and
@@ -307,7 +323,7 @@ unprivileged user:
 - The REST mirror submits, lists, cancels, streams logs, and refuses requests without its
   token.
 
-**`hv2-jobs`** has 37 unit tests, passing on Windows and Linux, including:
+**`hv2-jobs`** has 38 unit tests, passing on Windows and Linux, including:
 - interval boundary/overflow checks and competing schedule/occurrence publishers,
   with immutable records preserved after reopening the store;
 - bounded missed-occurrence batches, coalescing, restart planning with an
@@ -326,6 +342,8 @@ unprivileged user:
   retention, plus authenticated API and CLI list operations;
 - VM target persistence across publication/reopening and rejection of host-only
   controls, invalid profiles, relative guest paths and invalid timeouts;
+- one dispatch claim among eight competing workers, committed-record gating,
+  unresolved ownership after reopening, and immutable claim-bound completion;
 - the claim race and the cancel/claim race, run 15 times each on Windows without a failure;
 - lease loss and a slow worker losing its lease;
 - labels, and spec validation;

@@ -486,7 +486,7 @@ impl Store {
         }
     }
 
-    fn publish_schedule_record(
+    pub(crate) fn publish_schedule_record(
         &self,
         directory: &str,
         key: &str,

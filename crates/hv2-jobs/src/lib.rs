@@ -49,6 +49,7 @@ use serde::{Deserialize, Serialize};
 pub mod http;
 pub mod worker;
 pub mod schedule;
+pub mod dispatch;
 
 /// Why a store operation failed.
 #[derive(Debug, thiserror::Error)]
