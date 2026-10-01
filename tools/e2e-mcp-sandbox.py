@@ -12,12 +12,14 @@ from pathlib import Path
 import uuid
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp_cancellation_check import ObservedWrite, check_cancellation
 
 
 async def check(args):
     known = []
     events = []
     errors = []
+    cancellation = None
     key = os.environ.get("HV2_API_KEY", "")
     command = ["sandbox", "vm", "--endpoint", args.api_url, "mcp"]
     if args.envd_proxy:
@@ -26,7 +28,8 @@ async def check(args):
         args=command,
         env={"HV2_API_KEY": key})
     async with stdio_client(params) as streams:
-        async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=150)) as session:
+        writer = ObservedWrite(streams[1])
+        async with ClientSession(streams[0], writer, read_timeout_seconds=timedelta(seconds=150)) as session:
             await session.initialize()
             async def call(name, arguments=None, failed=False):
                 result = await session.call_tool(name, arguments or {})
@@ -68,6 +71,9 @@ async def check(args):
                         raise RuntimeError("guest output mismatch")
                     return value
                 await command(parent, f"printf '%s' '{marker}' > '{path}'; cat '{path}'", marker)
+                if args.check_cancellation:
+                    cancellation = await check_cancellation(session, writer, args.api_url, parent, key)
+                    events.extend(["sandbox_exec_cancelled", "ping_after_cancel"])
                 if args.envd_proxy:
                     payload = bytes(range(256)) * 1024
                     guest_path = "/root/mcp-binary'&query=literal.bin"
@@ -122,6 +128,8 @@ async def check(args):
         "harness_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "binary_sha256":hashlib.sha256(args.binary.read_bytes()).hexdigest(),
         "environment":args.environment,"operations":events,"errors":errors,
+        "cancellation":cancellation,
+        "cancellation_harness_sha256":hashlib.sha256(Path(__file__).with_name("mcp_cancellation_check.py").read_bytes()).hexdigest(),
         "remaining_known_sandboxes":known,"success":not errors and not known}
     print(json.dumps(report, indent=2))
     return 0 if report["success"] else 1
@@ -133,4 +141,5 @@ if __name__ == "__main__":
     parser.add_argument("--api-url", required=True)
     parser.add_argument("--environment", required=True)
     parser.add_argument("--envd-proxy", help="Enable binary file tools through this operator-selected proxy")
+    parser.add_argument("--check-cancellation", action="store_true", help="Verify in-flight client cancellation and continued remote work")
     raise SystemExit(asyncio.run(check(parser.parse_args())))

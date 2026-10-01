@@ -6,12 +6,14 @@ use anyhow::{bail, Result};
 use reqwest::Method;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::VecDeque;
 use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader,
 };
 
 const MAX_MESSAGE: u64 = 1024 * 1024;
 const VERSION: &str = "2025-11-25";
+const MAX_QUEUED_MESSAGES: usize = 8;
 
 fn lifetime() -> u64 {
     300
@@ -437,6 +439,46 @@ impl Session {
     }
 }
 
+fn request_id(input: &[u8]) -> Option<Value> {
+    let value: Value = serde_json::from_slice(input).ok()?;
+    if value["jsonrpc"] != "2.0" || value["method"].as_str()? == "initialize" {
+        return None;
+    }
+    let id = value.get("id")?;
+    (id.is_string() || id.as_i64().is_some() || id.as_u64().is_some()).then(|| id.clone())
+}
+
+fn cancellation_id(input: &[u8]) -> Option<Value> {
+    let value: Value = serde_json::from_slice(input).ok()?;
+    if value["jsonrpc"] != "2.0"
+        || value["method"] != "notifications/cancelled"
+        || value.get("id").is_some()
+        || value["params"]
+            .get("reason")
+            .is_some_and(|reason| !reason.is_string())
+    {
+        return None;
+    }
+    let id = value["params"].get("requestId")?;
+    (id.is_string() || id.as_i64().is_some() || id.as_u64().is_some()).then(|| id.clone())
+}
+
+async fn read_frame<R: AsyncBufRead + Unpin>(
+    input: &mut R,
+    partial: &mut Vec<u8>,
+) -> Result<Option<Vec<u8>>> {
+    // read_until preserves consumed bytes in `partial` if select drops its
+    // future. Bound the cumulative frame, rather than each read invocation.
+    input
+        .take(MAX_MESSAGE + 1 - partial.len() as u64)
+        .read_until(b'\n', partial)
+        .await?;
+    if partial.len() as u64 > MAX_MESSAGE {
+        bail!("MCP message exceeds 1 MiB limit")
+    }
+    Ok((!partial.is_empty()).then(|| std::mem::take(partial)))
+}
+
 async fn transport<R: AsyncBufRead + Unpin, W: AsyncWrite + Unpin>(
     api: &Api,
     deadline: u64,
@@ -448,19 +490,48 @@ async fn transport<R: AsyncBufRead + Unpin, W: AsyncWrite + Unpin>(
         files,
         ..Default::default()
     };
+    let mut partial = Vec::new();
+    let mut queued: VecDeque<Vec<u8>> = VecDeque::new();
     loop {
-        let mut line = Vec::new();
-        let read = input
-            .take(MAX_MESSAGE + 1)
-            .read_until(b'\n', &mut line)
-            .await?;
-        if read == 0 {
-            return Ok(());
-        }
-        if read as u64 > MAX_MESSAGE {
-            bail!("MCP message exceeds 1 MiB limit")
-        }
-        if let Some(response) = session.message(api, deadline, &line).await {
+        let line = match queued.pop_front() {
+            Some(line) => line,
+            None => match read_frame(input, &mut partial).await? {
+                Some(line) => line,
+                None => return Ok(()),
+            },
+        };
+        let active_id = request_id(&line);
+        let response = {
+            let operation = session.message(api, deadline, &line);
+            tokio::pin!(operation);
+            loop {
+                tokio::select! {
+                    // Finish an already-ready response before considering a
+                    // cancellation that raced with completion.
+                    biased;
+                    response = &mut operation => break response,
+                    frame = read_frame(input, &mut partial) => {
+                        let Some(frame) = frame? else { return Ok(()); };
+                        if let Some(id) = cancellation_id(&frame) {
+                            if active_id.as_ref() == Some(&id) {
+                                // Dropping the HTTP future releases this client
+                                // wait; remote effects are not rolled back.
+                                break None;
+                            }
+                            queued.retain(|frame| request_id(frame).as_ref() != Some(&id));
+                            continue;
+                        }
+                        if queued.len() >= MAX_QUEUED_MESSAGES
+                            || queued.iter().map(Vec::len).sum::<usize>() + frame.len() > MAX_MESSAGE as usize
+                        {
+                            bail!("MCP pending input exceeds queue limit")
+                        }
+                        queued.push_back(frame);
+                    }
+                }
+            }
+        };
+        if let Some(response) = response {
             output
                 .write_all(serde_json::to_string(&response)?.as_bytes())
                 .await?;
@@ -488,6 +559,10 @@ pub(super) async fn serve(
     )
     .await
 }
+
+#[cfg(test)]
+#[path = "sandbox_vm_mcp_transport_tests.rs"]
+mod transport_tests;
 
 #[cfg(test)]
 mod tests {
