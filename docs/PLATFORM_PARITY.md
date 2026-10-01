@@ -951,3 +951,12 @@ The next diagnostic build also prints the existing owner-captured APIC base
 MSR and CR8 alongside the LAPIC image. This exposes APIC enable/BSP bits and
 CPU interrupt priority without additional register reads. The formatting check
 preserves both values; live failed-boot capture of these added fields is pending.
+
+A separate [read-only supported-CPUID probe](benchmarks/2026-09-30/supported-topology-cpu0-probe.py)
+records the [CPU 0 KVM table](benchmarks/2026-09-30/supported-topology-cpu0.json).
+Leaf 1 EBX is 2099200: its logical-processor count field is 32, while its initial
+APIC ID is zero. The current backend only normalizes topology for multi-vCPU VMs,
+leaving this supported table unchanged for a one-vCPU guest. This system ioctl
+does not sample a running guest and does not establish the startup failure's
+cause. It identifies a separate guest-topology consistency gap to address and
+verify, including the AMD extended topology leaves.
