@@ -1071,7 +1071,22 @@ Linux 6.6.52 regression passed: the guest discovers the table, reports one
 processor and an I/O APIC, activates its UART console and reaches userspace
 handoff. The regression now accepts the older `console [ttyS0] enabled` message
 as well as the newer `legacy console` wording. Strict all-targets Linux core
-Clippy passed. The release rebuild, live checkpoint/pause/fork validation and
-matched contention cohort remain pending. These results establish guest
+Clippy and the release rebuild passed. Live checkpoint/pause/fork validation
+passed; the matched contention cohort is running. These results establish guest
 topology discovery on this kernel; they do not establish a startup-reliability
 or performance improvement.
+
+The [live snapshot-state report](benchmarks/2026-09-30/singleton-mptable-state.json)
+and [exact probe](benchmarks/2026-09-30/singleton-mptable-state-probe.py)
+exercise the rebuilt daemon with a newly created snapshot-backed base template
+at one vCPU and 1024 MiB. Guest kernel messages confirm the MP table and I/O
+APIC. Checkpoint restore rolls a file back from `after` to `before`;
+pause/resume preserves that value and command readiness; two forked guests
+both return `before`. Guest interrupt tables retain I/O APIC routes before and
+after restoration, with local-timer and virtio counts advancing. Artifact
+hashes remained unchanged and the isolated node's sandbox records and process
+were cleaned up. The first probe incorrectly used cold-only mode, which
+rejects checkpoints, and the second supplied an empty JSON pause body; those
+setup errors were corrected before this passing run. This validates snapshots
+created by this build, not persisted snapshots from an older build, density,
+fleet scale or performance superiority.
