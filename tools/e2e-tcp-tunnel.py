@@ -123,7 +123,10 @@ def main():
     parser.add_argument("--ssh-terminal", action="store_true", help="verify local/guest terminal resize and interrupt")
     parser.add_argument("--scheduled-dispatch", action="store_true", help="verify explicit scheduled VM dispatch and durable receipts")
     parser.add_argument("--scheduled-worker", action="store_true", help="verify automatic VM worker continuation and durable receipts")
+    parser.add_argument("--scheduled-calendar", action="store_true", help="verify cron fold occurrences through the VM worker")
     args = parser.parse_args()
+    if args.scheduled_calendar and not args.scheduled_worker:
+        parser.error("--scheduled-calendar requires --scheduled-worker")
     if args.ssh_by_name and not args.ssh_fixture:
         parser.error("--ssh-by-name requires --ssh-fixture")
     if args.ssh_pty and not args.ssh_fixture:
@@ -346,7 +349,15 @@ def main():
                     spec = directory / "vm-schedule.json"
                     marker = "literal'$(printf must-not-expand)"
                     script = "printf '%s\\n' \"$SCHEDULE_MARKER\" \"$HM_JOB_ID\"; printf x >> /tmp/scheduled-dispatch-count; exit 7"
-                    spec.write_text(json.dumps({"first_ms": 100, "every_ms": 10,
+                    times = (100, 110, 120)
+                    recurrence = {"first_ms": 100, "every_ms": 10}
+                    if args.scheduled_calendar:
+                        from datetime import datetime, timezone
+                        stamp = lambda day, hour: int(datetime(2025, 11, day, hour, 30, tzinfo=timezone.utc).timestamp() * 1000)
+                        times = (stamp(2, 8), stamp(2, 9), stamp(3, 9))
+                        assert int(time.time() * 1000) > times[2], "calendar fixture must be overdue"
+                        recurrence = {"first_ms": times[0] - 1800000, "cron": {"expression": "30 1 * * *", "timezone": "America/Los_Angeles"}}
+                    spec.write_text(json.dumps({**recurrence,
                         "vm": {"sandbox_id": id, "connection_profile": "local", "timeout_secs": 30},
                         "job": {"command": ["/bin/sh", "-c", script],
                                 "env": {"SCHEDULE_MARKER": marker}, "workdir": "/tmp"}}))
@@ -360,38 +371,44 @@ def main():
                         return json.loads(result.stdout) if succeeds and result.stdout.strip() else None
 
                     jobs("create", "guest-job", str(spec))
-                    jobs("publish", "guest-job", "--now-ms", "100", "--limit", "1")
+                    jobs("publish", "guest-job", "--now-ms", str(times[0]), "--limit", "1")
                     api("POST", f"/sandboxes/{id}/pause", {}, expected=204)
-                    result = jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1") if args.scheduled_worker else jobs("dispatch", "guest-job", "100", "--profiles", str(profiles))
+                    result = jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1") if args.scheduled_worker else jobs("dispatch", "guest-job", str(times[0]), "--profiles", str(profiles))
                     assert result["exit_code"] == 7 and result["timed_out"] is False
-                    assert result["stdout"] == marker + "\nguest-job--100\n"
+                    assert result["stdout"] == marker + f"\nguest-job--{times[0]}\n"
                     assert command(id, "cat /tmp/scheduled-dispatch-count") == "x"
-                    receipt = jobs("receipt", "guest-job", "100")["completion"]
+                    receipt = jobs("receipt", "guest-job", str(times[0]))["completion"]
                     assert receipt["stdout"] == result["stdout"] and receipt["exit_code"] == 7
                     assert receipt["stdout_truncated"] is False
-                    jobs("dispatch", "guest-job", "100", "--profiles", str(profiles), succeeds=False)
+                    if args.scheduled_calendar:
+                        assert receipt["origin"] == "api_response"
+                        assert jobs("status", "guest-job")["schedule"]["cron"]["tzdb_version"]
+                        assert times[1] - times[0] == 3600000
+                    jobs("dispatch", "guest-job", str(times[0]), "--profiles", str(profiles), succeeds=False)
                     assert command(id, "cat /tmp/scheduled-dispatch-count") == "x"
                     if args.scheduled_worker:
                         continued = jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1")
-                        assert continued["scheduled_ms"] == 110 and continued["exit_code"] == 7
-                        assert continued["stdout"] == marker + "\nguest-job--110\n"
+                        assert continued["scheduled_ms"] == times[1] and continued["exit_code"] == 7
+                        assert continued["stdout"] == marker + f"\nguest-job--{times[1]}\n"
                         assert command(id, "cat /tmp/scheduled-dispatch-count") == "xx"
-                        assert jobs("receipt", "guest-job", "110")["completion"]["stdout"] == continued["stdout"]
+                        assert jobs("receipt", "guest-job", str(times[1]))["completion"]["stdout"] == continued["stdout"]
                     if args.scheduled_worker:
-                        assert jobs("occurrences", "guest-job")[-1]["scheduled_ms"] == 120
+                        assert jobs("occurrences", "guest-job")[-1]["scheduled_ms"] == times[2]
                     jobs("cancel", "guest-job")
-                    jobs("publish", "guest-job", "--now-ms", "110", succeeds=False)
-                    assert jobs("receipt", "guest-job", "100")["completion"] == receipt
+                    jobs("publish", "guest-job", "--now-ms", str(times[1]), succeeds=False)
+                    assert jobs("receipt", "guest-job", str(times[0]))["completion"] == receipt
                     if args.scheduled_worker:
                         assert jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1") is None
                         assert command(id, "cat /tmp/scheduled-dispatch-count") == "xx"
-                        assert jobs("receipt", "guest-job", "120", succeeds=False) is None
+                        assert jobs("receipt", "guest-job", str(times[2]), succeeds=False) is None
                     return {"paused_guest_resumed": True, "guest_exit_code": 7,
                             "literal_environment_preserved": True, "durable_output_recovered": True,
                             "duplicate_guest_execution_refused": True, "history_survives_cancellation": True, "automatic_worker": args.scheduled_worker,
                             "restart_continues_next_occurrence": args.scheduled_worker,
-                            "cancelled_worker_leaves_pending_work_untouched": args.scheduled_worker}
-                case("scheduled-VM-worker-TLS-resume-restart-and-no-replay" if args.scheduled_worker else "scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
+                            "cancelled_worker_leaves_pending_work_untouched": args.scheduled_worker,
+                            "calendar_fold_distinct_utc_occurrences": args.scheduled_calendar,
+                            "scheduled_utc_ms": list(times) if args.scheduled_calendar else None}
+                case("scheduled-calendar-VM-worker-TLS-fold-resume-restart-and-no-replay" if args.scheduled_calendar else "scheduled-VM-worker-TLS-resume-restart-and-no-replay" if args.scheduled_worker else "scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
 
             if args.ssh_fixture:
                 fixture = args.ssh_fixture
