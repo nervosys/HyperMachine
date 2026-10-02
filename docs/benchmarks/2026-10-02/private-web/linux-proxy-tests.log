@@ -1,0 +1,30 @@
+   Compiling hv2-sandbox v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-sandbox)
+   Compiling hv2-guest-agent v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-guest-agent)
+   Compiling axum v0.8.9
+   Compiling tinytemplate v1.2.1
+   Compiling tracing-subscriber v0.3.23
+   Compiling reqwest v0.12.28
+   Compiling criterion v0.5.1
+   Compiling hv2-context v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-context)
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-core)
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.6
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-runtime)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-api)
+    Finished `test` profile [optimized + debuginfo] target(s) in 6m 28s
+     Running tests/sandbox_proxy_forwards.rs (/var/tmp/hm-competitive-target/debug/deps/sandbox_proxy_forwards-d60fce48bd5322bb)
+
+running 9 tests
+test an_http1_client_is_served_and_routed ... ok
+test an_unknown_sandbox_is_not_routed_anywhere ... ok
+test the_sdks_headers_route_when_the_hostname_cannot ... ok
+test a_hostname_with_no_sandbox_in_it_is_refused ... ok
+test a_dead_listener_is_unavailable_not_missing ... ok
+test a_plain_http_client_still_gets_an_http_status ... ok
+test a_grpc_client_is_refused_in_grpc_terms ... ok
+test a_request_for_a_sandbox_hostname_reaches_that_sandbox ... ok
+test a_sandbox_whose_listener_is_gone_answers_bad_gateway ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

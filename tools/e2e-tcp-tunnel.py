@@ -116,6 +116,7 @@ def terminal_check(argv, environment, register):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--private-web", action="store_true", help="verify dedicated browser login and trusted guest identity through the TLS/mTLS proxy")
     for name in ["daemon", "control-plane", "cli", "kernel", "initrd", "output"]:
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--ssh-fixture", type=Path,
@@ -174,6 +175,7 @@ def main():
     args.output.parent.mkdir(parents=True, exist_ok=True)
     processes, guests, logs, sockets = [], set(), {}, []
     key, token, inventory_key = (uuid.uuid4().hex for _ in range(3))
+    web_secret = uuid.uuid4().hex + uuid.uuid4().hex
 
     def case(name, action):
         row = {"name": name, "success": False}
@@ -345,11 +347,21 @@ def main():
                     HV2_ACCESS_AUDIT_KEY_FILE=str(directory / "audit.key"))
             if args.audit_resources:
                 control_environment["HV2_ACCESS_AUDIT_RESOURCES"] = "true"
-            start("control", [str(args.control_plane), "--store", store, "--namespace", namespace, "--port", str(api_port),
+            web_policy = directory / "web-access.json"
+            def web_policy_json(secret, expiry):
+                return json.dumps([{"subject":"fixture-user@example.test", "sha256":hashlib.sha256(secret.encode()).hexdigest(), "expires_at":expiry}])
+            control_args = []
+            if args.private_web:
+                web_policy.write_text(web_policy_json(web_secret, int(time.time())+600))
+                control_args = ["--web-access-file",str(web_policy),"--tls-cert",str(directory / "api.pem"),"--tls-key",str(directory / "api.key")]
+                refused = subprocess.run([str(args.control_plane),"--web-access-file",str(web_policy)],env=control_environment,capture_output=True,timeout=10)
+                if refused.returncode != 1 or b"requires proxy TLS and node mTLS" not in refused.stderr: raise RuntimeError("plaintext browser login startup was not refused")
+                report["private_web_transport_gate"] = {"plaintext_startup_refused":True}
+            control_process = start("control", [str(args.control_plane), "--store", store, "--namespace", namespace, "--port", str(api_port),
                 "--proxy-port", str(api_proxy), "--api-keys-file", str(policies), "--api-tls-cert", str(directory / "api.pem"),
                 "--api-tls-key", str(directory / "api.key"), "--mtls-ca", str(directory / "ca.pem"),
                 "--mtls-cert", str(directory / "control.pem"), "--mtls-key", str(directory / "control.key"),
-                "--mtls-node-name", "tcp-node.test"], control_environment)
+                "--mtls-node-name", "tcp-node.test"] + control_args, control_environment)
             deadline = time.monotonic() + 40
             while True:
                 if any(process.poll() is not None for _, process in processes):
@@ -365,6 +377,7 @@ def main():
                 time.sleep(.05)
             report["transport"] = "CLI -> verified API TLS -> control plane -> node mTLS plus cluster token -> vsock -> loopback guest TCP"
             create_body = {"templateID": "base", "timeout": 300, "allowInternetAccess": False}
+            if args.private_web: create_body["autoResume"] = {"enabled": True}
             ssh_name = "ssh-e2e-" + uuid.uuid4().hex
             if args.ssh_by_name and not args.reserved_alias:
                 create_body["metadata"] = {"hm.name": ssh_name, "fixture.marker":"preserve-through-fork"}
@@ -373,6 +386,85 @@ def main():
             guests.add(id)
             info = api("GET", f"/sandboxes/{id}")
             assert info["cpuCount"] == 1 and info["memoryMB"] == 1024
+            if args.private_web:
+                web_port = 18084
+                handler = """#!/bin/sh
+file=/tmp/hm-web-request-$$
+: > "$file"
+while IFS= read -r line; do
+    [ "$line" = "$(printf '\\r')" ] && break
+    printf '%s\\n' "$line" >> "$file"
+done
+length=$(wc -c < "$file")
+printf 'HTTP/1.1 200 OK\\r\\nContent-Type: text/plain\\r\\nContent-Length: %s\\r\\nConnection: close\\r\\n\\r\\n' "$length"
+cat "$file"
+rm -f "$file"
+"""
+                encoded = base64.b64encode(handler.encode()).decode()
+                command(id, f"printf %s {shlex.quote(encoded)} | busybox base64 -d > /tmp/hm-private-web-handler; chmod 700 /tmp/hm-private-web-handler; (while :; do busybox nc -l -p {web_port} -e /tmp/hm-private-web-handler; done) >/tmp/hm-private-web-server.log 2>&1 &")
+                def web(secret=None, expected=200, alias=None):
+                    connection = http.client.HTTPSConnection("127.0.0.1", api_proxy, context=context, timeout=10)
+                    headers = {"host":alias or f"{web_port}-{id}.sandbox.test", "x-hypermachine-user":"spoofed-user"}
+                    if secret is not None:
+                        headers["authorization"] = "Basic " + base64.b64encode(("fixture-user@example.test:"+secret).encode()).decode()
+                    try:
+                        connection.request("GET","/identity?check=1",headers=headers)
+                        response = connection.getresponse(); body=response.read()
+                        if response.status != expected: raise RuntimeError(f"private web status {response.status}, expected {expected}")
+                        if expected == 401:
+                            if not (response.getheader("www-authenticate") or "").startswith("Basic "): raise RuntimeError("browser login challenge missing")
+                        else:
+                            if response.getheader("cache-control") != "private, no-store": raise RuntimeError("private guest response is cacheable")
+                            lines=body.lower().splitlines()
+                            identities=[line.strip() for line in lines if line.startswith(b"x-hypermachine-user:")]
+                            if identities != [b"x-hypermachine-user: fixture-user@example.test"] or any(line.startswith(b"authorization:") for line in lines) or web_secret.encode() in body or b"spoofed-user" in body:
+                                raise RuntimeError("guest identity substitution or credential stripping failed")
+                        return {"status":response.status,"identity_from_policy":expected==200,"login_credential_absent":expected==200}
+                    finally: connection.close()
+                def web_login():
+                    web(expected=401); web("wrong",expected=401)
+                    deadline=time.monotonic()+10
+                    while True:
+                        try: return web(web_secret)
+                        except RuntimeError:
+                            if time.monotonic()>=deadline: raise
+                            time.sleep(.05)
+                case("private-web-browser-login-and-guest-identity",web_login)
+                alias="private-web.example.test"
+                api("PUT",f"/sandboxes/{id}/domains/{alias}",{"port":web_port})
+                case("private-web-custom-domain-authenticated",lambda:web(web_secret,alias=alias))
+                def no_unauthorized_wake():
+                    api("POST",f"/sandboxes/{id}/pause",{},expected=204)
+                    web(expected=401)
+                    if api("GET",f"/sandboxes/{id}")["state"]!="paused": raise RuntimeError("unauthorized guest URL resumed VM")
+                    api("POST",f"/sandboxes/{id}/resume",{"timeout":300},expected=201)
+                    return web(web_secret)
+                case("private-web-unauthorized-request-does-not-resume",no_unauthorized_wake)
+                def rotation():
+                    replacement=uuid.uuid4().hex+uuid.uuid4().hex
+                    web_policy.write_text(web_policy_json(replacement,int(time.time())+600)); control_process.send_signal(signal.SIGHUP)
+                    deadline=time.monotonic()+5
+                    while True:
+                        try: web(web_secret,expected=401); break
+                        except RuntimeError:
+                            if time.monotonic()>=deadline: raise
+                            time.sleep(.05)
+                    web(replacement)
+                    web_policy.write_text("[]"); control_process.send_signal(signal.SIGHUP)
+                    deadline=time.monotonic()+5
+                    while "web access reload rejected" not in (directory / "control.log").read_text():
+                        if time.monotonic()>=deadline: raise RuntimeError("invalid web policy reload was not observed")
+                        time.sleep(.05)
+                    web(replacement)
+                    web_policy.write_text(web_policy_json(replacement,1)); control_process.send_signal(signal.SIGHUP)
+                    deadline=time.monotonic()+5
+                    while True:
+                        try: web(replacement,expected=401); break
+                        except RuntimeError:
+                            if time.monotonic()>=deadline: raise
+                            time.sleep(.05)
+                    return {"old_key_revoked":True,"invalid_reload_preserved_policy":True,"expired_key_refused":True}
+                case("private-web-policy-reload-and-expiry",rotation)
             if args.observer_role:
                 def observer_capabilities():
                     listed = api("GET", "/sandboxes", supplied_key=inventory_key)
@@ -1182,6 +1274,13 @@ def main():
                     report["access_audit"] = dict(result, credentials_absent=True, synthetic_key_hex="42 repeated 32 times")
                 except Exception as error:
                     report["cleanup_errors"].append(f"access audit verification: {error}")
+            try:
+                report["artifact_sha256_after"] = {name: digest(path) for name, path in paths.items()}
+                report["artifacts_unchanged"] = report["artifact_sha256_after"] == report["artifact_sha256"]
+                if not report["artifacts_unchanged"]:
+                    report["cleanup_errors"].append("fixture artifacts changed during verification")
+            except Exception as error:
+                report["cleanup_errors"].append(f"final artifact verification: {error}")
             if report["cleanup_errors"]:
                 report["success"] = False
             args.output.write_text(json.dumps(report, indent=2) + "\n")
