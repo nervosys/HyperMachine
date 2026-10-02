@@ -58,9 +58,11 @@ pub trait ClusterStore: Send + Sync {
     async fn sandboxes(&self) -> Result<Vec<SandboxRecord>>;
 
     /// Atomically reserve pending ownership. True includes same-token replay.
-    /// Bound reservations must be created through a future atomic bind operation.
+    /// Bound reservations must be created through the atomic bind operation.
     async fn reserve_name(&self, reservation: &NameReservation) -> Result<bool>;
     async fn name_reservation(&self, name: &SandboxName) -> Result<Option<NameReservation>>;
+    /// Bind matching pending ownership to an existing sandbox; same-target replay succeeds.
+    async fn bind_name(&self, name: &SandboxName, token: &str, sandbox: &str) -> Result<bool>;
     /// Release pending ownership only with its matching operation token.
     async fn release_pending_name(&self, name: &SandboxName, token: &str) -> Result<bool>;
 
@@ -170,6 +172,9 @@ impl ClusterStore for MemoryStore {
         state
             .domains
             .retain(|_, binding| binding.sandbox_id() != id);
+        state
+            .names
+            .retain(|_, reservation| reservation.sandbox_id() != Some(id));
         Ok(state.records.remove(id).is_some())
     }
 
@@ -194,6 +199,17 @@ impl ClusterStore for MemoryStore {
             .insert(reservation.name().clone(), reservation.clone());
         Ok(true)
     }
+    async fn bind_name(&self, name: &SandboxName, token: &str, sandbox: &str) -> Result<bool> {
+        let mut state = self.sandboxes.lock();
+        if !state.records.contains_key(sandbox) {
+            return Ok(false);
+        }
+        let Some(reservation) = state.names.get_mut(name) else {
+            return Ok(false);
+        };
+        Ok(reservation.bind(token, sandbox).is_ok())
+    }
+
     async fn name_reservation(&self, name: &SandboxName) -> Result<Option<NameReservation>> {
         Ok(self.sandboxes.lock().names.get(name).cloned())
     }
@@ -528,16 +544,26 @@ for _, name in ipairs(names) do
     end
 end
 redis.call('DEL', KEYS[3])
+local reserved = redis.call('SMEMBERS', KEYS[5])
+for _, name in ipairs(reserved) do
+    local value = redis.call('HGET', KEYS[6], name)
+    if value and cjson.decode(value).sandbox_id == ARGV[1] then
+        redis.call('HDEL', KEYS[6], name)
+    end
+end
+redis.call('DEL', KEYS[5])
 local deleted = redis.call('DEL', KEYS[1])
 redis.call('SREM', KEYS[2], ARGV[1])
 return deleted
 "#,
             )
-            .arg(4)
+            .arg(6)
             .arg(self.key(&format!("sandbox:{id}")))
             .arg(self.key("sandboxes"))
             .arg(self.key(&format!("domains:{id}")))
             .arg(self.key("domains"))
+            .arg(self.key(&format!("reserved-names:{id}")))
+            .arg(self.key("name-reservations"))
             .arg(id)
             .query_async(&mut c)
             .await
@@ -575,6 +601,41 @@ return 1
             .map_err(redis_error)?;
         Ok(result == 1)
     }
+    async fn bind_name(&self, name: &SandboxName, token: &str, sandbox: &str) -> Result<bool> {
+        let Some(mut reservation) = self.name_reservation(name).await? else {
+            return Ok(false);
+        };
+        if reservation.bind(token, sandbox).is_err() {
+            return Ok(false);
+        }
+        let mut c = self.connection.clone();
+        let result: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local existing = redis.call('HGET', KEYS[1], ARGV[1])
+if not existing or redis.call('EXISTS', KEYS[2]) == 0 then return 0 end
+local value = cjson.decode(existing)
+if value.token ~= ARGV[2] then return 0 end
+if value.sandbox_id ~= cjson.null and value.sandbox_id ~= ARGV[3] then return 0 end
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[4])
+redis.call('SADD', KEYS[3], ARGV[1])
+return 1
+"#,
+            )
+            .arg(3)
+            .arg(self.key("name-reservations"))
+            .arg(self.key(&format!("sandbox:{sandbox}")))
+            .arg(self.key(&format!("reserved-names:{sandbox}")))
+            .arg(name.as_str())
+            .arg(token)
+            .arg(sandbox)
+            .arg(serde_json::to_string(&reservation).map_err(json_error)?)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(result == 1)
+    }
+
     async fn name_reservation(&self, name: &SandboxName) -> Result<Option<NameReservation>> {
         let mut c = self.connection.clone();
         let value: Option<String> = redis::cmd("HGET")
@@ -942,6 +1003,58 @@ pub(crate) mod tests {
 
     /// The contract, run against any store.
     pub(crate) async fn contract(store: &dyn ClusterStore) {
+        let bound_name = SandboxName::parse("binding-fixture").unwrap();
+        let reservation = NameReservation::pending(bound_name.clone());
+        let token = reservation.operation_token();
+        assert!(store.reserve_name(&reservation).await.unwrap());
+        assert!(!store
+            .bind_name(&bound_name, token, "binding-old")
+            .await
+            .unwrap());
+        store
+            .put_sandbox(&sandbox("binding-old", "a"))
+            .await
+            .unwrap();
+        assert!(!store
+            .bind_name(&bound_name, "wrong", "binding-old")
+            .await
+            .unwrap());
+        assert!(store
+            .bind_name(&bound_name, token, "binding-old")
+            .await
+            .unwrap());
+        assert!(store
+            .bind_name(&bound_name, token, "binding-old")
+            .await
+            .unwrap());
+        assert!(!store
+            .release_pending_name(&bound_name, token)
+            .await
+            .unwrap());
+        assert!(store.delete_sandbox("binding-old").await.unwrap());
+        assert!(store.name_reservation(&bound_name).await.unwrap().is_none());
+        let replacement = NameReservation::pending(bound_name.clone());
+        assert!(store.reserve_name(&replacement).await.unwrap());
+        store
+            .put_sandbox(&sandbox("binding-new", "a"))
+            .await
+            .unwrap();
+        assert!(store
+            .bind_name(&bound_name, replacement.operation_token(), "binding-new")
+            .await
+            .unwrap());
+        assert!(!store.delete_sandbox("binding-old").await.unwrap());
+        assert_eq!(
+            store
+                .name_reservation(&bound_name)
+                .await
+                .unwrap()
+                .unwrap()
+                .sandbox_id(),
+            Some("binding-new")
+        );
+        assert!(store.delete_sandbox("binding-new").await.unwrap());
+
         let name = SandboxName::parse("reservation-fixture").unwrap();
         let a = NameReservation::pending(name.clone());
         let b = NameReservation::pending(name.clone());
