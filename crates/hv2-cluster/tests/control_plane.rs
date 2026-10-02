@@ -761,6 +761,15 @@ async fn control_plane_with_keys(
     api_key: Option<&str>,
     api_keys: Vec<hv2_cluster::keys::ApiKeyPolicy>,
 ) -> String {
+    control_plane_with_timeout(store, api_key, api_keys, Duration::from_secs(10)).await
+}
+
+async fn control_plane_with_timeout(
+    store: Arc<dyn ClusterStore>,
+    api_key: Option<&str>,
+    api_keys: Vec<hv2_cluster::keys::ApiKeyPolicy>,
+    create_timeout: Duration,
+) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let control = ControlPlane::new(
@@ -770,7 +779,7 @@ async fn control_plane_with_keys(
             api_keys,
             cluster_token: Some(TOKEN.into()),
             proxy_port: 5981,
-            create_timeout: Duration::from_secs(10),
+            create_timeout,
             identity_issuer: Some("https://issuer.test".into()),
         },
     );
@@ -1525,4 +1534,196 @@ async fn name_assignment_is_authenticated_exclusive_and_reusable_after_deletion(
     assert_eq!(resolved, json!({"name":"alias","sandboxID":loser}));
     legacy_node.abort();
     let _ = legacy_node.await;
+}
+
+#[tokio::test]
+async fn named_creation_reserves_before_forwarding_across_control_planes() {
+    use hv2_cluster::names::SandboxName;
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (node, heartbeat) = fake_node(store.clone(), "named", 8, Duration::from_secs(30)).await;
+    let a = control_plane(store.clone(), Some(KEY)).await;
+    let b = control_plane(store.clone(), Some(KEY)).await;
+    let body = json!({"templateID":"base", "metadata":{"hm.name":"exclusive"}});
+    let request = |base: &str, path: &str, body: Value| {
+        client()
+            .post(format!("{base}{path}"))
+            .header("x-api-key", KEY)
+            .json(&body)
+            .send()
+    };
+    let (ra, rb) = tokio::join!(
+        request(&a, "/sandboxes", body.clone()),
+        request(&b, "/v2/sandboxes", body.clone())
+    );
+    let ra = ra.unwrap();
+    let rb = rb.unwrap();
+    assert!(matches!(
+        (ra.status().as_u16(), rb.status().as_u16()),
+        (201, 409) | (409, 201)
+    ));
+    let winner = if ra.status().is_success() { ra } else { rb };
+    let descriptor = winner.json::<Value>().await.unwrap();
+    let id = descriptor["sandboxID"].as_str().unwrap();
+    assert_eq!(node.running.lock().len(), 1);
+    let name = SandboxName::parse("exclusive").unwrap();
+    let reservation = store.name_reservation(&name).await.unwrap().unwrap();
+    assert_eq!(reservation.sandbox_id(), Some(id));
+    assert!(!descriptor
+        .to_string()
+        .contains(reservation.operation_token()));
+    assert_eq!(
+        request(&a, "/sandboxes", body.clone())
+            .await
+            .unwrap()
+            .status(),
+        409
+    );
+    for invalid in [json!("bad name"), json!(""), json!(12), Value::Null] {
+        assert_eq!(
+            request(
+                &a,
+                "/sandboxes",
+                json!({"templateID":"base","metadata":{"hm.name":invalid}})
+            )
+            .await
+            .unwrap()
+            .status(),
+            400
+        );
+    }
+    assert_eq!(node.running.lock().len(), 1);
+    assert_eq!(
+        client()
+            .delete(format!("{a}/sandboxes/{id}"))
+            .header("x-api-key", KEY)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        204
+    );
+    assert!(store.name_reservation(&name).await.unwrap().is_none());
+    assert_eq!(
+        request(&b, "/v2/sandboxes", body).await.unwrap().status(),
+        201
+    );
+    heartbeat.abort();
+    let _ = heartbeat.await;
+}
+
+#[tokio::test]
+async fn uncertain_named_creation_keeps_ownership_and_never_tries_another_node() {
+    use hv2_cluster::names::SandboxName;
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (a, ha) = fake_node(store.clone(), "a", 8, Duration::from_secs(30)).await;
+    let (b, hb) = fake_node(store.clone(), "b", 8, Duration::from_secs(30)).await;
+    ha.abort();
+    let _ = ha.await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mut info = store.node("a").await.unwrap().unwrap();
+    info.api = format!("http://{}", listener.local_addr().unwrap());
+    // Keep the first node preferred even after its created() announcement.
+    let mut other = store.node("b").await.unwrap().unwrap();
+    other.running = 7;
+    hb.abort();
+    let _ = hb.await;
+    store
+        .put_node(&other, Duration::from_secs(30))
+        .await
+        .unwrap();
+    let app =
+        Router::new()
+            .route(
+                "/v2/sandboxes",
+                post(
+                    |State(node): State<Arc<FakeNode>>,
+                     headers: HeaderMap,
+                     Json(body): Json<Value>| async move {
+                        let mode = body["metadata"]["test.mode"].as_str().unwrap().to_owned();
+                        let result = node_create(State(node), headers, Json(body)).await;
+                        assert_eq!(result.status(), StatusCode::CREATED);
+                        match mode.as_str() {
+                            "unavailable" => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+                            "malformed" => (StatusCode::CREATED, "invalid JSON").into_response(),
+                            "timeout" => {
+                                tokio::time::sleep(Duration::from_secs(1)).await;
+                                result
+                            }
+                            _ => (
+                                StatusCode::CREATED,
+                                Json(json!({"sandboxID":"wrong-target"})),
+                            )
+                                .into_response(),
+                        }
+                    },
+                ),
+            )
+            .with_state(a.clone());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let base = control_plane_with_timeout(
+        store.clone(),
+        Some(KEY),
+        Vec::new(),
+        Duration::from_millis(500),
+    )
+    .await;
+    for (mode, status) in [
+        ("unavailable", 503),
+        ("malformed", 502),
+        ("mismatch", 502),
+        ("timeout", 502),
+    ] {
+        store
+            .put_node(&info, Duration::from_secs(30))
+            .await
+            .unwrap();
+        let body = json!({"templateID":"base","metadata":{"hm.name":mode,"test.mode":mode}});
+        let (actual, _) = create(&base, body.clone()).await;
+        assert_eq!(actual, status);
+        let name = SandboxName::parse(mode).unwrap();
+        let reservation = store.name_reservation(&name).await.unwrap().unwrap();
+        assert!(reservation.sandbox_id().is_none());
+        assert_eq!(create(&base, body).await.0, 409);
+        assert!(b.running.lock().is_empty());
+    }
+    assert_eq!(a.running.lock().len(), 4);
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let another = control_plane(store.clone(), Some(KEY)).await;
+    assert_eq!(
+        create(
+            &another,
+            json!({"templateID":"base","metadata":{"hm.name":"timeout"}})
+        )
+        .await
+        .0,
+        409
+    );
+    assert!(store
+        .name_reservation(&SandboxName::parse("timeout").unwrap())
+        .await
+        .unwrap()
+        .unwrap()
+        .sandbox_id()
+        .is_none());
+    task.abort();
+    let _ = task.await;
+    // An unreachable node also leaves an uncertain reservation, without fallback.
+    store
+        .put_node(&info, Duration::from_secs(30))
+        .await
+        .unwrap();
+    let (status, _) = create(
+        &base,
+        json!({"templateID":"base","metadata":{"hm.name":"unreachable"}}),
+    )
+    .await;
+    assert_eq!(status, 502);
+    assert!(store
+        .name_reservation(&SandboxName::parse("unreachable").unwrap())
+        .await
+        .unwrap()
+        .unwrap()
+        .sandbox_id()
+        .is_none());
+    assert!(b.running.lock().is_empty());
 }

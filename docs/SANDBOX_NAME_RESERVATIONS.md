@@ -1,12 +1,12 @@
 # Atomic sandbox name reservations design
 
-This is a proposed implementation contract for closing the named SSH gap. Atomic pending reservation primitives are implemented, but named creation enforcement is not implemented. Existing `hm.name` metadata and CLI ambiguity rejection remain the current behavior. The design requires shared ownership in MemoryStore and RedisStore, rather than a control-plane process lock.
+This is a proposed implementation contract for closing the named SSH gap. Atomic pending reservations and enforcement for named creates through the current control plane are implemented. Direct-node and legacy metadata migration enforcement remain incomplete. The design requires shared ownership in MemoryStore and RedisStore, rather than a control-plane process lock.
 
 ## Current behavior and the creation race
 
-The CLI accepts 1–64 ASCII letters, digits, hyphens, underscores or dots, excluding the dot segments `.` and `..`. Names are case sensitive. Creation writes `hm.name` metadata; lookup filters the v1 sandbox inventory and refuses zero or multiple exact matches. Metadata does not reserve a name.
+The CLI accepts 1–64 ASCII letters, digits, hyphens, underscores or dots, excluding the dot segments `.` and `..`. Names are case sensitive. Creation writes `hm.name` metadata. The current control plane also reserves that name before forwarding; older servers and direct-node creation still treat metadata as advisory. Lookup prefers reserved ownership and falls back to the v1 inventory only for an unreserved name, refusing zero or multiple exact matches.
 
-`ControlPlane::create_inner` selects nodes and forwards the create body. The node assigns the sandbox ID. Transport errors currently permit trying another node. Therefore a named create cannot reserve ownership by sandbox ID in advance, and a timeout does not prove that the first node failed to create a VM. Reserving only after a successful response can leave duplicate live named VMs. A process-local lock also fails across replicas.
+`ControlPlane::create_inner` selects nodes and forwards the create body. The node assigns the sandbox ID. Transport errors permit trying another node only for unnamed requests; named requests retain pending ownership and stop. Therefore a named create cannot reserve ownership by sandbox ID in advance, and a timeout does not prove that the first node failed to create a VM. Reserving only after a successful response can leave duplicate live named VMs. A process-local lock also fails across replicas.
 
 ## Proposed ownership contract
 
@@ -45,7 +45,7 @@ Introduce dedicated authenticated reservation and name-resolution interfaces ins
 | Shipped CLI behavior | Named SSH reaches the sole reserved guest through the authenticated KVM/TLS fixture, with no duplicate or stale-owner fallback |
 | Cost | Matched name-create and resolve measurements on the same guest, store and concurrency, including conflicts, errors and cleanup |
 
-The feature comparison must continue to mark atomic name reservations absent until these interfaces and invariants are implemented and verified. A store primitive or a successful single-process lookup alone does not complete the feature.
+The feature comparison must continue to mark cluster-wide creation ownership incomplete until these interfaces and invariants are implemented and verified. A store primitive or a successful single-process lookup alone does not complete the feature.
 
 ## Implemented store foundation
 
@@ -61,4 +61,12 @@ An authenticated `PUT /sandboxes/{id}/names/{name}` now assigns a reserved alias
 
 A failed bind with a definitive false result conditionally releases its pending reservation. A store error has unknown outcome and retains ownership for reconciliation. If assignment crashes after reserving but before binding, the name remains pending and later assignments receive a conflict. An operator recovery interface and explicit alias removal remain incomplete. Real KVM alias validation now passes all 20 checks; the preserved first run exposed older-node deletion cleanup, which the control plane now performs before acknowledging a successful sandbox DELETE. Cleanup failure returns 503. The shipped CLI provides `hm sandbox vm alias bind VM_ID NAME` and `hm sandbox vm alias inspect NAME`; both use authenticated requests with responses capped at 65536 bytes. Inspect reads reserved ownership directly and never falls back to metadata. Invalid names are rejected before sending a request.
 
-Node operation identity, creation-time enforcement and legacy migration remain unimplemented. `create --name` still writes advisory metadata; it does not use the new alias assignment endpoint automatically. These primitives alone do not close the named SSH feature gap.
+## Control-plane named creation enforcement
+
+Both `POST /sandboxes` and `POST /v2/sandboxes` now reserve a validated metadata `hm.name` before forwarding to any node. Observed legacy metadata conflicts are refused. Requests racing through separate control-plane instances share store ownership and produce one winner; a repeated name gets 409. Successful creation binds the reservation only after the descriptor ID matches an existing sandbox record on the selected node with the requested metadata name. The response does not expose the operation token. Deletion releases bound ownership and permits a new named creation.
+
+Named requests do not retry another node after a connection failure, timeout, 503 or 429. Malformed success responses, mismatched records, store errors and other node errors retain pending ownership rather than assume that creation failed. This deliberately also retains names after definitive refusals until the node protocol can prove their outcome. A late response does not automatically bind or release the pending name. Unnamed creation retains its existing retry behavior.
+
+All 21 control-plane HTTP tests passed on Windows and Linux, with strict library/test Clippy on both. New tests race the v1/v2 routes across two control planes, verify one node creation, invalid-name rejection and deletion/reuse, and simulate a node that records a VM before returning 503, malformed JSON, a mismatched descriptor or a delayed response exceeding the HTTP timeout. Another control plane still sees the timed-out name as unavailable; an unreachable node also prevents fallback. These creation-route tests use MemoryStore and fake nodes. Live Redis store primitives and existing-VM aliases have separate evidence; named creation through a real KVM node has not yet been verified.
+
+Durable node operation identity, atomic exclusion of direct-node/legacy metadata races, operator reconciliation and creation idempotency remain unimplemented. Pending outcomes cannot currently be safely recovered through a public API. These limits keep the broader exclusive-name feature incomplete.
