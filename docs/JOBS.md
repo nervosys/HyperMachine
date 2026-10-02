@@ -274,7 +274,9 @@ remains unverified.
 
 Windows and Linux protocol fixtures verify completion, continuation after
 restart and refusal to dispatch again after an uncertain response. [A separate KVM/TLS run](benchmarks/2026-10-01/scheduled-worker.md) also verifies
-automatic paused-guest dispatch and continuation after restart. A Linux protocol
+automatic paused-guest dispatch and continuation after restart. [A rebuilt-CLI KVM check](benchmarks/2026-10-01/scheduled-worker-cancel.md)
+verifies the selection optimizations and that a worker started after cancellation
+leaves pending committed work unclaimed. A Linux protocol
 regression also holds an accepted execution response across SIGINT, verifies
 that the worker waits, then checks its persisted completion and absence of a
 later claim. This interruption check does not verify guest-side cancellation. The explicit
