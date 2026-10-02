@@ -69,3 +69,5 @@ through API TLS and node mTLS: exact 1 MiB binary roundtrip, remote exit code,
 rejected client key and rejected guest host key. Guest SSH provisioning and
 atomic name reservations remain unimplemented; this addition
 establishes no performance comparison.
+
+Named connections now prefer authenticated `GET /sandbox-names/{name}` resolution when a bound reservation exists. Pending reservations and authorization or server errors stop the connection. Metadata fallback is limited to an explicitly unreserved name or an older server with an empty route-not-found response; it continues to refuse duplicate names. See [reservation status and remaining creation work](SANDBOX_NAME_RESERVATIONS.md).

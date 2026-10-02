@@ -6,6 +6,18 @@ async fn tcp_stdio_is_binary_clean_and_exits_when_guest_closes_with_stdin_open()
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let app = Router::new()
         .route(
+            "/sandbox-names/{name}",
+            axum::routing::get(
+                |axum::extract::Path(name): axum::extract::Path<String>| async move {
+                    if name == "echo" {
+                        Json(json!({"name":"echo","sandboxID":"echo"})).into_response()
+                    } else {
+                        StatusCode::NOT_FOUND.into_response()
+                    }
+                },
+            ),
+        )
+        .route(
             "/sandboxes",
             axum::routing::get(
                 |axum::extract::Query(query): axum::extract::Query<
@@ -753,5 +765,75 @@ async fn benchmark_bounds_live_sandboxes_and_fails_a_missed_latency_gate() {
     assert_eq!(counts.created.load(Ordering::SeqCst), 4);
     assert_eq!(counts.live.load(Ordering::SeqCst), 0);
     assert!(counts.peak.load(Ordering::SeqCst) <= 2);
+    server.abort();
+}
+
+#[tokio::test]
+async fn reserved_name_errors_never_fall_back_to_legacy_metadata() {
+    use axum::{http::StatusCode, response::IntoResponse};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counter = calls.clone();
+    let app = Router::new()
+        .route(
+            "/sandbox-names/{name}",
+            axum::routing::get(
+                |axum::extract::Path(name): axum::extract::Path<String>| async move {
+                    match name.as_str() {
+                        "pending" => StatusCode::CONFLICT.into_response(),
+                        "forbidden" => StatusCode::FORBIDDEN.into_response(),
+                        "unavailable" => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+                        "gone" => (
+                            StatusCode::NOT_FOUND,
+                            Json(json!({"message":"named sandbox is missing"})),
+                        )
+                            .into_response(),
+                        "malformed" => {
+                            Json(json!({"name":"wrong","sandboxID":"vm"})).into_response()
+                        }
+                        _ => unreachable!(),
+                    }
+                },
+            ),
+        )
+        .route(
+            "/sandboxes",
+            axum::routing::get(move || {
+                counter.fetch_add(1, Ordering::SeqCst);
+                async { Json(json!([])) }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    for (name, message) in [
+        ("pending", "409"),
+        ("forbidden", "403"),
+        ("unavailable", "503"),
+        ("gone", "404"),
+        ("malformed", "mismatches"),
+    ] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args([
+                "sandbox",
+                "vm",
+                "--endpoint",
+                &endpoint,
+                "tcp-stdio",
+                "--name",
+                name,
+            ])
+            .env("HV2_API_KEY", "fixture")
+            .output()
+            .await
+            .unwrap();
+        assert_eq!(output.status.code(), Some(1));
+        assert!(String::from_utf8_lossy(&output.stderr).contains(message));
+        assert!(output.stdout.is_empty());
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
     server.abort();
 }
