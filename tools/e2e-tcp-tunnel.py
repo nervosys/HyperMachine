@@ -121,6 +121,7 @@ def main():
     parser.add_argument("--ssh-fixture", type=Path,
                         help="build-ssh-fixture.py output; opt in to real OpenSSH guest checks")
     parser.add_argument("--access-audit", action="store_true", help="verify durable credential-free control-plane audit records with a synthetic fixture key")
+    parser.add_argument("--audit-resources", action="store_true", help="verify opt-in keyed sandbox references during KVM lifecycle requests (requires --access-audit)")
     parser.add_argument("--observer-role", action="store_true", help="cap an admin-scoped fixture key with the observer role and verify it against a real guest")
     parser.add_argument("--ssh-by-name", action="store_true", help="resolve the SSH guest by its metadata label")
     parser.add_argument("--ssh-pty", action="store_true", help="verify guest PTY allocation and terminal input")
@@ -161,6 +162,8 @@ def main():
         parser.error("--ssh-pty requires --ssh-fixture")
     if args.ssh_terminal and not (args.ssh_fixture and args.ssh_pty):
         parser.error("--ssh-terminal requires --ssh-fixture and --ssh-pty")
+    if args.audit_resources and not args.access_audit:
+        parser.error("--audit-resources requires --access-audit")
     paths = {name: getattr(args, name.replace("-", "_")) for name in ["daemon", "control-plane", "cli", "kernel", "initrd"]}
     paths["coordinator"] = Path(__file__)
     if args.access_audit:
@@ -340,6 +343,8 @@ def main():
                 (directory / "audit.key").write_text("42" * 32 + "\n")
                 control_environment.update(HV2_ACCESS_AUDIT=str(directory / "access.jsonl"),
                     HV2_ACCESS_AUDIT_KEY_FILE=str(directory / "audit.key"))
+            if args.audit_resources:
+                control_environment["HV2_ACCESS_AUDIT_RESOURCES"] = "true"
             start("control", [str(args.control_plane), "--store", store, "--namespace", namespace, "--port", str(api_port),
                 "--proxy-port", str(api_proxy), "--api-keys-file", str(policies), "--api-tls-cert", str(directory / "api.pem"),
                 "--api-tls-key", str(directory / "api.key"), "--mtls-ca", str(directory / "ca.pem"),
@@ -1162,6 +1167,17 @@ def main():
                     assert result["verified_records"] > 0 and result["uncompleted_admissions"] == 0
                     assert result["completion_statuses"].get("201", 0) > 0
                     assert result["completion_statuses"].get("401", 0) > 0
+                    if args.audit_resources:
+                        import hmac
+                        events = [json.loads(line)["event"] for line in raw.splitlines()]
+                        refs = [e for e in events if "sandbox_ref" in e]
+                        assert refs, "no sandbox references recorded"
+                        target = hmac.new(bytes.fromhex("42" * 32), b"HyperMachine access resource v1\0sandbox\0" + id.encode(), hashlib.sha256).hexdigest()
+                        target_events = [e for e in refs if e["sandbox_ref"] == target]
+                        assert len(target_events) >= 4, "guest target not correlated across operations"
+                        assert id.encode() not in raw, "raw sandbox ID recorded"
+                        assert any(e["phase"] == "completion" and e["allowed"] and 200 <= e["status"] < 300 for e in target_events)
+                        report["resource_audit"] = {"target_events": len(target_events), "referenced_events": len(refs), "raw_id_absent": True}
                     args.output.with_name(args.output.stem + "-access.jsonl").write_bytes(raw)
                     report["access_audit"] = dict(result, credentials_absent=True, synthetic_key_hex="42 repeated 32 times")
                 except Exception as error:

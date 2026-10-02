@@ -36,6 +36,7 @@ form_urlencoded = "1"
 uuid = { workspace = true }
 # Webhook signatures, as E2B computes them.
 sha2 = "0.11"
+hmac = "0.13"
 
 # CubeMaster coordinates through Redis; so does this, and Valkey speaks the
 # same protocol. TLS (`rediss://`) through rustls with default features off,
