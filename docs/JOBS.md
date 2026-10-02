@@ -352,8 +352,12 @@ It requires an existing claim, validates its token and output bounds, and writes
 an immutable completion. Identical replay is accepted; a different result is
 refused. Recording completion allows the next ordered occurrence to be claimed,
 so an incorrect assertion can allow overlapping guest work. There is no claim
-reset or retry command. Receipts use the same schema as automatic completions;
-keep the independent evidence in operator records. Cross-process CLI tests check
+reset or retry command. Receipts persist `origin`: `api_response` for results observed by the dispatcher,
+`operator_recorded` for CLI or HTTP recovery, and `unknown` for legacy receipts.
+Recovery handlers set this field themselves and override any supplied origin.
+Origin is part of the immutable result, so operator recovery cannot relabel an
+existing API receipt. It describes the recording path, not proof of execution
+or side effects; keep the independent evidence in operator records. Cross-process CLI tests check
 wrong-token refusal, persistence, identical replay, conflicting-result refusal,
 invalid status refusal and prevention of completion without a claim.
 

@@ -146,8 +146,9 @@ async fn schedule_receipt(
 async fn schedule_record_result(
     State(api): State<Api>,
     Path((id, scheduled_ms)): Path<(String, u64)>,
-    Json(completion): Json<crate::dispatch::DispatchCompletion>,
+    Json(mut completion): Json<crate::dispatch::DispatchCompletion>,
 ) -> Response {
+    completion.origin = crate::dispatch::CompletionOrigin::OperatorRecorded;
     schedule_operation(StatusCode::OK, move || {
         api.store
             .complete_vm_occurrence(&id, scheduled_ms, &completion)?;
@@ -464,7 +465,7 @@ mod tests {
         let state: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(state["claim"]["token"], claim.token);
         assert!(state["completion"].is_null());
-        let mut result = json!({"claim_token":"wrong","exit_code":7,"timed_out":false,
+        let mut result = json!({"origin":"api_response","claim_token":"wrong","exit_code":7,"timed_out":false,
             "stdout":"durable output","stderr":"","stdout_truncated":false});
         for presented in [None, Some("wrong")] {
             assert_eq!(
@@ -533,6 +534,7 @@ mod tests {
         let (status, body) = call(&reopened, "GET", path, None, token).await;
         assert_eq!(status, StatusCode::OK);
         let state: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(state["completion"]["origin"], "operator_recorded");
         assert_eq!(state["completion"]["stdout"], "durable output");
         assert_eq!(state["completion"]["exit_code"], 7);
         assert_eq!(

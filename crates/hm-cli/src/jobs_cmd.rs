@@ -208,8 +208,9 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
                 } => {
                     let text = std::fs::read_to_string(&result)
                         .with_context(|| format!("reading {}", result.display()))?;
-                    let completion =
+                    let mut completion: hv2_jobs::dispatch::DispatchCompletion =
                         serde_json::from_str(&text).context("the verified dispatch completion")?;
+                    completion.origin = hv2_jobs::dispatch::CompletionOrigin::OperatorRecorded;
                     s.complete_vm_occurrence(&id, scheduled_ms, &completion)?;
                     serde_json::json!({"schedule_id":id,"scheduled_ms":scheduled_ms,"completion_recorded":true})
                 }

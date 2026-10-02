@@ -345,6 +345,15 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
         cmd
     };
     let result = success(worker().output().await.unwrap());
+    assert_eq!(
+        store
+            .vm_dispatch_state("run", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .origin,
+        hv2_jobs::dispatch::CompletionOrigin::ApiResponse
+    );
     assert_eq!(result["exit_code"], 7);
     assert_eq!(result["stdout"], "guest output");
     let receipt = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
@@ -526,7 +535,7 @@ fn operator_result_requires_claim_token_and_preserves_immutable_completion() {
         .unwrap();
     assert!(store.next_vm_occurrence("recover").is_err());
     let file = dir.path().join("result.json");
-    let mut result = json!({"claim_token":"wrong","exit_code":7,"timed_out":false,
+    let mut result = json!({"origin":"api_response","claim_token":"wrong","exit_code":7,"timed_out":false,
         "stdout":"independently verified output","stderr":""});
     let run = || {
         invoke(
@@ -544,6 +553,15 @@ fn operator_result_requires_claim_token_and_preserves_immutable_completion() {
     result["claim_token"] = json!(claim.token);
     std::fs::write(&file, result.to_string()).unwrap();
     assert_eq!(success(run())["completion_recorded"], true);
+    assert_eq!(
+        store
+            .vm_dispatch_state("recover", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .origin,
+        hv2_jobs::dispatch::CompletionOrigin::OperatorRecorded
+    );
     success(run());
     let reopened = hv2_jobs::Store::open(store.root()).unwrap();
     assert_eq!(

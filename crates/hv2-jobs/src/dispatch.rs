@@ -12,10 +12,23 @@ pub struct DispatchClaim {
     pub token: String,
 }
 
+/// How the result was obtained. Unknown preserves receipts written before
+/// provenance was recorded; no origin proves exactly-once side effects.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CompletionOrigin {
+    #[default]
+    Unknown,
+    ApiResponse,
+    OperatorRecorded,
+}
+
 /// A guest result, not proof of exactly-once external side effects.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DispatchCompletion {
+    #[serde(default)]
+    pub origin: CompletionOrigin,
     pub claim_token: String,
     pub exit_code: Option<i32>,
     pub timed_out: bool,
@@ -247,6 +260,7 @@ mod tests {
             .claim_vm_occurrence("dispatch", 100, "replacement")
             .is_err());
         let mut result = DispatchCompletion {
+            origin: CompletionOrigin::Unknown,
             claim_token: "wrong".into(),
             exit_code: Some(0),
             timed_out: false,
@@ -299,6 +313,7 @@ mod tests {
             serde_json::json!({"claim_token":"old","exit_code":0,"timed_out":false}),
         )
         .unwrap();
+        assert_eq!(legacy.origin, CompletionOrigin::Unknown);
         assert!(legacy.stdout.is_none());
         assert!(legacy.stderr.is_none());
     }

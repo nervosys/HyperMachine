@@ -229,6 +229,7 @@ pub async fn dispatch_once(
         id,
         scheduled_ms,
         &DispatchCompletion {
+            origin: hv2_jobs::dispatch::CompletionOrigin::ApiResponse,
             claim_token: claim.token,
             exit_code,
             timed_out,
