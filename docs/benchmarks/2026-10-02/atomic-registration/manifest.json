@@ -1,0 +1,11 @@
+{
+  "purpose": "shared-store atomic registration tests, no KVM or performance claim",
+  "base_commit": "798a2ed86c1d730b09c1052121a7dde86c41f28a",
+  "files_sha256": {
+    "redis.log": "a0dcf6d758815040e0a1647f3a966119d836044839179e43f3e1fe9731dbfb51",
+    "report.json": "4da069cda1500b0a9ee580a20f4826583f90e7d8ef015c4b1608e21326bde2bd",
+    "store.patch": "6ebf311eec3de85b33b1fcf1205da746699b9c49d68ed1e3a0f1578a71c1aa83",
+    "tests.log": "ed53ac42431df5bc5a1e7aec758e1e88de8162857df4f4480e55f9d8b06f964b",
+    "README.md": "4197cd870bafd7a42997fa6f30756ce87294d304be796d9a25f23b814b3a8cee"
+  }
+}

@@ -50,6 +50,14 @@ pub trait ClusterStore: Send + Sync {
     async fn remove_node(&self, id: &str) -> Result<()>;
 
     async fn put_sandbox(&self, record: &SandboxRecord) -> Result<()>;
+    /// Publish a new sandbox and bind its pending name in one transaction.
+    /// Exact same-owner/record replay succeeds without overwriting updates.
+    /// False leaves both record and ownership unchanged. No ID or owner transfer.
+    async fn register_named_sandbox(
+        &self,
+        record: &SandboxRecord,
+        reservation: &NameReservation,
+    ) -> Result<bool>;
     async fn sandbox(&self, id: &str) -> Result<Option<SandboxRecord>>;
     /// Remove a sandbox's record. Returns whether this call removed it, so
     /// that when two control planes reap the same sandbox exactly one of them
@@ -161,6 +169,41 @@ impl ClusterStore for MemoryStore {
             .records
             .insert(record.sandbox_id.clone(), record.clone());
         Ok(())
+    }
+
+    async fn register_named_sandbox(
+        &self,
+        record: &SandboxRecord,
+        reservation: &NameReservation,
+    ) -> Result<bool> {
+        if reservation.sandbox_id().is_some()
+            || record.metadata.get("hm.name").map(String::as_str)
+                != Some(reservation.name().as_str())
+        {
+            return Ok(false);
+        }
+        let mut state = self.sandboxes.lock();
+        let Some(existing) = state.names.get(reservation.name()) else {
+            return Ok(false);
+        };
+        let mut bound = existing.clone();
+        if bound
+            .bind(reservation.operation_token(), &record.sandbox_id)
+            .is_err()
+        {
+            return Ok(false);
+        }
+        if let Some(old) = state.records.get(&record.sandbox_id) {
+            return Ok(existing.sandbox_id() == Some(record.sandbox_id.as_str()) && old == record);
+        }
+        if existing.sandbox_id().is_some() {
+            return Ok(false);
+        }
+        state
+            .records
+            .insert(record.sandbox_id.clone(), record.clone());
+        state.names.insert(reservation.name().clone(), bound);
+        Ok(true)
     }
 
     async fn sandbox(&self, id: &str) -> Result<Option<SandboxRecord>> {
@@ -517,6 +560,69 @@ impl ClusterStore for RedisStore {
             .query_async::<()>(&mut c)
             .await
             .map_err(redis_error)
+    }
+
+    async fn register_named_sandbox(
+        &self,
+        record: &SandboxRecord,
+        reservation: &NameReservation,
+    ) -> Result<bool> {
+        if reservation.sandbox_id().is_some()
+            || record.metadata.get("hm.name").map(String::as_str)
+                != Some(reservation.name().as_str())
+        {
+            return Ok(false);
+        }
+        let mut bound = reservation.clone();
+        if bound
+            .bind(reservation.operation_token(), &record.sandbox_id)
+            .is_err()
+        {
+            return Ok(false);
+        }
+        let mut c = self.connection.clone();
+        let result: u32 = redis::cmd("EVAL")
+            .arg(
+                r#"
+local existing = redis.call('HGET', KEYS[1], ARGV[1])
+if not existing then return 0 end
+local value = cjson.decode(existing)
+if value.name ~= ARGV[1] or value.token ~= ARGV[2] then return 0 end
+if value.sandbox_id ~= cjson.null and value.sandbox_id ~= ARGV[3] then return 0 end
+local record = redis.call('GET', KEYS[2])
+if record then
+    if value.sandbox_id == ARGV[3] and record == ARGV[4] then return 1 end
+    return 0
+end
+if value.sandbox_id ~= cjson.null then return 0 end
+-- Check index types before writes: Lua runtime errors do not roll back writes.
+for i = 3, 4 do
+    local kind = redis.call('TYPE', KEYS[i]).ok
+    if kind ~= 'none' and kind ~= 'set' then
+        return redis.error_reply('named registration index type mismatch')
+    end
+end
+redis.call('SET', KEYS[2], ARGV[4])
+redis.call('SADD', KEYS[3], ARGV[3])
+redis.call('HSET', KEYS[1], ARGV[1], ARGV[5])
+redis.call('SADD', KEYS[4], ARGV[1])
+return 1
+"#,
+            )
+            .arg(4)
+            .arg(self.key("name-reservations"))
+            .arg(self.key(&format!("sandbox:{}", record.sandbox_id)))
+            .arg(self.key("sandboxes"))
+            .arg(self.key(&format!("reserved-names:{}", record.sandbox_id)))
+            .arg(reservation.name().as_str())
+            .arg(reservation.operation_token())
+            .arg(&record.sandbox_id)
+            .arg(serde_json::to_string(record).map_err(json_error)?)
+            .arg(serde_json::to_string(&bound).map_err(json_error)?)
+            .query_async(&mut c)
+            .await
+            .map_err(redis_error)?;
+        Ok(result == 1)
     }
 
     async fn sandbox(&self, id: &str) -> Result<Option<SandboxRecord>> {
@@ -1003,6 +1109,185 @@ pub(crate) mod tests {
 
     /// The contract, run against any store.
     pub(crate) async fn contract(store: &dyn ClusterStore) {
+        // Named registration publishes the record and ownership together.
+        let name = SandboxName::parse("atomic-create").unwrap();
+        let owner = NameReservation::pending(name.clone());
+        let wrong = NameReservation::pending(name.clone());
+        let mut record = sandbox("atomic-created", "a");
+        record
+            .metadata
+            .insert("hm.name".into(), name.as_str().into());
+        assert!(!store.register_named_sandbox(&record, &owner).await.unwrap());
+        assert!(store.sandbox(&record.sandbox_id).await.unwrap().is_none());
+        assert!(store.reserve_name(&owner).await.unwrap());
+        assert!(!store.register_named_sandbox(&record, &wrong).await.unwrap());
+        let mut bad = record.clone();
+        bad.metadata.clear();
+        assert!(!store.register_named_sandbox(&bad, &owner).await.unwrap());
+        bad = record.clone();
+        bad.sandbox_id = "bad/id".into();
+        assert!(!store.register_named_sandbox(&bad, &owner).await.unwrap());
+        assert_eq!(
+            store.name_reservation(&name).await.unwrap().as_ref(),
+            Some(&owner)
+        );
+        assert!(store.sandbox(&record.sandbox_id).await.unwrap().is_none());
+        assert!(store.register_named_sandbox(&record, &owner).await.unwrap());
+        assert_eq!(
+            store.sandbox(&record.sandbox_id).await.unwrap().as_ref(),
+            Some(&record)
+        );
+        let bound = store.name_reservation(&name).await.unwrap().unwrap();
+        assert_eq!(bound.sandbox_id(), Some(record.sandbox_id.as_str()));
+        assert!(store.register_named_sandbox(&record, &owner).await.unwrap());
+        assert!(!store.register_named_sandbox(&record, &bound).await.unwrap());
+        let mut changed = record.clone();
+        changed.end_at_ms += 1;
+        store.put_sandbox(&changed).await.unwrap();
+        assert!(!store.register_named_sandbox(&record, &owner).await.unwrap());
+        assert_eq!(
+            store.sandbox(&record.sandbox_id).await.unwrap().as_ref(),
+            Some(&changed)
+        );
+        let mut transferred = record.clone();
+        transferred.sandbox_id = "atomic-transferred".into();
+        assert!(!store
+            .register_named_sandbox(&transferred, &owner)
+            .await
+            .unwrap());
+        assert!(store
+            .sandbox(&transferred.sandbox_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(store.delete_sandbox(&record.sandbox_id).await.unwrap());
+        let replacement = NameReservation::pending(name.clone());
+        assert!(store.reserve_name(&replacement).await.unwrap());
+        assert!(!store.register_named_sandbox(&record, &owner).await.unwrap());
+        assert!(store
+            .register_named_sandbox(&transferred, &replacement)
+            .await
+            .unwrap());
+        assert!(!store.delete_sandbox(&record.sandbox_id).await.unwrap());
+        assert_eq!(
+            store
+                .name_reservation(&name)
+                .await
+                .unwrap()
+                .unwrap()
+                .sandbox_id(),
+            Some(transferred.sandbox_id.as_str())
+        );
+        store.delete_sandbox(&transferred.sandbox_id).await.unwrap();
+
+        let collision_name = SandboxName::parse("atomic-existing-id").unwrap();
+        let collision = NameReservation::pending(collision_name.clone());
+        let original = sandbox("atomic-id-collision", "original-node");
+        store.put_sandbox(&original).await.unwrap();
+        let mut intruder = original.clone();
+        intruder.node_id = "other-node".into();
+        intruder
+            .metadata
+            .insert("hm.name".into(), collision_name.as_str().into());
+        assert!(store.reserve_name(&collision).await.unwrap());
+        assert!(!store
+            .register_named_sandbox(&intruder, &collision)
+            .await
+            .unwrap());
+        assert_eq!(
+            store.sandbox(&original.sandbox_id).await.unwrap().as_ref(),
+            Some(&original)
+        );
+        assert_eq!(
+            store
+                .name_reservation(&collision_name)
+                .await
+                .unwrap()
+                .as_ref(),
+            Some(&collision)
+        );
+        store.delete_sandbox(&original.sandbox_id).await.unwrap();
+        store
+            .release_pending_name(&collision_name, collision.operation_token())
+            .await
+            .unwrap();
+
+        for round in 0..16 {
+            let name = SandboxName::parse(&format!("atomic-register-race-{round}")).unwrap();
+            let owner = NameReservation::pending(name.clone());
+            assert!(store.reserve_name(&owner).await.unwrap());
+            let mut a = sandbox(&format!("atomic-register-a-{round}"), "a");
+            a.metadata.insert("hm.name".into(), name.as_str().into());
+            let mut b = a.clone();
+            b.sandbox_id = format!("atomic-register-b-{round}");
+            b.node_id = "b".into();
+            let (ra, rb) = tokio::join!(
+                store.register_named_sandbox(&a, &owner),
+                store.register_named_sandbox(&b, &owner)
+            );
+            let (ra, rb) = (ra.unwrap(), rb.unwrap());
+            assert_ne!(ra, rb);
+            let (winner, loser) = if ra { (&a, &b) } else { (&b, &a) };
+            assert_eq!(
+                store.sandbox(&winner.sandbox_id).await.unwrap().as_ref(),
+                Some(winner)
+            );
+            assert!(store.sandbox(&loser.sandbox_id).await.unwrap().is_none());
+            assert_eq!(
+                store
+                    .name_reservation(&name)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .sandbox_id(),
+                Some(winner.sandbox_id.as_str())
+            );
+            store.delete_sandbox(&winner.sandbox_id).await.unwrap();
+            assert!(store.name_reservation(&name).await.unwrap().is_none());
+        }
+
+        for round in 0..16 {
+            let name = SandboxName::parse(&format!("atomic-register-delete-{round}")).unwrap();
+            let owner = NameReservation::pending(name.clone());
+            let mut record = sandbox(&format!("atomic-register-delete-vm-{round}"), "a");
+            record
+                .metadata
+                .insert("hm.name".into(), name.as_str().into());
+            assert!(store.reserve_name(&owner).await.unwrap());
+            let (registered, deleted) = if round % 2 == 0 {
+                tokio::join!(
+                    store.register_named_sandbox(&record, &owner),
+                    store.delete_sandbox(&record.sandbox_id)
+                )
+            } else {
+                let (deleted, registered) = tokio::join!(
+                    store.delete_sandbox(&record.sandbox_id),
+                    store.register_named_sandbox(&record, &owner)
+                );
+                (registered, deleted)
+            };
+            assert!(registered.unwrap());
+            if deleted.unwrap() {
+                assert!(store.sandbox(&record.sandbox_id).await.unwrap().is_none());
+                assert!(store.name_reservation(&name).await.unwrap().is_none());
+            } else {
+                assert_eq!(
+                    store.sandbox(&record.sandbox_id).await.unwrap().as_ref(),
+                    Some(&record)
+                );
+                assert_eq!(
+                    store
+                        .name_reservation(&name)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .sandbox_id(),
+                    Some(record.sandbox_id.as_str())
+                );
+                store.delete_sandbox(&record.sandbox_id).await.unwrap();
+            }
+        }
+
         // Whichever transaction wins, deletion cannot leave bound ownership
         // pointing at a missing sandbox. Uncertain pending ownership survives.
         for round in 0..16 {
@@ -1316,5 +1601,48 @@ pub(crate) mod tests {
         let namespace = format!("test-{}", now_ms());
         let store = RedisStore::connect(&url, &namespace).await.unwrap();
         contract(&store).await;
+    }
+    #[tokio::test]
+    async fn redis_named_registration_checks_index_types_before_writing() {
+        let Ok(url) = std::env::var("HV2_TEST_REDIS") else {
+            eprintln!("skipped: HV2_TEST_REDIS is unset");
+            return;
+        };
+        let store = RedisStore::connect(&url, &format!("type-test-{}", uuid::Uuid::new_v4()))
+            .await
+            .unwrap();
+        let name = SandboxName::parse("atomic-type-fault").unwrap();
+        let owner = NameReservation::pending(name.clone());
+        let mut record = sandbox("atomic-type-fault-vm", "a");
+        record
+            .metadata
+            .insert("hm.name".into(), name.as_str().into());
+        assert!(store.reserve_name(&owner).await.unwrap());
+        let mut connection = store.connection.clone();
+        for index in [
+            store.key("sandboxes"),
+            store.key(&format!("reserved-names:{}", record.sandbox_id)),
+        ] {
+            redis::cmd("SET")
+                .arg(&index)
+                .arg("wrong-type")
+                .query_async::<()>(&mut connection)
+                .await
+                .unwrap();
+            assert!(store.register_named_sandbox(&record, &owner).await.is_err());
+            assert!(store.sandbox(&record.sandbox_id).await.unwrap().is_none());
+            assert_eq!(
+                store.name_reservation(&name).await.unwrap().as_ref(),
+                Some(&owner)
+            );
+            redis::cmd("DEL")
+                .arg(&index)
+                .query_async::<u64>(&mut connection)
+                .await
+                .unwrap();
+        }
+        assert!(store.register_named_sandbox(&record, &owner).await.unwrap());
+        assert!(store.delete_sandbox(&record.sandbox_id).await.unwrap());
+        assert!(store.name_reservation(&name).await.unwrap().is_none());
     }
 }

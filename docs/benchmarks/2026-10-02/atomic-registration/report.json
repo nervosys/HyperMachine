@@ -1,0 +1,7 @@
+{
+  "test_exit_code": 0,
+  "redis_tests_enabled": true,
+  "redis_exit_code": 0,
+  "owned_redis_stopped": true,
+  "success": true
+}
