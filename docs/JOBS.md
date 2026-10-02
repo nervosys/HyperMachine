@@ -268,9 +268,9 @@ publication limits permit 1-1024 records. Catch-up publication can outpace
 execution and grow the backlog. Long-history scan performance is unverified.
 
 Windows and Linux protocol fixtures verify completion, continuation after
-restart and refusal to dispatch again after an uncertain response. The KVM/TLS
-archive below verifies explicit dispatch with an earlier frozen CLI; it does
-not verify this automatic worker.
+restart and refusal to dispatch again after an uncertain response. [A separate KVM/TLS run](benchmarks/2026-10-01/scheduled-worker.md) also verifies
+automatic paused-guest dispatch and continuation after restart. The explicit
+dispatch archive below uses an earlier frozen CLI.
 
 This explicitly dispatches one committed VM occurrence. It checks profile
 configuration and requires the HTTP deadline to exceed the guest timeout before
