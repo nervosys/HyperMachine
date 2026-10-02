@@ -541,7 +541,10 @@ impl Store {
     // Called only with timestamps selected or individually validated against
     // the loaded immutable schedule. Existing records still require equality.
     fn record_selected_occurrence(
-        &self, id: &str, scheduled_ms: u64, schedule: &IntervalSchedule,
+        &self,
+        id: &str,
+        scheduled_ms: u64,
+        schedule: &IntervalSchedule,
     ) -> Result<Occurrence> {
         let mut job = schedule.job.clone();
         job.not_before_ms = Some(scheduled_ms);
@@ -574,10 +577,21 @@ impl Store {
         key: &str,
         value: &impl Serialize,
     ) -> Result<()> {
+        self.publish_schedule_record_with_sync(directory, key, value, sync_schedule_directory)
+    }
+
+    // Per-call injection keeps failure tests independent of other publishers.
+    fn publish_schedule_record_with_sync(
+        &self,
+        directory: &str,
+        key: &str,
+        value: &impl Serialize,
+        sync_directory: impl Fn(&std::path::Path) -> Result<()>,
+    ) -> Result<()> {
         let dir = self.root().join(directory);
         std::fs::create_dir_all(&dir)?;
         // Persist the schedule subdirectory before acknowledging records in it.
-        sync_schedule_directory(self.root())?;
+        sync_directory(self.root())?;
         let temp = dir.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
         let result = (|| {
             let mut file = std::fs::OpenOptions::new()
@@ -589,10 +603,14 @@ impl Store {
             file.sync_all()?;
             drop(file);
             let published = std::fs::hard_link(&temp, dir.join(key));
-            if published.is_ok() || published.as_ref().is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists) {
+            if published.is_ok()
+                || published
+                    .as_ref()
+                    .is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists)
+            {
                 // Also flush on replay: a previous publisher may have linked
                 // the file but failed or exited before syncing the directory.
-                sync_schedule_directory(&dir)?;
+                sync_directory(&dir)?;
             }
             match published {
                 Ok(()) => Ok(()),
@@ -620,6 +638,85 @@ fn sync_schedule_directory(path: &std::path::Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn directory_sync_failures_do_not_acknowledge_or_replace_records() {
+        for directory in [
+            "schedules",
+            "occurrences",
+            "schedule-progress",
+            "dispatch-claims",
+            "dispatch-results",
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::open(dir.path()).unwrap();
+            let value = serde_json::json!({"immutable":"original"});
+            let final_path = dir.path().join(directory).join("record");
+            let fault = || JobError::Io(std::io::Error::other("injected directory sync failure"));
+            // Failure before linking must leave no published record.
+            assert!(matches!(
+                store.publish_schedule_record_with_sync(directory, "record", &value, |_| Err(
+                    fault()
+                )),
+                Err(JobError::Io(_))
+            ));
+            assert!(!final_path.exists());
+            let calls = std::cell::RefCell::new(Vec::new());
+            // Failure after linking is ambiguous to the caller, with complete
+            // immutable bytes present and no success acknowledgement.
+            assert!(matches!(
+                store.publish_schedule_record_with_sync(directory, "record", &value, |path| {
+                    calls.borrow_mut().push(path.to_path_buf());
+                    if path == store.root() {
+                        Ok(())
+                    } else {
+                        Err(fault())
+                    }
+                }),
+                Err(JobError::Io(_))
+            ));
+            assert_eq!(
+                *calls.borrow(),
+                vec![store.root().to_path_buf(), store.root().join(directory)]
+            );
+            let original = std::fs::read(&final_path).unwrap();
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(&original).unwrap(),
+                value
+            );
+            let changed = serde_json::json!({"immutable":"replacement"});
+            // A replay still flushes, and propagates a second sync failure.
+            assert!(matches!(
+                store.publish_schedule_record_with_sync(directory, "record", &changed, |path| {
+                    if path == store.root() {
+                        Ok(())
+                    } else {
+                        Err(fault())
+                    }
+                }),
+                Err(JobError::Io(_))
+            ));
+            let replay_calls = std::cell::RefCell::new(Vec::new());
+            assert!(matches!(
+                store.publish_schedule_record_with_sync(directory, "record", &changed, |path| {
+                    replay_calls.borrow_mut().push(path.to_path_buf());
+                    sync_schedule_directory(path)
+                }),
+                Err(JobError::Conflict(_))
+            ));
+            assert_eq!(
+                *replay_calls.borrow(),
+                vec![store.root().to_path_buf(), store.root().join(directory)]
+            );
+            assert_eq!(std::fs::read(final_path).unwrap(), original);
+            assert_eq!(
+                std::fs::read_dir(store.root().join(directory))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+    }
 
     fn schedule() -> IntervalSchedule {
         IntervalSchedule {
@@ -946,16 +1043,25 @@ mod tests {
     fn batch_refuses_disagreeing_orphan_without_committing_progress() {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::open(dir.path()).unwrap();
-        store.create_interval_schedule("corrupt-batch", &schedule()).unwrap();
-        let mut record = store.record_interval_occurrence("corrupt-batch", 100).unwrap();
+        store
+            .create_interval_schedule("corrupt-batch", &schedule())
+            .unwrap();
+        let mut record = store
+            .record_interval_occurrence("corrupt-batch", 100)
+            .unwrap();
         record.job.command = vec!["different".into()];
         let path = dir.path().join("occurrences/corrupt-batch--100");
         let bytes = serde_json::to_vec(&record).unwrap();
         std::fs::write(&path, &bytes).unwrap();
-        assert!(matches!(store.materialize_interval("corrupt-batch", 155, 3), Err(JobError::Corrupt(_))));
+        assert!(matches!(
+            store.materialize_interval("corrupt-batch", 155, 3),
+            Err(JobError::Corrupt(_))
+        ));
         assert_eq!(store.interval_progress("corrupt-batch").unwrap(), None);
         assert_eq!(std::fs::read(path).unwrap(), bytes);
-        assert!(store.record_interval_occurrence("corrupt-batch", 101).is_err());
+        assert!(store
+            .record_interval_occurrence("corrupt-batch", 101)
+            .is_err());
     }
 
     #[test]
