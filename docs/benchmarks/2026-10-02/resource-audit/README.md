@@ -46,6 +46,9 @@ was absent. All 22 owned processes stopped and remaining sandbox inventory was
 empty. This is functional evidence on shared WSL nested KVM, not a performance
 comparison, universal reliability result or tenant-isolation claim.
 
+The native `rejected-TRUE.log` is archived as `rejected-uppercase-true.log` to
+avoid colliding with `rejected-true.log` on Windows.
+
 Frozen coordinators, compiled overlays, build/test logs and SHA-256 manifest
 make the evidence reviewable. No executable, operator credential or private key
 is included. The keys are deliberately synthetic: native process checks use decimal byte 42
