@@ -1,0 +1,24 @@
+   Compiling hv2-sandbox v1.1.0 (/var/tmp/hm-event-connect/source/crates/hv2-sandbox)
+   Compiling tokio v1.53.1
+   Compiling hv2-guest-agent v1.1.0 (/var/tmp/hm-event-connect/source/crates/hv2-guest-agent)
+   Compiling hv2-agent-proto v1.1.0 (/var/tmp/hm-event-connect/source/crates/hv2-agent-proto)
+   Compiling hv2-context v1.1.0 (/var/tmp/hm-event-connect/source/crates/hv2-context)
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-event-connect/source/crates/hv2-core)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-event-connect/source/crates/hv2-agent)
+error[E0599]: no method named `reset` found for struct `MutexGuard<'_, RawMutex, VsockDevice>` in the current scope
+    --> crates/hv2-agent/src/guest_agent.rs:1280:36
+     |
+1280 |                 _ => device.lock().reset(),
+     |                                    ^^^^^ method not found in `MutexGuard<'_, RawMutex, VsockDevice>`
+     |
+     = help: items from traits can only be used if the trait is in scope
+     = note: the full name for the type has been written to '/var/tmp/hm-competitive-target/debug/deps/hv2_agent-d47b0520893cdb05.long-type-3133387819200887316.txt'
+     = note: consider using `--verbose` to print the full type name to the console
+help: trait `VirtioMmioDevice` which provides `reset` is implemented but not in scope; perhaps you want to import it
+     |
+ 940 +     use hv2_core::devices::VirtioMmioDevice;
+     |
+
+For more information about this error, try `rustc --explain E0599`.
+error: could not compile `hv2-agent` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
