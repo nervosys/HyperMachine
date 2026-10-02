@@ -131,7 +131,7 @@ def main():
     for name in ['hypermachine','firecracker','kernel','initrd','output']:parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--pairs',type=int,default=10);parser.add_argument('--concurrency',type=int,default=8)
     parser.add_argument('--mapping-diagnostics',action='store_true',help='Read owned-process smaps outside latency timing; diagnostic-only cohort')
-    args=parser.parse_args();args.owned_firecracker=[];require(1<=args.pairs<=100 and 1<=args.concurrency<=16,'invalid experiment limits')
+    args=parser.parse_args();args.owned_firecracker=[];require(1<=args.pairs<=100 and 1<=args.concurrency<=100,'invalid experiment limits')
     if args.mapping_diagnostics:
         diagnostic_spec=importlib.util.spec_from_file_location('prepared_mappings',Path(__file__).with_name('prepared-memory-mappings.py'))
         args.mapping_diagnostics=importlib.util.module_from_spec(diagnostic_spec);diagnostic_spec.loader.exec_module(args.mapping_diagnostics)
