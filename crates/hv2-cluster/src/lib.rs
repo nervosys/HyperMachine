@@ -14,6 +14,7 @@ pub mod keys;
 pub mod metrics;
 pub mod model;
 pub mod mtls;
+pub mod names;
 pub mod node;
 pub mod scheduler;
 pub mod store;
