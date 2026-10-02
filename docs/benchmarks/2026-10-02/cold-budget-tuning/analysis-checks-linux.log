@@ -1,0 +1,8 @@
+deadline: correctly refused
+budget: correctly refused
+attempts: correctly refused
+order: correctly refused
+nan: correctly refused
+memory: correctly refused
+hold: correctly refused
+7 malformed reports refused; cleanup failure preserved; valid report accepted
