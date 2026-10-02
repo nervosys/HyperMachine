@@ -2807,6 +2807,7 @@ name = "hv2-jobs"
 version = "1.1.0"
 dependencies = [
  "axum",
+ "chrono",
  "hv2-sandbox",
  "serde",
  "serde_json",
