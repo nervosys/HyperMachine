@@ -569,3 +569,5 @@ version or a version different from the build, preventing silent reinterpretatio
 of history after timezone rules change. Version migration is not implemented.
 Existing API/type method names retain `interval` for compatibility; their shared
 publication path now accepts calendar recurrence too.
+
+Calendar catch-up now enumerates non-UTC civil days once per bounded batch. [Matched planner timings and exact UTC timestamp comparison](benchmarks/2026-10-01/calendar-batch.md) cover dense catch-up, folds and sparse calendars; these are local planner measurements, excluding storage and VM execution.

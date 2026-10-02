@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         rows.push(json!({"expression":expression,"timezone":zone,"limit":limit,
             "horizon_days":horizon_days,"occurrences":expected.len(),
-            "first_occurrence_ms":expected[0],"last_occurrence_ms":expected.last(),"planning_ms":samples}));
+            "first_occurrence_ms":expected[0],"last_occurrence_ms":expected.last(),"scheduled_utc_ms":expected,"planning_ms":samples}));
     }
     println!(
         "{}",
