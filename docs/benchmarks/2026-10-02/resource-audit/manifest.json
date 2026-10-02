@@ -53,9 +53,10 @@
     "native/true-0.log": "527ca42fdaf002be5c8cd09f53ac384edc10465f3f3b8ef05a921d55eb1efd56",
     "native/true-1.log": "e6a5057089dd1a49718c24ef383785e0f9dfd5a1aacc9580719ca0f6722535a3",
     "native/true.jsonl": "000ba7fe1ac169554846a6524d29c1b2079a25f1c62331d53dd705fb23560dfb",
-    "README.md": "d7d3eca5fdf260da299cd989c0406c35ba08174ad5f207e3014ab7785a7d30d6",
+    "README.md": "ecca179ec306c5ebfb99dde67fd21bbdbe79a0eef86efb75292ac18f2e6e4cf0",
     "tests.log": "4e5cec1a7d2cc18c43f847566e44fe0f7c917aba6a9b7084af192c84930e0e8a",
     "verify-access-audit.py": "1816a4c07d49a9d9389b71d583a0fd4c21b233461a77c43a4c0a1b4aba27e054",
-    "verify-resource-audit.py": "0b806154f5d2cf38af099bdc5a192d973321a584762d8f168ed3bc456f22602e"
+    "verify-resource-audit.py": "0b806154f5d2cf38af099bdc5a192d973321a584762d8f168ed3bc456f22602e",
+    "native/rejected-uppercase-true.log": "bd4b434d9a0e99b30241d20e294f6f2eb9ee6dfce7f06b7f301922b3e0ca331c"
   }
 }
