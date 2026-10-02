@@ -82,4 +82,4 @@ docs/benchmarks/2026-10-02/reserved-create/** -text whitespace=cr-at-eol,-blank-
 
 docs/benchmarks/2026-10-02/fork-name/** -text whitespace=cr-at-eol,-blank-at-eol
 
-docs/benchmarks/2026-10-02/atomic-registration/** -text whitespace=cr-at-eol,-blank-at-eol
+docs/benchmarks/2026-10-02/atomic-registration/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
