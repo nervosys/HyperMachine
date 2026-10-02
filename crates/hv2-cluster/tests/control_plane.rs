@@ -1347,3 +1347,87 @@ async fn policy_replacement_revokes_old_keys_and_rejects_invalid_updates() {
     task.abort();
     let _ = task.await;
 }
+
+#[tokio::test]
+async fn reserved_name_lookup_authenticates_and_never_returns_operation_tokens() {
+    use hv2_cluster::names::{NameReservation, SandboxName};
+    use sha2::{Digest, Sha256};
+    let policy = |key: &str, scope: &str| {
+        json!({"sha256":Sha256::digest(key.as_bytes()).iter()
+        .map(|byte| format!("{byte:02x}")).collect::<String>(),
+        "expires_at":chrono::Utc::now().timestamp()+600,"scopes":[scope]})
+    };
+    let policies = hv2_cluster::keys::ApiKeyPolicy::from_json(
+        &json!([
+            policy("inventory-fixture", "inventory"),
+            policy("sandbox-fixture", "sandboxes")
+        ])
+        .to_string(),
+    )
+    .unwrap();
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_, heartbeat) = fake_node(store.clone(), "name-node", 4, Duration::from_secs(30)).await;
+    let base = control_plane_with_keys(store.clone(), Some(KEY), policies).await;
+    let request = |name: &str, key: &str| {
+        client()
+            .get(format!("{base}/sandbox-names/{name}"))
+            .header("x-api-key", key)
+            .send()
+    };
+    assert_eq!(request("guest", "").await.unwrap().status(), 401);
+    assert_eq!(
+        request("guest", "inventory-fixture")
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(request("bad%20name", KEY).await.unwrap().status(), 400);
+    assert_eq!(
+        request("guest", "sandbox-fixture").await.unwrap().status(),
+        404
+    );
+    let name = SandboxName::parse("guest").unwrap();
+    let reservation = NameReservation::pending(name.clone());
+    assert!(store.reserve_name(&reservation).await.unwrap());
+    let pending = request("guest", "sandbox-fixture").await.unwrap();
+    assert_eq!(pending.status(), 409);
+    assert!(!pending
+        .text()
+        .await
+        .unwrap()
+        .contains(reservation.operation_token()));
+    let (_, created) = create(&base, json!({"templateID":"base"})).await;
+    let id = created["sandboxID"].as_str().unwrap();
+    assert!(store
+        .bind_name(&name, reservation.operation_token(), id)
+        .await
+        .unwrap());
+    let response = request("guest", "sandbox-fixture").await.unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.json::<Value>().await.unwrap(),
+        json!({"name":"guest","sandboxID":id})
+    );
+    let (_, duplicate) = create(&base, json!({"templateID":"base"})).await;
+    let duplicate_id = duplicate["sandboxID"].as_str().unwrap();
+    let mut legacy = store.sandbox(duplicate_id).await.unwrap().unwrap();
+    legacy.metadata.insert("hm.name".into(), "guest".into());
+    store.put_sandbox(&legacy).await.unwrap();
+    assert_eq!(
+        request("guest", "sandbox-fixture").await.unwrap().status(),
+        409
+    );
+    assert!(store.delete_sandbox(duplicate_id).await.unwrap());
+    assert_eq!(
+        request("guest", "sandbox-fixture").await.unwrap().status(),
+        200
+    );
+    assert!(store.delete_sandbox(id).await.unwrap());
+    assert_eq!(
+        request("guest", "sandbox-fixture").await.unwrap().status(),
+        404
+    );
+    heartbeat.abort();
+    let _ = heartbeat.await;
+}

@@ -147,7 +147,7 @@ impl ApiKeyPolicy {
         }
         let parts: Vec<_> = path.trim_start_matches('/').split('/').collect();
         let family = match parts.as_slice() {
-            ["v2", "sandboxes", ..] | ["sandboxes", ..] => ApiScope::Sandboxes,
+            ["v2", "sandboxes", ..] | ["sandboxes" | "sandbox-names", ..] => ApiScope::Sandboxes,
             ["v2" | "v3", "templates", ..] | ["templates" | "snapshots", ..] => ApiScope::Templates,
             ["volumes", ..] => ApiScope::Volumes,
             ["events", ..] => ApiScope::Events,
