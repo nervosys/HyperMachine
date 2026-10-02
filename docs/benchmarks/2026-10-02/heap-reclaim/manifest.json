@@ -1,0 +1,27 @@
+{
+  "inputs": {
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "sha256": {
+    "README.md": "d9691bf56726b36c2376cf75d1c408c3543526366bcf9a7e17215c6550c7a706",
+    "analysis-checks-linux.log": "3b71f3178797b8d7585e52210e5dfa04473864a38f922ff3a444347ce6e090fc",
+    "analysis-checks-windows.log": "d8aeab269dbe4780794af06cedc0d4435c9839818ff945e30c9888c9129f699b",
+    "analyze-heap-reclaim.py": "4c8266dc6eb6fc288e18423bd7681ef4a52786a5e351fc0a5508a1749f1f2154",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines-concurrent.py": "b4d6e2426360e13d02bf4f812b8b2bfaf7b69be7ddbcd0ae7986dab6c2ff1acf",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "build-context.json": "926523b9b5e6f857f5cd29bffa3c0a5472462d0e49c50970699eb0c90e583117",
+    "build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c100-analysis.json": "66c2ed94704feba07be1576de927f3fbef76ba9b562e49cd862d217d09f6a80f",
+    "c100.json": "378fda7c85646855b1a4dcadcd3199a75a622e94757141410854adec79876a8a",
+    "c8-analysis.json": "06b093743807e9e2510cbe868ed28cdded95706f28cc5446716935ca6cfd9c2a",
+    "c8.json": "1fb7242819819f4efc82ff7135ad28784587ed53492ac90e9769d65a2de50a13",
+    "check-heap-reclaim-analysis.py": "a24d1575bc93dc18a8ac3baef83e848e8edc83c45e04b608edcb70618c7d5b63",
+    "compiled-main.rs": "e1b85b8a455a9afad0452113739a089f202b67787f419fc0d76a60a172334d5c",
+    "diagnose-heap-reclaim.py": "0aa364d2bce579b596d48cec5e130de6459513687c7bcb45199a3ff2db9611d0",
+    "diagnose-memory-retention.py": "a2035ed5075f323da74ddb134e9c9bf69fe8d2c3e8854676bdc0321a1bbbe8fe",
+    "heap-reclaim-probe.c": "6ab9373a559f410c047ee04ff95599a354e9f2efc2536fe39955660b8a55b56f",
+    "verify-heap-reclaim.py": "dd0df2f26d4d071edadd1182552db185fb8496b9cf57d885416a2604ac443695"
+  }
+}

@@ -1,0 +1,84 @@
+{
+  "runs": [
+    {
+      "pair": 0,
+      "variant": "sham",
+      "attempted": 8,
+      "passed": 8,
+      "cleanup_verified": true,
+      "held_pss_before_mib": 790.2490234375,
+      "held_pss_after_mib": 790.2568359375,
+      "held_pss_reduction_mib": -0.0078125,
+      "held_operation_ms": 0.000111,
+      "empty_pss_before_mib": 125.8564453125,
+      "empty_pss_after_mib": 125.7783203125,
+      "empty_pss_reduction_mib": 0.078125,
+      "empty_operation_ms": 5e-05
+    },
+    {
+      "pair": 0,
+      "variant": "trim",
+      "attempted": 8,
+      "passed": 8,
+      "cleanup_verified": true,
+      "held_pss_before_mib": 789.7353515625,
+      "held_pss_after_mib": 789.5205078125,
+      "held_pss_reduction_mib": 0.21484375,
+      "held_operation_ms": 0.339328,
+      "empty_pss_before_mib": 125.5,
+      "empty_pss_after_mib": 122.83203125,
+      "empty_pss_reduction_mib": 2.66796875,
+      "empty_operation_ms": 0.85406
+    },
+    {
+      "pair": 1,
+      "variant": "trim",
+      "attempted": 8,
+      "passed": 8,
+      "cleanup_verified": true,
+      "held_pss_before_mib": 846.8740234375,
+      "held_pss_after_mib": 751.3818359375,
+      "held_pss_reduction_mib": 95.4921875,
+      "held_operation_ms": 6.354243,
+      "empty_pss_before_mib": 87.1416015625,
+      "empty_pss_after_mib": 84.4189453125,
+      "empty_pss_reduction_mib": 2.72265625,
+      "empty_operation_ms": 0.594953
+    },
+    {
+      "pair": 1,
+      "variant": "sham",
+      "attempted": 8,
+      "passed": 8,
+      "cleanup_verified": true,
+      "held_pss_before_mib": 789.55078125,
+      "held_pss_after_mib": 789.5546875,
+      "held_pss_reduction_mib": -0.00390625,
+      "held_operation_ms": 4e-05,
+      "empty_pss_before_mib": 125.595703125,
+      "empty_pss_after_mib": 125.517578125,
+      "empty_pss_reduction_mib": 0.078125,
+      "empty_operation_ms": 4e-05
+    }
+  ],
+  "pairs": [
+    {
+      "pair": 0,
+      "held_sham_adjusted_reduction_mib": 0.22265625,
+      "empty_sham_adjusted_reduction_mib": 2.58984375
+    },
+    {
+      "pair": 1,
+      "held_sham_adjusted_reduction_mib": 95.49609375,
+      "empty_sham_adjusted_reduction_mib": 2.64453125
+    }
+  ],
+  "attempted": 32,
+  "passed": 32,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "runtime_change_adopted": false,
+  "performance_win_established": false,
+  "median_sham_adjusted_held_reduction_mib": 47.859375
+}
