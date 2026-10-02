@@ -1,0 +1,179 @@
+{
+  "success": true,
+  "scope": "local process-level Unix signal reload; no VM or performance comparison",
+  "binary_sha256": "d0757724cfcbacaeb80e64dade681a6299e7443f39bdda16bf458dd251bd00ef",
+  "coordinator_sha256": "726379a7572eac183dd619dc99ee0b535bcded168bc80fe3811c774fb962f3af",
+  "roles_requested": true,
+  "checks": [
+    {
+      "name": "initial key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "old key revoked",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "new key active",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "scope preserved",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "malformed preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "malformed preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "empty preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "empty preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "admin collision preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "admin collision preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "oversized preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "oversized preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "invalid UTF-8 preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "invalid UTF-8 preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "missing file preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "admin unchanged",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "expired replacement revokes scoped access",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "expired set keeps authentication required",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "valid update after rejection",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "restoration revokes previous key",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "operator volume inventory",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "same-key downgrade preserves inventory",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "same-key downgrade blocks capabilities",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "observer blocks mutation",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "observer blocks GET tunnel",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "unknown role preserves inventory",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "unknown role preserves capability denial",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "null role preserves inventory",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "null role preserves capability denial",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "same-key upgrade restores capability",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "observer scope allows sandbox inventory",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "observer scope excludes template inventory",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "role changes keep legacy admin",
+      "status": 200,
+      "expected": 200
+    }
+  ],
+  "owned_process_stopped": true,
+  "exit_code": -15,
+  "credentials_absent": true,
+  "service_log_sha256": "3855c224e821802fbf5b74ba25a3eeb35c284ce457c194b25ef95b3f405e7015",
+  "binary_unchanged": true
+}

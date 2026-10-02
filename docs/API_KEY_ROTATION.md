@@ -38,6 +38,12 @@ includes 66 passing library/HTTP tests on each platform and a 23-case real KVM
 run with TLS, node mTLS, unchanged guest state after denied mutations, and 222
 independently verified access records.
 
+[Live role-reload verification](benchmarks/2026-10-02/role-reload/README.md)
+passed 33 HTTP checks in each of two owned Unix processes. Same-key downgrades
+blocked capabilities, upgrades restored access, and unknown/null role updates
+preserved the active observer policy after acknowledged rejection. Each check
+sequence kept the process running and stopped it afterward.
+
 ## Durable access history
 
 Protected control-plane requests can also write synced, tamper-evident admission
