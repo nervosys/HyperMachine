@@ -1,0 +1,27 @@
+   Compiling hv2-sandbox v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\readiness-snapshots-windows-source\crates\hv2-sandbox)
+   Compiling tracing-subscriber v0.3.23
+   Compiling hv2-guest-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\readiness-snapshots-windows-source\crates\hv2-guest-agent)
+   Compiling criterion v0.5.1
+   Compiling hv2-context v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\readiness-snapshots-windows-source\crates\hv2-context)
+   Compiling hv2-core v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\readiness-snapshots-windows-source\crates\hv2-core)
+   Compiling hv2-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\.tmp\readiness-snapshots-windows-source\crates\hv2-agent)
+    Finished `test` profile [optimized + debuginfo] target(s) in 54.08s
+     Running unittests src\lib.rs (target\debug\deps\hv2_agent-23fce01e1f3f4492.exe)
+
+running 13 tests
+test guest_agent::tests::a_closed_channel_is_reported_as_closed_not_as_a_timeout ... ok
+test guest_agent::tests::a_version_mismatch_is_named_rather_than_misread ... ok
+test guest_agent::tests::fresh_restore_does_not_hide_a_failed_rng_reseed ... ok
+test guest_agent::tests::restore_samples_time_after_channel_creation_and_preserves_entropy ... ok
+test guest_agent::tests::the_guest_deadline_is_shorter_than_the_host_one ... ok
+test guest_agent::tests::a_program_killed_by_a_signal_is_not_reported_as_exiting_zero ... ok
+test guest_agent::tests::a_failing_command_is_a_result_not_an_error ... ok
+test guest_agent::tests::a_request_is_written_across_several_credit_grants ... ok
+test guest_agent::tests::an_agent_that_cannot_start_the_program_says_so ... ok
+test guest_agent::tests::a_command_runs_and_its_output_comes_back ... ok
+test guest_agent::tests::truncated_output_is_flagged_rather_than_passed_off_as_complete ... ok
+test guest_agent::tests::a_stale_response_does_not_answer_the_current_request ... ok
+test guest_agent::tests::a_guest_that_never_answers_times_out_rather_than_hanging ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 516 filtered out; finished in 0.16s
+
