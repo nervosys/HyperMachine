@@ -1,0 +1,45 @@
+{
+  "total_attempted": 204516,
+  "total_passed": 204516,
+  "audit_records_verified": 187416,
+  "runtime_change_adopted": true,
+  "competitor_win_established": false,
+  "cohorts": {
+    "initial": {
+      "previous_sha256": "b145e7f6badabd8e848f966d67fd1734cfd0c15a68e7db8ef78403886c0e61b8",
+      "current_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+      "runs": 72,
+      "previous_audited": false
+    },
+    "audited": {
+      "previous_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+      "current_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+      "runs": 72,
+      "previous_audited": true
+    },
+    "default": {
+      "previous_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+      "current_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+      "runs": 72,
+      "previous_audited": false
+    },
+    "single": {
+      "previous_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+      "current_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+      "runs": 18,
+      "previous_audited": true
+    },
+    "single-default": {
+      "previous_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+      "current_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+      "runs": 18,
+      "previous_audited": false
+    },
+    "repeat": {
+      "previous_sha256": "57d00f26056f1de328f849e37bdb6726372ef5efc39d243420a1722fda931fda",
+      "current_sha256": "8b558cccbbe96147ad7f8f794386173fb011b3f43b29270e50831e3ef2d8ffbb",
+      "runs": 36,
+      "previous_audited": true
+    }
+  }
+}

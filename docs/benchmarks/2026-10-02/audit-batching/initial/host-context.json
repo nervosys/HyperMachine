@@ -1,0 +1,32 @@
+{
+  "captured_after_initial_sweep": true,
+  "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "python_version": "3.13.5",
+  "cpu_affinity_available_at_capture": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ],
+  "mountinfo": "367 372 0:31 / /usr/lib/modules/6.18.33.2-microsoft-standard-WSL2 rw,nosuid,nodev,noatime - overlay none rw,lowerdir=/modules,upperdir=/lib/modules/6.18.33.2-microsoft-standard-WSL2/rw/upper,workdir=/lib/modules/6.18.33.2-microsoft-standard-WSL2/rw/work,uuid=on\n368 372 0:34 / /mnt/wsl rw,relatime shared:1 - tmpfs none rw\n369 372 0:36 / /usr/lib/wsl/drivers ro,nosuid,nodev,noatime - 9p drivers ro,aname=drivers;fmask=222;dmask=222,cache=0x5,access=client,msize=65536,trans=fd,rfd=8,wfd=8\n372 357 8:80 / / rw,relatime - ext4 /dev/sdf rw,discard,errors=remount-ro,data=ordered\n373 372 0:89 / /mnt/wslg rw,relatime shared:31 - tmpfs none rw\n374 373 8:80 / /mnt/wslg/distro ro,relatime shared:32 - ext4 /dev/sdf rw,discard,errors=remount-ro,data=ordered\n399 372 0:113 / /usr/lib/wsl/lib rw,nosuid,nodev,noatime - overlay none rw,lowerdir=/gpu_lib_packaged:/gpu_lib_inbox,upperdir=/gpu_lib/rw/upper,workdir=/gpu_lib/rw/work,uuid=on\n401 372 0:2 /init /init ro - rootfs rootfs rw,size=24049872k,nr_inodes=6012468\n402 372 0:6 / /dev rw,nosuid,relatime shared:43 - devtmpfs none rw,size=24049872k,nr_inodes=6012468,mode=755\n403 372 0:24 / /sys rw,nosuid,nodev,noexec,noatime shared:44 - sysfs sysfs rw\n404 372 0:117 / /proc rw,nosuid,nodev,noexec,noatime shared:45 - proc proc rw\n405 402 0:118 / /dev/pts rw,nosuid,noexec,noatime shared:46 - devpts devpts rw,gid=5,mode=620,ptmxmode=000\n406 372 0:119 / /run rw,nosuid,nodev shared:47 - tmpfs none rw,mode=755\n407 406 0:120 / /run/lock rw,nosuid,nodev,noexec,noatime shared:48 - tmpfs none rw\n408 406 0:121 / /run/shm rw,nosuid,nodev,noatime shared:49 - tmpfs none rw\n409 402 0:121 / /dev/shm rw,nosuid,nodev,noatime shared:49 - tmpfs none rw\n410 406 0:122 / /run/user rw,nosuid,nodev,noexec,noatime shared:50 - tmpfs none rw,mode=755\n411 404 0:35 / /proc/sys/fs/binfmt_misc rw,relatime shared:51 - binfmt_misc binfmt_misc rw\n414 403 0:25 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:52 - cgroup2 cgroup2 rw,nsdelegate\n430 373 0:91 /etc/versions.txt /mnt/wslg/versions.txt rw,relatime shared:53 - overlay none rw,lowerdir=/systemvhd,upperdir=/system/rw/upper,workdir=/system/rw/work,uuid=on\n432 373 0:91 /usr/share/doc /mnt/wslg/doc rw,relatime shared:54 - overlay none rw,lowerdir=/systemvhd,upperdir=/system/rw/upper,workdir=/system/rw/work,uuid=on\n434 372 0:89 /.X11-unix /tmp/.X11-unix ro,relatime shared:31 - tmpfs none rw\n435 372 0:125 / /mnt/c rw,noatime - 9p C:\\134 rw,aname=drvfs;path=C:\\;uid=1000;gid=1000;symlinkroot=/mnt/,cache=0x5,access=client,msize=65536,trans=fd,rfd=6,wfd=6\n436 372 0:126 / /mnt/e rw,noatime - 9p E:\\134 rw,aname=drvfs;path=E:\\;uid=1000;gid=1000;symlinkroot=/mnt/,cache=0x5,access=client,msize=65536,trans=fd,rfd=6,wfd=6\n437 410 0:89 /run/user /run/user rw,relatime shared:31 - tmpfs none rw\n438 403 0:13 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:55 - tracefs tracefs rw\n439 402 0:127 / /dev/hugepages rw,nosuid,nodev,relatime shared:56 - hugetlbfs hugetlbfs rw,pagesize=2M\n440 402 0:88 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:57 - mqueue mqueue rw\n441 372 0:128 / /tmp rw,nosuid,nodev - tmpfs tmpfs rw,size=24055632k,nr_inodes=1048576\n442 403 0:8 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:58 - debugfs debugfs rw\n489 406 0:129 / /run/credentials/systemd-journald.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:59 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap\n443 403 0:82 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:60 - fusectl fusectl rw\n444 403 0:22 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:61 - configfs configfs rw\n775 441 0:89 /.X11-unix /tmp/.X11-unix ro,relatime shared:31 - tmpfs none rw\n788 406 0:139 / /run/credentials/getty@tty1.service ro,nosuid,nodev,noexec,relatime,nosymfollow shared:268 - tmpfs tmpfs rw,size=1024k,nr_inodes=1024,mode=700,noswap\n491 437 0:140 / /run/user/0 rw,nosuid,nodev,relatime shared:328 - tmpfs tmpfs rw,size=4811124k,nr_inodes=1202781,mode=700\n493 373 0:140 / /mnt/wslg/run/user/0 rw,nosuid,nodev,relatime shared:328 - tmpfs tmpfs rw,size=4811124k,nr_inodes=1202781,mode=700\n"
+}

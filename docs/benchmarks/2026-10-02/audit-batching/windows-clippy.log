@@ -1,0 +1,6 @@
+    Checking hv2-core v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-core)
+    Checking hv2-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-agent)
+    Checking hv2-runtime v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-runtime)
+    Checking hv2-api v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-api)
+    Checking hv2-cluster v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-cluster)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.66s
