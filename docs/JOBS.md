@@ -269,7 +269,10 @@ execution and grow the backlog. Long-history scan performance is unverified.
 
 Windows and Linux protocol fixtures verify completion, continuation after
 restart and refusal to dispatch again after an uncertain response. [A separate KVM/TLS run](benchmarks/2026-10-01/scheduled-worker.md) also verifies
-automatic paused-guest dispatch and continuation after restart. The explicit
+automatic paused-guest dispatch and continuation after restart. A Linux protocol
+regression also holds an accepted execution response across SIGINT, verifies
+that the worker waits, then checks its persisted completion and absence of a
+later claim. This interruption check does not verify guest-side cancellation. The explicit
 dispatch archive below uses an earlier frozen CLI.
 
 This explicitly dispatches one committed VM occurrence. It checks profile
