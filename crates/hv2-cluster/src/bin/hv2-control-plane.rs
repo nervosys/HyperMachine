@@ -151,6 +151,13 @@ async fn main() -> std::process::ExitCode {
         eprintln!("hv2-control-plane: {error}");
         return std::process::ExitCode::FAILURE;
     }
+    let access_audit = match hv2_cluster::audit::AccessAudit::from_env() {
+        Ok(audit) => audit,
+        Err(error) => {
+            eprintln!("hv2-control-plane: {error}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
     let store = match store::open(&opts.store, &opts.namespace).await {
         Ok(store) => store,
         Err(e) => {
@@ -236,6 +243,7 @@ async fn main() -> std::process::ExitCode {
     let config = ControlConfig {
         api_key: opts.api_key,
         api_keys,
+        access_audit,
         cluster_token: opts.cluster_token,
         proxy_port: opts.proxy_port,
         create_timeout: Duration::from_secs(60),

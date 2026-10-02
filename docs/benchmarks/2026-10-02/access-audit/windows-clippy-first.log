@@ -1,0 +1,57 @@
+   Compiling serde_json v1.0.151
+    Checking hv2-core v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-core)
+    Checking hv2-guest-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-guest-agent)
+    Checking hv2-context v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-context)
+    Checking axum v0.8.9
+    Checking reqwest v0.12.28
+    Checking tracing-subscriber v0.3.23
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.6
+    Checking hv2-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-agent)
+    Checking hv2-runtime v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-runtime)
+    Checking hv2-api v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-api)
+    Checking hv2-cluster v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-cluster)
+error: items after a test module
+  --> crates\hv2-cluster\src\audit.rs:20:1
+   |
+20 | mod tests {
+   | ^^^^^^^^^
+...
+59 | impl AccessAudit {
+   | ^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#items_after_test_module
+   = note: `-D clippy::items-after-test-module` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::items_after_test_module)]`
+
+error: could not compile `hv2-cluster` (lib test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: consider adding a `;` to the last statement for consistent formatting
+    --> crates\hv2-cluster\tests\control_plane.rs:1829:13
+     |
+1829 | /             axum::serve(listener, control::router(control))
+1830 | |                 .await
+1831 | |                 .unwrap()
+     | |_________________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#semicolon_if_nothing_returned
+     = note: `-D clippy::semicolon-if-nothing-returned` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::semicolon_if_nothing_returned)]`
+help: add a `;` here
+     |
+1829 |             axum::serve(listener, control::router(control))
+1830 |                 .await
+1831 ~                 .unwrap();
+     |
+
+error: using `chunks_exact` with a constant chunk size
+    --> crates\hv2-cluster\tests\control_plane.rs:1879:25
+     |
+1879 |     for pair in records.chunks_exact(2) {
+     |                         ^^^^^^^^^^^^^^^ help: consider using `as_chunks` instead: `as_chunks::<2>().0`
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#chunks_exact_to_as_chunks
+     = note: `-D clippy::chunks-exact-to-as-chunks` implied by `-D warnings`
+     = help: to override `-D warnings` add `#[allow(clippy::chunks_exact_to_as_chunks)]`
+
+error: could not compile `hv2-cluster` (test "control_plane") due to 2 previous errors

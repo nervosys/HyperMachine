@@ -120,6 +120,7 @@ def main():
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--ssh-fixture", type=Path,
                         help="build-ssh-fixture.py output; opt in to real OpenSSH guest checks")
+    parser.add_argument("--access-audit", action="store_true", help="verify durable credential-free control-plane audit records with a synthetic fixture key")
     parser.add_argument("--ssh-by-name", action="store_true", help="resolve the SSH guest by its metadata label")
     parser.add_argument("--ssh-pty", action="store_true", help="verify guest PTY allocation and terminal input")
     parser.add_argument("--ssh-terminal", action="store_true", help="verify local/guest terminal resize and interrupt")
@@ -161,6 +162,8 @@ def main():
         parser.error("--ssh-terminal requires --ssh-fixture and --ssh-pty")
     paths = {name: getattr(args, name.replace("-", "_")) for name in ["daemon", "control-plane", "cli", "kernel", "initrd"]}
     paths["coordinator"] = Path(__file__)
+    if args.access_audit:
+        paths["audit_verifier"] = Path(__file__).with_name("verify-access-audit.py")
     report = {"success": False, "purpose": "functional verification, no performance comparison",
               "artifact_sha256": {name: digest(path) for name, path in paths.items()},
               "cases": [], "cleanup_errors": [], "environment": "local WSL nested KVM; 1 vCPU / 1024 MiB guests"}
@@ -329,11 +332,16 @@ def main():
                 "--advertise-proxy", f"127.0.0.1:{node_proxy}", "--mtls-ca", str(directory / "ca.pem"),
                 "--mtls-cert", str(directory / "node.pem"), "--mtls-key", str(directory / "node.key")],
                 dict(env, HV2_KERNEL=str(args.kernel), HV2_INITRD=str(args.initrd), HV2_CLUSTER_TOKEN=token))
+            control_environment = dict(env, HV2_API_KEY=key, HV2_CLUSTER_TOKEN=token)
+            if args.access_audit:
+                (directory / "audit.key").write_text("42" * 32 + "\n")
+                control_environment.update(HV2_ACCESS_AUDIT=str(directory / "access.jsonl"),
+                    HV2_ACCESS_AUDIT_KEY_FILE=str(directory / "audit.key"))
             start("control", [str(args.control_plane), "--store", store, "--namespace", namespace, "--port", str(api_port),
                 "--proxy-port", str(api_proxy), "--api-keys-file", str(policies), "--api-tls-cert", str(directory / "api.pem"),
                 "--api-tls-key", str(directory / "api.key"), "--mtls-ca", str(directory / "ca.pem"),
                 "--mtls-cert", str(directory / "control.pem"), "--mtls-key", str(directory / "control.key"),
-                "--mtls-node-name", "tcp-node.test"], dict(env, HV2_API_KEY=key, HV2_CLUSTER_TOKEN=token))
+                "--mtls-node-name", "tcp-node.test"], control_environment)
             deadline = time.monotonic() + 40
             while True:
                 if any(process.poll() is not None for _, process in processes):
@@ -1123,6 +1131,23 @@ def main():
                 raw = (directory / (name + ".log")).read_bytes()
                 log_path = args.output.with_name(args.output.stem + "-" + name + ".log")
                 log_path.write_bytes(raw)
+            if args.access_audit:
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location("audit_verifier", paths["audit_verifier"])
+                    verifier = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(verifier)
+                    raw = (directory / "access.jsonl").read_bytes()
+                    for secret in (key, token, inventory_key):
+                        assert secret.encode() not in raw, "credential appeared in audit records"
+                    result = verifier.verify(raw, bytes.fromhex("42" * 32))
+                    assert result["verified_records"] > 0 and result["uncompleted_admissions"] == 0
+                    assert result["completion_statuses"].get("201", 0) > 0
+                    assert result["completion_statuses"].get("401", 0) > 0
+                    args.output.with_name(args.output.stem + "-access.jsonl").write_bytes(raw)
+                    report["access_audit"] = dict(result, credentials_absent=True, synthetic_key_hex="42 repeated 32 times")
+                except Exception as error:
+                    report["cleanup_errors"].append(f"access audit verification: {error}")
             if report["cleanup_errors"]:
                 report["success"] = False
             args.output.write_text(json.dumps(report, indent=2) + "\n")
