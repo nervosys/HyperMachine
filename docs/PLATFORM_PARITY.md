@@ -79,6 +79,13 @@ in four of four pairs, but worse P99 (12857 versus 9168 ms) and higher held PSS
 The settings remain optional; these local results establish no managed-service
 or across-the-board win.
 
+[Two direct eight/sixteen-slot repeats](benchmarks/2026-10-02/cold-budget-comparison/README.md)
+passed all 1600 attempts. Sixteen improved paired P99 in six of eight pairs but
+paired means in only four. A matched sixteen-slot native comparison passed 400/400
+attempts per engine: HyperMachine had lower P50 (3807 versus 5579 ms) and worse
+P99 (11741 versus 11042 ms) and held PSS (8658.38 versus 8361.85 MiB). These
+tradeoffs leave tail latency and held memory as performance gaps.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.

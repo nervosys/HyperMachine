@@ -104,3 +104,4 @@ docs/benchmarks/2026-10-02/first-exit/** -text whitespace=cr-at-eol,-blank-at-eo
 docs/benchmarks/2026-10-02/first-cpu/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/cold-start-admission/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/cold-budget-tuning/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/cold-budget-comparison/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

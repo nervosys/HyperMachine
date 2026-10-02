@@ -19,3 +19,9 @@ The live-VM fixture verifies a two-slot bound, release after an unsuccessful boo
 and snapshot resume while a one-slot cold budget is occupied. This does not establish
 complete cancellation cleanup or resolve the cause of previously observed boot
 timeouts. See [measurements and reproducibility](benchmarks/2026-10-02/cold-start-admission/README.md).
+
+[Direct eight/sixteen-slot comparisons](benchmarks/2026-10-02/cold-budget-comparison/README.md)
+retain two repeats: sixteen lowered pooled P99 in both, but paired tail improvement
+was inconsistent in the repeat and paired means split evenly overall. Both settings
+improved local median readiness over Firecracker in their respective cohorts, with
+worse P99 and held process memory. These measurements establish no universal budget.
