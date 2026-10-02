@@ -86,6 +86,13 @@ attempts per engine: HyperMachine had lower P50 (3807 versus 5579 ms) and worse
 P99 (11741 versus 11042 ms) and held PSS (8658.38 versus 8361.85 MiB). These
 tradeoffs leave tail latency and held memory as performance gaps.
 
+A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
+passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
+observed approximately 100–112 MiB reclaimable while guests remained running,
+after no-op adjustment. This identifies a memory optimization candidate; the
+diagnostic helper changes the fixture, and concurrent latency, lifecycle and
+competitor comparisons remain untested. No heap policy or default was adopted.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.
