@@ -130,6 +130,7 @@ def main():
     parser.add_argument("--node-response-loss", action="store_true", help="verify real control-plane response loss and timeout after node completion")
     parser.add_argument("--node-publication-fault", action="store_true", help="verify committed named guest survives a Redis event publication failure")
     parser.add_argument("--node-registration-fault", action="store_true", help="verify a registration write denial preserves the local guest and pending ownership")
+    parser.add_argument("--node-registration-reconcile", action="store_true", help="reconcile the preserved guest with its original locally retained ownership")
     parser.add_argument("--node-name-operation", action="store_true", help="verify authenticated node completion and recovery without a creation descriptor")
     parser.add_argument("--reserved-create", action="store_true", help="verify name reservation during VM creation, duplicate refusal and reuse")
     parser.add_argument("--reserved-alias", action="store_true", help="assign a reserved alias with the CLI and verify named SSH without metadata")
@@ -140,6 +141,8 @@ def main():
         parser.error("--node-publication-fault requires --node-name-operation")
     if args.node_registration_fault and not args.node_name_operation:
         parser.error("--node-registration-fault requires --node-name-operation")
+    if args.node_registration_reconcile and not args.node_registration_fault:
+        parser.error("--node-registration-reconcile requires --node-registration-fault")
     if args.node_name_operation and not args.reserved_create:
         parser.error("--node-name-operation requires --reserved-create")
     if args.reserved_create and (not (args.ssh_by_name and args.ssh_fixture) or args.reserved_alias):
@@ -719,11 +722,11 @@ def main():
                     def registration_fault():
                         fault_name="registration-"+uuid.uuid4().hex
                         body={"templateID":"base","timeout":300,"metadata":{"hm.name":fault_name}}
-                        def direct(method,path,body=None,expected=200):
+                        def direct(method,path,body=None,expected=200,cluster_credential=token):
                             connection=http.client.HTTPSConnection("127.0.0.1",node_port,context=node_context,timeout=90)
                             try:
                                 connection.request(method,path,body=None if body is None else json.dumps(body).encode(),
-                                    headers={"content-type":"application/json","x-hv2-cluster-token":token})
+                                    headers={"content-type":"application/json","x-hv2-cluster-token":cluster_credential})
                                 response=connection.getresponse()
                                 raw=response.read()
                                 assert response.status==expected,(response.status,raw)
@@ -755,6 +758,33 @@ def main():
                             pending=json.loads(subprocess.check_output(["redis-cli","-p",str(redis_port),"HGET",f"hv2:{namespace}:name-reservations",fault_name]))
                             assert pending["name"]==fault_name and pending["sandbox_id"] is None
                             assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id,local_id}
+                            if args.node_registration_reconcile:
+                                path=f"/sandboxes/{local_id}/registration/reconcile"
+                                direct("POST",path,expected=401,cluster_credential="wrong")
+                                replacement=dict(pending,token=str(uuid.uuid4()))
+                                def install(value):
+                                    subprocess.run(["redis-cli","-p",str(redis_port),"HSET",f"hv2:{namespace}:name-reservations",fault_name,json.dumps(value)],check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                                try:
+                                    install(replacement)
+                                    direct("POST",path,expected=409)
+                                    assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id,local_id}
+                                    assert {row["sandboxID"] for row in api("GET","/v2/sandboxes")}=={id}
+                                finally:install(pending)
+                                reconciled=direct("POST",path)
+                                assert reconciled["sandboxID"]==local_id
+                                assert pending["token"] not in json.dumps(reconciled)
+                                assert alias_cli("inspect",fault_name)=={"name":fault_name,"sandboxID":local_id}
+                                assert {row["sandboxID"] for row in api("GET","/v2/sandboxes")}=={id,local_id}
+                                api("POST","/v2/sandboxes",body,expected=409)
+                                direct("POST",path,expected=409)
+                                assert pending["token"] not in command(local_id,"env")
+                                command(local_id,"/usr/sbin/dropbear -F -E -s -j -k -r /etc/dropbear/fixture-key -p 127.0.0.1:22 -P /var/run/ssh-fixture.pid </dev/null >/tmp/ssh-fixture.log 2>&1 &")
+                                deadline=time.monotonic()+10
+                                while True:
+                                    probe=ssh("printf reconciled-same-guest",sandbox_name=fault_name)
+                                    if probe.returncode==0 and probe.stdout==b"reconciled-same-guest":break
+                                    if time.monotonic()>deadline:raise RuntimeError(probe.stderr.decode(errors="replace"))
+                                    time.sleep(.05)
                         finally:
                             permission("+sadd")
                             if local_id is None:
@@ -762,6 +792,14 @@ def main():
                                 if matching:local_id=matching[0]["sandboxID"]
                             if local_id is not None:direct("DELETE",f"/sandboxes/{local_id}",expected=204)
                         assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id}
+                        if args.node_registration_reconcile:
+                            api("GET",f"/sandbox-names/{fault_name}",expected=404)
+                            return {"control_plane_status":503,"local_guest_preserved_and_executable":True,
+                                    "partial_registration_writes_absent":True,"wrong_cluster_credential_refused":True,
+                                    "replacement_owner_refused_without_guest_loss":True,"original_owner_reconciles_same_VM":True,
+                                    "CLI_and_named_SSH_recover_same_guest":True,"duplicate_creation_refused":True,
+                                    "reconciliation_context_cleared_after_success":True,"operation_not_exposed":True,
+                                    "local_guest_deleted_and_bound_name_released":True}
                         api("GET",f"/sandbox-names/{fault_name}",expected=409)
                         api("POST","/v2/sandboxes",body,expected=409)
                         return {"control_plane_status":503,"local_guest_preserved_and_executable":True,
@@ -769,7 +807,7 @@ def main():
                                 "pending_ownership_preserved":True,"duplicate_creation_refused":True,
                                 "no_extra_local_VM":True,"write_permission_restored":True,
                                 "local_guest_deleted":True,"pending_not_blindly_released_after_delete":True}
-                    case("node-registration-write-permission-fault",registration_fault)
+                    case("node-registration-fault-same-guest-reconciliation" if args.node_registration_reconcile else "node-registration-write-permission-fault",registration_fault)
                 def ssh_binary():
                     sample = bytes(index % 251 for index in range(1024 * 1024))
                     result = ssh("cat > /tmp/ssh-transfer.bin; cat /tmp/ssh-transfer.bin", sample)
