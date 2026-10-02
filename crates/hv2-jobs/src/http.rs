@@ -52,6 +52,10 @@ pub fn router(store: Store, token: Option<String>) -> Router {
             "/api/v1/schedules/{id}/occurrences",
             get(schedule_occurrences),
         )
+        .route(
+            "/api/v1/schedules/{id}/receipts/{scheduled_ms}",
+            get(schedule_receipt),
+        )
         .route_layer(middleware::from_fn_with_state(api.clone(), authorize))
         .with_state(api)
 }
@@ -122,6 +126,19 @@ async fn schedule_detail(State(api): State<Api>, Path(id): Path<String>) -> Resp
             "cancelled": api.store.interval_schedule_cancelled(&id)?,
             "publication_through_ms": api.store.interval_progress(&id)?
         }))
+    })
+    .await
+}
+
+async fn schedule_receipt(
+    State(api): State<Api>,
+    Path((id, scheduled_ms)): Path<(String, u64)>,
+) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        Ok(
+            serde_json::to_value(api.store.vm_dispatch_state(&id, scheduled_ms)?)
+                .expect("dispatch state serialization"),
+        )
     })
     .await
 }
@@ -406,6 +423,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn schedule_receipts_recover_unresolved_and_completed_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, app) = app(dir.path(), Some("receipt-token"));
+        let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,
+            "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+            "job":{"command":["true"]}}))
+        .unwrap();
+        store
+            .create_interval_schedule("recover", &schedule)
+            .unwrap();
+        store.materialize_interval("recover", 100, 1).unwrap();
+        let path = "/api/v1/schedules/recover/receipts/100";
+        let token = Some("receipt-token");
+        assert_eq!(
+            call(&app, "GET", path, None, token).await.0,
+            StatusCode::NOT_FOUND
+        );
+        let claim = store.claim_vm_occurrence("recover", 100, "worker").unwrap();
+        for presented in [None, Some("wrong")] {
+            let (status, body) = call(&app, "GET", path, None, presented).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+            assert!(!body.contains(&claim.token));
+        }
+        let (status, body) = call(&app, "GET", path, None, token).await;
+        assert_eq!(status, StatusCode::OK);
+        let state: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(state["claim"]["token"], claim.token);
+        assert!(state["completion"].is_null());
+        let result: crate::dispatch::DispatchCompletion = serde_json::from_value(json!({
+            "claim_token":claim.token,"exit_code":7,"timed_out":false,
+            "stdout":"durable output","stderr":"","stdout_truncated":false}))
+        .unwrap();
+        store
+            .complete_vm_occurrence("recover", 100, &result)
+            .unwrap();
+        store.cancel_interval_schedule("recover").unwrap();
+        let reopened = router(
+            Store::open(dir.path()).unwrap(),
+            Some("receipt-token".into()),
+        );
+        let (status, body) = call(&reopened, "GET", path, None, token).await;
+        assert_eq!(status, StatusCode::OK);
+        let state: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(state["completion"]["stdout"], "durable output");
+        assert_eq!(state["completion"]["exit_code"], 7);
+        assert_eq!(
+            call(&reopened, "POST", path, None, token).await.0,
+            StatusCode::METHOD_NOT_ALLOWED
+        );
+        assert_eq!(
+            call(
+                &reopened,
+                "GET",
+                "/api/v1/schedules/recover/receipts/invalid",
+                None,
+                token
+            )
+            .await
+            .0,
+            StatusCode::BAD_REQUEST
+        );
+    }
+
+    #[tokio::test]
     async fn schedule_routes_authenticate_publish_and_recover_pages() {
         let dir = tempfile::tempdir().unwrap();
         let (store, app) = app(dir.path(), Some("schedule-token"));
@@ -416,6 +497,7 @@ mod tests {
             ("POST", "/api/v1/schedules/test/publish"),
             ("POST", "/api/v1/schedules/test/cancel"),
             ("GET", "/api/v1/schedules/test/occurrences"),
+            ("GET", "/api/v1/schedules/test/receipts/100"),
         ] {
             for token in [None, Some("wrong")] {
                 assert_eq!(

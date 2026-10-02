@@ -214,6 +214,14 @@ files, and scans the schedule directory while retaining at most one page of name
 in memory. The CLI takes the same exclusive cursor as `schedule list --after NAME`.
 Pages are not a frozen snapshot during concurrent creation; refresh from the
 beginning to discover names inserted before a previous cursor.
+`GET /api/v1/schedules/{id}/receipts/{scheduled_ms}` returns the same durable
+claim and optional completion as `schedule receipt`. It requires the jobs
+service bearer token when configured. A claim without completion returns 200
+with `completion: null`; a missing claim returns 404. Results retain bounded
+stdout/stderr and truncation flags, survive store reopening, and remain readable
+after schedule cancellation. This inspection route does not accept writes,
+execute jobs, or establish that an unresolved guest command has stopped.
+
 Schedule filesystem operations run in blocking tasks. These routes provide no
 job execution or schedule update yet. Automatic publication
 currently runs through `schedule watch`.
