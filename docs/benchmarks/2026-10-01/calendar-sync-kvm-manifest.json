@@ -1,0 +1,19 @@
+{
+  "source_commit": "6d9bafd36210a0c4edcc2771ce38a20ba5e2e948",
+  "report_sha256": "5182753c8e586a9f116fa5d92f62dc0db0c73b15087408e13a78ce2fd69535b6",
+  "source_sha256": {
+    "calendar-publication-kvm-coordinator.py": "d98bcc2640fffdd3aa93b2511fe9647ac223f0fedf1ec6600d2466c78c9a1153",
+    "scheduled-worker-core-source.patch": "e6c015334bb04b1c96768c54bfb869ff3a9b2624b95210fc2bce9dc2ed0a1728"
+  },
+  "artifact_sha256": {
+    "daemon": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+    "control-plane": "67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029",
+    "cli": "dcbc3fa753a97c973b56d2935e076633c5502344fcd8a1bfc0ace5a3500cd1ff",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+    "coordinator": "d98bcc2640fffdd3aa93b2511fe9647ac223f0fedf1ec6600d2466c78c9a1153"
+  },
+  "verified_cases": 16,
+  "registered_processes_stopped": 22,
+  "scope": "Functional local WSL nested-KVM validation of Unix directory-synced calendar publication, worker restart, replay refusal and cancellation. No physical power-loss test or performance score. CLI includes provisional core patch; frozen accepted daemon and control plane."
+}

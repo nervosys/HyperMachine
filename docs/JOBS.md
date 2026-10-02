@@ -589,3 +589,5 @@ Calendar catch-up now enumerates non-UTC civil days once per bounded batch. [Mat
 The publication optimization also passed [real KVM worker validation](benchmarks/2026-10-01/calendar-publication-kvm.md): bounded historical catch-up, ordered fold dispatch after restart, replay refusal and cancellation, with complete fixture cleanup. This establishes functional behavior, not a guest execution throughput score.
 
 The [directory-sync cost diagnostic](benchmarks/2026-10-01/calendar-sync.md) records matched local publication timings after adding Unix directory flushes. It verifies exact timestamp equality and reopened committed history, without claiming physical power-loss recovery.
+
+[Real KVM verification with Unix directory syncs](benchmarks/2026-10-01/calendar-sync-kvm.md) passed bounded catch-up, worker restart, replay refusal and cancellation. This functional run does not establish physical power-loss recovery.
