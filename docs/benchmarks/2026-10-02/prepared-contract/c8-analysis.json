@@ -1,0 +1,178 @@
+{
+  "engines": {
+    "hypermachine": {
+      "planned": 160,
+      "attempted": 160,
+      "passed": 160,
+      "failed": 0,
+      "successful_p50_ms": 122.77119999998831,
+      "successful_p95_ms": 366.64950600061275,
+      "successful_p99_ms": 551.9606830002886,
+      "median_held_pss_mib": 87.9501953125,
+      "median_incremental_pss_mib": 41.49609375
+    },
+    "firecracker": {
+      "planned": 160,
+      "attempted": 160,
+      "passed": 160,
+      "failed": 0,
+      "successful_p50_ms": 121.98178700054996,
+      "successful_p95_ms": 686.7155889995047,
+      "successful_p99_ms": 952.503816000899,
+      "median_held_pss_mib": 40.95361328125,
+      "median_incremental_pss_mib": 40.95361328125
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -102.35939374979353,
+      "hypermachine_p99_reduction_ms": -177.39767800048867,
+      "hypermachine_held_pss_reduction_mib": -48.8798828125
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 25.301678500227354,
+      "hypermachine_p99_reduction_ms": 26.30763399974967,
+      "hypermachine_held_pss_reduction_mib": -48.9453125
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 46.68739774956521,
+      "hypermachine_p99_reduction_ms": 60.5327049997868,
+      "hypermachine_held_pss_reduction_mib": -49.50390625
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -15.324985624829424,
+      "hypermachine_p99_reduction_ms": -57.603893999839784,
+      "hypermachine_held_pss_reduction_mib": -49.7119140625
+    },
+    {
+      "pair": 4,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -236.82797650030807,
+      "hypermachine_p99_reduction_ms": -293.18783300004725,
+      "hypermachine_held_pss_reduction_mib": -50.0908203125
+    },
+    {
+      "pair": 5,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -41.71326150026289,
+      "hypermachine_p99_reduction_ms": -52.34749000010197,
+      "hypermachine_held_pss_reduction_mib": -50.1064453125
+    },
+    {
+      "pair": 6,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -33.7775963751028,
+      "hypermachine_p99_reduction_ms": -81.62181700026849,
+      "hypermachine_held_pss_reduction_mib": -45.3798828125
+    },
+    {
+      "pair": 7,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 336.9289486256548,
+      "hypermachine_p99_reduction_ms": 354.24505100127135,
+      "hypermachine_held_pss_reduction_mib": -45.6220703125
+    },
+    {
+      "pair": 8,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -152.4417437494776,
+      "hypermachine_p99_reduction_ms": -156.29326899943408,
+      "hypermachine_held_pss_reduction_mib": -46.380859375
+    },
+    {
+      "pair": 9,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -131.92753074963548,
+      "hypermachine_p99_reduction_ms": -159.32209200036596,
+      "hypermachine_held_pss_reduction_mib": -45.9970703125
+    },
+    {
+      "pair": 10,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -33.69804675003252,
+      "hypermachine_p99_reduction_ms": -41.06651900110592,
+      "hypermachine_held_pss_reduction_mib": -45.55078125
+    },
+    {
+      "pair": 11,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 18.205314874421674,
+      "hypermachine_p99_reduction_ms": 22.747204999177484,
+      "hypermachine_held_pss_reduction_mib": -46.05859375
+    },
+    {
+      "pair": 12,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 116.03530037496057,
+      "hypermachine_p99_reduction_ms": 125.31759999910719,
+      "hypermachine_held_pss_reduction_mib": -46.6015625
+    },
+    {
+      "pair": 13,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 43.489732624948374,
+      "hypermachine_p99_reduction_ms": 53.10090499915532,
+      "hypermachine_held_pss_reduction_mib": -46.6826171875
+    },
+    {
+      "pair": 14,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -83.03096150075362,
+      "hypermachine_p99_reduction_ms": -135.02087500091875,
+      "hypermachine_held_pss_reduction_mib": -46.40234375
+    },
+    {
+      "pair": 15,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -42.61211437506063,
+      "hypermachine_p99_reduction_ms": -32.25074900001346,
+      "hypermachine_held_pss_reduction_mib": -47.0
+    },
+    {
+      "pair": 16,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 82.75487825062555,
+      "hypermachine_p99_reduction_ms": 93.86379900024622,
+      "hypermachine_held_pss_reduction_mib": -47.09375
+    },
+    {
+      "pair": 17,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 22.51648862466027,
+      "hypermachine_p99_reduction_ms": 28.718944000502233,
+      "hypermachine_held_pss_reduction_mib": -47.5009765625
+    },
+    {
+      "pair": 18,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": -34.73158587439684,
+      "hypermachine_p99_reduction_ms": -77.24118099940824,
+      "hypermachine_held_pss_reduction_mib": -47.0302734375
+    },
+    {
+      "pair": 19,
+      "complete_successful_pair": true,
+      "hypermachine_mean_reduction_ms": 685.8587472502222,
+      "hypermachine_p99_reduction_ms": 802.162601999953,
+      "hypermachine_held_pss_reduction_mib": -47.2548828125
+    }
+  ],
+  "artifacts_unchanged": true,
+  "prepared_sources_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "memory_conditional_on_complete_successful_batches": true,
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false,
+  "cleanup_verified": true,
+  "hypermachine_faster_complete_pairs": 9,
+  "matched_guest_restore_contract": true
+}
