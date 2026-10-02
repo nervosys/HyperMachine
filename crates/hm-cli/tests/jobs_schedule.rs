@@ -596,3 +596,65 @@ fn operator_result_requires_claim_token_and_preserves_immutable_completion() {
     .status
     .success());
 }
+
+#[test]
+fn calendar_cli_publishes_fold_occurrences_and_recovers_without_execution() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let file = dir.path().join("calendar.json");
+    // 2026-11-01 08:00 UTC, before the Los Angeles repeated 01:30.
+    std::fs::write(
+        &file,
+        json!({"first_ms":1793520000000_u64,
+        "cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},
+        "job":{"command":["program-that-must-not-be-run"]}})
+        .to_string(),
+    )
+    .unwrap();
+    success(invoke(
+        &store,
+        &["create", "calendar", file.to_str().unwrap()],
+    ));
+    let status = success(invoke(&store, &["status", "calendar"]));
+    assert!(status["schedule"]["cron"]["tzdb_version"]
+        .as_str()
+        .is_some());
+    let first = success(invoke(
+        &store,
+        &[
+            "publish",
+            "calendar",
+            "--now-ms",
+            "1793527200000",
+            "--limit",
+            "1",
+        ],
+    ));
+    assert_eq!(first[0]["scheduled_ms"], 1793521800000_u64);
+    let second = success(invoke(
+        &store,
+        &[
+            "publish",
+            "calendar",
+            "--now-ms",
+            "1793527200000",
+            "--limit",
+            "1",
+        ],
+    ));
+    assert_eq!(second[0]["scheduled_ms"], 1793525400000_u64);
+    let records = success(invoke(&store, &["occurrences", "calendar"]));
+    assert_eq!(records.as_array().unwrap().len(), 2);
+    success(invoke(&store, &["cancel", "calendar"]));
+    assert!(!invoke(
+        &store,
+        &["publish", "calendar", "--now-ms", "1793527200000"]
+    )
+    .status
+    .success());
+    assert_eq!(
+        success(invoke(&store, &["occurrences", "calendar"])),
+        records
+    );
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+}

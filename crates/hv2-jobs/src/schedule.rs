@@ -8,17 +8,30 @@ use serde::{Deserialize, Serialize};
 
 use crate::{JobError, JobSpec, Result, Store};
 
-/// An interval anchored to an absolute Unix timestamp, without clock drift.
+/// Immutable recurrence, retaining the historical type name for compatibility.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct IntervalSchedule {
     pub first_ms: u64,
+    #[serde(default)]
     pub every_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cron: Option<CronCalendar>,
     #[serde(default)]
     pub missed_policy: MissedOccurrencePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vm: Option<VmScheduleTarget>,
     pub job: JobSpec,
+}
+
+/// Calendar recurrence pinned to the timezone rules used to create its history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CronCalendar {
+    pub expression: String,
+    pub timezone: String,
+    #[serde(default)]
+    pub tzdb_version: Option<String>,
 }
 
 /// Guest destination. Connection profiles are resolved by the operator's
@@ -73,6 +86,14 @@ impl IntervalSchedule {
             return Ok(Vec::new());
         }
         if self.missed_policy == MissedOccurrencePolicy::Coalesce {
+            if let Some(cron) = &self.cron {
+                let expression: crate::cron::CronExpression = cron.expression.parse()?;
+                return Ok(expression
+                    .at_or_before_in_timezone(now_ms, &cron.timezone)?
+                    .filter(|last| *last >= first)
+                    .into_iter()
+                    .collect());
+            }
             let offset = (now_ms - self.first_ms) / self.every_ms * self.every_ms;
             return Ok(vec![self.first_ms + offset]);
         }
@@ -83,7 +104,15 @@ impl IntervalSchedule {
             if due.len() == limit {
                 break;
             }
-            match current.checked_add(self.every_ms) {
+            let next = if self.cron.is_some() {
+                match current.checked_add(1) {
+                    Some(after) => self.at_or_after(after)?,
+                    None => None,
+                }
+            } else {
+                current.checked_add(self.every_ms)
+            };
+            match next {
                 Some(next) if next <= now_ms => current = next,
                 _ => break,
             }
@@ -92,7 +121,35 @@ impl IntervalSchedule {
     }
 
     pub fn validate(&self) -> Result<()> {
-        if self.every_ms == 0 {
+        if let Some(cron) = &self.cron {
+            if self.every_ms != 0 {
+                return Err(JobError::InvalidSpec(
+                    "choose cron or every_ms, not both".into(),
+                ));
+            }
+            let _: crate::cron::CronExpression = cron.expression.parse()?;
+            cron.timezone
+                .parse::<chrono_tz::Tz>()
+                .map_err(|_| JobError::InvalidSpec("unknown cron timezone".into()))?;
+            if cron
+                .tzdb_version
+                .as_deref()
+                .is_some_and(|version| version != chrono_tz::IANA_TZDB_VERSION)
+            {
+                return Err(JobError::InvalidSpec(
+                    "cron timezone database version differs from this build".into(),
+                ));
+            }
+            use chrono::Datelike;
+            let first = i64::try_from(self.first_ms)
+                .ok()
+                .and_then(chrono::DateTime::from_timestamp_millis);
+            if first.is_none_or(|value| !(1970..=9999).contains(&value.year())) {
+                return Err(JobError::InvalidSpec(
+                    "cron first_ms is outside supported calendar years".into(),
+                ));
+            }
+        } else if self.every_ms == 0 {
             return Err(JobError::InvalidSpec(
                 "schedule interval must be positive".into(),
             ));
@@ -137,6 +194,10 @@ impl IntervalSchedule {
     /// The first occurrence at or after `time_ms`; None means overflow.
     pub fn at_or_after(&self, time_ms: u64) -> Result<Option<u64>> {
         self.validate()?;
+        if let Some(cron) = &self.cron {
+            let expression: crate::cron::CronExpression = cron.expression.parse()?;
+            return expression.at_or_after_in_timezone(time_ms.max(self.first_ms), &cron.timezone);
+        }
         let delta = time_ms.saturating_sub(self.first_ms);
         let intervals = delta / self.every_ms;
         let intervals = if delta.is_multiple_of(self.every_ms) {
@@ -441,13 +502,26 @@ impl Store {
     pub fn create_interval_schedule(&self, id: &str, schedule: &IntervalSchedule) -> Result<()> {
         check_schedule_id(id)?;
         schedule.validate()?;
-        self.publish_schedule_record("schedules", id, schedule)
+        let mut schedule = schedule.clone();
+        if let Some(cron) = &mut schedule.cron {
+            cron.tzdb_version = Some(chrono_tz::IANA_TZDB_VERSION.into());
+        }
+        self.publish_schedule_record("schedules", id, &schedule)
     }
 
     pub fn interval_schedule(&self, id: &str) -> Result<IntervalSchedule> {
         check_schedule_id(id)?;
         let schedule: IntervalSchedule =
             crate::read_json(&self.root().join("schedules").join(id), id)?;
+        if schedule
+            .cron
+            .as_ref()
+            .is_some_and(|cron| cron.tzdb_version.is_none())
+        {
+            return Err(JobError::Corrupt(
+                "persisted cron is missing its timezone database version".into(),
+            ));
+        }
         schedule.validate()?;
         Ok(schedule)
     }
@@ -525,10 +599,144 @@ mod tests {
         IntervalSchedule {
             first_ms: 100,
             every_ms: 10,
+            cron: None,
             missed_policy: MissedOccurrencePolicy::CatchUp,
             vm: None,
             job: serde_json::from_value(serde_json::json!({"command":["echo","ok"]})).unwrap(),
         }
+    }
+
+    #[test]
+    fn calendar_publication_recovers_folds_coalesces_and_pins_rules() {
+        let utc = |value: &str| {
+            chrono::DateTime::parse_from_rfc3339(value)
+                .unwrap()
+                .timestamp_millis() as u64
+        };
+        let first = utc("2026-11-01T08:00:00Z");
+        let a = utc("2026-11-01T08:30:00Z");
+        let b = utc("2026-11-01T09:30:00Z");
+        let now = utc("2026-11-01T10:00:00Z");
+        let mut calendar: IntervalSchedule = serde_json::from_value(serde_json::json!({
+            "first_ms":first,"cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},
+            "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+            "job":{"command":["true"]}}))
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .create_interval_schedule("calendar", &calendar)
+            .unwrap();
+        assert_eq!(
+            store
+                .interval_schedule("calendar")
+                .unwrap()
+                .cron
+                .unwrap()
+                .tzdb_version
+                .as_deref(),
+            Some(chrono_tz::IANA_TZDB_VERSION)
+        );
+        store.record_interval_occurrence("calendar", a).unwrap(); // interrupted publication
+        assert_eq!(
+            store.materialize_interval("calendar", now, 1).unwrap()[0].scheduled_ms,
+            a
+        );
+        let reopened = Store::open(dir.path()).unwrap();
+        assert_eq!(
+            reopened.materialize_interval("calendar", now, 1).unwrap()[0].scheduled_ms,
+            b
+        );
+        assert!(reopened
+            .materialize_interval("calendar", a, 1)
+            .unwrap()
+            .is_empty());
+        let times = |name| {
+            reopened
+                .committed_interval_occurrences(name, None, 10)
+                .unwrap()
+                .into_iter()
+                .map(|r| r.scheduled_ms)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(times("calendar"), vec![a, b]);
+        reopened.cancel_interval_schedule("calendar").unwrap();
+        assert!(reopened.materialize_interval("calendar", now, 1).is_err());
+        assert_eq!(times("calendar"), vec![a, b]);
+        calendar.missed_policy = MissedOccurrencePolicy::Coalesce;
+        assert_eq!(calendar.due_occurrences(None, b - 1, 10).unwrap(), vec![a]);
+        assert!(calendar
+            .due_occurrences(Some(a), b - 1, 10)
+            .unwrap()
+            .is_empty());
+        store
+            .create_interval_schedule("coalesce", &calendar)
+            .unwrap();
+        assert_eq!(
+            store.materialize_interval("coalesce", now, 10).unwrap()[0].scheduled_ms,
+            b
+        );
+        assert_eq!(times("coalesce"), vec![b]);
+        calendar.every_ms = 1;
+        assert!(store.create_interval_schedule("both", &calendar).is_err());
+        calendar.every_ms = 0;
+        calendar.cron.as_mut().unwrap().tzdb_version = Some("different".into());
+        assert!(store
+            .create_interval_schedule("wrong-version", &calendar)
+            .is_err());
+        let mut persisted = store.interval_schedule("coalesce").unwrap();
+        persisted.cron.as_mut().unwrap().tzdb_version = None;
+        std::fs::write(
+            store.root().join("schedules/coalesce"),
+            serde_json::to_vec(&persisted).unwrap(),
+        )
+        .unwrap();
+        assert!(matches!(
+            store.interval_schedule("coalesce"),
+            Err(JobError::Corrupt(_))
+        ));
+    }
+
+    #[test]
+    fn racing_calendar_publishers_commit_one_fold_history() {
+        let first = chrono::DateTime::parse_from_rfc3339("2026-11-01T08:00:00Z")
+            .unwrap()
+            .timestamp_millis() as u64;
+        let calendar = serde_json::from_value(serde_json::json!({"first_ms":first,
+            "cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},
+            "job":{"command":["true"]}}))
+        .unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        store
+            .create_interval_schedule("race-calendar", &calendar)
+            .unwrap();
+        let barrier = std::sync::Barrier::new(4);
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..4)
+                .map(|_| {
+                    scope.spawn(|| {
+                        barrier.wait();
+                        store.materialize_interval("race-calendar", first + 2 * 3_600_000, 2)
+                    })
+                })
+                .collect();
+            let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+            assert!(results
+                .iter()
+                .any(|result| result.as_ref().is_ok_and(|rows| rows.len() == 2)));
+            assert!(results
+                .iter()
+                .all(|result| result.is_ok() || matches!(result, Err(JobError::Conflict(_)))));
+        });
+        let rows = Store::open(dir.path())
+            .unwrap()
+            .committed_interval_occurrences("race-calendar", None, 10)
+            .unwrap();
+        assert_eq!(
+            rows.iter().map(|r| r.scheduled_ms).collect::<Vec<_>>(),
+            vec![first + 1_800_000, first + 5_400_000]
+        );
     }
 
     #[test]
