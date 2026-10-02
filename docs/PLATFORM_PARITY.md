@@ -135,6 +135,15 @@ quarters of the observed total PSS gap and directs investigation toward host
 allocation ownership. Raw smaps and parser checks are retained; the diagnostic
 does not prove reclaimability or a runtime optimization benefit.
 
+A subsequent [prepared-source sham/trim probe](benchmarks/2026-10-02/prepared-reclaim/README.md)
+passes all 128 diagnostic restores. A one-time trim after named-source
+preparation reduces empty-daemon PSS by a sham-adjusted 28.70/28.75 MiB
+and later held PSS by 26.77/27.96 MiB in two fresh-daemon pairs. This proves
+bounded reclaimability in the instrumented fixture, not latency neutrality
+or the benefit of trimming after initial template construction. A production
+candidate and matched latency/lifecycle verification remain required; no
+runtime change is adopted.
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,
