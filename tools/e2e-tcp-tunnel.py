@@ -357,7 +357,7 @@ def main():
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90)
                         if (result.returncode == 0) != succeeds:
                             raise RuntimeError(f"schedule CLI status {result.returncode}: {result.stderr[:1000]!r}")
-                        return json.loads(result.stdout) if succeeds else None
+                        return json.loads(result.stdout) if succeeds and result.stdout.strip() else None
 
                     jobs("create", "guest-job", str(spec))
                     jobs("publish", "guest-job", "--now-ms", "100", "--limit", "1")
@@ -377,13 +377,20 @@ def main():
                         assert continued["stdout"] == marker + "\nguest-job--110\n"
                         assert command(id, "cat /tmp/scheduled-dispatch-count") == "xx"
                         assert jobs("receipt", "guest-job", "110")["completion"]["stdout"] == continued["stdout"]
+                    if args.scheduled_worker:
+                        assert jobs("occurrences", "guest-job")[-1]["scheduled_ms"] == 120
                     jobs("cancel", "guest-job")
                     jobs("publish", "guest-job", "--now-ms", "110", succeeds=False)
                     assert jobs("receipt", "guest-job", "100")["completion"] == receipt
+                    if args.scheduled_worker:
+                        assert jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1") is None
+                        assert command(id, "cat /tmp/scheduled-dispatch-count") == "xx"
+                        assert jobs("receipt", "guest-job", "120", succeeds=False) is None
                     return {"paused_guest_resumed": True, "guest_exit_code": 7,
                             "literal_environment_preserved": True, "durable_output_recovered": True,
                             "duplicate_guest_execution_refused": True, "history_survives_cancellation": True, "automatic_worker": args.scheduled_worker,
-                            "restart_continues_next_occurrence": args.scheduled_worker}
+                            "restart_continues_next_occurrence": args.scheduled_worker,
+                            "cancelled_worker_leaves_pending_work_untouched": args.scheduled_worker}
                 case("scheduled-VM-worker-TLS-resume-restart-and-no-replay" if args.scheduled_worker else "scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
 
             if args.ssh_fixture:

@@ -51,3 +51,5 @@ docs/benchmarks/2026-10-01/scheduled-worker-coordinator.py -text
 docs/benchmarks/2026-10-01/dispatch-history-selection.patch -text whitespace=cr-at-eol,-blank-at-eol
 
 docs/benchmarks/2026-10-01/dispatch-backlog-*.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/scheduled-worker-cancel-coordinator.py -text
