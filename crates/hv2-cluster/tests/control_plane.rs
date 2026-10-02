@@ -1399,6 +1399,18 @@ async fn reserved_name_lookup_authenticates_and_never_returns_operation_tokens()
         .contains(reservation.operation_token()));
     let (_, created) = create(&base, json!({"templateID":"base"})).await;
     let id = created["sandboxID"].as_str().unwrap();
+    for (key, expected) in [("inventory-fixture", 403), ("sandbox-fixture", 409)] {
+        assert_eq!(
+            client()
+                .put(format!("{base}/sandboxes/{id}/names/guest"))
+                .header("x-api-key", key)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            expected
+        );
+    }
     assert!(store
         .bind_name(&name, reservation.operation_token(), id)
         .await
@@ -1428,6 +1440,63 @@ async fn reserved_name_lookup_authenticates_and_never_returns_operation_tokens()
         request("guest", "sandbox-fixture").await.unwrap().status(),
         404
     );
+    heartbeat.abort();
+    let _ = heartbeat.await;
+}
+
+#[tokio::test]
+async fn name_assignment_is_authenticated_exclusive_and_reusable_after_deletion() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_, heartbeat) = fake_node(store.clone(), "assign-node", 4, Duration::from_secs(30)).await;
+    let base = control_plane(store.clone(), Some(KEY)).await;
+    let (_, a) = create(&base, json!({"templateID":"base"})).await;
+    let (_, b) = create(&base, json!({"templateID":"base"})).await;
+    let a = a["sandboxID"].as_str().unwrap();
+    let b = b["sandboxID"].as_str().unwrap();
+    let assign = |id: &str, name: &str, key: &str| {
+        client()
+            .put(format!("{base}/sandboxes/{id}/names/{name}"))
+            .header("x-api-key", key)
+            .send()
+    };
+    assert_eq!(assign(a, "alias", "").await.unwrap().status(), 401);
+    assert_eq!(assign(a, "bad%20name", KEY).await.unwrap().status(), 400);
+    assert_eq!(assign("absent", "alias", KEY).await.unwrap().status(), 404);
+    let (ra, rb) = tokio::join!(assign(a, "alias", KEY), assign(b, "alias", KEY));
+    let ra = ra.unwrap();
+    let rb = rb.unwrap();
+    assert!(matches!(
+        (ra.status().as_u16(), rb.status().as_u16()),
+        (200, 409) | (409, 200)
+    ));
+    let (winner, loser) = if ra.status().is_success() {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    assert_eq!(
+        assign(winner, "alias", KEY)
+            .await
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap(),
+        json!({"name":"alias","sandboxID":winner})
+    );
+    assert_eq!(assign(loser, "alias", KEY).await.unwrap().status(), 409);
+    assert!(store.delete_sandbox(winner).await.unwrap());
+    assert_eq!(assign(loser, "alias", KEY).await.unwrap().status(), 200);
+    assert!(!store.delete_sandbox(winner).await.unwrap());
+    let resolved = client()
+        .get(format!("{base}/sandbox-names/alias"))
+        .header("x-api-key", KEY)
+        .send()
+        .await
+        .unwrap()
+        .json::<Value>()
+        .await
+        .unwrap();
+    assert_eq!(resolved, json!({"name":"alias","sandboxID":loser}));
     heartbeat.abort();
     let _ = heartbeat.await;
 }
