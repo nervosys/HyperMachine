@@ -67,7 +67,7 @@ cargo test -p hm-cli --test sandbox_vm_client
 The protocol fixtures are complemented by [real KVM SSH verification](benchmarks/2026-10-01/ssh-stdio.md)
 through API TLS and node mTLS: exact 1 MiB binary roundtrip, remote exit code,
 rejected client key and rejected guest host key. Guest SSH provisioning and
-atomic name reservations remain unimplemented; this addition
+creation-time name enforcement remain unimplemented; [reserved aliases for existing VMs](benchmarks/2026-10-02/reserved-alias/README.md) now pass real KVM/TLS checks. This evidence
 establishes no performance comparison.
 
 Named connections now prefer authenticated `GET /sandbox-names/{name}` resolution when a bound reservation exists. Pending reservations and authorization or server errors stop the connection. Metadata fallback is limited to an explicitly unreserved name or an older server with an empty route-not-found response; it continues to refuse duplicate names. See [reservation status and remaining creation work](SANDBOX_NAME_RESERVATIONS.md).
