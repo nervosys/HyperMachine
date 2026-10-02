@@ -1,0 +1,67 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 4408.632878999924,
+      "successful_p99_ms": 15082.9505110014,
+      "failed_runs": 0
+    },
+    "candidate": {
+      "planned": 400,
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 4350.279322999995,
+      "successful_p99_ms": 13262.70744499925,
+      "failed_runs": 0
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 1811.230489439331,
+      "candidate_p50_reduction_ms": -420.85874699114356,
+      "candidate_p99_reduction_ms": 8035.5172410054365
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -777.5981747994956,
+      "candidate_p50_reduction_ms": -30.304453990538605,
+      "candidate_p99_reduction_ms": -3164.5780760009075
+    },
+    {
+      "pair": 2,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -2479.0187364496524,
+      "candidate_p50_reduction_ms": -147.83982699736953,
+      "candidate_p99_reduction_ms": -6292.763496006955
+    },
+    {
+      "pair": 3,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 721.8569939908048,
+      "candidate_p50_reduction_ms": 1276.2057590007316,
+      "candidate_p99_reduction_ms": 1229.308634006884
+    }
+  ],
+  "complete_successful_pairs": 4,
+  "candidate_faster_pairs": 2,
+  "median_paired_mean_reduction_ms": -27.87059040434542,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": 16,
+  "same_binary": true,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+  "baseline_limit": 8
+}
