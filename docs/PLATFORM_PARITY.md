@@ -144,6 +144,17 @@ or the benefit of trimming after initial template construction. A production
 candidate and matched latency/lifecycle verification remain required; no
 runtime change is adopted.
 
+An isolated [one-time startup trim candidate](benchmarks/2026-10-02/startup-reclaim/README.md)
+passes all 776 scored restores and controls across smoke and two C8 cohorts.
+Unlike the preload probe, it calls trim after initial template construction,
+before listening. Median held PSS falls by 27.49/28.51 MiB, with lower held
+PSS in all twelve matched pairs and nearly unchanged incremental guest PSS.
+Paired means improve in 4/6 then 6/6 pairs, and paired P99 in 3/6 then 6/6;
+Firecracker controls also improve on every candidate-side repeat. This verifies
+a bounded fixed-overhead memory reduction, not a causal latency win or fleet
+density gain. The candidate remains isolated; larger single-guest and higher
+concurrency, sustained allocations, lifecycle and platform checks remain.
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,

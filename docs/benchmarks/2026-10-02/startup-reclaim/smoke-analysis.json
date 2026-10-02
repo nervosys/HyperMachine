@@ -1,0 +1,113 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 2,
+      "passed": 2,
+      "failed": 0,
+      "successful_p50_ms": 43.18238400082919,
+      "successful_p95_ms": 60.4569180013641,
+      "successful_p99_ms": 60.4569180013641,
+      "median_held_pss_mib": 70.20556640625,
+      "median_incremental_pss_mib": 29.8798828125,
+      "firecracker_control_passed": 2,
+      "firecracker_control_planned": 2,
+      "firecracker_control_p50_ms": 45.950114999868674,
+      "firecracker_control_p99_ms": 81.15320700017037
+    },
+    "candidate": {
+      "planned": 2,
+      "passed": 2,
+      "failed": 0,
+      "successful_p50_ms": 72.58700399870577,
+      "successful_p95_ms": 106.07604700089723,
+      "successful_p99_ms": 106.07604700089723,
+      "median_held_pss_mib": 42.74853515625,
+      "median_incremental_pss_mib": 30.08349609375,
+      "firecracker_control_passed": 2,
+      "firecracker_control_planned": 2,
+      "firecracker_control_p50_ms": 91.56193399940094,
+      "firecracker_control_p99_ms": 133.14439599889738
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete": true,
+      "mean_reduction_ms": -37.511874498704856,
+      "p99_reduction_ms": -45.61912899953313,
+      "held_reduction_mib": 27.45703125,
+      "firecracker_control_mean_shift_ms": 48.801503999129636
+    }
+  ],
+  "cohorts": [
+    {
+      "pair": 0,
+      "variant": "baseline",
+      "cleanup_verified": true,
+      "engines": {
+        "hypermachine": {
+          "planned": 2,
+          "attempted": 2,
+          "passed": 2,
+          "failed": 0,
+          "successful_p50_ms": 43.18238400082919,
+          "successful_p95_ms": 60.4569180013641,
+          "successful_p99_ms": 60.4569180013641,
+          "median_held_pss_mib": 70.20556640625,
+          "median_incremental_pss_mib": 29.8798828125
+        },
+        "firecracker": {
+          "planned": 2,
+          "attempted": 2,
+          "passed": 2,
+          "failed": 0,
+          "successful_p50_ms": 45.950114999868674,
+          "successful_p95_ms": 81.15320700017037,
+          "successful_p99_ms": 81.15320700017037,
+          "median_held_pss_mib": 22.396484375,
+          "median_incremental_pss_mib": 22.396484375
+        }
+      },
+      "startup_trim": null
+    },
+    {
+      "pair": 0,
+      "variant": "candidate",
+      "cleanup_verified": true,
+      "engines": {
+        "hypermachine": {
+          "planned": 2,
+          "attempted": 2,
+          "passed": 2,
+          "failed": 0,
+          "successful_p50_ms": 72.58700399870577,
+          "successful_p95_ms": 106.07604700089723,
+          "successful_p99_ms": 106.07604700089723,
+          "median_held_pss_mib": 42.74853515625,
+          "median_incremental_pss_mib": 30.08349609375
+        },
+        "firecracker": {
+          "planned": 2,
+          "attempted": 2,
+          "passed": 2,
+          "failed": 0,
+          "successful_p50_ms": 91.56193399940094,
+          "successful_p95_ms": 133.14439599889738,
+          "successful_p99_ms": 133.14439599889738,
+          "median_held_pss_mib": 22.435546875,
+          "median_incremental_pss_mib": 22.435546875
+        }
+      },
+      "startup_trim": {
+        "released": 1,
+        "duration_ms": 6.657113
+      }
+    }
+  ],
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "memory_conditional_on_complete_successful_batches": true,
+  "runtime_change_adopted": false,
+  "managed_competitor_win_established": false
+}

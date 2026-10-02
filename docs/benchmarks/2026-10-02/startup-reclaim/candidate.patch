@@ -1,0 +1,22 @@
+--- accepted-main.rs
++++ candidate-main.rs
+@@ -4342,6 +4342,19 @@
+             }
+         }
+     }
++    // Isolated experiment: reclaim free GNU allocator pages once after
++    // initial template preparation, before listening or joining a cluster.
++    // No periodic worker or per-request reclaim is installed.
++    #[cfg(all(target_os = "linux", target_env = "gnu"))]
++    if !templates.is_empty() {
++        let started = std::time::Instant::now();
++        // SAFETY: malloc_trim takes only a padding value and acts on free
++        // allocator chunks. It is thread-safe and runs in normal execution,
++        // never a signal handler. Live guest allocations remain allocated.
++        let released = unsafe { libc::malloc_trim(0) };
++        eprintln!("HV2_STARTUP_RECLAIM_EXPERIMENT released={released} duration_ns={}", started.elapsed().as_nanos());
++    }
++
+     let template_line = if templates.is_empty() {
+         "sandboxes boot from the kernel (no template snapshot)".to_string()
+     } else {

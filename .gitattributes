@@ -121,3 +121,4 @@ docs/benchmarks/2026-10-02/readiness-snapshots/** -text whitespace=cr-at-eol,-bl
 docs/benchmarks/2026-10-02/prepared-engines/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/prepared-memory/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/prepared-reclaim/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/startup-reclaim/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

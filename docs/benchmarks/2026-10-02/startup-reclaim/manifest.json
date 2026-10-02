@@ -1,0 +1,56 @@
+{
+  "inputs": {
+    "baseline": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "candidate": "b49d88fa968b98fe05490c0a9fee6347d385571a1c80e600920e3ea54b881b34",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "cohorts": [
+    {
+      "report": "smoke-report.json",
+      "analysis": "smoke-analysis.json",
+      "pairs": 1,
+      "concurrency": 1
+    },
+    {
+      "report": "c8-report.json",
+      "analysis": "c8-analysis.json",
+      "pairs": 6,
+      "concurrency": 8
+    },
+    {
+      "report": "c8-repeat-report.json",
+      "analysis": "c8-repeat-analysis.json",
+      "pairs": 6,
+      "concurrency": 8
+    }
+  ],
+  "sha256": {
+    "README.md": "255cfa04fa66be61efb63beb2ef24367c587c4589a95c355d8ed43ad8ae1ce46",
+    "accepted-main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "analyze-prepared-engines.py": "6391a62d630da7a61ef7ea55f801e396b3e385bba27a680b9bf80373a9fd4590",
+    "analyze-startup-reclaim.py": "4a55d29d790d8d7ed102455641039769a7c361c1288600291c02b796aa288ce8",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "bench-prepared-engines.py": "5a3cb8ec91ac527f55c681051ca68e3196e7926b84e8c1a625ce4ce73866130b",
+    "bench-startup-reclaim.py": "24e85b171d347d78f65f343198fe57298957adb04992435ad9c4c72038561e18",
+    "build-context.json": "ae18cd5f37ae07fe10db1ffd35c955937214445f7eaf6e72eb500186dffeaced",
+    "build.log": "1b5f059a48bc3d432bccf49965b97d1690cf23535ba5ca61017c6959c0e10477",
+    "c8-analysis.json": "42cc5e428bc98c2c8c81c21bba694128673e20346b11e21f603b4e552aa3ca1c",
+    "c8-repeat-analysis.json": "fac702b064cb6d5421e50572f2840ba047b58763d6d0ca44cb2f6d93f8a69a16",
+    "c8-repeat-report.json": "7a0f48d844edd9f7928d2b342bef49edf95730ee990b31b8c182a51ecf5f87b2",
+    "c8-report.json": "33194d1a2fc911eff5a1e5c200d27fae98e295329e07a54dfb536de5f4889b02",
+    "candidate-main.rs": "45330237c00486ce126e0fa20a39a6cf98d100f918ca38f8a196f97818e0d472",
+    "candidate.patch": "bf5cda5e5ee518438e950a8132a78ea13b8d20a43a02d27ba2c74bcb75a409dd",
+    "check-startup-reclaim.py": "80be6aa752115d72fa6795bdaba70fdf75ae3260e725b8a8ea605ffafa2fd17d",
+    "compiler-comments.json": "15d980e93615a64a7fa16d3f7c097eb9516ab32050461908f3056d419c09ab61",
+    "experiment-startup-reclaim.py": "ef52a7517218d7e982787d13ff879812d192b98d03f746ec6f75ef07b2a2ed66",
+    "negative-linux.log": "778de89204aaddc7991f8bb5d32457d67dcaf72144095d7b7a8cb0618a8ef032",
+    "negative-windows.log": "a6054ae7f80f8c4a52b21a24b7bd18f88de2418592976b699c30f9bfa60bd084",
+    "smoke-analysis.json": "b998e47b08c01918c4c4878db5c916e141bb11db8b6604146a19ee1939bdc59d",
+    "smoke-report.json": "77541f04ed52357edb1ba9f5b72a692e11dd38b0a501e5dd44f09ce859e45ab7",
+    "source-context.json": "9b78d838863ec40175c09f53d08b04979dac9370c6c308bc22ec41f3b70b7cc8",
+    "verify-startup-reclaim.py": "38d3410fbb5f033bb86f08f0b3af007fa367c8b9e0c94d9a0eb1b79ed0033ebd"
+  }
+}
