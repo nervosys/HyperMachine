@@ -1,0 +1,539 @@
+{
+  "purpose": "alternating local calendar planner comparison, no storage or guest or competitor score",
+  "order": [
+    "baseline",
+    "candidate",
+    "candidate",
+    "baseline"
+  ],
+  "binary_sha256": {
+    "baseline": "beb6c735ae41a493e028b156ca21dbee560da16eee203109047a00157d21b46f",
+    "candidate": "bbc78a62bdc18a1f51a1a7c22456215d203a335bc29703842f22bcf6aef642ce"
+  },
+  "runs": [
+    {
+      "binary": "baseline",
+      "report": {
+        "first_ms": 1793520000000,
+        "purpose": "local calendar planner diagnostic; no store, guest, network or competitor measurement",
+        "rows": [
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.16325599999999998,
+              0.161653,
+              0.160611,
+              0.171311,
+              0.205568,
+              0.161443,
+              0.160471,
+              0.16008,
+              0.16005
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              168.494058,
+              164.23750900000002,
+              175.488787,
+              163.420107,
+              164.475609,
+              162.29057899999998,
+              162.78969600000002,
+              162.27767300000002,
+              162.093748
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.183766,
+              0.183506,
+              0.18354499999999999,
+              0.183496,
+              0.183605,
+              0.18374600000000002,
+              0.19275299999999998,
+              0.183936,
+              0.18285400000000002
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              188.07947,
+              187.205637,
+              188.744587,
+              203.195302,
+              191.060362,
+              194.443153,
+              191.571742,
+              197.822588,
+              187.832301
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "30 1 * * *",
+            "first_occurrence_ms": 1793521800000,
+            "horizon_days": 366,
+            "last_occurrence_ms": 1825057800000,
+            "limit": 1000,
+            "occurrences": 367,
+            "planning_ms": [
+              0.210898,
+              0.219214,
+              0.210137,
+              0.209837,
+              0.220697,
+              0.217241,
+              0.215598,
+              0.215186,
+              0.214936
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "0 0 29 2 *",
+            "first_occurrence_ms": 1835424000000,
+            "horizon_days": 2928,
+            "last_occurrence_ms": 1835424000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.001593,
+              0.001553,
+              0.001523,
+              0.001533,
+              0.001533,
+              0.001593,
+              0.001533,
+              0.001533,
+              0.001543
+            ],
+            "timezone": "America/Los_Angeles"
+          }
+        ],
+        "samples_per_case": 9,
+        "timezone_database_version": "2025b"
+      }
+    },
+    {
+      "binary": "candidate",
+      "report": {
+        "first_ms": 1793520000000,
+        "purpose": "local calendar planner diagnostic; no store, guest, network or competitor measurement",
+        "rows": [
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.0009609999999999999,
+              0.001122,
+              0.000802,
+              0.000821,
+              0.000792,
+              0.0008320000000000001,
+              0.000791,
+              0.000792,
+              0.000812
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              0.726267,
+              0.710516,
+              0.7287720000000001,
+              0.7244929999999999,
+              0.713241,
+              0.7252139999999999,
+              0.713722,
+              0.730254,
+              0.787154
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.18180200000000002,
+              0.181532,
+              0.181571,
+              0.181372,
+              0.181471,
+              0.181542,
+              0.181602,
+              0.192332,
+              0.183275
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              197.218993,
+              216.107477,
+              212.31699700000001,
+              201.245192,
+              201.559048,
+              204.409939,
+              199.793463,
+              200.04829800000002,
+              197.03297799999999
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "30 1 * * *",
+            "first_occurrence_ms": 1793521800000,
+            "horizon_days": 366,
+            "last_occurrence_ms": 1825057800000,
+            "limit": 1000,
+            "occurrences": 367,
+            "planning_ms": [
+              0.22573800000000002,
+              0.21286300000000002,
+              0.229275,
+              0.270565,
+              0.30938,
+              0.264132,
+              0.234655,
+              0.23591700000000002,
+              0.24720999999999999
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "0 0 29 2 *",
+            "first_occurrence_ms": 1835424000000,
+            "horizon_days": 2928,
+            "last_occurrence_ms": 1835424000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.001683,
+              0.001563,
+              0.001563,
+              0.001563,
+              0.001522,
+              0.001603,
+              0.001553,
+              0.001523,
+              0.001563
+            ],
+            "timezone": "America/Los_Angeles"
+          }
+        ],
+        "samples_per_case": 9,
+        "timezone_database_version": "2025b"
+      }
+    },
+    {
+      "binary": "candidate",
+      "report": {
+        "first_ms": 1793520000000,
+        "purpose": "local calendar planner diagnostic; no store, guest, network or competitor measurement",
+        "rows": [
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.001002,
+              0.000992,
+              0.000861,
+              0.000822,
+              0.0008320000000000001,
+              0.000852,
+              0.0008309999999999999,
+              0.000822,
+              0.000812
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              0.732291,
+              0.7678900000000001,
+              0.724355,
+              0.7851940000000001,
+              0.7384130000000001,
+              0.7234039999999999,
+              0.7424200000000001,
+              0.724365,
+              0.761137
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.18546,
+              0.183025,
+              0.182865,
+              0.182945,
+              0.18288500000000002,
+              0.183086,
+              0.182975,
+              0.182554,
+              0.18169200000000002
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              190.107703,
+              186.52458199999998,
+              185.974165,
+              186.25688200000002,
+              190.559901,
+              185.780869,
+              188.161276,
+              185.70140500000002,
+              186.117532
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "30 1 * * *",
+            "first_occurrence_ms": 1793521800000,
+            "horizon_days": 366,
+            "last_occurrence_ms": 1825057800000,
+            "limit": 1000,
+            "occurrences": 367,
+            "planning_ms": [
+              0.21151,
+              0.21126,
+              0.21128,
+              0.211571,
+              0.219977,
+              0.218303,
+              0.217522,
+              0.230478,
+              0.21779199999999999
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "0 0 29 2 *",
+            "first_occurrence_ms": 1835424000000,
+            "horizon_days": 2928,
+            "last_occurrence_ms": 1835424000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.001643,
+              0.001563,
+              0.001543,
+              0.001543,
+              0.001513,
+              0.001563,
+              0.001543,
+              0.001553,
+              0.001513
+            ],
+            "timezone": "America/Los_Angeles"
+          }
+        ],
+        "samples_per_case": 9,
+        "timezone_database_version": "2025b"
+      }
+    },
+    {
+      "binary": "baseline",
+      "report": {
+        "first_ms": 1793520000000,
+        "purpose": "local calendar planner diagnostic; no store, guest, network or competitor measurement",
+        "rows": [
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.153087,
+              0.153327,
+              0.152937,
+              0.152917,
+              0.15291600000000002,
+              0.17396699999999998,
+              0.153047,
+              0.15310700000000002,
+              0.153187
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              153.62783299999998,
+              157.66149800000002,
+              153.422264,
+              153.593071,
+              155.21120499999998,
+              153.115629,
+              152.82931499999998,
+              153.155327,
+              153.92574000000002
+            ],
+            "timezone": "UTC"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793520000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.182414,
+              0.182254,
+              0.18221299999999999,
+              0.18219300000000002,
+              0.182234,
+              0.182283,
+              0.182254,
+              0.182203,
+              0.193195
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "* * * * *",
+            "first_occurrence_ms": 1793520000000,
+            "horizon_days": 2,
+            "last_occurrence_ms": 1793579940000,
+            "limit": 1000,
+            "occurrences": 1000,
+            "planning_ms": [
+              198.25297799999998,
+              202.582544,
+              200.011135,
+              198.633092,
+              199.78125899999998,
+              198.355944,
+              198.2971,
+              199.840143,
+              201.410751
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "30 1 * * *",
+            "first_occurrence_ms": 1793521800000,
+            "horizon_days": 366,
+            "last_occurrence_ms": 1825057800000,
+            "limit": 1000,
+            "occurrences": 367,
+            "planning_ms": [
+              0.21099,
+              0.209897,
+              0.20982699999999999,
+              0.20968699999999998,
+              0.235687,
+              0.215037,
+              0.215117,
+              0.22615800000000003,
+              0.214235
+            ],
+            "timezone": "America/Los_Angeles"
+          },
+          {
+            "expression": "0 0 29 2 *",
+            "first_occurrence_ms": 1835424000000,
+            "horizon_days": 2928,
+            "last_occurrence_ms": 1835424000000,
+            "limit": 1,
+            "occurrences": 1,
+            "planning_ms": [
+              0.001593,
+              0.001533,
+              0.001553,
+              0.001533,
+              0.001523,
+              0.001593,
+              0.001543,
+              0.001543,
+              0.001563
+            ],
+            "timezone": "America/Los_Angeles"
+          }
+        ],
+        "samples_per_case": 9,
+        "timezone_database_version": "2025b"
+      }
+    }
+  ]
+}

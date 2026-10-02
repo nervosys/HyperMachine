@@ -51,6 +51,14 @@ impl CronExpression {
         if !(1970..=9999).contains(&start.year()) {
             return Err(invalid_time());
         }
+        if forward && timezone == chrono_tz::UTC {
+            // Preserve the named-zone range contract while avoiding civil
+            // ambiguity enumeration for a timezone that has no transitions.
+            return Ok(self.at_or_after_utc(time_ms)?.filter(|candidate| {
+                chrono::DateTime::from_timestamp_millis(*candidate as i64)
+                    .is_some_and(|value| value.year() <= 9999)
+            }));
+        }
         let local_date = start.with_timezone(&timezone).date_naive();
         // UTC offsets are strictly less than a day in magnitude. Starting two
         // civil days earlier covers date-crossing backward transitions.
@@ -270,6 +278,42 @@ mod tests {
             .unwrap()
             .timestamp_millis() as u64
     }
+    #[test]
+    fn named_utc_selection_matches_utc_planner_and_keeps_range_limit() {
+        for expression in ["* * * * *", "15 3 * * *", "0 0 29 2 *", "0 0 1 * 1"] {
+            let cron: CronExpression = expression.parse().unwrap();
+            for from in [
+                0,
+                1,
+                utc("2026-11-01T08:00:00Z"),
+                utc("2099-03-01T00:00:01Z"),
+            ] {
+                assert_eq!(
+                    cron.at_or_after_in_timezone(from, "UTC").unwrap(),
+                    cron.at_or_after_utc(from).unwrap()
+                );
+            }
+        }
+        let yearly: CronExpression = "0 0 1 1 *".parse().unwrap();
+        assert_eq!(
+            yearly
+                .at_or_after_in_timezone(utc("9999-12-31T00:00:00Z"), "UTC")
+                .unwrap(),
+            None
+        );
+        assert!(yearly
+            .at_or_after_in_timezone(
+                chrono::NaiveDate::from_ymd_opt(10000, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap()
+                    .and_utc()
+                    .timestamp_millis() as u64,
+                "UTC"
+            )
+            .is_err());
+    }
+
     #[test]
     fn timezone_search_skips_gaps_and_orders_all_fold_occurrences() {
         let zone = "America/Los_Angeles";

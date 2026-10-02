@@ -548,7 +548,9 @@ Tests verify calendar catch-up, coalescing, interrupted publication, restart,
 cancellation and competing publishers, while preserving interval persistence.
 [A KVM/TLS catch-up run](benchmarks/2026-10-01/scheduled-calendar.md) verifies
 automatic guest execution of both historical fold occurrences across restart.
-Live wall-clock DST scheduling and calendar-specific performance remain unverified.
+A [local planner comparison](benchmarks/2026-10-01/calendar-planning.md) measures
+dense/sparse calendar cost and the UTC optimization. Live wall-clock DST
+scheduling and end-to-end calendar performance remain unverified.
 
 A calendar schedule uses the existing `schedule create` command and schedule API:
 
