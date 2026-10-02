@@ -424,7 +424,7 @@ link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
 file. Filesystems without hard-link support return an error; there is no weaker
 fallback. Directory durability across power loss is not established. Schedule
-updates, calendar VM verification, timezone-rule migration, dispatch reconciliation and guest-job cancellation
+updates, calendar performance, timezone-rule migration, dispatch reconciliation and guest-job cancellation
 and guest execution remain to be implemented.
 
 The implementation must cover these requirements together:
@@ -546,7 +546,9 @@ reconstructing history. Persisted cron schedules and bounded publication are
 available through the CLI and authenticated API.
 Tests verify calendar catch-up, coalescing, interrupted publication, restart,
 cancellation and competing publishers, while preserving interval persistence.
-Calendar VM execution and calendar-specific performance remain unverified.
+[A KVM/TLS catch-up run](benchmarks/2026-10-01/scheduled-calendar.md) verifies
+automatic guest execution of both historical fold occurrences across restart.
+Live wall-clock DST scheduling and calendar-specific performance remain unverified.
 
 A calendar schedule uses the existing `schedule create` command and schedule API:
 
