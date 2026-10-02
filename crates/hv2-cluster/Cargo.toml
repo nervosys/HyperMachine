@@ -48,6 +48,7 @@ redis = { version = "1.7", default-features = false, features = [
 ] }
 
 [dev-dependencies]
+tempfile = "3"
 rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
 
 [[bin]]
