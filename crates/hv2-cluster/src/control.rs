@@ -160,6 +160,10 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
 pub fn router(control: Arc<ControlPlane>) -> Router {
     let e2b = Router::new()
         .route("/sandbox-names/{name}", get(resolve_sandbox_name))
+        .route(
+            "/sandboxes/{id}/names/{name}",
+            axum::routing::put(assign_sandbox_name),
+        )
         .route("/sandboxes", post(create_v1).get(list_v1))
         .route("/v2/sandboxes", post(create_v2).get(list_v2))
         .route("/sandboxes/{id}", get(detail).delete(forward))
@@ -289,6 +293,104 @@ async fn unbind_domain(
             "domain binding does not exist for this sandbox",
         ),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn assign_sandbox_name(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, raw_name)): Path<(String, String)>,
+) -> Response {
+    use crate::names::{NameReservation, SandboxName};
+    let name = match SandboxName::parse(&raw_name) {
+        Ok(name) => name,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    match control.store.sandbox(&id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox is missing"),
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "sandbox lookup unavailable",
+            )
+        }
+    }
+    match control.store.sandboxes().await {
+        Ok(records)
+            if records.iter().any(|record| {
+                record.sandbox_id != id
+                    && record
+                        .metadata
+                        .get("hm.name")
+                        .is_some_and(|value| value == name.as_str())
+            }) =>
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "name conflicts with legacy sandbox metadata",
+            );
+        }
+        Ok(_) => {}
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "legacy name lookup unavailable",
+            )
+        }
+    }
+    let reservation = NameReservation::pending(name.clone());
+    match control.store.reserve_name(&reservation).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return match control.store.name_reservation(&name).await {
+                Ok(Some(existing))
+                    if existing.name() == &name && existing.sandbox_id() == Some(id.as_str()) =>
+                {
+                    Json(json!({"name":name.as_str(),"sandboxID":id})).into_response()
+                }
+                Ok(_) => api_error(
+                    StatusCode::CONFLICT,
+                    "name is owned or requires reconciliation",
+                ),
+                Err(_) => api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name ownership lookup unavailable",
+                ),
+            };
+        }
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "name reservation unavailable",
+            )
+        }
+    }
+    match control
+        .store
+        .bind_name(&name, reservation.operation_token(), &id)
+        .await
+    {
+        Ok(true) => Json(json!({"name":name.as_str(),"sandboxID":id})).into_response(),
+        Ok(false) => {
+            // A false atomic bind did not assign ownership. Conditional release
+            // cannot remove a binding if another operation has since completed it.
+            match control
+                .store
+                .release_pending_name(&name, reservation.operation_token())
+                .await
+            {
+                Ok(_) => api_error(StatusCode::CONFLICT, "sandbox or name ownership changed"),
+                Err(_) => api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name reconciliation required",
+                ),
+            }
+        }
+        // A failed store call has unknown commit outcome; retain ownership.
+        Err(_) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "name reconciliation required",
+        ),
     }
 }
 
