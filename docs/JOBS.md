@@ -591,3 +591,5 @@ The publication optimization also passed [real KVM worker validation](benchmarks
 The [directory-sync cost diagnostic](benchmarks/2026-10-01/calendar-sync.md) records matched local publication timings after adding Unix directory flushes. It verifies exact timestamp equality and reopened committed history, without claiming physical power-loss recovery.
 
 [Real KVM verification with Unix directory syncs](benchmarks/2026-10-01/calendar-sync-kvm.md) passed bounded catch-up, worker restart, replay refusal and cancellation. This functional run does not establish physical power-loss recovery.
+
+The shared publication helper also has per-call directory-sync fault tests for schedules, occurrences, progress, claims and completions. Injected failures before the final link leave no record; failures after linking return an error with complete immutable bytes present. Replays still attempt the directory flush, propagate its errors, and preserve the original record. These are deterministic error-path tests, not physical power-loss or kernel fault-injection evidence.
