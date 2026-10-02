@@ -24,7 +24,7 @@ container. The comparison is about what surrounds the VM.
 | Custom domains | yes | yes | **Real**: authenticated cluster bindings to guest HTTP ports, Memory/Redis ownership, HTTPS forwarding; [operator DNS and certificates](CUSTOM_DOMAINS.md) |
 | DNS validation and automatic domain TLS | yes | not checked | **Absent**: operators provide DNS and certificates |
 | Private URLs with login, identity headers | public web URL; team shell sharing | yes (`X-ExeDev-Email`) | **Absent** |
-| SSH to a VM by name | yes | yes | **Partial**: [persisted metadata names](benchmarks/2026-10-01/ssh-name.md) and authenticated stdio transport verified with real KVM/TLS, binary transfer and duplicate/key rejection; no atomic name reservations or guest SSH provisioning |
+| SSH to a VM by name | yes | yes | **Partial**: [persisted metadata names](benchmarks/2026-10-01/ssh-name.md) and authenticated stdio transport verified with real KVM/TLS, binary transfer and duplicate/key rejection; no atomic name reservations ([ownership and recovery design](SANDBOX_NAME_RESERVATIONS.md)) or guest SSH provisioning |
 | exec, and file copy in and out | yes | ssh/scp | **Real**: `/exec`, envd processes with PTY and stdin, files |
 | **Env vars for every command in a VM** | org-wide | creation env supported; command inheritance not checked | **Real**: E2B's `envVars`, kept in the guest so pause, fork and snapshots carry them |
 | Secrets held off the VM, injected at the edge | platform-held integration credentials; header-injection parity not established | yes | **Real**: header injection at the egress gateway, which the guest never sees |
