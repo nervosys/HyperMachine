@@ -1,0 +1,105 @@
+--- baseline-main.rs
++++ candidate-main.rs
+@@ -4195,6 +4195,62 @@
+     }
+ }
+ 
++
++// Isolated experiment only. No deployed daemon or defaults use this worker.
++#[cfg(all(target_os = "linux", target_env = "gnu"))]
++struct HeapReclaimExperiment {
++    stop: Arc<std::sync::atomic::AtomicBool>,
++    thread: Option<std::thread::JoinHandle<()>>,
++}
++
++#[cfg(all(target_os = "linux", target_env = "gnu"))]
++impl HeapReclaimExperiment {
++    fn start(interval: Duration) -> std::io::Result<Self> {
++        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
++        let stopped = Arc::clone(&stop);
++        let thread = std::thread::Builder::new()
++            .name("heap-reclaim-experiment".into())
++            .spawn(move || {
++                let mut calls = 0u64;
++                let mut released = 0u64;
++                let mut total_ns = 0u128;
++                let mut maximum_ns = 0u128;
++                loop {
++                    std::thread::park_timeout(interval);
++                    if stopped.load(std::sync::atomic::Ordering::Acquire) {
++                        break;
++                    }
++                    let started = std::time::Instant::now();
++                    // SAFETY: GNU malloc_trim takes only a padding value, acts
++                    // on free allocator chunks, and is thread-safe. This runs
++                    // on a normal dedicated thread, never a signal handler.
++                    let result = unsafe { libc::malloc_trim(0) };
++                    let duration_ns = started.elapsed().as_nanos();
++                    calls += 1;
++                    released += u64::from(result != 0);
++                    total_ns += duration_ns;
++                    maximum_ns = maximum_ns.max(duration_ns);
++                }
++                eprintln!("HV2_HEAP_RECLAIM_EXPERIMENT {{\"calls\":{calls},\"release_calls\":{released},\"total_ns\":{total_ns},\"maximum_ns\":{maximum_ns}}}");
++            })?;
++        Ok(Self { stop, thread: Some(thread) })
++    }
++}
++
++#[cfg(all(target_os = "linux", target_env = "gnu"))]
++impl Drop for HeapReclaimExperiment {
++    fn drop(&mut self) {
++        self.stop.store(true, std::sync::atomic::Ordering::Release);
++        if let Some(thread) = self.thread.take() {
++            thread.thread().unpark();
++            let _ = thread.join();
++        }
++    }
++}
++
++#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
++struct HeapReclaimExperiment;
++
+ #[tokio::main]
+ async fn main() -> std::process::ExitCode {
+     tracing_subscriber::fmt()
+@@ -4208,6 +4264,39 @@
+         Ok(opts) => opts,
+         Err(e) => {
+             eprintln!("hv2-sandboxd: {e}");
++            return std::process::ExitCode::FAILURE;
++        }
++    };
++    // Only the isolated experimental fixture sets this variable.
++    let _heap_reclaim_experiment: Option<HeapReclaimExperiment> = match std::env::var("HV2_EXPERIMENT_HEAP_RECLAIM_MS") {
++        Ok(value) => {
++            let interval_ms: u64 = match value.parse() {
++                Ok(value) if (100..=60000).contains(&value) => value,
++                _ => {
++                    eprintln!("heap experiment requires 100..60000 milliseconds");
++                    return std::process::ExitCode::FAILURE;
++                }
++            };
++            #[cfg(all(target_os = "linux", target_env = "gnu"))]
++            {
++                match HeapReclaimExperiment::start(Duration::from_millis(interval_ms)) {
++                    Ok(worker) => Some(worker),
++                    Err(error) => {
++                        eprintln!("heap experiment worker: {error}");
++                        return std::process::ExitCode::FAILURE;
++                    }
++                }
++            }
++            #[cfg(not(all(target_os = "linux", target_env = "gnu")))]
++            {
++                let _ = interval_ms;
++                eprintln!("heap experiment requires Linux GNU libc");
++                return std::process::ExitCode::FAILURE;
++            }
++        }
++        Err(std::env::VarError::NotPresent) => None,
++        Err(_) => {
++            eprintln!("heap experiment interval is not Unicode");
+             return std::process::ExitCode::FAILURE;
+         }
+     };
