@@ -575,3 +575,5 @@ Calendar catch-up now enumerates non-UTC civil days once per bounded batch. [Mat
 [Real KVM bounded calendar batch verification](benchmarks/2026-10-01/calendar-batch-kvm.md) passed publication, folded-time worker restart, replay refusal and cancellation with the optimized CLI. This is functional evidence, with no calendar throughput score.
 
 [Durable calendar publication measurements](benchmarks/2026-10-01/calendar-publication.md) include occurrence file syncs and progress commits. Reusing the immutable schedule removes repeated per-record timezone searches while preserving individual timestamp validation and existing-record equality checks.
+
+The publication optimization also passed [real KVM worker validation](benchmarks/2026-10-01/calendar-publication-kvm.md): bounded historical catch-up, ordered fold dispatch after restart, replay refusal and cancellation, with complete fixture cleanup. This establishes functional behavior, not a guest execution throughput score.
