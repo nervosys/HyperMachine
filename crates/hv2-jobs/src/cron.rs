@@ -42,6 +42,113 @@ impl CronExpression {
         self.search_timezone(time_ms, timezone, false)
     }
 
+    /// Earliest bounded batch in UTC order, enumerating each civil day once.
+    pub(crate) fn bounded_occurrences(
+        &self,
+        time_ms: u64,
+        through_ms: u64,
+        timezone_name: &str,
+        limit: usize,
+    ) -> Result<Vec<u64>> {
+        if !(1..=1024).contains(&limit) {
+            return Err(JobError::InvalidSpec(
+                "occurrence batch limit must be 1-1024".into(),
+            ));
+        }
+        let timezone: chrono_tz::Tz = timezone_name
+            .parse()
+            .map_err(|_| JobError::InvalidSpec("unknown cron timezone".into()))?;
+        let start = i64::try_from(time_ms)
+            .ok()
+            .and_then(chrono::DateTime::from_timestamp_millis)
+            .ok_or_else(invalid_time)?;
+        if !(1970..=9999).contains(&start.year()) {
+            return Err(invalid_time());
+        }
+        if timezone == chrono_tz::UTC {
+            let mut result = Vec::with_capacity(limit);
+            let mut cursor = time_ms;
+            while result.len() < limit {
+                let Some(value) = self.at_or_after_in_timezone(cursor, timezone_name)? else {
+                    break;
+                };
+                if value > through_ms {
+                    break;
+                }
+                result.push(value);
+                let Some(next) = value.checked_add(1) else {
+                    break;
+                };
+                cursor = next;
+            }
+            return Ok(result);
+        }
+        let mut date = start
+            .with_timezone(&timezone)
+            .date_naive()
+            .pred_opt()
+            .and_then(|d| d.pred_opt())
+            .ok_or_else(invalid_time)?;
+        let mut best = std::collections::BTreeSet::new();
+        for day in 0..=3_000_000 {
+            if day > 146_102 && best.is_empty() {
+                break;
+            }
+            // Every offset is less than a day. Once even the earliest possible
+            // UTC instant is too late, subsequent civil days cannot contribute.
+            let earliest = date
+                .and_hms_opt(0, 0, 0)
+                .expect("midnight")
+                .and_utc()
+                .timestamp_millis()
+                - 86_400_000;
+            if date.year() > 9999
+                || u64::try_from(earliest).is_ok_and(|value| {
+                    value > through_ms
+                        || (best.len() == limit && best.last().is_some_and(|last| value > *last))
+                })
+            {
+                break;
+            }
+            if (1969..=9999).contains(&date.year()) && self.matches_date(date) {
+                for hour in 0..24 {
+                    if !self.selected(1, hour) {
+                        continue;
+                    }
+                    for minute in 0..60 {
+                        if !self.selected(0, minute) {
+                            continue;
+                        }
+                        let civil = date
+                            .and_hms_opt(hour, minute, 0)
+                            .expect("bounded clock fields");
+                        let candidates = match timezone.from_local_datetime(&civil) {
+                            LocalResult::Single(value) => [Some(value), None],
+                            LocalResult::Ambiguous(a, b) => [Some(a), Some(b)],
+                            LocalResult::None => [None, None],
+                        };
+                        for candidate in candidates.into_iter().flatten() {
+                            let Ok(value) = u64::try_from(candidate.timestamp_millis()) else {
+                                continue;
+                            };
+                            if value >= time_ms && value <= through_ms {
+                                best.insert(value);
+                                if best.len() > limit {
+                                    best.pop_last();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let Some(next) = date.succ_opt() else {
+                break;
+            };
+            date = next;
+        }
+        Ok(best.into_iter().collect())
+    }
+
     fn search_timezone(&self, time_ms: u64, timezone: &str, forward: bool) -> Result<Option<u64>> {
         let timezone: chrono_tz::Tz = timezone
             .parse()
@@ -278,6 +385,97 @@ mod tests {
             .unwrap()
             .timestamp_millis() as u64
     }
+    #[test]
+    fn batches_match_single_search_across_transitions_and_long_windows() {
+        for (expression, zone, from, through) in [
+            (
+                "* 1 * * *",
+                "America/Los_Angeles",
+                "2026-11-01T08:45:01Z",
+                "2026-11-01T09:10:00Z",
+            ),
+            (
+                "30 2 * * *",
+                "America/Los_Angeles",
+                "2026-03-08T08:00:00Z",
+                "2026-03-12T00:00:00Z",
+            ),
+            (
+                "* 1 * * *",
+                "Australia/Lord_Howe",
+                "2026-04-04T14:40:01Z",
+                "2026-04-05T16:00:00Z",
+            ),
+            (
+                "0 0 * * *",
+                "Pacific/Apia",
+                "2011-12-29T09:00:01Z",
+                "2012-01-02T00:00:00Z",
+            ),
+            (
+                "* * * * *",
+                "Africa/Monrovia",
+                "1971-01-01T00:00:00Z",
+                "1971-01-02T00:00:00Z",
+            ),
+            (
+                "0 0 1 * 1",
+                "America/Los_Angeles",
+                "2026-01-01T00:00:00Z",
+                "2027-01-01T00:00:00Z",
+            ),
+            (
+                "0 0 1 1 *",
+                "America/Los_Angeles",
+                "2026-01-01T00:00:00Z",
+                "2600-01-01T00:00:00Z",
+            ),
+            (
+                "* * * * *",
+                "UTC",
+                "2026-11-01T08:45:01Z",
+                "2026-11-02T09:10:00Z",
+            ),
+        ] {
+            let cron: CronExpression = expression.parse().unwrap();
+            for limit in [1, 10, 1000] {
+                let mut expected = Vec::new();
+                let mut cursor = utc(from);
+                while expected.len() < limit {
+                    let Some(next) = cron.at_or_after_in_timezone(cursor, zone).unwrap() else {
+                        break;
+                    };
+                    if next > utc(through) {
+                        break;
+                    }
+                    expected.push(next);
+                    cursor = next + 1;
+                }
+                assert_eq!(
+                    cron.bounded_occurrences(utc(from), utc(through), zone, limit)
+                        .unwrap(),
+                    expected,
+                    "{expression} {zone} limit={limit}"
+                );
+            }
+            assert!(cron
+                .bounded_occurrences(utc(from), utc(from) - 1, zone, 10)
+                .unwrap()
+                .is_empty());
+        }
+        let cron: CronExpression = "* 1 * * *".parse().unwrap();
+        let fold = cron
+            .bounded_occurrences(
+                utc("2026-11-01T08:45:01Z"),
+                utc("2026-11-01T09:10:00Z"),
+                "America/Los_Angeles",
+                1000,
+            )
+            .unwrap();
+        assert_eq!(fold.len(), 25);
+        assert_eq!(fold[14], utc("2026-11-01T09:00:00Z"));
+    }
+
     #[test]
     fn named_utc_selection_matches_utc_planner_and_keeps_range_limit() {
         for expression in ["* * * * *", "15 3 * * *", "0 0 29 2 *", "0 0 1 * 1"] {

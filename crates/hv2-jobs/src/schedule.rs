@@ -97,6 +97,13 @@ impl IntervalSchedule {
             let offset = (now_ms - self.first_ms) / self.every_ms * self.every_ms;
             return Ok(vec![self.first_ms + offset]);
         }
+        if limit == 1 {
+            return Ok(vec![first]);
+        }
+        if let Some(cron) = &self.cron {
+            let expression: crate::cron::CronExpression = cron.expression.parse()?;
+            return expression.bounded_occurrences(first, now_ms, &cron.timezone, limit);
+        }
         let mut due = Vec::with_capacity(limit);
         let mut current = first;
         loop {
@@ -104,14 +111,7 @@ impl IntervalSchedule {
             if due.len() == limit {
                 break;
             }
-            let next = if self.cron.is_some() {
-                match current.checked_add(1) {
-                    Some(after) => self.at_or_after(after)?,
-                    None => None,
-                }
-            } else {
-                current.checked_add(self.every_ms)
-            };
+            let next = current.checked_add(self.every_ms);
             match next {
                 Some(next) if next <= now_ms => current = next,
                 _ => break,
