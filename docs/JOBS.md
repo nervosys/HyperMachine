@@ -267,7 +267,9 @@ not re-execute an uncertain occurrence. Polling permits 1-60000 milliseconds and
 publication limits permit 1-1024 records. Catch-up publication can outpace
 execution and grow the backlog. [A warm-cache history diagnostic](benchmarks/2026-10-01/dispatch-history.md)
 measures growing selection cost; a [local comparison](benchmarks/2026-10-01/dispatch-history-selection.md)
-checks the reduction from avoiding repeated schedule reads; end-to-end long-history worker performance
+checks the reduction from avoiding repeated schedule reads.
+[A pending-backlog comparison](benchmarks/2026-10-01/dispatch-backlog.md) checks
+a one-record initial page and its completed-history tradeoff; end-to-end long-history worker performance
 remains unverified.
 
 Windows and Linux protocol fixtures verify completion, continuation after
