@@ -1,0 +1,33 @@
+[package]
+name = "hv2-jobs"
+description = "A durable job queue for HyperMachine: sandboxed batch work on the host, no VM needed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+hv2-sandbox = { path = "../hv2-sandbox", version = "1.1.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+subtle = { version = "2.6", default-features = false }
+axum = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-stream = { version = "0.1", optional = true }
+
+[features]
+default = ["http"]
+# The REST mirror of the CLI, under /api/v1/jobs.
+http = ["dep:axum", "dep:tokio", "dep:tokio-stream"]
+
+[dev-dependencies]
+tempfile = "3.10"
+tokio = { workspace = true }
+tower = { workspace = true }
+
+[lints]
+workspace = true

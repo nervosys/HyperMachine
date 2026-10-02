@@ -1,0 +1,10 @@
+counterbalance: correctly refused
+attempts: correctly refused
+KVM handles: correctly refused
+guest checks: correctly refused
+probe command: correctly refused
+probe time: correctly refused
+snapshot order: correctly refused
+retained mapping: correctly refused
+guest resources: correctly refused
+9 malformed reports refused; cleanup error preserved; valid report accepted

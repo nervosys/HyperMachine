@@ -1,0 +1,46 @@
+{
+  "operation": "KVM_GET_SUPPORTED_CPUID",
+  "affinity": [
+    0
+  ],
+  "entries": 62,
+  "topology": [
+    {
+      "function": 1,
+      "index": 0,
+      "flags": 0,
+      "eax": 11800384,
+      "ebx": 2099200,
+      "ecx": 4160238083,
+      "edx": 126614527
+    },
+    {
+      "function": 11,
+      "index": 0,
+      "flags": 1,
+      "eax": 0,
+      "ebx": 0,
+      "ecx": 0,
+      "edx": 0
+    },
+    {
+      "function": 2147483656,
+      "index": 0,
+      "flags": 0,
+      "eax": 3158064,
+      "ebx": 1392693253,
+      "ecx": 20511,
+      "edx": 0
+    },
+    {
+      "function": 2147483678,
+      "index": 0,
+      "flags": 0,
+      "eax": 0,
+      "ebx": 0,
+      "ecx": 0,
+      "edx": 0
+    }
+  ],
+  "source_sha256": "9881465dcbdd411d8591124c31aa0c9db8aea6708ff5784fc2b55eca5b45fc1c"
+}

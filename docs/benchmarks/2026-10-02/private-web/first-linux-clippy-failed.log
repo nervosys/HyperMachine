@@ -1,0 +1,28 @@
+    Checking hv2-sandbox v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-sandbox)
+    Checking axum v0.8.9
+    Checking hv2-guest-agent v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-guest-agent)
+    Checking pbjson-types v0.9.0
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-api)
+    Checking tracing-subscriber v0.3.23
+    Checking tinytemplate v1.2.1
+    Checking reqwest v0.12.28
+    Checking criterion v0.5.1
+    Checking hv2-core v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-core)
+    Checking hv2-context v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-context)
+    Checking tonic v0.14.6
+    Checking tonic-prost v0.14.6
+    Checking hv2-agent v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-agent)
+    Checking hv2-runtime v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-runtime)
+    Checking hv2-cluster v1.1.0 (/var/tmp/hm-private-web/source/crates/hv2-cluster)
+error: consider adding a `;` to the last statement for consistent formatting
+   --> crates/hv2-cluster/src/bin/hv2-control-plane.rs:312:25
+    |
+312 |                         eprintln!("hv2-control-plane: web access reload rejected: {error}")
+    |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: add a `;` here: `eprintln!("hv2-control-plane: web access reload rejected: {error}");`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#semicolon_if_nothing_returned
+    = note: `-D clippy::semicolon-if-nothing-returned` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::semicolon_if_nothing_returned)]`
+
+error: could not compile `hv2-cluster` (bin "hv2-control-plane" test) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...

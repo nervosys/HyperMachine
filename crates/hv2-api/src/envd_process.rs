@@ -27,7 +27,8 @@
 //!
 //! Output is *polled* from the guest rather than pushed: the agent buffers
 //! what a program prints and this module drains it every `POLL_INTERVAL`.
-//! So "as it arrives" means within that interval, not instantly. One poller
+//! Successful host stdin, EOF and signal requests wake that process's poller
+//! early; unsolicited output still waits for the periodic poll. One poller
 //! per process publishes to a broadcast channel, which is what lets `Start`
 //! and any number of `Connect`s watch the same process without stealing each
 //! other's output -- a poll drains, so two independent pollers would each see
@@ -55,7 +56,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, Notify};
 use tokio_stream::{Stream, StreamExt};
 use tonic::{Request, Response, Status};
 
@@ -72,6 +73,9 @@ pub mod process_proto {
     // It was invisible until 2026-09-22 because the sweep's clippy step read
     // a grep count and ignored cargo's exit status, so 55 of these reported
     // as "workspace: 0". See tools/sweep.sh.
+    // Generated-code lint names differ across supported Clippy toolchains.
+    // Keep the allowances effective where known without breaking other versions.
+    #![allow(unknown_lints)]
     #![allow(
         clippy::large_enum_variant,
         clippy::doc_overindented_list_items,
@@ -134,6 +138,8 @@ struct Tracked {
     /// subscribe here; see this module's doc comment for why a shared
     /// broadcast rather than each caller polling for itself.
     events: broadcast::Sender<ProcessEvent>,
+    /// Host-side input/EOF/signals make output or exit likely immediately.
+    wake: Arc<Notify>,
 }
 
 /// One VM's `process.Process` service -- envd for exactly the sandbox this
@@ -227,7 +233,22 @@ impl EnvdProcess {
         self.vm
             .write_stdin_in_guest(pid, &text, false, GUEST_TIMEOUT)
             .await
-            .map_err(|e| Status::internal(format!("writing to pid {pid}: {e}")))
+            .map_err(|e| Status::internal(format!("writing to pid {pid}: {e}")))?;
+        self.wake_poller(pid);
+        Ok(())
+    }
+
+    fn wake_poller(&self, pid: u32) {
+        if let Some(process) = self.running.lock().get(&pid) {
+            process.wake.notify_one();
+        }
+    }
+}
+
+async fn wait_for_poll(wake: &Notify) {
+    tokio::select! {
+        _ = tokio::time::sleep(POLL_INTERVAL) => {},
+        _ = wake.notified() => {},
     }
 }
 
@@ -272,6 +293,7 @@ async fn pump(
     pid: u32,
     running: Arc<Mutex<HashMap<u32, Tracked>>>,
     events: broadcast::Sender<ProcessEvent>,
+    wake: Arc<Notify>,
 ) {
     use process_proto::process_event::data_event::Output;
 
@@ -327,7 +349,7 @@ async fn pump(
                 break;
             }
         }
-        tokio::time::sleep(POLL_INTERVAL).await;
+        wait_for_poll(&wake).await;
     }
 
     running.lock().remove(&pid);
@@ -407,6 +429,7 @@ impl Process for EnvdProcess {
             event: Some(ProcessEventKind::Start(StartEvent { pid })),
         });
 
+        let wake = Arc::new(Notify::new());
         self.running.lock().insert(
             pid,
             Tracked {
@@ -417,6 +440,7 @@ impl Process for EnvdProcess {
                 },
                 pty: pty.is_some(),
                 events: events.clone(),
+                wake: Arc::clone(&wake),
             },
         );
 
@@ -425,6 +449,7 @@ impl Process for EnvdProcess {
             pid,
             Arc::clone(&self.running),
             events,
+            wake,
         ));
 
         Ok(Response::new(stream_of(rx, |event| StartResponse {
@@ -543,6 +568,7 @@ impl Process for EnvdProcess {
             .signal_in_guest(pid, signal, GUEST_TIMEOUT)
             .await
             .map_err(|e| Status::internal(format!("signalling pid {pid}: {e}")))?;
+        self.wake_poller(pid);
 
         Ok(Response::new(SendSignalResponse {}))
     }
@@ -556,6 +582,7 @@ impl Process for EnvdProcess {
             .write_stdin_in_guest(pid, "", true, GUEST_TIMEOUT)
             .await
             .map_err(|e| Status::internal(format!("closing stdin for pid {pid}: {e}")))?;
+        self.wake_poller(pid);
         Ok(Response::new(CloseStdinResponse {}))
     }
 }
@@ -591,4 +618,48 @@ pub async fn serve_for_sandbox(
     shutdown: tokio::sync::oneshot::Receiver<()>,
 ) -> std::io::Result<()> {
     crate::connect::serve(vm, addr, access_token, shutdown).await
+}
+
+#[cfg(test)]
+mod wake_tests {
+    use super::*;
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+
+    #[tokio::test]
+    async fn input_before_wait_is_not_lost_or_delayed_until_the_timer() {
+        let wake = Notify::new();
+        wake.notify_one();
+        let wait = wait_for_poll(&wake);
+        tokio::pin!(wait);
+        assert!(matches!(
+            wait.as_mut().poll(&mut Context::from_waker(Waker::noop())),
+            Poll::Ready(())
+        ));
+    }
+
+    #[tokio::test]
+    async fn idle_wait_is_pending_and_a_later_input_wakes_it() {
+        let wake = Notify::new();
+        let wait = wait_for_poll(&wake);
+        tokio::pin!(wait);
+        let mut context = Context::from_waker(Waker::noop());
+        assert!(wait.as_mut().poll(&mut context).is_pending());
+        wake.notify_one();
+        assert!(wait.as_mut().poll(&mut context).is_ready());
+    }
+
+    #[tokio::test]
+    async fn queued_inputs_coalesce_instead_of_causing_an_idle_poll_storm() {
+        let wake = Notify::new();
+        wake.notify_one();
+        wake.notify_one();
+        wait_for_poll(&wake).await;
+        let next = wait_for_poll(&wake);
+        tokio::pin!(next);
+        assert!(next
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+            .is_pending());
+    }
 }

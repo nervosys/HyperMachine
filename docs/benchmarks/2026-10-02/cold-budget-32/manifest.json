@@ -1,0 +1,41 @@
+{
+  "sha256": {
+    "analyze-cold-budget-memory.py": "a3f6ef1acb8b099d6df47e25488c2aaa4803b9fbc5ef63cc26ab3ce9a32fc06e",
+    "analyze-cold-start-limit.py": "ef641a27afacab61aaec1ca593deee864648015282561de20d8195760659cbc9",
+    "analyze-connection-wait.py": "6c919d1d109490cba2e889648825fed8f4977a09bc9a78390d9801ace031dd14",
+    "bench-cold-start-limit.py": "06eb64db28935b1b7f50feff03540ad6e57508ddc50d46fe32fb2bde9a308c75",
+    "bench-connection-wait.py": "97b3c243b4eb9ad49da19347a4370650ec64c253abb1a601e0f303843a4816a2",
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines-concurrent.py": "b4d6e2426360e13d02bf4f812b8b2bfaf7b69be7ddbcd0ae7986dab6c2ff1acf",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "build-context.json": "1f58ce32de276164c11736c6b2c661b590795766d2a525bcb51d72406b1f6e9d",
+    "c100/analysis.json": "8a869c5d298538b4b0a9932470c6b85f5fb365a968c865ad86d2d02f1263c47d",
+    "c100/report.json": "48be07f8831171dc0255a9045b7896da1699242594b181ceb62547349b7592e9",
+    "check-cold-budget-memory.py": "e2c3d861101c48bc77462ed068a2d63e4d3a43a988f0770e553d87edaebccb90",
+    "compiled-main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52",
+    "linux-negative-checks.log": "281c0acb4d6551672fb03b518d6ed4aa543c14e9d4e3b75b894b13396a0752f3",
+    "README.md": "f7bf07671d4a8a245deac762f204e35601eaa24208fc548ed9c459844f6df5ab",
+    "smoke/analysis.json": "986ce52e22a778c99beb5ff77882c2791f7cbb11d2a84e6a236986ecf57df14f",
+    "smoke/report.json": "91e063b54f52a8cb580498a5cce9f0d9dfcf53df803c8f62f3083e9871f12d24",
+    "verify-cold-budget-memory.py": "94c70b4284d2b3f838e3b822afddcf3450ba04a7b610ddd0cb440124a51a2b87",
+    "windows-negative-checks.log": "a2e21b7ffaae05c283a8b8ea5f3779791235cbbe46bee7f3a204c35eb06c6310"
+  },
+  "inputs": {
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "cohorts": [
+    {
+      "concurrency": 8,
+      "report": "smoke/report.json",
+      "analysis": "smoke/analysis.json",
+      "pairs": 2
+    },
+    {
+      "concurrency": 100,
+      "report": "c100/report.json",
+      "analysis": "c100/analysis.json",
+      "pairs": 4
+    }
+  ]
+}

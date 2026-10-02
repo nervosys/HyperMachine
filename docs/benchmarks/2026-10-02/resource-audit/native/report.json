@@ -1,0 +1,48 @@
+{
+  "success": true,
+  "checks": [
+    "rejected-bad",
+    "rejected-TRUE",
+    "rejected-1",
+    "rejected-true",
+    "default-restart-privacy-decoding-and-correlation",
+    "false-restart-privacy-decoding-and-correlation",
+    "four-resigned-invalid-reference-records-rejected",
+    "true-restart-privacy-decoding-and-correlation"
+  ],
+  "cleanup_errors": [],
+  "control_plane_sha256": "e239db7ad88c9cd37c7bd5cd1b0a5dcfabf4bcc56081cf89c8c5d16656e92d65",
+  "coordinator_sha256": "1c8bae2ac0480476041e0e6aad6ffa716a3bbb8d8cc933db11be1a7f1c4f9e6d",
+  "verifier_sha256": "1816a4c07d49a9d9389b71d583a0fd4c21b233461a77c43a4c0a1b4aba27e054",
+  "synthetic_key": "42 repeated 32 times",
+  "performance_comparison": false,
+  "default": {
+    "verified_records": 24,
+    "uncompleted_admissions": 0,
+    "completion_statuses": {
+      "404": 8,
+      "401": 2,
+      "200": 2
+    }
+  },
+  "false": {
+    "verified_records": 24,
+    "uncompleted_admissions": 0,
+    "completion_statuses": {
+      "404": 8,
+      "401": 2,
+      "200": 2
+    }
+  },
+  "true": {
+    "verified_records": 24,
+    "uncompleted_admissions": 0,
+    "completion_statuses": {
+      "404": 8,
+      "401": 2,
+      "200": 2
+    }
+  },
+  "owned_processes_stopped": true,
+  "artifact_unchanged": true
+}

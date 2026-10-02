@@ -1,0 +1,2977 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command",
+  "concurrency": 1,
+  "hypermachine_log_filter": "warn",
+  "diagnostic_tracing": false,
+  "pairs": 100,
+  "order": "alternating AB/BA",
+  "environment": "shared-WSL-nested-KVM-one-pinned-CPU-worker-KVM-run-retry-diagnostic",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hyperMachine": "10b0650800b3bd36294dee4d3be563cbbc10d8ce2a854045b42a625da00a4c84",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "artifacts_unchanged": true,
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "driver_cpu_affinity": [
+    0
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "hypermachine_template_preflight": [
+    {
+      "aliases": [
+        "base"
+      ],
+      "buildID": "base",
+      "buildStatus": "ready",
+      "cpuCount": 1,
+      "envdVersion": "0.6.3",
+      "memoryMB": 1024,
+      "public": false,
+      "snapshot": false,
+      "templateID": "base"
+    }
+  ],
+  "setup_error": null,
+  "cleanup_error": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1127.479272000528,
+      "node_memory_ready": {
+        "Rss_kib": 110524,
+        "Pss_kib": 108455,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 108316,
+        "Anonymous_kib": 100744
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 25692,
+        "Pss_kib": 23501,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 23356,
+        "Anonymous_kib": 15728
+      },
+      "engine": "hypermachine",
+      "pair": 0
+    },
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 831.3140780001049,
+      "engine": "firecracker",
+      "pair": 0
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 782.4410590001207,
+      "engine": "firecracker",
+      "pair": 1
+    },
+    {
+      "index": 1,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1123.3137929993973,
+      "node_memory_ready": {
+        "Rss_kib": 96376,
+        "Pss_kib": 94185,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 94040,
+        "Anonymous_kib": 86404
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11420,
+        "Pss_kib": 9229,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 9084,
+        "Anonymous_kib": 1456
+      },
+      "engine": "hypermachine",
+      "pair": 1
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1158.2696080004098,
+      "node_memory_ready": {
+        "Rss_kib": 96448,
+        "Pss_kib": 94257,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 94112,
+        "Anonymous_kib": 86476
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11428,
+        "Pss_kib": 9237,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 9092,
+        "Anonymous_kib": 1464
+      },
+      "engine": "hypermachine",
+      "pair": 2
+    },
+    {
+      "index": 2,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 836.50654900066,
+      "engine": "firecracker",
+      "pair": 2
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1905.9619889994792,
+      "engine": "firecracker",
+      "pair": 3
+    },
+    {
+      "index": 3,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2849.6846620000724,
+      "node_memory_ready": {
+        "Rss_kib": 96496,
+        "Pss_kib": 94305,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 94160,
+        "Anonymous_kib": 86524
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11428,
+        "Pss_kib": 9237,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 9092,
+        "Anonymous_kib": 1464
+      },
+      "engine": "hypermachine",
+      "pair": 3
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2104.10845000024,
+      "node_memory_ready": {
+        "Rss_kib": 96444,
+        "Pss_kib": 94253,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 94108,
+        "Anonymous_kib": 86472
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11428,
+        "Pss_kib": 9237,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 9092,
+        "Anonymous_kib": 1464
+      },
+      "engine": "hypermachine",
+      "pair": 4
+    },
+    {
+      "index": 4,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 948.3947159997115,
+      "engine": "firecracker",
+      "pair": 4
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 981.6373989997373,
+      "engine": "firecracker",
+      "pair": 5
+    },
+    {
+      "index": 5,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1283.9084189999994,
+      "node_memory_ready": {
+        "Rss_kib": 96416,
+        "Pss_kib": 94225,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 94080,
+        "Anonymous_kib": 86444
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11436,
+        "Pss_kib": 9245,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 9100,
+        "Anonymous_kib": 1472
+      },
+      "engine": "hypermachine",
+      "pair": 5
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1201.3844669991158,
+      "node_memory_ready": {
+        "Rss_kib": 96492,
+        "Pss_kib": 94301,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 94156,
+        "Anonymous_kib": 86520
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11456,
+        "Pss_kib": 9265,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 9120,
+        "Anonymous_kib": 1492
+      },
+      "engine": "hypermachine",
+      "pair": 6
+    },
+    {
+      "index": 6,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 804.2437730000529,
+      "engine": "firecracker",
+      "pair": 6
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 965.093013999649,
+      "engine": "firecracker",
+      "pair": 7
+    },
+    {
+      "index": 7,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1281.7747419994703,
+      "node_memory_ready": {
+        "Rss_kib": 96532,
+        "Pss_kib": 94341,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 86568,
+        "Anonymous_kib": 86560
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11456,
+        "Pss_kib": 9265,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 1492,
+        "Anonymous_kib": 1492
+      },
+      "engine": "hypermachine",
+      "pair": 7
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1280.8325480000349,
+      "node_memory_ready": {
+        "Rss_kib": 125264,
+        "Pss_kib": 123073,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 115300,
+        "Anonymous_kib": 115292
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 40240,
+        "Pss_kib": 38049,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 30276,
+        "Anonymous_kib": 30276
+      },
+      "engine": "hypermachine",
+      "pair": 8
+    },
+    {
+      "index": 8,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 895.5551600001854,
+      "engine": "firecracker",
+      "pair": 8
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1323.2226529999025,
+      "engine": "firecracker",
+      "pair": 9
+    },
+    {
+      "index": 9,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1153.4446979994755,
+      "node_memory_ready": {
+        "Rss_kib": 96544,
+        "Pss_kib": 94353,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 86580,
+        "Anonymous_kib": 86572
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 11464,
+        "Pss_kib": 9273,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 1500,
+        "Anonymous_kib": 1500
+      },
+      "engine": "hypermachine",
+      "pair": 9
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1171.1881789997278,
+      "node_memory_ready": {
+        "Rss_kib": 125352,
+        "Pss_kib": 123161,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 115388,
+        "Anonymous_kib": 115380
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 40248,
+        "Pss_kib": 38057,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 30284,
+        "Anonymous_kib": 30284
+      },
+      "engine": "hypermachine",
+      "pair": 10
+    },
+    {
+      "index": 10,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 964.3532660002165,
+      "engine": "firecracker",
+      "pair": 10
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 827.030353999362,
+      "engine": "firecracker",
+      "pair": 11
+    },
+    {
+      "index": 11,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1291.156921000038,
+      "node_memory_ready": {
+        "Rss_kib": 125296,
+        "Pss_kib": 123105,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 115332,
+        "Anonymous_kib": 115324
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 40252,
+        "Pss_kib": 38061,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 30288,
+        "Anonymous_kib": 30288
+      },
+      "engine": "hypermachine",
+      "pair": 11
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1191.5269789997183,
+      "node_memory_ready": {
+        "Rss_kib": 127052,
+        "Pss_kib": 124861,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117088,
+        "Anonymous_kib": 117080
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 12
+    },
+    {
+      "index": 12,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 874.5635379991654,
+      "engine": "firecracker",
+      "pair": 12
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 899.6152159998019,
+      "engine": "firecracker",
+      "pair": 13
+    },
+    {
+      "index": 13,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1306.747288999759,
+      "node_memory_ready": {
+        "Rss_kib": 127080,
+        "Pss_kib": 124889,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117116,
+        "Anonymous_kib": 117108
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 13
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1150.7188670002506,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 125001,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117228,
+        "Anonymous_kib": 117220
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 14
+    },
+    {
+      "index": 14,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 859.9500680002166,
+      "engine": "firecracker",
+      "pair": 14
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 792.185168999822,
+      "engine": "firecracker",
+      "pair": 15
+    },
+    {
+      "index": 15,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1143.9345240005423,
+      "node_memory_ready": {
+        "Rss_kib": 127140,
+        "Pss_kib": 124949,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117176,
+        "Anonymous_kib": 117168
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 15
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1694.4759630005137,
+      "node_memory_ready": {
+        "Rss_kib": 127032,
+        "Pss_kib": 124841,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117068,
+        "Anonymous_kib": 117060
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 16
+    },
+    {
+      "index": 16,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 941.1859219999315,
+      "engine": "firecracker",
+      "pair": 16
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 790.9967570003573,
+      "engine": "firecracker",
+      "pair": 17
+    },
+    {
+      "index": 17,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1094.653721999748,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124937,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 17
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1111.6723420000199,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124937,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42064,
+        "Pss_kib": 39873,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32100,
+        "Anonymous_kib": 32100
+      },
+      "engine": "hypermachine",
+      "pair": 18
+    },
+    {
+      "index": 18,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 798.4417460002078,
+      "engine": "firecracker",
+      "pair": 18
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 788.1299049995505,
+      "engine": "firecracker",
+      "pair": 19
+    },
+    {
+      "index": 19,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1258.9020000004894,
+      "node_memory_ready": {
+        "Rss_kib": 127096,
+        "Pss_kib": 124905,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117132,
+        "Anonymous_kib": 117124
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42068,
+        "Pss_kib": 39877,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 19
+    },
+    {
+      "index": 20,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1121.7945469998085,
+      "node_memory_ready": {
+        "Rss_kib": 127016,
+        "Pss_kib": 124825,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117052,
+        "Anonymous_kib": 117044
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42068,
+        "Pss_kib": 39877,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32104,
+        "Anonymous_kib": 32104
+      },
+      "engine": "hypermachine",
+      "pair": 20
+    },
+    {
+      "index": 20,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 823.7175510002999,
+      "engine": "firecracker",
+      "pair": 20
+    },
+    {
+      "index": 21,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 825.720562999777,
+      "engine": "firecracker",
+      "pair": 21
+    },
+    {
+      "index": 21,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1151.4390030006325,
+      "node_memory_ready": {
+        "Rss_kib": 127136,
+        "Pss_kib": 124945,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42072,
+        "Pss_kib": 39881,
+        "Private_Clean_kib": 7628,
+        "Private_Dirty_kib": 32108,
+        "Anonymous_kib": 32108
+      },
+      "engine": "hypermachine",
+      "pair": 21
+    },
+    {
+      "index": 22,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321418, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321488; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 22,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:44429, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:53459 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:53459 process.Process/Start\n\u001b[2m2026-10-01T04:03:58.735271Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-53fb194d58484b8c8758: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321418, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321488; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 22,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 817.3694790002628,
+      "engine": "firecracker",
+      "pair": 22
+    },
+    {
+      "index": 23,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 834.642676999465,
+      "engine": "firecracker",
+      "pair": 23
+    },
+    {
+      "index": 23,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1161.53168099936,
+      "node_memory_ready": {
+        "Rss_kib": 127228,
+        "Pss_kib": 125037,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117204,
+        "Anonymous_kib": 117196
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39953,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 23
+    },
+    {
+      "index": 24,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1132.8513520002161,
+      "node_memory_ready": {
+        "Rss_kib": 127112,
+        "Pss_kib": 124922,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117088,
+        "Anonymous_kib": 117080
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39953,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 24
+    },
+    {
+      "index": 24,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 959.78502700018,
+      "engine": "firecracker",
+      "pair": 24
+    },
+    {
+      "index": 25,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1033.9267649997055,
+      "engine": "firecracker",
+      "pair": 25
+    },
+    {
+      "index": 25,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1203.4986940007002,
+      "node_memory_ready": {
+        "Rss_kib": 127172,
+        "Pss_kib": 124982,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117148,
+        "Anonymous_kib": 117140
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39958,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 25
+    },
+    {
+      "index": 26,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1172.651341999881,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 125005,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117168,
+        "Anonymous_kib": 117160
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39957,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 26
+    },
+    {
+      "index": 26,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 904.9661360004393,
+      "engine": "firecracker",
+      "pair": 26
+    },
+    {
+      "index": 27,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2782.4787760000618,
+      "engine": "firecracker",
+      "pair": 27
+    },
+    {
+      "index": 27,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2529.8864959995626,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124957,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39953,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 27
+    },
+    {
+      "index": 28,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1400.7658230002562,
+      "node_memory_ready": {
+        "Rss_kib": 127172,
+        "Pss_kib": 124981,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117148,
+        "Anonymous_kib": 117140
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39953,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 28
+    },
+    {
+      "index": 28,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1046.4898820000599,
+      "engine": "firecracker",
+      "pair": 28
+    },
+    {
+      "index": 29,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 947.2504949999347,
+      "engine": "firecracker",
+      "pair": 29
+    },
+    {
+      "index": 29,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1382.199875999504,
+      "node_memory_ready": {
+        "Rss_kib": 127204,
+        "Pss_kib": 125025,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117180,
+        "Anonymous_kib": 117172
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39965,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 29
+    },
+    {
+      "index": 30,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1311.985526999706,
+      "node_memory_ready": {
+        "Rss_kib": 127180,
+        "Pss_kib": 125000,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117156,
+        "Anonymous_kib": 117148
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39964,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 30
+    },
+    {
+      "index": 30,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1129.1271459995187,
+      "engine": "firecracker",
+      "pair": 30
+    },
+    {
+      "index": 31,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1637.730886999634,
+      "engine": "firecracker",
+      "pair": 31
+    },
+    {
+      "index": 31,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1453.226493999864,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 124952,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39964,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 31
+    },
+    {
+      "index": 32,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1250.8533529999113,
+      "node_memory_ready": {
+        "Rss_kib": 127112,
+        "Pss_kib": 124932,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117088,
+        "Anonymous_kib": 117080
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39964,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 32
+    },
+    {
+      "index": 32,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 951.1645780003164,
+      "engine": "firecracker",
+      "pair": 32
+    },
+    {
+      "index": 33,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1241.3949239999056,
+      "engine": "firecracker",
+      "pair": 33
+    },
+    {
+      "index": 33,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1303.8527890003024,
+      "node_memory_ready": {
+        "Rss_kib": 127368,
+        "Pss_kib": 125188,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117344,
+        "Anonymous_kib": 117336
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39964,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 33
+    },
+    {
+      "index": 34,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1307.1273859995927,
+      "node_memory_ready": {
+        "Rss_kib": 127084,
+        "Pss_kib": 124904,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117060,
+        "Anonymous_kib": 117052
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39964,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 34
+    },
+    {
+      "index": 34,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1064.1668059997755,
+      "engine": "firecracker",
+      "pair": 34
+    },
+    {
+      "index": 35,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 885.794459999488,
+      "engine": "firecracker",
+      "pair": 35
+    },
+    {
+      "index": 35,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1402.827893999529,
+      "node_memory_ready": {
+        "Rss_kib": 127184,
+        "Pss_kib": 125004,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117160,
+        "Anonymous_kib": 117152
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39964,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 35
+    },
+    {
+      "index": 36,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1379.7487210003965,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124938,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117104,
+        "Anonymous_kib": 117096
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 36
+    },
+    {
+      "index": 36,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 953.1212249994496,
+      "engine": "firecracker",
+      "pair": 36
+    },
+    {
+      "index": 37,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 979.9442140001702,
+      "engine": "firecracker",
+      "pair": 37
+    },
+    {
+      "index": 37,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1414.9315579998074,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 124942,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 37
+    },
+    {
+      "index": 38,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1452.3237870007506,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124958,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 38
+    },
+    {
+      "index": 38,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1034.9763909998728,
+      "engine": "firecracker",
+      "pair": 38
+    },
+    {
+      "index": 39,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 945.797646999381,
+      "engine": "firecracker",
+      "pair": 39
+    },
+    {
+      "index": 39,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1198.900305999814,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124938,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117104,
+        "Anonymous_kib": 117096
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 39
+    },
+    {
+      "index": 40,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1200.885940000262,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 125006,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 40
+    },
+    {
+      "index": 40,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2049.8734519997015,
+      "engine": "firecracker",
+      "pair": 40
+    },
+    {
+      "index": 41,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1757.1068659999582,
+      "engine": "firecracker",
+      "pair": 41
+    },
+    {
+      "index": 41,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1444.7553589998279,
+      "node_memory_ready": {
+        "Rss_kib": 127116,
+        "Pss_kib": 124926,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117092,
+        "Anonymous_kib": 117084
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 41
+    },
+    {
+      "index": 42,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2126.8639410000105,
+      "node_memory_ready": {
+        "Rss_kib": 127172,
+        "Pss_kib": 124982,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117148,
+        "Anonymous_kib": 117140
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 42
+    },
+    {
+      "index": 42,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2140.325454000049,
+      "engine": "firecracker",
+      "pair": 42
+    },
+    {
+      "index": 43,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2429.7828819999268,
+      "engine": "firecracker",
+      "pair": 43
+    },
+    {
+      "index": 43,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2687.107228000059,
+      "node_memory_ready": {
+        "Rss_kib": 127100,
+        "Pss_kib": 124910,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117076,
+        "Anonymous_kib": 117068
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39958,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 43
+    },
+    {
+      "index": 44,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2347.7739199997814,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124942,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117104,
+        "Anonymous_kib": 117096
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39958,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 44
+    },
+    {
+      "index": 44,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2180.185671999425,
+      "engine": "firecracker",
+      "pair": 44
+    },
+    {
+      "index": 45,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2195.37469900024,
+      "engine": "firecracker",
+      "pair": 45
+    },
+    {
+      "index": 45,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3032.362850000027,
+      "node_memory_ready": {
+        "Rss_kib": 127168,
+        "Pss_kib": 124982,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117144,
+        "Anonymous_kib": 117136
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39958,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 45
+    },
+    {
+      "index": 46,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2923.0167149999033,
+      "node_memory_ready": {
+        "Rss_kib": 127096,
+        "Pss_kib": 124910,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117072,
+        "Anonymous_kib": 117064
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39958,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 46
+    },
+    {
+      "index": 46,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1812.5048490001063,
+      "engine": "firecracker",
+      "pair": 46
+    },
+    {
+      "index": 47,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2324.2008239994902,
+      "engine": "firecracker",
+      "pair": 47
+    },
+    {
+      "index": 47,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2647.5623129999803,
+      "node_memory_ready": {
+        "Rss_kib": 127128,
+        "Pss_kib": 124932,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117104,
+        "Anonymous_kib": 117096
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39948,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 47
+    },
+    {
+      "index": 48,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2655.5043770003977,
+      "node_memory_ready": {
+        "Rss_kib": 127188,
+        "Pss_kib": 124990,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39946,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 48
+    },
+    {
+      "index": 48,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2379.466276999665,
+      "engine": "firecracker",
+      "pair": 48
+    },
+    {
+      "index": 49,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2796.3148609997006,
+      "engine": "firecracker",
+      "pair": 49
+    },
+    {
+      "index": 49,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2695.7288300000073,
+      "node_memory_ready": {
+        "Rss_kib": 127136,
+        "Pss_kib": 124939,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117112,
+        "Anonymous_kib": 117104
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42144,
+        "Pss_kib": 39947,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32120,
+        "Anonymous_kib": 32120
+      },
+      "engine": "hypermachine",
+      "pair": 49
+    },
+    {
+      "index": 50,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546788, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546858; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 50,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:44429, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:53459 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:53459 process.Process/Start\n\u001b[2m2026-10-01T04:03:58.735271Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-53fb194d58484b8c8758: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321418, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321488; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:05:52.704691Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-912bfd74b9e047ebb1c6: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546788, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546858; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 50,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3075.376449000032,
+      "engine": "firecracker",
+      "pair": 50
+    },
+    {
+      "index": 51,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2278.32202800073,
+      "engine": "firecracker",
+      "pair": 51
+    },
+    {
+      "index": 51,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 6036.233136000192,
+      "node_memory_ready": {
+        "Rss_kib": 127088,
+        "Pss_kib": 124839,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117064,
+        "Anonymous_kib": 117056
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42152,
+        "Pss_kib": 39902,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32128,
+        "Anonymous_kib": 32128
+      },
+      "engine": "hypermachine",
+      "pair": 51
+    },
+    {
+      "index": 52,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867779, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867849; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 52,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:44429, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:53459 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:53459 process.Process/Start\n\u001b[2m2026-10-01T04:03:58.735271Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-53fb194d58484b8c8758: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321418, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321488; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:05:52.704691Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-912bfd74b9e047ebb1c6: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546788, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546858; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:20.376394Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-80090d32d1394bc0982b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867779, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867849; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 52,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2051.202025000748,
+      "engine": "firecracker",
+      "pair": 52
+    },
+    {
+      "index": 53,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2273.4687210004267,
+      "engine": "firecracker",
+      "pair": 53
+    },
+    {
+      "index": 53,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084095, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084155; vCPU 0 owner sample: RIP=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 53,
+      "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:44429, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:53459 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:53459 process.Process/Start\n\u001b[2m2026-10-01T04:03:58.735271Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-53fb194d58484b8c8758: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321418, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321488; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:05:52.704691Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-912bfd74b9e047ebb1c6: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546788, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546858; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:20.376394Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-80090d32d1394bc0982b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867779, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867849; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:40.708659Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5ab824d8058b4a17b2e8: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084095, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084155; vCPU 0 owner sample: RIP=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 54,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 54,
+      "node_log_tail": "oint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:53459 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:53459 process.Process/Start\n\u001b[2m2026-10-01T04:03:58.735271Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-53fb194d58484b8c8758: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321418, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5407140321488; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:05:52.704691Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-912bfd74b9e047ebb1c6: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546788, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546858; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:20.376394Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-80090d32d1394bc0982b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867779, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867849; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:40.708659Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5ab824d8058b4a17b2e8: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084095, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084155; vCPU 0 owner sample: RIP=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:56.573652Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3372d48d8f2b4eceaf5f: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 54,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3641.4431149996744,
+      "engine": "firecracker",
+      "pair": 54
+    },
+    {
+      "index": 55,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 8735.716248999779,
+      "engine": "firecracker",
+      "pair": 55
+    },
+    {
+      "index": 55,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2786.9759559998784,
+      "node_memory_ready": {
+        "Rss_kib": 127124,
+        "Pss_kib": 124838,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117100,
+        "Anonymous_kib": 117092
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42172,
+        "Pss_kib": 39889,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32148,
+        "Anonymous_kib": 32148
+      },
+      "engine": "hypermachine",
+      "pair": 55
+    },
+    {
+      "index": 56,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3121.628302999852,
+      "node_memory_ready": {
+        "Rss_kib": 127164,
+        "Pss_kib": 124881,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117140,
+        "Anonymous_kib": 117132
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42172,
+        "Pss_kib": 39889,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32148,
+        "Anonymous_kib": 32148
+      },
+      "engine": "hypermachine",
+      "pair": 56
+    },
+    {
+      "index": 56,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2555.827223000051,
+      "engine": "firecracker",
+      "pair": 56
+    },
+    {
+      "index": 57,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 6496.788684999956,
+      "engine": "firecracker",
+      "pair": 57
+    },
+    {
+      "index": 57,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3603.359972999897,
+      "node_memory_ready": {
+        "Rss_kib": 127136,
+        "Pss_kib": 124852,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117112,
+        "Anonymous_kib": 117104
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42172,
+        "Pss_kib": 39888,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32148,
+        "Anonymous_kib": 32148
+      },
+      "engine": "hypermachine",
+      "pair": 57
+    },
+    {
+      "index": 58,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596525, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596585; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 58,
+      "node_log_tail": "P=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:05:52.704691Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-912bfd74b9e047ebb1c6: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546788, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5521064546858; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:20.376394Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-80090d32d1394bc0982b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867779, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867849; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:40.708659Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5ab824d8058b4a17b2e8: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084095, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084155; vCPU 0 owner sample: RIP=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:56.573652Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3372d48d8f2b4eceaf5f: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:07:44.720844Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-f4b22acba08d43d4b30d: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596525, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596585; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 58,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1944.8715400003493,
+      "engine": "firecracker",
+      "pair": 58
+    },
+    {
+      "index": 59,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2001.1456249994808,
+      "engine": "firecracker",
+      "pair": 59
+    },
+    {
+      "index": 59,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3640.560612000627,
+      "node_memory_ready": {
+        "Rss_kib": 127176,
+        "Pss_kib": 124888,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117152,
+        "Anonymous_kib": 117144
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42184,
+        "Pss_kib": 39896,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32160,
+        "Anonymous_kib": 32160
+      },
+      "engine": "hypermachine",
+      "pair": 59
+    },
+    {
+      "index": 60,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 5210.895030999382,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124860,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42184,
+        "Pss_kib": 39898,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32160,
+        "Anonymous_kib": 32160
+      },
+      "engine": "hypermachine",
+      "pair": 60
+    },
+    {
+      "index": 60,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 5076.072298999861,
+      "engine": "firecracker",
+      "pair": 60
+    },
+    {
+      "index": 61,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 6573.303078999743,
+      "engine": "firecracker",
+      "pair": 61
+    },
+    {
+      "index": 61,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2401.4784339997277,
+      "node_memory_ready": {
+        "Rss_kib": 127152,
+        "Pss_kib": 124864,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117128,
+        "Anonymous_kib": 117120
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42188,
+        "Pss_kib": 39900,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32164,
+        "Anonymous_kib": 32164
+      },
+      "engine": "hypermachine",
+      "pair": 61
+    },
+    {
+      "index": 62,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2389.1435280002042,
+      "node_memory_ready": {
+        "Rss_kib": 127156,
+        "Pss_kib": 124868,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117132,
+        "Anonymous_kib": 117124
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42188,
+        "Pss_kib": 39900,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32164,
+        "Anonymous_kib": 32164
+      },
+      "engine": "hypermachine",
+      "pair": 62
+    },
+    {
+      "index": 62,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 4932.564132999687,
+      "engine": "firecracker",
+      "pair": 62
+    },
+    {
+      "index": 63,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2423.3792200002426,
+      "engine": "firecracker",
+      "pair": 63
+    },
+    {
+      "index": 63,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2684.8222030002944,
+      "node_memory_ready": {
+        "Rss_kib": 127140,
+        "Pss_kib": 124855,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117116,
+        "Anonymous_kib": 117108
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42192,
+        "Pss_kib": 39909,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32168,
+        "Anonymous_kib": 32168
+      },
+      "engine": "hypermachine",
+      "pair": 63
+    },
+    {
+      "index": 64,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 8296.288952000396,
+      "node_memory_ready": {
+        "Rss_kib": 127152,
+        "Pss_kib": 124868,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117128,
+        "Anonymous_kib": 117120
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42192,
+        "Pss_kib": 39908,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32168,
+        "Anonymous_kib": 32168
+      },
+      "engine": "hypermachine",
+      "pair": 64
+    },
+    {
+      "index": 64,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2017.614195000533,
+      "engine": "firecracker",
+      "pair": 64
+    },
+    {
+      "index": 65,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1580.7094749998214,
+      "engine": "firecracker",
+      "pair": 65
+    },
+    {
+      "index": 65,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1926.2893079994683,
+      "node_memory_ready": {
+        "Rss_kib": 127160,
+        "Pss_kib": 124877,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117136,
+        "Anonymous_kib": 117128
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39917,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 65
+    },
+    {
+      "index": 66,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 6651.909748000435,
+      "node_memory_ready": {
+        "Rss_kib": 127200,
+        "Pss_kib": 124918,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117176,
+        "Anonymous_kib": 117168
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39918,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 66
+    },
+    {
+      "index": 66,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1859.6961169996575,
+      "engine": "firecracker",
+      "pair": 66
+    },
+    {
+      "index": 67,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2309.9417570001606,
+      "engine": "firecracker",
+      "pair": 67
+    },
+    {
+      "index": 67,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2184.7199089997957,
+      "node_memory_ready": {
+        "Rss_kib": 127160,
+        "Pss_kib": 124878,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117136,
+        "Anonymous_kib": 117128
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39918,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 67
+    },
+    {
+      "index": 68,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2369.4463840001845,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 124914,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39918,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 68
+    },
+    {
+      "index": 68,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1921.974629000033,
+      "engine": "firecracker",
+      "pair": 68
+    },
+    {
+      "index": 69,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1700.1569679996464,
+      "engine": "firecracker",
+      "pair": 69
+    },
+    {
+      "index": 69,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2271.8529929998112,
+      "node_memory_ready": {
+        "Rss_kib": 127156,
+        "Pss_kib": 124874,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117132,
+        "Anonymous_kib": 117124
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39918,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 69
+    },
+    {
+      "index": 70,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 4591.516745000263,
+      "node_memory_ready": {
+        "Rss_kib": 127164,
+        "Pss_kib": 124883,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117140,
+        "Anonymous_kib": 117132
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39919,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 70
+    },
+    {
+      "index": 70,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1846.4263459991344,
+      "engine": "firecracker",
+      "pair": 70
+    },
+    {
+      "index": 71,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1991.607298999952,
+      "engine": "firecracker",
+      "pair": 71
+    },
+    {
+      "index": 71,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2711.624663999828,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 124942,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117168,
+        "Anonymous_kib": 117160
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39950,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 71
+    },
+    {
+      "index": 72,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2083.8933810000526,
+      "node_memory_ready": {
+        "Rss_kib": 127160,
+        "Pss_kib": 124910,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117136,
+        "Anonymous_kib": 117128
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39950,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 72
+    },
+    {
+      "index": 72,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1576.9419250000283,
+      "engine": "firecracker",
+      "pair": 72
+    },
+    {
+      "index": 73,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1832.0827159996043,
+      "engine": "firecracker",
+      "pair": 73
+    },
+    {
+      "index": 73,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2520.548200999656,
+      "node_memory_ready": {
+        "Rss_kib": 127252,
+        "Pss_kib": 125006,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117228,
+        "Anonymous_kib": 117220
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 73
+    },
+    {
+      "index": 74,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2388.7403700000505,
+      "node_memory_ready": {
+        "Rss_kib": 127192,
+        "Pss_kib": 124946,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117168,
+        "Anonymous_kib": 117160
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 74
+    },
+    {
+      "index": 74,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1891.815983000015,
+      "engine": "firecracker",
+      "pair": 74
+    },
+    {
+      "index": 75,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2249.844053000743,
+      "engine": "firecracker",
+      "pair": 75
+    },
+    {
+      "index": 75,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 4197.332458999881,
+      "node_memory_ready": {
+        "Rss_kib": 127136,
+        "Pss_kib": 124896,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117112,
+        "Anonymous_kib": 117104
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39961,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 75
+    },
+    {
+      "index": 76,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3329.9773099997765,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124913,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39967,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 76
+    },
+    {
+      "index": 76,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3010.03449899963,
+      "engine": "firecracker",
+      "pair": 76
+    },
+    {
+      "index": 77,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3541.548844999852,
+      "engine": "firecracker",
+      "pair": 77
+    },
+    {
+      "index": 77,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3287.666846999855,
+      "node_memory_ready": {
+        "Rss_kib": 127160,
+        "Pss_kib": 124935,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117136,
+        "Anonymous_kib": 117128
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39977,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 77
+    },
+    {
+      "index": 78,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 5870.774154999708,
+      "node_memory_ready": {
+        "Rss_kib": 127112,
+        "Pss_kib": 124895,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117088,
+        "Anonymous_kib": 117080
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39982,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 78
+    },
+    {
+      "index": 78,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1958.9641759994265,
+      "engine": "firecracker",
+      "pair": 78
+    },
+    {
+      "index": 79,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1631.5284130005239,
+      "engine": "firecracker",
+      "pair": 79
+    },
+    {
+      "index": 79,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2436.4067080005043,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124928,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42200,
+        "Pss_kib": 39982,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32176,
+        "Anonymous_kib": 32176
+      },
+      "engine": "hypermachine",
+      "pair": 79
+    },
+    {
+      "index": 80,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359597, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359667; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 80,
+      "node_log_tail": "P=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:20.376394Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-80090d32d1394bc0982b: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867779, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5548766867849; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:40.708659Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5ab824d8058b4a17b2e8: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084095, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084155; vCPU 0 owner sample: RIP=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:56.573652Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3372d48d8f2b4eceaf5f: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:07:44.720844Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-f4b22acba08d43d4b30d: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596525, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596585; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:10:17.048722Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3666a568b96245809454: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359597, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359667; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 80,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1498.1199349995222,
+      "engine": "firecracker",
+      "pair": 80
+    },
+    {
+      "index": 81,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1310.6864329993186,
+      "engine": "firecracker",
+      "pair": 81
+    },
+    {
+      "index": 81,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1787.7695490005863,
+      "node_memory_ready": {
+        "Rss_kib": 127160,
+        "Pss_kib": 124944,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117136,
+        "Anonymous_kib": 117128
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39988,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 81
+    },
+    {
+      "index": 82,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1774.496989999534,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124935,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39988,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 82
+    },
+    {
+      "index": 82,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1367.7893780004524,
+      "engine": "firecracker",
+      "pair": 82
+    },
+    {
+      "index": 83,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1647.0612949997303,
+      "engine": "firecracker",
+      "pair": 83
+    },
+    {
+      "index": 83,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3604.4205540001713,
+      "node_memory_ready": {
+        "Rss_kib": 127148,
+        "Pss_kib": 124940,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117124,
+        "Anonymous_kib": 117116
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39995,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 83
+    },
+    {
+      "index": 84,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3140.8367350004482,
+      "node_memory_ready": {
+        "Rss_kib": 127144,
+        "Pss_kib": 124926,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117120,
+        "Anonymous_kib": 117112
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39986,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 84
+    },
+    {
+      "index": 84,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1284.5423979997577,
+      "engine": "firecracker",
+      "pair": 84
+    },
+    {
+      "index": 85,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1872.5875399995857,
+      "engine": "firecracker",
+      "pair": 85
+    },
+    {
+      "index": 85,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2522.4798250001186,
+      "node_memory_ready": {
+        "Rss_kib": 127132,
+        "Pss_kib": 124917,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117108,
+        "Anonymous_kib": 117100
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39989,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 85
+    },
+    {
+      "index": 86,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2472.9102159999456,
+      "node_memory_ready": {
+        "Rss_kib": 127184,
+        "Pss_kib": 124969,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117160,
+        "Anonymous_kib": 117152
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39989,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 86
+    },
+    {
+      "index": 86,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2309.2590900005234,
+      "engine": "firecracker",
+      "pair": 86
+    },
+    {
+      "index": 87,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2330.5978750004215,
+      "engine": "firecracker",
+      "pair": 87
+    },
+    {
+      "index": 87,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2541.320100000121,
+      "node_memory_ready": {
+        "Rss_kib": 127172,
+        "Pss_kib": 124933,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117148,
+        "Anonymous_kib": 117140
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39965,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 87
+    },
+    {
+      "index": 88,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2964.6560419996604,
+      "node_memory_ready": {
+        "Rss_kib": 127164,
+        "Pss_kib": 124923,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117140,
+        "Anonymous_kib": 117132
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42204,
+        "Pss_kib": 39962,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32180,
+        "Anonymous_kib": 32180
+      },
+      "engine": "hypermachine",
+      "pair": 88
+    },
+    {
+      "index": 88,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2280.8864609996817,
+      "engine": "firecracker",
+      "pair": 88
+    },
+    {
+      "index": 89,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2247.5263249998534,
+      "engine": "firecracker",
+      "pair": 89
+    },
+    {
+      "index": 89,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531870, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531940; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 89,
+      "node_log_tail": "P=0xffffffff81eda95f RFLAGS=0x216 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:40.708659Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-5ab824d8058b4a17b2e8: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084095, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5569075084155; vCPU 0 owner sample: RIP=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:56.573652Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3372d48d8f2b4eceaf5f: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:07:44.720844Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-f4b22acba08d43d4b30d: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596525, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596585; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:10:17.048722Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3666a568b96245809454: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359597, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359667; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:11:15.157279Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-971cdcb6e457444e82b9: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531870, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531940; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 90,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 3171.0227260000465,
+      "node_memory_ready": {
+        "Rss_kib": 127196,
+        "Pss_kib": 124939,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117172,
+        "Anonymous_kib": 117164
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39954,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 90
+    },
+    {
+      "index": 90,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 4289.077026000086,
+      "engine": "firecracker",
+      "pair": 90
+    },
+    {
+      "index": 91,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1322.6361930001076,
+      "engine": "firecracker",
+      "pair": 91
+    },
+    {
+      "index": 91,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1896.213409999291,
+      "node_memory_ready": {
+        "Rss_kib": 127168,
+        "Pss_kib": 124911,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117144,
+        "Anonymous_kib": 117136
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39951,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 91
+    },
+    {
+      "index": 92,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 4821.655328999441,
+      "node_memory_ready": {
+        "Rss_kib": 127188,
+        "Pss_kib": 124931,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39953,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 92
+    },
+    {
+      "index": 92,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2781.016554999951,
+      "engine": "firecracker",
+      "pair": 92
+    },
+    {
+      "index": 93,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2690.296896000291,
+      "engine": "firecracker",
+      "pair": 93
+    },
+    {
+      "index": 93,
+      "success": false,
+      "cleanup_success": false,
+      "error": "HTTP 503: {\"code\":503,\"message\":\"guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5882566884133, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5882566884203; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\"}",
+      "engine": "hypermachine",
+      "pair": 93,
+      "node_log_tail": "P=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:56.573652Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3372d48d8f2b4eceaf5f: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:07:44.720844Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-f4b22acba08d43d4b30d: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596525, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596585; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:10:17.048722Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3666a568b96245809454: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359597, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359667; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:11:15.157279Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-971cdcb6e457444e82b9: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531870, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531940; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:11:54.227287Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-afd3b016e58045dd8359: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5882566884133, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5882566884203; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n"
+    },
+    {
+      "index": 94,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1675.4813270008526,
+      "node_memory_ready": {
+        "Rss_kib": 127120,
+        "Pss_kib": 124868,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117096,
+        "Anonymous_kib": 117088
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39953,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 94
+    },
+    {
+      "index": 94,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1226.4676590002637,
+      "engine": "firecracker",
+      "pair": 94
+    },
+    {
+      "index": 95,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1252.240372000415,
+      "engine": "firecracker",
+      "pair": 95
+    },
+    {
+      "index": 95,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1562.2952639996583,
+      "node_memory_ready": {
+        "Rss_kib": 127172,
+        "Pss_kib": 124915,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117148,
+        "Anonymous_kib": 117140
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39951,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 95
+    },
+    {
+      "index": 96,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1554.029249999985,
+      "node_memory_ready": {
+        "Rss_kib": 127176,
+        "Pss_kib": 124922,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117152,
+        "Anonymous_kib": 117144
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39951,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 96
+    },
+    {
+      "index": 96,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1055.0968569996257,
+      "engine": "firecracker",
+      "pair": 96
+    },
+    {
+      "index": 97,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1160.92429299988,
+      "engine": "firecracker",
+      "pair": 97
+    },
+    {
+      "index": 97,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1286.035338000147,
+      "node_memory_ready": {
+        "Rss_kib": 127212,
+        "Pss_kib": 124959,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117188,
+        "Anonymous_kib": 117180
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39955,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 97
+    },
+    {
+      "index": 98,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1244.6322969999528,
+      "node_memory_ready": {
+        "Rss_kib": 127252,
+        "Pss_kib": 124996,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117228,
+        "Anonymous_kib": 117220
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39956,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 98
+    },
+    {
+      "index": 98,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1083.4490209999785,
+      "engine": "firecracker",
+      "pair": 98
+    },
+    {
+      "index": 99,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 1727.9584400002932,
+      "engine": "firecracker",
+      "pair": 99
+    },
+    {
+      "index": 99,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 2992.7063730001464,
+      "node_memory_ready": {
+        "Rss_kib": 127188,
+        "Pss_kib": 124921,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 117164,
+        "Anonymous_kib": 117156
+      },
+      "node_memory_after_delete": {
+        "Rss_kib": 42208,
+        "Pss_kib": 39941,
+        "Private_Clean_kib": 7688,
+        "Private_Dirty_kib": 32184,
+        "Anonymous_kib": 32184
+      },
+      "engine": "hypermachine",
+      "pair": 99
+    }
+  ],
+  "node_memory_baseline": {
+    "Rss_kib": 8748,
+    "Pss_kib": 6678,
+    "Private_Clean_kib": 0,
+    "Private_Dirty_kib": 6540,
+    "Anonymous_kib": 844
+  },
+  "node_log_tail": "P=0xffffffff8105fb53 RFLAGS=0x92 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e68 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:06:56.573652Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3372d48d8f2b4eceaf5f: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001076, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5584934001146; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x212 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:07:44.720844Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-f4b22acba08d43d4b30d: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596525, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5633106596585; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:10:17.048722Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-3666a568b96245809454: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359597, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5785451359667; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0x30 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:11:15.157279Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-971cdcb6e457444e82b9: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531870, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5843472531940; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x206 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n\u001b[2m2026-10-01T04:11:54.227287Z\u001b[0m \u001b[33m WARN\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-afd3b016e58045dd8359: guest never became ready: Timeout: no answer from a guest agent on vsock port 1024 within 15s (1 refused). The guest may not be running, may have no vsock driver, or may not be running hv2-guest-agentd; the guest wrote nothing to its console; VM Running; vCPU 0: 0 exits (0 I/O) in 0.5 s, 2401 in all; pre-kick machine sample: PIC_MASTER LAST_IRR=0x0 IRR=0x11 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x30 INIT=0 AUTO_EOI=0 ELCR=0x0; PIC_SLAVE LAST_IRR=0x0 IRR=0x0 IMR=0x0 ISR=0x0 PRIORITY=0x0 BASE=0x38 INIT=0 AUTO_EOI=0 ELCR=0x0; PIT FLAGS=0x0 CH0 COUNT=1193 MODE=2 GATE=1 RW=3 READ=3 WRITE=3 LOADED_NS=0, CH1 COUNT=65536 MODE=255 GATE=1 RW=0 READ=0 WRITE=0 LOADED_NS=5882566884133, CH2 COUNT=65536 MODE=255 GATE=0 RW=0 READ=0 WRITE=0 LOADED_NS=5882566884203; vCPU 0 owner sample: RIP=0xffffffff81eda95f RFLAGS=0x202 CR3=0x2a2e000 run_state=Runnable RSP=0xffffffff82a03e88 APIC_BASE=0xfee00900 CR8=0x1; LAPIC TPR=0x10 PPR=0x10 SVR=0x3ff LVT_TIMER=0x10000 LVT0=0x700 TIMER_INITIAL=0x0 TIMER_CURRENT=0x0 TIMER_DIVIDE=0x0 ISR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000 IRR=00000000/00000000/00000000/00000000/00000000/00000000/00000000/00000000; EVENTS FLAGS=0xd IRQ_INJECTED=0 VECTOR=0xf3 SOFT=0 SHADOW=Some(0) EXCEPTION_INJECTED=0 EXCEPTION_VECTOR=0 EXCEPTION_PENDING=None NMI_INJECTED=0 NMI_PENDING=Some(0) NMI_MASKED=0; RUN_RETRIES EINTR=1 EAGAIN=0\n",
+  "ready_ms": {
+    "hypermachine": {
+      "n": 91,
+      "min": 1094.653721999748,
+      "max": 8296.288952000396,
+      "mean": 2269.0129910109804,
+      "p50": 1896.213409999291,
+      "p95": 5210.895030999382,
+      "p99": 8296.288952000396
+    },
+    "firecracker": {
+      "n": 100,
+      "min": 782.4410590001207,
+      "max": 8735.716248999779,
+      "mean": 1863.9411162499343,
+      "p50": 1631.5284130005239,
+      "p95": 4289.077026000086,
+      "p99": 6573.303078999743
+    }
+  },
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware; inspect driver/coordinator affinity metadata",
+    "Different native control paths: persistent HyperMachine HTTP node versus Firecracker process and Unix API",
+    "Cold lifecycle only; no snapshot/SDK/platform comparison",
+    "Engine-generated device kernel arguments differ"
+  ],
+  "success": false,
+  "controlled_cpu_load": {
+    "workers": 1,
+    "worker_code": "import time\nend=time.monotonic()+7200\nx=1\nwhile time.monotonic()<end:\n for _ in range(10000): x=(x*1664525+1013904223)&0xffffffff\n",
+    "all_alive_through_cohort": true,
+    "pinning": true,
+    "cpu": 0,
+    "workers_cleaned_up": true,
+    "coordinator_sha256": "959fd682d878f8d9d86fd321de87beca17a45728063401edd5dfddf4f08a338f"
+  }
+}

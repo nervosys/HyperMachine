@@ -1,0 +1,141 @@
+{
+  "success": true,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator; no managed-store durability claim",
+  "artifact_sha256": {
+    "tool": "fa3c145c7628b96f028081daff71636992a11ef3432ba8bdadad948e2da222a0",
+    "coordinator": "b31b4413b38412e1c64d3039946647675905db0a0e4b6ff2ba02ad029a32ba29",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17"
+  },
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "cryptography": "50.0.0",
+    "moto": "5.2.3"
+  },
+  "checks": [
+    {
+      "name": "active-store-refused",
+      "refused": true
+    },
+    {
+      "name": "encrypted-conditional-upload",
+      "sha256": "91c1f9cd3b72727bbe7b9d0d54173e0075fac498d0d193eefa44ca303eb4a8a0",
+      "bytes": 917
+    },
+    {
+      "name": "relocated-roundtrip-with-empty-directory-and-permissions",
+      "files": 4
+    },
+    {
+      "name": "wrong-key-tampered-truncated-refused",
+      "refused": true
+    },
+    {
+      "name": "expanded-byte-limit-refused",
+      "refused": true
+    },
+    {
+      "name": "unsafe-path",
+      "refused": true,
+      "error": "unsafe relative file name"
+    },
+    {
+      "name": "symlink",
+      "refused": true,
+      "error": "unsupported archive entry"
+    },
+    {
+      "name": "missing-file",
+      "refused": true,
+      "error": "archive file missing"
+    },
+    {
+      "name": "wrong-digest",
+      "refused": true,
+      "error": "archive file digest mismatch"
+    },
+    {
+      "name": "extra-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "duplicate-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "source-symlink-and-unfinished-claim-refused",
+      "refused": true
+    },
+    {
+      "name": "independent-receipt-mismatch-refused",
+      "refused": true
+    },
+    {
+      "name": "lost-upload-response-retains-verifiable-receipt",
+      "passed": true,
+      "injection": "client acknowledgement loss after real emulator commit",
+      "receipt": {
+        "operation": "backup",
+        "object": "lost-response.hmb",
+        "encrypted_bytes": 917,
+        "sha256": "670813f7d25c8f036d417adc2558bd8f0260be8aa63cfae4a5116c0ec6ec45eb",
+        "files": 4,
+        "expanded_bytes": 7074,
+        "upload_method": "single",
+        "parts": 0
+      }
+    },
+    {
+      "name": "real-kvm-state-recovered-through-s3-at-new-root",
+      "passed": true
+    }
+  ],
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "name": "node-recovered",
+      "exit_code": 0
+    },
+    {
+      "name": "node-original",
+      "exit_code": 0
+    },
+    {
+      "name": "s3",
+      "exit_code": 0
+    }
+  ],
+  "kvm": {
+    "same_id_and_access_token": true,
+    "live_process_and_memory_marker": true,
+    "filesystem_and_boot_id": true,
+    "volume_marker": true,
+    "guest_9p_volume_roundtrip": true,
+    "same_volume_id_and_token": true,
+    "volume_inventory_empty": true,
+    "original_path_unavailable": true,
+    "cleanup_inventory_empty": true,
+    "backup_receipt": {
+      "operation": "backup",
+      "object": "kvm.hmb",
+      "encrypted_bytes": 36623726,
+      "sha256": "6f07ed94041e82b610963f9a55b6e9395ae6d451633faeeb1f02932befe20de5",
+      "files": 9,
+      "expanded_bytes": 1080836130,
+      "upload_method": "multipart",
+      "parts": 5,
+      "composite_sha256": "v0FO022h1Wi0iFVUphjoZU4EJflwzF78KQwsjCwe0j8=-5",
+      "success": true
+    },
+    "receipt_checksum_verified": true,
+    "layered_memory_base_relocated": true,
+    "named_snapshot_recovered": true,
+    "ordinary_volume_snapshot_filename_preserved": true
+  },
+  "artifacts_unchanged": true
+}

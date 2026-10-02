@@ -1,0 +1,15 @@
+{
+  "baseline_sha256": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+  "candidate_sha256": "b49d88fa968b98fe05490c0a9fee6347d385571a1c80e600920e3ea54b881b34",
+  "candidate_main_sha256": "45330237c00486ce126e0fa20a39a6cf98d100f918ca38f8a196f97818e0d472",
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "build_exit_code": 0,
+  "command": "CARGO_TARGET_DIR=/var/tmp/hm-object-backup/target cargo build --release --locked -p hv2-sandboxd",
+  "compiler": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21) (built from a source tarball)",
+  "production_runtime_changed": false
+}

@@ -1,0 +1,52 @@
+   Compiling hv2-sandboxd v1.1.0 (/var/tmp/hm-periodic-heap/source/crates/hv2-sandboxd)
+error[E0425]: cannot find type `AtomicBool` in this scope
+    --> crates/hv2-sandboxd/src/main.rs:4202:15
+     |
+4202 |     stop: Arc<AtomicBool>,
+     |               ^^^^^^^^^^ not found in this scope
+     |
+help: consider importing this struct
+     |
+  93 + use std::sync::atomic::AtomicBool;
+     |
+
+error[E0433]: cannot find type `AtomicBool` in this scope
+    --> crates/hv2-sandboxd/src/main.rs:4209:29
+     |
+4209 |         let stop = Arc::new(AtomicBool::new(false));
+     |                             ^^^^^^^^^^ use of undeclared type `AtomicBool`
+     |
+help: consider importing this struct
+     |
+  93 + use std::sync::atomic::AtomicBool;
+     |
+
+error[E0433]: cannot find type `Ordering` in this scope
+    --> crates/hv2-sandboxd/src/main.rs:4220:37
+     |
+4220 |                     if stopped.load(Ordering::Acquire) {
+     |                                     ^^^^^^^^ use of undeclared type `Ordering`
+     |
+help: consider importing one of these enums
+     |
+  93 + use std::cmp::Ordering;
+     |
+  93 + use std::sync::atomic::Ordering;
+     |
+
+error[E0433]: cannot find type `Ordering` in this scope
+    --> crates/hv2-sandboxd/src/main.rs:4243:31
+     |
+4243 |         self.stop.store(true, Ordering::Release);
+     |                               ^^^^^^^^ use of undeclared type `Ordering`
+     |
+help: consider importing one of these enums
+     |
+  93 + use std::cmp::Ordering;
+     |
+  93 + use std::sync::atomic::Ordering;
+     |
+
+Some errors have detailed explanations: E0425, E0433.
+For more information about an error, try `rustc --explain E0425`.
+error: could not compile `hv2-sandboxd` (bin "hv2-sandboxd" test) due to 4 previous errors

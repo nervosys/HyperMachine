@@ -1,0 +1,660 @@
+//! Test schedule persistence through separate invocations of the shipped CLI.
+use serde_json::{json, Value};
+use std::process::{Command, Output};
+
+fn invoke(store: &std::path::Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_hm"))
+        .arg("jobs")
+        .arg("--store")
+        .arg(store)
+        .arg("schedule")
+        .args(args)
+        .output()
+        .unwrap()
+}
+
+fn success(output: Output) -> Value {
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
+}
+
+#[test]
+fn schedule_cli_persists_and_pages_without_executing_jobs() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let spec = dir.path().join("schedule.json");
+    std::fs::write(
+        &spec,
+        json!({"first_ms":100,"every_ms":10,"job":{"command":["program-that-must-not-be-run"]}})
+            .to_string(),
+    )
+    .unwrap();
+    let spec = spec.to_str().unwrap();
+    assert_eq!(success(invoke(&store, &["list"])), json!([]));
+    assert_eq!(
+        success(invoke(&store, &["create", "test", spec])),
+        json!({"id":"test"})
+    );
+    assert!(!invoke(&store, &["create", "test", spec]).status.success());
+    assert_eq!(
+        success(invoke(&store, &["list", "--limit", "1"])),
+        json!(["test"])
+    );
+    assert_eq!(
+        success(invoke(&store, &["list", "--after", "test"])),
+        json!([])
+    );
+    assert_eq!(
+        success(invoke(&store, &["status", "test"]))["publication_through_ms"],
+        Value::Null
+    );
+    let batch = success(invoke(
+        &store,
+        &["publish", "test", "--now-ms", "135", "--limit", "2"],
+    ));
+    assert_eq!(batch.as_array().unwrap().len(), 2);
+    assert_eq!(batch[1]["scheduled_ms"], 110);
+    success(invoke(
+        &store,
+        &["publish", "test", "--now-ms", "135", "--limit", "2"],
+    ));
+    assert_eq!(
+        success(invoke(&store, &["status", "test"]))["publication_through_ms"],
+        130
+    );
+    let page = success(invoke(
+        &store,
+        &["occurrences", "test", "--after-ms", "110", "--limit", "1"],
+    ));
+    assert_eq!(page.as_array().unwrap().len(), 1);
+    assert_eq!(page[0]["scheduled_ms"], 120);
+    assert!(!invoke(
+        &store,
+        &["publish", "test", "--now-ms", "135", "--limit", "0"]
+    )
+    .status
+    .success());
+    assert!(!invoke(&store, &["status", "../escape"]).status.success());
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(store.join("jobs")).unwrap().count(), 0);
+    assert_eq!(
+        success(invoke(&store, &["cancel", "test"]))["cancelled"],
+        true
+    );
+    assert_eq!(
+        success(invoke(&store, &["status", "test"]))["cancelled"],
+        true
+    );
+    assert!(!invoke(&store, &["publish", "test", "--now-ms", "140"])
+        .status
+        .success());
+    assert!(invoke(&store, &["watch", "test", "--ticks", "1"])
+        .status
+        .success());
+}
+
+#[test]
+fn automatic_publication_is_bounded_and_recovers_on_a_second_invocation() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let spec = dir.path().join("interval.json");
+    std::fs::write(
+        &spec,
+        json!({"first_ms":0,"every_ms":1,"vm":{"sandbox_id":"guest-1","connection_profile":"local","timeout_secs":30},"job":{"command":["must-not-run"]}}).to_string(),
+    )
+    .unwrap();
+    success(invoke(&store, &["create", "watch", spec.to_str().unwrap()]));
+    for expected in [3, 7] {
+        let output = invoke(
+            &store,
+            &[
+                "watch",
+                "watch",
+                "--limit",
+                "2",
+                "--poll-ms",
+                "1",
+                "--ticks",
+                "2",
+            ],
+        );
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let lines: Vec<Value> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines.iter().all(|line| line.as_array().unwrap().len() == 2));
+        assert!(lines
+            .iter()
+            .all(|line| line[0]["vm"]["connection_profile"] == "local"));
+        assert_eq!(
+            success(invoke(&store, &["status", "watch"]))["publication_through_ms"],
+            expected
+        );
+    }
+    assert!(!invoke(&store, &["watch", "watch", "--ticks", "0"])
+        .status
+        .success());
+    assert!(!invoke(
+        &store,
+        &["watch", "watch", "--poll-ms", "0", "--ticks", "1"]
+    )
+    .status
+    .success());
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+}
+
+async fn running_publisher_shutdown(signal: bool) {
+    use std::time::Duration;
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let spec = dir.path().join("live.json");
+    std::fs::write(
+        &spec,
+        json!({"first_ms":0,"every_ms":1,"job":{"command":["must-not-run"]}}).to_string(),
+    )
+    .unwrap();
+    success(invoke(&store, &["create", "live", spec.to_str().unwrap()]));
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["jobs", "--store"])
+        .arg(&store)
+        .args([
+            "schedule",
+            "watch",
+            "live",
+            "--limit",
+            "2",
+            "--poll-ms",
+            "10",
+        ])
+        .stdout(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    tokio::time::timeout(Duration::from_secs(10), output.read_line(&mut line))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<Value>(&line)
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    // Keep draining so a healthy publisher cannot block on a full stdout pipe.
+    let drain =
+        tokio::spawn(async move { tokio::io::copy(&mut output, &mut tokio::io::sink()).await });
+    if signal {
+        let status = Command::new("/bin/kill")
+            .args(["-INT", &child.id().unwrap().to_string()])
+            .status()
+            .unwrap();
+        assert!(status.success());
+    } else {
+        success(invoke(&store, &["cancel", "live"]));
+    }
+    let status = tokio::time::timeout(Duration::from_secs(5), child.wait())
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(status.success(), "publisher did not exit cleanly: {status}");
+    drain.await.unwrap().unwrap();
+    let persisted = success(invoke(&store, &["status", "live"]));
+    assert_eq!(persisted["cancelled"], !signal);
+    let records = success(invoke(&store, &["occurrences", "live", "--limit", "1024"]));
+    assert_eq!(
+        records.as_array().unwrap().last().unwrap()["scheduled_ms"],
+        persisted["publication_through_ms"]
+    );
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn running_publisher_observes_external_schedule_cancellation() {
+    running_publisher_shutdown(false).await;
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn running_publisher_handles_sigint_and_preserves_committed_records() {
+    running_publisher_shutdown(true).await;
+}
+
+#[test]
+fn profile_check_resolves_child_environment_without_printing_credentials() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let profiles = dir.path().join("profiles.json");
+    std::fs::write(&profiles, json!({"profiles":{"local":{"endpoint":"https://127.0.0.1:9","api_key_env":"HM_PROFILE_TEST_KEY"}}}).to_string()).unwrap();
+    let run = |with_key: bool| {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_hm"));
+        command
+            .args(["jobs", "--store"])
+            .arg(&store)
+            .args(["schedule", "profile-check"])
+            .arg(&profiles)
+            .arg("local");
+        if with_key {
+            command.env("HM_PROFILE_TEST_KEY", "disposable-profile-secret");
+        } else {
+            command.env_remove("HM_PROFILE_TEST_KEY");
+        }
+        command.output().unwrap()
+    };
+    let output = run(true);
+    assert!(!String::from_utf8_lossy(&output.stdout).contains("disposable-profile-secret"));
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("disposable-profile-secret"));
+    assert_eq!(
+        success(output),
+        json!({"profile":"local","configuration_valid":true})
+    );
+    assert!(!run(false).status.success());
+}
+
+#[tokio::test]
+async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execution() {
+    use axum::{
+        extract::Json,
+        http::{HeaderMap, StatusCode},
+        response::IntoResponse,
+        routing::post,
+        Router,
+    };
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    let calls = Arc::new(AtomicUsize::new(0));
+    let count = Arc::clone(&calls);
+    let app = Router::new()
+        .route("/sandboxes/guest/connect", post(|headers: HeaderMap| async move {
+            assert_eq!(headers["x-api-key"], "dispatch-fixture-key");
+            Json(json!({"envdAccessToken":"do-not-print"}))
+        }))
+        .route("/sandboxes/guest/exec", post(move |headers: HeaderMap, Json(body): Json<Value>| {
+            let count = Arc::clone(&count);
+            async move {
+                assert_eq!(headers["x-api-key"], "dispatch-fixture-key");
+                assert_eq!(body["timeout_secs"], 30);
+                let cmd = body["cmd"].as_str().unwrap();
+                assert!(cmd.starts_with("cd '/work space' && exec 'env' '--'"));
+                assert!(cmd.contains("'TEST=v'\\''alue'"));
+                assert!(cmd.contains("'/bin/sh' '-c'"));
+                let attempt = count.fetch_add(1, Ordering::SeqCst);
+                if attempt == 0 {
+                    Json(json!({"exit_code":7,"timed_out":false,"stdout":"guest output","stderr":"guest error"})).into_response()
+                } else if attempt == 1 {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "dispatch-fixture-key").into_response()
+                } else {
+                    Json(json!({"exit_code":0,"timed_out":false,"stdout":"x".repeat(1_048_577),"stderr":""})).into_response()
+                }
+            }
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = hv2_jobs::Store::open(dir.path().join("store")).unwrap();
+    let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,"vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},"job":{"command":["printf","%s","a'$(id)"],"env":{"TEST":"v'alue"},"workdir":"/work space"}})).unwrap();
+    store.create_interval_schedule("run", &schedule).unwrap();
+    store.materialize_interval("run", 110, 2).unwrap();
+    let profiles = dir.path().join("profiles.json");
+    std::fs::write(&profiles, json!({"profiles":{"local":{"endpoint":format!("http://{address}"),"api_key_env":"HM_DISPATCH_FIXTURE_KEY"}}}).to_string()).unwrap();
+    let dispatch = |name: &str, time: &str| {
+        let mut cmd = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"));
+        cmd.args(["jobs", "--store"])
+            .arg(store.root())
+            .args(["schedule", "dispatch", name, time, "--profiles"])
+            .arg(&profiles)
+            .env("HM_DISPATCH_FIXTURE_KEY", "dispatch-fixture-key");
+        cmd
+    };
+    let worker = || {
+        let mut cmd = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"));
+        cmd.args(["jobs", "--store"])
+            .arg(store.root())
+            .args([
+                "schedule",
+                "worker",
+                "run",
+                "--ticks",
+                "1",
+                "--limit",
+                "1",
+                "--profiles",
+            ])
+            .arg(&profiles)
+            .env("HM_DISPATCH_FIXTURE_KEY", "dispatch-fixture-key");
+        cmd
+    };
+    let result = success(worker().output().await.unwrap());
+    assert_eq!(
+        store
+            .vm_dispatch_state("run", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .origin,
+        hv2_jobs::dispatch::CompletionOrigin::ApiResponse
+    );
+    assert_eq!(result["exit_code"], 7);
+    assert_eq!(result["stdout"], "guest output");
+    let receipt = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["jobs", "--store"])
+        .arg(store.root())
+        .args(["schedule", "receipt", "run", "100"])
+        .output()
+        .await
+        .unwrap();
+    assert_eq!(success(receipt)["completion"]["stdout"], "guest output");
+    assert_eq!(
+        store
+            .vm_dispatch_state("run", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .exit_code,
+        Some(7)
+    );
+    assert!(!dispatch("run", "100")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let failed = worker().output().await.unwrap();
+    assert!(!failed.status.success());
+    assert!(!String::from_utf8_lossy(&failed.stderr).contains("dispatch-fixture-key"));
+    assert!(store
+        .vm_dispatch_state("run", 110)
+        .unwrap()
+        .completion
+        .is_none());
+    assert!(!dispatch("run", "110")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(!worker().output().await.unwrap().status.success());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    store.materialize_interval("run", 120, 1).unwrap();
+    assert!(!dispatch("run", "120")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    store.create_interval_schedule("large", &schedule).unwrap();
+    store.materialize_interval("large", 100, 1).unwrap();
+    assert!(!dispatch("large", "100")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
+    assert!(store
+        .vm_dispatch_state("large", 100)
+        .unwrap()
+        .completion
+        .is_none());
+    assert!(!dispatch("large", "100")
+        .output()
+        .await
+        .unwrap()
+        .status
+        .success());
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+    server.abort();
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn vm_worker_sigint_waits_for_inflight_result_and_persists_receipt() {
+    use axum::{routing::post, Json, Router};
+    use std::{sync::Arc, time::Duration};
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let (entered, gate) = (started.clone(), release.clone());
+    let app = Router::new()
+        .route("/sandboxes/guest/connect", post(|| async { Json(json!({})) }))
+        .route("/sandboxes/guest/exec", post(move || {
+            let (entered, gate) = (entered.clone(), gate.clone());
+            async move {
+                entered.notify_one();
+                gate.notified().await;
+                Json(json!({"exit_code":7,"timed_out":false,"stdout":"completed after interrupt","stderr":""}))
+            }
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let store = hv2_jobs::Store::open(dir.path().join("store")).unwrap();
+    let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,
+        "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+        "job":{"command":["true"]}}))
+    .unwrap();
+    store
+        .create_interval_schedule("interrupt", &schedule)
+        .unwrap();
+    let profiles = dir.path().join("profiles.json");
+    std::fs::write(
+        &profiles,
+        json!({"profiles":{"local":{"endpoint":format!("http://{address}")}}}).to_string(),
+    )
+    .unwrap();
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args(["jobs", "--store"])
+        .arg(store.root())
+        .args([
+            "schedule",
+            "worker",
+            "interrupt",
+            "--limit",
+            "1",
+            "--profiles",
+        ])
+        .arg(&profiles)
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), started.notified())
+        .await
+        .unwrap();
+    assert!(Command::new("/bin/kill")
+        .args(["-INT", &child.id().unwrap().to_string()])
+        .status()
+        .unwrap()
+        .success());
+    // Hold the response: interruption must not abandon accepted work.
+    assert!(
+        tokio::time::timeout(Duration::from_millis(150), child.wait())
+            .await
+            .is_err()
+    );
+    assert!(store
+        .vm_dispatch_state("interrupt", 100)
+        .unwrap()
+        .completion
+        .is_none());
+    release.notify_one();
+    assert!(tokio::time::timeout(Duration::from_secs(5), child.wait())
+        .await
+        .unwrap()
+        .unwrap()
+        .success());
+    let receipt = hv2_jobs::Store::open(store.root())
+        .unwrap()
+        .vm_dispatch_state("interrupt", 100)
+        .unwrap()
+        .completion
+        .unwrap();
+    assert_eq!(receipt.exit_code, Some(7));
+    assert_eq!(receipt.stdout.as_deref(), Some("completed after interrupt"));
+    assert!(store.vm_dispatch_state("interrupt", 110).is_err());
+    server.abort();
+}
+
+#[test]
+fn operator_result_requires_claim_token_and_preserves_immutable_completion() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = hv2_jobs::Store::open(dir.path().join("store")).unwrap();
+    let schedule = serde_json::from_value(json!({"first_ms":100,"every_ms":10,
+        "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+        "job":{"command":["true"]}}))
+    .unwrap();
+    store
+        .create_interval_schedule("recover", &schedule)
+        .unwrap();
+    store.materialize_interval("recover", 110, 2).unwrap();
+    let claim = store
+        .claim_vm_occurrence("recover", 100, "lost-worker")
+        .unwrap();
+    assert!(store.next_vm_occurrence("recover").is_err());
+    let file = dir.path().join("result.json");
+    let mut result = json!({"origin":"api_response","claim_token":"wrong","exit_code":7,"timed_out":false,
+        "stdout":"independently verified output","stderr":""});
+    let run = || {
+        invoke(
+            store.root(),
+            &["record-result", "recover", "100", file.to_str().unwrap()],
+        )
+    };
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!run().status.success());
+    assert!(store
+        .vm_dispatch_state("recover", 100)
+        .unwrap()
+        .completion
+        .is_none());
+    result["claim_token"] = json!(claim.token);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert_eq!(success(run())["completion_recorded"], true);
+    assert_eq!(
+        store
+            .vm_dispatch_state("recover", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .origin,
+        hv2_jobs::dispatch::CompletionOrigin::OperatorRecorded
+    );
+    success(run());
+    let reopened = hv2_jobs::Store::open(store.root()).unwrap();
+    assert_eq!(
+        reopened
+            .next_vm_occurrence("recover")
+            .unwrap()
+            .unwrap()
+            .scheduled_ms,
+        110
+    );
+    assert_eq!(
+        reopened
+            .vm_dispatch_state("recover", 100)
+            .unwrap()
+            .completion
+            .unwrap()
+            .exit_code,
+        Some(7)
+    );
+    result["exit_code"] = json!(0);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!run().status.success());
+    result["exit_code"] = json!(256);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!run().status.success());
+    result["exit_code"] = json!(7);
+    std::fs::write(&file, result.to_string()).unwrap();
+    assert!(!invoke(
+        store.root(),
+        &["record-result", "recover", "110", file.to_str().unwrap()]
+    )
+    .status
+    .success());
+}
+
+#[test]
+fn calendar_cli_publishes_fold_occurrences_and_recovers_without_execution() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("store");
+    let file = dir.path().join("calendar.json");
+    // 2026-11-01 08:00 UTC, before the Los Angeles repeated 01:30.
+    std::fs::write(
+        &file,
+        json!({"first_ms":1793520000000_u64,
+        "cron":{"expression":"30 1 * * *","timezone":"America/Los_Angeles"},
+        "job":{"command":["program-that-must-not-be-run"]}})
+        .to_string(),
+    )
+    .unwrap();
+    success(invoke(
+        &store,
+        &["create", "calendar", file.to_str().unwrap()],
+    ));
+    let status = success(invoke(&store, &["status", "calendar"]));
+    assert!(status["schedule"]["cron"]["tzdb_version"]
+        .as_str()
+        .is_some());
+    let first = success(invoke(
+        &store,
+        &[
+            "publish",
+            "calendar",
+            "--now-ms",
+            "1793527200000",
+            "--limit",
+            "1",
+        ],
+    ));
+    assert_eq!(first[0]["scheduled_ms"], 1793521800000_u64);
+    let second = success(invoke(
+        &store,
+        &[
+            "publish",
+            "calendar",
+            "--now-ms",
+            "1793527200000",
+            "--limit",
+            "1",
+        ],
+    ));
+    assert_eq!(second[0]["scheduled_ms"], 1793525400000_u64);
+    let records = success(invoke(&store, &["occurrences", "calendar"]));
+    assert_eq!(records.as_array().unwrap().len(), 2);
+    success(invoke(&store, &["cancel", "calendar"]));
+    assert!(!invoke(
+        &store,
+        &["publish", "calendar", "--now-ms", "1793527200000"]
+    )
+    .status
+    .success());
+    assert_eq!(
+        success(invoke(&store, &["occurrences", "calendar"])),
+        records
+    );
+    assert_eq!(std::fs::read_dir(store.join("queue")).unwrap().count(), 0);
+}

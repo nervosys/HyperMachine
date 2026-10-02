@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "transport": "e2b-python-sdk",
+  "sdk_version": "2.51.0",
+  "dependency_versions": {
+    "e2b": "2.51.0",
+    "pyqwest": "0.10.0",
+    "connectrpc": "0.11.1",
+    "httpx": "0.28.1",
+    "httpcore": "1.0.9"
+  },
+  "provider": "HyperMachine",
+  "api_url": "http://localhost:14095",
+  "sandbox_url": "http://localhost:14096",
+  "template": "base",
+  "environment": "Windows client; WSL Debian nested KVM; shared Ryzen 9900X host; debug profiling enabled; corrected connected-channel restore timestamp",
+  "image_description": "BusyBox static guest agent; snapshot prepared; 1 vCPU 1024 MiB; kernel 0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2; initrd 2f4f9b4dbc0b026e99ae1e299e3f221d9ac7b2c53f42ad1f963816426d9bc294",
+  "workload": "posix",
+  "expected_cpus": 1,
+  "expected_memory_mb": 1024,
+  "operation": "create",
+  "internet_access": false,
+  "sdk_debug": false,
+  "sdk_retries": 0,
+  "sandbox_lifetime_seconds": 300,
+  "request_timeout_seconds": 120,
+  "command_timeout_seconds": 30,
+  "samples_requested": 5,
+  "concurrency": 1,
+  "successful_samples": 5,
+  "failed_samples": 0,
+  "elapsed_seconds": 0.7464974999893457,
+  "completed_lifecycles_per_second": 6.697946074931748,
+  "client_os": "Windows-10-10.0.26200-SP0",
+  "client_python": "3.10.11",
+  "finished_at": "2026-09-30T18:51:18.765609+00:00",
+  "create_ms": {
+    "n": 5,
+    "min": 16.345599986379966,
+    "max": 53.317799989599735,
+    "mean": 25.077599997166544,
+    "p50": 17.587000009370968,
+    "p95": 53.317799989599735,
+    "p99": 53.317799989599735
+  },
+  "exec_ms": {
+    "n": 5,
+    "min": 65.65460001002066,
+    "max": 112.0803999947384,
+    "mean": 94.0892199985683,
+    "p50": 105.81509998883121,
+    "p95": 112.0803999947384,
+    "p99": 112.0803999947384
+  },
+  "ready_ms": {
+    "n": 5,
+    "min": 95.3968999965582,
+    "max": 132.69530000980012,
+    "mean": 119.17372000170872,
+    "p50": 122.16699999407865,
+    "p95": 132.69530000980012,
+    "p99": 132.69530000980012
+  },
+  "operation_ms": null,
+  "pause_ms": null,
+  "max_p99_ready_ms": null,
+  "threshold_passed": null,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "sandbox_id": "sbx-8fd99d92c7e3421c8dd5",
+      "create_ms": 53.317799989599735,
+      "exec_ms": 65.65460001002066,
+      "ready_ms": 118.97999999928288,
+      "cpu_count": 1,
+      "memory_mb": 1024
+    },
+    {
+      "index": 1,
+      "success": true,
+      "sandbox_id": "sbx-56a5c3c300ef4cdbbd0a",
+      "create_ms": 20.60770001844503,
+      "exec_ms": 112.0803999947384,
+      "ready_ms": 132.69530000980012,
+      "cpu_count": 1,
+      "memory_mb": 1024
+    },
+    {
+      "index": 2,
+      "success": true,
+      "sandbox_id": "sbx-48a831b7d96049a58e88",
+      "create_ms": 17.529899982037023,
+      "exec_ms": 77.8604999941308,
+      "ready_ms": 95.3968999965582,
+      "cpu_count": 1,
+      "memory_mb": 1024
+    },
+    {
+      "index": 3,
+      "success": true,
+      "sandbox_id": "sbx-6f140fe4c23f47e89e6d",
+      "create_ms": 16.345599986379966,
+      "exec_ms": 105.81509998883121,
+      "ready_ms": 122.16699999407865,
+      "cpu_count": 1,
+      "memory_mb": 1024
+    },
+    {
+      "index": 4,
+      "success": true,
+      "sandbox_id": "sbx-67605b61275a4bac8ccf",
+      "create_ms": 17.587000009370968,
+      "exec_ms": 109.03550000512041,
+      "ready_ms": 126.62940000882372,
+      "cpu_count": 1,
+      "memory_mb": 1024
+    }
+  ]
+}

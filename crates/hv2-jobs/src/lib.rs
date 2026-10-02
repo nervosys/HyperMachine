@@ -47,7 +47,10 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "http")]
 pub mod http;
+pub mod cron;
 pub mod worker;
+pub mod schedule;
+pub mod dispatch;
 
 /// Why a store operation failed.
 #[derive(Debug, thiserror::Error)]
@@ -119,6 +122,10 @@ pub struct GracefulStop {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct JobSpec {
+    /// Earliest start time, in milliseconds since the Unix epoch. Omitted
+    /// jobs are immediately eligible; workers poll and may start later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_before_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     /// The program and its arguments. Run directly, not through a shell.
@@ -177,7 +184,7 @@ impl JobSpec {
             }
         }
         if let Some(fs) = &self.sandbox.fs {
-            if fs != "host" && !fs.strip_prefix("isolated:").is_some_and(|r| !r.is_empty()) {
+            if fs != "host" && fs.strip_prefix("isolated:").is_none_or(|r| r.is_empty()) {
                 return bad(format!("sandbox.fs is host or isolated:ROOT, not {fs:?}"));
             }
         }
@@ -453,6 +460,10 @@ impl Store {
     /// Claim the oldest queued job a worker with `labels` can run, which is
     /// then running and held by `worker` until it finishes it.
     pub fn claim(&self, worker: &str, labels: &[String]) -> Result<Option<Claim>> {
+        self.claim_at(worker, labels, now_ms())
+    }
+
+    fn claim_at(&self, worker: &str, labels: &[String], eligible_ms: u64) -> Result<Option<Claim>> {
         self.reap_lost();
         let mut queued: Vec<String> = std::fs::read_dir(self.root.join("queue"))?
             .filter_map(|e| e.ok()?.file_name().into_string().ok())
@@ -468,6 +479,9 @@ impl Store {
                 continue;
             }
             let Ok(spec) = self.spec(&id) else { continue };
+            if spec.not_before_ms.is_some_and(|due| due > eligible_ms) {
+                continue;
+            }
             if !spec.labels.iter().all(|l| labels.contains(l)) {
                 continue;
             }
@@ -646,6 +660,7 @@ mod tests {
 
     fn spec(cmd: &[&str]) -> JobSpec {
         JobSpec {
+            not_before_ms: None,
             name: None,
             command: cmd.iter().map(|s| s.to_string()).collect(),
             workdir: None,
@@ -655,6 +670,42 @@ mod tests {
             max_attempts: 1,
             graceful_stop: None,
         }
+    }
+
+    #[test]
+    fn delayed_jobs_survive_reopen_and_do_not_block_ready_jobs() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let mut delayed = spec(&["delayed"]);
+        delayed.not_before_ms = Some(u64::MAX);
+        let delayed_id = store.submit(&delayed).unwrap();
+        let ready_id = store.submit(&spec(&["ready"])).unwrap();
+        drop(store);
+        let store = Store::open(dir.path()).unwrap();
+        assert_eq!(store.spec(&delayed_id).unwrap(), delayed);
+        assert_eq!(
+            store.claim_at("w", &[], u64::MAX - 1).unwrap().unwrap().id,
+            ready_id
+        );
+        assert!(store.claim_at("w", &[], u64::MAX - 1).unwrap().is_none());
+        assert_eq!(store.state(&delayed_id).unwrap().attempts, 0);
+        assert_eq!(
+            store.claim_at("w", &[], u64::MAX).unwrap().unwrap().id,
+            delayed_id
+        );
+        assert!(store.claim_at("other", &[], u64::MAX).unwrap().is_none());
+    }
+
+    #[test]
+    fn delayed_jobs_can_be_cancelled_before_becoming_eligible() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let mut delayed = spec(&["delayed"]);
+        delayed.not_before_ms = Some(u64::MAX);
+        let id = store.submit(&delayed).unwrap();
+        assert_eq!(store.cancel(&id).unwrap().state, Phase::Cancelled);
+        assert!(store.claim_at("w", &[], u64::MAX).unwrap().is_none());
+        assert_eq!(store.state(&id).unwrap().attempts, 0);
     }
 
     #[test]

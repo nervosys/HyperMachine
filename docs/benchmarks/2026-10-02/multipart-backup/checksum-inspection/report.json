@@ -1,0 +1,22 @@
+{
+  "success": false,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator",
+  "tool_sha256": "fa3c145c7628b96f028081daff71636992a11ef3432ba8bdadad948e2da222a0",
+  "coordinator_sha256": "130eeaa4279c6615b0d3cdbeb29a73dcfe1b8cecda109db5347430f7c97738e0",
+  "checks": [],
+  "cleanup_errors": [],
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "moto": "5.2.3",
+    "cryptography": "50.0.0"
+  },
+  "checksum_observation": {
+    "head_sha256": "Tli+bS+qFGt50w+G51xoPFUf1dBou4885SIiBOX8vZ0=",
+    "receipt_composite": "Tli+bS+qFGt50w+G51xoPFUf1dBou4885SIiBOX8vZ0=-3"
+  },
+  "error": "composite checksum confused with whole-object hash",
+  "emulator_exit_code": 0,
+  "artifacts_unchanged": true
+}

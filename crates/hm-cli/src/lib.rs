@@ -8,7 +8,10 @@
 
 pub mod agentic;
 pub mod jobs_cmd;
+pub mod jobs_profile;
+pub mod jobs_vm_dispatch;
 pub mod mcp_server;
 pub mod sandbox_cmd;
+pub mod sandbox_vm;
 pub mod t1_manager;
 pub mod vm_manager;

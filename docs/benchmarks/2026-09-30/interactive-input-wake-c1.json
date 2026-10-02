@@ -1,0 +1,403 @@
+{
+  "schema_version": 1,
+  "label": "input-triggered-wake",
+  "environment": "Windows SDK; Debian WSL nested KVM; shared Ryzen 9900X host; BusyBox snapshot 1 vCPU/1024 MiB; warning logs",
+  "sdk_version": "2.51.0",
+  "harness_sha256": "533547c7b1096042ad7d9c84ab77370784f2278d59b5a74c24062a5509ae3546",
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "cleanup_error": null,
+  "setup_error": null,
+  "samples": [
+    {
+      "operation": "stdin",
+      "index": 0,
+      "success": true,
+      "action_to_exit_ms": 12.289099977351725
+    },
+    {
+      "operation": "stdin",
+      "index": 1,
+      "success": true,
+      "action_to_exit_ms": 9.974000015063211
+    },
+    {
+      "operation": "stdin",
+      "index": 2,
+      "success": true,
+      "action_to_exit_ms": 9.639000025345013
+    },
+    {
+      "operation": "stdin",
+      "index": 3,
+      "success": true,
+      "action_to_exit_ms": 10.557400004472584
+    },
+    {
+      "operation": "stdin",
+      "index": 4,
+      "success": true,
+      "action_to_exit_ms": 9.214499994413927
+    },
+    {
+      "operation": "stdin",
+      "index": 5,
+      "success": true,
+      "action_to_exit_ms": 63.40699997963384
+    },
+    {
+      "operation": "stdin",
+      "index": 6,
+      "success": true,
+      "action_to_exit_ms": 10.313000006135553
+    },
+    {
+      "operation": "stdin",
+      "index": 7,
+      "success": true,
+      "action_to_exit_ms": 7.151800004066899
+    },
+    {
+      "operation": "stdin",
+      "index": 8,
+      "success": true,
+      "action_to_exit_ms": 10.130699985893443
+    },
+    {
+      "operation": "stdin",
+      "index": 9,
+      "success": true,
+      "action_to_exit_ms": 7.906999991973862
+    },
+    {
+      "operation": "stdin",
+      "index": 10,
+      "success": true,
+      "action_to_exit_ms": 10.599200002616271
+    },
+    {
+      "operation": "stdin",
+      "index": 11,
+      "success": true,
+      "action_to_exit_ms": 9.17850001133047
+    },
+    {
+      "operation": "stdin",
+      "index": 12,
+      "success": true,
+      "action_to_exit_ms": 8.358399994904175
+    },
+    {
+      "operation": "stdin",
+      "index": 13,
+      "success": true,
+      "action_to_exit_ms": 6.3599999994039536
+    },
+    {
+      "operation": "stdin",
+      "index": 14,
+      "success": false,
+      "action_to_exit_ms": 46.58860000199638,
+      "error": "interactive output or exit status mismatch"
+    },
+    {
+      "operation": "stdin",
+      "index": 15,
+      "success": true,
+      "action_to_exit_ms": 4.994200018700212
+    },
+    {
+      "operation": "stdin",
+      "index": 16,
+      "success": true,
+      "action_to_exit_ms": 7.1801999874878675
+    },
+    {
+      "operation": "stdin",
+      "index": 17,
+      "success": true,
+      "action_to_exit_ms": 58.91629998222925
+    },
+    {
+      "operation": "stdin",
+      "index": 18,
+      "success": true,
+      "action_to_exit_ms": 59.097499994095415
+    },
+    {
+      "operation": "stdin",
+      "index": 19,
+      "success": true,
+      "action_to_exit_ms": 6.413600000087172
+    },
+    {
+      "operation": "eof",
+      "index": 0,
+      "success": true,
+      "action_to_exit_ms": 59.07160000060685
+    },
+    {
+      "operation": "eof",
+      "index": 1,
+      "success": true,
+      "action_to_exit_ms": 7.8637999831698835
+    },
+    {
+      "operation": "eof",
+      "index": 2,
+      "success": true,
+      "action_to_exit_ms": 7.6012000208720565
+    },
+    {
+      "operation": "eof",
+      "index": 3,
+      "success": true,
+      "action_to_exit_ms": 7.737400010228157
+    },
+    {
+      "operation": "eof",
+      "index": 4,
+      "success": true,
+      "action_to_exit_ms": 46.471400011796504
+    },
+    {
+      "operation": "eof",
+      "index": 5,
+      "success": true,
+      "action_to_exit_ms": 4.912300006253645
+    },
+    {
+      "operation": "eof",
+      "index": 6,
+      "success": true,
+      "action_to_exit_ms": 6.737699994118884
+    },
+    {
+      "operation": "eof",
+      "index": 7,
+      "success": true,
+      "action_to_exit_ms": 6.498500006273389
+    },
+    {
+      "operation": "eof",
+      "index": 8,
+      "success": true,
+      "action_to_exit_ms": 5.949600017629564
+    },
+    {
+      "operation": "eof",
+      "index": 9,
+      "success": true,
+      "action_to_exit_ms": 60.20649999845773
+    },
+    {
+      "operation": "eof",
+      "index": 10,
+      "success": true,
+      "action_to_exit_ms": 7.698999979766086
+    },
+    {
+      "operation": "eof",
+      "index": 11,
+      "success": true,
+      "action_to_exit_ms": 5.206700006965548
+    },
+    {
+      "operation": "eof",
+      "index": 12,
+      "success": true,
+      "action_to_exit_ms": 43.68319999775849
+    },
+    {
+      "operation": "eof",
+      "index": 13,
+      "success": true,
+      "action_to_exit_ms": 61.078500002622604
+    },
+    {
+      "operation": "eof",
+      "index": 14,
+      "success": true,
+      "action_to_exit_ms": 6.397399993147701
+    },
+    {
+      "operation": "eof",
+      "index": 15,
+      "success": true,
+      "action_to_exit_ms": 4.781600000569597
+    },
+    {
+      "operation": "eof",
+      "index": 16,
+      "success": true,
+      "action_to_exit_ms": 5.402300012065098
+    },
+    {
+      "operation": "eof",
+      "index": 17,
+      "success": true,
+      "action_to_exit_ms": 5.833300005178899
+    },
+    {
+      "operation": "eof",
+      "index": 18,
+      "success": true,
+      "action_to_exit_ms": 5.075699998997152
+    },
+    {
+      "operation": "eof",
+      "index": 19,
+      "success": true,
+      "action_to_exit_ms": 50.08020001696423
+    },
+    {
+      "operation": "signal",
+      "index": 0,
+      "success": true,
+      "action_to_exit_ms": 5.641399999149144
+    },
+    {
+      "operation": "signal",
+      "index": 1,
+      "success": true,
+      "action_to_exit_ms": 5.53229998331517
+    },
+    {
+      "operation": "signal",
+      "index": 2,
+      "success": true,
+      "action_to_exit_ms": 4.740299977129325
+    },
+    {
+      "operation": "signal",
+      "index": 3,
+      "success": true,
+      "action_to_exit_ms": 8.388399990508333
+    },
+    {
+      "operation": "signal",
+      "index": 4,
+      "success": true,
+      "action_to_exit_ms": 9.252899995772168
+    },
+    {
+      "operation": "signal",
+      "index": 5,
+      "success": true,
+      "action_to_exit_ms": 4.570400022203103
+    },
+    {
+      "operation": "signal",
+      "index": 6,
+      "success": true,
+      "action_to_exit_ms": 5.530399997951463
+    },
+    {
+      "operation": "signal",
+      "index": 7,
+      "success": true,
+      "action_to_exit_ms": 48.88539999956265
+    },
+    {
+      "operation": "signal",
+      "index": 8,
+      "success": true,
+      "action_to_exit_ms": 5.077000008895993
+    },
+    {
+      "operation": "signal",
+      "index": 9,
+      "success": true,
+      "action_to_exit_ms": 57.53049999475479
+    },
+    {
+      "operation": "signal",
+      "index": 10,
+      "success": true,
+      "action_to_exit_ms": 4.023200017400086
+    },
+    {
+      "operation": "signal",
+      "index": 11,
+      "success": true,
+      "action_to_exit_ms": 58.68020001798868
+    },
+    {
+      "operation": "signal",
+      "index": 12,
+      "success": true,
+      "action_to_exit_ms": 48.65179999615066
+    },
+    {
+      "operation": "signal",
+      "index": 13,
+      "success": true,
+      "action_to_exit_ms": 47.99059999641031
+    },
+    {
+      "operation": "signal",
+      "index": 14,
+      "success": true,
+      "action_to_exit_ms": 63.31080000381917
+    },
+    {
+      "operation": "signal",
+      "index": 15,
+      "success": true,
+      "action_to_exit_ms": 6.527599995024502
+    },
+    {
+      "operation": "signal",
+      "index": 16,
+      "success": true,
+      "action_to_exit_ms": 7.491500000469387
+    },
+    {
+      "operation": "signal",
+      "index": 17,
+      "success": true,
+      "action_to_exit_ms": 45.620799995958805
+    },
+    {
+      "operation": "signal",
+      "index": 18,
+      "success": true,
+      "action_to_exit_ms": 51.88890002318658
+    },
+    {
+      "operation": "signal",
+      "index": 19,
+      "success": true,
+      "action_to_exit_ms": 61.40390000655316
+    }
+  ],
+  "action_to_exit_ms": {
+    "stdin": {
+      "n": 19,
+      "min": 4.994200018700212,
+      "max": 63.40699997963384,
+      "mean": 16.93059999869499,
+      "p50": 9.639000025345013,
+      "p95": 63.40699997963384,
+      "p99": 63.40699997963384
+    },
+    "eof": {
+      "n": 20,
+      "min": 4.781600000569597,
+      "max": 61.078500002622604,
+      "mean": 20.414395003172103,
+      "p50": 6.737699994118884,
+      "p95": 60.20649999845773,
+      "p99": 61.078500002622604
+    },
+    "signal": {
+      "n": 20,
+      "min": 4.023200017400086,
+      "max": 63.31080000381917,
+      "mean": 27.536915001110174,
+      "p50": 8.388399990508333,
+      "p95": 61.40390000655316,
+      "p99": 63.31080000381917
+    }
+  }
+}

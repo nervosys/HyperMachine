@@ -1,0 +1,15 @@
+baseline budget: correctly refused
+candidate budget: correctly refused
+invalid budget: correctly refused
+binary identity: correctly refused
+guest resources: correctly refused
+actual resources: correctly refused
+cold template: correctly refused
+duplicate attempt: correctly refused
+nan: correctly refused
+9 malformed reports refused; cleanup error preserved; valid report accepted
+Legacy analysis unchanged: prototype/c100.json
+Legacy analysis unchanged: prototype/c100-repeat.json
+Legacy analysis unchanged: adoption/c100.json
+Legacy analysis unchanged: adoption/default-c1.json
+Legacy analysis unchanged: adoption/default-c8.json

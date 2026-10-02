@@ -1,0 +1,51 @@
+{
+  "engines": {
+    "hypermachine": {
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 3530.191907004337,
+      "successful_p99_ms": 12856.698984993272,
+      "valid_memory_batches": 4,
+      "held_pss_mib": 8617.5888671875,
+      "incremental_pss_mib": 8326.376953125
+    },
+    "firecracker": {
+      "attempted": 400,
+      "passed": 400,
+      "failed": 0,
+      "successful_p50_ms": 5678.444067991222,
+      "successful_p99_ms": 9167.603217996657,
+      "valid_memory_batches": 4,
+      "held_pss_mib": 8360.783203125,
+      "incremental_pss_mib": 8360.783203125
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete": true,
+      "hypermachine_mean_reduction_ms": 1187.2177585290046
+    },
+    {
+      "pair": 1,
+      "complete": true,
+      "hypermachine_mean_reduction_ms": 5480.148395169963
+    },
+    {
+      "pair": 2,
+      "complete": true,
+      "hypermachine_mean_reduction_ms": 4378.684869939898
+    },
+    {
+      "pair": 3,
+      "complete": true,
+      "hypermachine_mean_reduction_ms": 1100.7828378702106
+    }
+  ],
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "managed_competitor_win_established": false
+}

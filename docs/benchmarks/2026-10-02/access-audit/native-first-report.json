@@ -1,0 +1,34 @@
+{
+  "success": true,
+  "checks": [
+    "partial-hv2_access_audit",
+    "partial-hv2_access_audit_key_file",
+    "invalid-key",
+    "second-writer",
+    "restart-0-authorized-and-denied-records",
+    "restart-1-authorized-and-denied-records",
+    "independent-mac-verification-and-private-values-absent",
+    "wrong-key-restart",
+    "partial-tail-restart",
+    "edited-record-restart",
+    "storage-failure-latches-before-dispatch-and-health-remains-available"
+  ],
+  "cleanup_errors": [],
+  "control_plane_sha256": "7002c037838c8ba5a59074e83e5f59de566a564127223d34192c9e7f89d147ad",
+  "fixture_sha256": "2cd5e9ca8f7f55e4d6200f1edaad56ce674ca0058ff9b67d7bec2226888cb146",
+  "verifier_sha256": "a8ff97fe80b683c4ec8aaaab4e9fd4f5fefaf6e92e9882b2718cf7025b4993db",
+  "synthetic_audit_key": "42 repeated 32 times",
+  "performance_comparison": false,
+  "audit": {
+    "verified_records": 20,
+    "uncompleted_admissions": 0,
+    "completion_statuses": {
+      "401": 2,
+      "200": 4,
+      "403": 2,
+      "404": 2
+    }
+  },
+  "owned_processes_stopped": true,
+  "artifact_unchanged": true
+}

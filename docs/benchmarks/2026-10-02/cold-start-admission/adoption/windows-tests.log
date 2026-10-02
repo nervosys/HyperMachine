@@ -1,0 +1,55 @@
+   Compiling hv2-context v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-context)
+   Compiling hv2-core v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-core)
+   Compiling axum v0.8.9
+   Compiling tracing-subscriber v0.3.23
+   Compiling reqwest v0.12.28
+   Compiling tonic v0.14.6
+   Compiling tonic-prost v0.14.6
+   Compiling hv2-agent v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-agent)
+   Compiling hv2-net v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-net)
+   Compiling hv2-runtime v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-runtime)
+   Compiling hv2-api v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-api)
+   Compiling hv2-cluster v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-cluster)
+   Compiling hv2-sandboxd v1.1.0 (C:\Users\adamm\dev\nervosys\os\HyperMachine\crates\hv2-sandboxd)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1m 15s
+     Running unittests src\main.rs (target\debug\deps\hv2_sandboxd-fdf851ea143c1fc1.exe)
+
+running 35 tests
+test boot_diagnostics::tests::clock_samples_distinguish_missing_zero_and_large_values ... ok
+test boot_diagnostics::tests::missing_apic_is_not_reported_as_no_pending_interrupts ... ok
+test boot_diagnostics::tests::ioapic_routes_preserve_full_width_and_ignore_union_padding ... ok
+test boot_diagnostics::tests::irq_bitmaps_use_register_spacing_and_preserve_all_words ... ok
+test boot_diagnostics::tests::machine_sample_preserves_pic_irq_bits_and_full_pit_count ... ok
+test boot_diagnostics::tests::unavailable_events_preserve_architecture_without_inventing_zero_state ... ok
+test builds::tests::commands_and_paths_as_a_step_writes_them ... ok
+test env_vars::tests::a_template_without_defaults_gets_only_the_sandboxs ... ok
+test identity::tests::token_names_refuse_braces_and_control_characters ... ok
+test idle::tests::a_guest_is_quiet_only_when_every_sample_was ... ok
+test env_vars::tests::an_unreadable_defaults_file_is_an_error_not_an_empty_one ... ok
+test env_vars::tests::names_and_sizes_are_checked ... ok
+test boot_diagnostics::tests::machine_sample_refuses_foreign_and_truncated_layouts ... ok
+test builds::tests::env_values_expand_as_dockers_do ... ok
+test env_vars::tests::sandbox_variables_go_over_the_templates_and_keep_the_rest ... ok
+test cloud_login::tests::dates_are_amzs ... ok
+test identity::tests::base64url_matches_the_rfc_vectors ... ok
+test identity::tests::a_reloaded_key_keeps_its_kid ... ok
+test identity::tests::a_minted_token_verifies_against_its_jwk ... ok
+test cloud_login::tests::sigv4_matches_awss_example ... ok
+test boot_diagnostics::tests::missing_ioapic_does_not_invent_empty_routes ... ok
+test idle::tests::windows_are_off_or_long_enough_to_mean_something ... ok
+test oci::tests::paths_that_leave_the_root_are_dropped ... ok
+test oci::tests::references_take_dockers_defaults ... ok
+test tests::a_tenant_rule_opens_reserved_ranges_only_as_the_operator_allows ... ok
+test initramfs::tests::hard_links_share_one_inode_and_carry_data_once ... ok
+test oci::tests::layers_apply_in_order_with_whiteouts ... ok
+test tests::named_cluster_creation_requires_valid_authenticated_operation_context ... ok
+test initramfs::tests::records_are_newc_and_aligned ... ok
+test tests::registration_reconciliation_requires_each_requests_cluster_credential ... ok
+test tests::standalone_metadata_names_and_unnamed_cluster_requests_keep_their_protocol ... ok
+test oci::tests::layers_decompress_by_their_magic ... ok
+test builds::tests::nothing_matching_is_an_error_not_an_empty_copy ... ok
+test builds::tests::copies_land_where_docker_puts_them ... ok
+test cloud_login::tests::gcp_assertions_are_signed_jwts ... ok
+
+test result: ok. 35 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+

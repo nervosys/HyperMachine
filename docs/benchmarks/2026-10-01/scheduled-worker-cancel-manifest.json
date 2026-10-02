@@ -1,0 +1,19 @@
+{
+  "source_commit": "d54b81df83ddbff304a24115bcf67f4beb099772",
+  "report_sha256": "57aedd4dc932adcedf0fc2fc084dd57a5cd931a0fa3f569ae8dc21e5751716c1",
+  "source_sha256": {
+    "scheduled-worker-cancel-coordinator.py": "7265c2ae79b4d8f045eae16b447b71966c6d8f3ac800adf592fd65814438b442",
+    "scheduled-worker-core-source.patch": "e6c015334bb04b1c96768c54bfb869ff3a9b2624b95210fc2bce9dc2ed0a1728"
+  },
+  "artifact_sha256": {
+    "daemon": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+    "control-plane": "67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029",
+    "cli": "339103ae2da9864d4172495dd48caa06a8e71fdba6b8ac55bec6cd433f7fac37",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+    "coordinator": "7265c2ae79b4d8f045eae16b447b71966c6d8f3ac800adf592fd65814438b442"
+  },
+  "verified_cases": 16,
+  "registered_processes_stopped": 22,
+  "scope": "One functional WSL nested-KVM run with the optimized selector; no scheduling timing or competitor measurement. CLI includes provisional core patch; daemon and control plane are frozen accepted artifacts."
+}

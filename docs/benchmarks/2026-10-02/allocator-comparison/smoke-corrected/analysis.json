@@ -1,0 +1,70 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 16,
+      "attempted": 16,
+      "passed": 16,
+      "failed": 0,
+      "successful_p50_ms": 995.9309579862747,
+      "successful_p99_ms": 1638.9648669864982,
+      "failed_runs": 0,
+      "median_held_pss_mib": 803.81298828125,
+      "median_incremental_pss_mib": 796.78564453125
+    },
+    "candidate": {
+      "planned": 16,
+      "attempted": 16,
+      "passed": 16,
+      "failed": 0,
+      "successful_p50_ms": 843.395962001523,
+      "successful_p99_ms": 1239.1130970208906,
+      "failed_runs": 0,
+      "median_held_pss_mib": 711.3955078125,
+      "median_incremental_pss_mib": 702.0703125
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -157.68402725734632,
+      "candidate_p50_reduction_ms": -149.3878779874649,
+      "candidate_p99_reduction_ms": -243.18213903461583
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": 566.1799553672608,
+      "candidate_p50_reduction_ms": 442.8465999662876,
+      "candidate_p99_reduction_ms": 795.5689049849752
+    }
+  ],
+  "complete_successful_pairs": 2,
+  "candidate_faster_pairs": 1,
+  "median_paired_mean_reduction_ms": 204.24796405495727,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": 16,
+  "same_binary": true,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+  "baseline_limit": 16,
+  "memory_pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": 106.662109375
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": 78.1728515625
+    }
+  ],
+  "allocator_change_adopted": false
+}

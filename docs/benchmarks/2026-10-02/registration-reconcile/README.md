@@ -1,0 +1,13 @@
+# Reconcile a preserved named guest
+
+The daemon retains the original trusted creation ownership locally when registration returns an uncertain result. `POST /sandboxes/{sandboxID}/registration/reconcile` uses that retained context to atomically register the same running guest and bind its pending name, then publish the creation event. The handler verifies each request's cluster token in constant time, in addition to the existing protected node route middleware. A configured token and cluster node are required. Callers do not provide ownership tokens.
+
+The KVM fixture denies `SADD` during named creation, observes 503, proves that the guest remains executable and that shared registration writes are absent, then restores permission. Wrong cluster credentials are refused. Replacing the pending owner in the fixture's private Redis namespace produces 409 without deleting the guest or writing its record. Restoring the original pending owner permits reconciliation of exactly that guest. CLI inspection and named SSH reach its existing ID; another creation is refused, successful reconciliation clears retained context, and deletion releases the bound name. No operation token appears in the descriptor or guest environment.
+
+The combined report covers 26 KVM/TLS checks, including response loss, the actual 60-second timeout, post-commit event failure, binary SSH/TCP and lifecycle behavior. Cleanup leaves zero sandboxes with no errors and stops all 22 registered processes. This is local WSL nested KVM functional verification, with no performance comparison.
+
+Windows daemon tests passed 35 tests and strict Clippy. Linux passed 39 tests and lint checking with the existing argument-count exception. The daemon was built from the preceding clean-source candidate plus the archived main source/patch. The control plane, CLI, kernel and guest image are unchanged. Committed boot hashes are verified in `build-context.json`; provisional boot changes were excluded.
+
+This is a trusted node management interface, not a complete public operator recovery workflow. It requires the local running guest and its retained context. Context is not durable across daemon restart and is not transferred through pause/resume. Other lifecycle mutations may make reconciliation refuse rather than overwrite shared state. No uncertain name is automatically released. Fleet migration, durable in-flight identity, pending operations with no surviving guest and lost-event reconciliation remain incomplete. Publication after an uncertain result may duplicate an event; this does not establish exactly-once event delivery.
+
+Run `python docs/benchmarks/2026-10-02/registration-reconcile/verify.py` to verify raw evidence, source/binary provenance and the combined cases.

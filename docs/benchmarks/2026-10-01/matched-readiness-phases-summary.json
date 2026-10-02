@@ -1,0 +1,19 @@
+{
+  "raw_sha256": "85a4910e12d8f1861b689f2eb95fa620f09aeba1aff2c3752d68774233539971",
+  "internal_hypermachine_mean_ms": {
+    "blocking_queue_ms": 0.07249162499999999,
+    "connect_ms": 346.427520625,
+    "ping_ms": 1.1580255625
+  },
+  "engines": {
+    "hypermachine": {
+      "create_ms": 368.05210418697243,
+      "exec_ms": 6.2092688131087925
+    },
+    "firecracker": {
+      "api_setup_ms": 16.457152249586215,
+      "agent_connect_ms": 319.96494381291996,
+      "exec_ms": 1.1452412486505636
+    }
+  }
+}

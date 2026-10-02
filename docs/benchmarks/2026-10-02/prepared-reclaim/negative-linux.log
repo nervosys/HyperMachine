@@ -1,0 +1,15 @@
+{
+  "rejected": [
+    "incomplete",
+    "order",
+    "repeated_operation",
+    "wrong_operation",
+    "different_pid",
+    "fabricated_pss",
+    "source_changed",
+    "guest_failed",
+    "different_binary",
+    "claim"
+  ],
+  "count": 10
+}

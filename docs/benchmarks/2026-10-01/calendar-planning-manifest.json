@@ -1,0 +1,19 @@
+{
+  "binary_sha256": {
+    "baseline": "beb6c735ae41a493e028b156ca21dbee560da16eee203109047a00157d21b46f",
+    "candidate": "bbc78a62bdc18a1f51a1a7c22456215d203a335bc29703842f22bcf6aef642ce"
+  },
+  "report_sha256": "55e2dd0d0f3a7660f85eae668ef5ef6ea9f8210effad17b265a97ea33e54efc7",
+  "source_sha256": "33170e96faf6be969d980593ca990c4640687c63efb993433541fd2942d8a294",
+  "environment": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "logical_cpus": 24,
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "timezone_database_version": "2025b",
+  "profile": "release",
+  "scope": "local planner only, no store or guest or competitor measurement",
+  "base_commit": "8213f042bcdf523c4a67b61e0af26d89dbe753ee",
+  "comparison_sha256": "96adb8b7baf64b59d74794227b9c115c95079bba23dc9668738da1def1c4190d",
+  "candidate_patch_sha256": "0405e47bae91b7f971f12dd80ec185ae30bc5010cb1eae11045dbd7b1a8a3b83",
+  "runs": 4,
+  "samples_per_case_per_binary": 18
+}

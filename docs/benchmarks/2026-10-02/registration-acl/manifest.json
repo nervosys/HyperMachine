@@ -1,0 +1,19 @@
+{
+  "base_commit": "80364f7",
+  "purpose": "shared-store regression verification, no VM or performance comparison",
+  "files_sha256": {
+    "after.json": "dd34572daaba2716e2d64c64cb4bfd4465eec252556bdfd8bc72d0a21df04dfd",
+    "after.redis.log": "895344bf6ded20f400a6a2b919c76c0bcdc438278d4b992414aef3bc1d4ce9e7",
+    "after.tests.log": "590adb2d1c4709ce079c7d82ead7df946328f4ddb27eb4d06c4cc9d63228716d",
+    "before.json": "97ea94a93bf04c317389bb515d6ee75000c48f40d246af3bc6aabe01a8d5ed5a",
+    "before.redis.log": "c7e39b87621e931a14aca712b5383c67cd54d96ac4435618a0e04a50aa239381",
+    "before.tests.log": "f9581527283a70ab8ca4780509db93ebfbeaafec9cae64e6c4980993bdd93084",
+    "clippy.log": "4f976fe38ac56f479908d531e8d258462522dfdc8e4f27c31738af80258426c0",
+    "README.md": "cd3abada144eba462093fcc6cbb9fe4c30b6fcfb0bf75096fd6a726270e8a3f7",
+    "runner.py": "23bfacf05267c8adc071ef497cff0c26319a0425e134afb56c3ca295c6f17abc",
+    "store-after.rs": "0c73540795cd8e2a359195b241f591d08184e91e05a3a36d452117450604d49f",
+    "store-before.rs": "5b9922da345512c206d5d91f5b60c34e081da91c333b1c733a4fe7501d161b84",
+    "store.patch": "8603b83df87d62f507bd97f52dad9a1cbebb74119da7d3e8f91019d87d24671f",
+    "verify.py": "249c05445d73411760b8c74ff7fc88fde40c0d41cdd22adaad7147e502a88c4a"
+  }
+}

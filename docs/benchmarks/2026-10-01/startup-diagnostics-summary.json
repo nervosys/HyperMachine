@@ -1,0 +1,132 @@
+{
+  "diagnostic_only": true,
+  "cohorts": [
+    {
+      "label": "stage_only",
+      "passing_attempts": 400,
+      "matched_hypermachine_stages": 200,
+      "stages_ms": {
+        "total_ms": {
+          "n": 200,
+          "mean": 7370.00323076,
+          "median": 6258.1038625,
+          "min": 3520.989776,
+          "max": 11059.957232
+        },
+        "build_ms": {
+          "n": 200,
+          "mean": 6.630659965,
+          "median": 4.09575,
+          "min": 0.278803,
+          "max": 71.180222
+        },
+        "launch_ms": {
+          "n": 200,
+          "mean": 108.35595014,
+          "median": 67.763887,
+          "min": 30.301675,
+          "max": 948.888748
+        },
+        "agent_ms": {
+          "n": 200,
+          "mean": 7254.91142407,
+          "median": 6180.483014,
+          "min": 3459.643592,
+          "max": 11003.803018999999
+        },
+        "network_envd_ms": {
+          "n": 200,
+          "mean": 0.105500305,
+          "median": 0.0319675,
+          "min": 0.007805,
+          "max": 12.933282
+        }
+      },
+      "native_ready_minus_bringup_ms": {
+        "n": 200,
+        "mean": 840.741628545014,
+        "median": 726.6370740001089,
+        "min": 108.25767400084987,
+        "max": 3423.4023020001378
+      }
+    },
+    {
+      "label": "guest_probe_after_readiness",
+      "passing_attempts": 400,
+      "matched_hypermachine_stages": 200,
+      "stages_ms": {
+        "total_ms": {
+          "n": 200,
+          "mean": 5576.92954326,
+          "median": 5791.0876375,
+          "min": 3376.971172,
+          "max": 6808.030346
+        },
+        "build_ms": {
+          "n": 200,
+          "mean": 6.064158065,
+          "median": 5.07357,
+          "min": 0.20308400000000001,
+          "max": 44.038719
+        },
+        "launch_ms": {
+          "n": 200,
+          "mean": 99.006917235,
+          "median": 66.08475899999999,
+          "min": 28.781342,
+          "max": 728.888419
+        },
+        "agent_ms": {
+          "n": 200,
+          "mean": 5471.780048895,
+          "median": 5709.1436570000005,
+          "min": 3319.9773929999997,
+          "max": 6720.6939090000005
+        },
+        "network_envd_ms": {
+          "n": 200,
+          "mean": 0.078712795,
+          "median": 0.034958,
+          "min": 0.008987,
+          "max": 5.637997
+        }
+      },
+      "native_ready_minus_bringup_ms": {
+        "n": 200,
+        "mean": 665.4841213999982,
+        "median": 624.8233454998813,
+        "min": 19.420628000568286,
+        "max": 1656.3208120010186
+      },
+      "sampled_guest_init_handoff_ms": {
+        "n": 20,
+        "mean": 1531.48645,
+        "median": 1479.0520000000001,
+        "min": 781.0709999999999,
+        "max": 2372.246
+      },
+      "host_agent_wait_minus_guest_init_timestamp_ms": {
+        "n": 20,
+        "mean": 3985.26031585,
+        "median": 4030.9637295,
+        "min": 2858.5943329999996,
+        "max": 5145.6173180000005
+      },
+      "sampled_guest_free_init_to_wx_check_ms": {
+        "n": 20,
+        "mean": 166.98455,
+        "median": 170.6585,
+        "min": 34.39300000000003,
+        "max": 310.047
+      },
+      "sampled_guests_with_entropy_initialized_before_handoff": 20,
+      "guest_samples": 20,
+      "clock_limitation": "Guest dmesg and host elapsed clocks do not independently isolate dispatch, userspace or handshake delay"
+    }
+  ],
+  "raw_sha256": {
+    "local-engines-startup-stages-c100.json": "1ce05c490373d2ca67feaeba82b682d6687d357e8c16ebccca9a88a393010935",
+    "local-engines-guest-boot-stages-c100.json": "25ee581d5482a2b15fbea1625d44959c06929ba4775f9644dd42b09ca72a2437"
+  },
+  "analysis_sha256": "caceb0c479e1276e2f7a9b72e3fb4127063e4f2500371d35a14def5edfb3f5ec"
+}

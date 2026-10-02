@@ -1,0 +1,16 @@
+{
+  "base_commit": "3fc295754540d02b365e59b9b12b9d4752d65a9b",
+  "report_sha256": "4d088418566c510b4b7f6767e7295412afedce36238a0b12f827fddb4e4ae17c",
+  "patch_sha256": {
+    "dispatch-backlog-benchmark.patch": "122b33a44b86151c8372cf45479e6371756be99d6a906df75b72b1d2ff6e3c8b",
+    "dispatch-backlog-selection.patch": "e4c87a282127dd1d76ffe1a1d5a9a7ff2ef992e811ac6b0d5e4cb42f36990762"
+  },
+  "binary_sha256": {
+    "baseline": "e14ef4ac42ce1d5b22f1417d84783b25b96d5ff5e324052be37a95d0d76c14f9",
+    "candidate": "a44c3162415449aad44fc7d79c46d5647dd46a88792b14c1ce24b36221c12791"
+  },
+  "runs": 4,
+  "samples_per_case_per_binary": 18,
+  "environment": "release binaries on native WSL Debian temporary filesystem, warm-cache reopened-store selection",
+  "scope": "no VM, network or competitor score"
+}

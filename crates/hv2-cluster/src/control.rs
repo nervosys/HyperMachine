@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Path, Query, Request, State};
+use axum::extract::{MatchedPath, Path, Query, Request, State};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -31,10 +31,12 @@ use parking_lot::Mutex;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+use crate::domains::{DomainBinding, DomainName};
 use crate::metrics::{self, Counter, Exposition, Histogram};
-use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, SandboxRecord};
+use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, NodeInfo, SandboxRecord};
+use crate::names::{NameReservation, SandboxName, NAME_OPERATION_HEADER};
 use crate::scheduler::candidates;
-use crate::store::ClusterStore;
+use crate::store::{ClusterStore, DomainClaim};
 
 /// The header a node reads the cluster token from.
 pub const CLUSTER_TOKEN_HEADER: &str = "x-hv2-cluster-token";
@@ -44,6 +46,10 @@ pub const CLUSTER_TOKEN_HEADER: &str = "x-hv2-cluster-token";
 pub struct ControlConfig {
     /// Required from clients as `X-API-Key`, when set.
     pub api_key: Option<String>,
+    /// Additional operator-provisioned expiring keys with capability scopes.
+    pub api_keys: Vec<crate::keys::ApiKeyPolicy>,
+    /// Optional synced admission/completion log for protected API routes.
+    pub access_audit: Option<Arc<crate::audit::AccessAudit>>,
     /// Sent to nodes, when set.
     pub cluster_token: Option<String>,
     /// This instance's envd proxy port, written into descriptors so a client
@@ -59,7 +65,9 @@ pub struct ControlConfig {
 pub struct ControlPlane {
     store: Arc<dyn ClusterStore>,
     http: reqwest::Client,
+    tcp_http: reqwest::Client,
     config: ControlConfig,
+    api_keys: parking_lot::RwLock<Vec<crate::keys::ApiKeyPolicy>>,
     metrics: ControlMetrics,
 }
 
@@ -77,6 +85,22 @@ struct ControlMetrics {
 }
 
 impl ControlPlane {
+    /// Atomically replace scoped policies after validating the full JSON array.
+    /// Rejected replacements leave active policies unchanged. In-flight requests
+    /// retain their original authorization; new requests use the replacement.
+    ///
+    /// # Errors
+    /// Reject invalid policies or a collision with the legacy admin credential.
+    pub fn replace_api_key_policies(&self, json: &str) -> Result<(), String> {
+        let policies = crate::keys::ApiKeyPolicy::from_json(json)?;
+        crate::keys::ApiKeyPolicy::validate_legacy_admin(
+            &policies,
+            self.config.api_key.as_deref(),
+        )?;
+        *self.api_keys.write() = policies;
+        Ok(())
+    }
+
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, config: ControlConfig) -> Arc<Self> {
         // No global timeout: a streaming or long request is the caller's
@@ -85,7 +109,13 @@ impl ControlPlane {
             .connect_timeout(Duration::from_secs(5))
             .build()
             .unwrap_or_default();
-        Self::with_client(store, config, http)
+        let tcp_http = reqwest::Client::builder()
+            .http1_only()
+            .redirect(reqwest::redirect::Policy::none())
+            .connect_timeout(Duration::from_secs(5))
+            .build()
+            .expect("HTTP/1 TCP tunnel client configuration");
+        Self::with_clients(store, config, http, tcp_http)
     }
 
     /// [`Self::new`], reaching nodes through `http` -- one built by
@@ -97,9 +127,23 @@ impl ControlPlane {
         config: ControlConfig,
         http: reqwest::Client,
     ) -> Arc<Self> {
+        Self::with_clients(store, config, http.clone(), http)
+    }
+
+    /// Custom clients, including an HTTP/1-only client for TCP upgrades.
+    /// Supply the same TLS identity and trust policy to both clients.
+    #[must_use]
+    pub fn with_clients(
+        store: Arc<dyn ClusterStore>,
+        config: ControlConfig,
+        http: reqwest::Client,
+        tcp_http: reqwest::Client,
+    ) -> Arc<Self> {
         Arc::new(Self {
             store,
             http,
+            tcp_http,
+            api_keys: parking_lot::RwLock::new(config.api_keys.clone()),
             config,
             metrics: ControlMetrics::default(),
         })
@@ -118,6 +162,11 @@ fn api_error(status: StatusCode, message: impl std::fmt::Display) -> Response {
 /// The routes.
 pub fn router(control: Arc<ControlPlane>) -> Router {
     let e2b = Router::new()
+        .route("/sandbox-names/{name}", get(resolve_sandbox_name))
+        .route(
+            "/sandboxes/{id}/names/{name}",
+            axum::routing::put(assign_sandbox_name),
+        )
         .route("/sandboxes", post(create_v1).get(list_v1))
         .route("/v2/sandboxes", post(create_v2).get(list_v2))
         .route("/sandboxes/{id}", get(detail).delete(forward))
@@ -127,6 +176,17 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/pause", post(forward))
         .route("/sandboxes/{id}/resume", post(forward))
         .route("/sandboxes/{id}/fork", post(forward))
+        .route("/sandboxes/{id}/domains", get(list_domains))
+        .route(
+            "/sandboxes/{id}/domains/{domain}",
+            axum::routing::put(bind_domain).delete(unbind_domain),
+        )
+        .route("/sandboxes/{id}/checkpoints", get(forward).post(forward))
+        .route(
+            "/sandboxes/{id}/checkpoints/{name}",
+            axum::routing::delete(forward),
+        )
+        .route("/sandboxes/{id}/checkpoints/{name}/restore", post(forward))
         .route("/sandboxes/{id}/snapshots", post(forward))
         .route("/sandboxes/metrics", get(sandboxes_metrics))
         .route("/sandboxes/{id}/metrics", get(forward))
@@ -146,6 +206,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/sandboxes/{id}/network", any(forward))
         .route("/sandboxes/{id}/network/decisions", get(forward))
         .route("/sandboxes/{id}/exec", post(forward))
+        .route("/sandboxes/{id}/ports/{port}/tcp", get(tcp_tunnel))
         .route("/cluster/nodes", get(cluster_nodes))
         .route("/templates", get(templates).post(build_templates))
         .route("/cluster/events", get(cluster_events))
@@ -161,11 +222,17 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         // Public, like any OIDC issuer's: what a cloud verifying a
         // sandbox's workload token fetches.
         .route("/.well-known/jwks.json", get(jwks))
-        .route("/.well-known/openid-configuration", get(openid_configuration))
+        .route(
+            "/.well-known/openid-configuration",
+            get(openid_configuration),
+        )
         .route("/ui", get(ui))
         // Without the key: the SDK sends none with an upload. The node
         // checks the token its authenticated link carried.
-        .route("/templates/{id}/files/{hash}", axum::routing::put(to_builder))
+        .route(
+            "/templates/{id}/files/{hash}",
+            axum::routing::put(to_builder),
+        )
         // Volume content: each volume's bearer token, which its node checks.
         .route("/volumecontent/{id}/file", any(to_volume_node))
         .route("/volumecontent/{id}/dir", any(to_volume_node))
@@ -177,23 +244,394 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .with_state(control)
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DomainPort {
+    port: u16,
+}
+
+async fn list_domains(
+    State(control): State<Arc<ControlPlane>>,
+    Path(id): Path<String>,
+) -> Response {
+    match control.store.sandbox(&id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+    match control.store.domains(&id).await {
+        Ok(bindings) => Json(bindings).into_response(),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn bind_domain(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, domain)): Path<(String, String)>,
+    Json(body): Json<DomainPort>,
+) -> Response {
+    let binding = match DomainBinding::new(&domain, &id, body.port) {
+        Ok(binding) => binding,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    match control.store.claim_domain(&binding).await {
+        Ok(DomainClaim::Claimed) => Json(binding).into_response(),
+        Ok(DomainClaim::Conflict) => api_error(
+            StatusCode::CONFLICT,
+            "domain is already bound to another sandbox",
+        ),
+        Ok(DomainClaim::SandboxMissing) => {
+            api_error(StatusCode::NOT_FOUND, "sandbox does not exist")
+        }
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn unbind_domain(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, domain)): Path<(String, String)>,
+) -> Response {
+    let domain = match DomainName::parse(&domain) {
+        Ok(domain) => domain,
+        Err(e) => return api_error(StatusCode::BAD_REQUEST, e),
+    };
+    match control.store.delete_domain(&domain, &id).await {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => api_error(
+            StatusCode::NOT_FOUND,
+            "domain binding does not exist for this sandbox",
+        ),
+        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    }
+}
+
+async fn assign_sandbox_name(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, raw_name)): Path<(String, String)>,
+) -> Response {
+    use crate::names::{NameReservation, SandboxName};
+    let name = match SandboxName::parse(&raw_name) {
+        Ok(name) => name,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    match control.store.sandbox(&id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox is missing"),
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "sandbox lookup unavailable",
+            )
+        }
+    }
+    match control.store.sandboxes().await {
+        Ok(records)
+            if records.iter().any(|record| {
+                record.sandbox_id != id
+                    && record
+                        .metadata
+                        .get("hm.name")
+                        .is_some_and(|value| value == name.as_str())
+            }) =>
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "name conflicts with legacy sandbox metadata",
+            );
+        }
+        Ok(_) => {}
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "legacy name lookup unavailable",
+            )
+        }
+    }
+    let reservation = NameReservation::pending(name.clone());
+    match control.store.reserve_name(&reservation).await {
+        Ok(true) => {}
+        Ok(false) => {
+            return match control.store.name_reservation(&name).await {
+                Ok(Some(existing))
+                    if existing.name() == &name && existing.sandbox_id() == Some(id.as_str()) =>
+                {
+                    Json(json!({"name":name.as_str(),"sandboxID":id})).into_response()
+                }
+                Ok(_) => api_error(
+                    StatusCode::CONFLICT,
+                    "name is owned or requires reconciliation",
+                ),
+                Err(_) => api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name ownership lookup unavailable",
+                ),
+            };
+        }
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "name reservation unavailable",
+            )
+        }
+    }
+    match control
+        .store
+        .bind_name(&name, reservation.operation_token(), &id)
+        .await
+    {
+        Ok(true) => Json(json!({"name":name.as_str(),"sandboxID":id})).into_response(),
+        Ok(false) => {
+            // A false atomic bind did not assign ownership. Conditional release
+            // cannot remove a binding if another operation has since completed it.
+            match control
+                .store
+                .release_pending_name(&name, reservation.operation_token())
+                .await
+            {
+                Ok(_) => api_error(StatusCode::CONFLICT, "sandbox or name ownership changed"),
+                Err(_) => api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name reconciliation required",
+                ),
+            }
+        }
+        // A failed store call has unknown commit outcome; retain ownership.
+        Err(_) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "name reconciliation required",
+        ),
+    }
+}
+
+async fn resolve_sandbox_name(
+    State(control): State<Arc<ControlPlane>>,
+    Path(name): Path<String>,
+) -> Response {
+    let name = match crate::names::SandboxName::parse(&name) {
+        Ok(name) => name,
+        Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+    };
+    let reservation = match control.store.name_reservation(&name).await {
+        Ok(Some(reservation)) if reservation.name() == &name => reservation,
+        Ok(Some(_)) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "name ownership record mismatch",
+            )
+        }
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "name is not reserved"),
+        Err(_) => return api_error(StatusCode::SERVICE_UNAVAILABLE, "name lookup unavailable"),
+    };
+    let Some(id) = reservation.sandbox_id() else {
+        return api_error(
+            StatusCode::CONFLICT,
+            "name creation outcome requires reconciliation",
+        );
+    };
+    // Legacy metadata is still writable until creation migration is enforced.
+    // Refuse observed ambiguity rather than hiding it behind a reservation.
+    match control.store.sandboxes().await {
+        Ok(records)
+            if records.iter().any(|record| {
+                record.sandbox_id != id
+                    && record
+                        .metadata
+                        .get("hm.name")
+                        .is_some_and(|value| value == name.as_str())
+            }) =>
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "name conflicts with legacy sandbox metadata",
+            );
+        }
+        Ok(_) => {}
+        Err(_) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "legacy name lookup unavailable",
+            )
+        }
+    }
+    match control.store.sandbox(id).await {
+        Ok(Some(_)) => Json(json!({"name": name.as_str(), "sandboxID": id})).into_response(),
+        Ok(None) => api_error(StatusCode::NOT_FOUND, "named sandbox is missing"),
+        Err(_) => api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "named sandbox lookup unavailable",
+        ),
+    }
+}
+
+fn audit_event(mut event: Value) -> Value {
+    if event["sandbox_ref"].is_null() {
+        event.as_object_mut().unwrap().remove("sandbox_ref");
+    }
+    event
+}
+
 async fn require_api_key(
     State(control): State<Arc<ControlPlane>>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Response {
-    if let Some(key) = &control.config.api_key {
-        use subtle::ConstantTimeEq;
+    let started = Instant::now();
+    let request_id = uuid::Uuid::new_v4();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or("unknown", MatchedPath::as_str)
+        .to_owned();
+    let method = match request.method().as_str() {
+        "GET" => "GET",
+        "HEAD" => "HEAD",
+        "POST" => "POST",
+        "PUT" => "PUT",
+        "DELETE" => "DELETE",
+        "PATCH" => "PATCH",
+        "OPTIONS" => "OPTIONS",
+        "CONNECT" => "CONNECT",
+        "TRACE" => "TRACE",
+        _ => "OTHER",
+    };
+    let (kind, key_id, rejection) = authorize(&control.config, &control.api_keys.read(), &request);
+    let allowed = rejection.is_none();
+    let sandbox_ref = if let Some(audit) = &control.config.access_audit {
+        if audit.resource_attribution_enabled()
+            && (route.starts_with("/sandboxes/{id}") || route.starts_with("/v2/sandboxes/{id}"))
+        {
+            use axum::extract::FromRequestParts;
+            let (mut parts, body) = request.into_parts();
+            let target = Path::<HashMap<String, String>>::from_request_parts(&mut parts, &())
+                .await
+                .ok()
+                .and_then(|Path(params)| {
+                    params.get("id").and_then(|id| audit.sandbox_reference(id))
+                });
+            request = Request::from_parts(parts, body);
+            target
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    if let Some(audit) = &control.config.access_audit {
+        if audit
+            .append(audit_event(
+                json!({"phase":"admission", "request_id":request_id,
+            "route":route, "method":method, "principal":kind, "key_id":key_id,
+            "allowed":allowed, "sandbox_ref":sandbox_ref}),
+            ))
+            .await
+            .is_err()
+        {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "access audit unavailable; request was not dispatched",
+            );
+        }
+    }
+    let response = match rejection {
+        Some(response) => response,
+        None => {
+            tracing::info!(target: "hv2_cluster::access", %request_id, route, method,
+                principal = kind, key_id, "control-plane access started");
+            next.run(request).await
+        }
+    };
+    tracing::info!(target: "hv2_cluster::access", %request_id, route, method,
+        principal = kind, key_id, allowed, status = response.status().as_u16(),
+        elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+        "control-plane access completed");
+    if let Some(audit) = &control.config.access_audit {
+        if audit
+            .append(audit_event(
+                json!({"phase":"completion", "request_id":request_id,
+            "route":route, "method":method, "principal":kind, "key_id":key_id,
+            "allowed":allowed, "sandbox_ref":sandbox_ref, "status":response.status().as_u16(),
+            "elapsed_us":u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX)}),
+            ))
+            .await
+            .is_err()
+        {
+            return api_error(StatusCode::SERVICE_UNAVAILABLE, "access audit unavailable after dispatch; operation outcome may already be committed");
+        }
+    }
+    response
+}
+
+/// Identity is a category plus a short digest of a configured credential.
+/// Never log unknown credential digests, headers, bodies, query strings or IDs
+/// supplied in paths. Library callers get scoped precedence for collisions.
+fn authorize(
+    config: &ControlConfig,
+    api_keys: &[crate::keys::ApiKeyPolicy],
+    request: &Request,
+) -> (&'static str, String, Option<Response>) {
+    use sha2::{Digest, Sha256};
+    use subtle::ConstantTimeEq;
+    let fingerprint = |digest: &[u8; 32]| -> String {
+        digest[..8]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect()
+    };
+    if config.api_key.is_some() || !api_keys.is_empty() {
         let sent = request
             .headers()
             .get("x-api-key")
             .map(HeaderValue::as_bytes)
             .unwrap_or_default();
-        if !bool::from(sent.ct_eq(key.as_bytes())) {
-            return api_error(StatusCode::UNAUTHORIZED, "missing or wrong X-API-Key");
+        let digest: [u8; 32] = Sha256::digest(sent).into();
+        // Library callers can construct a conflicting configuration without
+        // the binary's startup validation. Never turn a scoped key into an
+        // unrestricted, non-expiring credential in that case.
+        let now = chrono::Utc::now().timestamp();
+        let policy = api_keys.iter().find(|policy| policy.has_digest(&digest));
+        match policy {
+            Some(policy) if !sent.is_empty() => {
+                if !policy.matches(&digest, now) {
+                    return (
+                        "expired",
+                        fingerprint(&digest),
+                        Some(api_error(
+                            StatusCode::UNAUTHORIZED,
+                            "missing, expired or wrong X-API-Key",
+                        )),
+                    );
+                }
+                if !policy.permits(request.method(), request.uri().path()) {
+                    return (
+                        "scoped",
+                        fingerprint(&digest),
+                        Some(api_error(
+                            StatusCode::FORBIDDEN,
+                            "API key scope does not permit this operation",
+                        )),
+                    );
+                }
+                return ("scoped", fingerprint(&digest), None);
+            }
+            _ => {
+                if let Some(key) = &config.api_key {
+                    if !sent.is_empty() && bool::from(sent.ct_eq(key.as_bytes())) {
+                        return ("legacy_admin", fingerprint(&digest), None);
+                    }
+                }
+                return (
+                    "unauthenticated",
+                    "none".into(),
+                    Some(api_error(
+                        StatusCode::UNAUTHORIZED,
+                        "missing, expired or wrong X-API-Key",
+                    )),
+                );
+            }
         }
     }
-    next.run(request).await
+    ("anonymous", "none".into(), None)
 }
 
 async fn health(State(control): State<Arc<ControlPlane>>) -> Response {
@@ -268,6 +706,63 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
         );
     }
 
+    // Ownership must exist before a named request can reach a node. A lost
+    // response cannot establish that no VM was created, so pending ownership
+    // is deliberately retained without a TTL or automatic cross-node retry.
+    let name = match serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("metadata")
+                .and_then(|metadata| metadata.get("hm.name"))
+                .cloned()
+        }) {
+        None => None,
+        Some(Value::String(value)) => match SandboxName::parse(&value) {
+            Ok(name) => Some(name),
+            Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+        },
+        Some(_) => return api_error(StatusCode::BAD_REQUEST, "hm.name must be a string"),
+    };
+    let reservation = if let Some(name) = name {
+        // This refuses observed legacy conflicts. An atomic migration gate is
+        // still required to exclude direct-node and older-control-plane races.
+        match control.store.sandboxes().await {
+            Ok(records)
+                if records.iter().any(|record| {
+                    record
+                        .metadata
+                        .get("hm.name")
+                        .is_some_and(|value| value == name.as_str())
+                }) =>
+            {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    "name conflicts with legacy sandbox metadata",
+                )
+            }
+            Ok(_) => {}
+            Err(_) => {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name inventory unavailable",
+                )
+            }
+        }
+        let reservation = NameReservation::pending(name);
+        match control.store.reserve_name(&reservation).await {
+            Ok(true) => Some(reservation),
+            Ok(false) => return api_error(StatusCode::CONFLICT, "name is already reserved"),
+            Err(_) => {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name reservation unavailable",
+                )
+            }
+        }
+    } else {
+        None
+    };
     let mut refusals = Vec::new();
     for node in order {
         let mut request = control
@@ -276,12 +771,24 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
             .timeout(control.config.create_timeout)
             .header("content-type", "application/json")
             .body(body.clone());
+        if let Some(operation) = &reservation {
+            let mut value = HeaderValue::from_str(operation.operation_token())
+                .expect("validated operation UUID");
+            value.set_sensitive(true);
+            request = request.header(NAME_OPERATION_HEADER, value);
+        }
         if let Some(token) = &control.config.cluster_token {
             request = request.header(CLUSTER_TOKEN_HEADER, token);
         }
         let response = match request.send().await {
             Ok(response) => response,
             Err(e) => {
+                if reservation.is_some() {
+                    return api_error(
+                        StatusCode::BAD_GATEWAY,
+                        "named creation outcome requires reconciliation",
+                    );
+                }
                 refusals.push(format!("{}: {e}", node.id));
                 continue;
             }
@@ -293,6 +800,12 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
         if status == reqwest::StatusCode::SERVICE_UNAVAILABLE
             || status == reqwest::StatusCode::TOO_MANY_REQUESTS
         {
+            if reservation.is_some() {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "named creation outcome requires reconciliation",
+                );
+            }
             refusals.push(format!("{}: {status}", node.id));
             continue;
         }
@@ -310,6 +823,53 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
             Ok(v) => v,
             Err(e) => return api_error(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
         };
+        if let Some(reservation) = &reservation {
+            let Some(id) = descriptor.get("sandboxID").and_then(Value::as_str) else {
+                return api_error(
+                    StatusCode::BAD_GATEWAY,
+                    "named creation returned an invalid descriptor",
+                );
+            };
+            match control.store.sandbox(id).await {
+                Ok(Some(record))
+                    if record.node_id == node.id
+                        && record
+                            .metadata
+                            .get("hm.name")
+                            .is_some_and(|value| value == reservation.name().as_str()) => {}
+                Ok(_) => {
+                    return api_error(
+                        StatusCode::BAD_GATEWAY,
+                        "named creation record does not match its response",
+                    )
+                }
+                Err(_) => {
+                    return api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "named creation record unavailable",
+                    )
+                }
+            }
+            match control
+                .store
+                .bind_name(reservation.name(), reservation.operation_token(), id)
+                .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    return api_error(
+                        StatusCode::CONFLICT,
+                        "named creation outcome requires reconciliation",
+                    )
+                }
+                Err(_) => {
+                    return api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "named creation outcome requires reconciliation",
+                    )
+                }
+            }
+        }
         rewrite_descriptor(control, &mut descriptor, &node.id);
         return (StatusCode::CREATED, Json(descriptor)).into_response();
     }
@@ -411,14 +971,90 @@ async fn detail(State(control): State<Arc<ControlPlane>>, Path(id): Path<String>
 
 // ── Everything else goes to the sandbox's node ──────────────────────────────
 
+async fn tcp_tunnel(
+    State(control): State<Arc<ControlPlane>>,
+    Path((id, port)): Path<(String, u16)>,
+    request: Request,
+) -> Response {
+    if let Err(message) = hv2_api::tcp_tunnel::validate(&request) {
+        return api_error(StatusCode::BAD_REQUEST, message);
+    }
+    if port == 0 {
+        return api_error(StatusCode::BAD_REQUEST, "guest port must be nonzero");
+    }
+    let record = match control.store.sandbox(&id).await {
+        Ok(Some(record)) if !record.paused => record,
+        Ok(Some(_)) => {
+            return api_error(
+                StatusCode::CONFLICT,
+                "resume the sandbox before opening TCP",
+            )
+        }
+        Ok(None) => return api_error(StatusCode::NOT_FOUND, "sandbox does not exist"),
+        Err(error) => return api_error(StatusCode::SERVICE_UNAVAILABLE, error),
+    };
+    let node = match control.store.node(&record.node_id).await {
+        Ok(Some(node)) => node,
+        Ok(None) => {
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "sandbox node is unavailable",
+            )
+        }
+        Err(error) => return api_error(StatusCode::SERVICE_UNAVAILABLE, error),
+    };
+    let path = request.uri().path();
+    let mut upstream = control
+        .tcp_http
+        .get(format!("{}{path}", node.api))
+        .version(reqwest::Version::HTTP_11)
+        .header("connection", "upgrade")
+        .header("upgrade", hv2_api::tcp_tunnel::PROTOCOL);
+    if let Some(token) = &control.config.cluster_token {
+        upstream = upstream.header(CLUSTER_TOKEN_HEADER, token);
+    }
+    let result = tokio::time::timeout(Duration::from_secs(15), async {
+        let response = upstream.send().await?;
+        let status = response.status();
+        if status != reqwest::StatusCode::SWITCHING_PROTOCOLS {
+            return Ok::<_, reqwest::Error>(Err(status));
+        }
+        if response
+            .headers()
+            .get("upgrade")
+            .and_then(|v| v.to_str().ok())
+            != Some(hv2_api::tcp_tunnel::PROTOCOL)
+        {
+            return Ok(Err(reqwest::StatusCode::BAD_GATEWAY));
+        }
+        Ok(Ok(response.upgrade().await?))
+    })
+    .await;
+    match result {
+        Ok(Ok(Ok(stream))) => hv2_api::tcp_tunnel::accept(request, stream),
+        Ok(Ok(Err(status))) => api_error(status, "node could not open the guest TCP port"),
+        Ok(Err(error)) => {
+            tracing::debug!(%id, %error, "TCP tunnel node connection failed");
+            api_error(StatusCode::BAD_GATEWAY, "TCP tunnel node connection failed")
+        }
+        Err(_) => api_error(
+            StatusCode::GATEWAY_TIMEOUT,
+            "TCP tunnel node connection timed out",
+        ),
+    }
+}
+
 async fn forward(
     State(control): State<Arc<ControlPlane>>,
-    Path(id): Path<String>,
+    Path(parameters): Path<BTreeMap<String, String>>,
     method: Method,
     uri: axum::http::Uri,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let Some(id) = parameters.get("id").cloned() else {
+        return api_error(StatusCode::BAD_REQUEST, "missing sandbox ID");
+    };
     let record = match control.store.sandbox(&id).await {
         Ok(Some(record)) => record,
         Ok(None) => return api_error(StatusCode::NOT_FOUND, format!("no sandbox {id}")),
@@ -517,6 +1153,19 @@ async fn forward(
         .unwrap_or("application/json")
         .to_string();
     let bytes = response.bytes().await.unwrap_or_default();
+
+    // Older nodes remove the VM record without knowing about reserved names.
+    // Repeat the atomic store cleanup here before acknowledging deletion; it
+    // also clears ownership when the node has already removed the record.
+    if method == Method::DELETE && uri.path() == format!("/sandboxes/{id}") && status.is_success() {
+        if let Err(error) = control.store.delete_sandbox(&id).await {
+            tracing::warn!(%id, %error, "sandbox deletion store cleanup failed");
+            return api_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "sandbox deletion store cleanup failed",
+            );
+        }
+    }
 
     // `connect` and `resume` answer with the descriptor, which has to point
     // here too; `fork` with one per fork, beside an error or not.
@@ -675,7 +1324,8 @@ async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
         Ok(nodes) => nodes,
         Err(e) => return api_error(StatusCode::SERVICE_UNAVAILABLE, e),
     };
-    let mut offered: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut offered: BTreeMap<String, Vec<(&NodeInfo, Option<&crate::model::TemplateInfo>)>> =
+        BTreeMap::new();
     for node in &nodes {
         let names = if node.templates.is_empty() {
             vec!["base".to_string()]
@@ -683,20 +1333,54 @@ async fn templates(State(control): State<Arc<ControlPlane>>) -> Response {
             node.templates.clone()
         };
         for name in names {
-            offered.entry(name).or_default().push(node.id.clone());
+            let metadata = node.template_metadata.get(&name);
+            offered.entry(name).or_default().push((node, metadata));
         }
     }
     Json(
         offered
             .into_iter()
             .map(|(name, nodes)| {
+                let snapshot = if nodes
+                    .iter()
+                    .all(|(_, metadata)| metadata.is_some_and(|m| m.snapshot))
+                {
+                    Some(true)
+                } else if nodes
+                    .iter()
+                    .any(|(_, metadata)| metadata.is_some_and(|m| !m.snapshot))
+                {
+                    Some(false)
+                } else {
+                    None
+                };
+                let common_size =
+                    nodes
+                        .first()
+                        .and_then(|(_, metadata)| *metadata)
+                        .filter(|first| {
+                            nodes.iter().all(|(_, metadata)| {
+                                metadata.is_some_and(|m| {
+                                    m.cpu_count == first.cpu_count && m.memory_mb == first.memory_mb
+                                })
+                            })
+                        });
                 json!({
                     "templateID": name,
                     "buildID": name,
                     "aliases": [name],
                     "public": false,
                     "buildStatus": "ready",
-                    "nodeIDs": nodes,
+                    "nodeIDs": nodes.iter().map(|(node, _)| &node.id).collect::<Vec<_>>(),
+                    "snapshot": snapshot,
+                    "cpuCount": common_size.map(|m| m.cpu_count),
+                    "memoryMB": common_size.map(|m| m.memory_mb),
+                    "nodes": nodes.iter().map(|(node, metadata)| json!({
+                        "nodeID": node.id,
+                        "snapshot": metadata.map(|m| m.snapshot),
+                        "cpuCount": metadata.map(|m| m.cpu_count),
+                        "memoryMB": metadata.map(|m| m.memory_mb),
+                    })).collect::<Vec<_>>(),
                 })
             })
             .collect::<Vec<_>>(),
@@ -1108,6 +1792,7 @@ async fn ui() -> Response {
 /// which then says so -- a failed call, not a misdirected one.
 pub struct ClusterRoutes {
     store: Arc<dyn ClusterStore>,
+    web_access: Option<Arc<crate::web_access::WebAccessPolicy>>,
     cache: Mutex<HashMap<String, (SocketAddr, Instant)>>,
     ttl: Duration,
     backend_tls: Option<(
@@ -1121,10 +1806,18 @@ impl ClusterRoutes {
     pub fn new(store: Arc<dyn ClusterStore>, ttl: Duration) -> Self {
         Self {
             store,
+            web_access: None,
             cache: Mutex::new(HashMap::new()),
             ttl,
             backend_tls: None,
         }
+    }
+
+    /// Require dedicated browser credentials on guest application URLs.
+    #[must_use]
+    pub fn with_web_access(mut self, policy: Arc<crate::web_access::WebAccessPolicy>) -> Self {
+        self.web_access = Some(policy);
+        self
     }
 
     /// Relay to nodes' proxies over mutual TLS.
@@ -1140,6 +1833,54 @@ impl ClusterRoutes {
 
 #[async_trait::async_trait]
 impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
+    fn prepare_response(&self, _sandbox: &str, port: u16, headers: &mut HeaderMap) {
+        if self.web_access.is_some() && port != hv2_api::sandbox_proxy::ENVD_PORT {
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("private, no-store"),
+            );
+        }
+    }
+    fn authorize_request(
+        &self,
+        sandbox: &str,
+        port: u16,
+        headers: &mut HeaderMap,
+    ) -> Result<(), hv2_api::sandbox_proxy::ProxyAccessDenied> {
+        let Some(policy) = &self.web_access else {
+            return Ok(());
+        };
+        headers.remove(crate::web_access::IDENTITY_HEADER);
+        // Envd already requires its per-sandbox access token. Browser policy
+        // protects guest application URLs without changing E2B SDK transport.
+        if port == hv2_api::sandbox_proxy::ENVD_PORT {
+            return Ok(());
+        }
+        let denied = || hv2_api::sandbox_proxy::ProxyAccessDenied {
+            challenge: Some("Basic realm=\"HyperMachine sandbox\", charset=\"UTF-8\""),
+        };
+        let subject = policy
+            .identity(headers, sandbox, chrono::Utc::now().timestamp())
+            .ok_or_else(denied)?;
+        headers.remove(axum::http::header::AUTHORIZATION);
+        headers.insert(
+            crate::web_access::IDENTITY_HEADER,
+            subject.parse().map_err(|_| denied())?,
+        );
+        Ok(())
+    }
+    async fn resolve_hostname(&self, authority: &str) -> Option<(u16, String)> {
+        if authority.contains('@') {
+            return None;
+        }
+        let authority = authority.parse::<axum::http::uri::Authority>().ok()?;
+        let name = DomainName::parse(authority.host()).ok()?;
+        let binding = self.store.domain(&name).await.ok()??;
+        // Do not let the node-address cache keep a deleted sandbox's alias alive.
+        self.store.sandbox(binding.sandbox_id()).await.ok()??;
+        Some((binding.port(), binding.sandbox_id().to_owned()))
+    }
+
     async fn resolve(&self, sandbox: &str, _port: u16) -> Option<SocketAddr> {
         if let Some((addr, at)) = self.cache.lock().get(sandbox) {
             if at.elapsed() < self.ttl {
@@ -1180,5 +1921,103 @@ impl hv2_api::sandbox_proxy::SandboxRoutes for ClusterRoutes {
         rustls::pki_types::ServerName<'static>,
     )> {
         self.backend_tls.clone()
+    }
+}
+
+#[cfg(test)]
+mod access_audit_tests {
+    use super::*;
+    use hv2_core::security::audit_chain::{AuditChain, AuditSink};
+    use std::io;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct FailAt {
+        writes: usize,
+        fail_at: usize,
+        lines: Arc<Mutex<Vec<String>>>,
+    }
+    impl AuditSink for FailAt {
+        fn write_line(&mut self, line: &str) -> io::Result<()> {
+            if self.writes == self.fail_at {
+                return Err(io::Error::other("injected audit storage failure"));
+            }
+            self.writes += 1;
+            self.lines.lock().push(line.to_owned());
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn audit_failure_before_dispatch_blocks_mutation_and_after_dispatch_preserves_uncertainty(
+    ) {
+        for fail_at in [0, 1] {
+            let lines = Arc::new(Mutex::new(Vec::new()));
+            let audit = crate::audit::AccessAudit::with_test_chain(AuditChain::new(
+                [42; 32],
+                Box::new(FailAt {
+                    writes: 0,
+                    fail_at,
+                    lines: lines.clone(),
+                }),
+            ));
+            let control = ControlPlane::new(
+                Arc::new(crate::store::MemoryStore::new()),
+                ControlConfig {
+                    api_key: Some("test-key".into()),
+                    api_keys: Vec::new(),
+                    access_audit: Some(audit),
+                    cluster_token: None,
+                    proxy_port: 5981,
+                    create_timeout: Duration::from_secs(1),
+                    identity_issuer: None,
+                },
+            );
+            let mutations = Arc::new(AtomicUsize::new(0));
+            let handler_mutations = mutations.clone();
+            let app = Router::new()
+                .route(
+                    "/mutation",
+                    post(move || {
+                        let mutations = handler_mutations.clone();
+                        async move {
+                            mutations.fetch_add(1, Ordering::SeqCst);
+                            StatusCode::CREATED
+                        }
+                    }),
+                )
+                .route_layer(axum::middleware::from_fn_with_state(
+                    control,
+                    require_api_key,
+                ));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let url = format!("http://{}/mutation", listener.local_addr().unwrap());
+            let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+            let client = reqwest::Client::new();
+            let response = client
+                .post(&url)
+                .header("x-api-key", "test-key")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            let text = response.text().await.unwrap();
+            assert!(text.contains(if fail_at == 0 {
+                "not dispatched"
+            } else {
+                "may already be committed"
+            }));
+            assert_eq!(mutations.load(Ordering::SeqCst), fail_at);
+            let response = client
+                .post(&url)
+                .header("x-api-key", "test-key")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            assert_eq!(mutations.load(Ordering::SeqCst), fail_at);
+            assert_eq!(lines.lock().len(), fail_at);
+            task.abort();
+            let _ = task.await;
+        }
     }
 }

@@ -1,0 +1,11 @@
+{
+  "kernel_sha256": "d0b6b5801885478da68eb75247ab0ef76c43a2bb3c93fdc04311aef0eddbef72",
+  "kernel_bytes": 17327104,
+  "gzip_kernel_sha256": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+  "gzip_kernel_bytes": 12952576,
+  "resolved_config_sha256": "e7b5a171417b4c114fe30bcf2f2dee40f2bef43cfee3e08f8d81c739de059682",
+  "defconfig_sha256": "83a99c0bf41b93706b350d1d358b2a237c7eed88f0a265b6f3b5b27f35e52b2e",
+  "builder_sha256": "5ac2ce82e405721466a87441568c72fac2b681f38d687e76435471115f6b8c6c",
+  "linux_source_sha256": "1591ab348399d4aa53121158525056a69c8cf0fe0e90935b0095e9a58e37b4b8",
+  "source_version": "6.6.52"
+}

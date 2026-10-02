@@ -1,0 +1,20 @@
+{
+  "base_source": "/var/tmp/hm-resource-audit/source",
+  "compiled_overlays": {
+    "Cargo.lock": "8e37902115c3bc224b27d0b9114175080e4a2ddc81641aabfc6fe9050b6d2bb5",
+    "crates/hv2-sandboxd/Cargo.toml": "fe20ca86e6a6630d763d72e9b8b023af3786c0f6d454f891573e79d417f6b291",
+    "crates/hv2-sandboxd/src/main.rs": "5b8d92902845f748bcfd497cdaa349a7509b4ed27fd6dd867935c8f27e59fb52"
+  },
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "daemon_sha256": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+  "linux_tests": 41,
+  "strict_linux_clippy": "passed with existing too_many_arguments exception",
+  "performance_comparison": false,
+  "windows_tests": 36,
+  "windows_source_overlays_match": true,
+  "strict_windows_clippy": "passed with existing too_many_arguments exception"
+}

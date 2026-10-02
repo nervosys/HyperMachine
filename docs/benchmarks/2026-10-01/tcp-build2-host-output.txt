@@ -1,0 +1,5 @@
+   Compiling hv2-api v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-api)
+   Compiling hm-cli v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hm-cli)
+   Compiling hv2-cluster v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-cluster)
+   Compiling hv2-sandboxd v1.1.0 (/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/crates/hv2-sandboxd)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 10s

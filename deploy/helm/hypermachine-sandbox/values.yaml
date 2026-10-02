@@ -12,6 +12,13 @@ image:
 # Secret with keys `api-key`, `cluster-token` and `store-password` instead.
 auth:
   apiKey: ""
+  # Preserve the existing non-expiring admin credential by default.
+  # Set false only with apiKeysSecret configured for policy-only authentication.
+  legacyAdminEnabled: true
+  # Existing Secret containing the JSON array accepted by --api-keys-file.
+  # Policies load at startup: restart all control-plane pods after rotation.
+  apiKeysSecret: ""
+  apiKeysSecretKey: keys.json
   clusterToken: ""
   # Letters and digits only: it is spliced into the store's redis:// URL.
   storePassword: ""

@@ -1,0 +1,23 @@
+{
+  "base_commit": "6b652e6",
+  "clean_build_base": "c01de88",
+  "compiler": "Linux cargo/rustc 1.95; Windows 1.98.1",
+  "source_matches_workspace": {
+    "Cargo.lock": "965d940da08d2e2ebc7087da1bfd48330d6e4477d66be5ab6bda6cc862d9d240",
+    "crates/hv2-cluster/Cargo.toml": "c15419530959b4454af70f4daf17fd5f5855add3accc4c3d37728ee8e11eba0c",
+    "crates/hv2-cluster/src/lib.rs": "27e3ed97e34163d28957a4248e9719d48502df85514ed4c4dff00ba6488d2b9c",
+    "crates/hv2-cluster/src/web_access.rs": "a4ce051c82078f070e977f1219b4617b0bc5dbd02cee71a79267291e8b57738c",
+    "crates/hv2-cluster/src/control.rs": "d7364ea381b39ed8de3700926e3fb2216721849e899cf261e2d548904e52901f",
+    "crates/hv2-cluster/src/bin/hv2-control-plane.rs": "db6a7477ffb7543059c99def64d3e1f44a03e2159cd3811e7623b63c2466ff01",
+    "crates/hv2-cluster/tests/control_plane.rs": "de530af1af82b9e9412acbb280fb6a98e7fbf0297ca0064671e2e7f6ba872eca",
+    "crates/hv2-api/src/sandbox_proxy.rs": "996fde17115bb40b215721a7c942efc496b8823275ced79246336b0e1c2ae1c1"
+  },
+  "clean_core_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "provisional_core_changes_excluded": true,
+  "benchmark_scope": "Functional local nested KVM; no competitor or performance result",
+  "scope": "Exact sandbox-ID grants for browser credentials; managed-vendor performance unmeasured"
+}

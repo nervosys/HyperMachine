@@ -1,0 +1,30 @@
+{
+  "base_source": "/var/tmp/hm-cold-start-adoption/source",
+  "base_revision": "f53adee plus accepted e711b3b sandbox daemon main",
+  "compiled_overlays": {
+    "Cargo.lock": "915de28e8fb9ca4a38e3caaf21a5aa5564f202ef87dc34812e5219f6baeb053c",
+    "crates/hv2-cluster/Cargo.toml": "4b11918e8ca88c2d614ebf571753f4f35529a68df7aa612bc2f1502376776a08",
+    "crates/hv2-cluster/src/audit.rs": "2f03cd240ee44e825ed2ea9f4713acd2b624c10029c0b7d6fa03c141428270c5",
+    "crates/hv2-cluster/src/control.rs": "6da1ad25352f9f87d16b2f8678002341d30a59ccff31aae019f2a9e6bde7c659",
+    "crates/hv2-cluster/tests/control_plane.rs": "2b25611b12aead1edd260c30147274d033bbbb2fe9f1a5841284d1729ae6bda5"
+  },
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  },
+  "control_plane_sha256": "e239db7ad88c9cd37c7bd5cd1b0a5dcfabf4bcc56081cf89c8c5d16656e92d65",
+  "runtime_sha256": {
+    "daemon": "b7d2aba8a9a21845e187a10dbeda10c0c10f43d6794160739888435723a77d95",
+    "control-plane": "e239db7ad88c9cd37c7bd5cd1b0a5dcfabf4bcc56081cf89c8c5d16656e92d65",
+    "cli": "c385bd2d2996c660d2e9e0a1f7387980339abbb19ee8fdec518890ec52dd6bd5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17"
+  },
+  "linux_tests": {
+    "library": 43,
+    "http": 25
+  },
+  "strict_linux_clippy": true,
+  "performance_comparison": false
+}

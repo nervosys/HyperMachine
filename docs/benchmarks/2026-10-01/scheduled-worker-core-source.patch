@@ -1,0 +1,177 @@
+diff --git a/crates/hv2-core/src/backends/kvm.rs b/crates/hv2-core/src/backends/kvm.rs
+index 329ad26..23aa295 100644
+--- a/crates/hv2-core/src/backends/kvm.rs
++++ b/crates/hv2-core/src/backends/kvm.rs
+@@ -1030,7 +1030,7 @@ impl HypervisorBackend for KvmBackend {
+         // here is a fresh anonymous mapping made in `create_vm` and nothing has
+         // touched it since, so it already reads as zero and writing zeros over
+         // it would achieve nothing except making every page of it resident.
+-        for (addr, data) in boot.data_regions()? {
++        for (addr, data) in boot.data_regions_borrowed()? {
+             kvm_vm.write_guest_memory(addr, &data)?;
+         }
+         if !self.guest_memory_starts_zeroed() {
+diff --git a/crates/hv2-core/src/boot/linux.rs b/crates/hv2-core/src/boot/linux.rs
+index a691869..3f5519c 100644
+--- a/crates/hv2-core/src/boot/linux.rs
++++ b/crates/hv2-core/src/boot/linux.rs
+@@ -28,6 +28,10 @@
+ //! - Linux kernel: arch/x86/include/uapi/asm/bootparam.h
+ 
+ use crate::{Error, Result};
++use std::borrow::Cow;
++
++/// A guest address and boot bytes, borrowing image payloads where possible.
++pub type BorrowedBootRegion<'a> = (u64, Cow<'a, [u8]>);
+ 
+ /// Linux boot parameters configuration
+ #[derive(Debug, Clone)]
+@@ -395,6 +399,22 @@ impl LinuxBootProtocol {
+     /// Returns an error if the kernel image is invalid or parameters fail
+     /// validation.
+     pub fn prepare_guest_memory(params: &LinuxBootParams) -> Result<Vec<(u64, Vec<u8>)>> {
++        Ok(Self::prepare_guest_memory_borrowed(params)?
++            .into_iter()
++            .map(|(address, bytes)| (address, bytes.into_owned()))
++            .collect())
++    }
++
++    /// Prepare the same regions while borrowing kernel and initrd payloads.
++    /// Only generated boot parameters and command-line bytes are allocated.
++    ///
++    /// # Errors
++    ///
++    /// As [`Self::prepare_guest_memory`]. The caller must finish writing these
++    /// regions before dropping the supplied parameters.
++    pub fn prepare_guest_memory_borrowed(
++        params: &LinuxBootParams,
++    ) -> Result<Vec<BorrowedBootRegion<'_>>> {
+         // 1. Validate everything first
+         Self::validate_params(params)?;
+ 
+@@ -413,12 +433,12 @@ impl LinuxBootProtocol {
+         // 2. Parse header to determine setup vs kernel split
+         let header = Self::parse_header(&params.kernel_image)?;
+ 
+-        let mut regions: Vec<(u64, Vec<u8>)> = Vec::new();
++        let mut regions: Vec<BorrowedBootRegion<'_>> = Vec::new();
+ 
+         // 3. Initrd (optional) — place at 32 MB (above kernel)
+         let (initrd_addr, initrd_size) = if let Some(ref initrd) = params.initrd {
+             let addr = Self::initrd_address(params, initrd.len() as u64)?;
+-            regions.push((addr, initrd.clone()));
++            regions.push((addr, Cow::Borrowed(initrd.as_slice())));
+             (Some(addr), Some(initrd.len()))
+         } else {
+             (None, None)
+@@ -426,18 +446,18 @@ impl LinuxBootProtocol {
+ 
+         // 4. Boot parameters structure at setup_addr
+         let boot_params = Self::create_boot_params(params, initrd_addr, initrd_size);
+-        regions.push((params.setup_addr, boot_params));
++        regions.push((params.setup_addr, Cow::Owned(boot_params)));
+ 
+         // 5. Command line at setup_addr + 0x1000
+         let cmdline_addr = params.setup_addr + 0x1000;
+         let mut cmdline_bytes = params.cmdline.as_bytes().to_vec();
+         cmdline_bytes.push(0); // null-terminate
+-        regions.push((cmdline_addr, cmdline_bytes));
++        regions.push((cmdline_addr, Cow::Owned(cmdline_bytes)));
+ 
+         // 6. Protected-mode kernel at kernel_addr (skip setup sectors)
+         let kernel_offset = header.setup_size;
+         if kernel_offset < params.kernel_image.len() {
+-            let kernel_data = params.kernel_image[kernel_offset..].to_vec();
++            let kernel_data = Cow::Borrowed(&params.kernel_image[kernel_offset..]);
+             regions.push((params.kernel_addr, kernel_data));
+         }
+ 
+@@ -707,6 +727,25 @@ mod tests {
+         };
+ 
+         let regions = LinuxBootProtocol::prepare_guest_memory(&params).unwrap();
++        let borrowed = LinuxBootProtocol::prepare_guest_memory_borrowed(&params).unwrap();
++        assert_eq!(regions.len(), borrowed.len());
++        for ((address, bytes), (borrowed_address, borrowed_bytes)) in regions.iter().zip(&borrowed)
++        {
++            assert_eq!(address, borrowed_address);
++            assert_eq!(bytes.as_slice(), borrowed_bytes.as_ref());
++        }
++        assert_eq!(
++            borrowed[0].1.as_ptr(),
++            params.initrd.as_ref().unwrap().as_ptr()
++        );
++        let payload = LinuxBootProtocol::parse_header(&params.kernel_image)
++            .unwrap()
++            .setup_size;
++        let kernel = borrowed
++            .iter()
++            .find(|(address, _)| *address == params.kernel_addr)
++            .unwrap();
++        assert_eq!(kernel.1.as_ptr(), params.kernel_image[payload..].as_ptr());
+ 
+         // Should have: initrd, boot_params, cmdline, kernel
+         assert!(regions.len() >= 3);
+diff --git a/crates/hv2-core/src/boot/source.rs b/crates/hv2-core/src/boot/source.rs
+index 711a041..b802dc8 100644
+--- a/crates/hv2-core/src/boot/source.rs
++++ b/crates/hv2-core/src/boot/source.rs
+@@ -27,11 +27,12 @@
+ //! # }
+ //! ```
+ 
++use std::borrow::Cow;
+ use std::path::{Path, PathBuf};
+ 
+ use serde::{Deserialize, Serialize};
+ 
+-use crate::boot::linux::{LinuxBootParams, LinuxBootProtocol};
++use crate::boot::linux::{BorrowedBootRegion, LinuxBootParams, LinuxBootProtocol};
+ use crate::boot::multiboot::{MultibootInfo, MultibootLayout, MultibootModule, MultibootProtocol};
+ use crate::{Error, Result};
+ 
+@@ -500,6 +501,35 @@ impl LoadedBoot {
+         }
+     }
+ 
++    /// As [`Self::memory_regions`], borrowing Linux and raw image payloads.
++    /// Multiboot retains its existing owned preparation and zero-fill semantics.
++    pub fn memory_regions_borrowed(&self) -> Result<Vec<BorrowedBootRegion<'_>>> {
++        match self {
++            Self::Linux(params) => LinuxBootProtocol::prepare_guest_memory_borrowed(params),
++            Self::Raw {
++                data, load_addr, ..
++            } => Ok(vec![(*load_addr, Cow::Borrowed(data.as_slice()))]),
++            Self::Multiboot(_) => Ok(self
++                .memory_regions()?
++                .into_iter()
++                .map(|(address, bytes)| (address, Cow::Owned(bytes)))
++                .collect()),
++        }
++    }
++
++    /// As [`Self::data_regions`], borrowing Linux and raw image payloads.
++    pub fn data_regions_borrowed(&self) -> Result<Vec<BorrowedBootRegion<'_>>> {
++        if matches!(self, Self::Multiboot(_)) {
++            Ok(self
++                .data_regions()?
++                .into_iter()
++                .map(|(address, bytes)| (address, Cow::Owned(bytes)))
++                .collect())
++        } else {
++            self.memory_regions_borrowed()
++        }
++    }
++
+     /// The ranges that must read as zero, without materialising the zeros.
+     ///
+     /// A `.bss`. Separate from [`Self::memory_regions`] because the two cost
+@@ -561,7 +591,7 @@ impl LoadedBoot {
+     /// A VM whose memory is smaller than this cannot hold the boot images.
+     pub fn highest_address(&self) -> Result<u64> {
+         Ok(self
+-            .memory_regions()?
++            .memory_regions_borrowed()?
+             .iter()
+             .map(|(addr, data)| addr + data.len() as u64)
+             .max()

@@ -1,0 +1,92 @@
+{
+  "success": false,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator; no managed-store durability claim",
+  "artifact_sha256": {
+    "tool": "238f8b5eaec615a6afbb913c1cd681584c5b8efe15b0e266d26ee04b0ad33406",
+    "coordinator": "a4a3e42a6ef06663b26df647c37848a6f2718304f90bd5c9eb6822bc248ac47a",
+    "daemon": "2e9e53dace2ae5e2bb60228d4b784182eb252aad3c6bf76c81049dfc0540a70f",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17"
+  },
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "cryptography": "50.0.0",
+    "moto": "5.2.3"
+  },
+  "checks": [
+    {
+      "name": "active-store-refused",
+      "refused": true
+    },
+    {
+      "name": "encrypted-conditional-upload",
+      "sha256": "287dc99b9a34d371975452196c5eccd5cd327d3b19f369c3265b23edc75fa879",
+      "bytes": 804
+    },
+    {
+      "name": "relocated-roundtrip-with-empty-directory-and-permissions",
+      "files": 3
+    },
+    {
+      "name": "wrong-key-tampered-truncated-refused",
+      "refused": true
+    },
+    {
+      "name": "expanded-byte-limit-refused",
+      "refused": true
+    },
+    {
+      "name": "unsafe-path",
+      "refused": true,
+      "error": "unsafe relative file name"
+    },
+    {
+      "name": "symlink",
+      "refused": true,
+      "error": "unsupported archive entry"
+    },
+    {
+      "name": "missing-file",
+      "refused": true,
+      "error": "archive file missing"
+    },
+    {
+      "name": "wrong-digest",
+      "refused": true,
+      "error": "archive file digest mismatch"
+    },
+    {
+      "name": "extra-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "duplicate-file",
+      "refused": true,
+      "error": "extra or duplicate archive file"
+    },
+    {
+      "name": "source-symlink-and-unfinished-claim-refused",
+      "refused": true
+    },
+    {
+      "name": "independent-receipt-mismatch-refused",
+      "refused": true
+    }
+  ],
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "name": "node-original",
+      "exit_code": 0
+    },
+    {
+      "name": "s3",
+      "exit_code": 0
+    }
+  ],
+  "error": "[Errno 2] No such file or directory: '/var/tmp/hm-object-backup/kvm-corrected/kvm-store/volumes/backup-marker'",
+  "artifacts_unchanged": true
+}

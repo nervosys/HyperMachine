@@ -1,0 +1,23 @@
+{
+  "purpose": "current native-engine comparison including failed cohort",
+  "files_sha256": {
+    "bench-firecracker-local.py": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6",
+    "bench-local-engines-concurrent.py": "59fae86ff5a8a8de390e15359e7da3e470edbab1c701e04de5efa788ae5fa459",
+    "bench-local-engines.py": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "build-context.json": "0ee628e8e5e8dfbd445aec7555448ae352bfe66d9c364cf7628091664bb007a4",
+    "c1.json": "0b1be67662305feb894e6625f13ebbc5eb68e0812e68a17e775019484299f791",
+    "c1.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c100.json": "9e5afc69842c28635b827228095baa7a94f2c6d67f4441af327719c637699623",
+    "c100.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c50.json": "484e6ce8b662f0fddff5ba79d6e575b1124616142deff03fbd78b5817c135b8f",
+    "c50.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c8.json": "ba4a27304fbe802975bafb98b9b31dad330f216ff2ecdc6d3b73b2774f2504b5",
+    "c8.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "matrix.json": "c2051035e93acc1831a85f4d0ecbd5f1a4e00b52ba7851934256267e2d044976",
+    "README.md": "713ec996c509fca29f881106ac9a5761b56206866929b3229dc56e07f3e46d94",
+    "refresh-local-engines.py": "30966c1f2cc9885a3ffefbdf1aebdc4c8299a2c79a1edfffd640002fc96b39ea",
+    "summarize-local-engine-refresh.py": "af190c1be04358040e423578466de8cdae873ab6b6713eb08df2fc27f4ab8cb7",
+    "summary.json": "1b3ae43470d790fc1ac3d70937622b1aef9e96d0b16d73cf1e08a9ebafff7a22",
+    "verify.py": "2d5692bd05e1a3d8cd9c5739c530c5a77bc164cf972aa508da0583d8340614cb"
+  }
+}

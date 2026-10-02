@@ -1,0 +1,21 @@
+{
+  "success": true,
+  "builder_sha256": "223ed4c1894ac1494ba934993240a3ac2240dfef0bf698545f88399e5dcf59cf",
+  "base_sha256": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+  "fixture_only": true,
+  "input_sha256": {
+    "/lib/x86_64-linux-gnu/libc.so.6": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92",
+    "/lib/x86_64-linux-gnu/libcrypt.so.1": "436788729ab71d794a66954d62e930c723e624587f39beb2f4f86ff1000b1d29",
+    "/lib/x86_64-linux-gnu/libgmp.so.10": "d15e1585c6c267296459570c8ac217ca9123044bcd4e896d2f686b32333445d2",
+    "/lib/x86_64-linux-gnu/libz.so.1": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+    "/lib64/ld-linux-x86-64.so.2": "c8438e4fde1934e61c88311633f00949ff645d5c04cdb8671fa3d78164d2f307",
+    "/var/tmp/hm-ssh/package/usr/bin/dropbearkey": "1696f951c7fbc48f671565c66117fa10cd28922081690d23999d0404c13ffbc5",
+    "/var/tmp/hm-ssh/package/usr/lib/x86_64-linux-gnu/libtomcrypt.so.1": "31848895a0b908efcf953568066d7da813b2a0cf5884eef41eba77d54f7a26c0",
+    "/var/tmp/hm-ssh/package/usr/lib/x86_64-linux-gnu/libtommath.so.1": "24a243d404e41eca754c9359fd6da686d7ccdbdff613a4f99d6b5c27481fe58b",
+    "/var/tmp/hm-ssh/package/usr/sbin/dropbear": "7896833aa1d4eb0d4edf7cbefe91dce6dd0a9795a1610032a9ef7d01dac13c75"
+  },
+  "server_version": "Dropbear v2025.89",
+  "image_sha256": "d520964ff11dff3bc7090af9ee988eedd3c5c5ffb23a5a3708250e3248a2cb17",
+  "client_public_key_sha256": "16962bfe15c065c53913b37d078755fb2320f0b03f8a58f8eb988caab86c8dc6",
+  "host_public_key_sha256": "051bfaea0d67633b8aed656133f554fb5f43251eda3efb5b33d20e7d9a69ea4d"
+}

@@ -1,0 +1,17 @@
+diff --git a/crates/hv2-sandboxd/src/main.rs b/crates/hv2-sandboxd/src/main.rs
+index fc6502c..6da56c6 100644
+--- a/crates/hv2-sandboxd/src/main.rs
++++ b/crates/hv2-sandboxd/src/main.rs
+@@ -2349,6 +2349,12 @@ async fn fork_route(
+         )
+     };
+ 
++    // A name identifies its original sandbox. Copying it would make legacy
++    // lookup ambiguous and conflict with the parent's reserved ownership.
++    // Keep other caller metadata on the child, without inheriting its name.
++    let mut metadata = metadata;
++    metadata.remove("hm.name");
++
+     // Concurrently: each fork is independent, and they are what a caller
+     // fanning work out to N agents is waiting on.
+     let forks: Vec<_> = (0..count)

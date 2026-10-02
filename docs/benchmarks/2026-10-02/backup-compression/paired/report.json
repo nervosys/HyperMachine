@@ -1,0 +1,87 @@
+{
+  "success": true,
+  "managed_competitor_comparison": false,
+  "rows": [
+    {
+      "pair": 0,
+      "level": 1,
+      "capture_seconds": 4.204241239989642,
+      "compressed_bytes": 36364214,
+      "encrypted_bytes": 36364250,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 0,
+      "level": 6,
+      "capture_seconds": 5.781272085994715,
+      "compressed_bytes": 31512346,
+      "encrypted_bytes": 31512382,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 1,
+      "level": 6,
+      "capture_seconds": 5.6477302339917514,
+      "compressed_bytes": 31512346,
+      "encrypted_bytes": 31512382,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 1,
+      "level": 1,
+      "capture_seconds": 4.516838132985868,
+      "compressed_bytes": 36364214,
+      "encrypted_bytes": 36364250,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 2,
+      "level": 1,
+      "capture_seconds": 4.241776877985103,
+      "compressed_bytes": 36364214,
+      "encrypted_bytes": 36364250,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 2,
+      "level": 6,
+      "capture_seconds": 8.524954423017334,
+      "compressed_bytes": 31512346,
+      "encrypted_bytes": 31512382,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 3,
+      "level": 6,
+      "capture_seconds": 6.968827643984696,
+      "compressed_bytes": 31512346,
+      "encrypted_bytes": 31512382,
+      "all_file_hashes_verified": true
+    },
+    {
+      "pair": 3,
+      "level": 1,
+      "capture_seconds": 9.386154328996781,
+      "compressed_bytes": 36364214,
+      "encrypted_bytes": 36364250,
+      "all_file_hashes_verified": true
+    }
+  ],
+  "tool_sha256": "3d36d9aed237561d0dbb1104e2a9ebb32ef57548832964513287e3c3884f2ecf",
+  "coordinator_sha256": "a8cde67cc255b5437bf9e58f09c0a67e874059c79a7a539219f89623c40b76a5",
+  "measurement": "scan, dependency verification, gzip tar capture, final rescan; warm-cache AB/BA pairs; no upload or restore timing",
+  "files": 4,
+  "expanded_bytes": 1077309947,
+  "catalog_sha256": "0a1d016cf38e119557bc0f4070d4bdbbeb28675f300f1e04cfeb4d0c9ca4d49d",
+  "summary": {
+    "1": {
+      "median_capture_seconds": 4.379307505485485,
+      "median_encrypted_bytes": 36364250.0
+    },
+    "6": {
+      "median_capture_seconds": 6.375049864989705,
+      "median_encrypted_bytes": 31512382.0
+    }
+  },
+  "artifacts_unchanged": true
+}

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "engine": "firecracker",
+  "lifecycle": "cold-create",
+  "concurrency": 1,
+  "environment": "Debian WSL nested KVM; shared Ryzen 9900X host; identical BusyBox guest artifacts; no network",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "artifact_sha256": {
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c"
+  },
+  "harness_sha256": "6bdeb9c0d34f41984e69a91ed7180a3a297213b6681d5b65250969e6a71656f1",
+  "artifacts_unchanged": true,
+  "samples": [
+    {
+      "index": 0,
+      "success": true,
+      "cleanup_success": true,
+      "ready_ms": 390.4787789999999
+    }
+  ],
+  "ready_ms": {
+    "n": 1,
+    "min": 390.4787789999999,
+    "max": 390.4787789999999,
+    "mean": 390.4787789999999,
+    "p50": 390.4787789999999,
+    "p95": 390.4787789999999,
+    "p99": 390.4787789999999
+  },
+  "success": true
+}

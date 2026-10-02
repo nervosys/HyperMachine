@@ -1,0 +1,449 @@
+{
+  "schema_version": 1,
+  "lifecycle": "native-cold-create-to-command-bursts",
+  "concurrency": 1,
+  "pairs": 2,
+  "order": "alternating engine-batch AB/BA",
+  "environment": "shared-WSL-nested-KVM-eight-host-CPU-affinity-no-added-load",
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "artifact_sha256": {
+    "hypermachine": "5f65bc1c815deed83b92fd6bb0e00bae1a05c457d185271f51625195aa0c5ec4",
+    "firecracker": "99ad0f5cd0514a88aad0e9ae8cfdb3cc3b4ab9d190e1194602406c786b5de7a5",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "harness": "59fae86ff5a8a8de390e15359e7da3e470edbab1c701e04de5efa788ae5fa459",
+    "shared_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433",
+    "firecracker_harness": "38493ed3b069d31bc87552c3c262bb541607cfc2e4bbd408f64950b76b78fea6"
+  },
+  "cpu_count": 1,
+  "memory_mb": 1024,
+  "daemon_allocator_arena_max": null,
+  "daemon_log_filter": "warn",
+  "driver_cpu_affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "guest_readiness_timeout_s": {
+    "hypermachine": 15,
+    "firecracker": 15
+  },
+  "firecracker_total_startup_timeout_s": 30,
+  "common_boot_args": "console=ttyS0,115200 nokaslr rdinit=/init quiet loglevel=3 8250.nr_uarts=1 i8042.noaux i8042.nomux i8042.nopnp i8042.dumbkbd",
+  "batches": [
+    {
+      "engine": "hypermachine",
+      "pair": 0,
+      "concurrency": 1,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.04636100493371487,
+          "create_ms": 379.2440289980732,
+          "ready_ms": 387.9689979949035,
+          "exec_ms": 8.724968996830285,
+          "batch_start_perf_seconds": 124811.861875497,
+          "sandbox_id": "sbx-1df14696110f4ca080cf",
+          "validated_offset_ms": 395.81975000328384
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 395.81975000328384,
+      "launch_spread_ms": 0.0,
+      "passing_attempts": 1,
+      "passing_attempts_per_second": 2.5264024849485245,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 110988,
+        "Pss_kib": 108914,
+        "Private_Clean_kib": 7668,
+        "Private_Dirty_kib": 101072,
+        "Anonymous_kib": 101064
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 110992,
+        "Pss_kib": 108918,
+        "Private_Clean_kib": 7668,
+        "Private_Dirty_kib": 101076,
+        "Anonymous_kib": 101068
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 9180,
+        "Pss_kib": 7106,
+        "Private_Clean_kib": 5960,
+        "Private_Dirty_kib": 972,
+        "Anonymous_kib": 972
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 101812,
+        "Pss_kib": 101812,
+        "Private_Clean_kib": 1708,
+        "Private_Dirty_kib": 100104,
+        "Anonymous_kib": 100096
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.0001048569974955,
+      "idle_memory_read_duration_ms": 1.7984360019909218,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5002.149203006411,
+        "max": 5002.149203006411
+      },
+      "total_wall_ms_including_cleanup": 5443.158594003762,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 26264,
+        "Pss_kib": 24125,
+        "Private_Clean_kib": 7924,
+        "Private_Dirty_kib": 15964,
+        "Anonymous_kib": 15964
+      }
+    },
+    {
+      "engine": "firecracker",
+      "pair": 0,
+      "concurrency": 1,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 0,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.6741969991708174,
+          "api_setup_ms": 15.653598995413631,
+          "agent_connect_ms": 325.65788200008683,
+          "ready_ms": 342.56535000167787,
+          "exec_ms": 1.2538690061774105,
+          "validated_offset_ms": 343.73805300856475
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 343.73805300856475,
+      "launch_spread_ms": 0.0,
+      "passing_attempts": 1,
+      "passing_attempts_per_second": 2.909192017722529,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 88052,
+        "Pss_kib": 88044,
+        "Private_Clean_kib": 2372,
+        "Private_Dirty_kib": 85668,
+        "Anonymous_kib": 85660
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 88052,
+        "Pss_kib": 88044,
+        "Private_Clean_kib": 2372,
+        "Private_Dirty_kib": 85668,
+        "Anonymous_kib": 85660
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 88052,
+        "Pss_kib": 88044,
+        "Private_Clean_kib": 2372,
+        "Private_Dirty_kib": 85668,
+        "Anonymous_kib": 85660
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.0001013389992295,
+      "idle_memory_read_duration_ms": 1.531247005914338,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5001.921232993482,
+        "max": 5001.921232993482
+      },
+      "total_wall_ms_including_cleanup": 5422.478445994784,
+      "success": true
+    },
+    {
+      "engine": "firecracker",
+      "pair": 1,
+      "concurrency": 1,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "firecracker",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.6511530082207173,
+          "api_setup_ms": 17.149731997051276,
+          "agent_connect_ms": 326.6264739941107,
+          "ready_ms": 344.58032400289085,
+          "exec_ms": 0.8041180117288604,
+          "validated_offset_ms": 345.7016879983712
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 345.7016879983712,
+      "launch_spread_ms": 0.0,
+      "passing_attempts": 1,
+      "passing_attempts_per_second": 2.8926673913281893,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 88052,
+        "Pss_kib": 88044,
+        "Private_Clean_kib": 2372,
+        "Private_Dirty_kib": 85668,
+        "Anonymous_kib": 85660
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 88052,
+        "Pss_kib": 88044,
+        "Private_Clean_kib": 2372,
+        "Private_Dirty_kib": 85668,
+        "Anonymous_kib": 85660
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 0,
+        "Pss_kib": 0,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 0,
+        "Anonymous_kib": 0
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 88052,
+        "Pss_kib": 88044,
+        "Private_Clean_kib": 2372,
+        "Private_Dirty_kib": 85668,
+        "Anonymous_kib": 85660
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000088257002062,
+      "idle_memory_read_duration_ms": 1.3423710042843595,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5001.40536800609,
+        "max": 5001.40536800609
+      },
+      "total_wall_ms_including_cleanup": 5380.4805890104035,
+      "success": true
+    },
+    {
+      "engine": "hypermachine",
+      "pair": 1,
+      "concurrency": 1,
+      "samples": [
+        {
+          "index": 0,
+          "pair": 1,
+          "engine": "hypermachine",
+          "success": true,
+          "cleanup_success": true,
+          "start_offset_ms": 0.05117899854667485,
+          "create_ms": 380.1683060009964,
+          "ready_ms": 386.8866370030446,
+          "exec_ms": 6.718331002048217,
+          "batch_start_perf_seconds": 124838.118665417,
+          "sandbox_id": "sbx-e48894d713c346e9a67e",
+          "validated_offset_ms": 391.8615470029181
+        }
+      ],
+      "error": null,
+      "readiness_wall_ms": 391.8615470029181,
+      "launch_spread_ms": 0.0,
+      "passing_attempts": 1,
+      "passing_attempts_per_second": 2.551921737788049,
+      "held_process_count": 1,
+      "held_process_memory_kib": {
+        "Rss_kib": 140736,
+        "Pss_kib": 138594,
+        "Private_Clean_kib": 7876,
+        "Private_Dirty_kib": 130484,
+        "Anonymous_kib": 130476
+      },
+      "all_guests_validated_while_held": true,
+      "idle_process_memory_kib": {
+        "Rss_kib": 140736,
+        "Pss_kib": 138597,
+        "Private_Clean_kib": 7876,
+        "Private_Dirty_kib": 130484,
+        "Anonymous_kib": 130476
+      },
+      "empty_process_memory_baseline_kib": {
+        "Rss_kib": 26240,
+        "Pss_kib": 24101,
+        "Private_Clean_kib": 7876,
+        "Private_Dirty_kib": 15988,
+        "Anonymous_kib": 15988
+      },
+      "incremental_idle_process_memory_kib": {
+        "Rss_kib": 114496,
+        "Pss_kib": 114496,
+        "Private_Clean_kib": 0,
+        "Private_Dirty_kib": 114496,
+        "Anonymous_kib": 114488
+      },
+      "memory_idle_requested_seconds": 5.0,
+      "memory_idle_actual_seconds": 5.000161310003023,
+      "idle_memory_read_duration_ms": 2.6722250040620565,
+      "guest_idle_at_measurement_start_ms": {
+        "min": 5002.793360996293,
+        "max": 5002.793360996293
+      },
+      "total_wall_ms_including_cleanup": 5450.575173003017,
+      "success": true,
+      "empty_node_memory_after_cleanup_kib": {
+        "Rss_kib": 55544,
+        "Pss_kib": 53405,
+        "Private_Clean_kib": 7876,
+        "Private_Dirty_kib": 45292,
+        "Anonymous_kib": 45292
+      }
+    }
+  ],
+  "setup_error": null,
+  "cleanup_errors": [],
+  "success": true,
+  "limitations": [
+    "Shared nested-KVM host; no dedicated hardware",
+    "Persistent HyperMachine HTTP daemon versus fresh Firecracker processes and Unix APIs",
+    "Barrier-released arrivals have measured scheduling spread; not sustained arrivals",
+    "All guests held until last validation; earlier guests have longer idle time",
+    "Aggregate process PSS includes guest/VMM memory but excludes kernel allocations; no long idle/density test",
+    "Cold native engines only; no managed SDK, snapshot or fleet comparison",
+    "Fixed idle hold starts after all readiness checks; individual guest idle ages and sequential read duration are recorded; PSS excludes kernel memory and does not prove density"
+  ],
+  "memory_idle_seconds": 5.0,
+  "memory_method": "HM held daemon minus same-batch empty daemon PSS; FC summed fresh VMM PSS minus zero-process baseline",
+  "hypermachine_template_preflight": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": false,
+    "templateID": "base"
+  },
+  "node_memory_baseline_kib": {
+    "Rss_kib": 9052,
+    "Pss_kib": 6978,
+    "Private_Clean_kib": 5832,
+    "Private_Dirty_kib": 972,
+    "Anonymous_kib": 972
+  },
+  "remaining_sandbox_count": 0,
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:33149, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:58345 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:58345 process.Process/Start\n\u001b[2m2026-10-02T13:13:40.675475Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 2.345\u00b5s\n\u001b[2m2026-10-02T13:13:40.700459Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.09957300000000001\n\u001b[2m2026-10-02T13:13:40.700686Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.002465 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.18662600000000001\n\u001b[2m2026-10-02T13:13:40.700747Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.063613\n\u001b[2m2026-10-02T13:13:40.873965Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m173.213651 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(173085351) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(173204955)\n\u001b[2m2026-10-02T13:13:41.049151Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.163426 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m348.325932 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.293479 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:13:41.049377Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-1df14696110f4ca080cf up in 373.85322ms: build 426.967\u00b5s, launch 24.412804ms, agent answering 348.934907ms,          network and envd 78.823\u00b5s\n\u001b[2m2026-10-02T13:14:06.930646Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 992ns\n\u001b[2m2026-10-02T13:14:06.948485Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.090835\n\u001b[2m2026-10-02T13:14:06.948611Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.003196 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.089432\n\u001b[2m2026-10-02T13:14:06.948640Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.030528999999999997\n\u001b[2m2026-10-02T13:14:07.124637Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m175.994062 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(175968370) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(175988552)\n\u001b[2m2026-10-02T13:14:07.305508Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.093381 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m353.227132 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m3.784851 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:07.305717Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-e48894d713c346e9a67e up in 375.011643ms: build 364.363\u00b5s, launch 17.326714ms, agent answering 357.2606ms,          network and envd 60.427\u00b5s\n",
+  "artifacts_unchanged": true,
+  "ready_ms": {
+    "hypermachine": {
+      "n": 2,
+      "min": 386.8866370030446,
+      "max": 387.9689979949035,
+      "mean": 387.42781749897404,
+      "p50": 386.8866370030446,
+      "p95": 387.9689979949035,
+      "p99": 387.9689979949035
+    },
+    "firecracker": {
+      "n": 2,
+      "min": 342.56535000167787,
+      "max": 344.58032400289085,
+      "mean": 343.57283700228436,
+      "p50": 342.56535000167787,
+      "p95": 344.58032400289085,
+      "p99": 344.58032400289085
+    }
+  },
+  "diagnostic_only": true,
+  "hypermachine_log_filter": "hv2_sandboxd=debug,hv2_agent::cold_readiness=debug,hv2_core::cold_dispatch=debug",
+  "diagnostic_sha256": "4d6232d5659ef3e38a44a9fd00b71aa1158d1ad2520b4bf899bfaf368df3c2f3",
+  "guest_boot_collected": false,
+  "guest_observations": [],
+  "guest_probe_scope": "Every tenth arrival index, after all guests validate while held; memory readings follow these extra commands",
+  "startup_stages_ms": {
+    "sbx-1df14696110f4ca080cf": {
+      "total_ms": 373.85322,
+      "build_ms": 0.426967,
+      "launch_ms": 24.412804,
+      "agent_ms": 348.934907,
+      "network_envd_ms": 0.07882299999999999
+    },
+    "sbx-e48894d713c346e9a67e": {
+      "total_ms": 375.011643,
+      "build_ms": 0.364363,
+      "launch_ms": 17.326714,
+      "agent_ms": 357.2606,
+      "network_envd_ms": 0.060427
+    }
+  },
+  "cold_readiness_log": "hv2-sandboxd: listening on 0.0.0.0:33149, capacity 128\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes boot from the kernel (no template snapshot)\n\nsandbox proxy on 0.0.0.0:58345 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:58345 process.Process/Start\n\u001b[2m2026-10-02T13:13:40.675475Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 2.345\u00b5s\n\u001b[2m2026-10-02T13:13:40.700459Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.09957300000000001\n\u001b[2m2026-10-02T13:13:40.700686Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.002465 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.18662600000000001\n\u001b[2m2026-10-02T13:13:40.700747Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.063613\n\u001b[2m2026-10-02T13:13:40.873965Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m173.213651 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(173085351) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(173204955)\n\u001b[2m2026-10-02T13:13:41.049151Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-1df14696110f4ca080cf \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.163426 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m348.325932 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m0.293479 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:13:41.049377Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-1df14696110f4ca080cf up in 373.85322ms: build 426.967\u00b5s, launch 24.412804ms, agent answering 348.934907ms,          network and envd 78.823\u00b5s\n\u001b[2m2026-10-02T13:14:06.930646Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m slot granted after 992ns\n\u001b[2m2026-10-02T13:14:06.948485Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m VM background dispatch \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mdispatch_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.090835\n\u001b[2m2026-10-02T13:14:06.948611Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU owner thread entry \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mwrapper_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.003196 \u001b[3mthread_start_ms\u001b[0m\u001b[2m=\u001b[0m0.089432\n\u001b[2m2026-10-02T13:14:06.948640Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend call \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mowner_setup_ms\u001b[0m\u001b[2m=\u001b[0m0.030528999999999997\n\u001b[2m2026-10-02T13:14:07.124637Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_core::cold_dispatch\u001b[0m\u001b[2m:\u001b[0m vCPU first backend return \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mvcpu_id\u001b[0m\u001b[2m=\u001b[0m0 \u001b[3mfirst_backend_ms\u001b[0m\u001b[2m=\u001b[0m175.994062 \u001b[3mfirst_exit_kind\u001b[0m\u001b[2m=\u001b[0m\"io_out\" \u001b[3mfirst_exit_port\u001b[0m\u001b[2m=\u001b[0mSome(3320) \u001b[3mfirst_backend_cpu_ns\u001b[0m\u001b[2m=\u001b[0mSome(175968370) \u001b[3mfirst_backend_cpu_wall_ns\u001b[0m\u001b[2m=\u001b[0mSome(175988552)\n\u001b[2m2026-10-02T13:14:07.305508Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_agent::cold_readiness\u001b[0m\u001b[2m:\u001b[0m cold guest readiness stages \u001b[3mvm\u001b[0m\u001b[2m=\u001b[0msbx-e48894d713c346e9a67e \u001b[3mblocking_queue_ms\u001b[0m\u001b[2m=\u001b[0m0.093381 \u001b[3mconnect_ms\u001b[0m\u001b[2m=\u001b[0m353.227132 \u001b[3mping_ms\u001b[0m\u001b[2m=\u001b[0m3.784851 \u001b[3msucceeded\u001b[0m\u001b[2m=\u001b[0mtrue \u001b[3mphase\u001b[0m\u001b[2m=\u001b[0m\"ping\"\n\u001b[2m2026-10-02T13:14:07.305717Z\u001b[0m \u001b[34mDEBUG\u001b[0m \u001b[2mhv2_sandboxd\u001b[0m\u001b[2m:\u001b[0m sbx-e48894d713c346e9a67e up in 375.011643ms: build 364.363\u00b5s, launch 17.326714ms, agent answering 357.2606ms,          network and envd 60.427\u00b5s\n",
+  "cold_readiness_stages_ms": {
+    "sbx-1df14696110f4ca080cf": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.163426,
+      "connect_ms": 348.325932,
+      "ping_ms": 0.293479
+    },
+    "sbx-e48894d713c346e9a67e": {
+      "phase": "ping",
+      "succeeded": true,
+      "blocking_queue_ms": 0.093381,
+      "connect_ms": 353.227132,
+      "ping_ms": 3.784851
+    }
+  },
+  "dispatch_stages_ms": {
+    "sbx-1df14696110f4ca080cf": {
+      "dispatch_queue_ms": 0.09957300000000001,
+      "wrapper_queue_ms": 0.002465,
+      "thread_start_ms": 0.18662600000000001,
+      "owner_setup_ms": 0.063613,
+      "first_backend_ms": 173.213651
+    },
+    "sbx-e48894d713c346e9a67e": {
+      "dispatch_queue_ms": 0.090835,
+      "wrapper_queue_ms": 0.003196,
+      "thread_start_ms": 0.089432,
+      "owner_setup_ms": 0.030528999999999997,
+      "first_backend_ms": 175.994062
+    }
+  },
+  "first_exit_kinds": {
+    "sbx-1df14696110f4ca080cf": {
+      "kind": "io_out",
+      "io_port": 3320
+    },
+    "sbx-e48894d713c346e9a67e": {
+      "kind": "io_out",
+      "io_port": 3320
+    }
+  },
+  "first_backend_cpu": {
+    "sbx-1df14696110f4ca080cf": {
+      "first_backend_cpu_ns": 173085351,
+      "first_backend_cpu_wall_ns": 173204955
+    },
+    "sbx-e48894d713c346e9a67e": {
+      "first_backend_cpu_ns": 175968370,
+      "first_backend_cpu_wall_ns": 175988552
+    }
+  },
+  "stage_ids_match_passed_requests": true,
+  "cold_ids_match_passed_requests": true,
+  "dispatch_ids_match_passed_requests": true,
+  "first_exit_ids_match_passed_requests": true,
+  "first_cpu_ids_match_passed_requests": true
+}

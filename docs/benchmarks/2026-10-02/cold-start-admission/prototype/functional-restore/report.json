@@ -1,0 +1,35 @@
+{
+  "success": false,
+  "purpose": "owned functional verification; no performance comparison",
+  "artifact_sha256": {
+    "daemon": "ef4afc154fc728e6d45e1677a49d2cd4101c34fe2386e07936e73bfe49131791",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "no_agent_initrd": "ba6454e28b54c21459399120c4c666fd8756c9ef2e3dd70e02b20a15fce3ff54",
+    "coordinator": "fbacf9421b1a8455234ff717df246c4e4a71c3c0dcad3dae14cfe5ec7277ac2b"
+  },
+  "checks": [
+    "invalid limit 0",
+    "invalid limit 1025",
+    "invalid limit -1",
+    "invalid limit bad",
+    "bounded"
+  ],
+  "cleanup_errors": [],
+  "processes_stopped": [
+    {
+      "phase": "bounded",
+      "exit_code": 0
+    },
+    {
+      "phase": "failure-release",
+      "exit_code": 0
+    }
+  ],
+  "bounded": {
+    "acquired": 8,
+    "released": 8,
+    "maximum_observed": 2
+  },
+  "error": "pause failed"
+}

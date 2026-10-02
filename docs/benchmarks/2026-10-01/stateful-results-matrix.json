@@ -1,0 +1,86 @@
+{
+  "matrix_sha256": "32164b7954cd8d1ea5b207f5fc0549ed1bf2a5b8e286409f385de58617e8fa4d",
+  "coordinator_sha256": "db3e7af749d5f6ef684a33b4a607ba94eef46b246c245d2dae8a21f56a70a974",
+  "cohorts": [
+    {
+      "file": "stateful-final-resume-c1.json",
+      "operation": "resume",
+      "concurrency": 1,
+      "exit_code": 0,
+      "duration_seconds": 39.87769764599943,
+      "report_sha256": "a0515642bbd28fd38aa9e323108ea0356a06cef127476699e7dbd3664b2e7ba2",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 100, \"min\": 69.32194299952243, \"max\": 142.44463999784784, \"mean\": 101.94838880004681, \"p50\": 113.22209799982375, \"p95\": 117.38885100203333, \"p99\": 141.5209219994722}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-fork-c1.json",
+      "operation": "fork",
+      "concurrency": 1,
+      "exit_code": 1,
+      "duration_seconds": 87.47418106400073,
+      "report_sha256": "5758b6792031ac046801f97ae781a6d01edbba8709c5ddcac81ecbb208017cf1",
+      "stdout": "{\"success\": false, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 1, \"ready_ms\": {\"n\": 99, \"min\": 71.54196400006185, \"max\": 129.33233099829522, \"mean\": 105.50307644444554, \"p50\": 116.11711200021091, \"p95\": 125.43323299905751, \"p99\": 129.33233099829522}, \"failed_samples\": 1, \"failed_rows\": [{\"index\": 8, \"success\": false, \"sandbox_id\": \"sbx-4e5ecce730be44a38d8c\", \"create_ms\": 19.535035997250816, \"operation_start_offset_ms\": 4617.543438002031, \"phase\": \"fork\", \"error\": \"fork did not return exactly one successful sandbox\", \"batch_index\": 8}]}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-fork-c8.json",
+      "operation": "fork",
+      "concurrency": 8,
+      "exit_code": 0,
+      "duration_seconds": 13.047055707000254,
+      "report_sha256": "2768916d0b066cace32706374fd08ddbe27ac422d0b5ea7128417a97c9d5b9a9",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 104, \"min\": 86.46815899919602, \"max\": 166.44201899907785, \"mean\": 134.99689740382775, \"p50\": 136.5979359979974, \"p95\": 154.18092799882288, \"p99\": 162.7849469987268}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-resume-c8.json",
+      "operation": "resume",
+      "concurrency": 8,
+      "exit_code": 0,
+      "duration_seconds": 8.442386790000455,
+      "report_sha256": "c4981336cfa82e31b2cbb47818b6d8b67b8afcd480054ac2df8948aa8f565693",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 104, \"min\": 75.32483600152773, \"max\": 150.58513900294201, \"mean\": 128.7385170289431, \"p50\": 133.24188499973388, \"p95\": 148.67464900089544, \"p99\": 150.39046300080372}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-resume-c50.json",
+      "operation": "resume",
+      "concurrency": 50,
+      "exit_code": 0,
+      "duration_seconds": 5.170727048000117,
+      "report_sha256": "94e2b7e2bb4029ec2fdbf83e719f08a32ec0dafd9f31d26f8c3da01caf9caf8f",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 100, \"min\": 219.4367730007798, \"max\": 647.7254050005286, \"mean\": 392.7841992302274, \"p50\": 396.9557380005426, \"p95\": 635.9740480002074, \"p99\": 641.2538389995461}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-fork-c50.json",
+      "operation": "fork",
+      "concurrency": 50,
+      "exit_code": 0,
+      "duration_seconds": 5.9677938200002245,
+      "report_sha256": "e16c8b5ccf11cea127c3646ecb49208d7bddf6d7b57df5c1a69c7c88ce14c21e",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 100, \"min\": 357.30427100133966, \"max\": 560.4490289988462, \"mean\": 443.91894187992875, \"p50\": 446.5072320017498, \"p95\": 499.779508998472, \"p99\": 511.58769899848267}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-fork-c100.json",
+      "operation": "fork",
+      "concurrency": 100,
+      "exit_code": 0,
+      "duration_seconds": 10.734810410998762,
+      "report_sha256": "d3a144b59400ca0abf63674c881b6e4b01af46ea4e2d9bce758bb5d1867f281d",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 200, \"min\": 626.3250379997771, \"max\": 1436.9893809998757, \"mean\": 891.5779665099762, \"p50\": 902.4837410033797, \"p95\": 976.1561890009034, \"p99\": 1064.2664129991317}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    },
+    {
+      "file": "stateful-final-resume-c100.json",
+      "operation": "resume",
+      "concurrency": 100,
+      "exit_code": 0,
+      "duration_seconds": 9.428170808998402,
+      "report_sha256": "8208b860529d87d1d3fdb12d4e8aea100205c06a82703e6d2793328d4e33c449",
+      "stdout": "{\"success\": true, \"error\": null, \"cleanup_errors\": [], \"sdk_exit_code\": 0, \"ready_ms\": {\"n\": 200, \"min\": 408.4489580018271, \"max\": 1113.3898530024453, \"mean\": 714.2659932349306, \"p50\": 692.1583240000473, \"p95\": 1043.32526899816, \"p99\": 1089.486503002263}, \"failed_samples\": 0, \"failed_rows\": []}\n",
+      "stderr": ""
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "raw_sha256": "756a807a778c3a6bd11404c154eb6cdf94710c105df928a5f6246d253d4e39f3",
+  "diagnostic_rows": [
+    {
+      "blocking_queue_ms": 0.178452,
+      "connect_ms": 341.746085,
+      "ping_ms": 2.5116359999999998,
+      "sandbox_id": "sbx-c74d147c607c4f98948c"
+    },
+    {
+      "blocking_queue_ms": 0.45482999999999996,
+      "connect_ms": 353.523953,
+      "ping_ms": 0.265727,
+      "sandbox_id": "sbx-77fedcf9b5514982a1db"
+    },
+    {
+      "blocking_queue_ms": 0.049897,
+      "connect_ms": 359.391488,
+      "ping_ms": 2.5642590000000003,
+      "sandbox_id": "sbx-a9313ca49079463b8cf8"
+    },
+    {
+      "blocking_queue_ms": 0.037237000000000006,
+      "connect_ms": 347.730257,
+      "ping_ms": 1.901569,
+      "sandbox_id": "sbx-9f1ad02906564c96bc40"
+    },
+    {
+      "blocking_queue_ms": 0.042756999999999996,
+      "connect_ms": 342.447534,
+      "ping_ms": 2.371854,
+      "sandbox_id": "sbx-6dbf033abd7643488b42"
+    },
+    {
+      "blocking_queue_ms": 0.051827,
+      "connect_ms": 349.176551,
+      "ping_ms": 0.232151,
+      "sandbox_id": "sbx-ed1dfa6b95034c37a96c"
+    },
+    {
+      "blocking_queue_ms": 0.042072,
+      "connect_ms": 340.43082000000004,
+      "ping_ms": 2.701847,
+      "sandbox_id": "sbx-6e82d54397014e6e8242"
+    },
+    {
+      "blocking_queue_ms": 0.035238,
+      "connect_ms": 342.423628,
+      "ping_ms": 0.32779800000000003,
+      "sandbox_id": "sbx-e0ce02aeaf6248f1bce0"
+    },
+    {
+      "blocking_queue_ms": 0.068623,
+      "connect_ms": 337.723399,
+      "ping_ms": 1.741296,
+      "sandbox_id": "sbx-10283eceb64f4a6ea43d"
+    },
+    {
+      "blocking_queue_ms": 0.040443,
+      "connect_ms": 347.881657,
+      "ping_ms": 0.24190099999999998,
+      "sandbox_id": "sbx-700d7b627eec4ba3a8b8"
+    },
+    {
+      "blocking_queue_ms": 0.047678,
+      "connect_ms": 347.296495,
+      "ping_ms": 2.246033,
+      "sandbox_id": "sbx-a98153cecc574fecab42"
+    },
+    {
+      "blocking_queue_ms": 0.055149,
+      "connect_ms": 358.124327,
+      "ping_ms": 0.41191099999999997,
+      "sandbox_id": "sbx-17f19251d9f546f584d4"
+    },
+    {
+      "blocking_queue_ms": 0.056595,
+      "connect_ms": 349.153823,
+      "ping_ms": 2.7215529999999997,
+      "sandbox_id": "sbx-f2741afcc8174b72accb"
+    },
+    {
+      "blocking_queue_ms": 0.043095,
+      "connect_ms": 350.691678,
+      "ping_ms": 2.6537409999999997,
+      "sandbox_id": "sbx-76c73fd339654cf9ab77"
+    },
+    {
+      "blocking_queue_ms": 0.05178,
+      "connect_ms": 347.13435999999996,
+      "ping_ms": 2.2045179999999998,
+      "sandbox_id": "sbx-a3b8ff497cad4995b2cc"
+    },
+    {
+      "blocking_queue_ms": 0.054922,
+      "connect_ms": 350.457312,
+      "ping_ms": 2.507667,
+      "sandbox_id": "sbx-4b4468b892c44cad8374"
+    }
+  ],
+  "phase_mean_ms": {
+    "blocking_queue_ms": 0.0819121875,
+    "connect_ms": 347.8333354375,
+    "ping_ms": 1.7253413125
+  },
+  "scored_cleanup_breakdown": [
+    {
+      "rate": 5,
+      "engine": "hypermachine",
+      "mean_cleanup_ms": 47.916298849941086
+    },
+    {
+      "rate": 5,
+      "engine": "firecracker",
+      "mean_cleanup_ms": 58.66954982475363
+    },
+    {
+      "rate": 25,
+      "engine": "hypermachine",
+      "mean_cleanup_ms": 61.735523995048425
+    },
+    {
+      "rate": 25,
+      "engine": "firecracker",
+      "mean_cleanup_ms": 78.51129563485301
+    }
+  ]
+}

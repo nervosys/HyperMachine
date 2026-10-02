@@ -39,9 +39,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Run cargo check
               run: cargo check --workspace --all-targets
@@ -50,6 +48,7 @@ jobs:
         name: Test
         runs-on: ${{ matrix.os }}
         strategy:
+            fail-fast: false
             matrix:
                 os: [ubuntu-latest, windows-latest, macos-latest]
         steps:
@@ -70,9 +69,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             # hv1-core is the x86_64 Type-1 hypervisor and says so itself: its
             # lib.rs carries a compile_error! refusing any other architecture,
@@ -82,6 +79,13 @@ jobs:
             # having removed the blanket exclusions in #70.
             - name: Run tests
               run: cargo test --workspace --exclude hv2-core ${{ runner.arch == 'ARM64' && '--exclude hv1-core' || '' }}
+
+            - name: Build shipped control plane for authentication checks
+              run: cargo build -p hv2-cluster --bin hv2-control-plane
+
+            - name: Verify shipped scoped-key enforcement and live expiry
+              shell: bash
+              run: python tools/e2e-control-keys.py --control-plane "target/debug/hv2-control-plane${{ runner.os == 'Windows' && '.exe' || '' }}"
 
             # What hv2-sandbox can enforce on this runner, probed rather than
             # assumed -- in particular whether a GitHub runner gives an
@@ -106,6 +110,43 @@ jobs:
     # hollow control cannot reach master unread: a state a guard demands that
     # nothing constructs, and a refusal, mode or claimed enforcement that
     # nothing acts on. Both exit 1 only for findings not already reviewed.
+    sandbox-tools:
+        name: Sandbox Benchmark and Chart Gates
+        runs-on: ubuntu-24.04
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+            - name: Verify benchmark failure accounting and provenance gates
+              run: python3 tools/test-bench-e2b-sdk.py
+            - name: Verify local engine benchmark failure accounting
+              run: python3 tools/test-local-engines.py
+            - name: Verify concurrent engine barriers and retained failures
+              run: python3 tools/test-bench-local-engines-concurrent.py
+            - name: Verify TCP transfer correctness and failure accounting
+              run: python3 tools/test-bench-tcp-local.py
+            - name: Verify startup diagnostic duration and identity decoding
+              run: python3 tools/test-diagnose-concurrent-startup.py
+            - name: Verify memory retention mapping decoding
+              run: python3 tools/test-diagnose-memory-retention.py
+            - name: Verify Firecracker benchmark artifact integrity
+              run: python3 tools/test-install-firecracker-benchmark.py
+            - name: Verify protoc checksum and platform selection gates
+              run: python3 tools/test-ci-install-protoc.py
+            - name: Install pinned Helm
+              uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+              with:
+                  version: v3.17.3
+            - name: Install isolated chart test dependency
+              run: |
+                  python3 -m venv "${RUNNER_TEMP}/hm-chart-tests"
+                  "${RUNNER_TEMP}/hm-chart-tests/bin/python" -m pip install PyYAML==6.0.3
+            - name: Verify chart authentication and TLS mount combinations
+              run: '"${RUNNER_TEMP}/hm-chart-tests/bin/python" tools/test-sandbox-chart.py'
+            - name: Lint default and policy-only sandbox charts
+              run: |
+                  helm lint deploy/helm/hypermachine-sandbox
+                  helm lint deploy/helm/hypermachine-sandbox --set auth.apiKeysSecret=policies,auth.legacyAdminEnabled=false
+
     unread-controls:
         name: Unread Controls
         runs-on: ubuntu-latest
@@ -187,9 +228,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Run core tests
               run: cargo test -p hv2-core
@@ -297,9 +336,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Check MSRV compatibility
               run: cargo check --workspace --all-targets
@@ -342,9 +379,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Run clippy
               run: cargo clippy --workspace --all-targets -- -D warnings
@@ -359,9 +394,7 @@ jobs:
               uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Build documentation
               run: cargo doc --workspace --no-deps
@@ -451,9 +484,7 @@ jobs:
                       ${{ runner.os }}-cargo-
 
             - name: Install protoc
-              uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
-              with:
-                  repo-token: ${{ secrets.GITHUB_TOKEN }}
+              run: python tools/ci-install-protoc.py
 
             - name: Build CLIs
               run: |

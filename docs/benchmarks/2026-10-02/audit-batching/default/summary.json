@@ -1,0 +1,280 @@
+{
+  "profiles": [
+    {
+      "concurrency": 1,
+      "variants": {
+        "previous": {
+          "planned_total": 132,
+          "attempted_total": 132,
+          "passed_total": 132,
+          "failed_total": 0,
+          "measured_attempted": 120,
+          "measured_passed": 120,
+          "successful_p50_ms": 0.1478850026614964,
+          "successful_p95_ms": 0.21901499712839723,
+          "successful_p99_ms": 0.23993999639060348,
+          "successful_batch_median_requests_per_second": 6065.342910322122,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 132,
+          "attempted_total": 132,
+          "passed_total": 132,
+          "failed_total": 0,
+          "measured_attempted": 120,
+          "measured_passed": 120,
+          "successful_p50_ms": 0.1525129919173196,
+          "successful_p95_ms": 0.20426299306564033,
+          "successful_p99_ms": 0.26104100106749684,
+          "successful_batch_median_requests_per_second": 5710.9248455477755,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 132,
+          "attempted_total": 132,
+          "passed_total": 132,
+          "failed_total": 0,
+          "measured_attempted": 120,
+          "measured_passed": 120,
+          "successful_p50_ms": 10.41480699495878,
+          "successful_p95_ms": 10.884067000006326,
+          "successful_p99_ms": 11.340424010995775,
+          "successful_batch_median_requests_per_second": 94.90978345076724,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 2,
+          "median_paired_mean_reduction_ms": -0.0018034505046671256,
+          "median_paired_throughput_ratio": 0.976581367007423
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -10.367568824221962,
+          "median_paired_throughput_ratio": 0.016584499118711946
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -10.361521649247152,
+          "median_paired_throughput_ratio": 0.016476436646070534
+        }
+      }
+    },
+    {
+      "concurrency": 8,
+      "variants": {
+        "previous": {
+          "planned_total": 1056,
+          "attempted_total": 1056,
+          "passed_total": 1056,
+          "failed_total": 0,
+          "measured_attempted": 960,
+          "measured_passed": 960,
+          "successful_p50_ms": 1.313444008701481,
+          "successful_p95_ms": 2.6011279987869784,
+          "successful_p99_ms": 3.3530930086271837,
+          "successful_batch_median_requests_per_second": 5113.993507523419,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 1056,
+          "attempted_total": 1056,
+          "passed_total": 1056,
+          "failed_total": 0,
+          "measured_attempted": 960,
+          "measured_passed": 960,
+          "successful_p50_ms": 1.2928539945278317,
+          "successful_p95_ms": 2.853169004083611,
+          "successful_p99_ms": 3.714777994900942,
+          "successful_batch_median_requests_per_second": 5074.8867187282785,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 1056,
+          "attempted_total": 1056,
+          "passed_total": 1056,
+          "failed_total": 0,
+          "measured_attempted": 960,
+          "measured_passed": 960,
+          "successful_p50_ms": 20.089277997612953,
+          "successful_p95_ms": 21.2736140092602,
+          "successful_p99_ms": 22.058581991586834,
+          "successful_batch_median_requests_per_second": 395.3748489331583,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 1,
+          "median_paired_mean_reduction_ms": -0.009707978688311414,
+          "median_paired_throughput_ratio": 0.9991851138413517
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -18.668210009127506,
+          "median_paired_throughput_ratio": 0.07779320212517357
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -18.717395255816882,
+          "median_paired_throughput_ratio": 0.0773408594143179
+        }
+      }
+    },
+    {
+      "concurrency": 50,
+      "variants": {
+        "previous": {
+          "planned_total": 6600,
+          "attempted_total": 6600,
+          "passed_total": 6600,
+          "failed_total": 0,
+          "measured_attempted": 6000,
+          "measured_passed": 6000,
+          "successful_p50_ms": 7.396360990242101,
+          "successful_p95_ms": 18.36025899683591,
+          "successful_p99_ms": 23.383765001199208,
+          "successful_batch_median_requests_per_second": 5053.930416869487,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 6600,
+          "attempted_total": 6600,
+          "passed_total": 6600,
+          "failed_total": 0,
+          "measured_attempted": 6000,
+          "measured_passed": 6000,
+          "successful_p50_ms": 7.287201995495707,
+          "successful_p95_ms": 18.448946007993072,
+          "successful_p99_ms": 23.6004520120332,
+          "successful_batch_median_requests_per_second": 5084.60064566131,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 6600,
+          "attempted_total": 6600,
+          "passed_total": 6600,
+          "failed_total": 0,
+          "measured_attempted": 6000,
+          "measured_passed": 6000,
+          "successful_p50_ms": 21.20230700529646,
+          "successful_p95_ms": 25.78573599748779,
+          "successful_p99_ms": 28.72687099443283,
+          "successful_batch_median_requests_per_second": 2277.080709069226,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 5,
+          "median_paired_mean_reduction_ms": 0.10441610463749385,
+          "median_paired_throughput_ratio": 1.0064915936699084
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -12.50636223769834,
+          "median_paired_throughput_ratio": 0.44762406356014794
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -12.362473749941273,
+          "median_paired_throughput_ratio": 0.45086628878863366
+        }
+      }
+    },
+    {
+      "concurrency": 100,
+      "variants": {
+        "previous": {
+          "planned_total": 13200,
+          "attempted_total": 13200,
+          "passed_total": 13200,
+          "failed_total": 0,
+          "measured_attempted": 12000,
+          "measured_passed": 12000,
+          "successful_p50_ms": 14.487406006082892,
+          "successful_p95_ms": 37.784527987241745,
+          "successful_p99_ms": 51.63515500316862,
+          "successful_batch_median_requests_per_second": 5006.5132726304655,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-off": {
+          "planned_total": 13200,
+          "attempted_total": 13200,
+          "passed_total": 13200,
+          "failed_total": 0,
+          "measured_attempted": 12000,
+          "measured_passed": 12000,
+          "successful_p50_ms": 14.470431007794105,
+          "successful_p95_ms": 37.49069300829433,
+          "successful_p99_ms": 50.95851900114212,
+          "successful_batch_median_requests_per_second": 5034.221991577097,
+          "successful_batches": 6,
+          "failed_runs": 0
+        },
+        "audit-on": {
+          "planned_total": 13200,
+          "attempted_total": 13200,
+          "passed_total": 13200,
+          "failed_total": 0,
+          "measured_attempted": 12000,
+          "measured_passed": 12000,
+          "successful_p50_ms": 21.186148005654104,
+          "successful_p95_ms": 25.793274005991407,
+          "successful_p99_ms": 31.50219398958143,
+          "successful_batch_median_requests_per_second": 4415.433578818681,
+          "successful_batches": 6,
+          "failed_runs": 0
+        }
+      },
+      "comparisons": {
+        "audit-off_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 4,
+          "median_paired_mean_reduction_ms": 0.15897177565057063,
+          "median_paired_throughput_ratio": 1.002164078508676
+        },
+        "audit-on_versus_audit-off": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -3.666311142180348,
+          "median_paired_throughput_ratio": 0.8804616352257091
+        },
+        "audit-on_versus_previous": {
+          "complete_pairs": 6,
+          "candidate_faster_mean_pairs": 0,
+          "median_paired_mean_reduction_ms": -3.564251489835442,
+          "median_paired_throughput_ratio": 0.8801380786914574
+        }
+      }
+    }
+  ],
+  "total_attempted": 62964,
+  "total_passed": 62964,
+  "audit_records_verified": 41976,
+  "cleanup_verified": true,
+  "cohort_success": true,
+  "artifacts_unchanged": true,
+  "previous_audited": false,
+  "competitor_win_established": false
+}

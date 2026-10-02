@@ -1,0 +1,13 @@
+import json,statistics
+from pathlib import Path
+root=Path('/mnt/c/Users/adamm/dev/nervosys/os/HyperMachine/docs/benchmarks/2026-10-01')
+text='\n\n## Results and decision\n\nAll 3,328 attempts passed: 1,664 per engine, with 832 per engine/profile. All 12 cohorts exited successfully; image/harness identity, held validation, empty-node teardown and owned CPU worker checks passed. Raw cohort reports are listed with hashes and exits in the [complete matrix](boot-sizing-results-matrix.json). Both concurrency summaries retain all attempts.\n\n| Concurrency | Profile | Engine | Passed/attempted | P50 readiness ms | P99 readiness ms | Median held idle PSS MiB | Median post-cleanup PSS MiB |\n|---:|---|---|---:|---:|---:|---:|---:|\n'
+for c in (8,100):
+ r=json.loads((root/f'boot-sizing-c{c}-summary.json').read_bytes())
+ for p in ('baseline','sized'):
+  for e in ('hypermachine','firecracker'):
+   d=r['profiles'][p][e]
+   cleanup=f"{d['median_post_cleanup_pss_mib']:.2f}" if e=='hypermachine' else '—'
+   text+=f"| {c} | {'Parent' if p=='baseline' else 'Candidate cohort'} | {e} | {d['passed']}/{d['attempts']} | {d['p50_ready_ms']:.2f} | {d['p99_ready_ms']:.2f} | {d['median_held_idle_pss_mib']:.2f} | {cleanup} |\n"
+text+='\nAt [concurrency 8](boot-sizing-c8-summary.json), both paired blocks reduced HyperMachine mean readiness by about 17 ms and held/post-cleanup PSS. At [concurrency 100](boot-sizing-c100-summary.json), the candidate was slower in three of four paired blocks: +1635.69, +1274.75, +1714.75 and −438.04 ms; the median paired change was **+1455.22 ms**. Held PSS changes were +0.04, −6.18, −146.67 and +48.30 MiB; the median paired change was only −3.07 MiB. Post-cleanup changes were +0.62, −7.32, −147.31 and +49.42 MiB. Aggregated median memory differences are not a consistent block-level improvement.\n\nFirecracker readiness also varied between profile cohorts; the cause is not established on this shared host. These results do not isolate a causal performance regression, but they fail the evidence needed to adopt the candidate as an improvement. **The runtime change was reverted.** Exact candidate [Linux source](boot-sizing-linux-optimized.rs), [LoadedBoot source](boot-sizing-loaded-optimized.rs), [allocation test](boot-sizing-allocation-test.rs), and baseline sources are archived. Micro-level allocation savings and passing state checks did not justify the observed high-concurrency tradeoff. Neither profile beats Firecracker across readiness and held memory.\n'
+with (root/'boot-sizing.md').open('a') as f:f.write(text)

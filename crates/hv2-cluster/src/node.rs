@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::model::{now_ms, ClusterEvent, NodeInfo, SandboxRecord};
+use crate::names::NameReservation;
 use crate::store::ClusterStore;
 
 /// How a node joins a cluster.
@@ -35,13 +36,21 @@ pub struct NodeAgent {
     config: NodeConfig,
     /// The templates it offers now: set at start from the config, and
     /// again as templates are built while it runs.
-    templates: Arc<parking_lot::Mutex<Vec<String>>>,
+    templates: Arc<parking_lot::Mutex<TemplateAdvertisement>>,
+}
+
+struct TemplateAdvertisement {
+    names: Vec<String>,
+    metadata: std::collections::BTreeMap<String, crate::model::TemplateInfo>,
 }
 
 impl NodeAgent {
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, config: NodeConfig) -> Self {
-        let templates = Arc::new(parking_lot::Mutex::new(config.templates.clone()));
+        let templates = Arc::new(parking_lot::Mutex::new(TemplateAdvertisement {
+            names: config.templates.clone(),
+            metadata: std::collections::BTreeMap::new(),
+        }));
         Self {
             store,
             config,
@@ -51,7 +60,21 @@ impl NodeAgent {
 
     /// Offer these templates from the next heartbeat on.
     pub fn set_templates(&self, templates: Vec<String>) {
-        *self.templates.lock() = templates;
+        *self.templates.lock() = TemplateAdvertisement {
+            names: templates,
+            metadata: std::collections::BTreeMap::new(),
+        };
+    }
+
+    /// Atomically offer templates with their preparation state and resources.
+    pub fn set_template_metadata(
+        &self,
+        metadata: std::collections::BTreeMap<String, crate::model::TemplateInfo>,
+    ) {
+        *self.templates.lock() = TemplateAdvertisement {
+            names: metadata.keys().cloned().collect(),
+            metadata,
+        };
     }
 
     #[must_use]
@@ -60,6 +83,7 @@ impl NodeAgent {
     }
 
     fn info(&self, running: u32) -> NodeInfo {
+        let templates = self.templates.lock();
         NodeInfo {
             id: self.config.id.clone(),
             api: self.config.api.clone(),
@@ -69,7 +93,8 @@ impl NodeAgent {
             heartbeat_ms: now_ms(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             jwk: self.config.jwk.clone(),
-            templates: self.templates.lock().clone(),
+            templates: templates.names.clone(),
+            template_metadata: templates.metadata.clone(),
         }
     }
 
@@ -151,6 +176,49 @@ impl NodeAgent {
         running: u32,
     ) -> crate::store::Result<ClusterEvent> {
         self.store.put_sandbox(record).await?;
+        self.publish_created(record, running).await
+    }
+
+    /// Check trusted pending ownership before allocating a named VM.
+    ///
+    /// # Errors
+    /// The shared store could not be read.
+    pub async fn name_operation_pending(
+        &self,
+        operation: &NameReservation,
+    ) -> crate::store::Result<bool> {
+        Ok(self
+            .store
+            .name_reservation(operation.name())
+            .await?
+            .is_some_and(|existing| existing.matches_pending_operation(operation)))
+    }
+
+    /// Atomically publish the VM record and bind its creation name before
+    /// announcing it. None is a definitive ownership/record refusal; a store
+    /// error may have committed and must not authorize another creation.
+    ///
+    /// # Errors
+    /// Storage, load announcement or event publication failed.
+    pub async fn created_named(
+        &self,
+        record: &SandboxRecord,
+        running: u32,
+        operation: &NameReservation,
+    ) -> crate::store::Result<Option<ClusterEvent>> {
+        if record.node_id != self.config.id
+            || !self.store.register_named_sandbox(record, operation).await?
+        {
+            return Ok(None);
+        }
+        self.publish_created(record, running).await.map(Some)
+    }
+
+    async fn publish_created(
+        &self,
+        record: &SandboxRecord,
+        running: u32,
+    ) -> crate::store::Result<ClusterEvent> {
         self.announce(running).await?;
         let event = ClusterEvent::new("sandbox-created", &self.config.id, Some(&record.sandbox_id))
             .with_record(record);
@@ -250,6 +318,41 @@ mod tests {
         )
     }
 
+    #[tokio::test]
+    async fn template_metadata_is_published_with_names_and_legacy_updates_clear_it() {
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let node = agent(store.clone());
+        node.set_template_metadata(
+            [(
+                "python".into(),
+                crate::model::TemplateInfo {
+                    snapshot: true,
+                    cpu_count: 2,
+                    memory_mb: 256,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        );
+        node.announce(0).await.unwrap();
+        let published = store.nodes().await.unwrap().remove(0);
+        assert_eq!(published.templates, ["python"]);
+        assert!(published.template_metadata["python"].snapshot);
+        let mut old_wire = serde_json::to_value(&published).unwrap();
+        old_wire
+            .as_object_mut()
+            .unwrap()
+            .remove("template_metadata");
+        let old: NodeInfo = serde_json::from_value(old_wire).unwrap();
+        assert!(old.template_metadata.is_empty());
+        assert!(old.offers("python"));
+        node.set_templates(vec!["base".into()]);
+        node.announce(0).await.unwrap();
+        let changed = store.nodes().await.unwrap().remove(0);
+        assert_eq!(changed.templates, ["base"]);
+        assert!(changed.template_metadata.is_empty());
+    }
+
     /// A node that restarts lost every VM it had; the store must not go on
     /// routing to them.
     #[tokio::test]
@@ -287,5 +390,60 @@ mod tests {
             .map(|e| e.kind)
             .collect();
         assert_eq!(kinds, ["sandbox-expired", "sandbox-created"]);
+    }
+    #[tokio::test]
+    async fn named_completion_binds_before_announcement_and_refuses_unowned_records() {
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let node = agent(store.clone());
+        let name = crate::names::SandboxName::parse("node-completed").unwrap();
+        let owner = crate::names::NameReservation::pending(name.clone());
+        let wrong = crate::names::NameReservation::pending(name.clone());
+        let mut record = sandbox("node-completed-vm", "a");
+        record
+            .metadata
+            .insert("hm.name".into(), name.as_str().into());
+        assert!(!node.name_operation_pending(&owner).await.unwrap());
+        assert!(store.reserve_name(&owner).await.unwrap());
+        assert!(node.name_operation_pending(&owner).await.unwrap());
+        assert!(!node.name_operation_pending(&wrong).await.unwrap());
+        assert!(node
+            .created_named(&record, 1, &wrong)
+            .await
+            .unwrap()
+            .is_none());
+        let mut other = record.clone();
+        other.node_id = "other-node".into();
+        assert!(node
+            .created_named(&other, 1, &owner)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(store.sandbox(&record.sandbox_id).await.unwrap().is_none());
+        assert!(store.events(10).await.unwrap().is_empty());
+        let event = node
+            .created_named(&record, 1, &owner)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(event.kind, "sandbox-created");
+        assert!(!serde_json::to_string(&event)
+            .unwrap()
+            .contains(owner.operation_token()));
+        assert_eq!(
+            store.sandbox(&record.sandbox_id).await.unwrap().as_ref(),
+            Some(&record)
+        );
+        assert_eq!(
+            store
+                .name_reservation(&name)
+                .await
+                .unwrap()
+                .unwrap()
+                .sandbox_id(),
+            Some(record.sandbox_id.as_str())
+        );
+        assert!(!node.name_operation_pending(&owner).await.unwrap());
+        assert_eq!(store.node("a").await.unwrap().unwrap().running, 1);
+        assert_eq!(store.events(10).await.unwrap().len(), 1);
     }
 }

@@ -1,0 +1,17 @@
+{
+  "rejected_reports": 12,
+  "cases": [
+    "wrong_hold",
+    "shortened_hold",
+    "missing_pss",
+    "nan_pss",
+    "negative_pss",
+    "wrong_subtraction",
+    "wrong_empty_baseline",
+    "missing_run",
+    "wrong_budget",
+    "false_success",
+    "wrong_resource",
+    "failed_cleanup"
+  ]
+}

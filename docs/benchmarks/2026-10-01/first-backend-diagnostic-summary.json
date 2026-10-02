@@ -1,0 +1,272 @@
+{
+  "diagnostic_only": true,
+  "passing_attempts": 400,
+  "matched_ids": 200,
+  "guest_samples": 20,
+  "dispatch_ms": {
+    "dispatch_queue_ms": {
+      "n": 200,
+      "mean": 4.403990905,
+      "median": 2.416963,
+      "min": 0.072822,
+      "max": 61.118123000000004
+    },
+    "wrapper_queue_ms": {
+      "n": 200,
+      "mean": 0.006556950000000001,
+      "median": 0.0034415,
+      "min": 0.000792,
+      "max": 0.41016600000000003
+    },
+    "thread_start_ms": {
+      "n": 200,
+      "mean": 11.200733184999999,
+      "median": 4.320873499999999,
+      "min": 0.090364,
+      "max": 363.13069199999995
+    },
+    "owner_setup_ms": {
+      "n": 200,
+      "mean": 1.370693745,
+      "median": 0.086648,
+      "min": 0.026201,
+      "max": 46.39628
+    },
+    "first_backend_ms": {
+      "n": 200,
+      "mean": 3480.503355495,
+      "median": 3328.356104,
+      "min": 1554.624852,
+      "max": 4924.195364
+    }
+  },
+  "elapsed_clocks_compatible_count": 20,
+  "samples": [
+    {
+      "sandbox_id": "sbx-4ac2e20a73f9400e88bb",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.067617225999129,
+      "host_delta_high_seconds": 0.08105179700214649,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0762161260629757,
+      "conditional_guest_epoch_after_native_start_low_ms": 6016.286930000206,
+      "conditional_guest_epoch_after_native_start_high_ms": 6043.30987999856
+    },
+    {
+      "sandbox_id": "sbx-072617abe5574f5eb610",
+      "guest_delta_seconds": 0.0699999999999994,
+      "host_delta_low_seconds": 0.06734005000180332,
+      "host_delta_high_seconds": 0.0805052869982319,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9469355127511763,
+      "conditional_guest_epoch_after_native_start_low_ms": 4822.61347900203,
+      "conditional_guest_epoch_after_native_start_high_ms": 4849.297747998207
+    },
+    {
+      "sandbox_id": "sbx-9e4bd57f0219429da48d",
+      "guest_delta_seconds": 0.07999999999999985,
+      "host_delta_low_seconds": 0.06755481399886776,
+      "host_delta_high_seconds": 0.08059184500234551,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0800108559902748,
+      "conditional_guest_epoch_after_native_start_low_ms": 6828.77614699828,
+      "conditional_guest_epoch_after_native_start_high_ms": 6855.038291996607
+    },
+    {
+      "sandbox_id": "sbx-d8a3eee0aa364d8394db",
+      "guest_delta_seconds": 0.06999999999999984,
+      "host_delta_low_seconds": 0.06701647599766147,
+      "host_delta_high_seconds": 0.08103505399776623,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9456167052398805,
+      "conditional_guest_epoch_after_native_start_low_ms": 5544.387148001988,
+      "conditional_guest_epoch_after_native_start_high_ms": 5571.69622299989
+    },
+    {
+      "sandbox_id": "sbx-3da0936987b743af948b",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.06598821400257293,
+      "host_delta_high_seconds": 0.07972150899877306,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0980735993748485,
+      "conditional_guest_epoch_after_native_start_low_ms": 5990.865411004052,
+      "conditional_guest_epoch_after_native_start_high_ms": 6018.599278999318
+    },
+    {
+      "sandbox_id": "sbx-d585d8bb062f4acd8400",
+      "guest_delta_seconds": 0.06999999999999984,
+      "host_delta_low_seconds": 0.06413781800074503,
+      "host_delta_high_seconds": 0.07857782300197869,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9809716651682754,
+      "conditional_guest_epoch_after_native_start_low_ms": 5057.822241000395,
+      "conditional_guest_epoch_after_native_start_high_ms": 5085.666662998847
+    },
+    {
+      "sandbox_id": "sbx-c460bf0bc7a5469b8f6a",
+      "guest_delta_seconds": 0.06000000000000005,
+      "host_delta_low_seconds": 0.06274825100263115,
+      "host_delta_high_seconds": 0.07616557200162788,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.8638449176963545,
+      "conditional_guest_epoch_after_native_start_low_ms": 6484.941213999264,
+      "conditional_guest_epoch_after_native_start_high_ms": 6512.9216849964
+    },
+    {
+      "sandbox_id": "sbx-3d55e76beef446f99171",
+      "guest_delta_seconds": 0.07000000000000028,
+      "host_delta_low_seconds": 0.06019363800078281,
+      "host_delta_high_seconds": 0.07464355800038902,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0382891676179906,
+      "conditional_guest_epoch_after_native_start_low_ms": 5578.481105003448,
+      "conditional_guest_epoch_after_native_start_high_ms": 5606.467647998215
+    },
+    {
+      "sandbox_id": "sbx-30d8e29b613d4ea19727",
+      "guest_delta_seconds": 0.06000000000000005,
+      "host_delta_low_seconds": 0.058991739999328274,
+      "host_delta_high_seconds": 0.07312855100099114,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9082632129512188,
+      "conditional_guest_epoch_after_native_start_low_ms": 5226.219980002497,
+      "conditional_guest_epoch_after_native_start_high_ms": 5253.879823998432
+    },
+    {
+      "sandbox_id": "sbx-1b7aec12f4904a42a2d3",
+      "guest_delta_seconds": 0.06000000000000005,
+      "host_delta_low_seconds": 0.05736611500105937,
+      "host_delta_high_seconds": 0.07177729300019564,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9291995763255214,
+      "conditional_guest_epoch_after_native_start_low_ms": 5911.575515001459,
+      "conditional_guest_epoch_after_native_start_high_ms": 5939.671794996684
+    },
+    {
+      "sandbox_id": "sbx-005f3a90a0c943e2b49b",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.06936145100189606,
+      "host_delta_high_seconds": 0.08533134999743197,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0343079895534064,
+      "conditional_guest_epoch_after_native_start_low_ms": 1773.1010700008483,
+      "conditional_guest_epoch_after_native_start_high_ms": 1801.1362089964678
+    },
+    {
+      "sandbox_id": "sbx-73f76a8d3ec34500a5e4",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.07075579699812806,
+      "host_delta_high_seconds": 0.0847462550009368,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0289253289143885,
+      "conditional_guest_epoch_after_native_start_low_ms": 4860.215718003019,
+      "conditional_guest_epoch_after_native_start_high_ms": 4886.7509720003
+    },
+    {
+      "sandbox_id": "sbx-cb51785c7a6a4dfcab67",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.071321129998978,
+      "host_delta_high_seconds": 0.08558711200021207,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0197042421826765,
+      "conditional_guest_epoch_after_native_start_low_ms": 5855.962851997901,
+      "conditional_guest_epoch_after_native_start_high_ms": 5882.847783996112
+    },
+    {
+      "sandbox_id": "sbx-9859d97874ed4c168ee6",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.071562883000297,
+      "host_delta_high_seconds": 0.08586392500001239,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0163453228352677,
+      "conditional_guest_epoch_after_native_start_low_ms": 5430.164488003356,
+      "conditional_guest_epoch_after_native_start_high_ms": 5457.298523997451
+    },
+    {
+      "sandbox_id": "sbx-c09d27a812aa4008a10a",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.07211288200051058,
+      "host_delta_high_seconds": 0.08558613999775844,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0145909465548644,
+      "conditional_guest_epoch_after_native_start_low_ms": 3498.5049390015774,
+      "conditional_guest_epoch_after_native_start_high_ms": 3525.1175569974293
+    },
+    {
+      "sandbox_id": "sbx-6187aece1c9948dda54e",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.0707222470009583,
+      "host_delta_high_seconds": 0.0857675229999586,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0224310509182974,
+      "conditional_guest_epoch_after_native_start_low_ms": 5934.239648002404,
+      "conditional_guest_epoch_after_native_start_high_ms": 5962.484700998175
+    },
+    {
+      "sandbox_id": "sbx-0047e62030b842febda5",
+      "guest_delta_seconds": 0.08000000000000007,
+      "host_delta_low_seconds": 0.06922273699819925,
+      "host_delta_high_seconds": 0.08321111500117695,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.0496356150643946,
+      "conditional_guest_epoch_after_native_start_low_ms": 5843.837683001766,
+      "conditional_guest_epoch_after_native_start_high_ms": 5872.132445998432
+    },
+    {
+      "sandbox_id": "sbx-4c6eeee2fd434f9a907c",
+      "guest_delta_seconds": 0.07000000000000028,
+      "host_delta_low_seconds": 0.06669378399965353,
+      "host_delta_high_seconds": 0.08146910900177318,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9449059556271789,
+      "conditional_guest_epoch_after_native_start_low_ms": 4870.288381000137,
+      "conditional_guest_epoch_after_native_start_high_ms": 4898.503574997449
+    },
+    {
+      "sandbox_id": "sbx-1d4ada994fd147358ed3",
+      "guest_delta_seconds": 0.0699999999999994,
+      "host_delta_low_seconds": 0.06446391499775928,
+      "host_delta_high_seconds": 0.07861370799946599,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 0.9784898369657277,
+      "conditional_guest_epoch_after_native_start_low_ms": 3548.0511100031435,
+      "conditional_guest_epoch_after_native_start_high_ms": 3576.8354589999944
+    },
+    {
+      "sandbox_id": "sbx-a253cac83f1f4ed5a241",
+      "guest_delta_seconds": 0.0699999999999994,
+      "host_delta_low_seconds": 0.06123724899953231,
+      "host_delta_high_seconds": 0.07636012299917638,
+      "elapsed_clocks_compatible": true,
+      "guest_host_midpoint_ratio": 1.017461292802254,
+      "conditional_guest_epoch_after_native_start_low_ms": 2076.9632940027805,
+      "conditional_guest_epoch_after_native_start_high_ms": 2105.549232001067
+    }
+  ],
+  "measurements": {
+    "guest_host_midpoint_ratio": {
+      "n": 20,
+      "mean": 0.9997109460298487,
+      "median": 1.0169033078187608,
+      "min": 0.8638449176963545,
+      "max": 1.0980735993748485
+    },
+    "conditional_guest_epoch_after_native_start_low_ms": {
+      "n": 20,
+      "mean": 5057.6649176515275,
+      "median": 5487.275818002672,
+      "min": 1773.1010700008483,
+      "max": 6828.77614699828
+    },
+    "conditional_guest_epoch_after_native_start_high_ms": {
+      "n": 20,
+      "mean": 5085.260274798202,
+      "median": 5514.497373498671,
+      "min": 1801.1362089964678,
+      "max": 6855.038291996607
+    }
+  },
+  "raw_sha256": "b73d4555923c9cc63bb567b67d6d317ca3f586d35d02a99f6adf948a309e35e2",
+  "analysis_sha256": "0e3d5246c359ab3ada6c387388fe26a208c42dbd43863ddf5f929cb3fdc5caaa",
+  "limitation": "Two uptime observations test only their interval, not earlier boot-time clock stability. Guest clock epoch is not VM entry. Conditional epoch bounds cannot establish dispatch delay or transport root cause. Shared host, sampling and post-readiness commands remain diagnostic limitations."
+}

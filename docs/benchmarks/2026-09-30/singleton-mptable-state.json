@@ -1,0 +1,36 @@
+{
+  "artifact_sha256": {
+    "daemon": "8ea52a369067d99f281b96bc513c59216304ac8e7eea0462d746f854e9d7aa5d",
+    "kernel": "0e1962a290ad92bff749d3b736001c2f22782fcbcaf716ecff0db6543631adc2",
+    "initrd": "1fcc60fa58a9826b0e299c76dfc1e51aae0ce524b540efb7d51144c0d3510c9c",
+    "probe": "a62a52513c97c77831a34c2060df0ae7cb164977990847fdc037259b569d4284",
+    "request_harness": "6cc4b9a964e7d5cf623d0bc308d5f369cc2751f3c7085d71b04f13cf1f69d433"
+  },
+  "diagnostic_only": true,
+  "success": true,
+  "error": null,
+  "checks": [
+    "checkpoint restores prior guest state",
+    "pause/resume retains guest state and command readiness",
+    "two forked guests retain state and answer commands"
+  ],
+  "cleanup_errors": [],
+  "template": {
+    "aliases": [
+      "base"
+    ],
+    "buildID": "base",
+    "buildStatus": "ready",
+    "cpuCount": 1,
+    "envdVersion": "0.6.3",
+    "memoryMB": 1024,
+    "public": false,
+    "snapshot": true,
+    "templateID": "base"
+  },
+  "kernel_topology": "[    0.000442] found SMP MP-table at [mem 0x0009fc00-0x0009fc0f]\n[    0.040543] MPTABLE: OEM ID: HV2     \n[    0.040544] MPTABLE: Product ID: HYPERMACHINE\n[    0.040544] MPTABLE: APIC at: 0xFEE00000\n[    0.040622] IOAPIC[0]: apic_id 1, version 17, address 0xfec00000, GSI 0-23\n[    0.040624] Processors: 1\n",
+  "interrupts_before": "           CPU0       \n  1:          0   IO-APIC   1-edge      i8042\n  2:          0    XT-PIC      cascade\n  4:         41   IO-APIC   4-edge      ttyS0\n  5:         35   IO-APIC   5-edge      virtio0\n  8:          0   IO-APIC   8-edge      rtc0\nNMI:          0   Non-maskable interrupts\nLOC:        187   Local timer interrupts\nSPU:          0   Spurious interrupts\nPMI:          0   Performance monitoring interrupts\nIWI:          0   IRQ work interrupts\nRTR:          0   APIC ICR read retries\nRES:          0   Rescheduling interrupts\nCAL:          0   Function call interrupts\nTLB:          0   TLB shootdowns\nTRM:          0   Thermal event interrupts\nTHR:          0   Threshold APIC interrupts\nDFR:          0   Deferred Error APIC interrupts\nMCE:          0   Machine check exceptions\nMCP:          1   Machine check polls\nHYP:          2   Hypervisor callback interrupts\nERR:          0\nMIS:          0\nPIN:          0   Posted-interrupt notification event\nNPI:          0   Nested posted-interrupt event\nPIW:          0   Posted-interrupt wakeup event\n",
+  "interrupts_after": "           CPU0       \n  1:          0   IO-APIC   1-edge      i8042\n  2:          0    XT-PIC      cascade\n  4:         41   IO-APIC   4-edge      ttyS0\n  5:         78   IO-APIC   5-edge      virtio0\n  8:          0   IO-APIC   8-edge      rtc0\nNMI:          0   Non-maskable interrupts\nLOC:        248   Local timer interrupts\nSPU:          0   Spurious interrupts\nPMI:          0   Performance monitoring interrupts\nIWI:          0   IRQ work interrupts\nRTR:          0   APIC ICR read retries\nRES:          0   Rescheduling interrupts\nCAL:          0   Function call interrupts\nTLB:          0   TLB shootdowns\nTRM:          0   Thermal event interrupts\nTHR:          0   Threshold APIC interrupts\nDFR:          0   Deferred Error APIC interrupts\nMCE:          0   Machine check exceptions\nMCP:          1   Machine check polls\nHYP:          4   Hypervisor callback interrupts\nERR:          0\nMIS:          0\nPIN:          0   Posted-interrupt notification event\nNPI:          0   Nested posted-interrupt event\nPIW:          0   Posted-interrupt wakeup event\n",
+  "node_log_tail": "hv2-sandboxd: listening on 0.0.0.0:34527, capacity 8\n  POST   /sandboxes                -- E2B-shaped (NewSandbox -> Sandbox), boots a real VM and its own process.Process gRPC listener (port in the response's processPort)\n  POST   /sandboxes/{id}/exec     -- NOT E2B's envd protocol; a real exec_in_guest (simpler than grpcurl-ing processPort)\n  POST   /sandboxes/{id}/connect  -- attach to an existing sandbox; what the E2B SDK's Sandbox.connect() calls\n  DELETE /sandboxes/{id}          -- stop the VM and its process.Process listener\n  PUT    /sandboxes/{id}/network  -- replace a running sandbox's egress rules\n  POST   /sandboxes/{id}/pause    -- suspend to disk; connect or resume brings it back,          and with autoResume so does a request through the proxy\n  POST   /sandboxes/{id}/fork     -- checkpoint in place, start `count` copies\n  GET    /sandboxes/{id}/network/decisions -- NOT E2B's; the gateway's audit log\nsandboxes get no network interface (--network to change that)\nsandboxes are restored from template snapshots: base\n\nsandbox proxy on 0.0.0.0:52843 -- HTTP/2, routed by the authority a client asks for, as 49983-<sandboxID>.<anything>\n  grpcurl -plaintext -authority 49983-$SBX.local -H \"X-Access-Token: $TOKEN\" -import-path crates/hv2-api/proto -proto process.proto \\\n      -d '{\"process\":{\"cmd\":\"/bin/sh\",\"args\":[\"-c\",\"echo hi\"]}}' \\\n      localhost:52843 process.Process/Start\n",
+  "artifacts_unchanged": true
+}
