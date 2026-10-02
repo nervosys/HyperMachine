@@ -109,6 +109,24 @@ authenticated encryption detects corruption but does not prove that the bucket
 returned the particular historical backup the operator intended. A checksum
 obtained from that same bucket at restore time does not establish independence.
 
+For a versioned bucket, the upload receipt includes `version_id` when S3 returns
+one, for both single and multipart uploads. Retain it alongside the checksum.
+Add `--version-id RECEIPT_VERSION_ID` to restore a specific historical object,
+including when the current key is a delete marker or refers to a newer backup.
+The helper checks the response version before reading the ciphertext and still
+checks the independently supplied `--sha256` before decrypting. AWS requires
+`s3:GetObjectVersion` for this operation; see [GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html).
+Without `--version-id`, restore reads the current object and reports
+`version_pinned: false`. A lost upload acknowledgement may leave an attempt
+receipt without a version ID; inspect the bucket's versions and verify bytes
+against its checksum rather than inventing an identifier. Versioning remains
+operator-configured. A `null` version in an unversioned or suspended bucket is
+mutable, and retained versions can be deleted or expired by policy; a version ID
+does not establish retention or durability.
+[Version-pinned recovery evidence](benchmarks/2026-10-02/version-backup/README.md)
+covers delete markers, key reuse, single/multipart versions, response mismatch,
+deleted-version refusal and real KVM guest recovery at a new store path.
+
 Restore downloads into private temporary storage, verifies the supplied receipt,
 and authenticates the complete ciphertext before parsing it. It validates the
 manifest, file catalog, hashes, sizes and relative names; refuses links, duplicate,

@@ -345,16 +345,27 @@ def client(endpoint, region):
                       connect_timeout=10, read_timeout=60, retries={"total_max_attempts": 1}))
 
 
+def object_version(value):
+    require(isinstance(value, str) and 0 < len(value.encode()) <= 4096
+            and not any(ord(character) < 32 or ord(character) == 127 for character in value), "invalid S3 object version ID")
+    return value
+
+
+def record_version(result, receipt):
+    if "VersionId" in result: receipt["version_id"] = object_version(result["VersionId"])
+
+
 def upload_ciphertext(s3, stream, bucket, object_key, receipt, threshold, part_size):
     size = receipt["encrypted_bytes"]
     receipt["upload_method"] = "multipart" if size >= threshold or size > MAX_SINGLE_PUT else "single"
     receipt["parts"] = 0
     if receipt["upload_method"] == "single":
         try:
-            s3.put_object(Bucket=bucket, Key=object_key, Body=stream, ContentLength=size,
+            result = s3.put_object(Bucket=bucket, Key=object_key, Body=stream, ContentLength=size,
                           ContentType="application/octet-stream", IfNoneMatch="*",
                           ChecksumSHA256=base64.b64encode(bytes.fromhex(receipt["sha256"])).decode())
             receipt["parts"] = 1
+            record_version(result, receipt)
             return
         except BaseException as error:
             raise UploadUncertain(receipt, interrupted=isinstance(error, KeyboardInterrupt)) from None
@@ -383,6 +394,7 @@ def upload_ciphertext(s3, stream, bucket, object_key, receipt, threshold, part_s
         receipt["composite_sha256"] = checksum
         result = s3.complete_multipart_upload(Bucket=bucket, Key=object_key, UploadId=upload_id,
             MultipartUpload={"Parts": parts}, ChecksumType="COMPOSITE", IfNoneMatch="*")
+        record_version(result, receipt)
         if "ChecksumSHA256" in result:
             require(result["ChecksumSHA256"] == checksum, "completed multipart checksum mismatch")
     except BaseException as error:
@@ -431,10 +443,14 @@ def restore(args):
     with tempfile.TemporaryDirectory(prefix="hm-restore-", dir=args.work_dir) as scratch:
         scratch = Path(scratch)
         encrypted, bundle = scratch / "bundle.hmb", scratch / "bundle.tar.gz"
-        response = s3.get_object(Bucket=args.bucket, Key=args.object)
-        length = response["ContentLength"]
-        require(type(length) is int and 36 <= length <= MAX_OBJECT, "S3 object exceeds backup limit")
+        request = {"Bucket": args.bucket, "Key": args.object}
+        if args.version_id is not None: request["VersionId"] = object_version(args.version_id)
+        response = s3.get_object(**request)
         with response["Body"] as body, encrypted.open("xb") as dst:
+            if args.version_id is not None:
+                require(response.get("VersionId") == args.version_id, "S3 returned a different object version")
+            length = response["ContentLength"]
+            require(type(length) is int and 36 <= length <= MAX_OBJECT, "S3 object exceeds backup limit")
             count = 0
             while block := body.read(CHUNK):
                 count += len(block); require(count <= length, "S3 body exceeds declared length"); dst.write(block)
@@ -455,8 +471,11 @@ def restore(args):
                 try: os.fsync(fd)
                 finally: os.close(fd)
             publish(staging, destination)
-        return {"operation": "restore", "object": args.object, "files": len(manifest["files"]),
-                "expanded_bytes": manifest["expanded_bytes"], "memory_bases_relocated": True, "receipt_checksum_verified": args.sha256 is not None}
+        receipt = {"operation": "restore", "object": args.object, "files": len(manifest["files"]),
+                   "expanded_bytes": manifest["expanded_bytes"], "memory_bases_relocated": True,
+                   "receipt_checksum_verified": args.sha256 is not None, "version_pinned": args.version_id is not None}
+        record_version(response, receipt)
+        return receipt
 
 
 def main():
@@ -477,6 +496,7 @@ def main():
             command.add_argument("--multipart-threshold-mib", type=int, default=64, help="multipart upload threshold, 1 to 4096 MiB")
             command.add_argument("--multipart-part-mib", type=int, default=64, help="encrypted part buffer, 8 to 128 MiB")
         if name == "restore":
+            command.add_argument("--version-id", help="restore the exact S3 object version recorded in the receipt")
             command.add_argument("--sha256", help="independently retained receipt checksum; detects substitution of another valid backup")
     args = parser.parse_args()
     require(sys.platform == "linux", "offline backup v1 requires Linux file locks and renameat2")

@@ -1,0 +1,88 @@
+{
+  "success": false,
+  "performance_comparison": false,
+  "storage": "owned Moto S3 HTTP emulator",
+  "tool_sha256": "8055959543b75b4bef2f4f86df3b7122181f112c682b860aef4d69cff830cea8",
+  "coordinator_sha256": "0a2e73e90ec2c10fe657796a141ef3c36f48f26b410efc54bb90d59ec013dd98",
+  "checks": [
+    {
+      "name": "multipart-roundtrip-composite-and-no-overwrite",
+      "receipt": {
+        "operation": "backup",
+        "object": "success.hmb",
+        "encrypted_bytes": 20978505,
+        "sha256": "6022bd4d5d12c4abf7fa12ddcea8b12bd3bf0e378054fb61fc86607edb67a88a",
+        "files": 1,
+        "expanded_bytes": 20971520,
+        "compression_level": 1,
+        "upload_method": "multipart",
+        "parts": 3,
+        "composite_sha256": "Sla7NTxKHx9TzInxJUJm5eiFq9k+3JdEFhFDekQQ950=-3",
+        "version_id": "null",
+        "success": true
+      },
+      "passed": true
+    },
+    {
+      "name": "part-failure-preserves-other-upload",
+      "passed": true
+    },
+    {
+      "name": "part-checksum-mismatch",
+      "passed": true,
+      "cleanup_status": "aborted",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "abort-failure",
+      "passed": true,
+      "cleanup_status": "abort_failed",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "create-response-loss",
+      "passed": true,
+      "cleanup_status": "upload_id_unavailable",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "interrupt",
+      "passed": true,
+      "cleanup_status": "aborted",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "complete-response-loss",
+      "passed": true,
+      "cleanup_status": "already_completed_or_absent",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "complete-checksum-mismatch",
+      "passed": true,
+      "cleanup_status": "already_completed_or_absent",
+      "injection": "owned client adapter around real emulator operations"
+    },
+    {
+      "name": "configuration-and-format-limits",
+      "passed": true
+    }
+  ],
+  "cleanup_errors": [],
+  "versions": {
+    "boto3": "1.43.107",
+    "botocore": "1.43.107",
+    "moto": "5.2.3",
+    "cryptography": "50.0.0"
+  },
+  "checksum_observation": {
+    "head_sha256": "Sla7NTxKHx9TzInxJUJm5eiFq9k+3JdEFhFDekQQ950=",
+    "receipt_composite": "Sla7NTxKHx9TzInxJUJm5eiFq9k+3JdEFhFDekQQ950=-3"
+  },
+  "emulator_limitations": [
+    "HeadObject composite SHA256 omits AWS part-count suffix; no AWS durability or IAM verification"
+  ],
+  "error": "wrong-version response was not refused/closed",
+  "emulator_exit_code": 0,
+  "artifacts_unchanged": true
+}
