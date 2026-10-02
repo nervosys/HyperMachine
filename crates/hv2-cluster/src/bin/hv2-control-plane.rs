@@ -255,6 +255,37 @@ async fn main() -> std::process::ExitCode {
             }
         },
     };
+    #[cfg(unix)]
+    if let Some(path) = opts.api_keys_file.clone() {
+        let mut reload = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+        {
+            Ok(signal) => signal,
+            Err(error) => {
+                eprintln!("hv2-control-plane: policy reload signal: {error}");
+                return std::process::ExitCode::FAILURE;
+            }
+        };
+        let policy_control = Arc::clone(&control);
+        tokio::spawn(async move {
+            while reload.recv().await.is_some() {
+                let path = path.clone();
+                let control = Arc::clone(&policy_control);
+                let result = tokio::task::spawn_blocking(move || {
+                    let json = std::fs::read_to_string(path)
+                        .map_err(|_| "could not read API key policy file".to_owned())?;
+                    control.replace_api_key_policies(&json)
+                })
+                .await;
+                match result {
+                    Ok(Ok(())) => eprintln!("hv2-control-plane: API key policies reloaded"),
+                    Ok(Err(error)) => {
+                        eprintln!("hv2-control-plane: API key reload rejected: {error}");
+                    }
+                    Err(_) => eprintln!("hv2-control-plane: API key reload task failed"),
+                }
+            }
+        });
+    }
     tokio::spawn(control::reaper(Arc::clone(&control), opts.reap_interval));
     let addr = format!("0.0.0.0:{}", opts.port);
     let listener = match tokio::net::TcpListener::bind(&addr).await {

@@ -32,7 +32,7 @@ container. The comparison is about what surrounds the VM.
 | Egress policy per VM | egress allowlist documented; enforcement details not checked | no | **Real**: allow/deny lists, live updates, decision log, reserved ranges refused |
 | VM-to-VM networks by tag | yes | via proxy | **Absent** |
 | Teams, roles, sharing | yes | yes, with SSO | **Absent**: one team |
-| Scoped, expiring API keys | yes | yes | **Real on the control plane**: hashed operator-provisioned keys, request-time expiry and capability scopes; single team, startup-loaded policies |
+| Scoped, expiring API keys | yes | yes | **Real on the control plane**: hashed operator-provisioned keys, request-time expiry and capability scopes; single team; [atomic policy replacement](API_KEY_ROTATION.md) is HTTP-tested, while Unix signal reload awaits process-level validation |
 | Persistent volumes shared between VMs | no | no | **Real**: E2B volumes over 9P, live and shared (Linux hosts) |
 | Build images from Dockerfiles or OCI | compose | Dockerfile | **Real**: E2B template builds, no Docker |
 | Backups to object storage | yes | no | **Absent** |

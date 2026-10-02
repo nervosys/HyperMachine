@@ -1,0 +1,11 @@
+# Rotate scoped control-plane keys
+
+On Unix, a control plane started with `--api-keys-file PATH` reloads that same file when its process receives `SIGHUP`. Write a complete replacement JSON array to a temporary file, atomically replace the configured file, then send `kill -HUP PID` to the control-plane process you operate. Observe its `API key policies reloaded` message. Check the new credential and verify the revoked credential is refused through the API. Signal every control-plane replica; replacements are local to each process.
+
+The full replacement is parsed and validated before it becomes active. Invalid JSON, empty arrays, duplicate credentials, invalid scopes and collisions with the legacy admin credential are rejected; active policies remain unchanged. A read or task error also preserves active policies. Error messages omit credential values and policy contents. Expiry remains checked on every request. Existing authorized requests and open streams continue; revocation applies to subsequent authorization decisions.
+
+This replaces only scoped policies. The legacy `HV2_API_KEY` admin credential remains unchanged and requires restarting the process to rotate. An empty policy list is refused, so a reload cannot accidentally open an unauthenticated API. To revoke all scoped credentials, replace them with a valid policy whose expiry has already passed. Newly created policy files and their replacement must remain readable by the service account.
+
+On other platforms, signal reload is unavailable; restart the binary with the replacement file. Embedded users can call `ControlPlane::replace_api_key_policies` to apply the same validated atomic replacement. Unix signal handling is installed only when `--api-keys-file` is configured; do not send SIGHUP to an instance without that option.
+
+A real HTTP integration test checks old-key revocation, replacement-key access, unchanged admin access, scope enforcement and rejected updates preserving active policies. Process-level SIGHUP validation remains outstanding. The feature provides operator rotation within the existing single team; it does not add tenant roles, central policy distribution or interruption of already-authorized work.
