@@ -34,6 +34,7 @@ use serde_json::{json, Value};
 use crate::domains::{DomainBinding, DomainName};
 use crate::metrics::{self, Counter, Exposition, Histogram};
 use crate::model::{metadata_matches, parse_metadata_query, ClusterEvent, NodeInfo, SandboxRecord};
+use crate::names::{NameReservation, SandboxName};
 use crate::scheduler::candidates;
 use crate::store::{ClusterStore, DomainClaim};
 
@@ -639,6 +640,63 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
         );
     }
 
+    // Ownership must exist before a named request can reach a node. A lost
+    // response cannot establish that no VM was created, so pending ownership
+    // is deliberately retained without a TTL or automatic cross-node retry.
+    let name = match serde_json::from_slice::<Value>(&body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("metadata")
+                .and_then(|metadata| metadata.get("hm.name"))
+                .cloned()
+        }) {
+        None => None,
+        Some(Value::String(value)) => match SandboxName::parse(&value) {
+            Ok(name) => Some(name),
+            Err(error) => return api_error(StatusCode::BAD_REQUEST, error),
+        },
+        Some(_) => return api_error(StatusCode::BAD_REQUEST, "hm.name must be a string"),
+    };
+    let reservation = if let Some(name) = name {
+        // This refuses observed legacy conflicts. An atomic migration gate is
+        // still required to exclude direct-node and older-control-plane races.
+        match control.store.sandboxes().await {
+            Ok(records)
+                if records.iter().any(|record| {
+                    record
+                        .metadata
+                        .get("hm.name")
+                        .is_some_and(|value| value == name.as_str())
+                }) =>
+            {
+                return api_error(
+                    StatusCode::CONFLICT,
+                    "name conflicts with legacy sandbox metadata",
+                )
+            }
+            Ok(_) => {}
+            Err(_) => {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name inventory unavailable",
+                )
+            }
+        }
+        let reservation = NameReservation::pending(name);
+        match control.store.reserve_name(&reservation).await {
+            Ok(true) => Some(reservation),
+            Ok(false) => return api_error(StatusCode::CONFLICT, "name is already reserved"),
+            Err(_) => {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "name reservation unavailable",
+                )
+            }
+        }
+    } else {
+        None
+    };
     let mut refusals = Vec::new();
     for node in order {
         let mut request = control
@@ -653,6 +711,12 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
         let response = match request.send().await {
             Ok(response) => response,
             Err(e) => {
+                if reservation.is_some() {
+                    return api_error(
+                        StatusCode::BAD_GATEWAY,
+                        "named creation outcome requires reconciliation",
+                    );
+                }
                 refusals.push(format!("{}: {e}", node.id));
                 continue;
             }
@@ -664,6 +728,12 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
         if status == reqwest::StatusCode::SERVICE_UNAVAILABLE
             || status == reqwest::StatusCode::TOO_MANY_REQUESTS
         {
+            if reservation.is_some() {
+                return api_error(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "named creation outcome requires reconciliation",
+                );
+            }
             refusals.push(format!("{}: {status}", node.id));
             continue;
         }
@@ -681,6 +751,53 @@ async fn create_inner(control: &ControlPlane, path: &str, body: Bytes) -> Respon
             Ok(v) => v,
             Err(e) => return api_error(StatusCode::BAD_GATEWAY, format!("{}: {e}", node.id)),
         };
+        if let Some(reservation) = &reservation {
+            let Some(id) = descriptor.get("sandboxID").and_then(Value::as_str) else {
+                return api_error(
+                    StatusCode::BAD_GATEWAY,
+                    "named creation returned an invalid descriptor",
+                );
+            };
+            match control.store.sandbox(id).await {
+                Ok(Some(record))
+                    if record.node_id == node.id
+                        && record
+                            .metadata
+                            .get("hm.name")
+                            .is_some_and(|value| value == reservation.name().as_str()) => {}
+                Ok(_) => {
+                    return api_error(
+                        StatusCode::BAD_GATEWAY,
+                        "named creation record does not match its response",
+                    )
+                }
+                Err(_) => {
+                    return api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "named creation record unavailable",
+                    )
+                }
+            }
+            match control
+                .store
+                .bind_name(reservation.name(), reservation.operation_token(), id)
+                .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    return api_error(
+                        StatusCode::CONFLICT,
+                        "named creation outcome requires reconciliation",
+                    )
+                }
+                Err(_) => {
+                    return api_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "named creation outcome requires reconciliation",
+                    )
+                }
+            }
+        }
         rewrite_descriptor(control, &mut descriptor, &node.id);
         return (StatusCode::CREATED, Json(descriptor)).into_response();
     }
