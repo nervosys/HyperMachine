@@ -49,3 +49,5 @@ docs/benchmarks/2026-10-01/scheduled-worker-core-source.patch -text whitespace=c
 docs/benchmarks/2026-10-01/scheduled-worker-coordinator.py -text
 
 docs/benchmarks/2026-10-01/dispatch-history-selection.patch -text whitespace=cr-at-eol,-blank-at-eol
+
+docs/benchmarks/2026-10-01/dispatch-backlog-*.patch -text whitespace=cr-at-eol,-blank-at-eol

@@ -58,7 +58,10 @@ impl Store {
         }
         let mut cursor = None;
         loop {
-            let records = self.committed_interval_occurrences(id, cursor, 1024)?;
+            // Most active schedules can decide from the first record.
+            // Use full pages only after finding completed history.
+            let limit = if cursor.is_none() { 1 } else { 1024 };
+            let records = self.committed_interval_occurrences(id, cursor, limit)?;
             if records.is_empty() {
                 return Ok(None);
             }
