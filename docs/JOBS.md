@@ -423,9 +423,19 @@ Publication writes and syncs a temporary file before creating an exclusive hard
 link to its final name. Competing publishers cannot replace the winner or expose
 partial JSON. A crash before publication can leave an unreferenced temporary
 file. Filesystems without hard-link support return an error; there is no weaker
-fallback. Directory durability across power loss is not established. Schedule
-updates, calendar performance, timezone-rule migration, dispatch reconciliation and guest-job cancellation
-and guest execution remain to be implemented.
+fallback. On Unix, publication syncs the store directory after creating the
+record subdirectory, then syncs the record directory after linking the final
+name, before acknowledging success. Replaying an existing name also syncs that
+directory before accepting a matching record. Sync errors are returned even
+when the final name may already exist; retry the immutable operation to reconcile
+it. Temporary-file removal is best effort and may leave ignored files after a
+crash. These calls establish an ordering protocol, not a verified power-loss
+guarantee: use a pre-existing persistent store root on a filesystem that honors
+file and directory sync. Durability of newly created root ancestors, Windows
+directory entries, network filesystems and physical power-loss recovery remains
+unverified. Schedule updates, timezone-rule migration, dispatch reconciliation
+and guest-job cancellation remain incomplete. Local calendar publication timings
+and VM execution verification are linked below.
 
 The implementation must cover these requirements together:
 
@@ -577,3 +587,5 @@ Calendar catch-up now enumerates non-UTC civil days once per bounded batch. [Mat
 [Durable calendar publication measurements](benchmarks/2026-10-01/calendar-publication.md) include occurrence file syncs and progress commits. Reusing the immutable schedule removes repeated per-record timezone searches while preserving individual timestamp validation and existing-record equality checks.
 
 The publication optimization also passed [real KVM worker validation](benchmarks/2026-10-01/calendar-publication-kvm.md): bounded historical catch-up, ordered fold dispatch after restart, replay refusal and cancellation, with complete fixture cleanup. This establishes functional behavior, not a guest execution throughput score.
+
+The [directory-sync cost diagnostic](benchmarks/2026-10-01/calendar-sync.md) records matched local publication timings after adding Unix directory flushes. It verifies exact timestamp equality and reopened committed history, without claiming physical power-loss recovery.

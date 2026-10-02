@@ -576,6 +576,8 @@ impl Store {
     ) -> Result<()> {
         let dir = self.root().join(directory);
         std::fs::create_dir_all(&dir)?;
+        // Persist the schedule subdirectory before acknowledging records in it.
+        sync_schedule_directory(self.root())?;
         let temp = dir.join(format!(".{}.tmp", uuid::Uuid::new_v4()));
         let result = (|| {
             let mut file = std::fs::OpenOptions::new()
@@ -586,7 +588,13 @@ impl Store {
             file.write_all(&bytes)?;
             file.sync_all()?;
             drop(file);
-            match std::fs::hard_link(&temp, dir.join(key)) {
+            let published = std::fs::hard_link(&temp, dir.join(key));
+            if published.is_ok() || published.as_ref().is_err_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists) {
+                // Also flush on replay: a previous publisher may have linked
+                // the file but failed or exited before syncing the directory.
+                sync_schedule_directory(&dir)?;
+            }
+            match published {
                 Ok(()) => Ok(()),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(JobError::Conflict(
                     format!("{directory}/{key} already exists"),
@@ -597,6 +605,16 @@ impl Store {
         let _ = std::fs::remove_file(temp);
         result
     }
+}
+
+// Rust exposes directory handles suitable for fsync on Unix. Other platforms
+// retain the existing file-sync contract; no directory durability is claimed.
+fn sync_schedule_directory(path: &std::path::Path) -> Result<()> {
+    #[cfg(unix)]
+    std::fs::File::open(path)?.sync_all()?;
+    #[cfg(not(unix))]
+    let _ = path;
+    Ok(())
 }
 
 #[cfg(test)]
