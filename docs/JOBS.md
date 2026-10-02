@@ -518,10 +518,21 @@ lower bound. Expression length is limited to 256 bytes.
 
 Names, aliases such as `@daily`, seconds/year fields, weekday 7, `?`, reversed
 ranges, empty list items, zero steps and steps on bare numbers are rejected.
-Tests cover exact selector sets, field boundaries and malformed input. This is
-a parser foundation only: it does not yet select calendar timestamps, resolve
-timezones/DST, validate whether dates can occur, persist cron schedules, or
-publish/dispatch them. The CLI and API still accept interval schedules only.
-Calendar day matching, next-occurrence search, durable progress compatibility,
+Tests cover exact selector sets, field boundaries and malformed input. The library also provides `at_or_after_utc`, selecting the first matching whole
+UTC minute at or after nonnegative Unix milliseconds. It rounds partial minutes
+up, uses checked timestamp conversion, and scans at most one Gregorian 400-year
+cycle plus its boundary day. Impossible calendar selections return no occurrence;
+unsupported calendar timestamps produce an error. Calendar arithmetic uses
+[Chrono](https://docs.rs/chrono/latest/chrono/struct.NaiveDate.html).
+
+Month, hour and minute must match. When both day fields are restricted, either
+day of month or day of week matches; when either contains a wildcard, both day
+selectors must match, including wildcard steps. This follows the documented
+[BSD cron day matching convention](https://man.openbsd.org/crontab.5). Tests cover
+month/year rollover, Sunday zero, restricted-day OR matching, stepped wildcard
+matching, leap-year century rules, partial-minute rounding, impossible dates
+and timestamp limits. Named timezones/DST, persisted cron schedules and
+publication/dispatch remain unimplemented. The CLI and API still accept interval schedules only.
+Timezone-aware occurrence search, durable progress compatibility,
 missed occurrences, cancellation and competing publishers remain required before
 cron support can be marked usable. Existing interval persistence is unchanged.

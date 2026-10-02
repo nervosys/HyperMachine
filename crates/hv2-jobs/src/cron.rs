@@ -1,5 +1,6 @@
-//! Numeric five-field cron grammar. Calendar planning is integrated separately.
+//! Numeric five-field cron grammar and bounded UTC calendar occurrence search.
 use crate::{JobError, Result};
+use chrono::{Datelike, NaiveDate};
 use std::str::FromStr;
 
 /// Minute, hour, day-of-month, month, day-of-week numeric selectors.
@@ -10,6 +11,75 @@ pub struct CronExpression {
     pub(crate) masks: [u64; 5],
     pub(crate) day_of_month_wildcard: bool,
     pub(crate) day_of_week_wildcard: bool,
+}
+
+impl CronExpression {
+    fn selected(&self, field: usize, value: u32) -> bool {
+        self.masks[field] & (1_u64 << value) != 0
+    }
+
+    fn matches_date(&self, date: NaiveDate) -> bool {
+        let dom = self.selected(2, date.day());
+        let dow = self.selected(4, date.weekday().num_days_from_sunday());
+        let day = if !self.day_of_month_wildcard && !self.day_of_week_wildcard {
+            dom || dow
+        } else {
+            dom && dow
+        };
+        self.selected(3, date.month()) && day
+    }
+
+    /// First matching whole minute at or after Unix milliseconds, in UTC.
+    /// Searches at most one Gregorian 400-year cycle plus its boundary day.
+    /// None means no valid date or representable future occurrence; timestamps
+    /// outside the calendar library's supported range are rejected.
+    pub fn at_or_after_utc(&self, time_ms: u64) -> Result<Option<u64>> {
+        let remainder = time_ms % 60_000;
+        let start = if remainder == 0 {
+            time_ms
+        } else {
+            match time_ms.checked_add(60_000 - remainder) {
+                Some(value) => value,
+                None => return Ok(None),
+            }
+        };
+        let signed = i64::try_from(start).map_err(|_| {
+            JobError::InvalidSpec("cron timestamp is outside calendar range".into())
+        })?;
+        let timestamp = chrono::DateTime::from_timestamp_millis(signed).ok_or_else(|| {
+            JobError::InvalidSpec("cron timestamp is outside calendar range".into())
+        })?;
+        let mut date = timestamp.date_naive();
+        for _ in 0..=146_097 {
+            if self.matches_date(date) {
+                for hour in 0..24 {
+                    if !self.selected(1, hour) {
+                        continue;
+                    }
+                    for minute in 0..60 {
+                        if !self.selected(0, minute) {
+                            continue;
+                        }
+                        let candidate = date
+                            .and_hms_opt(hour, minute, 0)
+                            .expect("bounded hour and minute")
+                            .and_utc()
+                            .timestamp_millis();
+                        let candidate = u64::try_from(candidate)
+                            .expect("search starts at the Unix epoch or later");
+                        if candidate >= start {
+                            return Ok(Some(candidate));
+                        }
+                    }
+                }
+            }
+            let Some(next) = date.succ_opt() else {
+                return Ok(None);
+            };
+            date = next;
+        }
+        Ok(None)
+    }
 }
 
 fn invalid() -> JobError {
@@ -85,6 +155,48 @@ impl FromStr for CronExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn utc(value: &str) -> u64 {
+        chrono::DateTime::parse_from_rfc3339(value)
+            .unwrap()
+            .timestamp_millis() as u64
+    }
+    #[test]
+    fn utc_search_preserves_boundaries_leap_years_and_day_matching() {
+        let every: CronExpression = "* * * * *".parse().unwrap();
+        assert_eq!(every.at_or_after_utc(0).unwrap(), Some(0));
+        assert_eq!(every.at_or_after_utc(1).unwrap(), Some(60_000));
+        assert_eq!(every.at_or_after_utc(u64::MAX).unwrap(), None);
+        assert!(every.at_or_after_utc(i64::MAX as u64).is_err());
+        for (expression, from, expected) in [
+            ("0 0 29 2 *", "2099-03-01T00:00:00Z", "2104-02-29T00:00:00Z"),
+            ("0 0 29 2 *", "1999-03-01T00:00:00Z", "2000-02-29T00:00:00Z"),
+            ("0 0 1 * *", "2026-12-01T00:00:01Z", "2027-01-01T00:00:00Z"),
+            ("0 0 1 * 1", "2026-10-02T00:00:00Z", "2026-10-05T00:00:00Z"),
+            ("0 0 31 2 1", "2026-10-02T00:00:00Z", "2027-02-01T00:00:00Z"),
+            (
+                "0 0 */2 * 1",
+                "2026-10-06T00:00:00Z",
+                "2026-10-19T00:00:00Z",
+            ),
+            ("0 0 * * 0", "2026-10-01T00:00:00Z", "2026-10-04T00:00:00Z"),
+        ] {
+            let cron: CronExpression = expression.parse().unwrap();
+            assert_eq!(
+                cron.at_or_after_utc(utc(from)).unwrap(),
+                Some(utc(expected)),
+                "{expression}"
+            );
+        }
+        assert_eq!(
+            "0 0 31 2 *"
+                .parse::<CronExpression>()
+                .unwrap()
+                .at_or_after_utc(0)
+                .unwrap(),
+            None
+        );
+    }
+
     #[test]
     fn lists_ranges_and_steps_use_field_bounds_and_anchors() {
         let cron: CronExpression = "1,10-20/3,59 0,23 */2 1-12/3 0,6".parse().unwrap();
