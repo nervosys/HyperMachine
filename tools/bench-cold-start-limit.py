@@ -43,11 +43,13 @@ def main():
     parser.add_argument("--concurrency", type=int, default=100)
     parser.add_argument("--candidate-limit", type=int, default=8, help="1..1024 enables the candidate budget; 0 leaves it disabled for binary regression controls")
     parser.add_argument("--baseline-limit", type=int, default=0, help="0 leaves the baseline disabled; 1..1024 compares two enabled budgets")
+    parser.add_argument("--memory-idle-seconds", type=float, default=0, help="0 disables held-memory measurement; otherwise hold guests for 1..30 seconds")
     args = parser.parse_args()
     if not 1 <= args.pairs <= 10 or not 1 <= args.concurrency <= 100 or not all(0 <= limit <= 1024 for limit in [args.baseline_limit, args.candidate_limit]):
         parser.error("requires 1..10 pairs, 1..100 guests, 0..1024 admission settings")
+    if not (args.memory_idle_seconds == 0 or 1 <= args.memory_idle_seconds <= 30):
+        parser.error("memory idle hold must be 0 or 1..30 seconds")
     if args.output.exists(): parser.error("output exists; preserve earlier attempts")
-    args.memory_idle_seconds = 0
     args.daemon_log_filter = "warn"
     inputs = {name:getattr(args,name).resolve(strict=True) for name in ["baseline", "candidate", "kernel", "initrd"]}
     for name,path in inputs.items(): setattr(args,name,path)
@@ -62,7 +64,9 @@ def main():
         "concurrency":args.concurrency, "pairs":args.pairs, "candidate_limit":args.candidate_limit,
         "baseline_limit":args.baseline_limit,
         "order":"fresh-daemon AB/BA", "guest_readiness_timeout_s":15, "cpu_count":1, "memory_mb":1024,
-        "queue_included_in_ready_ms":True, "same_binary":identities["baseline"] == identities["candidate"],
+        "queue_included_in_ready_ms":True, "memory_idle_seconds":args.memory_idle_seconds,
+        "memory_method":"held daemon PSS and same-batch empty-daemon subtraction; excludes kernel memory",
+        "same_binary":identities["baseline"] == identities["candidate"],
         "limitations":["Shared nested-KVM host", "Cold native startup only",
             "Conditional latency summaries exclude failed attempts; all failures retained",
             "No managed competitor endpoint or optimal admission-limit claim"], "runs":[], "success":False}

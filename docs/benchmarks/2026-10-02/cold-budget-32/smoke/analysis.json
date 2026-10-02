@@ -1,0 +1,73 @@
+{
+  "variants": {
+    "baseline": {
+      "planned": 16,
+      "attempted": 16,
+      "passed": 16,
+      "failed": 0,
+      "successful_p50_ms": 850.2471740002875,
+      "successful_p99_ms": 981.6369119998853,
+      "failed_runs": 0,
+      "median_held_pss_mib": 825.2763671875,
+      "median_incremental_pss_mib": 818.07568359375
+    },
+    "candidate": {
+      "planned": 16,
+      "attempted": 16,
+      "passed": 16,
+      "failed": 0,
+      "successful_p50_ms": 1209.250699000222,
+      "successful_p99_ms": 2220.7691490002617,
+      "failed_runs": 0,
+      "median_held_pss_mib": 839.29736328125,
+      "median_incremental_pss_mib": 832.236328125
+    }
+  },
+  "pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -1100.5953921248874,
+      "candidate_p50_reduction_ms": -1063.7390969995977,
+      "candidate_p99_reduction_ms": -1239.1322370003763
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_mean_reduction_ms": -324.4974442499142,
+      "candidate_p50_reduction_ms": -363.29716199998074,
+      "candidate_p99_reduction_ms": -324.9110840006324
+    }
+  ],
+  "complete_successful_pairs": 2,
+  "candidate_faster_pairs": 0,
+  "median_paired_mean_reduction_ms": -712.5464181874008,
+  "cleanup_verified": true,
+  "artifacts_unchanged": true,
+  "cohort_success": true,
+  "latencies_conditional_on_success": true,
+  "runtime_change_adopted": false,
+  "competitor_win_established": false,
+  "candidate_limit": 32,
+  "same_binary": true,
+  "queue_included_in_ready_ms": true,
+  "experimental_candidate": true,
+  "note": "Incomplete pairs remain in failure totals; their mean latency difference is unavailable",
+  "baseline_limit": 16,
+  "memory_idle_seconds": 5.0,
+  "memory_pairs": [
+    {
+      "pair": 0,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": -28.4775390625,
+      "candidate_incremental_pss_reduction_mib": -28.5048828125
+    },
+    {
+      "pair": 1,
+      "complete_successful_pair": true,
+      "candidate_held_pss_reduction_mib": 0.435546875,
+      "candidate_incremental_pss_reduction_mib": 0.18359375
+    }
+  ],
+  "memory_conditional_on_complete_successful_runs": true
+}
