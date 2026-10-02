@@ -273,11 +273,7 @@ def main():
         help="opt-in glibc arena limit for the owned HyperMachine daemon only")
     parser.add_argument("--daemon-log-filter", default="warn",
         help="explicit diagnostic tracing filter; changes timing, default warn for comparisons")
-    parser.add_argument("--cold-start-concurrency", type=int,
-        help="opt-in HyperMachine cold boot budget (1..1024); readiness includes queue time")
     args = parser.parse_args()
-    if args.cold_start_concurrency is not None and not 1 <= args.cold_start_concurrency <= 1024:
-        parser.error("cold-start-concurrency requires 1..1024")
     if not args.daemon_log_filter.strip() or len(args.daemon_log_filter) > 512:
         parser.error("daemon log filter must be nonempty and <=512 characters")
     if args.arrival_rate is not None and (not math.isfinite(args.arrival_rate) or
@@ -297,8 +293,6 @@ def main():
         "host":platform.platform(), "artifact_sha256":identities, "cpu_count":1, "memory_mb":1024,
         "daemon_allocator_arena_max":args.daemon_allocator_arena_max,
         "daemon_log_filter":args.daemon_log_filter,
-        "cold_start_concurrency":args.cold_start_concurrency,
-        "queue_included_in_ready_ms":True,
         "driver_cpu_affinity":sorted(os.sched_getaffinity(0)), "guest_readiness_timeout_s":{
             "hypermachine":15, "firecracker":fc.GUEST_READY_TIMEOUT_SECONDS},
         "firecracker_total_startup_timeout_s":args.timeout, "common_boot_args":fc.BOOT_ARGS,
@@ -330,13 +324,9 @@ def main():
         args.url = f"http://127.0.0.1:{port}"
         try:
             with (directory/"node.log").open("wb") as log:
-                daemon_argv = [str(args.hypermachine), "--port", str(port), "--proxy-port", str(proxy),
+                process = subprocess.Popen([str(args.hypermachine), "--port", str(port), "--proxy-port", str(proxy),
                     "--memory-mb", "1024", "--cpu-cores", "1", "--capacity", "128", "--no-template",
-                    "--volume-dir", str(directory/"volumes"), "--snapshot-store", str(directory/"snapshots")]
-                if args.cold_start_concurrency is not None:
-                    daemon_argv.extend(["--cold-start-concurrency", str(args.cold_start_concurrency)])
-                report["daemon_argv"] = daemon_argv
-                process = subprocess.Popen(daemon_argv,
+                    "--volume-dir", str(directory/"volumes"), "--snapshot-store", str(directory/"snapshots")],
                     env=daemon_environment(args), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
                 args.node_pid = process.pid
                 deadline = time.monotonic()+30
@@ -382,7 +372,6 @@ def main():
                 try:
                     if not engines.stop(process): report["cleanup_errors"].append("node did not stop")
                 except Exception as error: report["cleanup_errors"].append(str(error))
-                report["daemon_exit_code"] = process.returncode
             if (directory/"node.log").exists():
                 logfile = directory/"node.log"
                 report["node_log_tail"] = logfile.read_bytes()[-8000:].decode(errors="replace")

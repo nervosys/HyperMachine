@@ -1,0 +1,16 @@
+{
+  "source_head": "f53adee",
+  "source_overlay": "compiled-main.rs",
+  "boot_files": "tracked HEAD; three provisional workspace files excluded",
+  "daemon_sha256": "b7d2aba8a9a21845e187a10dbeda10c0c10f43d6794160739888435723a77d95",
+  "tests": {
+    "Linux": 39,
+    "Windows": 35
+  },
+  "main_sha256": "e1b85b8a455a9afad0452113739a089f202b67787f419fc0d76a60a172334d5c",
+  "clean_boot_sha256": {
+    "crates/hv2-core/src/backends/kvm.rs": "05bb3d41799f72970df19dc3bced8991c758664bf73de95de2c15a0902079a43",
+    "crates/hv2-core/src/boot/linux.rs": "f24a7aeb7f1a493188bad3f83df6d2f0ba5df5959ed7d185f13224872b5712a1",
+    "crates/hv2-core/src/boot/source.rs": "4f269436b7bee48bebb2bcef87eb9d4cd7048ad8add634a7e4949764d8a3c23c"
+  }
+}

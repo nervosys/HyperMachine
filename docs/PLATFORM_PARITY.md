@@ -71,6 +71,14 @@ in four of four pairs. [Raw comparisons and controls](benchmarks/2026-10-02/cold
 retain earlier failures and the slower default-disabled C8 control. This is an
 opt-in tradeoff, with no managed competitor performance claim.
 
+A subsequent [matched native comparison](benchmarks/2026-10-02/cold-budget-tuning/README.md)
+passed 400/400 attempts per engine at C100. HyperMachine with eight slots had
+lower P50 readiness (3530 versus Firecracker's 5678 ms) and lower paired means
+in four of four pairs, but worse P99 (12857 versus 9168 ms) and higher held PSS
+(8617.59 versus 8360.78 MiB). A four-slot experiment also worsened the tail.
+The settings remain optional; these local results establish no managed-service
+or across-the-board win.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.
