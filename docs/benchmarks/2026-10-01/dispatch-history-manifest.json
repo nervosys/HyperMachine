@@ -1,0 +1,11 @@
+{
+  "binary_sha256": "407d3b4dbe296c20c1672896c59bb390f73445751a85bda60bda3d6c278f0c4d",
+  "report_sha256": "fd098bc2f0fa886e9e183cf3ab65c3878f1a5eadc28f091769242d3c2b0eb9e0",
+  "source_sha256": "ea9e49b4d32fb17cedaf87110d8dbe5bf94be11928a1967c5817f1c80242758e",
+  "environment": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.41",
+  "rustc": "rustc 1.95.0 (59807616e 2026-04-14) (built from a source tarball)",
+  "filesystem": "WSL Debian native temporary filesystem, not /mnt/c",
+  "profile": "release",
+  "scope": "warm-cache selection only; synthetic completed records, no VM or competitor endpoint",
+  "source_commit": "9d83787bbea7af31e084304a72a7982ed32f5ab3"
+}
