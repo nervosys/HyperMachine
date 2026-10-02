@@ -681,7 +681,7 @@ def main():
                             assert result.strip()==b"OK",result
                         recovered_id=None
                         try:
-                            publication_permission("-xadd")
+                            publication_permission("-publish")
                             error=api("POST","/v2/sandboxes",body,expected=503)
                             assert error["code"]==503
                             resolved=alias_cli("inspect",fault_name)
@@ -698,16 +698,16 @@ def main():
                                 if time.monotonic()>deadline:raise RuntimeError(probe.stderr.decode(errors="replace"))
                                 time.sleep(.05)
                             acl=json.loads(subprocess.check_output(["redis-cli","-p",str(redis_port),"--json","ACL","LOG","10"]))
-                            assert any(row.get("object")=="xadd" and row.get("reason")=="command" for row in acl),acl
+                            assert any(row.get("command")=="publish" and row.get("reason")=="command" for row in acl),acl
                         finally:
-                            publication_permission("+xadd")
+                            publication_permission("+publish")
                             if recovered_id is None:
                                 recovered=api("GET",f"/sandbox-names/{fault_name}",expected=200)
                                 guests.add(recovered["sandboxID"])
                         api("DELETE",f"/sandboxes/{recovered_id}",expected=204)
                         guests.remove(recovered_id)
                         api("GET",f"/sandbox-names/{fault_name}",expected=404)
-                        return {"control_plane_status":503,"redis_xadd_denial_observed":True,
+                        return {"control_plane_status":503,"redis_publish_denial_observed":True,
                                 "committed_VM_preserved":True,"CLI_recovers_ID":True,
                                 "named_SSH_reaches_same_guest":True,"duplicate_creation_refused":True,
                                 "no_extra_VM":True,"publication_permission_restored":True,"deleted_name_released":True}
