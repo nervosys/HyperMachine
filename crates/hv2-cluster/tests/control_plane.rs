@@ -1287,3 +1287,63 @@ async fn creates_go_to_a_node_with_the_template() {
     names.sort_unstable();
     assert_eq!(names, ["base", "python"]);
 }
+
+#[tokio::test]
+async fn policy_replacement_revokes_old_keys_and_rejects_invalid_updates() {
+    use sha2::{Digest, Sha256};
+    let policies = |key: &str| {
+        json!([{"sha256":Sha256::digest(key.as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect::<String>(),
+        "expires_at":chrono::Utc::now().timestamp()+600,"scopes":["inventory"]}]).to_string()
+    };
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let control = ControlPlane::new(
+        store,
+        ControlConfig {
+            api_key: Some(KEY.into()),
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies("old-key")).unwrap(),
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 5981,
+            create_timeout: Duration::from_secs(10),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let app = control::router(control.clone());
+    let task = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let status = |key: &str| {
+        client()
+            .get(format!("{base}/sandboxes"))
+            .header("x-api-key", key)
+            .send()
+    };
+    assert_eq!(status("old-key").await.unwrap().status(), 200);
+    control
+        .replace_api_key_policies(&policies("new-key"))
+        .unwrap();
+    assert_eq!(status("old-key").await.unwrap().status(), 401);
+    assert_eq!(status("new-key").await.unwrap().status(), 200);
+    for invalid in [
+        "[]".to_owned(),
+        "malformed-secret".to_owned(),
+        policies(KEY),
+    ] {
+        assert!(control.replace_api_key_policies(&invalid).is_err());
+        assert_eq!(status("new-key").await.unwrap().status(), 200);
+        assert_eq!(status("old-key").await.unwrap().status(), 401);
+    }
+    assert_eq!(status(KEY).await.unwrap().status(), 200);
+    assert_eq!(
+        client()
+            .post(format!("{base}/sandboxes"))
+            .header("x-api-key", "new-key")
+            .json(&json!({"templateID":"base"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    task.abort();
+    let _ = task.await;
+}

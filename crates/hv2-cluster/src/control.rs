@@ -64,6 +64,7 @@ pub struct ControlPlane {
     http: reqwest::Client,
     tcp_http: reqwest::Client,
     config: ControlConfig,
+    api_keys: parking_lot::RwLock<Vec<crate::keys::ApiKeyPolicy>>,
     metrics: ControlMetrics,
 }
 
@@ -81,6 +82,22 @@ struct ControlMetrics {
 }
 
 impl ControlPlane {
+    /// Atomically replace scoped policies after validating the full JSON array.
+    /// Rejected replacements leave active policies unchanged. In-flight requests
+    /// retain their original authorization; new requests use the replacement.
+    ///
+    /// # Errors
+    /// Reject invalid policies or a collision with the legacy admin credential.
+    pub fn replace_api_key_policies(&self, json: &str) -> Result<(), String> {
+        let policies = crate::keys::ApiKeyPolicy::from_json(json)?;
+        crate::keys::ApiKeyPolicy::validate_legacy_admin(
+            &policies,
+            self.config.api_key.as_deref(),
+        )?;
+        *self.api_keys.write() = policies;
+        Ok(())
+    }
+
     #[must_use]
     pub fn new(store: Arc<dyn ClusterStore>, config: ControlConfig) -> Arc<Self> {
         // No global timeout: a streaming or long request is the caller's
@@ -123,6 +140,7 @@ impl ControlPlane {
             store,
             http,
             tcp_http,
+            api_keys: parking_lot::RwLock::new(config.api_keys.clone()),
             config,
             metrics: ControlMetrics::default(),
         })
@@ -297,7 +315,7 @@ async fn require_api_key(
         "TRACE" => "TRACE",
         _ => "OTHER",
     };
-    let (kind, key_id, rejection) = authorize(&control.config, &request);
+    let (kind, key_id, rejection) = authorize(&control.config, &control.api_keys.read(), &request);
     let allowed = rejection.is_none();
     let response = match rejection {
         Some(response) => response,
@@ -319,6 +337,7 @@ async fn require_api_key(
 /// supplied in paths. Library callers get scoped precedence for collisions.
 fn authorize(
     config: &ControlConfig,
+    api_keys: &[crate::keys::ApiKeyPolicy],
     request: &Request,
 ) -> (&'static str, String, Option<Response>) {
     use sha2::{Digest, Sha256};
@@ -329,7 +348,7 @@ fn authorize(
             .map(|byte| format!("{byte:02x}"))
             .collect()
     };
-    if config.api_key.is_some() || !config.api_keys.is_empty() {
+    if config.api_key.is_some() || !api_keys.is_empty() {
         let sent = request
             .headers()
             .get("x-api-key")
@@ -340,10 +359,7 @@ fn authorize(
         // the binary's startup validation. Never turn a scoped key into an
         // unrestricted, non-expiring credential in that case.
         let now = chrono::Utc::now().timestamp();
-        let policy = config
-            .api_keys
-            .iter()
-            .find(|policy| policy.has_digest(&digest));
+        let policy = api_keys.iter().find(|policy| policy.has_digest(&digest));
         match policy {
             Some(policy) if !sent.is_empty() => {
                 if !policy.matches(&digest, now) {
