@@ -121,6 +121,7 @@ def main():
     parser.add_argument("--ssh-fixture", type=Path,
                         help="build-ssh-fixture.py output; opt in to real OpenSSH guest checks")
     parser.add_argument("--access-audit", action="store_true", help="verify durable credential-free control-plane audit records with a synthetic fixture key")
+    parser.add_argument("--observer-role", action="store_true", help="cap an admin-scoped fixture key with the observer role and verify it against a real guest")
     parser.add_argument("--ssh-by-name", action="store_true", help="resolve the SSH guest by its metadata label")
     parser.add_argument("--ssh-pty", action="store_true", help="verify guest PTY allocation and terminal input")
     parser.add_argument("--ssh-terminal", action="store_true", help="verify local/guest terminal resize and interrupt")
@@ -324,7 +325,9 @@ def main():
                     time.sleep(.02)
             policies = directory / "keys.json"
             policies.write_text(json.dumps([{"sha256": hashlib.sha256(inventory_key.encode()).hexdigest(),
-                                             "expires_at": int(time.time()) + 3600, "scopes": ["inventory"]}]))
+                                             "expires_at": int(time.time()) + 3600,
+                                             "scopes": ["admin" if args.observer_role else "inventory"],
+                                             "role": "observer" if args.observer_role else "operator"}]))
             start("node", [str(args.daemon), "--port", str(node_port), "--proxy-port", str(node_proxy),
                 "--memory-mb", "1024", "--cpu-cores", "1", "--capacity", "4", "--volume-dir", str(directory / "volumes"),
                 "--snapshot-store", str(directory / "snapshots"), "--cluster-store", store, "--cluster-namespace", namespace,
@@ -365,6 +368,21 @@ def main():
             guests.add(id)
             info = api("GET", f"/sandboxes/{id}")
             assert info["cpuCount"] == 1 and info["memoryMB"] == 1024
+            if args.observer_role:
+                def observer_capabilities():
+                    listed = api("GET", "/sandboxes", supplied_key=inventory_key)
+                    assert len(listed) == 1 and listed[0]["sandboxID"] == id
+                    assert "envdAccessToken" not in listed[0]
+                    for path in [f"/sandboxes/{id}", "/volumes", "/templates/base/files/hash"]:
+                        api("GET", path, supplied_key=inventory_key, expected=403)
+                    api("POST", "/v2/sandboxes", create_body, supplied_key=inventory_key, expected=403)
+                    api("POST", f"/sandboxes/{id}/exec", {"command":"touch /tmp/observer-write"}, supplied_key=inventory_key, expected=403)
+                    api("DELETE", f"/sandboxes/{id}", supplied_key=inventory_key, expected=403)
+                    assert command(id, "test ! -e /tmp/observer-write && printf intact") == "intact"
+                    assert len(api("GET", "/sandboxes")) == 1
+                    return {"admin_scope_capped":True,"inventory_without_guest_token":True,
+                            "capability_reads_refused":True,"mutations_refused":True,"guest_intact":True}
+                case("observer-role-caps-admin-with-real-guest", observer_capabilities)
             if args.reserved_alias or args.reserved_create:
                 def alias_cli(*arguments, succeeds=True):
                     result = subprocess.run([str(args.cli), "sandbox", "vm", "--endpoint", api_url,
