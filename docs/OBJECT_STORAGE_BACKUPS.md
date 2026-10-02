@@ -59,6 +59,14 @@ proceed. An attempt receipt establishes which bytes the client tried to send,
 not proof that the server committed them. The helper never
 deletes or overwrites an existing backup as recovery from an upload error.
 
+`--compression-level 1` is the default; levels 1–9 select gzip's capture-speed
+and storage-size tradeoff. The receipt records the selected level. Higher levels
+can reduce uploaded bytes at the cost of additional capture CPU and elapsed time;
+the restore format and encryption are unchanged.
+The [paired KVM-store comparison](benchmarks/2026-10-02/backup-compression/README.md)
+produced 13.3% fewer bytes at level 6, with slower capture in both cohorts.
+Level 6 also passed real KVM recovery through multipart S3 upload.
+
 `--endpoint https://s3.example` selects an S3-compatible service; ordinary AWS
 S3 uses the SDK default endpoint. TLS verification stays enabled. HTTP is allowed
 only for loopback fixtures. `--region` defaults to `us-east-1`. Bucket policy,

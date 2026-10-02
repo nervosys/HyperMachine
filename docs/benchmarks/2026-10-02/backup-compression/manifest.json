@@ -1,0 +1,16 @@
+{
+  "sha256": {
+    "README.md": "b977288f1ac641e31db9718ce564ac05d554a877f973bacf5dcea852f9dce068",
+    "backup-snapshot-store.py": "3d36d9aed237561d0dbb1104e2a9ebb32ef57548832964513287e3c3884f2ecf",
+    "bench-backup-compression.py": "a8cde67cc255b5437bf9e58f09c0a67e874059c79a7a539219f89623c40b76a5",
+    "check-multipart-backup.py": "fcdb79f45390cebd0a5d495f5613e1aedf14dec2c2870b988ad1d1feb2d27434",
+    "check-object-backup.py": "5f288b038c644afc1b8286822ee23fc4bc6372aba53a82a8f5dfe5cd7aa65fbd",
+    "default-regression/report.json": "9e3ac0c2fea46e037f62fc90ee90c2de197b45bb773dbd8343eeaaf9ffdd54e0",
+    "default-regression/s3.log": "52ad0b1db5466cd20a466a06c38f004f449aa459fb1b649f6bf7b7265f00ee5f",
+    "kvm-level6/report.json": "a37d89849423e9105a7c2056fb281ff1cd67fb5f2d00060c5f63d519a83826d6",
+    "kvm-level6/s3.log": "28f7126b3da08acc4bae9e527107199778b234007475de4b45e1e84080df3b54",
+    "paired/report.json": "535004c9d139cb33101cdb3df65c3c8c62b85f7d70625370d32f9aa55c9ca512",
+    "repeat/report.json": "cdf0475db55cae23b353fdaa5722b9d8cbdc35ed2bd5b5f9797ff1e92b159b1f",
+    "verify-backup-compression.py": "d9c97b9024083e63e2d8b14682b21e03f14390336bf85ada2be56364a08d3b9c"
+  }
+}
