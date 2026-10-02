@@ -154,8 +154,8 @@ An optional `vm` target is preserved in the schedule and each occurrence:
 
 The profile is an operator-managed name, not an endpoint URL or credential.
 Accepting the schedule spec does not establish that the profile or sandbox exists.
-Explicit dispatch is available as described below; automatic guest execution and
-reconciliation remain incomplete. Sandbox IDs permit
+Explicit dispatch and an automatic VM worker are available as described below;
+guest reconciliation remains incomplete. Sandbox IDs permit
 1-128 ASCII letters, digits, hyphens or underscores; profiles use the schedule
 name format. Timeouts must be 1-86400 seconds. Guest working directories must be
 absolute UTF-8 paths beginning with `/`, interpreted independently of the host
@@ -236,7 +236,7 @@ completion receipts. `claim_vm_occurrence` accepts only committed occurrences
 with VM targets and grants one exclusive claim. `vm_dispatch_state` recovers the
 claim and optional result; `complete_vm_occurrence` checks its claim token and
 records one result, allowing identical receipt replay. The explicit CLI dispatcher
-uses these APIs; an automatic VM worker is not implemented yet.
+and automatic VM worker use these APIs.
 
 `next_vm_occurrence` selects the oldest unclaimed committed occurrence. Claims
 must follow that order: an unclaimed or unresolved predecessor prevents claiming
@@ -248,6 +248,29 @@ background descendants or external side effects have stopped after a command exi
 ```text
 hm jobs --store DIR schedule dispatch NAME SCHEDULED_MS --profiles profiles.json --worker operator
 ```
+
+For automatic publication and dispatch:
+
+```text
+hm jobs --store DIR schedule worker NAME --profiles profiles.json --worker operator --limit 100 --poll-ms 1000
+```
+
+The worker requires a VM target and validates the profile deadline before
+publishing. Each tick publishes up to `--limit` due occurrences and dispatches
+at most one oldest eligible occurrence, recording its completion before moving
+on. `--ticks N` bounds the number of ticks, including idle ticks; otherwise the
+loop continues until interruption, schedule cancellation or an error. Ctrl+C
+waits for an in-flight operation to finish; it does not cancel the guest command.
+Cancellation stops the worker when observed between ticks and preserves history.
+An unresolved claim or competing-writer conflict stops the worker; restart does
+not re-execute an uncertain occurrence. Polling permits 1-60000 milliseconds and
+publication limits permit 1-1024 records. Catch-up publication can outpace
+execution and grow the backlog. Long-history scan performance is unverified.
+
+Windows and Linux protocol fixtures verify completion, continuation after
+restart and refusal to dispatch again after an uncertain response. The KVM/TLS
+archive below verifies explicit dispatch with an earlier frozen CLI; it does
+not verify this automatic worker.
 
 This explicitly dispatches one committed VM occurrence. It checks profile
 configuration and requires the HTTP deadline to exceed the guest timeout before
@@ -295,7 +318,7 @@ stable occurrence records keyed by schedule ID and scheduled Unix milliseconds.
 `Store::create_interval_schedule`, `interval_schedule` and
 `record_interval_occurrence` are library APIs; the CLI supports explicit bounded
 publication and an automatic publication loop. Explicit VM dispatch consumes one
-committed record; no automatic VM worker consumes them yet.
+committed record; the automatic VM worker publishes and dispatches in bounded ticks.
 Interval arithmetic stays anchored to the first
 timestamp and checks overflow. An occurrence stores the job configuration with
 its earliest start set to that occurrence's time.

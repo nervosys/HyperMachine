@@ -326,7 +326,25 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
             .env("HM_DISPATCH_FIXTURE_KEY", "dispatch-fixture-key");
         cmd
     };
-    let result = success(dispatch("run", "100").output().await.unwrap());
+    let worker = || {
+        let mut cmd = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"));
+        cmd.args(["jobs", "--store"])
+            .arg(store.root())
+            .args([
+                "schedule",
+                "worker",
+                "run",
+                "--ticks",
+                "1",
+                "--limit",
+                "1",
+                "--profiles",
+            ])
+            .arg(&profiles)
+            .env("HM_DISPATCH_FIXTURE_KEY", "dispatch-fixture-key");
+        cmd
+    };
+    let result = success(worker().output().await.unwrap());
     assert_eq!(result["exit_code"], 7);
     assert_eq!(result["stdout"], "guest output");
     let receipt = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
@@ -353,7 +371,7 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
         .status
         .success());
     assert_eq!(calls.load(Ordering::SeqCst), 1);
-    let failed = dispatch("run", "110").output().await.unwrap();
+    let failed = worker().output().await.unwrap();
     assert!(!failed.status.success());
     assert!(!String::from_utf8_lossy(&failed.stderr).contains("dispatch-fixture-key"));
     assert!(store
@@ -367,6 +385,8 @@ async fn explicit_vm_dispatch_records_results_and_never_retries_uncertain_execut
         .unwrap()
         .status
         .success());
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(!worker().output().await.unwrap().status.success());
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     store.materialize_interval("run", 120, 1).unwrap();
     assert!(!dispatch("run", "120")
