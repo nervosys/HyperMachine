@@ -1,0 +1,13 @@
+{
+  "base_commit": "c2385a52063b5a74cfe14ca10366cf4ac4824118",
+  "report_sha256": "4196abe48e7bd89317e13f94d29d994d8cfc0f15efae09fc166fe01b0e2906be",
+  "control_sha256": "6903902155a549abc2e43c2256d735423a45643188f01a30a992ce3ef90ba09d",
+  "source_patch_sha256": "cc190accc86cbc41a3abce1d17472a47c1d0c2f85cc2a2a1cd8b3d397245d4e6",
+  "binary_sha256": {
+    "baseline": "407d3b4dbe296c20c1672896c59bb390f73445751a85bda60bda3d6c278f0c4d",
+    "candidate": "99aedf538e23a585ed84514b3f69e8f909e889b9109648b69a1419bc0b2032a5"
+  },
+  "runs": 8,
+  "samples_per_size_per_binary": 36,
+  "scope": "warm-cache reopened-store selection on native WSL filesystem; no VM, network or competitor measurement"
+}
