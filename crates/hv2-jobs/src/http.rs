@@ -54,7 +54,7 @@ pub fn router(store: Store, token: Option<String>) -> Router {
         )
         .route(
             "/api/v1/schedules/{id}/receipts/{scheduled_ms}",
-            get(schedule_receipt),
+            get(schedule_receipt).post(schedule_record_result),
         )
         .route_layer(middleware::from_fn_with_state(api.clone(), authorize))
         .with_state(api)
@@ -139,6 +139,19 @@ async fn schedule_receipt(
             serde_json::to_value(api.store.vm_dispatch_state(&id, scheduled_ms)?)
                 .expect("dispatch state serialization"),
         )
+    })
+    .await
+}
+
+async fn schedule_record_result(
+    State(api): State<Api>,
+    Path((id, scheduled_ms)): Path<(String, u64)>,
+    Json(completion): Json<crate::dispatch::DispatchCompletion>,
+) -> Response {
+    schedule_operation(StatusCode::OK, move || {
+        api.store
+            .complete_vm_occurrence(&id, scheduled_ms, &completion)?;
+        Ok(json!({"schedule_id":id,"scheduled_ms":scheduled_ms,"completion_recorded":true}))
     })
     .await
 }
@@ -451,13 +464,67 @@ mod tests {
         let state: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(state["claim"]["token"], claim.token);
         assert!(state["completion"].is_null());
-        let result: crate::dispatch::DispatchCompletion = serde_json::from_value(json!({
-            "claim_token":claim.token,"exit_code":7,"timed_out":false,
-            "stdout":"durable output","stderr":"","stdout_truncated":false}))
-        .unwrap();
-        store
-            .complete_vm_occurrence("recover", 100, &result)
-            .unwrap();
+        let mut result = json!({"claim_token":"wrong","exit_code":7,"timed_out":false,
+            "stdout":"durable output","stderr":"","stdout_truncated":false});
+        for presented in [None, Some("wrong")] {
+            assert_eq!(
+                call(&app, "POST", path, Some(&result.to_string()), presented)
+                    .await
+                    .0,
+                StatusCode::UNAUTHORIZED
+            );
+        }
+        assert_eq!(
+            call(&app, "POST", path, Some(&result.to_string()), token)
+                .await
+                .0,
+            StatusCode::CONFLICT
+        );
+        assert!(store
+            .vm_dispatch_state("recover", 100)
+            .unwrap()
+            .completion
+            .is_none());
+        result["claim_token"] = json!(claim.token);
+        result["stdout"] = json!("x".repeat(crate::dispatch::MAX_RECEIPT_OUTPUT_BYTES + 1));
+        assert_eq!(
+            call(&app, "POST", path, Some(&result.to_string()), token)
+                .await
+                .0,
+            StatusCode::BAD_REQUEST
+        );
+        result["stdout"] = json!("durable output");
+        assert_eq!(
+            call(&app, "POST", path, Some(&result.to_string()), token)
+                .await
+                .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&app, "POST", path, Some(&result.to_string()), token)
+                .await
+                .0,
+            StatusCode::OK
+        );
+        result["exit_code"] = json!(0);
+        assert_eq!(
+            call(&app, "POST", path, Some(&result.to_string()), token)
+                .await
+                .0,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/recover/receipts/110",
+                Some(&result.to_string()),
+                token
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
         store.cancel_interval_schedule("recover").unwrap();
         let reopened = router(
             Store::open(dir.path()).unwrap(),
@@ -469,7 +536,7 @@ mod tests {
         assert_eq!(state["completion"]["stdout"], "durable output");
         assert_eq!(state["completion"]["exit_code"], 7);
         assert_eq!(
-            call(&reopened, "POST", path, None, token).await.0,
+            call(&reopened, "DELETE", path, None, token).await.0,
             StatusCode::METHOD_NOT_ALLOWED
         );
         assert_eq!(
@@ -498,6 +565,7 @@ mod tests {
             ("POST", "/api/v1/schedules/test/cancel"),
             ("GET", "/api/v1/schedules/test/occurrences"),
             ("GET", "/api/v1/schedules/test/receipts/100"),
+            ("POST", "/api/v1/schedules/test/receipts/100"),
         ] {
             for token in [None, Some("wrong")] {
                 assert_eq!(
