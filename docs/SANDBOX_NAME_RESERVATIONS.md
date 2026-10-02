@@ -1,6 +1,6 @@
 # Atomic sandbox name reservations design
 
-This is a proposed implementation contract for closing the named SSH gap. Atomic reservations are not implemented. Existing `hm.name` metadata and CLI ambiguity rejection remain the current behavior. The design requires shared ownership in MemoryStore and RedisStore, rather than a control-plane process lock.
+This is a proposed implementation contract for closing the named SSH gap. Atomic pending reservation primitives are implemented, but named creation enforcement is not implemented. Existing `hm.name` metadata and CLI ambiguity rejection remain the current behavior. The design requires shared ownership in MemoryStore and RedisStore, rather than a control-plane process lock.
 
 ## Current behavior and the creation race
 
@@ -46,3 +46,9 @@ Introduce dedicated authenticated reservation and name-resolution interfaces ins
 | Cost | Matched name-create and resolve measurements on the same guest, store and concurrency, including conflicts, errors and cleanup |
 
 The feature comparison must continue to mark atomic name reservations absent until these interfaces and invariants are implemented and verified. A store primitive or a successful single-process lookup alone does not complete the feature.
+
+## Implemented store foundation
+
+Validated name and reservation types reject invalid stored identities, preserve case-sensitive names and omit operation tokens from Debug output. MemoryStore and RedisStore now support atomic pending reservation, same-token replay, reservation lookup and conditional pending release. Competing operation tokens cannot acquire the same name; a delayed release from the old owner cannot remove its replacement. Bound records cannot be inserted through the pending reservation operation. The shared contract passed in memory and against an owned Redis server on Linux, with all 34 library tests passing. Windows library tests and strict Clippy on both platforms also passed.
+
+Binding to an existing sandbox, deletion cleanup, node operation identity, legacy migration, authenticated routes and CLI use remain unimplemented. These primitives alone do not close the named SSH feature gap.
