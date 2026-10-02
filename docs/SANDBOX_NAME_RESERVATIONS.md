@@ -55,4 +55,6 @@ Atomic binding now requires an existing sandbox and matching reservation token, 
 
 Authenticated resolution now exists at `GET /sandbox-names/{name}` for admin and sandbox-scoped keys; inventory keys are refused. It returns only `name` and `sandboxID`, with no reservation token or guest connection credentials. Invalid names return 400, unknown or deleted names 404, and pending ownership or an observed conflicting legacy metadata name 409. Store failures return 503 with generic errors. The lookup checks current records but cannot prevent legacy metadata changing after that check; creation enforcement and migration remain necessary.
 
-Node operation identity, legacy migration, reservation management routes and CLI use remain unimplemented. These primitives alone do not close the named SSH feature gap.
+The CLI now prefers reserved lookup for `tcp-stdio --name`, bounds the response to 65536 bytes and checks the returned name and sandbox path. It falls back to metadata only for an empty 404 from an older server or an explicit unreserved-name 404. Pending ownership, authorization failures, server errors, deleted-target 404s and malformed replies stop lookup. The existing fallback still refuses duplicate metadata names. Shipped-binary protocol tests passed on Windows and Linux; this CLI change has not yet been verified with a real KVM guest.
+
+Node operation identity, creation enforcement, legacy migration and reservation management routes remain unimplemented. These primitives alone do not close the named SSH feature gap.

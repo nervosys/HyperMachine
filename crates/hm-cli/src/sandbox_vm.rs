@@ -288,6 +288,48 @@ impl Api {
 
     async fn resolve_name(&self, name: &str) -> Result<String> {
         sandbox_name(name).map_err(anyhow::Error::msg)?;
+        let mut reserved = self
+            .client
+            .get(self.url(&["sandbox-names", name])?)
+            .send()
+            .await
+            .context("reserved sandbox name lookup failed")?;
+        let status = reserved.status();
+        if status != reqwest::StatusCode::OK && status != reqwest::StatusCode::NOT_FOUND {
+            bail!("reserved sandbox name lookup returned {status}");
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = reserved
+            .chunk()
+            .await
+            .context("reserved name response failed")?
+        {
+            if bytes.len() + chunk.len() > 65536 {
+                bail!("reserved name response exceeds 65536 bytes");
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        if status == reqwest::StatusCode::OK {
+            let record: Value =
+                serde_json::from_slice(&bytes).context("invalid reserved name response")?;
+            if record["name"].as_str() != Some(name) {
+                bail!("reserved name response mismatches requested name");
+            }
+            let id = record["sandboxID"]
+                .as_str()
+                .context("reserved name missing sandboxID")?;
+            self.url(&["sandboxes", id])?;
+            return Ok(id.to_owned());
+        }
+        // Empty 404 is the older server's missing route. The new server
+        // explicitly distinguishes unreserved names from deleted targets.
+        if !bytes.is_empty() {
+            let error: Value =
+                serde_json::from_slice(&bytes).context("invalid reserved name error response")?;
+            if error["message"].as_str() != Some("name is not reserved") {
+                bail!("reserved sandbox name lookup returned {status}");
+            }
+        }
         // v1 listing includes all running and paused matches, without v2's
         // page limit. Refuse ambiguity instead of choosing a first page/row.
         let response = self
