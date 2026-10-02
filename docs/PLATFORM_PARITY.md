@@ -99,6 +99,13 @@ increased pooled P50 by 23.9% and P99 by 103.6%; only one paired mean improved.
 That tested policy was rejected and is not part of the deployed daemon. The
 memory gap remains; reclaimability alone does not establish a performance win.
 
+A [reclamation candidate guarded by the entire cold-start budget](benchmarks/2026-10-02/guarded-heap/README.md)
+verified seven reclamation calls with no admitted-cold overlap, failure recovery
+and snapshot resume. Its C100 cohort retained 725/800 passes and 75 disabled-worker
+creation failures. Only one of three complete pairs improved mean readiness and
+a different one improved held memory; none improved both. The guarded policy was
+not adopted, and the pass-count difference establishes no reliability fix.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.
