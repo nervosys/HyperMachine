@@ -504,3 +504,24 @@ unprivileged user:
 - graceful stops, both honoured and ignored;
 - a worker pool draining a queue;
 - IDs that try to reach outside the store.
+
+### Calendar scheduling implementation status
+
+`hv2_jobs::cron::CronExpression` now parses a bounded numeric five-field
+expression: minute (0-59), hour (0-23), day of month (1-31), month (1-12),
+and day of week (0-6, Sunday 0). The field order and numeric ranges follow the
+[POSIX crontab format](https://pubs.opengroup.org/onlinepubs/9699919799/utilities/crontab.html).
+The parser accepts `*`, values, comma lists, ascending inclusive ranges and
+positive steps on wildcards or ranges. Steps are an explicit extension here;
+a stepped day-of-month wildcard starts at 1, and a stepped range starts at its
+lower bound. Expression length is limited to 256 bytes.
+
+Names, aliases such as `@daily`, seconds/year fields, weekday 7, `?`, reversed
+ranges, empty list items, zero steps and steps on bare numbers are rejected.
+Tests cover exact selector sets, field boundaries and malformed input. This is
+a parser foundation only: it does not yet select calendar timestamps, resolve
+timezones/DST, validate whether dates can occur, persist cron schedules, or
+publish/dispatch them. The CLI and API still accept interval schedules only.
+Calendar day matching, next-occurrence search, durable progress compatibility,
+missed occurrences, cancellation and competing publishers remain required before
+cron support can be marked usable. Existing interval persistence is unchanged.
