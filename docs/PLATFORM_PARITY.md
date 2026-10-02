@@ -155,6 +155,15 @@ a bounded fixed-overhead memory reduction, not a causal latency win or fleet
 density gain. The candidate remains isolated; larger single-guest and higher
 concurrency, sustained allocations, lifecycle and platform checks remain.
 
+The startup candidate is now [rejected after larger prepared bursts](benchmarks/2026-10-02/startup-reclaim-scale/README.md).
+All 2400 restores and controls at C50/C100 pass, but candidate paired means
+and P99 are worse in all four pairs. At C100, P99 is 8656.581 ms versus
+1410.779 ms, despite lower held PSS. These larger-burst regressions outweigh
+the earlier C8 observations for adoption. Both HyperMachine variants perform
+the same clock/RNG maintenance; direct Firecracker controls omit that
+operation, so their startup contract is different and a fully matched service
+comparison remains required. Raw earlier evidence remains preserved.
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,

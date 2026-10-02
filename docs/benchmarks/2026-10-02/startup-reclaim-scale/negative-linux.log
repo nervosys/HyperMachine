@@ -1,0 +1,15 @@
+{
+  "rejected": [
+    "missing_run",
+    "wrong_order",
+    "wrong_binary",
+    "missing_trim",
+    "repeated_trim",
+    "diagnostic",
+    "source_changed",
+    "wrong_resources",
+    "missing_state",
+    "adoption_claim"
+  ],
+  "count": 10
+}
