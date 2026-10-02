@@ -88,3 +88,4 @@ docs/benchmarks/2026-10-02/node-completion/** -text whitespace=cr-at-eol,-blank-
 
 docs/benchmarks/2026-10-02/node-response-loss/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
 docs/benchmarks/2026-10-02/node-publication-fault/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof
+docs/benchmarks/2026-10-02/registration-acl/** -text whitespace=cr-at-eol,-blank-at-eol,-blank-at-eof

@@ -1,0 +1,23 @@
+   Compiling hv2-core v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-core)
+   Compiling hv2-agent v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-agent)
+   Compiling hv2-runtime v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-runtime)
+   Compiling hv2-api v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-api)
+   Compiling hv2-cluster v1.1.0 (/var/tmp/hm-registration-acl/source/crates/hv2-cluster)
+    Finished `test` profile [optimized + debuginfo] target(s) in 1m 10s
+     Running unittests src/lib.rs (/var/tmp/hm-competitive-target/debug/deps/hv2_cluster-551d4e56575db7fd)
+
+running 1 test
+
+thread 'store::tests::redis_named_registration_checks_write_permissions_before_writing' (2207) panicked at crates/hv2-cluster/src/store.rs:1657:13:
+registration partially wrote after denying sadd
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test store::tests::redis_named_registration_checks_write_permissions_before_writing ... FAILED
+
+failures:
+
+failures:
+    store::tests::redis_named_registration_checks_write_permissions_before_writing
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 37 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p hv2-cluster --lib`
