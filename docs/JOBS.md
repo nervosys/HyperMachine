@@ -313,7 +313,11 @@ connection descriptor tokens are not returned. Completion status is durable;
 Receipts retain up to 65536 bytes of UTF-8 stdout and stderr per stream, with
 explicit truncation flags and character-safe boundaries. Read them using
 `hm jobs --store DIR schedule receipt NAME SCHEDULED_MS`. Legacy receipts report
-missing output as null. Explicit dispatch also limits accumulated connect response
+missing output as null. Persisted completions are validated on recovery as well
+as publication: invalid exit codes or oversized stored output produce a
+corruption error and block selection and claiming of later work. This detects
+invalid records; it does not authenticate store contents against a writer with
+filesystem access. Explicit dispatch also limits accumulated connect response
 bytes to 65536 and execution response bytes to 1048576, checking declared length
 and received chunks. Oversized responses leave ownership unresolved and cannot
 be automatically retried. These limits are not a total process-memory bound or
