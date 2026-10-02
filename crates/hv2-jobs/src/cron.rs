@@ -1,6 +1,6 @@
-//! Numeric five-field cron grammar and bounded UTC calendar occurrence search.
+//! Numeric five-field cron grammar and bounded UTC/timezone occurrence search.
 use crate::{JobError, Result};
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, LocalResult, NaiveDate, TimeZone};
 use std::str::FromStr;
 
 /// Minute, hour, day-of-month, month, day-of-week numeric selectors.
@@ -27,6 +27,76 @@ impl CronExpression {
             dom && dow
         };
         self.selected(3, date.month()) && day
+    }
+
+    /// First local cron minute at or after `time_ms` in an IANA timezone.
+    /// Gaps are skipped; both fold occurrences are eligible in UTC order.
+    /// Search is bounded to a 400-year civil-calendar horizon. Supported UTC
+    /// years are 1970-9999; timezone rules come from the locked chrono-tz build.
+    pub fn at_or_after_in_timezone(&self, time_ms: u64, timezone: &str) -> Result<Option<u64>> {
+        let timezone: chrono_tz::Tz = timezone
+            .parse()
+            .map_err(|_| JobError::InvalidSpec("unknown cron timezone".into()))?;
+        let signed = i64::try_from(time_ms).map_err(|_| invalid_time())?;
+        let start = chrono::DateTime::from_timestamp_millis(signed).ok_or_else(invalid_time)?;
+        if !(1970..=9999).contains(&start.year()) {
+            return Err(invalid_time());
+        }
+        let local_date = start.with_timezone(&timezone).date_naive();
+        // UTC offsets are strictly less than a day in magnitude. Starting two
+        // civil days earlier covers date-crossing backward transitions.
+        let mut date = local_date
+            .pred_opt()
+            .and_then(|d| d.pred_opt())
+            .ok_or_else(invalid_time)?;
+        let mut best: Option<u64> = None;
+        for _ in 0..=146_102 {
+            let earliest_possible = date
+                .and_hms_opt(0, 0, 0)
+                .expect("midnight")
+                .and_utc()
+                .timestamp_millis()
+                - 86_400_000;
+            if best.is_some_and(|candidate| earliest_possible > candidate as i64) {
+                return Ok(best);
+            }
+            if date.year() > 9999 {
+                return Ok(best);
+            }
+            if self.matches_date(date) {
+                for hour in 0..24 {
+                    if !self.selected(1, hour) {
+                        continue;
+                    }
+                    for minute in 0..60 {
+                        if !self.selected(0, minute) {
+                            continue;
+                        }
+                        let civil = date
+                            .and_hms_opt(hour, minute, 0)
+                            .expect("bounded clock fields");
+                        let candidates = match timezone.from_local_datetime(&civil) {
+                            LocalResult::Single(value) => [Some(value), None],
+                            LocalResult::Ambiguous(first, second) => [Some(first), Some(second)],
+                            LocalResult::None => [None, None],
+                        };
+                        for candidate in candidates.into_iter().flatten() {
+                            let Ok(value) = u64::try_from(candidate.timestamp_millis()) else {
+                                continue;
+                            };
+                            if value >= time_ms && best.is_none_or(|previous| value < previous) {
+                                best = Some(value);
+                            }
+                        }
+                    }
+                }
+            }
+            let Some(next) = date.succ_opt() else {
+                return Ok(best);
+            };
+            date = next;
+        }
+        Ok(best)
     }
 
     /// First matching whole minute at or after Unix milliseconds, in UTC.
@@ -80,6 +150,10 @@ impl CronExpression {
         }
         Ok(None)
     }
+}
+
+fn invalid_time() -> JobError {
+    JobError::InvalidSpec("timezone cron timestamp is outside supported years 1970-9999".into())
 }
 
 fn invalid() -> JobError {
@@ -160,6 +234,74 @@ mod tests {
             .unwrap()
             .timestamp_millis() as u64
     }
+    #[test]
+    fn timezone_search_skips_gaps_and_orders_all_fold_occurrences() {
+        let zone = "America/Los_Angeles";
+        let gap: CronExpression = "30 2 * * *".parse().unwrap();
+        assert_eq!(
+            gap.at_or_after_in_timezone(utc("2026-03-08T08:00:00Z"), zone)
+                .unwrap(),
+            Some(utc("2026-03-09T09:30:00Z"))
+        );
+        let fold: CronExpression = "30 1 * * *".parse().unwrap();
+        let first = utc("2026-11-01T08:30:00Z");
+        let second = utc("2026-11-01T09:30:00Z");
+        assert_eq!(
+            fold.at_or_after_in_timezone(first, zone).unwrap(),
+            Some(first)
+        );
+        assert_eq!(
+            fold.at_or_after_in_timezone(first + 1, zone).unwrap(),
+            Some(second)
+        );
+        assert_eq!(
+            fold.at_or_after_in_timezone(second + 1, zone).unwrap(),
+            Some(utc("2026-11-02T09:30:00Z"))
+        );
+        let each: CronExpression = "* 1 * * *".parse().unwrap();
+        assert_eq!(
+            each.at_or_after_in_timezone(utc("2026-11-01T08:45:01Z"), zone)
+                .unwrap(),
+            Some(utc("2026-11-01T08:46:00Z"))
+        );
+        assert_eq!(
+            each.at_or_after_in_timezone(utc("2026-11-01T08:59:01Z"), zone)
+                .unwrap(),
+            Some(utc("2026-11-01T09:00:00Z"))
+        );
+        let midnight: CronExpression = "0 0 * * *".parse().unwrap();
+        assert_eq!(
+            midnight
+                .at_or_after_in_timezone(utc("2011-12-30T09:00:01Z"), "Pacific/Apia")
+                .unwrap(),
+            Some(utc("2011-12-30T10:00:00Z"))
+        );
+        let half_hour: CronExpression = "45 1 * * *".parse().unwrap();
+        assert_eq!(
+            half_hour
+                .at_or_after_in_timezone(utc("2026-04-04T14:45:00Z") + 1, "Australia/Lord_Howe")
+                .unwrap(),
+            Some(utc("2026-04-04T15:15:00Z"))
+        );
+        let historical: CronExpression = "* * * * *".parse().unwrap();
+        assert_eq!(
+            historical
+                .at_or_after_in_timezone(utc("1971-01-01T00:00:00Z"), "Africa/Monrovia")
+                .unwrap(),
+            Some(utc("1971-01-01T00:00:30Z"))
+        );
+        assert_eq!(
+            "0 0 31 2 *"
+                .parse::<CronExpression>()
+                .unwrap()
+                .at_or_after_in_timezone(0, zone)
+                .unwrap(),
+            None
+        );
+        assert!(fold.at_or_after_in_timezone(0, "unknown/timezone").is_err());
+        assert!(fold.at_or_after_in_timezone(u64::MAX, zone).is_err());
+    }
+
     #[test]
     fn utc_search_preserves_boundaries_leap_years_and_day_matching() {
         let every: CronExpression = "* * * * *".parse().unwrap();

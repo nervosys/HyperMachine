@@ -531,8 +531,19 @@ selectors must match, including wildcard steps. This follows the documented
 [BSD cron day matching convention](https://man.openbsd.org/crontab.5). Tests cover
 month/year rollover, Sunday zero, restricted-day OR matching, stepped wildcard
 matching, leap-year century rules, partial-minute rounding, impossible dates
-and timestamp limits. Named timezones/DST, persisted cron schedules and
+and timestamp limits. `at_or_after_in_timezone` also supports named IANA zones using the locked
+[chrono-tz database](https://docs.rs/chrono-tz/latest/chrono_tz/). Nonexistent
+local minutes are skipped; both repeated local minutes are eligible, ordered
+by their UTC timestamps. Selection considers all matching candidates rather
+than returning the first civil clock value, so repeated-hour occurrences do
+not jump ahead of earlier UTC work. A two-day guard handles date-crossing
+offset changes, and search has a 400-year civil horizon with supported input
+UTC years 1970-9999 and an upper civil year of 9999. Tests include Los Angeles
+DST gaps/folds, Lord Howe half-hour folds, Apia's skipped day and historical
+Monrovia second-based offsets. Rules are those embedded in the locked build;
+future durable scheduling must preserve or validate its timezone database
+version when reconstructing history. Persisted cron schedules and
 publication/dispatch remain unimplemented. The CLI and API still accept interval schedules only.
-Timezone-aware occurrence search, durable progress compatibility,
+Durable progress compatibility,
 missed occurrences, cancellation and competing publishers remain required before
 cron support can be marked usable. Existing interval persistence is unchanged.
