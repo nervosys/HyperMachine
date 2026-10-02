@@ -122,6 +122,7 @@ def main():
     parser.add_argument("--ssh-pty", action="store_true", help="verify guest PTY allocation and terminal input")
     parser.add_argument("--ssh-terminal", action="store_true", help="verify local/guest terminal resize and interrupt")
     parser.add_argument("--scheduled-dispatch", action="store_true", help="verify explicit scheduled VM dispatch and durable receipts")
+    parser.add_argument("--scheduled-worker", action="store_true", help="verify automatic VM worker continuation and durable receipts")
     args = parser.parse_args()
     if args.ssh_by_name and not args.ssh_fixture:
         parser.error("--ssh-by-name requires --ssh-fixture")
@@ -335,7 +336,7 @@ def main():
                 if time.monotonic() > deadline:
                     raise TimeoutError("guest fixture did not start")
                 time.sleep(.01)
-            if args.scheduled_dispatch:
+            if args.scheduled_dispatch or args.scheduled_worker:
                 def scheduled_dispatch():
                     job_store = directory / "scheduled-jobs"
                     profiles = directory / "job-profiles.json"
@@ -361,7 +362,7 @@ def main():
                     jobs("create", "guest-job", str(spec))
                     jobs("publish", "guest-job", "--now-ms", "100", "--limit", "1")
                     api("POST", f"/sandboxes/{id}/pause", {}, expected=204)
-                    result = jobs("dispatch", "guest-job", "100", "--profiles", str(profiles))
+                    result = jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1") if args.scheduled_worker else jobs("dispatch", "guest-job", "100", "--profiles", str(profiles))
                     assert result["exit_code"] == 7 and result["timed_out"] is False
                     assert result["stdout"] == marker + "\nguest-job--100\n"
                     assert command(id, "cat /tmp/scheduled-dispatch-count") == "x"
@@ -370,13 +371,20 @@ def main():
                     assert receipt["stdout_truncated"] is False
                     jobs("dispatch", "guest-job", "100", "--profiles", str(profiles), succeeds=False)
                     assert command(id, "cat /tmp/scheduled-dispatch-count") == "x"
+                    if args.scheduled_worker:
+                        continued = jobs("worker", "guest-job", "--profiles", str(profiles), "--limit", "1", "--ticks", "1")
+                        assert continued["scheduled_ms"] == 110 and continued["exit_code"] == 7
+                        assert continued["stdout"] == marker + "\nguest-job--110\n"
+                        assert command(id, "cat /tmp/scheduled-dispatch-count") == "xx"
+                        assert jobs("receipt", "guest-job", "110")["completion"]["stdout"] == continued["stdout"]
                     jobs("cancel", "guest-job")
                     jobs("publish", "guest-job", "--now-ms", "110", succeeds=False)
                     assert jobs("receipt", "guest-job", "100")["completion"] == receipt
                     return {"paused_guest_resumed": True, "guest_exit_code": 7,
                             "literal_environment_preserved": True, "durable_output_recovered": True,
-                            "duplicate_guest_execution_refused": True, "history_survives_cancellation": True}
-                case("scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
+                            "duplicate_guest_execution_refused": True, "history_survives_cancellation": True, "automatic_worker": args.scheduled_worker,
+                            "restart_continues_next_occurrence": args.scheduled_worker}
+                case("scheduled-VM-worker-TLS-resume-restart-and-no-replay" if args.scheduled_worker else "scheduled-VM-dispatch-TLS-resume-receipt-and-no-replay", scheduled_dispatch)
 
             if args.ssh_fixture:
                 fixture = args.ssh_fixture

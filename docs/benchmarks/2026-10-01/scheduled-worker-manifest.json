@@ -1,0 +1,16 @@
+{
+  "source_commit": "26b2897bb55e7f9c2e057620e8a722f023347b9c",
+  "report_sha256": "ee981b3f58d94acae8b0a48ea219cbbbe6bcbcc62b907579f7b367b4ef825caf",
+  "core_source_patch_sha256": "e6c015334bb04b1c96768c54bfb869ff3a9b2624b95210fc2bce9dc2ed0a1728",
+  "artifact_sha256": {
+    "daemon": "03043e33a6efe017bf0f9d2f0d7ee9caf4e0c09705abeaf849f21825128f799d",
+    "control-plane": "67059d67fc9dfc3a2d2fc55d958245dc5220bf48fb48bdb7475a8e6ede9a1029",
+    "cli": "bd1232d9ccade63b174febbb4ffb2e1d85b23ed8a472cb9131d07d8d00aa1bd6",
+    "kernel": "afaa2129c3eacc519fd1ca35fe8bfc47e6c44251b5840d504f1e140705daebdd",
+    "initrd": "7d36dd6384504ec60abf2e69f9d78941cfae8d96110d9e05f5d45ce87fdd1224",
+    "coordinator": "c98eddc24f04b8dbc4ff3cf328cd43d1d17920dc7a3d90b48009533761f7273f"
+  },
+  "verified_cases": 16,
+  "registered_processes_stopped": 22,
+  "limitations": "One functional WSL nested-KVM run, no performance comparison. CLI includes provisional core edits; daemon and control plane are frozen accepted artifacts. No worker-loss reconciliation or guest cancellation verification."
+}
