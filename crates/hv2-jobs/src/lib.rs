@@ -47,6 +47,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "http")]
 pub mod http;
+pub mod cron;
 pub mod worker;
 pub mod schedule;
 pub mod dispatch;
