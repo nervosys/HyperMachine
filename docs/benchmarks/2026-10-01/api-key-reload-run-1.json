@@ -1,0 +1,90 @@
+{
+  "success": true,
+  "scope": "local process-level Unix signal reload; no VM or performance comparison",
+  "binary_sha256": "ac7e4af6c53bfca35695688f14aac52ffef7fafadd2e2c06a07c1031505d1cdf",
+  "coordinator_sha256": "66d764d822805caf16d742ed8d724d76c442ecfad0606c13135c7faea4379af2",
+  "checks": [
+    {
+      "name": "initial key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "old key revoked",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "new key active",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "scope preserved",
+      "status": 403,
+      "expected": 403
+    },
+    {
+      "name": "malformed preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "malformed preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "empty preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "empty preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "admin collision preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "admin collision preserves revocation",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "missing file preserves active key",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "admin unchanged",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "expired replacement revokes scoped access",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "expired set keeps authentication required",
+      "status": 401,
+      "expected": 401
+    },
+    {
+      "name": "valid update after rejection",
+      "status": 200,
+      "expected": 200
+    },
+    {
+      "name": "restoration revokes previous key",
+      "status": 401,
+      "expected": 401
+    }
+  ],
+  "owned_process_stopped": true,
+  "exit_code": -15
+}
