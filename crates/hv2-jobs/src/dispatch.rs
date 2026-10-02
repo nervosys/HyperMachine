@@ -42,6 +42,29 @@ pub struct DispatchCompletion {
     pub stderr_truncated: bool,
 }
 
+impl DispatchCompletion {
+    fn validate(&self) -> Result<()> {
+        if [&self.stdout, &self.stderr]
+            .into_iter()
+            .flatten()
+            .any(|text| text.len() > MAX_RECEIPT_OUTPUT_BYTES)
+        {
+            return Err(JobError::InvalidSpec(
+                "dispatch output exceeds the per-stream receipt limit".into(),
+            ));
+        }
+        if self
+            .exit_code
+            .is_some_and(|code| !(0..=255).contains(&code))
+        {
+            return Err(JobError::InvalidSpec(
+                "guest exit code must be 0-255 or null".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 pub const MAX_RECEIPT_OUTPUT_BYTES: usize = 65_536;
 
 /// Bound a UTF-8 stream without splitting a character.
@@ -162,6 +185,11 @@ impl Store {
                 "dispatch result {key} has the wrong claim"
             )));
         }
+        if let Some(result) = &completion {
+            result.validate().map_err(|_| {
+                JobError::Corrupt(format!("dispatch result {key} violates completion bounds"))
+            })?;
+        }
         Ok(DispatchState { claim, completion })
     }
 
@@ -173,23 +201,7 @@ impl Store {
         scheduled_ms: u64,
         result: &DispatchCompletion,
     ) -> Result<()> {
-        if [&result.stdout, &result.stderr]
-            .into_iter()
-            .flatten()
-            .any(|text| text.len() > MAX_RECEIPT_OUTPUT_BYTES)
-        {
-            return Err(JobError::InvalidSpec(
-                "dispatch output exceeds the per-stream receipt limit".into(),
-            ));
-        }
-        if result
-            .exit_code
-            .is_some_and(|code| !(0..=255).contains(&code))
-        {
-            return Err(JobError::InvalidSpec(
-                "guest exit code must be 0-255 or null".into(),
-            ));
-        }
+        result.validate()?;
         let state = self.vm_dispatch_state(id, scheduled_ms)?;
         if state.claim.token != result.claim_token {
             return Err(JobError::Conflict(
@@ -300,6 +312,53 @@ mod tests {
                 .exit_code,
             Some(0)
         );
+    }
+
+    #[test]
+    fn corrupt_completion_cannot_unblock_later_guest_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open(dir.path()).unwrap();
+        let schedule = serde_json::from_value(serde_json::json!({
+            "first_ms":100,"every_ms":10,"vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+            "job":{"command":["true"]}})).unwrap();
+        store
+            .create_interval_schedule("corrupt", &schedule)
+            .unwrap();
+        store.materialize_interval("corrupt", 110, 2).unwrap();
+        let claim = store.claim_vm_occurrence("corrupt", 100, "worker").unwrap();
+        let valid = serde_json::json!({"claim_token":claim.token,"exit_code":0,"timed_out":false});
+        std::fs::create_dir_all(store.root().join("dispatch-results")).unwrap();
+        let path = store.root().join("dispatch-results/corrupt--100");
+        for (field, value) in [
+            ("exit_code", serde_json::json!(-1)),
+            ("exit_code", serde_json::json!(256)),
+            (
+                "stdout",
+                serde_json::json!("x".repeat(MAX_RECEIPT_OUTPUT_BYTES + 1)),
+            ),
+            (
+                "stderr",
+                serde_json::json!("x".repeat(MAX_RECEIPT_OUTPUT_BYTES + 1)),
+            ),
+        ] {
+            let mut damaged = valid.clone();
+            damaged[field] = value;
+            std::fs::write(&path, serde_json::to_vec(&damaged).unwrap()).unwrap();
+            let reopened = Store::open(dir.path()).unwrap();
+            assert!(matches!(
+                reopened.vm_dispatch_state("corrupt", 100),
+                Err(JobError::Corrupt(_))
+            ));
+            assert!(matches!(
+                reopened.next_vm_occurrence("corrupt"),
+                Err(JobError::Corrupt(_))
+            ));
+            assert!(matches!(
+                reopened.claim_vm_occurrence("corrupt", 110, "later"),
+                Err(JobError::Corrupt(_))
+            ));
+            assert!(!store.root().join("dispatch-claims/corrupt--110").exists());
+        }
     }
 
     #[test]
