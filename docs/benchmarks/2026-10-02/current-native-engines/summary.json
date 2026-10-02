@@ -1,0 +1,164 @@
+{
+  "purpose": "current native-engine baseline; no causal improvement claim",
+  "cohort_success": false,
+  "profiles": [
+    {
+      "concurrency": 1,
+      "success": true,
+      "cleanup_verified": true,
+      "engines": {
+        "hypermachine": {
+          "planned": 2,
+          "attempts": 2,
+          "passed": 2,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 2,
+            "mean": 380.79015850962605,
+            "p50": 374.9903210118646,
+            "p95": 386.5899960073875,
+            "p99": 386.5899960073875
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 120.87548828125,
+          "incremental_idle_pss_mib_median": 105.703125
+        },
+        "firecracker": {
+          "planned": 2,
+          "attempts": 2,
+          "passed": 2,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 2,
+            "mean": 340.13246950053144,
+            "p50": 335.4702840006212,
+            "p95": 344.7946550004417,
+            "p99": 344.7946550004417
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 85.916015625,
+          "incremental_idle_pss_mib_median": 85.916015625
+        }
+      }
+    },
+    {
+      "concurrency": 8,
+      "success": true,
+      "cleanup_verified": true,
+      "engines": {
+        "hypermachine": {
+          "planned": 16,
+          "attempts": 16,
+          "passed": 16,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 16,
+            "mean": 504.03340343564196,
+            "p50": 494.678400005796,
+            "p95": 574.8587149864761,
+            "p99": 574.8587149864761
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 859.0849609375,
+          "incremental_idle_pss_mib_median": 771.599609375
+        },
+        "firecracker": {
+          "planned": 16,
+          "attempts": 16,
+          "passed": 16,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 16,
+            "mean": 422.44182606464165,
+            "p50": 429.10535700502805,
+            "p95": 437.94576299842447,
+            "p99": 437.94576299842447
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 670.9453125,
+          "incremental_idle_pss_mib_median": 670.9453125
+        }
+      }
+    },
+    {
+      "concurrency": 50,
+      "success": true,
+      "cleanup_verified": true,
+      "engines": {
+        "hypermachine": {
+          "planned": 100,
+          "attempts": 100,
+          "passed": 100,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 100,
+            "mean": 3045.0590600098076,
+            "p50": 3121.661999000935,
+            "p95": 3365.5628919950686,
+            "p99": 3372.6147429988487
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 4243.23486328125,
+          "incremental_idle_pss_mib_median": 4203.18359375
+        },
+        "firecracker": {
+          "planned": 100,
+          "attempts": 100,
+          "passed": 100,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 100,
+            "mean": 2531.985037819977,
+            "p50": 2560.4358999989927,
+            "p95": 2672.7912409987766,
+            "p99": 2694.5204110088525
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 4180.90234375,
+          "incremental_idle_pss_mib_median": 4180.90234375
+        }
+      }
+    },
+    {
+      "concurrency": 100,
+      "success": false,
+      "cleanup_verified": true,
+      "engines": {
+        "hypermachine": {
+          "planned": 200,
+          "attempts": 200,
+          "passed": 100,
+          "failed": 100,
+          "successful_readiness_ms": {
+            "n": 100,
+            "mean": 8408.835953270464,
+            "p50": 8484.271794004599,
+            "p95": 8596.550659000059,
+            "p99": 8616.946074005682
+          },
+          "valid_memory_batches": 1,
+          "held_idle_pss_mib_median": 8467.6171875,
+          "incremental_idle_pss_mib_median": 8317.984375
+        },
+        "firecracker": {
+          "planned": 200,
+          "attempts": 200,
+          "passed": 200,
+          "failed": 0,
+          "successful_readiness_ms": {
+            "n": 200,
+            "mean": 6951.659583104556,
+            "p50": 5766.795884002931,
+            "p95": 8648.223836004036,
+            "p99": 8674.39423900214
+          },
+          "valid_memory_batches": 2,
+          "held_idle_pss_mib_median": 8360.169921875,
+          "incremental_idle_pss_mib_median": 8360.169921875
+        }
+      }
+    }
+  ],
+  "attempts": 636,
+  "passed": 536
+}
