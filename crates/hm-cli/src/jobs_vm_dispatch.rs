@@ -1,9 +1,88 @@
-//! One explicit VM dispatch. Unknown transport outcomes remain durably claimed.
+//! Explicit and automatic VM dispatch. Unknown outcomes remain durably claimed.
 use anyhow::{bail, Context, Result};
 use hv2_jobs::{dispatch::DispatchCompletion, schedule::Occurrence, Store};
 use reqwest::Method;
 use serde_json::{json, Value};
 use std::path::Path;
+
+pub struct VmWorkerOptions {
+    pub schedule_id: String,
+    pub profiles: std::path::PathBuf,
+    pub worker: String,
+    pub limit: usize,
+    pub poll_ms: u64,
+    pub ticks: Option<u64>,
+}
+
+/// Publish bounded batches and dispatch at most one occurrence per tick.
+/// Unresolved ownership terminates this worker without re-execution.
+pub async fn run_worker(store: &Store, options: VmWorkerOptions) -> Result<i32> {
+    if !(1..=1024).contains(&options.limit)
+        || !(1..=60_000).contains(&options.poll_ms)
+        || options.ticks == Some(0)
+    {
+        bail!("worker requires limit 1-1024, poll-ms 1-60000 and positive ticks");
+    }
+    let schedule = store.interval_schedule(&options.schedule_id)?;
+    let target = schedule.vm.context("schedule has no VM target")?;
+    let (_, timeout) = crate::jobs_profile::resolve_connection_profile(
+        &options.profiles,
+        &target.connection_profile,
+    )?;
+    if timeout <= target.timeout_secs {
+        bail!("profile request timeout must exceed the guest command timeout");
+    }
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
+    let mut ticks = 0_u64;
+    loop {
+        if store.interval_schedule_cancelled(&options.schedule_id)? {
+            return Ok(0);
+        }
+        let operation = async {
+            let (store_copy, name, limit) =
+                (store.clone(), options.schedule_id.clone(), options.limit);
+            tokio::task::spawn_blocking(move || {
+                store_copy.materialize_interval(&name, hv2_jobs::now_ms(), limit)
+            })
+            .await??;
+            let Some(record) = store.next_vm_occurrence(&options.schedule_id)? else {
+                return Ok(json!({"idle":true}));
+            };
+            dispatch_once(
+                store,
+                &options.schedule_id,
+                record.scheduled_ms,
+                &options.worker,
+                &options.profiles,
+            )
+            .await
+        };
+        tokio::pin!(operation);
+        let result = tokio::select! {
+            result = &mut operation => result?,
+            signal = &mut shutdown => {
+                signal?;
+                // An accepted guest request may still be running. Wait for its
+                // bounded response and persist completion before leaving.
+                operation.await?;
+                return Ok(0);
+            }
+        };
+        println!("{}", serde_json::to_string(&result)?);
+        std::io::Write::flush(&mut std::io::stdout())?;
+        ticks = ticks
+            .checked_add(1)
+            .context("VM worker tick count overflow")?;
+        if options.ticks.is_some_and(|limit| ticks >= limit) {
+            return Ok(0);
+        }
+        tokio::select! {
+            () = tokio::time::sleep(std::time::Duration::from_millis(options.poll_ms)) => {},
+            signal = &mut shutdown => { signal?; return Ok(0); }
+        }
+    }
+}
 
 fn guest_command(record: &Occurrence) -> Result<String> {
     let mut args = vec!["env".to_string(), "--".to_string()];

@@ -97,6 +97,20 @@ pub enum JobsCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum ScheduleCommand {
+    /// Publish and execute VM occurrences in order; unresolved work stops the worker
+    Worker {
+        id: String,
+        #[arg(long)]
+        profiles: PathBuf,
+        #[arg(long, default_value = "cli")]
+        worker: String,
+        #[arg(long, default_value = "100")]
+        limit: usize,
+        #[arg(long, default_value = "1000")]
+        poll_ms: u64,
+        #[arg(long)]
+        ticks: Option<u64>,
+    },
     /// Read durable dispatch ownership and completion output
     Receipt { id: String, scheduled_ms: u64 },
     /// Dispatch one committed VM occurrence; uncertain outcomes are not retried
@@ -160,6 +174,27 @@ pub async fn run(store: &StoreArgs, command: JobsCommand) -> Result<i32> {
     match command {
         JobsCommand::Schedule { command } => {
             let value = match command {
+                ScheduleCommand::Worker {
+                    id,
+                    profiles,
+                    worker,
+                    limit,
+                    poll_ms,
+                    ticks,
+                } => {
+                    return crate::jobs_vm_dispatch::run_worker(
+                        &s,
+                        crate::jobs_vm_dispatch::VmWorkerOptions {
+                            schedule_id: id,
+                            profiles,
+                            worker,
+                            limit,
+                            poll_ms,
+                            ticks,
+                        },
+                    )
+                    .await;
+                }
                 ScheduleCommand::Receipt { id, scheduled_ms } => {
                     serde_json::to_value(s.vm_dispatch_state(&id, scheduled_ms)?)?
                 }
