@@ -8,7 +8,14 @@ use std::time::Instant;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rows = Vec::new();
-    for (completed, pending) in [(0_u64, 1_u64), (100, 1), (1000, 1), (5000, 1), (0, 1000), (0, 5000)] {
+    for (completed, pending) in [
+        (0_u64, 1_u64),
+        (100, 1),
+        (1000, 1),
+        (5000, 1),
+        (0, 1000),
+        (0, 5000),
+    ] {
         let through = completed + pending - 1;
         let directory = tempfile::tempdir()?;
         let store = Store::open(directory.path())?;
@@ -42,6 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     token: token.clone(),
                 };
                 let result = DispatchCompletion {
+                    origin: hv2_jobs::dispatch::CompletionOrigin::Unknown,
                     claim_token: token,
                     exit_code: Some(0),
                     timed_out: false,
