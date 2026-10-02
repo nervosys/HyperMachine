@@ -722,6 +722,7 @@ def main():
                     def registration_fault():
                         fault_name="registration-"+uuid.uuid4().hex
                         body={"templateID":"base","timeout":300,"metadata":{"hm.name":fault_name}}
+                        if args.node_registration_reconcile:body["idleTimeout"]=30
                         def direct(method,path,body=None,expected=200,cluster_credential=token):
                             connection=http.client.HTTPSConnection("127.0.0.1",node_port,context=node_context,timeout=90)
                             try:
@@ -759,6 +760,14 @@ def main():
                             assert pending["name"]==fault_name and pending["sandbox_id"] is None
                             assert {row["sandboxID"] for row in direct("GET","/v2/sandboxes")}=={id,local_id}
                             if args.node_registration_reconcile:
+                                time.sleep(35)  # Cross the configured 30-second idle window.
+                                idle_rows=[row for row in direct("GET","/v2/sandboxes") if row["sandboxID"]==local_id]
+                                assert len(idle_rows)==1 and idle_rows[0]["state"]=="running",idle_rows
+                                still_live=direct("POST",f"/sandboxes/{local_id}/exec",{"cmd":"printf pending-idle-survivor","timeout_secs":10})
+                                assert still_live["exit_code"]==0 and still_live["stdout"]=="pending-idle-survivor"
+                                direct("POST",f"/sandboxes/{local_id}/pause",{},expected=409)
+                                direct("POST",f"/sandboxes/{local_id}/fork",{"count":1},expected=409)
+                                direct("POST",f"/sandboxes/{local_id}/timeout",{"timeout":300},expected=409)
                                 path=f"/sandboxes/{local_id}/registration/reconcile"
                                 direct("POST",path,expected=401,cluster_credential="wrong")
                                 replacement=dict(pending,token=str(uuid.uuid4()))
@@ -777,6 +786,22 @@ def main():
                                 assert {row["sandboxID"] for row in api("GET","/v2/sandboxes")}=={id,local_id}
                                 api("POST","/v2/sandboxes",body,expected=409)
                                 direct("POST",path,expected=409)
+                                direct("POST",f"/sandboxes/{local_id}/timeout",{"timeout":300},expected=204)
+                                direct("POST",f"/sandboxes/{local_id}/pause",{},expected=204)
+                                resumed=direct("POST",f"/sandboxes/{local_id}/resume",{"timeout":300},expected=201)
+                                assert resumed["sandboxID"]==local_id
+                                assert alias_cli("inspect",fault_name)=={"name":fault_name,"sandboxID":local_id}
+                                forked=direct("POST",f"/sandboxes/{local_id}/fork",{"count":1,"timeout":300},expected=201)
+                                assert len(forked)==1
+                                child_id=forked[0]["sandbox"]["sandboxID"]
+                                guests.add(child_id)
+                                try:
+                                    child=api("GET",f"/sandboxes/{child_id}")
+                                    assert "hm.name" not in child.get("metadata",{})
+                                    assert alias_cli("inspect",fault_name)=={"name":fault_name,"sandboxID":local_id}
+                                finally:
+                                    direct("DELETE",f"/sandboxes/{child_id}",expected=204)
+                                    guests.remove(child_id)
                                 assert pending["token"] not in command(local_id,"env")
                                 command(local_id,"/usr/sbin/dropbear -F -E -s -j -k -r /etc/dropbear/fixture-key -p 127.0.0.1:22 -P /var/run/ssh-fixture.pid </dev/null >/tmp/ssh-fixture.log 2>&1 &")
                                 deadline=time.monotonic()+10
@@ -796,6 +821,9 @@ def main():
                             api("GET",f"/sandbox-names/{fault_name}",expected=404)
                             return {"control_plane_status":503,"local_guest_preserved_and_executable":True,
                                     "partial_registration_writes_absent":True,"wrong_cluster_credential_refused":True,
+                                    "uncertain_pause_fork_timeout_refused":True,"timeout_available_after_reconciliation":True,
+                                    "uncertain_guest_survives_idle_window_seconds":35,
+                                    "pause_resume_fork_available_after_reconciliation":True,
                                     "replacement_owner_refused_without_guest_loss":True,"original_owner_reconciles_same_VM":True,
                                     "CLI_and_named_SSH_recover_same_guest":True,"duplicate_creation_refused":True,
                                     "reconciliation_context_cleared_after_success":True,"operation_not_exposed":True,
