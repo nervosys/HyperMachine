@@ -93,6 +93,12 @@ after no-op adjustment. This identifies a memory optimization candidate; the
 diagnostic helper changes the fixture, and concurrent latency, lifecycle and
 competitor comparisons remain untested. No heap policy or default was adopted.
 
+An isolated [250 ms periodic-reclamation candidate](benchmarks/2026-10-02/periodic-heap/README.md)
+passed all 800 C100 attempts and reduced held PSS in four of four pairs, but
+increased pooled P50 by 23.9% and P99 by 103.6%; only one paired mean improved.
+That tested policy was rejected and is not part of the deployed daemon. The
+memory gap remains; reclaimability alone does not establish a performance win.
+
 - Open source and self-hosted, down to the VMM.
 - Drop-in for the E2B SDKs, so existing agent code needs no changes.
 - Per-sandbox egress policy with a decision log.
