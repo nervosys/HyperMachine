@@ -67,6 +67,11 @@ pub enum VmCommand {
         #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
         lifetime: u64,
     },
+    /// Assign or inspect a reserved alias for an existing VM
+    Alias {
+        #[command(subcommand)]
+        command: AliasCommand,
+    },
     /// List VM sandboxes
     List,
     /// Inspect a VM sandbox
@@ -139,6 +144,21 @@ pub enum VmCommand {
     Domain {
         #[command(subcommand)]
         command: DomainCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AliasCommand {
+    /// Reserve a name for an existing sandbox; ownership conflicts are refused
+    Bind {
+        id: String,
+        #[arg(value_parser = sandbox_name)]
+        name: String,
+    },
+    /// Inspect authoritative reserved ownership without metadata fallback
+    Inspect {
+        #[arg(value_parser = sandbox_name)]
+        name: String,
     },
 }
 
@@ -497,6 +517,21 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             api.request(Method::POST, &["v2", "sandboxes"], Some(body))
                 .await?
         }
+        VmCommand::Alias { command } => match command {
+            AliasCommand::Bind { id, name } => {
+                api.request_bounded(
+                    Method::PUT,
+                    &["sandboxes", &id, "names", &name],
+                    None,
+                    65536,
+                )
+                .await?
+            }
+            AliasCommand::Inspect { name } => {
+                api.request_bounded(Method::GET, &["sandbox-names", &name], None, 65536)
+                    .await?
+            }
+        },
         VmCommand::List => api.request(Method::GET, &["sandboxes"], None).await?,
         VmCommand::Inspect { id } => api.request(Method::GET, &["sandboxes", &id], None).await?,
         VmCommand::Delete { id } => {

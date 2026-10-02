@@ -837,3 +837,61 @@ async fn reserved_name_errors_never_fall_back_to_legacy_metadata() {
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     server.abort();
 }
+
+#[tokio::test]
+async fn alias_commands_authenticate_assign_inspect_and_refuse_invalid_names() {
+    use axum::http::HeaderMap;
+    let app = Router::new().route("/sandboxes/{id}/names/{name}", axum::routing::put(
+        |axum::extract::Path((id,name)):axum::extract::Path<(String,String)>,headers:HeaderMap| async move {
+            assert_eq!(headers["x-api-key"],"alias-fixture-key");
+            assert_eq!(id,"vm-fixture");
+            Json(json!({"name":name,"sandboxID":id}))
+        })).route("/sandbox-names/{name}", axum::routing::get(
+        |axum::extract::Path(name):axum::extract::Path<String>,headers:HeaderMap| async move {
+            assert_eq!(headers["x-api-key"],"alias-fixture-key");
+            Json(json!({"name":name,"sandboxID":"vm-fixture"}))
+        }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    for arguments in [
+        vec!["bind", "vm-fixture", "reserved-alias"],
+        vec!["inspect", "reserved-alias"],
+    ] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args(["sandbox", "vm", "--endpoint", &endpoint, "alias"])
+            .args(arguments)
+            .env("HV2_API_KEY", "alias-fixture-key")
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+            json!({"name":"reserved-alias","sandboxID":"vm-fixture"})
+        );
+    }
+    for name in ["..", "bad/name", "bad name"] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+            .args([
+                "sandbox",
+                "vm",
+                "--endpoint",
+                &endpoint,
+                "alias",
+                "inspect",
+                name,
+            ])
+            .env("HV2_API_KEY", "alias-fixture-key")
+            .output()
+            .await
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+    server.abort();
+}
