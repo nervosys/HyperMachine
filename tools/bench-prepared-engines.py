@@ -59,6 +59,8 @@ def batch(args,engine,pair,url,node,seed,snapshot,directory):
     barrier=threading.Barrier(args.concurrency)
     handles={};lock=threading.Lock();report={'engine':engine,'pair':pair,'samples':[],'success':False,'cleanup_errors':[]}
     baseline=engines.memory(node.pid) if engine=='hypermachine' else None
+    if args.mapping_diagnostics and engine=='hypermachine':
+        report['empty_mapping_observations']=[args.mapping_diagnostics.observe(node.pid)]
     def attempt(index):
         row={'index':index,'success':False,'cleanup_success':False};sandbox=None;process=None
         marker='hm-prepared-'+uuid.uuid4().hex
@@ -98,6 +100,9 @@ def batch(args,engine,pair,url,node,seed,snapshot,directory):
         report['empty_process_memory_baseline_kib']=baseline if baseline is not None else {key:0 for key in readings[0]}
         report['incremental_process_memory_kib']={key:value-report['empty_process_memory_baseline_kib'][key] for key,value in report['held_process_memory_kib'].items()}
         report['memory_hold_seconds']=5;report['memory_read_ms']=(time.perf_counter()-started)*1000
+        if args.mapping_diagnostics:
+            pids=[node.pid] if engine=='hypermachine' else [p.pid for _,p,_ in handles.values() if p.poll() is None]
+            report['held_mapping_observations']=[args.mapping_diagnostics.observe(pid) for pid in pids]
     except Exception as error:report['memory_error']=str(error)
     for row in report['samples']:
         handle=handles.get(row['index'])
@@ -125,16 +130,22 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ['hypermachine','firecracker','kernel','initrd','output']:parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--pairs',type=int,default=10);parser.add_argument('--concurrency',type=int,default=8)
+    parser.add_argument('--mapping-diagnostics',action='store_true',help='Read owned-process smaps outside latency timing; diagnostic-only cohort')
     args=parser.parse_args();args.owned_firecracker=[];require(1<=args.pairs<=100 and 1<=args.concurrency<=16,'invalid experiment limits')
+    if args.mapping_diagnostics:
+        diagnostic_spec=importlib.util.spec_from_file_location('prepared_mappings',Path(__file__).with_name('prepared-memory-mappings.py'))
+        args.mapping_diagnostics=importlib.util.module_from_spec(diagnostic_spec);diagnostic_spec.loader.exec_module(args.mapping_diagnostics)
     require(not args.output.exists(),'output exists; preserve earlier attempts')
     paths={name:getattr(args,name).resolve(strict=True) for name in ['hypermachine','firecracker','kernel','initrd']}
     for name,path in paths.items():setattr(args,name,path)
     paths.update(coordinator=Path(__file__).resolve(),engines=Path(engines.__file__).resolve(),firecracker_harness=Path(fc.__file__).resolve())
+    if args.mapping_diagnostics:paths['mapping_diagnostics']=Path(args.mapping_diagnostics.__file__).resolve()
     hashes={name:engines.digest(path) for name,path in paths.items()}
     affinity=sorted(os.sched_getaffinity(0))[:8];os.sched_setaffinity(0,affinity);os.umask(0o077)
     report={'success':False,'purpose':'prepared snapshot startup, no managed endpoint or universal performance claim','artifact_sha256':hashes,'driver_cpu_affinity':affinity,'cpu_count':1,'memory_mb':1024,'concurrency':args.concurrency,'pairs':args.pairs,'guest_readiness_timeout_s':15,'preparation':{},'runs':[],'cleanup_errors':[],
         'limitations':['Shared WSL nested KVM and uncontrolled host background load','Persistent HyperMachine HTTP daemon versus fresh Firecracker process/Unix API','Prepared resident/cache-warm sources; no dropped-cache or storage durability comparison','PSS excludes kernel memory and unmapped page cache; not fleet density','Failed attempts retained; conditional latency and memory summaries','Engine-generated device kernel arguments differ']}
     args.output.parent.mkdir(parents=True,exist_ok=True)
+    report['diagnostic_only']=bool(args.mapping_diagnostics)
     def save():args.output.write_text(json.dumps(report,indent=2)+'\n')
     with tempfile.TemporaryDirectory(prefix='hm-prepared-',dir='/var/tmp') as scratch:
         scratch=Path(scratch);node=None;parent=None;log=None;seed=uuid.uuid4().hex;url=None

@@ -127,6 +127,14 @@ fleet density. All main and smoke cleanup checks pass; three retained setup
 failures prevented 12 planned restores, rather than failing scored restores.
 No runtime change or across-the-board performance claim follows from this data.
 
+A [prepared-memory mapping diagnostic](benchmarks/2026-10-02/prepared-memory/README.md)
+passes 96 additional restores across two fresh-node cohorts. HyperMachine
+has about 44 MiB outside guest-sized mappings versus Firecracker's 6 MiB;
+much is already present in the empty daemon. This accounts for roughly three
+quarters of the observed total PSS gap and directs investigation toward host
+allocation ownership. Raw smaps and parser checks are retained; the diagnostic
+does not prove reclaimability or a runtime optimization benefit.
+
 A subsequent [owned heap-reclamation diagnostic](benchmarks/2026-10-02/heap-reclaim/README.md)
 passed all 432 guest attempts and all post-probe guest checks. At C100, two pairs
 observed approximately 100–112 MiB reclaimable while guests remained running,
